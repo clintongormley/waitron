@@ -3680,7 +3680,7 @@ commit with Save, bind it to that Save even when its preview updates as you type
 Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
 Station picker at the top lists the active stations in the Stations table's order, the default
 station included. The month is Opening hours' month in its station mode (`stationMode` on
-`opening-hours-month.ts`): ‹ › step months, and there is no Year / Month switch and no
+`opening-hours-month.ts`): ‹ › step months, the month's year is plain text, and there is no
 department picker. A station one department or none feeds draws one bar per date of the times it
 gets orders, worked out from routed products and the zones that can order them, and a date it gets
 none reads "No orders". When more than one department sends the station orders in the weeks
@@ -3872,10 +3872,10 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`. A Year / Month switch after the
-Year's and the Month's ‹ › picks between the two (`opening-hours-screen.ts`): Month opens the
-month holding the venue's today when the shown year holds it, else that year's January, and Year
-opens the shown month's year. The page opens on Year when its address names no view and
+Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year and
+the Month (`opening-hours-screen.ts`): a month's name in the Year opens that month, and the Month's
+year, drawn as a link, opens that year's Year, keeping the department and the rest of the address.
+The page opens on Year when its address names no view and
 no department, zone, season or `?station=`, and on an old `/view/calendar` address
 (`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
 year; `/department/<id>` selects the department.
@@ -3886,7 +3886,8 @@ view in `order`; with none, no switch is drawn. A chosen view replaces the Year 
 hours' month carries that month into its address. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
 covering a month; each day lists the areas with a bar whose width is the area's share of the
-month's largest number, and the number. ‹ › step months, a Show picker offers All areas or one area
+month's largest number, and the number. ‹ › step months, its title keeps one width as the Month's
+does, its year is plain text, and a Show picker offers All areas or one area
 (kept in the address as `area`), and a day closed all day reads Closed. It has no row of season
 chips and no legend. Every day is a button that opens the shared day box (Day box below): the
 date, the special day's name, a line saying which season's standard staffing the day follows or
@@ -3948,7 +3949,8 @@ Opening hours' Year.
   public holiday names it. Days are picked as Picking days (below) says, and a picked day is filled
   with `--wt-color-primary`, its number in `--wt-color-on-primary`; today stays underlined.
   ‹ › step years, a month's name, drawn as a link ending in ›, opens that
-  month (below), and the season chips rename, move, add and delete seasons
+  month (below), and when the year cannot be read the Year lists the twelve month names, each
+  opening its month. The season chips rename, move, add and delete seasons
   (`season-chips.ts`), and a chip's name opens the season painter.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. On a special day that is also a public holiday, the day's accessible
@@ -3966,8 +3968,10 @@ Opening hours' Year.
   day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
-  colour. Above the dates, ‹, the month's name, ›, the
-  Year / Month switch and the Show department picker share one row, which wraps at phone width; ‹ › step months. Arrow keys move between
+  colour. Above the dates, ‹, the month's name and year, › and the Show department picker share one
+  row, which wraps at phone width; ‹ › step months, and the year is a link that opens the Year. The
+  month's name and year sit in a box as wide as the shown year's longest month title in any
+  interface language (`fixed-title.ts`), so ‹ and › stay put. Arrow keys move between
   dates, with one Tab stop. Clicking a date picks it and opens the day box (below), for a viewer
   too; days are picked as Picking days (below) says, and
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside

@@ -249,6 +249,7 @@ keeps `/view/week` out of search while it still means the old season painter.
    when it is pointed at or tapped (Lunch 16:00–17:00 is a sliver).
 3. **No Week button (A759, owner 2026-10-16).** The Week opens from the day box's "Open this week"
    (point 5) on that date's week; its title links back to the month and the year. ‹ › step a week.
+   Its title takes its own fixed width, wide enough for the longest week title (A759).
 4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
    for the next day.
 5. **No painting here.** Clicking a day's name opens the Calendar's day box (`calendar-day-box.ts`).
@@ -312,23 +313,6 @@ special-day write routes.
    the names, then "plus N more" past a cut-off. Owner: try 5 and 10 names on the real screen and
    keep the one that reads better.
 
-## A759. The Calendar's Year | Month switch goes; the title moves between views
-
-**A759 (owner, 2026-10-16).** Owner: "i'm not sure whether we need the Year|Month … it is now obvious
-that the month names in the annual calendar are clickable, and with the < February 2026 > we can
-just make 2026 an obvious link to get back to the annual view". Files: the Calendar toolbar in
-`packages/venue-service/src/dashboard/opening-hours-screen.ts`, and A722
-before it is built.
-
-1. **The Year | Month switch goes**, and A722 adds no Week button to it.
-2. **Year to Month:** a month name, as today. **Month to Year:** in "‹ February 2026 ›" the year is
-   an obvious link. **To Week:** the day box's "Open this week" (A722 point 5). **Week back out:** in
-   "‹ 9–15 February 2026 ›" the month opens that month and the year the Year view.
-3. **The "‹ title ›" has a fixed width**, so the arrows do not move as the title changes: wide
-   enough for the longest month-and-year title in every interface language, with digits of equal
-   width. The Week view's longer title ("28 September – 4 October 2026") takes its own fixed width.
-4. **The Staffing month follows** (`packages/staffing/src/dashboard/staffing-month.ts`).
-
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
 **A762 (owner, 2026-10-16).** Owner: "we need to make it more obvious that we're editing a standard
@@ -350,8 +334,16 @@ not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
 ## Decisions and deliberate limits
 
 - **No Week button and no "Open this week" in the day box until A722 (A720, 2026-10-15).** The
-  Calendar switches between Year and Month only, and today's `/view/week` addresses still open the
-  season painter. A disabled button would do nothing. A722 adds both, and then deletes this note.
+  Calendar has a Year and a Month only, and today's `/view/week` addresses still open the season
+  painter. A disabled button would do nothing. A722 adds both, and then deletes this note.
+
+- **The Calendar has no Year | Month switch; the title moves between views (A759, owner
+  2026-10-16).** A month's name in the Year opens that month; in the Month's "‹ February 2026 ›" the
+  year is a link that opens the Year; A722's Week is to open from the day box's "Open this week",
+  with no Week button. The Month's "‹ title ›", and Staffing's, keeps one width, as wide as the
+  longest month-and-year title in any interface language, so the arrows stay put. When the Year
+  cannot be read it lists the twelve month names, so the Month stays reachable. The station Times
+  tab's year and Staffing's year are plain text, since neither has a Year view.
 
 - **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
   (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.
@@ -377,8 +369,8 @@ not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
   (`special_day.date_taken`). A double-click or long press on a held date opens that special day
   instead.
 
-- **Staffing's month (A720, 2026-10-15)** has no Year / Month switch, since Staffing has no Year or
-  Week view, and no legend. Its day box lists each area's number of people; role names and times
+- **Staffing's month (A720, 2026-10-15)** has no legend, and its year is plain text, since Staffing
+  has no Year view (A759). Its day box lists each area's number of people; role names and times
   wait for the month read to carry each block (backlog: "Staffing's day box: each area's staff
   roles and times").
 
