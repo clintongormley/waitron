@@ -69,6 +69,19 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "2.48", amount: "4.96", discount: "0.00" });
   });
 
+  it("prints the filed figures, and no discount, when a line has a stored price but no list total", () => {
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "2",
+          gross: "6.00",
+          listUnitPriceGross: "3.33",
+          net: net("2.48", "4.96", "21.00"),
+        }),
+      ),
+    ).toEqual({ price: "2.48", amount: "4.96", discount: "0.00" });
+  });
+
   it("reads a line no discount touched as filed", () => {
     expect(
       beforeVatFigures(filed({ quantity: "2", gross: "8.80", net: net("4.00", "8.00", "10") })),
@@ -103,7 +116,7 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "19.69", amount: "2.42", discount: "0.00" });
   });
 
-  it("prints a weighed line under one kilo at its stored price before any discount (owner, Q9)", () => {
+  it("prints a weighed line at its stored price before any discount (owner, Q9)", () => {
     // J1, measured: 0.123 kg at 24,00 €/kg, 10% off, charged 2,65, filed base 2,41.
     expect(
       beforeVatFigures(
@@ -116,6 +129,21 @@ describe("beforeVatFigures", () => {
         }),
       ),
     ).toEqual({ price: "21.82", amount: "2.68", discount: "0.27" });
+  });
+
+  it("prints a weighed line at its stored price when its discount comes to nothing before VAT", () => {
+    // 0.062 kg at 24,00 €/kg is 1,49; 1% off charges 1,48, at 23,95 €/kg, and both totals have base 1,35.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "0.062",
+          gross: "1.48",
+          listGross: "1.49",
+          listUnitPriceGross: "24.00",
+          net: net("21.77", "1.35", "10.00"),
+        }),
+      ),
+    ).toEqual({ price: "21.82", amount: "1.35", discount: "0.00" });
   });
 
   it("gives a comped weighed line its value (owner, Q9)", () => {
