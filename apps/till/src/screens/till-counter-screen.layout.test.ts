@@ -31,7 +31,6 @@ afterEach(async () => {
   await page.viewport(...DEFAULT_FRAME);
 });
 
-
 function product(key: string, name: string, unitPrice: string): TillProduct {
   return {
     id: `p-${key}`,
