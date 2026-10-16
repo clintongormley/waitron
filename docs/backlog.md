@@ -1850,8 +1850,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   persistence, note copying/combining during bill and party moves, paper headings and atomic
   kitchen corrections are on the feature branch. The counter forwards initial notes with cash,
   card, Hold and Place, restores saved note ownership, and saves retrieved notes separately from
-  dishes. Table and Waiting integration, card decline/recovery, and station/pass screen
-  headings/correction wording remain open. Add a whole-order note
+  dishes. Table and Waiting note editors, pending-note barriers before sending or paying,
+  fresh card decline/recovery and atomic note persistence while seating are also on the branch.
+  Station/pass screen headings and correction wording, the final output audit and branch gates
+  remain open. Add a whole-order note
   ("all together, they have a train at 14:30") alongside the existing line notes: a row at the top of the order
   on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at
   the top of every kitchen ticket the order sends and shown on the kitchen screens. A change after
@@ -5604,6 +5606,11 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
+  in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
+  fixture checks. Bound the generated screenshot filename and keep the complete test name in
+  its metadata; verify with a deliberately failing case whose generated name is long.
 
 - **A pnpm setup retry does not identify which command failed.** A746 removes the test fixture's
   blanket one-second version deadline, with a controlled slow-check regression. The original

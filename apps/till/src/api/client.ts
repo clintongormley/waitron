@@ -1828,6 +1828,7 @@ export interface FloorZone {
  */
 export interface TableParty {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   revision: number;
   guestCount: number | null;
   state: "open" | "closed";
@@ -2023,6 +2024,7 @@ export interface TableServiceStatus {
 
 /** `POST /api/tables/:id/seat` success — the new party, its tab and the tab's order number. */
 export interface SeatResult {
+  kitchenNote?: KitchenNoteSnapshot;
   partyId: string;
   tabId: string;
   revision: number;
@@ -3413,8 +3415,15 @@ export class TillApi {
    * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_clearing` surface as a
    * rejected `{ code }`.
    */
-  seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
-    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
+  seatTable(
+    tableId: string,
+    guestCount: number | null,
+    kitchenNote?: string | null,
+  ): Promise<SeatResult> {
+    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
+      guestCount,
+      ...(kitchenNote === undefined ? {} : { kitchenNote }),
+    });
   }
 
   /** Seat a party at `tableId` and, in the same request, at each of `withTableIds`. */
@@ -3422,10 +3431,12 @@ export class TillApi {
     tableId: string,
     guestCount: number | null,
     withTableIds: readonly string[],
+    kitchenNote?: string | null,
   ): Promise<SeatResult> {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
       guestCount,
       withTableIds,
+      ...(kitchenNote === undefined ? {} : { kitchenNote }),
     });
   }
 

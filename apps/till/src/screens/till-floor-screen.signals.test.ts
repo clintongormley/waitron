@@ -11,6 +11,12 @@ const past = new Date(now - 60_000).toISOString();
 
 function party(over: Partial<TableParty> = {}): TableParty {
   return {
+    kitchenNote: {
+      scope: { partyId: over.id ?? "v2" },
+      note: null,
+      revision: 0,
+      ownerRevision: over.revision ?? 3,
+    },
     id: "v2",
     revision: 3,
     guestCount: 2,

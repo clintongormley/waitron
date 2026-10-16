@@ -1635,7 +1635,10 @@ export class TillTableOrderScreen extends LitElement {
     new ContentLanguageController(this);
   }
 
+  #kitchenNoteVisit = 0;
+
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("draftStore")) this.#kitchenNoteVisit++;
     this.#watchDraft();
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
       this.#takeOverAnswered = this.takeOverPending?.id;
@@ -2673,7 +2676,7 @@ export class TillTableOrderScreen extends LitElement {
           .scopeKey=${this.party === null ? `order:${this.orderId ?? draft?.id ?? ""}` : `party:${this.party.id}`}
           .note=${this.party === null ? (draft?.kitchenNote ?? null) : this.kitchenNote}
           .revision=${this.party === null ? (draft?.kitchenNoteRevision ?? 0) : this.kitchenNoteRevision}
-          .visit=${draft?.loadGeneration ?? 0}
+          .visit=${this.#kitchenNoteVisit}
           .busy=${this.busy}
           @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => {
             if (this.party !== null || draft === null) return;

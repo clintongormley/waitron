@@ -47,6 +47,15 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueDefault: "es-ES",
       loginDefault: "es-ES",
     }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue({
       locale: "es-ES",
       venueName: "Bar Pepe",
@@ -267,6 +276,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       ],
     };
     const party = {
+      kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "v1",
       revision: 3,
       guestCount: 2,

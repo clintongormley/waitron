@@ -56,6 +56,7 @@ export class TillOrderKitchenNote extends LitElement {
   @property({ type: Number }) revision = 0;
   @property({ type: Number }) visit = 0;
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) hideHeading = false;
   @property() refusal = "";
   @property() fieldRefusal = "";
   @state() private editing = false;
@@ -123,7 +124,7 @@ export class TillOrderKitchenNote extends LitElement {
     scope.commit(this.#baseline);
   }
 
-  #open(): void {
+  openEditor(): void {
     if (this.busy || this.editing) return;
     this.#opening = { scopeKey: this.scopeKey, visit: this.visit };
     this.#baseline = normalise(this.note);
@@ -136,12 +137,17 @@ export class TillOrderKitchenNote extends LitElement {
   }
 
   #close(): void {
+    if (!this.editing) return;
+    const opening = this.#opening;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
     this.editing = false;
     this.pending = null;
     this.#focusHeading = true;
+    this.dispatchEvent(
+      new CustomEvent("close-kitchen-note", { detail: opening, bubbles: true, composed: true }),
+    );
   }
 
   #change(value: string): void {
@@ -191,74 +197,78 @@ export class TillOrderKitchenNote extends LitElement {
     const action = saveActionState(this.#scope);
     const fieldError =
       this.attempted && this.#tooLong() ? t("kitchen_note.too_long") : this.fieldRefusal;
-    return html`<div class="heading">
-        <wt-button
-          data-edit
-          variant="secondary"
-          ?disabled=${this.busy}
-          @click=${() => this.#open()}
-        >
-          ${this.note === null ? t("kitchen_note.add") : `${t("kitchen_note.heading")}: ${this.note}`}
-        </wt-button>
-      </div>
-      ${
-        this.editing
-          ? html`<wt-dialog
-              ${trackDialog()}
-              .open=${true}
-              .heading=${t("kitchen_note.title")}
-              .beforeClose=${this.#beforeClose}
-              @wt-close=${(event: Event) => {
-                event.stopPropagation();
-                if (event.target === event.currentTarget) this.#close();
-              }}
+    return html`${
+      this.hideHeading
+        ? nothing
+        : html`<div class="heading">
+            <wt-button
+              data-edit
+              variant="secondary"
+              ?disabled=${this.busy}
+              @click=${() => this.openEditor()}
             >
-              <div class="fields">
-                <wt-textarea
-                  name="kitchenNote"
-                  autocomplete="off"
-                  .label=${t("kitchen_note.title")}
-                  .placeholder=${t("kitchen_note.placeholder")}
-                  .value=${this.draft}
-                  .maxlength=${2000}
-                  .error=${fieldError}
+              ${this.note === null ? t("kitchen_note.add") : `${t("kitchen_note.heading")}: ${this.note}`}
+            </wt-button>
+          </div>`
+    }
+    ${
+      this.editing
+        ? html`<wt-dialog
+            ${trackDialog()}
+            .open=${true}
+            .heading=${t("kitchen_note.title")}
+            .beforeClose=${this.#beforeClose}
+            @wt-close=${(event: Event) => {
+              event.stopPropagation();
+              if (event.target === event.currentTarget) this.#close();
+            }}
+          >
+            <div class="fields">
+              <wt-textarea
+                name="kitchenNote"
+                autocomplete="off"
+                .label=${t("kitchen_note.title")}
+                .placeholder=${t("kitchen_note.placeholder")}
+                .value=${this.draft}
+                .maxlength=${2000}
+                .error=${fieldError}
+                ?disabled=${this.busy || this.pending !== null}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#change(event.detail.value);
+                }}
+              ></wt-textarea>
+              <wt-form-actions
+                .error=${[fieldError ? t("form.fix_fields") : "", this.refusal].filter(Boolean).join(" ")}
+              >
+                <wt-button
+                  slot="cancel"
+                  data-cancel
+                  variant="secondary"
                   ?disabled=${this.busy || this.pending !== null}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.#change(event.detail.value);
-                  }}
-                ></wt-textarea>
-                <wt-form-actions
-                  .error=${[fieldError ? t("form.fix_fields") : "", this.refusal].filter(Boolean).join(" ")}
+                  @click=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+                  >${t("kitchen_note.cancel")}</wt-button
                 >
-                  <wt-button
-                    slot="cancel"
-                    data-cancel
-                    variant="secondary"
-                    ?disabled=${this.busy || this.pending !== null}
-                    @click=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
-                    >${t("kitchen_note.cancel")}</wt-button
-                  >
-                  <wt-button
-                    slot="secondary"
-                    data-clear
-                    variant="danger"
-                    ?disabled=${this.busy || this.pending !== null || normalise(this.draft) === null}
-                    @click=${() => this.#change("")}
-                    >${t("kitchen_note.clear")}</wt-button
-                  >
-                  <wt-button
-                    data-save
-                    variant=${action.variant}
-                    ?disabled=${this.busy || this.pending !== null || action.unchanged || (this.attempted && this.#tooLong())}
-                    @click=${() => void this.#save()}
-                    >${t("kitchen_note.save")}</wt-button
-                  >
-                </wt-form-actions>
-              </div>
-            </wt-dialog>`
-          : nothing
-      }`;
+                <wt-button
+                  slot="secondary"
+                  data-clear
+                  variant="danger"
+                  ?disabled=${this.busy || this.pending !== null || normalise(this.draft) === null}
+                  @click=${() => this.#change("")}
+                  >${t("kitchen_note.clear")}</wt-button
+                >
+                <wt-button
+                  data-save
+                  variant=${action.variant}
+                  ?disabled=${this.busy || this.pending !== null || action.unchanged || (this.attempted && this.#tooLong())}
+                  @click=${() => void this.#save()}
+                  >${t("kitchen_note.save")}</wt-button
+                >
+              </wt-form-actions>
+            </div>
+          </wt-dialog>`
+        : nothing
+    }`;
   }
 }
 

@@ -52,6 +52,7 @@ const joined = table(
     state: "open-tab",
     condition: "held",
     party: {
+      kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
       id: "p1",
       revision: 1,
       guestCount: 6,

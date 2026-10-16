@@ -97,3 +97,26 @@ describe("kitchen note client", () => {
     ]);
   });
 });
+
+it.each([false, true])("carries an unassigned note with seating, grouped=%s", async (grouped) => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      response({ partyId: "p", tabId: "b", revision: 0, orderNumber: 1, kitchenNote: snapshot }),
+    );
+  const api = new TillApi("", fetcher);
+  const call = grouped
+    ? (api.seatAtTables as (...args: unknown[]) => Promise<unknown>)(
+        "t1",
+        2,
+        ["t2"],
+        "Train at 14:30",
+      )
+    : (api.seatTable as (...args: unknown[]) => Promise<unknown>)("t1", 2, "Train at 14:30");
+  expect(await call).toMatchObject({ kitchenNote: snapshot });
+  expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual({
+    guestCount: 2,
+    kitchenNote: "Train at 14:30",
+    ...(grouped ? { withTableIds: ["t2"] } : {}),
+  });
+});

@@ -75,6 +75,7 @@ const openTable: TableState = {
   today: null,
   signals: [],
   party: {
+    kitchenNote: { scope: { partyId: "v-2" }, note: null, revision: 0, ownerRevision: 3 },
     id: "v-2",
     revision: 3,
     guestCount: 2,
@@ -682,7 +683,18 @@ describe("opening a table station move while its station list is pending", () =>
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const listStations = vi.fn().mockResolvedValue(listed);
     const { el } = await mountApp({
@@ -1460,7 +1472,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
 
@@ -1968,7 +1991,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const noted: TabLine = { ...burgerLine, note: "no onions" };
 
@@ -2166,7 +2200,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let finishReload!: () => void;
@@ -2212,7 +2257,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let failReload!: () => void;
@@ -2250,7 +2306,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       ...openTable,
       id: "t3",
       label: "3",
-      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+      party: {
+        ...openTable.party!,
+        kitchenNote: {
+          scope: { partyId: "v-3" },
+          note: null,
+          revision: 0,
+          ownerRevision: openTable.party!.revision,
+        },
+        id: "v-3",
+        mainBillId: "wo-8",
+        tableIds: ["t3"],
+      },
     };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let finishReload!: () => void;

@@ -173,6 +173,7 @@ const openTable: TableState = {
   today: null,
   signals: [],
   party: {
+    kitchenNote: { scope: { partyId: "v-2" }, note: null, revision: 0, ownerRevision: 3 },
     id: "v-2",
     revision: 3,
     guestCount: 2,
@@ -460,6 +461,15 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     findBillOptions: vi.fn().mockResolvedValue(billOptions),
     listBills: vi.fn().mockResolvedValue(listPage()),
@@ -15711,6 +15721,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     label: "Ana",
   };
   const luisParty = {
+    kitchenNote: { scope: { partyId: "v7" }, note: null, revision: 0, ownerRevision: 9 },
     id: "v7",
     revision: 9,
     guestCount: 2,

@@ -214,6 +214,7 @@ function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
 }
 
 const anaParty: TableParty = {
+  kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 3 },
   id: "v1",
   revision: 3,
   guestCount: 3,
@@ -3630,6 +3631,7 @@ describe("till-table-order-screen", () => {
       };
       const luis: TableParty = {
         ...anaParty,
+        kitchenNote: { scope: { partyId: "v7" }, note: null, revision: 0, ownerRevision: 9 },
         id: "v7",
         revision: 9,
         name: "Luis",

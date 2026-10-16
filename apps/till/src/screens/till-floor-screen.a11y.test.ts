@@ -171,7 +171,13 @@ const partyTables: TableState[] = [
     status: null,
     nextReservation: null,
     condition: "held",
-    party: { ...party, id: "v1", state: "open", outstanding: "44.00" },
+    party: {
+      ...party,
+      kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
+      id: "v1",
+      state: "open",
+      outstanding: "44.00",
+    },
   },
   {
     ...tables[0]!,
@@ -183,7 +189,14 @@ const partyTables: TableState[] = [
     status: null,
     nextReservation: null,
     condition: "held",
-    party: { ...party, id: "v2", state: "open", outstanding: "0.00", tableIds: ["t7"] },
+    party: {
+      ...party,
+      kitchenNote: { scope: { partyId: "v2" }, note: null, revision: 0, ownerRevision: 4 },
+      id: "v2",
+      state: "open",
+      outstanding: "0.00",
+      tableIds: ["t7"],
+    },
   },
   ...["t8", "t9"].map((id): TableState => ({
     ...tables[0]!,

@@ -99,7 +99,26 @@ function app() {
   const hono = new Hono();
   mountTillApi(
     hono,
-    { db: suite.db, cfg, secureCookies: false, venueLocale: "en-GB" } as TillApiDeps,
+    {
+      db: suite.db,
+      cfg,
+      backend: {} as TillApiDeps["backend"],
+      clock: {
+        now: () => ({
+          instant: new Date(),
+          offsetMinutes: 0,
+          confident: true,
+          confidence: "anchored",
+          anchorAgeSeconds: 0,
+        }),
+        anchor: () => {
+          throw new Error("This fixture never anchors time");
+        },
+        currentAnchor: () => null,
+      },
+      secureCookies: false,
+      venueLocale: "en-GB",
+    } as TillApiDeps,
     () => {},
   );
   return hono;
@@ -599,5 +618,48 @@ describe("whole-order kitchen note routes", () => {
       revision: 1,
       note: "n".repeat(2000),
     });
+  });
+});
+
+describe("seating an unassigned kitchen instruction", () => {
+  const seatRequest = (tableId: string, kitchenNote: unknown) =>
+    app().request(`/api/tables/${tableId}/seat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      body: JSON.stringify({ guestCount: 2, kitchenNote }),
+    });
+  it("seats and saves the note in one write before any food is submitted", async () => {
+    const table = await createTable(suite.db, cfg, { label: "New table", zoneId: tableZoneId });
+    const response = await seatRequest(table.id, "  Train\nat 14:30  ");
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    const seated = (await response.json()) as {
+      partyId: string;
+      revision: number;
+      kitchenNote?: KitchenNoteSnapshot;
+    };
+    expect(seated.kitchenNote).toEqual({
+      scope: { partyId: seated.partyId },
+      ownerRevision: seated.revision,
+      note: "Train at 14:30",
+      revision: 1,
+    });
+    const stored = await withTransaction(suite.db, (tx) =>
+      readKitchenNotes(tx, [{ partyId: seated.partyId }]),
+    );
+    expect(stored.get(`party:${seated.partyId}`)).toEqual({ note: "Train at 14:30", revision: 1 });
+  });
+  it.each([
+    { note: [], code: "kitchen_note.invalid" },
+    { note: "x".repeat(2001), code: "kitchen_note.too_long" },
+  ])("rejects $code and leaves the table free", async ({ note, code }) => {
+    const table = await createTable(suite.db, cfg, { label: "New table", zoneId: tableZoneId });
+    const before = await suite.db.select().from(parties);
+    const response = await seatRequest(table.id, note);
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(400);
+    await expectError(response, 400, code);
+    expect(await suite.db.select().from(parties)).toEqual(before);
+    expect(
+      await suite.db.select().from(partyTables).where(eq(partyTables.tableId, table.id)),
+    ).toEqual([]);
   });
 });

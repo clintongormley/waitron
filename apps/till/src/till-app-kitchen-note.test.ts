@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus, draftServer } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
+  TableState,
+  TableParty,
   HeldOrder,
   TabLine,
   TabLines,
@@ -166,6 +169,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueDefault: "en",
       loginDefault: "en",
     }),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -474,6 +483,10 @@ describe("note-save ownership and ordering", () => {
     const getKitchenNote = vi.fn().mockResolvedValue(saved);
     const el = await mounted({
       getKitchenNote,
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockResolvedValue({ ...heldOrder(6), kitchenNote: saved }),
       setKitchenNote: vi.fn().mockRejectedValue({ code: "kitchen_note.out_of_date" }),
     });
     const h = await edit(el, "My draft");
@@ -714,3 +727,705 @@ it("does not pay after an order reload between the note wait and payment", async
   expect(api.recordSale).not.toHaveBeenCalled();
   expect(store.kitchenNote).toBe("New read");
 });
+
+const waitingOrder = {
+  id: "waiting-7",
+  orderNumber: 7,
+  label: "Train",
+  status: "settled" as const,
+  openedAt: "2026-10-16T10:00:00Z",
+  settledAt: "2026-10-16T10:01:00Z",
+  collectedAt: null,
+  total: "8.00",
+  canHandOver: true,
+  serviceMode: null,
+  movableDishes: [],
+};
+const waitingSnapshot = {
+  scope: { workingOrderId: "waiting-7" },
+  note: "Train at 14:30",
+  revision: 3,
+  ownerRevision: 7,
+};
+const waitingEditor = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillOrderKitchenNote>("[data-waiting-note]");
+async function saveWaiting(el: TillApp, note: string) {
+  const h = waitingEditor(el)!;
+  emit(h.shadowRoot!.querySelector("wt-textarea")!, "wt-change", { value: note });
+  await flush(el);
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-save]")!),
+  );
+  await flush(el);
+}
+describe("Waiting kitchen note editor", () => {
+  it("reads and saves a paid order's note without replacing the current basket", async () => {
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
+      setKitchenNote: vi
+        .fn()
+        .mockResolvedValue({ ...waitingSnapshot, note: "All together", revision: 4 }),
+    });
+    const store = basket(el).store;
+    const lines = store.lines;
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    expect(api.getKitchenNote).toHaveBeenCalledWith({ workingOrderId: waitingOrder.id });
+    const h = waitingEditor(el)!;
+    expect(h.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+    expect(h.note).toBe("Train at 14:30");
+    expect(h.shadowRoot!.querySelector("[data-edit]")).toBeNull();
+    await saveWaiting(el, "All together");
+    expect(api.setKitchenNote).toHaveBeenCalledWith(waitingSnapshot.scope, {
+      submissionId: expect.any(String),
+      expectedNoteRevision: 3,
+      expectedOrderRevision: 7,
+      partyId: null,
+      note: "All together",
+    });
+    expect(waitingEditor(el)).toBeNull();
+    expect(store.id).toBe("wo-9");
+    expect(store.lines).toEqual(lines);
+    expect(store.lines[0]).toBe(lines[0]);
+    expect(store.kitchenNote).toBeNull();
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+  });
+  it("reuses the same submission on a lost response and leaves the modal available", async () => {
+    const setKitchenNote = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network"))
+      .mockResolvedValue({ ...waitingSnapshot, note: "Together", revision: 4 });
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
+      setKitchenNote,
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    expect(waitingEditor(el)).not.toBeNull();
+    await saveWaiting(el, "Together");
+    expect(waitingEditor(el)?.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+    await saveWaiting(el, "Together");
+    expect(setKitchenNote).toHaveBeenCalledTimes(2);
+    expect(setKitchenNote.mock.calls[1]).toEqual(setKitchenNote.mock.calls[0]);
+    expect(waitingEditor(el)).toBeNull();
+  });
+  it("ignores a Waiting read after logout", async () => {
+    const pending = deferred<typeof waitingSnapshot>();
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockReturnValue(pending.promise),
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    expect(api.getKitchenNote).toHaveBeenCalledOnce();
+    emit(el.shadowRoot!.querySelector(".app")!, "logout");
+    await flush(el);
+    pending.resolve(waitingSnapshot);
+    await flush(el);
+    expect(waitingEditor(el)).toBeNull();
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+  });
+});
+
+describe("fresh persisted counter notes", () => {
+  it.each(["card", "place"])("adopts canonical note metadata after fresh %s", async (action) => {
+    let id = "";
+    const getKitchenNote = vi.fn(async () => ({
+      scope: { workingOrderId: id },
+      note: "Initial",
+      revision: 1,
+      ownerRevision: 0,
+    }));
+    const el = await mounted(
+      {
+        getKitchenNote,
+        pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+        setKitchenNote: vi.fn(async () => ({
+          scope: { workingOrderId: id },
+          note: "Changed",
+          revision: 2,
+          ownerRevision: 0,
+        })),
+      },
+      false,
+    );
+    const store = basket(el).store;
+    store.addProduct(product("cana", "Caña", "2.50"), "1");
+    store.kitchenNote = "Initial";
+    id = store.id;
+    emit(counter(el), action === "card" ? "collect-card" : "place-order", {});
+    await flush(el);
+    expect(getKitchenNote).toHaveBeenCalledWith({ workingOrderId: id });
+    expect(store.persisted).toBe(true);
+    expect(store.kitchenNoteRevision).toBe(1);
+    expect(store.kitchenNoteDirty).toBe(false);
+    await edit(el, "Changed");
+    expect(api.setKitchenNote).toHaveBeenCalledWith(
+      { workingOrderId: id },
+      {
+        submissionId: expect.any(String),
+        note: "Changed",
+        expectedNoteRevision: 1,
+        expectedOrderRevision: 0,
+        partyId: null,
+      },
+    );
+    expect(store.kitchenNote).toBe("Changed");
+    expect(api.updateWorkingOrder).not.toHaveBeenCalled();
+  });
+});
+
+const partyNote = {
+  scope: { partyId: "party-table" },
+  note: "Table instruction",
+  revision: 2,
+  ownerRevision: 3,
+};
+const tableParty = (note = partyNote): TableParty & { kitchenNote: typeof partyNote } => ({
+  id: "party-table",
+  revision: note.ownerRevision,
+  guestCount: 2,
+  state: "open",
+  name: null,
+  displayName: "Four",
+  mainBillId: "bill-table",
+  outstanding: "0.00",
+  billCount: 1,
+  tableIds: ["table-four"],
+  unsentDrafts: [],
+  reminder: null,
+  kitchenNote: note,
+});
+const tableRow = (party: TableParty | null): TableState => ({
+  id: "table-four",
+  label: "Four",
+  zoneId: "zone-counter",
+  state: party ? "open-tab" : "free",
+  condition: party ? "held" : "free",
+  hasOpenTab: party !== null,
+  pendingDeliveries: 0,
+  pendingToServe: 0,
+  readyToServe: 0,
+  enRoute: 0,
+  timingBand: "fresh",
+  status: null,
+  nextReservation: null,
+  today: null,
+  signals: [],
+  party,
+});
+const tableScreen = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+const tableHeading = (el: TillApp) =>
+  tableScreen(el).shadowRoot!.querySelector<TillOrderKitchenNote>("till-order-kitchen-note")!;
+async function mountedTable(
+  overrides: Record<string, unknown> = {},
+  initialParty: TableParty | null = tableParty(),
+) {
+  const server = draftServer();
+  const el = await mounted(
+    {
+      getTablesState: vi.fn().mockResolvedValue([tableRow(initialParty)]),
+      getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [], editSentLines: true }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+      listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
+      listDrafts: server.listDrafts,
+      saveDraft: server.saveDraft,
+      submitDraft: server.submitDraft,
+      takeOverDraft: server.takeOverDraft,
+      fireGroup: vi.fn().mockResolvedValue({ revision: 5 }),
+      getKitchenNote: vi.fn().mockResolvedValue(partyNote),
+      setKitchenNote: vi
+        .fn()
+        .mockResolvedValue({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 }),
+      ...overrides,
+    },
+    false,
+  );
+  emit(counter(el), "floor-refresh", {});
+  await flush(el);
+  expect(api.getTablesState).toHaveBeenCalled();
+  emit(counter(el), "open-table", { tableId: "table-four", seated: true });
+  await flush(el);
+  expect(tableScreen(el)).not.toBeNull();
+  expect(tableScreen(el).party?.id ?? null).toBe(initialParty?.id ?? null);
+  return { el, server };
+}
+async function editTable(el: TillApp, text: string) {
+  const h = tableHeading(el);
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-edit]")!),
+  );
+  await flush(el);
+  emit(h.shadowRoot!.querySelector("wt-textarea")!, "wt-change", { value: text });
+  await flush(el);
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-save]")!),
+  );
+  await flush(el);
+  return h;
+}
+describe("party kitchen note integration", () => {
+  it("hydrates the shared note and saves it without saving any draft lines", async () => {
+    const { el, server } = await mountedTable();
+    expect(tableHeading(el).note).toBe("Table instruction");
+    const store = tableScreen(el).draftStore;
+    await editTable(el, "Together");
+    expect(api.setKitchenNote).toHaveBeenCalledWith(
+      { partyId: "party-table" },
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedNoteRevision: 2,
+        note: "Together",
+      },
+    );
+    expect(tableHeading(el).note).toBe("Together");
+    expect(tableScreen(el).party?.revision).toBe(4);
+    expect(tableScreen(el).draftStore).toBe(store);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  });
+  it("waits for the note before firing and uses the returned party revision", async () => {
+    const pending = deferred<typeof partyNote>();
+    const { el } = await mountedTable({ setKitchenNote: vi.fn().mockReturnValue(pending.promise) });
+    await editTable(el, "Together");
+    expect(api.setKitchenNote).toHaveBeenCalledOnce();
+    emit(tableScreen(el), "fire-group", { groupId: "group-held" });
+    await flush(el);
+    expect(api.fireGroup).not.toHaveBeenCalled();
+    pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
+    await flush(el);
+    expect(api.fireGroup).toHaveBeenCalledWith("party-table", "group-held", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 4,
+    });
+  });
+  it("keeps a refused note editable and does not fire food", async () => {
+    const pending = deferred<typeof partyNote>();
+    const { el } = await mountedTable({ setKitchenNote: vi.fn().mockReturnValue(pending.promise) });
+    await editTable(el, "Together");
+    expect(api.setKitchenNote).toHaveBeenCalledOnce();
+    emit(tableScreen(el), "fire-group", { groupId: "group-held" });
+    await flush(el);
+    pending.reject(new TypeError("network"));
+    await flush(el);
+    expect(api.fireGroup).not.toHaveBeenCalled();
+    expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+    expect(tableHeading(el).refusal).not.toBe("");
+  });
+  it("adopts a polled note without resetting a dirty editor or the line draft", async () => {
+    const { el } = await mountedTable();
+    const store = tableScreen(el).draftStore;
+    const h = tableHeading(el);
+    await userEvent.click(
+      page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-edit]")!),
+    );
+    await flush(el);
+    emit(h.shadowRoot!.querySelector("wt-textarea")!, "wt-change", { value: "My draft" });
+    await flush(el);
+    vi.mocked(api.getTablesState).mockResolvedValue([
+      tableRow(tableParty({ ...partyNote, note: "Other device", revision: 3, ownerRevision: 4 })),
+    ]);
+    emit(el.shadowRoot!.querySelector(".app")!, "floor-refresh", { poll: true });
+    await flush(el);
+    expect(h.note).toBe("Other device");
+    expect(h.revision).toBe(3);
+    expect(h.shadowRoot!.querySelector("wt-textarea")!.value).toBe("My draft");
+    expect(tableScreen(el).draftStore).toBe(store);
+  });
+});
+
+it.each(["send-lines", "pay-tab", "bill-pay"])(
+  "waits for a party note before %s",
+  async (action) => {
+    const pending = deferred<typeof partyNote>();
+    const { el } = await mountedTable({
+      setKitchenNote: vi.fn().mockReturnValue(pending.promise),
+      sendLines: vi.fn().mockResolvedValue(undefined),
+      getBillBalance: vi.fn().mockResolvedValue({
+        workingOrderId: "bill-table",
+        status: "open",
+        total: "1.00",
+        received: "0.00",
+        reserved: "0.00",
+        outstanding: "1.00",
+        tips: "0.00",
+        payments: [],
+        paidLines: [],
+      }),
+    });
+    await editTable(el, "Together");
+    emit(
+      tableScreen(el),
+      action,
+      action === "send-lines"
+        ? { lineNos: [1] }
+        : action === "pay-tab"
+          ? { method: "cash", amount: "10.00" }
+          : { way: "contribution", amount: "1.00", lines: [] },
+    );
+    await flush(el);
+    expect(api.sendLines).not.toHaveBeenCalled();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.getBillBalance).not.toHaveBeenCalled();
+    pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
+    await flush(el);
+    if (action === "send-lines") expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1]);
+    if (action === "pay-tab")
+      expect(api.recordSale).toHaveBeenCalledWith(
+        [],
+        { method: "cash", amount: "10.00" },
+        "bill-table",
+      );
+    if (action === "bill-pay") expect(api.getBillBalance).toHaveBeenCalled();
+  },
+);
+
+it("waits for a party note before submitting the selected round", async () => {
+  const pending = deferred<typeof partyNote>();
+  const { el, server } = await mountedTable({
+    setKitchenNote: vi.fn().mockReturnValue(pending.promise),
+  });
+  const store = tableScreen(el).draftStore!;
+  store.addProduct(product("cana", "Caña", "2.50"), "1");
+  await flush(el);
+  await editTable(el, "Together");
+  emit(tableScreen(el), "submit-draft", {
+    groups: [{ release: "fire", lineIndexes: [0] }],
+    store,
+    sent: store.lines,
+  });
+  await flush(el);
+  expect(server.submitDraft).not.toHaveBeenCalled();
+  pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
+  await vi.waitFor(() => expect(server.submitDraft).toHaveBeenCalledOnce());
+  expect(server.submitDraft.mock.calls[0]?.[2].expectedPartyRevision).toBe(4);
+});
+
+it("keeps a failed party note ahead of a later Fire until it is discarded", async () => {
+  const { el } = await mountedTable({
+    setKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")),
+  });
+  const h = await editTable(el, "Unsent instruction");
+  expect(h.refusal).not.toBe("");
+  emit(tableScreen(el), "fire-group", { groupId: "group-held" });
+  await flush(el);
+  expect(api.fireGroup).not.toHaveBeenCalled();
+  h.closeEditor();
+  await flush(el);
+  emit(tableScreen(el), "fire-group", { groupId: "group-held" });
+  await flush(el);
+  expect(api.fireGroup).toHaveBeenCalledOnce();
+});
+it("keeps a failed counter note ahead of a later payment", async () => {
+  const el = await mounted({ setKitchenNote: vi.fn().mockRejectedValue(new TypeError("network")) });
+  await edit(el, "Unsent instruction");
+  emit(counter(el), "confirm-payment", { method: "cash", amount: "10.00" });
+  await flush(el);
+  expect(api.recordSale).not.toHaveBeenCalled();
+});
+it("keeps a newer polled instruction when an older successful save arrives", async () => {
+  const pending = deferred<typeof partyNote>();
+  const { el } = await mountedTable({ setKitchenNote: vi.fn().mockReturnValue(pending.promise) });
+  await editTable(el, "Together");
+  vi.mocked(api.getTablesState).mockResolvedValue([
+    tableRow(tableParty({ ...partyNote, note: "Newer", revision: 4, ownerRevision: 5 })),
+  ]);
+  emit(tableScreen(el), "floor-refresh", {});
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Newer");
+  pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Newer");
+  expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
+});
+it("removes the Waiting editor after its native close completes", async () => {
+  const el = await mounted({
+    listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+    getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
+  });
+  emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+  await flush(el);
+  const h = waitingEditor(el)!;
+  const dialog = h.shadowRoot!.querySelector("wt-dialog")!;
+  const closed = new Promise<void>((resolve) =>
+    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!),
+  );
+  await closed;
+  await flush(el);
+  expect(waitingEditor(el)).toBeNull();
+  expect(api.setKitchenNote).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "seats the unassigned table instruction before making its draft sendable, lines=%s",
+  async (withLines) => {
+    const note = { ...partyNote, note: "Train", revision: 1, ownerRevision: 0 };
+    const { el, server } = await mountedTable(
+      {
+        seatTable: vi.fn(async () => {
+          vi.mocked(api.getTablesState).mockResolvedValue([tableRow(tableParty(note))]);
+          return {
+            tabId: "bill-table",
+            partyId: "party-table",
+            revision: 0,
+            orderNumber: 1,
+            kitchenNote: note,
+          };
+        }),
+      },
+      null,
+    );
+    const draft = tableScreen(el).draftStore!;
+    draft.kitchenNote = "Train";
+    if (withLines) {
+      draft.addProduct(product("cana", "Caña", "2.50"), "2", { note: "No salt" });
+      draft.setLineCourse(0, "mains");
+      draft.setLineMakeAt(0, "s1");
+    }
+    const lines = draft.lines;
+    await flush(el);
+    emit(tableScreen(el), "open-table", { tableId: "table-four", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(api.seatTable).toHaveBeenCalledWith("table-four", 2, "Train");
+    expect(tableScreen(el).party?.id).toBe("party-table");
+    expect(tableHeading(el).note).toBe("Train");
+    expect(tableHeading(el).revision).toBe(1);
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+    expect(tableScreen(el).draftStore!.lines).toEqual(lines);
+    if (withLines) await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalled());
+  },
+);
+
+it("does not adopt a note save after reopening the same table", async () => {
+  const pending = deferred<typeof partyNote>();
+  const { el } = await mountedTable({ setKitchenNote: vi.fn().mockReturnValue(pending.promise) });
+  await editTable(el, "Old visit");
+  vi.mocked(api.getTablesState).mockResolvedValue([
+    tableRow(tableParty({ ...partyNote, note: "Fresh visit", revision: 5, ownerRevision: 8 })),
+  ]);
+  emit(tableScreen(el), "floor-refresh", {});
+  await flush(el);
+  emit(tableScreen(el), "open-table", { tableId: "table-four", seated: true });
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Fresh visit");
+  pending.resolve({ ...partyNote, note: "Old visit", revision: 3, ownerRevision: 4 });
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Fresh visit");
+  expect(tableScreen(el).party?.revision).toBe(8);
+});
+it("rereads a stale party note and keeps the current line draft", async () => {
+  const fresh = { ...partyNote, note: "Other staff", revision: 5, ownerRevision: 8 };
+  const { el } = await mountedTable({
+    setKitchenNote: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
+    getKitchenNote: vi.fn().mockResolvedValue(fresh),
+  });
+  const store = tableScreen(el).draftStore;
+  await editTable(el, "Stale change");
+  expect(api.getKitchenNote).toHaveBeenCalledWith({ partyId: "party-table" });
+  expect(tableHeading(el).note).toBe("Other staff");
+  expect(tableScreen(el).party?.revision).toBe(8);
+  expect(tableScreen(el).draftStore).toBe(store);
+  expect(tableHeading(el).shadowRoot!.querySelector("wt-dialog")).toBeNull();
+});
+it("saves a party note when settlement left no main bill", async () => {
+  const party = { ...tableParty(), mainBillId: null };
+  const { el } = await mountedTable({}, party);
+  expect(tableScreen(el).orderId).toBeUndefined();
+  await editTable(el, "Together");
+  expect(api.setKitchenNote).toHaveBeenCalledWith(
+    { partyId: "party-table" },
+    {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      expectedNoteRevision: 2,
+      note: "Together",
+    },
+  );
+  expect(tableHeading(el).note).toBe("Together");
+  expect(api.parkOrder).not.toHaveBeenCalled();
+});
+it("retries a lost party-note response with the same submission", async () => {
+  const setKitchenNote = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("network"))
+    .mockResolvedValue({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
+  const { el } = await mountedTable({ setKitchenNote });
+  const h = await editTable(el, "Together");
+  expect(h.refusal).not.toBe("");
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-save]")!),
+  );
+  await flush(el);
+  expect(setKitchenNote).toHaveBeenCalledTimes(2);
+  expect(setKitchenNote.mock.calls[1]).toEqual(setKitchenNote.mock.calls[0]);
+  expect(tableHeading(el).note).toBe("Together");
+  expect(h.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+});
+
+it("recovers persisted note ownership after a fresh card request loses its response", async () => {
+  let id = "";
+  const getKitchenNote = vi.fn(async () => ({
+    scope: { workingOrderId: id },
+    note: "Stored instruction",
+    revision: 4,
+    ownerRevision: 0,
+  }));
+  const el = await mounted(
+    { pay: vi.fn().mockRejectedValue(new TypeError("network")), getKitchenNote },
+    false,
+  );
+  const store = basket(el).store;
+  store.addProduct(product("cana", "Caña", "2.50"), "1");
+  store.kitchenNote = "Original instruction";
+  id = store.id;
+  emit(counter(el), "collect-card", {});
+  await flush(el);
+  expect(getKitchenNote).toHaveBeenCalledWith({ workingOrderId: id });
+  expect(store.persisted).toBe(true);
+  expect(store.kitchenNote).toBe("Stored instruction");
+  expect(store.kitchenNoteRevision).toBe(4);
+  expect(store.revision).toBe(0);
+  expect(api.recordSale).not.toHaveBeenCalled();
+});
+
+it("rereads changed lines before accepting a newer order revision from note recovery", async () => {
+  let id = "";
+  const snapshot = () => ({
+    scope: { workingOrderId: id },
+    note: "Stored",
+    revision: 4,
+    ownerRevision: 2,
+  });
+  const retrieveWorkingOrder = vi.fn(async () => ({
+    ...heldOrder(2, "9.00", "3.000"),
+    id,
+    kitchenNote: snapshot(),
+  }));
+  const el = await mounted(
+    {
+      pay: vi.fn().mockRejectedValue(new TypeError("network")),
+      getKitchenNote: vi.fn(async () => snapshot()),
+      retrieveWorkingOrder,
+      getTabLines: vi.fn().mockResolvedValue(listing(2, "9.00", "3.000")),
+    },
+    false,
+  );
+  const store = basket(el).store;
+  store.addProduct(product("cana", "Caña", "2.50"), "1");
+  id = store.id;
+  emit(counter(el), "collect-card", {});
+  await flush(el);
+  expect(retrieveWorkingOrder).toHaveBeenCalledWith(id);
+  expect(store.revision).toBe(2);
+  expect(store.lines.find((line) => line.product.id === "cana")?.quantity).toBe("3");
+  expect(store.lines.find((line) => line.product.id === "cana")?.product.unitPrice).toBe("9.00");
+  expect(store.kitchenNote).toBe("Stored");
+});
+it("refreshes stale counter lines before the next note edit uses their revision", async () => {
+  const snapshot = {
+    scope: { workingOrderId: "wo-9" },
+    note: "New state",
+    revision: 4,
+    ownerRevision: 8,
+  };
+  const retrieveWorkingOrder = vi
+    .fn()
+    .mockResolvedValueOnce(heldOrder(4))
+    .mockResolvedValue({ ...heldOrder(8, "9.00", "3.000"), kitchenNote: snapshot });
+  const setKitchenNote = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "working_order.out_of_date" })
+    .mockResolvedValue({ ...snapshot, note: "Fresh edit", revision: 5 });
+  const el = await mounted({
+    retrieveWorkingOrder,
+    getKitchenNote: vi.fn().mockResolvedValue(snapshot),
+    setKitchenNote,
+  });
+  await edit(el, "Old edit");
+  expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+  expect(basket(el).store.lines[1]!.product.unitPrice).toBe("9.00");
+  expect(basket(el).store.revision).toBe(8);
+  await edit(el, "Fresh edit");
+  expect(setKitchenNote.mock.calls[1]?.[1].expectedOrderRevision).toBe(8);
+  expect(basket(el).store.kitchenNote).toBe("Fresh edit");
+});
+
+it("opens the Waiting note from its real row action and returns focus after Cancel", async () => {
+  const el = await mounted({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      capabilities: ["take-orders"],
+      canvas: {
+        ...canvas,
+        tabs: [
+          {
+            ...canvas.tabs[0]!,
+            cards: [
+              ...canvas.tabs[0]!.cards,
+              { type: "held-orders", colSpan: 12, rowSpan: 3, config: {} },
+            ],
+          },
+        ],
+      },
+    }),
+    listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+    getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
+  });
+  const grid = counter(el).shadowRoot!.querySelector("till-card-grid")!;
+  const waiting = grid.shadowRoot!.querySelector("till-counter-waiting")!;
+  const button = waiting.shadowRoot!.querySelector<HTMLElement>("[data-waiting-kitchen-note]");
+  expect(button).not.toBeNull();
+  await userEvent.click(page.elementLocator(button!));
+  await flush(el);
+  const h = waitingEditor(el)!;
+  expect(h.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+  const dialog = h.shadowRoot!.querySelector("wt-dialog")!;
+  const closed = new Promise<void>((resolve) =>
+    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(
+    page.elementLocator(h.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!),
+  );
+  await closed;
+  await flush(el);
+  expect(waitingEditor(el)).toBeNull();
+  expect(button!.shadowRoot!.activeElement).toBe(button!.shadowRoot!.querySelector("button"));
+});
+
+it.each(["reload", "table"])(
+  "drops a Waiting read after leaving its counter view by %s",
+  async (change) => {
+    const pending = deferred<typeof waitingSnapshot>();
+    const el = await mounted({
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockReturnValue(pending.promise),
+    });
+    emit(counter(el), "edit-waiting-kitchen-note", { id: waitingOrder.id });
+    await flush(el);
+    expect(api.getKitchenNote).toHaveBeenCalledOnce();
+    if (change === "reload") {
+      const store = basket(el).store;
+      const generation = store.loadGeneration;
+      emit(counter(el), "retrieve-order", { id: "wo-9" });
+      await flush(el);
+      expect(store.loadGeneration).toBeGreaterThan(generation);
+    } else {
+      emit(counter(el), "open-table", { tableId: "table-four", seated: true });
+      await flush(el);
+      expect(tableScreen(el)).not.toBeNull();
+    }
+    pending.resolve(waitingSnapshot);
+    await flush(el);
+    expect(waitingEditor(el)).toBeNull();
+    expect(api.setKitchenNote).not.toHaveBeenCalled();
+  },
+);

@@ -43,6 +43,7 @@ function party(
   name: string | null = null,
 ): TableParty {
   return {
+    kitchenNote: { scope: { partyId: id }, note: null, revision: 0, ownerRevision: revision },
     id,
     revision,
     guestCount: 2,

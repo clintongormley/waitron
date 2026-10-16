@@ -118,6 +118,7 @@ const weightProduct: TillProduct = {
 };
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 2 },
   id: "v1",
   revision: 2,
   guestCount: 3,

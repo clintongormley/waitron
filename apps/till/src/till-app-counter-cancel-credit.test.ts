@@ -115,6 +115,15 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueDefault: "en",
       loginDefault: "en",
     }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({

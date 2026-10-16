@@ -30,3 +30,19 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
   },
 );
+
+it.each(["light", "dark"] as const)(
+  "opens the standalone Waiting editor accessibly in %s",
+  async (theme) => {
+    const { el, host } = await mountWidget<TillOrderKitchenNote>(
+      "till-order-kitchen-note",
+      { scopeKey: "order:a", note: "Together", hideHeading: true },
+      theme,
+    );
+    el.openEditor();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-edit]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
+    await expectNoA11yViolations(host);
+  },
+);

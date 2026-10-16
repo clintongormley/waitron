@@ -229,6 +229,15 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     getLocales: vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" }),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -931,6 +940,7 @@ const DINING = {
 };
 
 const party = {
+  kitchenNote: { scope: { partyId: "party-a" }, note: null, revision: 0, ownerRevision: 1 },
   id: "party-a",
   revision: 1,
   guestCount: 2,
@@ -1506,7 +1516,18 @@ const tableB = {
   ...table,
   id: "t3",
   label: "3",
-  party: { ...party, id: "party-c", mainBillId: "wo-8", tableIds: ["t3"] },
+  party: {
+    ...party,
+    kitchenNote: {
+      scope: { partyId: "party-c" },
+      note: null,
+      revision: 0,
+      ownerRevision: party.revision,
+    },
+    id: "party-c",
+    mainBillId: "wo-8",
+    tableIds: ["t3"],
+  },
 };
 
 describe("a kept round and another table", () => {
@@ -2023,7 +2044,13 @@ describe("a round that got no answer while its tab moved to another table", () =
     await toTable(el);
     await sendLemonadeRound(el);
     // The guests move from t2 to t4, and the party, which holds both, has a new main bill.
-    const spread = { ...party, revision: 2, mainBillId: "wo-other", tableIds: ["t2", "t4"] };
+    const spread = {
+      ...party,
+      kitchenNote: { scope: { partyId: party.id }, note: null, revision: 0, ownerRevision: 2 },
+      revision: 2,
+      mainBillId: "wo-other",
+      tableIds: ["t2", "t4"],
+    };
     api.getTablesState.mockResolvedValue([
       { ...seated, party: spread },
       { ...seated, id: "t4", label: "4", party: spread },

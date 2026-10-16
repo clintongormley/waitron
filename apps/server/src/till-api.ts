@@ -2754,8 +2754,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ guestCount?: unknown; withTableIds?: unknown }>(c);
+      const body = await readJsonBody<{
+        guestCount?: unknown;
+        withTableIds?: unknown;
+        kitchenNote?: unknown;
+      }>(c);
       const guestCount = requireGuestCount(body.guestCount);
+      const initialNote = body.kitchenNote;
+      if (initialNote !== undefined && initialNote !== null && typeof initialNote !== "string")
+        throw new AppError("kitchen_note.invalid", { field: "note" });
       const withTableIds = requireOtherTables(body.withTableIds, id);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
@@ -2765,6 +2772,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           ...withTableIds.map((tableId) => ({ tableId })),
         ]);
         const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        const kitchenNote =
+          initialNote === undefined
+            ? undefined
+            : await VENUE_SERVICE.writeKitchenNote(tx, { partyId: seated.partyId }, 0, initialNote);
         for (const otherId of withTableIds) {
           if ((await holderOf(tx, otherId)) === seated.partyId) continue;
           await joinTables(tx, sendCfg, seated.partyId, otherId, {
@@ -2777,8 +2788,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }
         // After the writes, so a seat's and a join's own refusals answer first, as on the join route.
         await refuseTakenOff(tx, [id, ...withTableIds]);
-        if (withTableIds.length === 0) return seated;
-        return { ...seated, revision: await partyRevision(tx, seated.partyId) };
+        const revision =
+          withTableIds.length === 0 ? seated.revision : await partyRevision(tx, seated.partyId);
+        return {
+          ...seated,
+          revision,
+          ...(kitchenNote === undefined
+            ? {}
+            : {
+                kitchenNote: {
+                  ...kitchenNote,
+                  scope: { partyId: seated.partyId },
+                  ownerRevision: revision,
+                },
+              }),
+        };
       });
       return c.json(result);
     }),
