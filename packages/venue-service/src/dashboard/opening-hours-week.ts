@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
@@ -27,14 +27,22 @@ const RULER_STEP = 120;
 
 type TitlePart = ReturnType<typeof formatWeekTitleParts>[number];
 
-let widthCandidates: TitlePart[][] | undefined;
-/** The titles of every week whose Monday falls in 2026, in each interface language. */
-function titleCandidates(): TitlePart[][] {
+let widthCandidates: TemplateResult[] | undefined;
+/** The titles of every week whose Monday falls in 2026, in each interface language. A candidate
+ *  is shaped as the title is, its links inline-blocks; shaped otherwise, Chromium measured the
+ *  Month's title a hair wider. */
+function titleCandidates(): TemplateResult[] {
   if (!widthCandidates) {
-    widthCandidates = [];
+    const parts: TitlePart[][] = [];
     for (const language of Object.keys(VENUE_SERVICE_STRINGS))
       for (let monday = "2026-01-05"; monday < "2027-01-01"; monday = addDays(monday, 7))
-        widthCandidates.push(formatWeekTitleParts(monday, addDays(monday, 6), language));
+        parts.push(formatWeekTitleParts(monday, addDays(monday, 6), language));
+    widthCandidates = parts.map(
+      (title) =>
+        html`${title.map((part) =>
+          part.month || part.year ? html`<span class="title-link">${part.text}</span>` : part.text,
+        )}`,
+    );
   }
   return widthCandidates;
 }
@@ -346,14 +354,6 @@ export class OpeningHoursWeekView extends LitElement {
         >${glyph}</wt-button
       >`;
     };
-    // A candidate is shaped as the title is, its links inline-blocks; shaped otherwise, Chromium
-    // measured the Month's title a hair wider.
-    const candidates = titleCandidates().map(
-      (parts) =>
-        html`${parts.map((part) =>
-          part.month || part.year ? html`<span class="title-link">${part.text}</span>` : part.text,
-        )}`,
-    );
     const heading = html`${formatWeekTitleParts(dates[0]!, dates[6]!).map((part) => {
       const { month, year } = part;
       if (month)
@@ -383,7 +383,7 @@ export class OpeningHoursWeekView extends LitElement {
     const days = this.model ? weekDays(this.model, this.date) : undefined;
     return html`<div class="head">
         ${step(-7, "previous-week", "week.previous", "‹")}
-        ${fixedTitle(html`<h2 data-test="week" aria-live="polite">${heading}</h2>`, candidates)}
+        ${fixedTitle(html`<h2 data-test="week" aria-live="polite">${heading}</h2>`, titleCandidates())}
         ${step(7, "next-week", "week.next", "›")}
         ${days && this.model ? this.#show(this.model) : nothing}
       </div>
@@ -420,8 +420,7 @@ export class OpeningHoursWeekView extends LitElement {
         <div class="scale">
           ${labels.map(
             (minute) =>
-              // A label is centred on its tick. "HH:MM" in tabular figures is under 5ch wide, so
-              // holding its centre 2.5ch from the end keeps the last one inside the Week.
+              // A label is centred on its tick, its centre held at least 2.5ch from the end.
               html`<span
                 class="label"
                 style=${styleMap({ left: `min(${(minute / longest) * 100}%, calc(100% - 2.5ch))` })}
