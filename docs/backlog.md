@@ -3686,32 +3686,25 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
-  screen follows the device's own light or dark setting: the token layer honours a `data-theme`
-  attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in
-  the product sets it. So staff on a locked-down till or a kiosk tablet cannot change it. Add a
-  Theme choice with three options (Light, Dark, Follow device, the default) to the dashboard, the
-  till and setup. It is saved in that browser on that device, not in the venue's database. Open:
-  one choice per device, or one per person on a shared till (suggested: per device).
+  screen follows the device's own light or dark setting. Add a Theme choice with three options
+  (Light, Dark, Follow device, the default) to the dashboard, the till and setup. It is saved in
+  that browser on that device, not in the venue's database.
+  [Detail](backlog/dashboard.md#a681-a-light--dark--follow-device-theme-choice-in-the-apps)
 
 - **A653 — every long dashboard table scrolls the same way, with less above it (owner,
   2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows
   inside the table's own box (`wt-data-table`'s `stickyHeader`, set by no other screen); a menu's
   Structure tab, and the other long tables, scroll the whole page instead. Make them consistent.
-  The cost of Products' way is the height spent above the table — banner, page title, breadcrumb,
-  status line, tabs, the Filters and Select buttons and the search box — which on a phone leaves
-  few rows; cut that down, phones first. On a phone also cut the side margins — the page's own
-  padding and each screen's — and keep the Demo and Preparation link strip (`wt-demo-bar`) from
-  wrapping to two rows (owner, 2026-10-14). Takes in W80's two open points: few rows at 375×667,
-  and `stickyHeader` set only by Products.
+  The cost of Products' way is the height spent above the table, which on a phone leaves few rows;
+  cut that down, phones first.
   [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
   [screenshots](backlog/mockups/a653-table-scrolling/)
 
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
   dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes
   without the "Discard changes?" question. Escape, a click outside, a dialog's ✕, and leaving a page
-  any other way (the sidebar, a language change, logging out, browser Back) still ask. Reverses the
-  written rule in design-system.md ("Protect an edited dialog before closing it"), which routes
-  Cancel through the question; change the rule in the same change. Dashboard, till and setup alike.
+  any other way still ask. Reverses the written rule in design-system.md ("Protect an edited dialog
+  before closing it"); change the rule in the same change.
   [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 
 - **A625. A row menu wraps its two-word items after the window is resized to phone width.** Seen on
@@ -3729,16 +3722,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
 
 - **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
-  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height unless
-  given `height="medium"` (`packages/ui/src/components/wt-modal.ts`, the `dialog` rule) and
-  `wt-dialog` puts the form's message at the end of the body
-  (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
-  150 px between the message and the buttons (seen in the Prep stations station editor; the same at
-  main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
-  buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
-  full-height dialog those are not the same place. Options: push the message to the bottom of the
-  body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
-  this stays open.
+  look, owner decision needed). A short form leaves a gap of about 150 px between the message and
+  the buttons (seen in the Prep stations station editor). Options: push the message to the bottom
+  of the body, or into the footer.
+  [Detail](backlog/dashboard.md#a-forms-bottom-message-in-a-full-height-dialog-sits-far-above-its-buttons)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
@@ -3750,37 +3737,37 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
   `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
 
-- **After a box reset, the reset page's own banner still shows the old venue's name.** By reading,
-  not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName` that
-  `getMe` set, and the locale read meant to replace it repeats the old name once made, since it is
-  kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
+- **Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).**
+  - After a box reset, the reset page's own banner still shows the old venue's name. By reading,
+    not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName`
+    that `getMe` set, and the locale read meant to replace it repeats the old name once made, since
+    it is kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
+  - A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
+    reset" notice — for example one asleep through the reset and the new venue's setup; there is
+    no venue identity to compare.
+  - A sign-in screen already showing when a box reset is found may already have started its passkey
+    autofill, and has started its Google settings read; the switch to the reset notice stops
+    neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
+    by a failed check on coming back into view) switches to the reset notice only when a later
+    request is answered `node.reset`.
+  - `waitron.sh reset --all` deletes the box's own minted certificate (`deploy/waitron.sh`, the
+    `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
+    not run — a tab left open fails the certificate check, reports `connection.failed` on every
+    request and is never signed out, indistinguishable from the box being down. This holds only for
+    the minted certificate; when the operator supplies one through `WAITRON_TLS_*`, the box serves
+    that instead.
 
-- **A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
-  reset" notice** — for example one asleep through the reset and the new venue's setup; there is no
-  venue identity to compare.
-
-- **A sign-in screen already showing when a box reset is found may already have started its passkey
-  autofill, and has started its Google settings read; the switch to the reset notice stops neither.** By reading, not
-  run: a tab already on sign-in (sent by the shared session deadline, or by a failed check on coming
-  back into view) switches to the reset notice only when a later request is answered `node.reset`.
-
-- **A dashboard tab on the Backup screen learns of a box reset late.** Setup mode answers only
-  `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
-  screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404 with
-  no code (or, without the built wizard, the placeholder page), so such a tab shows the reset notice
-  only at its next management request. Measured by A501's Codex review against setup mode. Options:
-  answer those dashboard `/api` paths with `node.reset` too (the boot test pins `/api/staff` answering
-  the placeholder), or move the reads under `/management-api`. Left open by A501.
-
-- **`reportError`'s HTTP status is now unread.** `apps/dashboard/src/session-signals.ts` no longer
-  uses it, and the status hand-off in `packages/dashboard-kit/src/request.ts` was added only for the
-  check A501 removed; a small cleanup across both packages. Left open by A501.
-
-- **`waitron.sh reset --all` deletes the box's own minted certificate** (`deploy/waitron.sh`, the
-  `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
-  not run — a tab left open fails the certificate check, reports `connection.failed` on every request
-  and is never signed out, indistinguishable from the box being down. This holds only for the minted
-  certificate; when the operator supplies one through `WAITRON_TLS_*`, the box serves that instead.
+- **Loose ends left by A501 (#1552).**
+  - A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
+    `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
+    screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404
+    with no code (or, without the built wizard, the placeholder page), so such a tab shows the reset
+    notice only at its next management request. Measured by A501's Codex review against setup mode.
+    Options: answer those dashboard `/api` paths with `node.reset` too (the boot test pins
+    `/api/staff` answering the placeholder), or move the reads under `/management-api`.
+  - `reportError`'s HTTP status is now unread. `apps/dashboard/src/session-signals.ts` no longer
+    uses it, and the status hand-off in `packages/dashboard-kit/src/request.ts` was added only for
+    the check A501 removed; a small cleanup across both packages.
 
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
   The editor repeats the list title and has no parent link above the heading
@@ -3823,8 +3810,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
-- The dashboard's `es-ES` module default still needs the flip the till got in #170; check the
-  dashboard money formatter for the same "doesn't follow the UI locale" bug.
+- The dashboard's `es-ES` module default still needs the flip the till got in #170.
 
 - **Product decision to take before production:** A human account always keeps an email (no
   remove-email action; `setEmail` rejects clearing) — the rule now, rather than a missing UI path.
@@ -3846,33 +3832,31 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   look (2026-10-07), OPEN, unqueued — not checked against `main`. Screenshots:
   `~/waitron-campaign-c/a310-shots/`.
 
-- **`docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
-  table heading**, while Menus, Staff and Units put a text Add button at the heading row's trailing
-  edge; the doc only names the exceptions, and whether the rule itself changes is the owner's call.
-  Left open by W79 (#1186).
+- **Loose ends left by W79 (#1186, the Menus list).**
+  - `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
+    table heading, while Menus, Staff and Units put a text Add button at the heading row's
+    trailing edge; the doc only names the exceptions, and whether the rule itself changes is the
+    owner's call.
+  - The row-highlight tests focus only the row's own button, so nothing tests that a row
+    highlights while another control in it, such as its Actions menu, has focus.
 
-- **The row-highlight tests focus only the row's own button**, so nothing tests that a row
-  highlights while another control in it, such as its Actions menu, has focus. Left open by W79
-  (#1186, the Menus list).
+- **Loose ends left by A629 (#1684).**
+  - The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
+    (`wt-row-actions`) has not been tried. No screen marks one disabled yet; W88's busy-tree point
+    would be the first.
+  - A middle-click on a dashboard link marked `aria-disabled="true"` outside a ⋮ menu may still
+    open it in a new tab — not tried. The dashboard cancels such a link in `#onAppLink`
+    (`apps/dashboard/src/dashboard-app.ts`), which listens for `click` only; in A629's tests a
+    middle-click on a ⋮ menu link opened a new page in Chromium until `auxclick` was cancelled
+    too. Raised by A629's review.
 
-- **The browser's "Open link in new tab" on a link marked `aria-disabled="true"` in a ⋮ menu
-  (`wt-row-actions`) has not been tried.** No screen marks one disabled yet; W88's busy-tree point
-  would be the first. Left open by A629 (#1684).
-
-- **A middle-click on a dashboard link marked `aria-disabled="true"` outside a ⋮ menu may still open
-  it in a new tab — not tried.** The dashboard cancels such a link in `#onAppLink`
-  (`apps/dashboard/src/dashboard-app.ts`), which listens for `click` only; in A629's tests a
-  middle-click on a ⋮ menu link opened a new page in Chromium until `auxclick` was cancelled too.
-  Raised by A629's review (#1684).
-
-- **The table's Customise columns button is icon-only beside Filters and Select but has neither
-  their look nor a tooltip.** Left open by W83's review (#1193), not started.
-  [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
-
-- **The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not a
-  `wt-icon-button` component** — the Products table's Select is a native `<button>` because `wt-button` does not pass
-  `aria-pressed` through, and the Structure tab's Reorder and Select toggles are hand-built icon buttons
-  for the same reason. Left open by W83's review (#1193), not started.
+- **Loose ends left by W83's review (#1193), not started.**
+  - The table's Customise columns button is icon-only beside Filters and Select but has neither
+    their look nor a tooltip.
+  - The icon button and its tooltip are a stylesheet and a handler each caller wires by hand, not
+    a `wt-icon-button` component — the Products table's Select is a native `<button>` because
+    `wt-button` does not pass `aria-pressed` through, and the Structure tab's Reorder and Select
+    toggles are hand-built icon buttons for the same reason.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 - **Row menus in plain `<table>`s are unchecked at phone width.** None has a phone-width case and
@@ -3890,13 +3874,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 - On the dashboard, the language chooser's menu is now a native popover in the top layer (A187), so
-  it paints over the alert pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which
-  hangs below the banner's row at its trailing edge, under the update bar while that shows, with `z-index: 40`, a stacking order the top layer
-  ignores): where the two overlap, an alert arriving while the menu is open is hidden under it, and
-  its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it
-  only while the pointer or keyboard focus is on the pop-up. Decide whether an arriving alert should
-  close the menu. Left open by C133 (#1045, the till's tabs fit one screen), under service Task 16
-  (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
+  it paints over the alert pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`): where
+  the two overlap, an alert arriving while the menu is open is hidden under it, and its countdown
+  keeps running. Decide whether an arriving alert should close the menu. Left open by C133 (#1045,
+  the till's tabs fit one screen), under service Task 16 (#981).
+  [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Why that
   screen behaved differently has not been established. Left open by the service, ordering and
@@ -3949,49 +3931,40 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   among others) and a screen's own paragraphs still run the modal's full width.
   [Detail](backlog/dashboard.md#a-form-in-a-modal-stops-at---wt-form-max-width-c105-965--left-open)
 
-- **`wt-form-error-summary` is deleted once nothing uses it** — left open by C47
-  (#838/#839/#840/#841). Besides its own files and exports in `packages/ui-core` and `packages/ui`,
-  the `packages/ui` workbench demo (`packages/ui/demo/main.ts`) and the consumer test page
-  `packages/ui-core/test/consumer/main.ts`, which `packages/ui-core/test/package-consumer.test.mjs`
-  loads, still use it.
-
-- **The profile screen, opened with required details missing, marks those fields at once, before any
-  press** (two existing tests pin it), unlike every other form. Left open by C47
-  (#838/#839/#840/#841).
-
-- **The form plumbing is hand-written per form** — left open by C47 (#838/#839/#840/#841):
-  assembling the bottom message, waiting for the render and then calling `focusFirstInvalid`, and
-  the state that remembers the first press and which refusals the person has since changed, in
-  several different shapes.
-  [Detail](backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form)
-
-- **The image picker's error message is not read to a screen reader** — left open by C47
-  (#838/#839/#840/#841). The Choose image button inside it carries `aria-invalid` and takes focus,
-  so a screen reader hears "invalid" with no reason. Since A200 the product editor's photo button
-  (`apps/dashboard/src/widgets/product-editor.ts`) has the same defect.
-  [Detail](backlog/dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
-
-- **A refused save of a venue service setting that saves at once shows twice** — found during C47
-  part 2 and not fixed: beside the control and at the top of the panel (`render`,
-  `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
-  `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
+- **Loose ends left by C47 (#838/#839/#840/#841).**
+  - `wt-form-error-summary` is deleted once nothing uses it. Besides its own files and exports in
+    `packages/ui-core` and `packages/ui`, the `packages/ui` workbench demo
+    (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
+    which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it.
+  - The profile screen, opened with required details missing, marks those fields at once, before
+    any press (two existing tests pin it), unlike every other form.
+  - The form plumbing is hand-written per form: assembling the bottom message, waiting for the
+    render and then calling `focusFirstInvalid`, and the state that remembers the first press and
+    which refusals the person has since changed, in several different shapes.
+    [Detail](backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form)
+  - The image picker's error message is not read to a screen reader. The Choose image button inside
+    it carries `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason.
+    Since A200 the product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`)
+    has the same defect.
+    [Detail](backlog/dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
+  - Found during C47 part 2 and not fixed: a refused save of a venue service setting that saves at
+    once shows twice, beside the control and at the top of the panel (`render`,
+    `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
+    `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both.
+  - Found during C47 part 2 and not fixed: `wt-switch` cannot be marked invalid — a server refusal
+    of an adjustment reason's note-required switch would show its message but move focus nowhere.
+    [Detail](backlog/dashboard.md#what-c47-part-2-found-and-did-not-fix)
+  - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
+    footer, in a screenshot after a refusal that names no field, which looks like the modal's
+    scrolling body showing a focus ring — not traced, and not checked against `main`. A502 part 2
+    saw the same line above the buttons of the floor plan editor's compact "Delete {name}?"
+    question, opened by a click.
 
 - **A switched-off `wt-switch` may be too faint to see** — seen in A639's screenshots of the Backups
   screen, not fixed: its track measured roughly 1.3 to 1 against the light page and 1.6 to 1 against
   the dark one, read from pixel colours in those screenshots, where WCAG 1.4.11 asks 3 to 1 for a
   control's boundary. Not measured from the component's tokens; `wt-switch` itself was not changed
   by A639 (last changed by W97, #1311).
-
-- **`wt-switch` cannot be marked invalid** — found during C47 part 2 and not fixed: a server refusal
-  of an adjustment reason's note-required switch would show its message but move focus nowhere.
-  [Detail](backlog/dashboard.md#what-c47-part-2-found-and-did-not-fix)
-
-- **A blue line along the top of a `wt-modal` editor's footer** — found during C47 part 2 and not
-  fixed: in a screenshot of a `wt-modal` editor after a refusal that names no field, a blue line
-  runs along the top of the footer, which looks like the modal's scrolling body showing a focus ring
-  — not traced, and not checked against `main`; an observation from the implementer's session.
-  A502 part 2 saw the same line above the buttons of the floor plan editor's compact "Delete
-  {name}?" question, opened by a click.
 
 - **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
   (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
@@ -4051,7 +4024,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). Still open: `wt-combobox` does not sort its options, and
-  `compareLabels`, now used by `wt-data-table`, passes no locale to `localeCompare`.
+  `compareLabels`, now used by `wt-data-table`, passes no locale to its `Intl.Collator`.
   [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
@@ -4093,28 +4066,18 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   receipt language): one of two tidy-ups its review raised and left, because each changes files
   outside it.
 
-- **When live updates are off and every Hours read both fails and takes longer than the 60-second
-  refresh, no error is shown: the dashboard's request code sets no timeout on a read** — left open
-  by A261 step 5 (Hours). Found in #1298's review; I believe it predates the branch (not checked
-  with `git blame`).
-
-- **Secret hashing still blocks the event loop** — left open by W1 (#1117), secret checks and the write
-  lock. `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting
-  a token or setting a PIN or password stops the event loop. The `deriveKey` callers are listed
-  under [The box](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives).
-  [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
-
-- **`verifySecretAsync` could be renamed `verifySecret` (optional)** — left open by #912's review
-  (secret checks and the write lock).
+- **Loose ends left by secret checks and the write lock (W1, #1117; #912's review).**
+  - **Secret hashing still blocks the event loop** — left open by W1 (#1117). `hashSecret` derives
+    with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN
+    or password stops the event loop. The `deriveKey` callers are listed under
+    [The box](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives).
+  - **`verifySecretAsync` could be renamed `verifySecret` (optional)** — left open by #912's review.
   [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
 
 - **A refused early dashboard payment authorization may become allowed before the PIN transaction —
   UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
-  credential when its read refuses; `pinGated` then opens the transaction without a turn. If the
-  permission changes to allowed between those reads, a text PIN may derive under the write lock
-  outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
-  **Next action:** reproduce the permission-grant window through a real attestation route, then
-  decide whether the refused early read must still join a person-specific turn.
+  credential when its read refuses; `pinGated` then opens the transaction without a turn.
+  [Detail](backlog/dashboard.md#a-refused-early-dashboard-payment-authorization-may-become-allowed-before-the-pin-transaction--unverified-a530-review)
 
 - **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
   shared look, and the rules for it live in [design-system.md](developers/design-system.md). The
@@ -4132,9 +4095,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on
   the page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on
   `--wt-color-bg` (`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-  (`packages/ui/src/tokens/colors.css`). **Next action:** an owner colour call — darken the light
-  theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on the
-  page background and add a check that says so.
+  (`packages/ui-core/src/tokens/colors.css`). **Next action:** an owner colour call — darken the
+  light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
+  the page background and add a check that says so.
   [Detail](backlog/dashboard.md#also-open-and-product-wide-the-primary-blue-fails-the-accessibility-contrast-bar-as-text-on-the-page-background-in-the-light-theme)
 
 - **Nothing stops the next screen styling `wt-data-table` cell markup with a class.** A check that
@@ -4153,12 +4116,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   consumers CAP a name cell with it, others use it as a `min-width` FLOOR, and one uses it as a FLEX
   BASIS on a combobox. **Next action (design decision):** a second token for the floor, or one
   shared sizing value used three ways.
-
-- **The Payments screen's readers table gets no button**, because "Add reader" sits beside each
-  connected provider (none, one or several), so there is no single Add to put there, and the list
-  is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none
-  either, because its rows come from "Add products" on the Structure tab.
-  Left open by A176 (an empty table shows a proper empty box, with the screen's Add button, #1033).
 
 - **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
   still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
@@ -4223,23 +4180,18 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   places is checked by nobody.
 
 - **`--wt-color-primary-text` has fixed light and dark values that do not follow
-  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082):
-  (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored tenant theme
-  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the
-  disabled colours `--wt-color-primary-disabled`, `--wt-color-on-primary-disabled`,
-  `--wt-color-danger-disabled` and `--wt-color-on-danger-disabled` (A535), which
-  do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment that sets
-  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered or
-  disabled primary or danger `wt-button`.
+  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082). The same
+  holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the disabled
+  colours (A535), so a tenant or deployment that sets only `--wt-color-primary` or
+  `--wt-color-danger` gets Waitron's default blue or red on a hovered or disabled primary or danger
+  `wt-button`.
+  [Detail](backlog/dashboard.md#--wt-color-primary-text-has-fixed-light-and-dark-values-that-do-not-follow---wt-color-primary-and-a-tenant-theme-cannot-set-it)
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
-  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
-  instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
-  browser run also missed the Prep stations drag test's 1500 ms bound at
-  `prep-stations-screen.test.ts:6556`: scrollTop was 266, against a required value above 317.
-  An isolated run of the complete file on the branch's earlier head passed. The cause remains
-  unverified. Capture the current scroll/limit, pointer position, drag state and visible box
-  before attributing it to the scroll helper.
+  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge). A 2026-10-09
+  venue-service browser run also missed the Prep stations drag test's 1500 ms bound. The cause
+  remains unverified.
+  [Detail](backlog/dashboard.md#one-earlier-spanish-dark-theme-390-px-demo-probe-reached-its-12-second-deadline-before-the-bottom)
 
 - **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
   The native status colour fields show an ellipsis instead of the full label in the inspected
@@ -4257,12 +4209,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   instead of pressing the form's button; they pass, but never prove the button works. Left open by
   A331 batch 3a (#1401).
 
-- **Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor
-  closes until focus is back on a field inside the dialog** — seen in the purchase form's
-  tests, not changed and not tried by hand (the tests put it there with `focus()`; a click was not
-  tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`, A397.2): after a put-back, focus
-  is on the page body and the dialog is no longer modal; the measurements attribute this to how
-  `wt-dialog` handles being put back. Left open by A397 part 1 (#1429), under A331 batch 5.
+- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
+  by A539's mutation tests, not fixed. Out of modal, a long body grows past the screen
+  (`packages/ui/src/components/wt-dialog.ts`). Seen in the purchase form's tests too: once put back
+  with an edit, keyboard focus is outside the dialog, and Escape neither asks nor closes until
+  focus is back on a field inside the dialog — left open by A397 part 1 (#1429), under A331 batch 5.
+  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal),
+  [the purchase form's case](backlog/dashboard.md#once-put-back-with-an-edit-keyboard-focus-is-outside-the-dialog-and-escape-neither-asks-nor-closes)
 
 - **On a hovered Products row in the dark theme, status and allergen badge borders appear to
   disappear into the row** — the earlier screenshot-only observation remains open. Contrast for those
@@ -4282,7 +4235,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   here. [Detail](backlog/dashboard.md#text-size-after-a179-988)
 
 - **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
-  reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint
+  reorder list (`ReorderController`, `packages/ui/src/reorder-table.ts`) shows a faint
   line at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its
   list has its shadow cut off where the table ends.
   [Detail](backlog/dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
@@ -4292,10 +4245,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   there may wrap mid-word.
   [Detail](backlog/dashboard.md#the-overviews-top-sellers-table-can-reach-into-its-cards-padding-at-desktop-width)
 
-- **Three texts still use the old words.** Two hints say "Create" (the Products screen's empty
-  prompt, "Create a menu on the Menus screen…", and the readiness line "Create an active department
-  before service."), and the purchase dialog's edit heading reads "Edit purchase invoice" while its
-  create heading is now "Add invoice". Left open by A450 (#1484).
+- **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
+  "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
+  purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).
 
 - **Opening hours' create texts say "New …" and "+ …"** — `season.new` ("New season"),
   `special.new` ("New special day") and `season.add` ("+ Season") in
@@ -4311,11 +4263,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   found by A539's mutation tests, not fixed. The close sets `body.hidden` behind Lit's back, so the
   reopen measures a hidden body and unhides it at once (`packages/ui/src/components/wt-disclosure.ts`).
   [Detail](backlog/dashboard.md#a541-a-wt-disclosure-reopened-after-an-animated-close-snaps-open-with-no-animation)
-
-- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
-  by A539's mutation tests, not fixed. Out of modal, a long body grows past the screen
-  (`packages/ui/src/components/wt-dialog.ts`).
-  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal)
 
 - **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
   answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's

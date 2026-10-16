@@ -442,16 +442,16 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
   is the one dropdown (A178b–f). Still open:
   `wt-combobox` does not sort its options, and `compareLabels`, now used by `wt-data-table`,
-  passes no locale to `localeCompare`.
+  passes no locale to its `Intl.Collator`.
 
 ## Shared database-backed table paging, search and sorting
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes.
-  `wt-data-table`'s toolbar search box and filter dropdowns (#362) filter the rows already in the
-  browser and emit no `wt-*` event of their own when the search text or a filter changes (only
-  sorting and row selection do), so server-backed paging cannot reuse them as they stand.
+  Since A737 Part 1 (#1778), `wt-data-table` takes `serverPaging` and emits `wt-query-change`
+  (search text, sort and filters) and `wt-page-change`; only the till's find-bill screen
+  (`apps/till/src/screens/till-find-bill-screen.ts`) uses them, and no dashboard table does yet.
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
 
@@ -533,12 +533,12 @@ settle this first, because every screen after it inherits the answer.
 **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
 page background, in the light theme.** Light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
 (`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text
-(`packages/ui/src/tokens/colors.css`). The dark theme is fine (`#4c8dff` on `#101216`, 5.86 to 1),
-and so is the same blue on a card or modal surface (4.63 to 1 on white). The `*.a11y.test.ts`
+(`packages/ui-core/src/tokens/colors.css`). The dark theme is fine (`#4c8dff` on `#101216`, 5.86 to
+1), and so is the same blue on a card or modal surface (4.63 to 1 on white). The `*.a11y.test.ts`
 suites run axe's full default ruleset, but axe only sees a pairing some mounted component paints;
-nothing enumerates the tokens against each other. **Next action:** an owner colour call — darken
-the light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on
-the page background and add a check that says so.
+nothing enumerates the tokens against each other. **Next action:** an owner colour call — darken the
+light theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on the
+page background and add a check that says so.
 
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
@@ -621,9 +621,7 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
     Remove while a window opened from it is still open. Owner, 2026-10-08: "a", draw them grey too;
     A427 does those four, and Remove keeps its red while the editor's own save is being sent.
     **Landed as #1446.** Delete on a canvas's last tab is left as it is, because canvases are
-    being deleted (A182, owner 2026-10-08). **Left open by A427, not queued:** the product editor's
-    image picker can still be opened while the editor's own save is being sent (found by #1446's
-    Codex review, which held the save request open and clicked the image chooser);
+    being deleted (A182, owner 2026-10-08);
   - when the server refuses an options list's save because of one option, opening that option's
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
@@ -879,8 +877,8 @@ the usual remedy is to keep field text at 16px on small screens only.
 ## Dragging a row (A180, #994 and #1003) — two things seen, left as they were
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
-reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
-at each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
+reorder list (`ReorderController`, `packages/ui/src/reorder-table.ts`) shows a faint line at
+each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
 has its shadow cut off where the table ends. Whether A180's lifting (`position: relative`,
 `z-index: 1`) contributes is not known; the likely cause, not checked, is the sideways-scroll
 wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant table;
@@ -1043,6 +1041,13 @@ From A334 (#1416, held reorder drags scroll at the list edge):
 
 - Floor and grid placement editors remain outside this change.
 
+From A176 (an empty table shows a proper empty box, with the screen's Add button, #1033):
+
+- **The Payments screen's readers table gets no button**, because "Add reader" sits beside each
+  connected provider (none, one or several), so there is no single Add to put there, and the list
+  is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none
+  either, because its rows come from "Add products" on the Structure tab.
+
 ## A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)
 
 The owner's words (2026-10-13, watcher session): "I want a help interface so that there is a
@@ -1132,3 +1137,69 @@ still asks, and a full page's own Cancel leaves without asking too.
 - **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
   Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
   that asserts Cancel asks is now asserting the old rule.
+
+## A681. A light / dark / follow-device theme choice in the apps
+
+**A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
+screen follows the device's own light or dark setting: the token layer honours a `data-theme`
+attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in
+the product sets it. So staff on a locked-down till or a kiosk tablet cannot change it. Add a
+Theme choice with three options (Light, Dark, Follow device, the default) to the dashboard, the
+till and setup. It is saved in that browser on that device, not in the venue's database. Open:
+one choice per device, or one per person on a shared till (suggested: per device).
+
+## A form's bottom message in a full-height dialog sits far above its buttons
+
+**A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
+look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height unless
+given `height="medium"` (`packages/ui/src/components/wt-modal.ts`, the `dialog` rule) and
+`wt-dialog` puts the form's message at the end of the body
+(`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
+150 px between the message and the buttons (seen in the Prep stations station editor; the same at
+main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
+buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
+full-height dialog those are not the same place. Options: push the message to the bottom of the
+body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
+this stays open.
+
+## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
+
+- **A refused early dashboard payment authorization may become allowed before the PIN transaction —
+  UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
+  credential when its read refuses; `pinGated` then opens the transaction without a turn. If the
+  permission changes to allowed between those reads, a text PIN may derive under the write lock
+  outside the attempt queue. The same fallback is present at base `c704ac0dc`; no race was run.
+  **Next action:** reproduce the permission-grant window through a real attestation route, then
+  decide whether the refused early read must still join a person-specific turn.
+
+## `--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`, and a tenant theme cannot set it
+
+- **`--wt-color-primary-text` has fixed light and dark values that do not follow
+  `--wt-color-primary`, and a tenant theme cannot set it** — left open by A218 (#1082):
+  (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored tenant theme
+  yet. The same holds for `--wt-color-primary-hover` and `--wt-color-danger-hover` (A306), and the
+  disabled colours `--wt-color-primary-disabled`, `--wt-color-on-primary-disabled`,
+  `--wt-color-danger-disabled` and `--wt-color-on-danger-disabled` (A535), which
+  do not follow `--wt-color-primary` and `--wt-color-danger`, so a tenant or deployment that sets
+  only `--wt-color-primary` or `--wt-color-danger` gets Waitron's default blue or red on a hovered or
+  disabled primary or danger `wt-button`.
+
+## One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the bottom
+
+- **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
+  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
+  instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
+  browser run also missed the Prep stations drag test's 1500 ms bound at
+  `prep-stations-screen.test.ts:6556`: scrollTop was 266, against a required value above 317.
+  An isolated run of the complete file on the branch's earlier head passed. The cause remains
+  unverified. Capture the current scroll/limit, pointer position, drag state and visible box
+  before attributing it to the scroll helper.
+
+## Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor closes
+
+- **Once put back with an edit, keyboard focus is outside the dialog, and Escape neither asks nor
+  closes until focus is back on a field inside the dialog** — seen in the purchase form's
+  tests, not changed and not tried by hand (the tests put it there with `focus()`; a click was not
+  tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`, A397.2): after a put-back, focus
+  is on the page body and the dialog is no longer modal; the measurements attribute this to how
+  `wt-dialog` handles being put back. Left open by A397 part 1 (#1429), under A331 batch 5.
