@@ -41,6 +41,8 @@ safes and disabled incomplete forms without saying what was missing (`ui-login`,
 A short field explanation is the field's hint; one too long for a hint, or on a field that starts
 filled in, uses `wt-help-tooltip`, whose button closes on outside click or Escape (owner,
 2026-10-03).
+Venue settings' Venue card is the exception: it starts filled in and has no "?" (owner, 2026-10-16,
+A755; design-system.md, Forms).
 
 Nothing guards that hint-or-"?" rule across screens, and other setup screens may still break it
 (backlog A237).

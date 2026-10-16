@@ -1422,8 +1422,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 - **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
   put back.** Left open after the unit-form fix in A397 part 2 (#1439):
-  the "VAT class for new products" default, the ingredient form, the options list and its option
-  window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
+  the ingredient form, the options list and its option window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
   screen ever moves an open form. Left open by A331 batch 2a (#1422).
 
 - **A menu published before this keeps a variant's own unit, frozen in its published copy, until the
@@ -1547,11 +1546,37 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   role, with "plus N more" past 5 or 10, whichever reads better.
   [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
 
-- **A755. Venue settings: four cards on one page (owner, 2026-10-16).** Business, Venue, Business
-  day and Defaults, each editing on its own; the business-day start shown once; no "?" buttons;
-  "Default receipt language" without its legal paragraph; the VAT class for new products back from
-  its own Defaults page, under `venue.configure`. No tabs once A756, A757 and A758 have taken
-  theirs. [Detail](backlog/service-periods.md#a755-venue-settings-four-cards-on-one-page), [mockups](backlog/mockups/a755-venue-settings/)
+- **For the owner: the Business day card's actions with a scheduled change** — left open by A755
+  (the A755 PR). The mock-up draws only "Change start". As built, a change that can still be
+  altered shows "Replace change" and "Cancel scheduled change"; one past its lock shows no action
+  and the locked note.
+
+- **For the owner: the Venue card's lock wording** — left open by A755 (the A755 PR). The mock-up's
+  foot names the field ("The time zone is locked because the venue has recorded sales."); as built
+  it says one sentence per reason ("Locked: the venue has recorded sales."), and the "· locked"
+  marker beside a field names it.
+
+- **The Venue card says nothing about a time zone locked by a past business-day change** — left open
+  by A755 (the A755 PR). The server gives the reason `business_day_history`
+  (`apps/server/src/venue-details.ts`); `REASONS` in `apps/dashboard/src/screens/venue-details-panel.ts`
+  has no sentence for it.
+
+- **For the owner: who sees the Defaults card** — left open by A755 (the A755 PR). As built, only a
+  session holding `venue.configure`; a supervisor (who holds `venue.view` alone) sees the other three
+  cards read-only and no Defaults card.
+
+- **For the owner: the legal paragraph beside setup's fixed receipt language** — left open by A755
+  (the A755 PR), which took it out of Venue settings. The setup wizard still shows it
+  (`fixedReceiptLocale.reason`, `apps/setup/src/screens/venue-screen.ts`). Should it go there too?
+
+- **For the owner: Province on the Venue card** — left open by A755 (the A755 PR). The mock-up draws
+  it editable; the server refuses every province change, so it shows as a locked row until
+  _Province edits in Venue details_ below is decided. Is that right?
+
+- **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
+  while doing A755 (the A755 PR); none had one before it either: `departments_zones`,
+  `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
+  `preview_paper`, `trading_name_location`, `trim_save_error`, `venue_defaults` and `venue_wide`.
 
 - **A762. Every painter says what it edits in its colour, and the Staffing month marks special days
   (owner, 2026-10-16).** All four painters get a band in the season's or the special day's colour;
@@ -3724,7 +3749,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   did before the change, and leaves the order's lines unchanged. No till screen calls that
   route.
 
-- The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
+- The refusal's count of blocking orders is not shown on Venue settings' Defaults card: `codeMessage` fills
   in no values.
 
 - The provisioning command (`waitron-provision`) can still store two languages, or one no pack
@@ -3739,7 +3764,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   reload. The on-screen ticket follows each sale's own language.
 
 - The dev and demo seed's English mode stores `en-GB`, which prints the Spanish words beside
-  English dish names; the Receipts tab of Venue settings shows it as the saved language although it is not
+  English dish names; Venue settings' Defaults card shows it as the saved language although it is not
   offered.
 
 **Bluetooth (read, not run, unless a line says otherwise):**
@@ -4422,8 +4447,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   review should propose the whole list: which permissions to merge, the names, and which role holds
   each, and then rename the call sites in one change. **Do it before the editable-roles item below**
   (owner, 2026-09-26). Since A494 (2026-10-11), `catalogue.manage` gates the catalogue,
-  units and content languages, and the "VAT class for new products" default; A755 moves that
-  default under `venue.configure` (owner, 2026-10-16).
+  units and content languages; the "VAT class for new products" default is set under
+  `venue.configure` (owner, 2026-10-16, A755).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner

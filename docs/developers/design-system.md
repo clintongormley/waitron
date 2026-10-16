@@ -2241,7 +2241,7 @@ These forms follow the rule
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
-- batch 2a: the "VAT class for new products" default (now on Products and menus → Defaults); the
+- batch 2a: the "VAT class for new products" default (now on Venue settings' Defaults card); the
   recipe editor and the ingredient form; the unit form, new and existing; the options list and its
   option window; the extras list; Add to menus after a product is created; a section's Add products;
   a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's
@@ -2271,6 +2271,9 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
+- A755: Venue settings' Venue card and Defaults card, each editing in place. Their leave cases are
+  in `apps/dashboard/src/screens/venue-details-panel.unsaved.test.ts` and
+  `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
@@ -2640,7 +2643,10 @@ where a hint would never show. The setup wizard's shop step decides which field 
 `FIELD_HINT` and `FIELD_HELP` maps for its text fields. The location name is in both: `#field` gives
 it the "?" and no hint in Demo, where it starts filled in, and the hint otherwise. The
 receipt-language choice keeps its own
-"?" (`apps/setup/src/screens/venue-screen.ts`).
+"?" (`apps/setup/src/screens/venue-screen.ts`). One exception (owner, 2026-10-16, A755): Venue
+settings' Venue card starts filled in and carries no "?"; what a change to its name, postcode, city
+or time zone does is said in the card's review box once that field changes, and the receipt-address
+note sits once at the form's foot.
 Give its question-mark button a localized `aria-label`. It opens on click, stays open while you
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in the
 `help` slot of a `wt-input`, `wt-textarea` or `wt-combobox`, which puts it beside the field box, at
@@ -3247,7 +3253,12 @@ list, on Venue settings' Kitchen tab and in the product editor's Courses window,
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
-its own table row").
+its own table row"). A fourth exception (owner, 2026-10-16, A755): Venue settings' Venue details
+tab draws four cards — Business, Venue, Business day and Defaults — with
+`apps/dashboard/src/widgets/settings-card.ts`. Each card's heading is inside the card and its
+action sits in the card's header. The Venue and Defaults cards edit in place rather than in a
+modal, each on its own while the others stay in view mode; the Business card's Change legal name
+and the Business day card's change of start open dialogs.
 
 Printer details are a navigable destination with a different edit pattern. The printer name edits
 beside the heading, network host and port edit inside Connection, and Active saves in Status. Status
@@ -3363,7 +3374,7 @@ the normal, expected treatment there.
 | Role        | Token(s)                                    | Example                                                                                                                                                                                                                     |
 | ----------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Page title  | `--wt-font-size-xl`, bold                   | a screen's own `<h1>` — "Your profile" no longer qualifies: it's a `wt-modal` heading now (`--wt-font-size-lg`, its own role, not this one)                                                                                 |
-| Group label | `--wt-font-size-sm`, bold, uppercase, muted | the receipt-language card's heading (`apps/dashboard/src/screens/receipt-language-panel.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below) |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | a form's `.group-label` (`apps/dashboard/src/widgets/product-editor.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below)                 |
 | Field label | `--wt-font-size-sm`, normal weight, muted   | "Name"                                                                                                                                                                                                                      |
 | Field value | `--wt-font-size-md`, bold                   | "Clinton Gormley"                                                                                                                                                                                                           |
 
@@ -4268,8 +4279,10 @@ Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
 `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
-opens the first visible tab. Venue details needs `venue.view`; its editor needs `venue.configure`.
-Receipt language sits in Venue details. The dashboard preserves module-owned
+opens the first visible tab. Venue details holds four cards: Business, Venue, Business day and
+Defaults. It needs `venue.view`, and editing needs `venue.configure`. The Defaults card — the default
+receipt language and the "VAT class for new products" default — is shown only to a session holding
+`venue.configure`. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
