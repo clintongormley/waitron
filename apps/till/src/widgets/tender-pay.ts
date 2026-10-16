@@ -255,6 +255,7 @@ export class TillTenderPay extends LitElement {
    * take it. */
   @property({ type: Boolean }) takesCash = true;
   @property({ attribute: false }) cardOutcome?: CardOutcome;
+  @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   /** Bumped by the app when no card attempt is still running, after any retry and any
    * kitchen-station question an attempt asks, whether or not it produced a {@link cardOutcome}. */
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -280,6 +281,7 @@ export class TillTenderPay extends LitElement {
   /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
    * Retry is tapped. */
   #lastCollectDetail: CollectCardDetail = {};
+  #cardOutcomeOrderId?: string;
   /** Stays chosen for later sales on this widget instance, until the operator picks again. */
   @state() private chosenReaderId?: string;
   @state() private pickingReader = false;
@@ -446,7 +448,10 @@ export class TillTenderPay extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (this.view === "card_outcome" && this.#cardOutcomeOrderId !== this.store.id)
+      this.view = "idle";
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
+      this.#cardOutcomeOrderId = this.store.id;
       this.view = "card_outcome";
     }
     if (changed.has("cardAttemptsOver") && this.view === "collecting") {
@@ -549,13 +554,14 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  #retryCard(): void {
+  #retryCard(orderId: string): void {
+    if (orderId !== this.store.id) return;
     if (
       this.cardOutcome?.outcome === "declined" &&
       KEEP_CARD_REASONS.has(this.cardOutcome.failureReason ?? "")
     )
       return;
-    this.#collectCard(this.#lastCollectDetail);
+    this.#collectCard(this.cardRetryDetail ?? this.#lastCollectDetail);
   }
 
   #onTipChange(event: Event): void {
@@ -1020,6 +1026,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderCardOutcome() {
+    const orderId = this.store.id;
     const reason =
       this.cardOutcome?.outcome === "declined" ? this.cardOutcome.failureReason : undefined;
     const keepCard = KEEP_CARD_REASONS.has(reason ?? "");
@@ -1043,7 +1050,7 @@ export class TillTenderPay extends LitElement {
                 class="retry"
                 variant="primary"
                 size="lg"
-                @click=${() => this.#retryCard()}
+                @click=${() => this.#retryCard(orderId)}
               >
                 ${t("card.retry")}
               </wt-button>`

@@ -1549,7 +1549,6 @@ export class TillApp extends LitElement {
             this.#counterSends++;
             this.#clearBasket();
             this.counterLines = null;
-            this.cardOutcome = undefined;
             this.collectFlow = undefined;
           }
         }
@@ -1787,6 +1786,7 @@ export class TillApp extends LitElement {
   #syncBasketDraft(): void {
     if (this.#basketGeneration !== this.#store.loadGeneration) {
       this.#basketGeneration = this.#store.loadGeneration;
+      this.requestUpdate();
       this.#basketBaseline = this.#basketPayload();
       this.#basketScope?.dispose();
       this.#basketScope = undefined;
@@ -1862,6 +1862,7 @@ export class TillApp extends LitElement {
       : this.#venueLocale;
   }
 
+  #tableToResume?: { personId: string; tableId: string; partyId: string };
   /**
    * Set after a full {@link #loadFloorData}, so a repeat floor visit reloads tables only. A flag, not
    * `zones.length > 0`, because a venue with no floor zones leaves that 0. Reset at login and logout.
@@ -2530,11 +2531,23 @@ export class TillApp extends LitElement {
    * {@link #onPayWaitingOrder}; a no-op once it has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
   #adjustOpening = false;
-  /**
-   * The outcome of the last non-captured `collect-card` attempt. Cleared wherever the basket it describes
-   * leaves the counter, and deliberately not by `#onDiscardOrder`, which never touches the loaded basket.
-   */
-  @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>;
+  readonly #cardOutcomes = new Map<
+    string,
+    { outcome: Exclude<PayOutcome, { outcome: "captured" }>; detail: CollectCardDetail }
+  >();
+
+  private get cardOutcome(): Exclude<PayOutcome, { outcome: "captured" }> | undefined {
+    return this.#cardOutcomes.get(this.#store.id)?.outcome;
+  }
+
+  private get cardRetryDetail(): CollectCardDetail | undefined {
+    return this.#cardOutcomes.get(this.#store.id)?.detail;
+  }
+
+  #clearCardOutcome(): void {
+    this.#cardOutcomes.delete(this.#store.id);
+    this.requestUpdate();
+  }
   /** Relayed to the pay card, which leaves its "Tap or insert card" spinner when this changes. */
   @state() private cardAttemptsOver = 0;
   /** Card attempts started and not yet ended; {@link cardAttemptsOver} moves when this returns to 0. */
@@ -3713,6 +3726,10 @@ export class TillApp extends LitElement {
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
+    const tableToResume =
+      !switched && this.#tableToResume?.personId === personId ? this.#tableToResume : undefined;
+    this.#tableToResume = undefined;
+    const landingVisit = this.#orderVisit;
     // While this loads, the lock screen can start a newer sign-in, and a logout (idle, or from the
     // shell once it shows) or a server move can end this one.
     const replaced = () =>
@@ -3797,7 +3814,7 @@ export class TillApp extends LitElement {
     this.operatorName = displayName;
     this.#loginPending = false;
     this.operatorPersonId = personId;
-    this.#resumeOrderDraft();
+    if (tableToResume === undefined) this.#resumeOrderDraft();
     if (switched) this.#endProfileSwitch();
     this.permissions = permissions;
     this.#syncDepartmentTransfers();
@@ -3828,6 +3845,23 @@ export class TillApp extends LitElement {
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
+    if (tableToResume !== undefined) {
+      const left = () => replaced() || this.#orderVisit !== landingVisit;
+      if (!this.#floorLoaded) await this.#loadFloorData(left);
+      if (replaced()) return;
+      const table = this.tables.find((candidate) => candidate.id === tableToResume.tableId);
+      if (!left() && this.#floorLoaded && table?.party?.id === tableToResume.partyId) {
+        const visit = ++this.#orderVisit;
+        await this.#openTable(
+          table.id,
+          undefined,
+          ++this.#tableOfferRequest,
+          undefined,
+          () => replaced() || this.#orderVisit !== visit,
+        );
+        if (replaced()) return;
+      }
+    }
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.#showsCounterLists();
     if (showsCounterLists) {
@@ -4719,7 +4753,7 @@ export class TillApp extends LitElement {
     const payload = this.#basketPayload();
     const sendsToKitchen = this.#paySendsToKitchen();
     this.errorKey = undefined;
-    this.cardOutcome = undefined;
+    this.#clearCardOutcome();
     let reachedFiscal = false;
     let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
@@ -4763,13 +4797,15 @@ export class TillApp extends LitElement {
         this.#showTicket(id);
         paid = true;
       } else {
-        if (!this.#store.persisted) await this.#adoptCreatedCounterNote(id, basketVisit, session);
         if (
-          session === this.#operatorSession &&
-          this.#store.id === id &&
-          !this.#cancelledDemoReaderOrders.has(id)
+          !this.#store.persisted &&
+          (await this.#adoptCreatedCounterNote(id, basketVisit, session))
         )
-          this.cardOutcome = out;
+          this.#commitBasket(payload);
+        if (session === this.#operatorSession && !this.#cancelledDemoReaderOrders.has(id)) {
+          this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
+          this.requestUpdate();
+        }
       }
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
@@ -6095,7 +6131,6 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       this.#dismissStationChoices();
       this.#clearBasket();
-      this.cardOutcome = undefined;
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
@@ -6286,7 +6321,6 @@ export class TillApp extends LitElement {
     );
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
-    this.cardOutcome = undefined;
     this.collectFlow = undefined;
   }
 
@@ -7274,7 +7308,6 @@ export class TillApp extends LitElement {
     this.stage = "order";
     this.collectFlow = undefined;
     this.errorKey = undefined;
-    this.cardOutcome = undefined;
     const home = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
     this.#setActiveTab(home, true);
     if (home === "counter") void this.#loadStations();
@@ -7911,8 +7944,6 @@ export class TillApp extends LitElement {
     return { sync, read: read ? await sync.load() : true };
   }
 
-  /** A sign-out leaves the order on the table-order screen, but its draft went with the session: the
-   * person signing in gets their own draft on that party. */
   #resumeOrderDraft(): void {
     const session = this.#operatorSession;
     void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
@@ -9624,7 +9655,6 @@ export class TillApp extends LitElement {
     ) {
       this.#dismissStationChoices();
       this.#clearBasket();
-      this.cardOutcome = undefined;
     }
     this.submittedNotice = t("counter.moved_to_table").replace("{table}", () => label);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
@@ -10230,7 +10260,6 @@ export class TillApp extends LitElement {
         this.stage = "order";
         this.collectFlow = undefined;
         this.counterLines = null;
-        this.cardOutcome = undefined;
       }
       await this.#refreshAfterWrite("station", "refresh.station_after_cancel");
       // A read started after the session ended could show the next operator this cancel's failure
@@ -11212,6 +11241,17 @@ export class TillApp extends LitElement {
   async #onLogout(): Promise<void> {
     // Lock locally first: a rejecting or hanging `api.logout()` (offline, failover) must never leave
     // the till unlocked. The server logout is best-effort.
+    this.#tableToResume =
+      this.#inShell() &&
+      this.#tableCatalogueActive() &&
+      this.activeTableId !== undefined &&
+      this.orderParty !== null
+        ? {
+            personId: this.operatorPersonId,
+            tableId: this.activeTableId,
+            partyId: this.orderParty.id,
+          }
+        : undefined;
     this.operatorName = "";
     this.#loginPending = false;
     this.#preLoginChoice = undefined;
@@ -11360,6 +11400,7 @@ export class TillApp extends LitElement {
         .canEditKitchenNote=${this.capabilities.includes("take-orders")}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
+        .cardRetryDetail=${this.cardRetryDetail}
         .cardAttemptsOver=${this.cardAttemptsOver}
         .activeReaders=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
@@ -11823,6 +11864,7 @@ export class TillApp extends LitElement {
           void this.#refreshFloorZones();
         }}
         @move-held-order=${(event: CustomEvent<MoveHeldOrderDetail>) => {
+          // A Held row's click may already be travelling when retrieval makes its order current.
           if (event.detail.orderId === this.#store.id) {
             const held = event.composedPath().find((node) => node instanceof TillHeldOrders);
             this.#replaceBasket(

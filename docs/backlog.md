@@ -2199,13 +2199,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-16).** Today it grows only when the table is let go.
   [Detail](backlog/till.md#a766-the-tills-floor-plan-grows-while-a-table-is-dragged-past-its-edge)
 
-- **A767. Signing back in, a false "discard your edits", and a card panel on the wrong order
-  (owner, 2026-10-16).** Logged out on a table's order, the same person signing back in lands on the
-  counter showing an old held order waiting on a declined card; Retrieve then asks to discard
-  edits nobody made; switching orders leaves Retry card on screen. Fix the card panel first: Retry
-  card must never act on an order other than the one shown.
-  [Detail](backlog/till.md#a767-signing-back-in-a-false-discard-your-edits-and-a-card-panel-on-the-wrong-order)
-
 - **A768. The till: open a table fast, and stop needing a reload (owner, 2026-10-16).** Opening a
   table waits on up to four requests in a row, one re-reading the zone's whole menu; keep each
   zone's menu and check it with `/api/menu-state`. Courses, and other settings read once when the

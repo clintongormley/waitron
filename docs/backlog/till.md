@@ -2003,6 +2003,10 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   toggle stays until A739. [Provider evidence and reproduction](../research/2026-10-16-card-reader-failure-reasons.md).
   Stripe's stored timeout outcome remains the separate owner-approved A764 follow-up under M7b2 in
   [payments.md](payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702).
+- **Keep the card panel tied to its order.** A767 stores the outcome and Retry's reader, tip and
+  offline choice by order id. Moving the panel into the payment window must preserve that link:
+  switching orders hides it, returning restores it, and a Retry control from the previous order
+  cannot start a payment on the replacement. Browser cases: `till-app.test.ts`, “A767 card outcome”.
 - **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
   data and nothing on the till says the decision is made on the dashboard). It came from A247
   (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry
@@ -2056,27 +2060,6 @@ build after A757's board if it has been decided, else name the table alone.
 **A766 (owner, 2026-10-16).** Dragging a table beyond the plan's edge on the till's floor leaves the
 plan its old size until the table is let go, so the waiter cannot see where it will land. Grow it
 as the table moves. Related open notes on the same drag are in A474 above.
-
-## A767. Signing back in, a false "discard your edits", and a card panel on the wrong order
-
-**A767 (owner, 2026-10-16).** Seen on one till, in this order:
-
-1. **The card panel stays on the wrong order — do this first.** With a counter order waiting on a
-   declined card (Retry card, Use another tender, Keep waiting), switching to another order leaves
-   the panel on screen. It belongs to the declined order: hide it on switching, show it again on
-   switching back, and add a test that Retry card can never act on an order other than the one
-   shown. Which way it goes wrong today (retrying #1's payment, or charging #2 under #1's attempt)
-   was not checked.
-2. **Signing back in lands on the counter.** The owner was logged out while on a table's order and
-   signed back in as the same person. The code means to keep the table-order screen and give them
-   their own draft on that party (`#resumeOrderDraft`, `apps/till/src/till-app.ts`); instead the
-   counter showed held order #1, still waiting on its declined card. A sign-out keeps the counter's
-   basket on purpose (`#requestLeave`, `except: [this.#basketOwner]`), so #1 was most likely left
-   from earlier. Find what moved the screen. While #1 was open on the counter it was also listed
-   under Held orders with Retrieve and Discard; an order open on the counter is not listed there.
-3. **Retrieve asks to discard edits nobody made.** On that screen, Retrieve on #2 asked to discard
-   unsaved edits. Unproven guess from reading: sign-in re-checks the basket against the current
-   menu (`#reconcileBasket`) and that marks it changed. Reproduce before fixing.
 
 ## A768. The till: open a table fast, and stop needing a reload
 
