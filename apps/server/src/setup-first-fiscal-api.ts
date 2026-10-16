@@ -424,6 +424,18 @@ export function mountSetupFirstFiscalApi(
             const { module, seat, context } = selected(body.module);
             boundedPublic(body.proposal);
             const request = seat.request(context, seat.candidates(context, body.proposal));
+            await host.assertFreshAssignment(
+              {
+                ...state,
+                frozen: {
+                  ...state.frozen,
+                  modules: state.frozen.modules.map((entry) =>
+                    entry.module === module ? { ...entry, request } : entry,
+                  ),
+                },
+              },
+              module,
+            );
             await host.owner.consumeReconfirmation(
               owner,
               text(body.reconfirmation),
@@ -453,6 +465,7 @@ export function mountSetupFirstFiscalApi(
             const { module, seat, context } = selected(body.module);
             if (Buffer.byteLength(JSON.stringify(body.input)) > 65536) invalid();
             const imported = seat.inspect(context, body.input);
+            await host.assertFreshAssignment(state, module, imported.input);
             if (Object.hasOwn(state.inputs, module)) {
               if (!isDeepStrictEqual(state.inputs[module], imported.input))
                 throw new AppError("setup.attempt_conflict", {});

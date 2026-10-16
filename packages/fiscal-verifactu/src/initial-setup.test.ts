@@ -519,3 +519,33 @@ it("refuses a declared public fingerprint that disagrees with the independently 
     }),
   );
 });
+
+it("retirement names installations across distinct allocation IDs and includes every frozen candidate", () => {
+  const f = fixture(),
+    other = fixture({
+      ...context,
+      attemptId: "attempt2",
+      recipientVenueId: "first-setup:attempt2",
+      binding: {
+        ...context.binding,
+        sourceId: "first-setup:attempt2",
+        eventId: "event2",
+        targetNodeId: "new-node",
+      },
+    });
+  const keys = FISCAL_INITIAL_SETUP.assignmentKeys!(f.held, f.input);
+  expect(keys).toContain('["89890001K","W1","production","installation","S000001"]');
+  expect(keys).toContain('["89890001K","W1","production","installation","S000002"]');
+  expect(FISCAL_INITIAL_SETUP.assignmentKeys!(other.held, other.input)).toContain(
+    '["89890001K","W1","production","installation","S000001"]',
+  );
+  expect(FISCAL_INITIAL_SETUP.assignmentKeys!(context)).toEqual([]);
+});
+
+it("retirement exposes an independent numeric floor for each installation namespace", () => {
+  const f = fixture(context, [42, 43]);
+  expect(FISCAL_INITIAL_SETUP.assignmentPositions!(f.held)).toEqual([
+    { namespace: '["89890001K","W1","production","S"]', position: 42 },
+    { namespace: '["89890001K","W1","production","S"]', position: 43 },
+  ]);
+});

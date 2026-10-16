@@ -8,6 +8,8 @@ import type { SQLWrapper } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase, type Database } from "@waitron/db";
 import {
+  assertFirstSetupBootTarget,
+  firstSetupAnchorFor,
   readOperationalVenueIds,
   readTenantIdentities,
   type FirstSetupStore,
@@ -183,10 +185,17 @@ export function createFirstSetupResolutionInspection(
       return { inspection, originals };
     },
     async withVenueExclusion<T>(body: () => Promise<T>): Promise<T> {
-      const hold = await lockVenueDatabase(options.venueDir);
+      const anchor = await firstSetupAnchorFor(options);
+      const hold = await lockVenueDatabase(anchor.venueDir);
+      let target: Awaited<ReturnType<typeof lockVenueDatabase>> | undefined;
       try {
+        await assertFirstSetupBootTarget(options);
+        if (anchor.venueDir !== options.venueDir)
+          target = await lockVenueDatabase(options.venueDir);
+        await assertFirstSetupBootTarget(options);
         return await body();
       } finally {
+        target?.release();
         hold.release();
       }
     },

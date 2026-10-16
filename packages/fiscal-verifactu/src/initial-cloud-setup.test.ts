@@ -291,6 +291,21 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const seat = FISCAL_INITIAL_SETUP.configure!(host);
     return { ...f, root, host, current, seat };
   }
+  it("retirement retains the Cloud operation and the verified C installation independently of paper names", async () => {
+    const f = await setup();
+    expect(f.seat.assignmentKeys!(f.held)).toEqual([
+      '["89890001K","W1","production","cloud-operation","10000000-0000-4000-8000-000000000001"]',
+    ]);
+    expect(f.seat.assignmentKeys!(f.held, f.input)).toContain(
+      '["89890001K","W1","production","installation","C000042"]',
+    );
+    expect(f.seat.assignmentPositions!(f.held, f.input)).toEqual([
+      { namespace: '["89890001K","W1","production","C"]', position: 42 },
+    ]);
+    expect(() => FISCAL_INITIAL_SETUP.assignmentPositions!(f.held, f.input)).toThrowError(
+      expect.objectContaining({ code: "sif.allocation_invalid" }),
+    );
+  });
   it("exports a frozen Cloud request and prepares C setup before the paper source", async () => {
     const f = await setup();
     const candidates = f.seat.candidates(scope, {

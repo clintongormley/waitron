@@ -16,12 +16,13 @@ import {
   createFirstSetupStore,
   planVenue,
   venueFiscalSelection,
+  readRetiredFirstSetupStates,
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
-import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
+import { firstSetupModuleContext, createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
   evidence?: { read: ModuleOperationHost["readPublicEvidence"] },
@@ -125,6 +126,38 @@ export function createFirstSetupModuleHost(options: {
     keys,
     bootId,
   });
+  const assertFreshAssignment = async (
+    state: import("@waitron/provisioning").FirstSetupState,
+    name: string,
+    input = state.inputs[name],
+  ): Promise<void> => {
+    const seat = initialSetupFor(modules, name);
+    if (
+      seat === undefined ||
+      (seat.assignmentKeys === undefined && seat.assignmentPositions === undefined)
+    )
+      return;
+    const context = firstSetupModuleContext(state, name);
+    const candidates = new Set(seat.assignmentKeys?.(context, input) ?? []);
+    const positions = seat.assignmentPositions?.(context, input) ?? [];
+    const retired = await readRetiredFirstSetupStates(options);
+    for (const old of [
+      ...state.previous,
+      ...retired.flatMap((entry) => [entry, ...entry.previous]),
+    ]) {
+      if (!old.frozen.modules.some((entry) => entry.module === name)) continue;
+      const context = firstSetupModuleContext(old, name);
+      for (const key of seat.assignmentKeys?.(context, old.inputs[name]) ?? [])
+        if (candidates.has(key)) throw new AppError("setup.attempt_conflict", {});
+      for (const floor of seat.assignmentPositions?.(context, old.inputs[name]) ?? [])
+        if (
+          positions.some(
+            (value) => value.namespace === floor.namespace && value.position <= floor.position,
+          )
+        )
+          throw new AppError("setup.attempt_conflict", {});
+    }
+  };
   const configuredEvidence = {
     ...legacyEvidence,
     invalidate(attemptId: string) {
@@ -132,6 +165,9 @@ export function createFirstSetupModuleHost(options: {
       delivery.invalidate(attemptId);
     },
     async read(binding: OperationBinding) {
+      const state = await store.readResumable();
+      if (state === null) throw new AppError("setup.owner_required", {});
+      await assertFreshAssignment(state.state, binding.module);
       return (await delivery.has(binding)) ? delivery.read(binding) : legacyEvidence.read(binding);
     },
   };
@@ -153,6 +189,7 @@ export function createFirstSetupModuleHost(options: {
     evidence: configuredEvidence,
     keys,
     delivery,
+    assertFreshAssignment,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(
         options.stateDir,

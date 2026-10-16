@@ -5,7 +5,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import { createFirstSetupCoordinator } from "./first-setup-state.js";
+import {
+  createFirstSetupCoordinator,
+  parseState,
+  type FirstSetupState,
+} from "./first-setup-state.js";
 import {
   canonicalFirstSetupDirectory,
   firstSetupDirectory,
@@ -76,7 +80,11 @@ async function writeOnce(path: string, witness: Witness) {
   }
   await writeDurableHostJson(path, witness, LIMIT);
 }
-async function originalsUnchanged(anchor: FirstSetupAnchor, record: ResolutionRecord) {
+async function originalsUnchanged(
+  anchor: FirstSetupAnchor,
+  record: ResolutionRecord,
+  retired: FirstSetupAnchor,
+) {
   const originals = await store(anchor).readOriginals(record.resolutionId);
   for (const required of [
     "state/first-setup.json",
@@ -85,6 +93,7 @@ async function originalsUnchanged(anchor: FirstSetupAnchor, record: ResolutionRe
   ])
     if (!originals.some((original) => original.name === required)) uncertain();
   for (const original of originals) {
+    if (original.name === "workspace:predecessor") continue;
     const directory = original.name.startsWith("directory:");
     const label = directory ? original.name.slice("directory:".length) : original.name;
     let path: string;
@@ -96,7 +105,7 @@ async function originalsUnchanged(anchor: FirstSetupAnchor, record: ResolutionRe
       const [root, ...parts] = label.split("/");
       if (parts.some((part) => !part || part === "." || part === ".." || part.includes("\\")))
         uncertain();
-      path = join(root === "state" ? anchor.stateDir : anchor.venueDir, ...parts);
+      path = join(root === "state" ? retired.stateDir : retired.venueDir, ...parts);
     }
     await firstSetupDirectory(dirname(path));
     if (directory) {
@@ -141,7 +150,10 @@ async function originalsUnchanged(anchor: FirstSetupAnchor, record: ResolutionRe
 async function checkedApplied(
   anchor: FirstSetupAnchor,
   record: ResolutionRecord,
-): Promise<WorkspaceBinding> {
+  seen = new Set<string>(),
+): Promise<{ binding: WorkspaceBinding; predecessor: Witness | null; retired: FirstSetupAnchor }> {
+  if (seen.has(record.resolutionId) || seen.size >= 64) uncertain();
+  seen.add(record.resolutionId);
   const records = await store(anchor).read(record.resolutionId);
   if (
     records.length !== 2 ||
@@ -155,8 +167,52 @@ async function checkedApplied(
   validateWorkspaceBinding(binding);
   if (binding.anchorVenueDir !== anchor.venueDir || binding.anchorStateDir !== anchor.stateDir)
     uncertain();
-  await originalsUnchanged(anchor, record);
-  return binding;
+  const originals = await store(anchor).readOriginals(record.resolutionId);
+  const previous = originals.find((original) => original.name === "workspace:predecessor");
+  const predecessor =
+    previous === undefined
+      ? null
+      : checkedWitness(JSON.parse(previous.bytes?.toString("utf8") ?? "null"));
+  if (binding.selectionGeneration === 1 ? predecessor !== null : predecessor === null) uncertain();
+  let retired = anchor;
+  if (predecessor !== null) {
+    if (
+      predecessor.binding.selectionGeneration + 1 !== binding.selectionGeneration ||
+      predecessor.binding.anchorVenueDir !== anchor.venueDir ||
+      predecessor.binding.anchorStateDir !== anchor.stateDir
+    )
+      uncertain();
+    await checkedChain(anchor, predecessor, seen);
+    retired = predecessor.binding;
+  }
+  await originalsUnchanged(anchor, record, retired);
+  return { binding, predecessor, retired };
+}
+async function checkedChain(anchor: FirstSetupAnchor, witness: Witness, seen = new Set<string>()) {
+  const records = await store(anchor).read(witness.binding.resolutionId),
+    applied = records[1];
+  if (
+    applied === undefined ||
+    witness.resolutionDigest !== digest(applied) ||
+    witness.evidenceDigest !== applied.evidenceDigest
+  )
+    uncertain();
+  const checked = await checkedApplied(anchor, applied, seen);
+  if (!isDeepStrictEqual(checked.binding, witness.binding)) uncertain();
+  await firstSetupDirectory(checked.binding.venueDir);
+  await firstSetupDirectory(checked.binding.stateDir);
+  if (
+    !isDeepStrictEqual(
+      await read(join(checked.retired.venueDir, "first-setup-retirement.json")),
+      witness,
+    ) ||
+    !isDeepStrictEqual(
+      await read(join(checked.binding.venueDir, "first-setup-workspace.json")),
+      witness,
+    )
+  )
+    uncertain();
+  return { ...checked, record: applied };
 }
 export async function selectFirstSetupWorkspace(
   anchorInput: FirstSetupAnchor,
@@ -164,28 +220,37 @@ export async function selectFirstSetupWorkspace(
 ): Promise<WorkspaceBinding> {
   try {
     const anchor = await canonical(anchorInput),
-      binding = await checkedApplied(anchor, record);
+      { binding, predecessor, retired } = await checkedApplied(anchor, record);
     const witness: Witness = {
       version: 1,
       binding,
       evidenceDigest: record.evidenceDigest,
       resolutionDigest: digest(record),
     };
-    const retirement = join(anchor.venueDir, "first-setup-retirement.json");
+    const retirement = join(retired.venueDir, "first-setup-retirement.json");
     const backlink = join(binding.venueDir, "first-setup-workspace.json");
     const current = await read(backlink);
     if (current !== null && !isDeepStrictEqual(current, witness)) uncertain();
+    const selections = [
+      ...new Set([
+        join(anchor.stateDir, "first-setup-selection.json"),
+        join(anchor.venueDir, "first-setup-selection.json"),
+      ]),
+    ];
+    for (const path of selections) {
+      const value = await read(path);
+      if (!isDeepStrictEqual(value, predecessor) && !isDeepStrictEqual(value, witness)) uncertain();
+    }
     if (current === null) {
       for (const path of [binding.venueDir, binding.stateDir]) {
         await firstSetupDirectory(path, true);
         if ((await readdir(path)).length !== 0) uncertain();
       }
     }
-    // Both target directories exist before retirement; no selection is published until retirement survives.
+    // Retired roots keep their witness permanently; only the two fixed discovery records advance.
     await writeOnce(retirement, witness);
     await writeOnce(backlink, witness);
-    await writeOnce(join(anchor.stateDir, "first-setup-selection.json"), witness);
-    await writeOnce(join(anchor.venueDir, "first-setup-selection.json"), witness);
+    for (const path of selections) await writeDurableHostJson(path, witness, LIMIT);
     await resolveFirstSetupWorkspace(anchor);
     return binding;
   } catch {
@@ -200,33 +265,29 @@ export async function resolveFirstSetupWorkspace(
     const venue = await read(join(anchor.venueDir, "first-setup-selection.json"));
     const state = await read(join(anchor.stateDir, "first-setup-selection.json"));
     const retirement = await read(join(anchor.venueDir, "first-setup-retirement.json"));
-    if (venue === null && state === null && retirement === null)
-      return { ...anchor, binding: null };
-    if (
-      venue === null ||
-      state === null ||
-      retirement === null ||
-      !isDeepStrictEqual(venue, state) ||
-      !isDeepStrictEqual(venue, retirement)
-    )
+    if (venue === null && state === null && retirement === null) {
+      const value = await read(join(anchor.venueDir, "first-setup-workspace.json"));
+      if (value === null) {
+        if (basename(dirname(dirname(anchor.venueDir))) === "first-setup-workspaces") uncertain();
+        return { ...anchor, binding: null };
+      }
+      const { binding } = checkedWitness(value);
+      if (binding.venueDir !== anchor.venueDir || binding.stateDir !== anchor.stateDir) uncertain();
+      const selected = await resolveFirstSetupWorkspace({
+        venueDir: binding.anchorVenueDir,
+        stateDir: binding.anchorStateDir,
+      });
+      if (!isDeepStrictEqual(selected.binding, binding)) uncertain();
+      return selected;
+    }
+    if (venue === null || state === null || retirement === null || !isDeepStrictEqual(venue, state))
       uncertain();
     const witness = checkedWitness(venue),
       binding = witness.binding;
     if (binding.anchorVenueDir !== anchor.venueDir || binding.anchorStateDir !== anchor.stateDir)
       uncertain();
-    await firstSetupDirectory(binding.venueDir);
-    await firstSetupDirectory(binding.stateDir);
-    const backlink = await read(join(binding.venueDir, "first-setup-workspace.json"));
-    if (!isDeepStrictEqual(backlink, witness)) uncertain();
-    const records = await store(anchor).read(binding.resolutionId),
-      applied = records[1];
-    if (
-      applied === undefined ||
-      witness.resolutionDigest !== digest(applied) ||
-      witness.evidenceDigest !== applied.evidenceDigest ||
-      !isDeepStrictEqual(await checkedApplied(anchor, applied), binding)
-    )
-      uncertain();
+    await checkedChain(anchor, witness);
+    if ((await read(join(binding.venueDir, "first-setup-retirement.json"))) !== null) uncertain();
     return { venueDir: binding.venueDir, stateDir: binding.stateDir, binding };
   } catch {
     uncertain();
@@ -284,4 +345,52 @@ export async function assertFirstSetupBootTarget(targetInput: FirstSetupAnchor):
   } catch {
     uncertain();
   }
+}
+
+export async function readFirstSetupRetirements(
+  targetInput: FirstSetupAnchor,
+): Promise<{ state: FirstSetupState; record: ResolutionRecord }[]> {
+  try {
+    const target = await canonical(targetInput);
+    await assertFirstSetupBootTarget(target);
+    const value = await read(join(target.venueDir, "first-setup-workspace.json"));
+    if (value === null) return [];
+    let witness: Witness | null = checkedWitness(value);
+    const anchor = {
+      venueDir: witness.binding.anchorVenueDir,
+      stateDir: witness.binding.anchorStateDir,
+    };
+    const states: { state: FirstSetupState; record: ResolutionRecord }[] = [];
+    while (witness !== null) {
+      const { retired, predecessor, record } = await checkedChain(anchor, witness);
+      const originals = await store(anchor).readOriginals(witness.binding.resolutionId);
+      const bytes = originals.find((original) => original.name === "state/first-setup.json")?.bytes;
+      if (bytes == null) uncertain();
+      states.push({
+        state: parseState(JSON.parse(bytes.toString("utf8")), retired.venueDir, retired.stateDir),
+        record,
+      });
+      witness = predecessor;
+    }
+    return states;
+  } catch {
+    uncertain();
+  }
+}
+
+export async function firstSetupAnchorFor(
+  targetInput: FirstSetupAnchor,
+): Promise<FirstSetupAnchor> {
+  const target = await canonical(targetInput);
+  await assertFirstSetupBootTarget(target);
+  const value = await read(join(target.venueDir, "first-setup-workspace.json"));
+  if (value === null) return target;
+  const { binding } = checkedWitness(value);
+  return { venueDir: binding.anchorVenueDir, stateDir: binding.anchorStateDir };
+}
+
+export async function readRetiredFirstSetupStates(
+  target: FirstSetupAnchor,
+): Promise<FirstSetupState[]> {
+  return (await readFirstSetupRetirements(target)).map((entry) => entry.state);
 }

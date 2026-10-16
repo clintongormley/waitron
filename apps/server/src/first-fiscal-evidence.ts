@@ -55,7 +55,10 @@ function exact(value: unknown, fields: readonly string[]): value is Record<strin
     fields.every((key) => Object.hasOwn(value, key))
   );
 }
-export function firstSetupModuleContext(state: FirstSetupState, name: string): InitialSetupContext {
+export function firstSetupModuleContext(
+  state: Pick<FirstSetupState, "frozen">,
+  name: string,
+): InitialSetupContext {
   const frozen = state.frozen;
   const module = frozen.modules.find((entry) => entry.module === name);
   if (module === undefined) refuse();

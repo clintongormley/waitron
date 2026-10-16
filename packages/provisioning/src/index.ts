@@ -58,6 +58,9 @@ export type {
   FirstSetupOriginal,
 } from "./first-setup-resolution.js";
 export {
+  firstSetupAnchorFor,
+  readRetiredFirstSetupStates,
+  readFirstSetupRetirements,
   selectFirstSetupWorkspace,
   resolveFirstSetupWorkspace,
   assertFirstSetupBootTarget,

@@ -945,3 +945,171 @@ it("a retired root cannot be claimed again or accept a delayed state update", as
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect(await readFile(f.statePath)).toEqual(before);
 });
+
+async function retiredFixture() {
+  const f = await fixture();
+  const original = await f.claim();
+  const api = await import("./index.js");
+  const anchor = {
+    stateDir: await realpath(f.options.stateDir),
+    venueDir: await realpath(f.options.venueDir),
+  };
+  const resolutionId = randomUUID(),
+    workspaceId = randomUUID(),
+    base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
+  const binding = {
+    ...anchor,
+    workspaceId,
+    resolutionId,
+    anchorStateDir: anchor.stateDir,
+    anchorVenueDir: anchor.venueDir,
+    stateDir: join(base, "state"),
+    venueDir: join(base, "venue"),
+    selectionGeneration: 1,
+  };
+  const records = api.createFirstSetupResolutionStore({
+    ...anchor,
+    coordinator: api.createFirstSetupCoordinator(),
+  });
+  const prepared = await records.prepare(
+    {
+      resolutionId,
+      attemptId: original.frozen.attemptId,
+      observedRevision: 1,
+      observedOwnerGeneration: 1,
+      database: "missing",
+      authority: "original-password",
+      register: {
+        kind: "current-master",
+        status: "Unknown",
+        custodian: "Elena",
+        reference: "c".repeat(64),
+        consultedAt: "2026-10-16T03:00:00.000Z",
+      },
+      action: "retire",
+      nextWorkspace: binding,
+    },
+    [
+      { name: "state/first-setup.json", bytes: await readFile(f.statePath) },
+      { name: "venue/first-setup-claim.json", bytes: await readFile(f.markerPath) },
+      { name: "venue/venue.db", bytes: null },
+    ],
+  );
+  await api.selectFirstSetupWorkspace(anchor, await records.apply(prepared));
+  const fresh = api.createFirstSetupStore({
+    ...binding,
+    coordinator: api.createFirstSetupCoordinator(),
+  });
+  return { ...f, original, fresh, binding };
+}
+it.each(["attempt", "node", "administrator", "event"] as const)(
+  "a selected workspace cannot reuse a retired %s identity",
+  async (kind) => {
+    const f = await retiredFixture(),
+      input = frozen(),
+      old = f.original.frozen;
+    if (kind === "attempt") {
+      input.attemptId = old.attemptId;
+      input.sourceId = old.sourceId;
+    } else if (kind === "node") input.nodeId = old.nodeId;
+    else if (kind === "administrator") input.administratorId = old.administratorId;
+    else input.modules[0]!.eventId = old.modules[0]!.eventId;
+    await expect(
+      f.fresh.claim(input, verifier, digest("new-capability"), digest("new-nonce")),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(await f.fresh.read()).toBeNull();
+    expect(await readFile(f.statePath, "utf8")).toBe(JSON.stringify(f.original));
+  },
+);
+it("retirement exclusions allow fresh identities without copying the old account or settings", async () => {
+  const f = await retiredFixture(),
+    input = frozen();
+  input.request.admin = {
+    ...input.request.admin,
+    email: "new@example.test",
+    displayName: "New owner",
+  };
+  const state = await f.fresh.claim(input, verifier, digest("new-capability"), digest("new-nonce"));
+  expect(state.frozen).toEqual(input);
+  expect(state.previous).toEqual([]);
+  expect(state.inputs).toEqual({});
+  expect(state.revision).toBe(1);
+});
+
+it("a third workspace excludes identities from the original attempt after both retirements", async () => {
+  const f = await retiredFixture(),
+    api = await import("./index.js");
+  const middle = await f.fresh.claim(
+    frozen(),
+    verifier,
+    digest("middle-capability"),
+    digest("middle-nonce"),
+  );
+  const anchor = { stateDir: f.binding.anchorStateDir, venueDir: f.binding.anchorVenueDir };
+  const resolutionId = randomUUID(),
+    workspaceId = randomUUID(),
+    base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
+  const binding = {
+    ...f.binding,
+    workspaceId,
+    resolutionId,
+    stateDir: join(base, "state"),
+    venueDir: join(base, "venue"),
+    selectionGeneration: 2,
+  };
+  const records = api.createFirstSetupResolutionStore({
+    ...anchor,
+    coordinator: api.createFirstSetupCoordinator(),
+  });
+  const prepared = await records.prepare(
+    {
+      resolutionId,
+      attemptId: middle.frozen.attemptId,
+      observedRevision: middle.revision,
+      observedOwnerGeneration: middle.ownerGeneration,
+      database: "missing",
+      authority: "original-password",
+      register: {
+        kind: "current-master",
+        status: "Unknown",
+        custodian: "Elena",
+        reference: "d".repeat(64),
+        consultedAt: "2026-10-16T04:00:00.000Z",
+      },
+      action: "retire",
+      nextWorkspace: binding,
+    },
+    [
+      {
+        name: "workspace:predecessor",
+        bytes: await readFile(join(f.binding.venueDir, "first-setup-workspace.json")),
+      },
+      {
+        name: "state/first-setup.json",
+        bytes: await readFile(join(f.binding.stateDir, "first-setup.json")),
+      },
+      {
+        name: "venue/first-setup-claim.json",
+        bytes: await readFile(join(f.binding.venueDir, "first-setup-claim.json")),
+      },
+      { name: "venue/venue.db", bytes: null },
+    ],
+  );
+  await api.selectFirstSetupWorkspace(anchor, await records.apply(prepared));
+  const fresh = api.createFirstSetupStore({
+    ...binding,
+    coordinator: api.createFirstSetupCoordinator(),
+  });
+  const repeated = frozen();
+  repeated.nodeId = f.original.frozen.nodeId;
+  await expect(
+    fresh.claim(repeated, verifier, digest("third-capability"), digest("third-nonce")),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(
+    (await api.readRetiredFirstSetupStates(binding)).map((state) => state.frozen.attemptId),
+  ).toEqual([middle.frozen.attemptId, f.original.frozen.attemptId]);
+  expect(
+    (await fresh.claim(frozen(), verifier, digest("third-capability"), digest("third-nonce")))
+      .previous,
+  ).toEqual([]);
+});

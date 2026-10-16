@@ -21,6 +21,11 @@ export interface InitialSetupImport {
 }
 
 export interface InitialSetupContribution {
+  assignmentPositions?(
+    context: InitialSetupContext,
+    input?: unknown,
+  ): readonly { namespace: string; position: number }[];
+  assignmentKeys?(context: InitialSetupContext, input?: unknown): readonly string[];
   resolutionEvidence?(): { files: readonly string[]; directories: readonly string[] };
   configure?(host: ModuleOperationHost): InitialSetupContribution;
   candidates(context: InitialSetupContext, proposal: unknown): unknown;

@@ -300,3 +300,133 @@ it("an installation sharing its original state and venue directory can select an
     stateDir: f.binding.stateDir,
   });
 });
+
+async function successor(
+  f: Awaited<ReturnType<typeof fixture>>,
+  prior: provision.WorkspaceBinding,
+) {
+  const resolutionId = randomUUID(),
+    workspaceId = randomUUID();
+  const base = join(f.anchor.stateDir, "first-setup-workspaces", workspaceId);
+  const binding = {
+    ...prior,
+    resolutionId,
+    workspaceId,
+    venueDir: join(base, "venue"),
+    stateDir: join(base, "state"),
+    selectionGeneration: prior.selectionGeneration + 1,
+  };
+  const before = await readFile(join(prior.venueDir, "first-setup-workspace.json"));
+  const prepared = await f.store.prepare(
+    {
+      resolutionId,
+      attemptId: randomUUID(),
+      observedRevision: 3,
+      observedOwnerGeneration: 2,
+      database: "missing",
+      authority: "original-password",
+      register: {
+        kind: "current-master",
+        status: "Unknown",
+        custodian: "Elena",
+        reference: "d".repeat(64),
+        consultedAt: "2026-10-16T03:00:00.000Z",
+      },
+      action: "retire",
+      nextWorkspace: binding,
+    },
+    [
+      { name: "workspace:predecessor", bytes: before },
+      { name: "state/first-setup.json", bytes: null },
+      { name: "venue/first-setup-claim.json", bytes: null },
+      { name: "venue/venue.db", bytes: null },
+    ],
+  );
+  return { binding, applied: await f.store.apply(prepared) };
+}
+it("repeated retirement keeps the original discovery anchor and refuses every retired generation", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const next = await successor(f, f.binding);
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, next.applied)).toEqual(next.binding);
+  expect(await provision.resolveFirstSetupWorkspace(f.anchor)).toEqual({
+    venueDir: next.binding.venueDir,
+    stateDir: next.binding.stateDir,
+    binding: next.binding,
+  });
+  await provision.assertFirstSetupBootTarget(next.binding);
+  await expect(provision.assertFirstSetupBootTarget(f.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(provision.assertFirstSetupBootTarget(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  const third = await successor(f, next.binding);
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, third.applied)).toEqual(third.binding);
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(third.binding);
+  await provision.assertFirstSetupBootTarget(third.binding);
+  await expect(provision.assertFirstSetupBootTarget(next.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(await readFile(join(f.anchor.stateDir, "first-setup.json"), "utf8")).toBe(
+    "unchanged original state",
+  );
+});
+it("a successor cannot skip a generation or select an unrelated predecessor", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const next = await successor(f, { ...f.binding, selectionGeneration: 8 });
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+});
+
+it("an entry configured with selected roots rediscovers the original fixed anchor", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  expect(await provision.resolveFirstSetupWorkspace(f.binding)).toEqual({
+    venueDir: f.binding.venueDir,
+    stateDir: f.binding.stateDir,
+    binding: f.binding,
+  });
+  expect(await provision.firstSetupAnchorFor(f.binding)).toEqual(f.anchor);
+});
+
+it("interrupted later retirement returns resolution instead of the now-retired previous selection", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const next = await successor(f, f.binding);
+  const actual = (await vi.importActual<typeof durable>("./durable-host-json.js"))
+    .writeDurableHostJson;
+  let failed = false;
+  vi.mocked(durable.writeDurableHostJson).mockImplementation(async (path, ...args) => {
+    await actual(path, ...args);
+    if (path === join(f.binding.venueDir, "first-setup-retirement.json") && !failed) {
+      failed = true;
+      throw new Error("synthetic later retirement interruption");
+    }
+  });
+  await expect(provision.selectFirstSetupWorkspace(f.anchor, next.applied)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(failed).toBe(true);
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  vi.mocked(durable.writeDurableHostJson).mockImplementation(actual);
+  expect(await provision.selectFirstSetupWorkspace(f.anchor, next.applied)).toEqual(next.binding);
+});
+it("restoring an earlier ancestor is refused after a later workspace was selected", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  const next = await successor(f, f.binding);
+  await provision.selectFirstSetupWorkspace(f.anchor, next.applied);
+  await writeFile(join(f.anchor.stateDir, "first-setup.json"), "restored original ancestor");
+  await expect(provision.resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  await expect(provision.assertFirstSetupBootTarget(next.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});

@@ -266,6 +266,20 @@ function createInitialSetup(
   receiptTrust: () => ReceiptTrust | null,
   retained?: { files: readonly string[]; directories: readonly string[] },
 ): InitialSetupContribution {
+  const assignmentFacts = (context: InitialSetupContext, input: unknown) => {
+    binding(context);
+    const scope = [context.taxId, WAITRON_ID_SISTEMA, context.environment];
+    const allocations: Pick<FiscalAllocation, "allocationId" | "installationIdentity">[] = [];
+    let operationId: string | undefined;
+    if (context.request != null) {
+      if (isInitialCloudRequest(context.request))
+        operationId = readInitialCloudRequest(context).operationId;
+      else allocations.push(...frozenRequest(context).candidates);
+    }
+    if (input !== undefined)
+      allocations.push(readInput(context, input, receiptTrust()).input.allocation);
+    return { scope, allocations, operationId };
+  };
   const contribution: InitialSetupContribution = {
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
@@ -285,6 +299,23 @@ function createInitialSetup(
           "WAITRON_FISCAL_EMERGENCY_DIRECTORY",
         ]),
       });
+    },
+    assignmentPositions(context, input) {
+      const { scope, allocations } = assignmentFacts(context, input);
+      return allocations.map((allocation) => ({
+        namespace: JSON.stringify([...scope, allocation.installationIdentity[0]]),
+        position: Number(allocation.installationIdentity.slice(1)),
+      }));
+    },
+    assignmentKeys(context, input) {
+      const { scope, allocations, operationId } = assignmentFacts(context, input);
+      const keys = allocations.flatMap((allocation) => [
+        JSON.stringify([...scope, "allocation", allocation.allocationId]),
+        JSON.stringify([...scope, "installation", allocation.installationIdentity]),
+      ]);
+      if (operationId !== undefined)
+        keys.push(JSON.stringify([...scope, "cloud-operation", operationId]));
+      return [...new Set(keys)];
     },
     candidates(context, proposal) {
       binding(context);

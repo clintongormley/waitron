@@ -172,6 +172,9 @@ export async function activateFirstFiscal(
 ): Promise<VenueResult> {
   let state = await host.owner.authorize(owner);
   if (["uncertain", "abandoned", "claimed"].includes(state.status)) conflict();
+  for (const module of state.frozen.modules)
+    if (initialSetupFor(host.modules, module.module) !== undefined)
+      await host.assertFreshAssignment(state, module.module);
   if (
     deps.provision === undefined ||
     deps.db === undefined ||

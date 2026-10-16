@@ -1,4 +1,7 @@
-import { assertFirstSetupVenueTarget } from "./first-setup-workspace.js";
+import {
+  assertFirstSetupVenueTarget,
+  readRetiredFirstSetupStates,
+} from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -390,7 +393,7 @@ function validateAttempt(value: unknown): asserts value is Attempt {
   publicValue(value.inputs);
   publicValue(value.result);
 }
-function parseState(value: unknown, venueDir: string, stateDir: string): FirstSetupState {
+export function parseState(value: unknown, venueDir: string, stateDir: string): FirstSetupState {
   if (
     !keys(value, ["version", "venueDir", "stateDir", "previous", ...ATTEMPT_KEYS]) ||
     value.version !== 1 ||
@@ -644,13 +647,16 @@ export function createFirstSetupStore(options: {
                   ATTEMPT_KEYS.map((key) => [key, old[key as keyof FirstSetupState]]),
                 ) as unknown as Attempt,
               ];
+        const retired = await readRetiredFirstSetupStates({ venueDir, stateDir });
         const allIds = new Set(
-          previous.flatMap((attempt) => [
-            attempt.frozen.attemptId,
-            attempt.frozen.nodeId,
-            attempt.frozen.administratorId,
-            ...attempt.frozen.modules.map((module) => module.eventId),
-          ]),
+          [...previous, ...retired.flatMap((state) => [state, ...state.previous])].flatMap(
+            (attempt) => [
+              attempt.frozen.attemptId,
+              attempt.frozen.nodeId,
+              attempt.frozen.administratorId,
+              ...attempt.frozen.modules.map((module) => module.eventId),
+            ],
+          ),
         );
         if (
           [

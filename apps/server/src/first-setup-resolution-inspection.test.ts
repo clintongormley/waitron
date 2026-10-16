@@ -704,3 +704,43 @@ it("Start again serialises two browsers so an unchanged old claim is retired onl
   const target = await resolveFirstSetupWorkspace(f);
   expect(target.binding).not.toBeNull();
 });
+
+it("Start again can retire two fresh attempts while discovery stays at the original roots", async () => {
+  const f = await actionsFixture();
+  const first = await f.actions.startAgainFirstSetup(await f.startRequest());
+  const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
+  const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
+  const host = createFirstSetupModuleHost({
+    environment: {},
+    stateDir: first.stateDir,
+    venueDir: first.venueDir,
+    modules: [],
+  });
+  const claim = await host.owner.claimFirstSetup(
+    { environment: "production", request },
+    randomBytes(32).toString("base64url"),
+  );
+  await suite.db.archiveTo(join(first.venueDir, "venue.db"));
+  const inspection = await host.resolution.inspectFirstSetupResolution();
+  const actions = createFirstSetupResolutionActions({ ...first, host });
+  const next = await actions.startAgainFirstSetup({
+    inspectionId: inspection.inspectionId,
+    revision: claim.state.revision,
+    ownerGeneration: claim.state.ownerGeneration,
+    register: { kind: "no-current-master", confirmed: true },
+  });
+  expect(next.anchorStateDir).toBe(first.anchorStateDir);
+  expect(next.anchorVenueDir).toBe(first.anchorVenueDir);
+  expect(next.selectionGeneration).toBe(2);
+  expect(next.venueDir.startsWith(join(first.anchorStateDir, "first-setup-workspaces"))).toBe(true);
+  const { resolveFirstSetupWorkspace } = await import("@waitron/provisioning");
+  expect(
+    (
+      await resolveFirstSetupWorkspace({
+        stateDir: first.anchorStateDir,
+        venueDir: first.anchorVenueDir,
+      })
+    ).binding,
+  ).toEqual(next);
+  expect((await host.resolution.inspectFirstSetupResolution()).database).toBe("no-venue-rows");
+});

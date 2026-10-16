@@ -4,13 +4,16 @@ import {
   createFirstSetupCoordinator,
   createFirstSetupResolutionStore,
   assertFirstSetupBootTarget,
+  firstSetupAnchorFor,
+  resolveFirstSetupWorkspace,
+  readFirstSetupRetirements,
   selectFirstSetupWorkspace,
   type RegisterAnswer,
   type WorkspaceBinding,
   type FirstSetupState,
 } from "@waitron/provisioning";
 import { join } from "node:path";
-import { realpath } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -82,7 +85,13 @@ export function createFirstSetupResolutionActions(
                 artifact.name,
               ) || artifact.status === "missing",
           );
-          const empty = inspection.database === "no-venue-rows" && unused(state) && noOtherHistory;
+          const retired = await readFirstSetupRetirements(options);
+          const noInheritedRegister = retired.every(
+            ({ state, record }) => record.register.kind === "no-current-master" && unused(state),
+          );
+          const emptyWorkspace =
+            inspection.database === "no-venue-rows" && unused(state) && noOtherHistory;
+          const empty = emptyWorkspace && noInheritedRegister;
           let authority: "original-password" | "local-empty-no-custodian";
           if (request.owner === undefined) {
             if (
@@ -105,14 +114,17 @@ export function createFirstSetupResolutionActions(
               throw new AppError("setup.owner_required", {});
             authority = "original-password";
             if (request.register.kind === "no-current-master" && !empty) unavailable();
-            if (inspection.database !== "missing" && !empty) unavailable();
+            if (inspection.database !== "missing" && !emptyWorkspace) unavailable();
           }
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const anchor = {
-            venueDir: await realpath(options.venueDir),
-            stateDir: await realpath(options.stateDir),
-          };
+          const anchor = await firstSetupAnchorFor(options);
+          const current = await resolveFirstSetupWorkspace(anchor);
+          if (current.binding !== null)
+            snapshot.originals.push({
+              name: "workspace:predecessor",
+              bytes: await readFile(join(current.venueDir, "first-setup-workspace.json")),
+            });
           const resolutionId = randomUUID(),
             workspaceId = randomUUID();
           const base = join(anchor.stateDir, "first-setup-workspaces", workspaceId);
@@ -123,7 +135,7 @@ export function createFirstSetupResolutionActions(
             anchorStateDir: anchor.stateDir,
             venueDir: join(base, "venue"),
             stateDir: join(base, "state"),
-            selectionGeneration: 1,
+            selectionGeneration: (current.binding?.selectionGeneration ?? 0) + 1,
           };
           const records = createFirstSetupResolutionStore({
             ...anchor,
@@ -135,7 +147,7 @@ export function createFirstSetupResolutionActions(
               attemptId: state.frozen.attemptId,
               observedRevision: state.revision,
               observedOwnerGeneration: state.ownerGeneration,
-              database: empty ? "empty-preactivation" : "missing",
+              database: emptyWorkspace ? "empty-preactivation" : "missing",
               authority,
               register: request.register,
               action: "retire",
