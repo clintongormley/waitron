@@ -1969,9 +1969,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
   In progress on `feat/a737-post-invoice-refund`: guarded storage, refundable-balance reads and
-  internal reservation checks, plus a tested transactional authorization wrapper. Completed refund
-  commands, provider sending and recovery, cash
-  completion with its drawer audit, reporting, screens and acknowledgments remain to be built.
+  internal reservation checks, plus tested authorization and drawer-audit helpers. Completed refund
+  commands, provider sending and recovery, cash/manual completion and its attendance/drawer
+  integration, reporting, screens and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),

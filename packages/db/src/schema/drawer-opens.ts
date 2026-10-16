@@ -5,6 +5,7 @@ import { billPayments } from "./bill-payments.js";
 import { devices } from "./devices.js";
 import { sales } from "./sales.js";
 import { printers } from "./printers.js";
+import { tenderRefunds } from "./tender-refunds.js";
 
 /**
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
@@ -35,6 +36,7 @@ export const drawerOpens = table(
       "bill_payment",
       "bill_refund",
       "card_slip",
+      "tender_refund",
     ] as const).notNull(),
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
@@ -44,6 +46,7 @@ export const drawerOpens = table(
     /* v8 ignore start */
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */
+    tenderRefundId: id("tender_refund_id").references(() => tenderRefunds.id),
     // Who authorized the manual open; NULL for a
     // `cash_sale`, `bill_payment` or `card_slip` open.
     authorizedBy: id("authorized_by"),
@@ -54,7 +57,17 @@ export const drawerOpens = table(
     check("drawer_opens_reason_ck", enumCheck(t.reason)),
     check(
       "drawer_opens_target_ck",
-      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.deviceId} is null and ${t.saleId} is null and ${t.billPaymentId} is null) or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.deviceId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null) or (${t.reason} in ('cash_sale', 'manual') and ${t.deviceId} is not null and ${t.billPaymentId} is null) or (${t.reason} = 'card_slip' and ${t.deviceId} is not null and (${t.saleId} is null) <> (${t.billPaymentId} is null))`,
+      sql`(
+        ${t.tenderRefundId} is null and (
+          (${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.deviceId} is null and ${t.saleId} is null and ${t.billPaymentId} is null)
+          or (${t.reason} in ('bill_payment', 'bill_refund') and ${t.deviceId} is not null and ${t.billPaymentId} is not null and ${t.saleId} is null)
+          or (${t.reason} in ('cash_sale', 'manual') and ${t.deviceId} is not null and ${t.billPaymentId} is null)
+          or (${t.reason} = 'card_slip' and ${t.deviceId} is not null and (${t.saleId} is null) <> (${t.billPaymentId} is null))
+        )
+      ) or (
+        ${t.reason} = 'tender_refund' and ${t.deviceId} is not null and ${t.saleId} is not null
+        and ${t.tenderRefundId} is not null and ${t.billPaymentId} is null
+      )`,
     ),
   ],
 );

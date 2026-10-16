@@ -7,6 +7,7 @@ import {
   printJobs,
   readTenant,
   sales,
+  tenderRefunds,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
@@ -612,6 +613,47 @@ export async function enqueueBillRefundDrawer(
     authorization,
     printerLookup(tx, cfg.origin),
   );
+}
+
+export async function enqueueTenderRefundDrawer(
+  tx: Transaction,
+  cfg: OriginConfig,
+  refundId: string,
+  operatorId: string,
+  authorization: { authorizedBy: string; viaOverride: boolean },
+): Promise<void> {
+  if (cfg.origin.source !== "device") return;
+  const [refund] = await tx
+    .select({ saleId: tenderRefunds.saleId })
+    .from(tenderRefunds)
+    .where(
+      and(
+        eq(tenderRefunds.id, refundId),
+        eq(tenderRefunds.state, "completed"),
+        eq(tenderRefunds.method, "cash"),
+        eq(tenderRefunds.deviceId, cfg.origin.deviceId),
+        eq(tenderRefunds.nodeId, cfg.nodeId),
+        eq(tenderRefunds.locationId, cfg.locationId),
+      ),
+    );
+  if (refund === undefined) return;
+  const [earlier] = await tx
+    .select({ id: drawerOpens.id })
+    .from(drawerOpens)
+    .where(eq(drawerOpens.tenderRefundId, refundId));
+  if (earlier !== undefined) return;
+  const printer = await drawerPrinter(printerLookup(tx, cfg.origin));
+  if (printer === undefined) return;
+  await tx.insert(drawerOpens).values({
+    deviceId: cfg.origin.deviceId,
+    printerId: printer.id,
+    personId: operatorId,
+    saleId: refund.saleId,
+    tenderRefundId: refundId,
+    reason: "tender_refund",
+    ...authorization,
+  });
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
 }
 
 /**

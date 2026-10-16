@@ -12,6 +12,13 @@ import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { locations, tenants } from "./tenants.js";
+import { randomUUID } from "node:crypto";
+import { seedNode, seedTenant } from "../testing/seed.js";
+import { sales, tenders } from "./sales.js";
+import { invoiceSeries } from "./series.js";
+import { tenderRefunds } from "./tender-refunds.js";
+import { billPayments } from "./bill-payments.js";
+import { workingOrders } from "./orders.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
@@ -209,6 +216,168 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
         sql`select sql from sqlite_schema where type = 'table' and name = 'locations'`,
       );
       expect(definition!.sql).not.toContain(column);
+    },
+  );
+});
+
+describe("settled-tender refund drawer targets", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  let deviceId: string;
+  let saleId: string;
+  let refundId: string;
+  let billPaymentId: string;
+  let printerId: string;
+  beforeAll(async () => {
+    const db = suite.db;
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Return drawer", invoiceLocales: ["en"], operationDescription: "Meals" })
+      .returning();
+    const locationId = brandLocationId(location!.id);
+    const nodeId = await seedNode(db, locationId);
+    ({ deviceId } = await seedDevice(db, { locationId }));
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "TR", purpose: "standard" })
+      .returning();
+    const [sale] = await db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: "2026-10-16T09:00:00.000Z",
+        issuedOffsetMinutes: 0,
+        total: 1000,
+        vatBreakdown: [],
+        locale: "en",
+        invoiceLocales: ["en"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning();
+    saleId = sale!.id;
+    const [tender] = await db
+      .insert(tenders)
+      .values({ saleId, method: "cash", amount: 1000, settledAt: "2026-10-16T09:00:00.000Z" })
+      .returning();
+    const [refund] = await db
+      .insert(tenderRefunds)
+      .values({
+        saleId,
+        tenderId: tender!.id,
+        submissionId: randomUUID(),
+        fingerprint: "drawer-target",
+        appliedAmount: 1000,
+        tipAmount: 0,
+        reason: "Goodwill",
+        requestedBy: PERSON,
+        authorizedBy: AUTHORIZER,
+        source: "device",
+        deviceId,
+        nodeId,
+        locationId,
+        method: "cash",
+        manual: false,
+        state: "completed",
+        completedAt: "2026-10-16T09:00:00.000Z",
+      })
+      .returning();
+    refundId = refund!.id;
+    const [order] = await db
+      .insert(workingOrders)
+      .values({ source: "device", deviceId, nodeId, locationId, orderNumber: 1 })
+      .returning();
+    const [payment] = await db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order!.id,
+        submissionId: randomUUID(),
+        fingerprint: "bill-drawer",
+        kind: "contribution",
+        method: "cash",
+        applied: 1000,
+        tip: 0,
+        tendered: 1000,
+        receivedAt: "2026-10-16T09:00:00.000Z",
+        state: "received",
+        source: "device",
+        deviceId,
+        requestedBy: PERSON,
+      })
+      .returning();
+    billPaymentId = payment!.id;
+    const [printer] = await db
+      .insert(printers)
+      .values({ locationId, name: "Drawer", transport: "cloud_poll", pollId: randomUUID() })
+      .returning();
+    printerId = printer!.id;
+  });
+  type Target = {
+    reason?: string;
+    deviceId?: string | null;
+    saleId?: string | null;
+    refundId?: string | null;
+    billPaymentId?: string | null;
+    printerId?: string | null;
+  };
+  const insert = (patch: Target = {}) =>
+    withTransaction(suite.db, async (tx) => {
+      const row = {
+        reason: "tender_refund",
+        deviceId,
+        saleId,
+        refundId,
+        billPaymentId: null,
+        printerId,
+        ...patch,
+      };
+      await tx.run(sql`insert into drawer_opens (id,device_id,sale_id,tender_refund_id,bill_payment_id,printer_id,person_id,reason,opened_at)
+      values (${randomUUID()},${row.deviceId},${row.saleId},${row.refundId},${row.billPaymentId},${row.printerId},${PERSON},${row.reason},${Date.now()})`);
+      return row;
+    });
+  it("accepts the original sale and settled-tender refund with their device", async () => {
+    await expect(insert()).resolves.toMatchObject({
+      reason: "tender_refund",
+      deviceId,
+      saleId,
+      refundId,
+    });
+    const rows = suite.db.all<{ sale_id: string; tender_refund_id: string }>(
+      sql`select sale_id,tender_refund_id from drawer_opens where reason='tender_refund'`,
+    );
+    expect(rows).toEqual([{ sale_id: saleId, tender_refund_id: refundId }]);
+  });
+  it.each(["deviceId", "saleId", "refundId"] as const)(
+    "requires the %s of a settled-tender refund",
+    async (field) => {
+      const error = await captureError(() => insert({ [field]: null }));
+      expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
+    },
+  );
+  it("does not also name a bill payment", async () => {
+    const error = await captureError(() => insert({ billPaymentId }));
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
+  });
+  it("requires a refund row that exists", async () => {
+    const error = await captureError(() => insert({ refundId: randomUUID() }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+  it.each(["cash_sale", "manual", "calibration", "bill_payment", "bill_refund", "card_slip"])(
+    "keeps the %s target and forbids it a settled-tender refund id",
+    async (reason) => {
+      const target = {
+        reason,
+        deviceId: reason === "calibration" ? null : deviceId,
+        saleId: reason === "calibration" || reason.startsWith("bill_") ? null : saleId,
+        billPaymentId: reason.startsWith("bill_") ? billPaymentId : null,
+      };
+      await expect(insert({ ...target, refundId: null })).resolves.toMatchObject(target);
+      const error = await captureError(() => insert(target));
+      expect(engineErrorMessage(error)).toBe("CHECK constraint failed: drawer_opens_target_ck");
     },
   );
 });
