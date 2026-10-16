@@ -87,6 +87,7 @@ export class VenueDefaultsPanel extends LitElement {
   #leave?: LeaveCoordinator;
   #generation = 0;
   #writes = 0;
+  #loadedBefore = false;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -308,7 +309,12 @@ export class VenueDefaultsPanel extends LitElement {
   }
   async #load(): Promise<void> {
     const generation = this.#generation;
-    const query = dashboardQuery(this.api, "getVenueDefaults", []);
+    const query = dashboardQuery(
+      this.#loadedBefore ? (this.api.background ?? this.api) : this.api,
+      "getVenueDefaults",
+      [],
+    );
+    this.#loadedBefore = true;
     await Promise.all([
       this.#queries
         .watch(

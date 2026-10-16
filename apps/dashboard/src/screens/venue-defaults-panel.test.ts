@@ -672,3 +672,38 @@ it("a live update that fixes the language moves a staged choice to the fixed one
   expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
   expect(saveButton(el).disabled).toBe(false);
 });
+
+function withBackground() {
+  const r = rig();
+  const background = {
+    getVenueDefaults: vi.fn(async () => structuredClone(r.state.stored)),
+    getContentLanguages: vi.fn(async () => structuredClone(r.state.content)),
+  };
+  Object.assign(r.api, { background });
+  return { ...r, background };
+}
+
+it("reads through the background client once the card has read before, after reconnecting", async () => {
+  setLocale("en-GB");
+  const r = withBackground();
+  const el = await mount(r.api);
+  expect(r.api.getVenueDefaults).toHaveBeenCalledTimes(1);
+  expect(r.background.getVenueDefaults).not.toHaveBeenCalled();
+  const parent = el.parentNode!;
+  el.remove();
+  parent.appendChild(el);
+  await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
+  expect(r.api.getVenueDefaults).toHaveBeenCalledTimes(1);
+});
+
+it("Retry reads through the background client, as every read after the first does", async () => {
+  setLocale("en-GB");
+  const r = withBackground();
+  r.api.getVenueDefaults.mockRejectedValueOnce({ code: "server.unavailable" });
+  const { el } = await mountWidget<Panel>("dashboard-venue-defaults-panel", { api: r.api });
+  await expect.poll(() => q(el, "[data-test=retry]")).toBeTruthy();
+  (q(el, "[data-test=retry]") as HTMLElement).click();
+  await expect.poll(() => text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Spanish");
+  expect(r.api.getVenueDefaults).toHaveBeenCalledTimes(1);
+  expect(r.background.getVenueDefaults).toHaveBeenCalledTimes(1);
+});
