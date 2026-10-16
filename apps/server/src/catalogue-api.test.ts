@@ -4385,11 +4385,11 @@ describe("publishing a menu", () => {
   /** A new menu offering one new product at a menu price of 2.00. */
   async function menuWithProduct(
     app: Hono,
-  ): Promise<{ menuId: string; itemId: string; name: string }> {
+  ): Promise<{ menuId: string; itemId: string; name: string; productId: string }> {
     const menuId = await createCatalogueVia(app, `Published menu ${crypto.randomUUID()}`);
     const name = `Oferta ${crypto.randomUUID()}`;
     const productId = await createNamedProductVia(app, name);
-    return { menuId, itemId: await offerVia(app, menuId, productId, "2.00"), name };
+    return { menuId, itemId: await offerVia(app, menuId, productId, "2.00"), name, productId };
   }
 
   async function preview(app: Hono, menuId: string): Promise<MenuPreview> {
@@ -4462,7 +4462,7 @@ describe("publishing a menu", () => {
 
   it("previews, publishes and reports a menu as unpublished, current, then changed", async () => {
     const app = mountApp();
-    const { menuId, itemId, name } = await menuWithProduct(app);
+    const { menuId, itemId, name, productId } = await menuWithProduct(app);
     expect(await status(app, menuId)).toEqual({ state: "unpublished", clashes: 0 });
 
     const first = await preview(app, menuId);
@@ -4471,7 +4471,9 @@ describe("publishing a menu", () => {
     expect(first.changes).toEqual([
       expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
     ]);
-    expect(first.warnings).toEqual([]);
+    expect(first.warnings).toEqual([
+      { kind: "allergens_unreviewed", products: [{ id: productId, name, parentName: null }] },
+    ]);
     expect(first.status).toEqual({ state: "unpublished", clashes: 0 });
     expect(first.document).toMatchObject({ menuId, menuName: expect.any(String) });
     expect(first.document.root.members).toEqual([
@@ -4497,7 +4499,9 @@ describe("publishing a menu", () => {
       clashes: [],
       hash: first.hash,
       changes: [],
-      warnings: [],
+      warnings: [
+        { kind: "allergens_unreviewed", products: [{ id: productId, name, parentName: null }] },
+      ],
       status: current,
       document: first.document,
       live: { versionId: one.versionId, document: first.document },
@@ -4668,7 +4672,7 @@ describe("publishing a menu", () => {
 
   it("warns about a shortcut that publishing keeps as an empty slot", async () => {
     const app = mountApp();
-    const { menuId } = await menuWithProduct(app);
+    const { menuId, name, productId: offeredId } = await menuWithProduct(app);
     const offMenu = `Fuera ${crypto.randomUUID()}`;
     const productId = await createNamedProductVia(app, offMenu);
     const [details] = await suite.db
@@ -4680,6 +4684,7 @@ describe("publishing a menu", () => {
       .values({ sectionId: details!.homeSectionId, position: 0, productId });
     expect((await preview(app, menuId)).warnings).toEqual([
       { kind: "shortcut_missing", name: offMenu },
+      { kind: "allergens_unreviewed", products: [{ id: offeredId, name, parentName: null }] },
     ]);
   });
 

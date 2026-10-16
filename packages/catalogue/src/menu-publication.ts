@@ -479,6 +479,14 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   }
 
   const hash = menuDocumentHash(mine.document);
+  const unreviewed = new Map<string, { id: string; name: string; parentName: string | null }>();
+  for (const offer of Object.values(mine.document.offers)) {
+    if (offer.allergens === null)
+      unreviewed.set(offer.productId, { id: offer.productId, name: offer.name, parentName: null });
+    for (const variant of offer.variants)
+      if (variant.allergens === null)
+        unreviewed.set(variant.id, { id: variant.id, name: variant.name, parentName: offer.name });
+  }
   const precisionWarnings: MenuPreview["warnings"] = [];
   const warned = new Set<string>();
   for (const offer of Object.values(mine.document.offers))
@@ -512,6 +520,9 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     warnings: [
       ...(await shortcutWarnings(tx, mine.omittedShortcuts, sectionNames)),
       ...precisionWarnings,
+      ...(unreviewed.size === 0
+        ? []
+        : [{ kind: "allergens_unreviewed" as const, products: [...unreviewed.values()] }]),
     ],
     status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,

@@ -343,7 +343,11 @@ describe("home tiles", () => {
       { kind: "empty" },
       { kind: "empty" },
     ]);
-    expect(preview.warnings.map((w) => w.name)).toEqual(["Drinks", "Beer", "Lager"]);
+    expect(preview.warnings.map((w) => ("name" in w ? w.name : undefined))).toEqual([
+      "Drinks",
+      "Beer",
+      "Lager",
+    ]);
   });
 
   it("refuses unreachable, duplicate, missing and variant replacements without changing the tile", async () => {
