@@ -2624,11 +2624,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tables to staff, including handover and how assignments appear on the floor dashboard. The current
   workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
 
-- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
-  text.** **Next action:** whoever takes the till layout pass below decides whether these four want
-  `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
-  `--wt-color-danger` the dish picker's refusals now use.
-  [Detail](backlog/till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
+- **Diet badges still read undeclared caution and success text colours.** A668-5 removes the
+  basket and kitchen reads from the original “Four till surfaces ask for a caution colour” finding.
+  **Next action:** choose declared theme tokens or define the intended text tokens for
+  `diet-badges.ts`, then remove its two `FALLBACK_READS` exceptions.
+  [Original finding and remaining scope](backlog/till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
 
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found while looking at the real screens for B1 Task 12.
