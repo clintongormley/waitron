@@ -180,7 +180,10 @@ export class StripeTerminalProvider implements PaymentProvider {
       state: row.state,
       amount: params.amount,
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
-      ...(outcome.kind === "failed" && row.state === "failed" && outcome.failureReason !== undefined
+      ...(outcome.kind === "failed" &&
+      row.state === "failed" &&
+      outcome.failureReason !== undefined &&
+      outcome.failureReason !== "card_declined"
         ? { failureReason: outcome.failureReason }
         : {}),
     };

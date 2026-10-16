@@ -69,14 +69,22 @@ describe("staff-only card failure metadata", () => {
       toPayOutcome({ ...result("failed"), failureReason: "insufficient_funds" }, null),
     ).toEqual({ outcome: "declined", failureReason: "insufficient_funds" });
   });
-  it.each(["attempting", "network_unavailable", "captured", "accepted_offline"] as const)(
-    "never attaches a stale decline reason to %s",
-    (state) => {
-      const out = toPayOutcome(
-        { ...result(state), failureReason: "lost_card" },
-        state === "captured" || state === "accepted_offline" ? TICKET : null,
-      );
-      expect(out).not.toHaveProperty("failureReason");
-    },
-  );
+  it.each([
+    "attempting",
+    "network_unavailable",
+    "captured",
+    "accepted_offline",
+    "initiated",
+    "voided",
+    "refunded",
+    "partially_refunded",
+    "settled",
+    "declined",
+  ] as const)("never attaches a stale decline reason to %s", (state) => {
+    const out = toPayOutcome(
+      { ...result(state), failureReason: "lost_card" },
+      state === "captured" || state === "accepted_offline" ? TICKET : null,
+    );
+    expect(out).not.toHaveProperty("failureReason");
+  });
 });

@@ -138,6 +138,14 @@ describe("StripeTerminalProvider.collect", () => {
     },
   );
 
+  it("omits a generic card decline reason that adds no explanation", async () => {
+    const fake = new FakeStripe();
+    fake.declineNext();
+    const result = await providerFor(fake).collect(await collectParams());
+    expect(result.state).toBe("failed");
+    expect(result).not.toHaveProperty("failureReason");
+  });
+
   it("identifies an unanswered reader separately from a bank refusal", async () => {
     const fake = new FakeStripe();
     fake.stallNext();
@@ -154,6 +162,23 @@ describe("StripeTerminalProvider.collect", () => {
     const result = await providerFor(fake).collect(await collectParams());
     expect(result).toMatchObject({ state: "failed", failureReason: "reader_unavailable" });
   });
+
+  it.each(["createPaymentIntent", "processPaymentIntent", "readerOutcome"] as const)(
+    "identifies an exception from %s as no answer rather than a bank refusal",
+    async (method) => {
+      const fake = new FakeStripe();
+      vi.spyOn(fake, method).mockRejectedValue(new Error("connection interrupted"));
+      const result = await providerFor(fake).collect(await collectParams());
+      expect(result).toMatchObject({
+        state: "failed",
+        failureReason: "reader_unavailable",
+        settledAt: null,
+      });
+      const row = await rowFor(result.paymentRef);
+      expect(row?.state).toBe("failed");
+      expect(row?.externalRef).toBeNull();
+    },
+  );
 
   it("throws when no readerRef is supplied — a Terminal collect cannot proceed without a reader", async () => {
     const p = await collectParams();

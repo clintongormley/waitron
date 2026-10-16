@@ -2260,7 +2260,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   not declining is reproduced and fixed; the Demo card reader goes; no receipt screen after paying.
   The owner identified Keep waiting after a completed refusal as A739a's separate outcome-panel
   bug. Its approved Retry/Cancel, cause-specific messages and provider reasons leave the current
-  simulator toggle in place. Stripe's timeout bookkeeping remains the separate M7b2 owner decision.
+  simulator toggle in place. Stripe's timeout bookkeeping is the separate owner-approved A764
+  follow-up under M7b2.
   After A738.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
