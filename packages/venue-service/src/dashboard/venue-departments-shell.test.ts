@@ -55,10 +55,6 @@ async function mount(path = "/manage/venue-operations", view = model()) {
       profiles: [],
     }),
     listDeviceProfiles: vi.fn().mockResolvedValue([]),
-    watchZoneFloorPlan: vi.fn((_id, apply) => {
-      apply({ tables: [] });
-      return () => {};
-    }),
     openingHours: { watchOpeningHours: vi.fn(() => () => {}) },
   };
   shell.api = { ...reads, background: reads } as unknown as VenueServiceApi;

@@ -107,19 +107,6 @@ read by four separately written queries in `special-days.ts` and `business-day-s
 the browser-safe repeat rules, which leaves import loops with `business-day-schedule.ts` and
 `menu-timetable.ts`. Each could collapse to one place.
 
-## The zone editor's closed-times sentences without a season name
-
-Left open by A506-5, #1603.
-
-The zone editor's closed-times summary uses its sentences without a season name
-(`venue.zone_closed_days`, `venue.zone_closed_summary`, and `venue.zone_open_with_department`)
-only when the venue has no seasons at all: `zoneClosedWeek`
-(`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
-season nor a first season exists. Provisioning gives every venue four seasons, and deleting the
-last one is refused (`season.invalid`, reason `last`, `deleteSeason` in
-`packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in the code, not
-run; no test names those keys.
-
 ## A department or zone delete's preview never counts a special day's painted hours
 
 Left open by A506-5, #1603.
@@ -193,28 +180,6 @@ Left open by A506-6, #1609.
 reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
 which start at year 100; changing `isLocalDate` would change which dates the server accepts from
 outside (menu publication dates, imports), so it needs a decision.
-
-## A718. Departments and zones: a column for the receipt and floor plan, a trimmed zone editor
-
-**A718 (owner, 2026-10-15).** Mockup: [departments and zones](mockups/a718-a727-calendar-and-stations/12-departments-and-zones.png).
-Files: `packages/venue-service/src/dashboard/departments-list.ts`, `zone-edit-dialog.ts`.
-
-1. **The zone editor's Save sits too far right.** The fields stop short of the dialog's right edge
-   but the button row runs to it; the row ends where the fields end.
-2. **The zone editor drops three things:** the season sentence ("Autumn: open whenever the
-   department is"), the "Opening hours (normal week)" link, and the floor-plan link ("Add a floor
-   plan" / "Edit floor plan") with its preview (`zone-edit-dialog.ts:256-260`). The floor plan is
-   reached from the new column (point 4); opening hours from the Calendar.
-3. **No column picker** above the Departments table.
-4. **A column for each row's other editor** ("Also edit" in the mockup; the heading is the
-   implementer's call): "Receipt" on a department row where a receipt can be edited
-   (`receiptAvailable`, `departments-list.ts`), "Add floor plan" or "Floor plan" on a zone row.
-   Edit receipt leaves the department's ⋮ menu.
-
-Landing this deletes the open notes it makes moot: "The zone editor's closed-times sentences without
-a season name", "Closing a painter opened from the zone dialog's 'Opening hours (normal week)' link
-lands on the Opening hours Year", and "The zone editor's 'Edit floor plan' link is not hidden without
-`venue.configure`" — re-file that last one against the new column if it is still true there.
 
 ## A719. Periods become a window opened from the Calendar
 

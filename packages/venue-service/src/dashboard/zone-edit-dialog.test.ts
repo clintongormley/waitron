@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { setLocale } from "@waitron/dashboard-kit";
+import { page } from "vitest/browser";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   cleanupZoneEditors,
   mountZoneEditor,
@@ -11,6 +13,42 @@ beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupZoneEditors();
   setLocale("en");
+  vi.restoreAllMocks();
+});
+it("shows no season sentence, hours link, floor-plan link or preview, and reads neither", async () => {
+  const hours = vi.spyOn(OpeningHoursApi.prototype, "watchOpeningHours");
+  const paths: string[] = [];
+  const { el } = await mountZoneEditor((async (path: string) => {
+    paths.push(path);
+    return { tables: [] };
+  }) as DashboardRequest);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  expect(root.querySelector("[data-test=closed-week-summary]")).toBeNull();
+  expect(root.querySelector("[data-test=zone-opening-hours]")).toBeNull();
+  expect(root.querySelector("[data-test=zone-floor-plan]")).toBeNull();
+  expect(root.querySelector("wt-floor-plan-preview")).toBeNull();
+  expect(root.querySelector("a")).toBeNull();
+  expect(paths.filter((path) => path.includes("/floor-plan"))).toEqual([]);
+  expect(hours).not.toHaveBeenCalled();
+});
+it.each([1280, 390])("Save's right edge lines up with the last field's at %i px", async (width) => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(width, 900);
+    expect(window.innerWidth).toBe(width);
+    const { el } = await mountZoneEditor();
+    const fields = await zoneFields(el);
+    const choices = fields.shadowRoot!.querySelectorAll("wt-combobox");
+    const last = choices[choices.length - 1]!;
+    await last.updateComplete;
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    const save = zoneSave(el).getBoundingClientRect().right;
+    expect(Math.abs(save - last.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
 it("opens the selected zone with name and four raw overrides, offering each department value explicitly", async () => {
   const { el, modal, writes } = await mountZoneEditor();
@@ -183,83 +221,16 @@ it("an old native close cannot dismiss a replacement zone", async () => {
   expect(closed).not.toHaveBeenCalled();
 });
 
-it("retains this zone's floor preview and hours links, with passive reads and list return", async () => {
-  const reads: unknown[][] = [];
-  const { departmentHoursModel } = await import("../testing/department-hours-fixture.js");
-  const { el } = await mountZoneEditor((async (path, method = "GET", body, options) => {
-    reads.push([path, method, body, options]);
-    if (path.endsWith("/floor-plan"))
-      return {
-        tables: [
-          {
-            id: "t1",
-            fixed: true,
-            placement: { x: 0, y: 0, width: 2, height: 2, rotation: 0, shape: "rect" },
-          },
-        ],
-      };
-    return departmentHoursModel();
-  }) as import("@waitron/dashboard-kit").DashboardRequest);
-  await expect.poll(() => el.shadowRoot!.querySelector("wt-floor-plan-preview")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("wt-floor-plan-preview")!.tables).toEqual([
-    {
-      key: "t1",
-      fixed: true,
-      placement: { x: 0, y: 0, width: 2, height: 2, rotation: 0, shape: "rect" },
-    },
-  ]);
-  const floor = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-floor-plan]")!;
-  expect(floor.textContent!.trim()).toBe("Edit floor plan");
-  expect(floor.getAttribute("href")).toBe(
-    "/manage/floor-plan/zone/z1?back=%2Fmanage%2Fvenue-operations",
-  );
-  await expect
-    .poll(() =>
-      el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.getAttribute("href"),
-    )
-    .toBe("/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1");
-  await expect
-    .poll(() =>
-      el.shadowRoot!.querySelector("[data-test=closed-week-summary]")?.textContent?.trim(),
-    )
-    .toBe(
-      "Autumn: closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday",
-    );
-  expect(reads.length).toBe(2);
-  expect(reads.every((read) => (read[3] as { passive: boolean }).passive)).toBe(true);
-});
-it("unplaced tables offer Add floor plan and a detached old read cannot replace the next zone's preview", async () => {
-  let finish!: (value: unknown) => void;
-  const { departmentHoursModel } = await import("../testing/department-hours-fixture.js");
-  const { el } = await mountZoneEditor((async (path) => {
-    if (path.includes("/z1/floor-plan"))
-      return new Promise<unknown>((resolve) => {
-        finish = resolve;
-      });
-    if (path.includes("/z2/floor-plan"))
-      return { tables: [{ id: null, fixed: false, placement: null }] };
-    return departmentHoursModel();
-  }) as import("@waitron/dashboard-kit").DashboardRequest);
-  await expect.poll(() => !!finish).toBe(true);
+it("a deleted zone shows no fields, and switching to a surviving zone shows its own", async () => {
+  const { el } = await mountZoneEditor();
+  el.model!.zones[0]!.active = false;
+  el.model = structuredClone(el.model!);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")).toBeNull();
   el.zoneId = "z2";
   await el.updateComplete;
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=zone-floor-plan]")?.textContent?.trim())
-    .toBe("Add a floor plan");
-  finish({
-    tables: [
-      {
-        id: "old",
-        fixed: true,
-        placement: { x: 0, y: 0, width: 2, height: 2, rotation: 0, shape: "rect" },
-      },
-    ],
-  });
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-floor-plan-preview")).toBeNull();
-  expect(el.shadowRoot!.querySelector("[data-test=zone-floor-plan]")!.getAttribute("href")).toBe(
-    "/manage/floor-plan/zone/z2?back=%2Fmanage%2Fvenue-operations",
-  );
+  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit zone: Bar");
 });
 it("a pending save visibly reports loading, disables duplicate Save and Cancel, then clears loading", async () => {
   let finish!: () => void;

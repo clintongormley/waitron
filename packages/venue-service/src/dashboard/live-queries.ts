@@ -167,7 +167,6 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
   ],
   holidays: ["tenants", "locations", "holiday_geographies"],
-  "floor-plan": ["floor_plans", "floor_plan_tables", "dining_tables", "floor_zones"],
   "menu-periods-painted-in": [
     "menu_periods",
     "departments",
@@ -224,6 +223,8 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "kitchen_stations",
     "floor_zones",
+    "floor_plans",
+    "floor_plan_tables",
     "products",
     "content_languages",
     "menu_details",

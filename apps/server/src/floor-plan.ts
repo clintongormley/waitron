@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNotNull, ne } from "drizzle-orm";
 import {
   diningTables,
   floorPlans,
@@ -145,6 +145,20 @@ export async function readZonePlan(
     savedAt: plan?.savedAt ?? null,
     tables,
   };
+}
+
+/** The zones among `zoneIds` whose plan has a table `readZonePlan` would answer with a placement. */
+export async function zonesWithPlacedTables(
+  tx: Transaction,
+  zoneIds: readonly string[],
+): Promise<Set<string>> {
+  if (zoneIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ zoneId: floorPlans.zoneId })
+    .from(floorPlans)
+    .innerJoin(floorPlanTables, eq(floorPlanTables.planId, floorPlans.id))
+    .where(and(inArray(floorPlans.zoneId, [...zoneIds]), isNotNull(floorPlanTables.x)));
+  return new Set(rows.map((row) => row.zoneId));
 }
 
 function invalid(field: string): AppError {

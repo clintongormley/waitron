@@ -147,12 +147,13 @@ describe("department list", () => {
   it("shows service columns and only active department and zone rows", async () => {
     const el = await setup();
     const list = table(el);
-    expect(list.viewKey).toBe("waitron.venue.departments");
+    expect(list.viewKey).toBe("waitron.venue.departments-zones");
     expect(list.columns.map(({ key, label }) => [key, label])).toEqual([
       ["name", "Name"],
       ["orderStart", "How orders start"],
       ["paidWhen", "When counter service is used"],
       ["receiptPrintMode", "Print a receipt"],
+      ["also", "Also edit"],
       ["actions", "Actions"],
     ]);
     expect(list.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
@@ -362,6 +363,7 @@ describe("department list", () => {
       "Cómo empiezan los pedidos",
       "Cuando se usa el servicio en mostrador",
       "Imprimir el recibo",
+      "Editar también",
       "Acciones",
     ]);
     expect(rows(el)[1]!.textContent).toContain("Servicio en mostrador");
@@ -450,52 +452,10 @@ it("retains the Spanish published-menu refusal in the owning department's name c
   expect(cells[1]!.textContent).not.toContain("Terraza");
 });
 
-it.each(
-  [390, 1280].flatMap((width) =>
-    ["en", "es"].flatMap((locale) =>
-      ["light", "dark"].map((theme) => [width, locale, theme] as const),
-    ),
-  ),
-)(
-  "A462 Customise ends the toolbar without search at %i px (%s, %s)",
-  async (width, locale, theme) => {
-    const previous = [window.innerWidth, window.innerHeight];
-    await page.viewport(width, 844);
-    setLocale(locale);
-    try {
-      const el = await setup();
-      el.parentElement!.setAttribute("data-theme", theme);
-      el.parentElement!.style.background = "var(--wt-color-bg)";
-      el.parentElement!.style.color = "var(--wt-color-text)";
-      const list = table(el);
-      await vi.waitFor(() => {
-        const chooser = list
-          .shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!
-          .getBoundingClientRect();
-        const toolbar = list
-          .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
-          .getBoundingClientRect();
-        expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
-        expect(chooser.width).toBeGreaterThan(0);
-        expect(chooser.right).toBeCloseTo(toolbar.right, 0);
-      });
-      const chooser = list.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger")!;
-      await userEvent.click(chooser);
-      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("true"));
-      const dialog = list.shadowRoot!.querySelector("wt-dialog")!;
-      await userEvent.click(
-        dialog
-          .querySelector<HTMLElement>('wt-button[slot="footer"]:last-of-type')!
-          .shadowRoot!.querySelector<HTMLButtonElement>("button")!,
-      );
-      await vi.waitFor(() => expect(chooser.getAttribute("aria-expanded")).toBe("false"));
-      expect(list.shadowRoot!.activeElement).toBe(chooser);
-      await page.screenshot({
-        path: `__screenshots__/a462-task1/departments-${width}-${locale}-${theme}.png`,
-      });
-    } finally {
-      setLocale("en-GB");
-      await page.viewport(previous[0]!, previous[1]!);
-    }
-  },
-);
+it("offers no column chooser", async () => {
+  const el = await setup();
+  const list = table(el);
+  expect(list.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
+  expect(list.columns.filter((column) => column.choosable !== undefined)).toEqual([]);
+});

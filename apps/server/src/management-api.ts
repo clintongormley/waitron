@@ -119,7 +119,12 @@ import {
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import {
+  readZonePlan,
+  saveZonePlan,
+  zonesWithPlacedTables,
+  type ZonePlanSave,
+} from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -1697,7 +1702,14 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
+      const zones = await withVenueAuth(deps, sessionId, async (tx) => {
+        const listed = await listZones(tx, cfg);
+        const placed = await zonesWithPlacedTables(
+          tx,
+          listed.map((zone) => zone.id),
+        );
+        return listed.map((zone) => ({ ...zone, hasPlacedTables: placed.has(zone.id) }));
+      });
       return c.json(zones);
     }),
   );

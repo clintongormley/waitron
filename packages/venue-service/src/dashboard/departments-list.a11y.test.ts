@@ -12,55 +12,76 @@ afterEach(() => {
   sessionStorage.clear();
 });
 describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
-  it.each(["empty", "ready", "issues", "setup", "menu", "deleted-row"])("%s", async (state) => {
-    setLocale("en");
-    const el = (await mountThemed(
-      "<departments-list></departments-list>",
-      theme,
-    )) as HTMLElement & { model: VenueServiceView; updateComplete: Promise<unknown> };
-    el.model = {
-      departments:
-        state === "empty"
-          ? []
-          : [
-              {
-                id: "d1",
-                name: "Restaurant",
-                tradingName: "Casa Delgado",
-                active: state !== "issues" && state !== "deleted-row",
-              },
-            ],
-      zones: [],
-      floorZones: [{ id: "z1", name: "Patio" }],
-      readiness:
-        state === "issues" || state === "setup"
-          ? [
-              { code: "venue.default_station_missing" },
-              { code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" },
-              ...(state === "issues" ? [{ code: "venue.department_missing" as const }] : []),
-              { code: "zone.department_missing", zoneId: "z1", zoneName: "Patio" },
-            ]
-          : [],
-      salePolicies: { departments: [], zones: [] },
-      settings: { editSentLines: true },
-      kitchenTicketGrouping: "combined",
-      printHeldWork: false,
-      printMovedSlips: true,
-      releaseReminderMinutes: 10,
-      clearingWorkflow: false,
-    };
-    await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const table = el.shadowRoot?.querySelector("wt-data-table");
-    expect(table, "the list is rendered for accessibility scanning").toBeTruthy();
-    if (state === "menu") {
-      const menu = table!.shadowRoot!.querySelector("wt-row-actions")!;
-      menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-      await menu.updateComplete;
-      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-    }
-    if (state === "deleted-row")
-      expect(table!.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
-    await expectNoA11yViolations(host);
-  });
+  it.each(["empty", "ready", "issues", "setup", "menu", "deleted-row", "also-edit"])(
+    "%s",
+    async (state) => {
+      setLocale("en");
+      const el = (await mountThemed(
+        "<departments-list></departments-list>",
+        theme,
+      )) as HTMLElement & { model: VenueServiceView; updateComplete: Promise<unknown> };
+      el.model = {
+        departments:
+          state === "empty"
+            ? []
+            : [
+                {
+                  id: "d1",
+                  name: "Restaurant",
+                  tradingName: "Casa Delgado",
+                  active: state !== "issues" && state !== "deleted-row",
+                },
+              ],
+        zones:
+          state === "also-edit"
+            ? [
+                {
+                  id: "z1",
+                  name: "Patio",
+                  departmentId: "d1",
+                  departmentName: "Restaurant",
+                  serviceMode: "table_tab",
+                  active: true,
+                },
+              ]
+            : [],
+        floorZones: [{ id: "z1", name: "Patio" }],
+        readiness:
+          state === "issues" || state === "setup"
+            ? [
+                { code: "venue.default_station_missing" },
+                { code: "department.no_periods", departmentId: "d1", departmentName: "Restaurant" },
+                ...(state === "issues" ? [{ code: "venue.department_missing" as const }] : []),
+                { code: "zone.department_missing", zoneId: "z1", zoneName: "Patio" },
+              ]
+            : [],
+        salePolicies: { departments: [], zones: [] },
+        settings: { editSentLines: true },
+        kitchenTicketGrouping: "combined",
+        printHeldWork: false,
+        printMovedSlips: true,
+        releaseReminderMinutes: 10,
+        clearingWorkflow: false,
+      };
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const table = el.shadowRoot?.querySelector("wt-data-table");
+      expect(table, "the list is rendered for accessibility scanning").toBeTruthy();
+      if (state === "menu") {
+        const menu = table!.shadowRoot!.querySelector("wt-row-actions")!;
+        menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+        await menu.updateComplete;
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      }
+      if (state === "also-edit") {
+        expect(
+          table!.shadowRoot!.querySelector('[data-test="receipt-department-d1"]'),
+        ).not.toBeNull();
+        expect(table!.shadowRoot!.querySelector('[data-test="floor-plan-zone-z1"]')).not.toBeNull();
+      }
+      if (state === "deleted-row")
+        expect(table!.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 });

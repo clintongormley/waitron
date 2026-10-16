@@ -149,7 +149,7 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
   with no chooser; (3) nothing checks that a NEW dashboard table offers the chooser; (4) where a
   screen keeps its search and filters outside the table (staff, card readers) or the table has none
-  (alerts, venue operations), the Customise icon button sits alone on a row above the table rather than
+  (alerts), the Customise icon button sits alone on a row above the table rather than
   beside those controls — moving a screen's own controls into the table's toolbar would fix it;
   (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
   no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
@@ -158,7 +158,9 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
   those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (6) the printers screen's
   view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
-  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live.
+  that use a colon and lack the `waitron.` prefix — cheap to rename until a venue is live; (7) the
+  Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
+  chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
 
 ## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
 

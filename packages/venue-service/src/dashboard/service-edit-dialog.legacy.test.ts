@@ -383,15 +383,6 @@ it.each(["department", "zone"] as const)(
   },
 );
 
-it("the zone floor-plan link keeps token spacing below Opening hours", async () => {
-  const { el } = await mountZoneEditor();
-  el.style.setProperty("--wt-space-2", "9px");
-  await el.updateComplete;
-  const hours = el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.parentElement!;
-  const floor = el.shadowRoot!.querySelector("[data-test=zone-floor-plan]")!.parentElement!;
-  expect(floor.getBoundingClientRect().top - hours.getBoundingClientRect().bottom).toBeCloseTo(9);
-});
-
 it.each(["department", "zone"] as const)(
   "%s cancels its leave question when its subject is replaced and ignores old controls",
   async (kind) => {

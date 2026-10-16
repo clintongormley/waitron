@@ -468,31 +468,6 @@ it("creates a department through the real request with name only", async () => {
   });
 });
 
-it("watches one zone's master floor plan passively and rereads it when a plan table changes", async () => {
-  const plan = { zoneId: "z/1", revision: 2, savedAt: null, tables: [] };
-  const live = new LiveData();
-  const request = vi.fn(async () => structuredClone(plan));
-  const api = new VenueServiceApi(request as unknown as DashboardRequest, live);
-  const apply = vi.fn();
-  const stop = api.watchZoneFloorPlan("z/1", apply, vi.fn(), vi.fn());
-  try {
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(plan));
-    expect(request.mock.calls).toEqual([
-      ["/management-api/zones/z%2F1/floor-plan", "GET", undefined, { passive: true }],
-    ]);
-    expect(live.interests).toEqual(
-      ["floor_plans", "floor_plan_tables", "dining_tables", "floor_zones"].map((type) => ({
-        type,
-      })),
-    );
-    live.invalidate([{ type: "floor_plan_tables" }]);
-    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-  } finally {
-    stop();
-  }
-  expect(live.interests).toEqual([]);
-});
-
 it.each(["Zone", "Department"] as const)(
   "hierarchy %s uses encoded impact GET and active DELETE with complete 200 responses",
   async (kind) => {

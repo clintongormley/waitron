@@ -4,6 +4,11 @@
 > see `apps/server/src/sale-operation-description.ts` and its sibling tests. An existing
 > department without a description still answers `department.operation_description_required`.
 
+> **2026-10-16 — A718:** Edit receipt and the floor-plan link left the row menus for the list's
+> Also edit column; the list has no column picker; the zone editor no longer shows the closed-times
+> summary, the Opening hours link or the floor-plan preview. Current contract:
+> `docs/developers/design-system.md`, Departments and zones.
+
 
 2026-10-12. Lane D, Codex driver. This is the implementation contract for the parent driver, not a plan-only deliverable. The owner has authorised unattended implementation, finish and landing; there is no further design confirmation gate. This delegate only read local sources and wrote the spec and plan. All implementation behavior below still requires execution evidence. The private canvas is **UNVERIFIED**: no website or computer access was used.
 

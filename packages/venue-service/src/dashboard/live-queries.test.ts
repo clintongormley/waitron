@@ -64,6 +64,8 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "categories",
     "kitchen_stations",
     "floor_zones",
+    "floor_plans",
+    "floor_plan_tables",
     "products",
     "content_languages",
     "menu_details",
@@ -104,15 +106,6 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "zone_day_ranges",
     "special_days",
     "special_day_dates",
-  ]);
-});
-
-it("refreshes a zone's floor plan preview when a floor plan, its tables, or a dining table changes", () => {
-  expect(QUERY_DEPENDENCIES["floor-plan"]).toEqual([
-    "floor_plans",
-    "floor_plan_tables",
-    "dining_tables",
-    "floor_zones",
   ]);
 });
 

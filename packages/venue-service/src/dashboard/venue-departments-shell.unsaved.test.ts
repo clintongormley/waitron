@@ -52,11 +52,9 @@ class App extends LitElement {
     vi.fn(async (path: string) =>
       path.endsWith("/profiles")
         ? []
-        : path.endsWith("/floor-plan")
-          ? { tables: [] }
-          : path.endsWith("/opening-hours")
-            ? departmentHoursModel()
-            : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
+        : path.endsWith("/opening-hours")
+          ? departmentHoursModel()
+          : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
     ) as DashboardRequest,
   );
   override render() {
@@ -206,7 +204,7 @@ it("an accepted external department route recreates the form and its baseline", 
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("the real zone opening-hours link waits for the draft decision before navigation", async () => {
+it("leaving a dirty zone editor for another page waits for the draft decision before navigation", async () => {
   const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
   const zone = shell.shadowRoot!.querySelector("zone-edit-dialog")!;
   await zone.updateComplete;
@@ -225,17 +223,16 @@ it("the real zone opening-hours link waits for the draft decision before navigat
     }),
   );
   await zone.updateComplete;
-  const link = zone.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-opening-hours]")!;
-  await userEvent.click(page.elementLocator(link));
+  const away = "/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1";
+  const kept = navigationGuardFor(window)!.write(away);
   await choose("keep");
+  await kept;
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
   expect(fields.value).toMatchObject(draft);
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await userEvent.click(page.elementLocator(link));
+  void navigationGuardFor(window)!.write(away);
   await choose("discard");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/manage/opening-hours/view/season/season/autumn/department/d1/zone/z1");
+  await expect.poll(() => location.pathname).toBe(away);
   expect(fields.value).toMatchObject({
     orderStart: null,
     paidWhen: null,
