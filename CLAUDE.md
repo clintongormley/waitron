@@ -667,6 +667,11 @@ browser test** — most of these rules exist because a test passed while proving
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**, or it kills
   the child and returns `status: null`, which reads as a broken test. Cut the WAIT, not the retrying
   (`WAITRON_SH_HEALTH_DELAY`). Nothing guards the rule in general.
+- **A `spawnSync` timeout kills only the process it started; the script's own children keep
+  running, so each run of a script keeps its files apart from the next.** `exec` shortens the
+  leftover, it does not end it. Cost: lane G's push failed `ci-workflow`'s paging case on a killed
+  run's leftover call (A751). Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-spawnsync-timeout-kills-only-the-process-it-started).
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only on macOS and only where the stubs
   are a large share of the runtime — measure first.

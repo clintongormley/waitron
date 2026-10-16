@@ -4996,6 +4996,14 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
+- **Migrating a box drops the change-feed triggers one statement at a time, outside a
+  transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
+  `applyMigrations`) drops each `waitron_change_*` trigger on its own. A751's probe on the full
+  schema: 561 drops took 85–180 ms that way and 43–48 ms inside one transaction; A736 measured
+  53–56 ms against 23–25 ms. Boot migrates at every start (`apps/server/src/boot.ts`), and the
+  removal is about a quarter of the upgrade walk's processor profile. A product change in
+  `packages/db`, so A751 (a test-only change) left it.
+
 - **A branch install fetches compose and support files before resolving the image commit.**
   A push between those operations could give them different source commits; inferred from
   `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
@@ -5188,7 +5196,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
-- **Upgrade testing — blocking before go-live (owner, 2026-09-26).** Still open: rows the product itself writes. The synthetic walk's measured deadline now follows its step count (A489); see [the timing receipt](developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk). Every step here is built by this image's own migrator from today's change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the new image, is the test that matches what a box does. [Detail](backlog/box.md#upgrade-testing--blocking-before-go-live-owner-2026-09-26)
+- **Upgrade testing — blocking before go-live (owner, 2026-09-26).** Still open: rows the product itself writes. The synthetic walk's work budget follows its step count (A489) and is spent in its own processor time (A751); see [the timing receipt](developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time). Every step here is built by this image's own migrator from today's change-feed and append-only lists; a snapshot of a box at an earlier release, upgraded by the new image, is the test that matches what a box does. [Detail](backlog/box.md#upgrade-testing--blocking-before-go-live-owner-2026-09-26)
 
 - **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
@@ -5717,13 +5725,17 @@ the tree. What remains, largest first:
   On recurrence, retain separate install and version-check statuses before assigning a cause.
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
-- **The pre-push hook's `scripts/migrations-match-schema.test.ts` can time out under load
-  (2026-10-15; open).** On A677's first push (#1737) its `packages/staffing` case hit the 30-second
-  limit on drizzle-kit's generate (`GENERATE_TIMEOUT_MS`) with the machine's load average around 14;
-  the branch changed no schema, the case passed alone and the retried push passed. Not measured how
-  long a generate takes on an idle machine, so the right bound is unknown. Again on A662's first
-  push (#1803, 2026-10-16): the `staffing` and `venue-service` generates were killed at a load
-  average around 40; no schema changed, the file passed alone (19 of 19) and the second push passed.
+- **At a load average near 60, four more root guard files fail on time (left open by A751).**
+  With three root projects and eight spinning shell loops on the 18-core Mac, A751's branch passed
+  the four files it fixed and still failed `guarded-teardowns`, `menu-sections-upgrade`,
+  `mutation-shard` and `pre-push`; three more failed the same load before the change.
+  [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
+
+- **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
+  `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on
+  `main` (`b81f1481c`) as on A751's branch, so a wait in either that outgrows its bound passes it.
+  Measured by calling `budgets()` on each file's text; which construct it cannot resolve was not
+  traced.
 
 - **A624. The upgrade walk cannot step a new set whose first migration names another set's later
   table.** `scripts/migration-upgrade.test.ts` applies every set's first migration together at its

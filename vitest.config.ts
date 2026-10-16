@@ -84,8 +84,8 @@ export default defineConfig({
     //
     // What thirty seconds does NOT buy, stated so nobody reads it as a guarantee: at a load average
     // near 48 on this machine — four subagents' suites, a coverage run and the other campaign lane
-    // all at once — `scripts/ci-workflow.test.mjs` still timed out, and it declares SIXTY seconds of
-    // its own. No bound survives an oversubscribed machine. This raises the floor from a default
+    // all at once — `scripts/ci-workflow.test.mjs` still timed out, though it then declared sixty seconds
+    // of its own. No bound survives an oversubscribed machine. This raises the floor from a default
     // that a normal parallel run trips to one it does not; deciding test concurrency from measured
     // headroom (`CLAUDE.md` §2) is the other half and this cannot replace it.
     //

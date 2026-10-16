@@ -292,6 +292,32 @@ request for `/manage/devices` on 5190 returned the till HTML, while the same pat
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
 server without changing their deployed same-origin paths; this also affects setup's existing links.
 
+## At a load average near 60, more root guard files fail on time
+
+Measured 2026-10-16 on the 18-core Mac (64 GB, 58–60% of memory free), Node v26.11.1, Vitest
+4.1.11: three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
+loops that only spin; the one-minute load average peaked at 72 before the change and 102 on the
+branch. Receipts in lane B's campaign folder,
+`a751-receipts/heavy3/` (before A751) and `a751-receipts/verify-heavy3/` (A751's branch,
+`425cf16b8`).
+
+Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A751's branch each failed
+7–8 tests in four files, every one of them in all three runs except `guarded-teardowns` (one run):
+
+| File | Case | What it printed (one run) |
+| --- | --- | --- |
+| `scripts/guarded-teardowns.test.ts` | guards the resource it releases | `STACK_TRACE_ERROR` after 82 s |
+| `scripts/menu-sections-upgrade.test.ts` | both cases | `STACK_TRACE_ERROR` after 43–69 s |
+| `scripts/mutation-shard.test.mjs` | fills every shard | `STACK_TRACE_ERROR` after 51–58 s |
+| `scripts/pre-push.test.mjs` | four to five cases | assertion failures or `STACK_TRACE_ERROR`, after 17–40 s |
+
+`brand-build` (`status: null` after 10 s), `run-with-deadline` and `write-path-tables` failed the
+same load before A751 and passed it on the branch; whether that is A751's lighter `ci-workflow` and
+upgrade walk or chance was not measured. None of these failed with the root project and 16 spinning
+loops alone (`a751-receipts/loaded16-full-root.json`), nor in lane G's failing push of 2026-10-16.
+Each needs the same treatment A751 gave its four: what the bound waits for, its worst case under
+this load with the bound lifted, and whether the case can be made cheaper.
+
 ## Decisions and deliberate limits
 
 - **Upgrade-test deadline follows the migration count (A489, 2026-10-11).** The captured
