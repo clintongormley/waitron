@@ -81,9 +81,10 @@ is not checked for customer-name translations (`writeProductVariants`,
 `packages/catalogue/src/variants.ts`), so the language alone
 does not say which. What the save path can carry is pinned where it is thrown, in
 `packages/catalogue/src/product-editor.test.ts` ("names the missing language, and nothing else" and
-"refuses nutrition input without naming any field"): a refusal of an allergen or a dietary
-declaration names neither a field nor a language, which is why nothing maps those onto the editor's
-Nutrition section.
+"refuses nutrition input without naming any field"): generic allergen and dietary refusals name
+neither a field nor a language. The kind-specific `allergen.kinds_required` and
+`allergen.invalid_kind` refusals are mapped explicitly to the editor's Nutrition section by
+`catalogue-screen.ts`; they do not acquire a `field` parameter.
 
 `productEditorTranslationField` (`apps/dashboard/src/widgets/product-editor.ts`) resolves the
 language onto a value by reading the body that was submitted: every checked translated value missing

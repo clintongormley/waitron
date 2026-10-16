@@ -2730,23 +2730,22 @@ variant describes itself in no language.
   (`product.no_course` for the course) is left out where the empty value already means "fall
   back": offering both would read as one thing and save as another. A variant's unit is not such a
   field: it is always its product's, and its page shows it beside the price as fixed text (A222).
-- **The allergen and dietary pickers**: a muted hint line beside each
-  shows the fallback value while the stored value is empty, and goes away once the record sets its
-  own. The allergen and dietary hint lines name the values in grey italic ("Allergens: Milk"), "None"
-  where the parent has none (`editor.allergens_none`, `editor.diet_none`) and, for allergens the
-  parent has not had reviewed, "Not yet reviewed" (`editor.allergens_unreviewed`) — never "None",
-  which would claim a reviewed empty set. A variant's price in the variant table, where it has none of
-  its own, is the product's price in the same grey italic. An image shows the fallback picture itself
-  (`dashboard-image-upload`'s `inheritedImage`). In the variant form it has no visible caption, and
-  its alt text names the main product's photo (`editor.inherited_image_alt`); Remove sits beside
-  Choose image where it would for a photo of the variant's own, disabled, with the accessible
-  description "Uses the main product's photo" (`image.remove_inherited_hint`). The widget sets
-  `wt-button.ariaDescription`; the inner button receives `aria-description`.
-  With no photo at all, own or inherited, there is no Remove. In the
-  product editor, where the photo is a thumbnail beside Name, it has a dashed border, and "The main product's photo"
-  (`editor.inherited_image_alt`), hidden from sight, describes the photo button to a screen reader. A control whose empty state could also mean "none" (an allergen set,
-  a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
-  would declare the record free of what the fallback contains.
+- **Nutritional info** in the product editor shows allergen and diet chips directly. “Contains none
+  of the 14” records a reviewed empty allergen set; leaving every allergen unticked without that
+  choice remains unreviewed. Gluten and Nuts open indented kind chips. A variant's “Same as
+  {parent}” keeps its allergens inherited, with the parent's choices in italic and read-only;
+  an own choice replaces that set. Diet edits and allergen edits retain the other field's own value.
+  Implied diet labels are ticked and quiet, with “· from {label}”; they cannot be removed on their
+  own, and displaying them does not add declarations to the saved set.
+- **An image** shows the fallback picture itself (`dashboard-image-upload`'s `inheritedImage`).
+  In the variant form it has no visible caption, and its alt text names the main product's photo
+  (`editor.inherited_image_alt`); Remove sits beside Choose image where it would for a photo of
+  the variant's own, disabled, with the accessible description “Uses the main product's photo”
+  (`image.remove_inherited_hint`). The widget sets `wt-button.ariaDescription`; the inner button
+  receives `aria-description`. With no photo at all, own or inherited, there is no Remove. In the
+  product editor, where the photo is a thumbnail beside Name, it has a dashed border, and “The
+  main product's photo” (`editor.inherited_image_alt`), hidden from sight, describes the photo
+  button to a screen reader.
 
 A name is not hinted from a parent this way: a variant's names are its own. In the editors of
 products, variants, options lists, options and extras lists, a blank kitchen name, and a blank
@@ -2783,20 +2782,21 @@ values in `summaryFields`, or as rows in `summaryRows`. Each
 completely (a long English name hides the Spanish one), so opening the section is what shows every
 value. Build it from the values themselves, joined with a middot. The product editor's Kitchen,
 Descriptors and Nutritional info sections name every field they hold, filled or not, each value
-after its field's name in bold, and a field with nothing set reads "None specified" ("Sin
-especificar", `modifiers.none_specified`), the words the open allergen and dietary lines use
-(A211). The Kitchen section reads "**Kitchen name:** Café c/leche ·
+after its field's name in bold. Empty Kitchen and Descriptors fields read “None specified”
+(“Sin especificar”, `modifiers.none_specified`). Nutritional info distinguishes “Not yet reviewed”
+from “None” for allergens and lists chosen diets before their implied labels, with the latter in
+italic. The Kitchen section reads "**Kitchen name:** Café c/leche ·
 **Course:** Drinks", or "**Kitchen name:** None specified · **Course:** None specified" with
 neither set. The Descriptors section has one row per field, its languages
 side by side and only the field name bold — "**Name:** EN: Beef tenderloin · ES: Solomillo de
 ternera", cut after one line, then "**Description:** EN: … · ES: …", cut after two — so it stays two
 rows however many languages the venue has; a blank language reads "None specified" in its place,
 and a row with every language blank reads "None specified" alone. Nutritional info lists the
-allergens and the dietary preferences separated by commas, as the open lines do. On a variant's
+allergens with their kinds and the diet labels separated by commas. On a variant's
 page, a field the variant leaves blank to take its parent's value (the course, the description,
 the allergens, the dietary preferences) shows the parent's value in italic (`placeholder`), or,
-where the parent has none either, "None specified", or "Not yet reviewed" for allergens the parent
-has not had reviewed. A variant's blank kitchen and customer-facing names fall back to its own
+where the parent has none either, “None” for nutritional values and “None specified” for the
+other fields, or “Not yet reviewed” for allergens the parent has not had reviewed. A variant's blank kitchen and customer-facing names fall back to its own
 Name, not the parent's, so they read "None specified" as on a product. The Pricing fold still
 leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
 (the Options and Extras editors' "Customer-facing names") puts each language's customer-facing
@@ -2876,12 +2876,11 @@ Two notes on the primitives this pattern uses, both in the table above:
   headless Chromium (Vitest browser mode, Playwright 1.63.0, macOS) in `--wt-font-family`: "9999.99"
   is 55.5px at 14px, against 59.0px at 15px in the same run; the box figures were not re-measured.
 
-Inside Nutritional info, `dashboard-allergen-dietary-picker` draws each field as one borderless
-line: its name in bold, then its values or "None specified" (`modifiers.none_specified`). The line is
-a native button named "Allergens: Milk, Eggs, edit" (`modifiers.edit_named`). A click or Enter swaps
-it for a multiple `wt-combobox` with focus in it. Escape swaps it back with focus on the line (the
-second Escape, when the first closed the open list), without closing the window around it; moving
-focus out of the combobox swaps it back too.
+Inside Nutritional info, `dashboard-product-nutrition-picker` draws the choices directly, with no
+second summary. Native button chips expose their pressed state and support Enter and Space.
+An attempted Save with Gluten or Nuts selected without a kind marks each missing kind group,
+opens the section and focuses the first group. Save waits until those local errors are fixed;
+a request refusal alone leaves retry available.
 
 ### Dashboard banner
 

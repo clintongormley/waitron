@@ -753,14 +753,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A668 — allergen information in the editor and on the till (owner, 2026-10-14;
-  spec approved 2026-10-15).** The editor still needs the explicit "Contains none of the 14"
-  choice, inherited values in italic and implied diets. Fix the diet-only edit that records an
-  unreviewed dish as allergen-free. On the till, remove the Allergens screen, add the `allergies`
-  mark and long-press info window, put allergen icons after order-line names, and remove the
-  kitchen's "not reviewed" warning. A668-4 supplies the shared icons and app registrations;
-  A668-3 supplies the Products list's effective variant states and linked warnings before immediate
-  or scheduled publishing. Editor and till surfaces remain open.
+- **A668 — allergen information on the till (owner, 2026-10-14;
+  spec approved 2026-10-15).** Remove the Allergens screen, add the `allergies` mark and
+  long-press info window, put allergen icons after order-line names, and remove the kitchen's
+  "not reviewed" warning. The shared icons, editor, Products list and publishing warnings are
+  delivered by A668-4, A668-2 and A668-3.
   [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md),
   [mockups](backlog/mockups/a668-allergen-icons/)
 

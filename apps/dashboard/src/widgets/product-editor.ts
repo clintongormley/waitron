@@ -12,7 +12,6 @@ import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
-import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import {
   VAT_CLASSES,
@@ -36,12 +35,14 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "./allergen-dietary-picker.js";
+import "./product-nutrition-picker.js";
 import {
-  allergenChoices,
-  allergensFromChoices,
-  allergensForComparison,
-} from "./allergen-choices.js";
+  applyNutritionChange,
+  dietaryPresentation,
+  nutritionAllergensForComparison,
+  nutritionErrors,
+  type NutritionChange,
+} from "./product-nutrition.js";
 import "./image-upload.js";
 import "./product-appearance.js";
 import "./variant-form.js";
@@ -70,7 +71,6 @@ import type {
   UnitChoice,
   LocalizedText,
   ProductEditorDraft,
-  DietaryLabel,
   ProductRoutingChoice,
 } from "./product-editor-model.js";
 import {
@@ -83,8 +83,6 @@ import {
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import { allergenLabel, vatClassName } from "../i18n/domain.js";
-
-const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
 
 const SUMMARY_SEPARATOR = " · ";
 
@@ -224,17 +222,6 @@ function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
   };
 }
 
-/**
- * The product's own name is the plain STAFF name. The translated customer-facing name and the
- * kitchen name are separate optional fields that fall back to it, and the fallback belongs to
- * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen course travels
- * in this form's own submitted value.
- *
- * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
- * field the variant may leave blank shows blank, with the parent's value as its hint except the
- * kitchen and customer-facing names, which hint the variant's own names, never the parent's; and
- * there is no Standalone ordering, Modifiers or Variants section.
- */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
   static override styles = [
@@ -327,17 +314,15 @@ export class ProductEditor extends LitElement {
         font-size: var(--wt-font-size-sm);
         overflow-wrap: anywhere;
       }
-      .nutrition-hints {
-        gap: var(--wt-space-1);
-        margin-top: var(--wt-space-3);
+      .nutrition-summary {
+        overflow-wrap: anywhere;
       }
-      .hint {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .nutrition-hints .hint {
+      .nutrition-summary .inherited,
+      .nutrition-summary [data-implied] {
         font-style: italic;
+      }
+      .nutrition-summary .unreviewed {
+        color: var(--wt-color-warning);
       }
       .badge {
         padding: var(--wt-space-1) var(--wt-space-2);
@@ -590,6 +575,16 @@ export class ProductEditor extends LitElement {
       await this.focusImage();
       return;
     }
+    if (name.startsWith("allergens")) {
+      const section = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        '[data-section="nutrition"]',
+      );
+      await section?.updateComplete;
+      const picker = this.shadowRoot?.querySelector("dashboard-product-nutrition-picker");
+      await picker?.updateComplete;
+      picker?.focusField(name);
+      return;
+    }
     const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
     if (!field) {
       await this.focusVariantRow(name);
@@ -645,6 +640,8 @@ export class ProductEditor extends LitElement {
       "unit-price",
       "product-course",
       "allergens",
+      "allergens-gluten",
+      "allergens-nuts",
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
@@ -734,9 +731,6 @@ export class ProductEditor extends LitElement {
   /** The parent's values, on a variant's own page; null on a product of its own. */
   private get inherited() {
     return this.value?.inherited ?? null;
-  }
-  private hint(test: string, text: string) {
-    return html`<p class="hint" data-test=${test}>${text}</p>`;
   }
   private taxLabel(tax: { label: string; rate: string }) {
     return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
@@ -938,7 +932,7 @@ export class ProductEditor extends LitElement {
 
   private comparisonValue(draft: ProductEditorDraft): ProductEditorDraft {
     const value = this.submissionValue(draft);
-    value.allergens = allergensForComparison(value.allergens);
+    value.allergens = nutritionAllergensForComparison(value.allergens);
     value.unitPrice = comparablePrice(value.unitPrice);
     value.variants = value.variants.map((variant) => ({
       ...variant,
@@ -981,7 +975,7 @@ export class ProductEditor extends LitElement {
       if (variant.unitPrice !== null && !isProductPrice(variant.unitPrice))
         errors[`variant-${index}-price`] = t("editor.price_invalid");
     }
-    return errors;
+    return { ...errors, ...nutritionErrors(this.draft.allergens) };
   }
   private cancel(event: Event) {
     event.stopPropagation();
@@ -1326,117 +1320,62 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
-  private nutritionHints() {
-    const parent = this.inherited;
-    if (!parent) return nothing;
-    return html`<div class="group nutrition-hints">
-      ${
-        this.draft.allergens === null
-          ? this.hint(
-              "allergens-hint",
-              `${t("modifiers.allergens")}: ${
-                parent.allergens === null
-                  ? t("editor.allergens_unreviewed")
-                  : Object.entries(parent.allergens)
-                      .map(([code, entry]) => allergenLabel(code, entry))
-                      .join(", ") || t("editor.allergens_none")
-              }`,
-            )
-          : nothing
-      }${
-        this.draft.dietaryDeclarations === null
-          ? this.hint(
-              "dietary-hint",
-              `${t("modifiers.dietary_preferences")}: ${
-                parent.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)).join(", ") ||
-                t("editor.diet_none")
-              }`,
-            )
-          : nothing
-      }
-    </div>`;
-  }
-
   private renderNutrition() {
-    const none = t("modifiers.none_specified");
-    const allergens = (value: NonNullable<ProductEditorDraft["allergens"]>) =>
-      Object.entries(value)
-        .map(([code, entry]) => allergenLabel(code, entry))
-        .join(", ") || none;
-    const dietary = (labels: readonly DietaryLabel[]) =>
-      labels.map((label) => t(`editor.diet.${label}`)).join(", ") || none;
-    const { allergens: ownAllergens, dietaryDeclarations: ownDietary } = this.draft;
     const parent = this.inherited;
-    const summary = [
-      // On a product's own page a list never reviewed reads as the open line reads it.
-      this.foldedValue(
-        t("modifiers.allergens"),
-        ownAllergens === null ? null : allergens(ownAllergens),
-        () =>
-          parent!.allergens === null
-            ? t("editor.allergens_unreviewed")
-            : allergens(parent!.allergens),
-      ),
-      this.foldedValue(
-        t("modifiers.dietary_preferences"),
-        ownDietary === null ? null : dietary(ownDietary),
-        () => dietary(parent!.dietaryDeclarations),
-      ),
+    const inheritedAllergens = parent !== null && this.draft.allergens === null;
+    const allergens = inheritedAllergens ? parent.allergens : this.draft.allergens;
+    const allergenText =
+      allergens === null
+        ? t("editor.allergens_unreviewed")
+        : Object.entries(allergens)
+            .map(([code, entry]) => allergenLabel(code, entry))
+            .join(", ") || t("editor.nutrition.allergens_none");
+    const diet = dietaryPresentation(
+      parent ? this.draft.dietaryDeclarations : (this.draft.dietaryDeclarations ?? []),
+      parent?.dietaryDeclarations ?? [],
+    );
+    const labels = [
+      ...diet.chosen.map((label) => ({ label, implied: false })),
+      ...diet.implied.map(({ label }) => ({ label, implied: true })),
     ];
+    const nutritionErrors = Object.fromEntries(
+      Object.entries(this.#errorsNow).filter(([key]) => key.startsWith("allergens")),
+    );
     return html`<wt-disclosure
       ruled
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
       ?has-error=${this.sectionHasError("nutrition")}
-      .summaryFields=${summary}
     >
-      <dashboard-allergen-dietary-picker
+      <span slot="summary" class="nutrition-summary" data-test="nutrition-summary"
+        ><strong>${t("modifiers.allergens")}:</strong>
+        <span
+          data-test="nutrition-allergens"
+          class=${`${inheritedAllergens ? "inherited" : ""} ${allergens === null ? "unreviewed" : ""}`}
+          >${allergenText}</span
+        >
+        · <strong>${t("editor.nutrition.dietary")}:</strong>
+        <span data-test="nutrition-dietary" class=${diet.inherited ? "inherited" : ""}
+          >${labels.length ? labels.map(({ label, implied }, index) => html`${index ? ", " : nothing}<span ?data-implied=${implied} class=${diet.inherited ? "inherited" : ""}>${t(`editor.diet.${label}`)}</span>`) : t("editor.nutrition.diet_none")}</span
+        ></span
+      >
+      <dashboard-product-nutrition-picker
         name="allergens"
-        tabindex="-1"
-        aria-describedby="allergen-error"
+        .value=${{ allergens: this.draft.allergens, dietaryDeclarations: this.draft.dietaryDeclarations }}
+        .inherited=${parent}
         .busy=${this.suspended}
-        .dietaryOptions=${dietaryLabels}
-        .value=${{
-          allergens: allergenChoices(this.draft.allergens),
-          dietary: this.draft.dietaryDeclarations ?? [],
-        }}
-        @wt-change=${(
-          event: CustomEvent<{
-            value: { allergens: string[]; dietary: DietaryLabel[] };
-          }>,
-        ) => {
+        .errors=${nutritionErrors}
+        @wt-nutrition-change=${(event: CustomEvent<NutritionChange>) => {
           event.stopPropagation();
-          const { allergens: codes, dietary } = event.detail.value;
-          const previous = allergenChoices(this.draft.allergens);
-          const allergensChanged =
-            codes.length !== previous.length || codes.some((code) => !previous.includes(code));
-          if (allergensChanged) this.dismiss("allergens");
-          const previousDietary = this.draft.dietaryDeclarations ?? [];
-          const dietaryChanged =
-            dietary.length !== previousDietary.length ||
-            dietary.some((label) => !previousDietary.includes(label));
-          const allergens = allergensFromChoices(codes);
-          // On a variant an empty choice is blank, which reads the parent's: saved as an empty
-          // overlay it would declare the variant free of every allergen its parent contains.
-          const variantPage = this.inherited !== null;
-          this.draft = {
-            ...this.draft,
-            allergens: allergensChanged
-              ? variantPage && !codes.length
-                ? null
-                : allergens
-              : this.draft.allergens,
-            dietaryDeclarations: dietaryChanged
-              ? variantPage && !dietary.length
-                ? null
-                : dietary
-              : this.draft.dietaryDeclarations,
-          };
+          if (this.suspended) return;
+          if (event.detail.field === "allergens")
+            this.dismiss(
+              ...Object.keys(this.fieldErrors).filter((key) => key.startsWith("allergens")),
+            );
+          this.draft = { ...this.draft, ...applyNutritionChange(this.draft, event.detail) };
           this.#draftScope?.changed();
         }}
-      ></dashboard-allergen-dietary-picker>
-      ${this.error("allergens") ? html`<p id="allergen-error" data-test="allergen-error" class="field-error" role="alert">${this.error("allergens")}</p>` : nothing}
-      ${this.nutritionHints()}
+      ></dashboard-product-nutrition-picker>
     </wt-disclosure>`;
   }
 
@@ -1672,8 +1611,8 @@ export class ProductEditor extends LitElement {
     const unsaved =
       this.value !== null &&
       !sameValue(
-        { ...this.draft, allergens: allergensForComparison(this.draft.allergens) },
-        { ...this.value, allergens: allergensForComparison(this.value.allergens) },
+        { ...this.draft, allergens: nutritionAllergensForComparison(this.draft.allergens) },
+        { ...this.value, allergens: nutritionAllergensForComparison(this.value.allergens) },
       );
     const { variants } = this.draft;
     return keyed(

@@ -796,8 +796,14 @@ photo beside it as a small button that opens the image library (absent when the 
 a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
 variant is Active), Variants, Modifiers, then Cancel and Save. An archived product opens a plain-text details panel through View, not this editor. Opened on a
 variant, the same form is the variant's own page: it has no colour chooser and no Standalone
-ordering, Modifiers or Variants section, and each field the variant may leave blank to take the parent's value shows that value as its hint; the course, description,
-allergens and dietary preferences also show it in italic on their folded section's closed line.
+ordering, Modifiers or Variants section. The course and description show the parent's value as
+their placeholder while inherited. The course, description, allergens and dietary preferences
+also show inherited values in italic on their folded section's closed line.
+In Nutritional info you choose “Contains none of the 14” to record a reviewed empty allergen set.
+A variant's “Same as {parent}” keeps its allergens inherited and shows its parent's choices as
+read-only italic chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
+Implied diet labels are shown in quiet ticked chips without adding them to your saved declarations.
+Changing a diet label preserves the allergen review state, and changing allergens preserves the diet.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row

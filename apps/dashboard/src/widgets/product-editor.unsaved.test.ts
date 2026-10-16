@@ -171,7 +171,7 @@ it("valid decimal price spellings compare exactly while invalid raw input remain
 });
 it("a dietary-only change immediately enables unload protection", async () => {
   const { editor } = await mount({ ...product, allergens: {} });
-  await change(editor, "dashboard-allergen-dietary-picker", { allergens: [], dietary: ["vegan"] });
+  await nutritionChange(editor, ["vegan"]);
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(true);
@@ -493,10 +493,7 @@ it("dietary membership compares by values while modifier order still counts", as
     allergens: {},
     dietaryDeclarations: ["halal", "vegan"],
   });
-  await change(editor, "dashboard-allergen-dietary-picker", {
-    allergens: [],
-    dietary: ["vegan", "halal"],
-  });
+  await nutritionChange(editor, ["vegan", "halal"]);
   expect(app.leave.coordinator.isDirty()).toBe(false);
   await cancel(editor);
   await expect.poll(() => app.cancelled).toBe(1);
@@ -742,4 +739,78 @@ it("a Product put back with an edited Variant open keeps both edits unsaved, and
   expect(app.cancelled).toBe(0);
   await cancel(editor);
   expect((await question(app)).open).toBe(true);
+});
+
+async function nutritionChange(editor: ProductEditor, value: string[]) {
+  editor.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "dietaryDeclarations", value },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor.updateComplete;
+}
+
+it("a submitted nutrition snapshot preserves later diet edits across reattachment", async () => {
+  const { app, editor } = await mount();
+  const picker = editor.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-nutrition-change", {
+      detail: { field: "allergens", value: {} },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor.updateComplete;
+  let submitted: ProductEditorDraft | undefined;
+  editor.addEventListener("wt-submit", (event) => {
+    submitted = (event as CustomEvent<{ value: ProductEditorDraft }>).detail.value;
+  });
+  editor.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  expect(submitted!.allergens).toEqual({});
+  expect(submitted!.dietaryDeclarations).toEqual([]);
+  await nutritionChange(editor, ["vegan"]);
+  editor.commitSaved(submitted!);
+  await reattachAfterDetachedUpdate(editor);
+  expect(editor.currentValue.allergens).toEqual({});
+  expect(editor.currentValue.dietaryDeclarations).toEqual(["vegan"]);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await nutritionChange(editor, []);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await saveState(editor)).toEqual(quietSave);
+});
+
+it("incomplete allergen kinds survive reconnect and Keep, then Discard restores the reviewed empty set", async () => {
+  const { app, editor } = await mount({ ...product, allergens: {} });
+  await reattachAfterDetachedUpdate(editor);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  editor
+    .shadowRoot!.querySelector("dashboard-product-nutrition-picker")!
+    .dispatchEvent(
+      new CustomEvent("wt-nutrition-change", {
+        detail: { field: "allergens", value: { gluten: {} } },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await editor.updateComplete;
+  await reattachAfterDetachedUpdate(editor);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await cancel(editor);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await expect.poll(() => q.open).toBe(false);
+  await closeReportsDelivered();
+  expect(editor.currentValue.allergens).toEqual({ gluten: {} });
+  expect(app.cancelled).toBe(0);
+  await cancel(editor);
+  await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  await expect.poll(() => app.cancelled).toBe(1);
+  await closeReportsDelivered();
+  expect(editor.currentValue.allergens).toEqual({});
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
