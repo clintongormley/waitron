@@ -1469,6 +1469,11 @@ Each is the default this slice builds; the owner may override any at review.
     below 28 px as decision 11 says, in the editor too (a 2 × 2 stool is 24 px); every table keeps
     its name as its accessible name, and the tables list is the tap-sized way to select a table drawn
     smaller than `--wt-tap-min`.
+
+    2026-10-16: A673 adds editor pan and zoom; 12 px is now the initial scale. Touch selects a
+    table before dragging it. See the current
+    [canvas contract](../../developers/design-system.md#primitives).
+
 13. **The side panel sits beside the canvas while the editor is 600 px wide or more; below that it
     is a new `wt-sheet` docked at the bottom.** No sheet primitive exists (`packages/ui/src/components/`
     holds none). Collapsed, the sheet shows its heading (the selected table's name, else "Tables");
