@@ -118,16 +118,6 @@ Vitest 4.1.11 reads it.
   code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
 
-## A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite
-
-- **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
-  pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
-  with no colour evidence, so nothing here explains it — treat it as still unexplained. And
-  `packages/ui` and `apps/till` have the same harness with no pointer reset (the dashboard's is
-  `parkPointer`, guarded by `apps/dashboard/src/widgets/pointer-reset.test.ts`), with
-  `packages/ui/src/components/wt-button.test.ts` ending a test hovering a button, so the same flake
-  is waiting there.
-
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
 
 - **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the
@@ -176,34 +166,6 @@ Vitest 4.1.11 reads it.
   not touch: "(T12b)" in `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in
   `boot.reconcile.test.ts`, "(C2)", "(pre-merge review)", "(I1)" and "skipped a tenant" in
   `health.test.ts`, "the new guard" in `config.test.ts`.
-
-## The venue-service `migrations.test.ts` case titled "… or at commit" asserts no refusal at commit
-
-- Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
-  change. The venue-service `migrations.test.ts` case
-  titled "… or at commit" asserts no refusal at commit, which is now testable because
-  `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
-  commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
-  no longer shows an empty string refused: `unit_id` is plain text.
-
-## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
-
-- Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
-  `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
-  `.husky/pre-push` beside the same loop; it is not there.
-  `docs/developers/modifiers.md` (about lines 469-472) calls the `catalogue-engine-neutral`
-  header paragraph "the receipt" for not checking `pgEnum` in the order and sale files;
-  #602 deleted that paragraph because those columns are now
-  `enumType` (text plus a check). `docs/developers/testing-guide.md` (about line 294) says
-  `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
-  file's comment to what testing-guide itself measured (the per-test timer does not fire during
-  a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
-  matches.
-  Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
-  top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
-  decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
-  provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
-  spec §6 step 5).
 
 ## The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was measured false
 
@@ -460,3 +422,113 @@ moment this machine's monotonic clock read zero. The watchdog's stamp now reads 
 on a real interval, both taken when `venue-liveness.ts` loads; with those waits the run then printed
 `Tests 22 passed (22)`, and three unchanged runs did too. Detail:
 [testing-guide.md](../developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
+
+## A624. The upgrade walk cannot step a new set whose first migration names another set's later table
+
+`scripts/migration-upgrade.test.ts` applies every set's first migration together at its
+first step, so a set added now whose first migration has a foreign key to a table another set
+created later fails there ("no such table: main.special_day_dates", found building A585-1). A585-1
+fitted the walk by generating `staffing`'s tables in two migrations: `0000` holds the two tables
+whose targets every first migration creates, `0001` the other three, among them `staffing_days`,
+whose keys name venue-service's seasons and special days' dates. Next: teach the walk to apply a
+first migration dated after its floor at its own date (a change to how the guard walks, so the owner
+decides), then a set like staffing could keep one baseline.
+
+## The step-watch case's one pre-push failure (A544) is fixed at a likely cause, not a confirmed one
+
+The failure's message was not kept. A worker that starts late could report
+`Stalled between phases` with no finished phases although phases had already been sent, which
+the fix closes
+([receipt](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); a worker
+that writes nothing within the held case's 5 s wait, so that the case reads an empty report, was
+not reproduced and is unchanged. Next: if "reports the phase a synchronous call holds the thread in…"
+fails again, keep its message and compare it with those two shapes.
+
+## A419 dashboard CI stall remains unexplained (#1474)
+
+Run `37932573955` left `catalogue-screen.test.ts` unfinished; local focused and full-package runs
+and diagnostic CI `37936013331` completed. No repair was established. Next: if it recurs, retain
+per-test progress and locate the waiting operation before changing the browser harness. Since A441
+every package test job prints each file's start and end and, every 60 s, the files still running
+(`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
+output.
+
+## The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, #1788)
+
+- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work
+  (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
+  On recurrence, retain the phase report and host state before retrying; compare repeated samples
+  before assigning the variation to CPU scheduling or storage. Since A751 the budget counts the
+  walk's own processor time, so a recurrence fails the test when that time passes the budget or no
+  phase starts or finishes for 120 s (or, starved further, at CI's eight-minute `root-guards` limit
+  with no report). Keep the failure report: a work-budget failure names the processor time used, a
+  no-progress failure the wall time.
+  [Measurement](../developers/ci-and-gates.md#reducing-repeated-upgrade-test-setup-work-a736)
+
+## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
+
+- Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
+  `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
+  `.husky/pre-push` beside the same loop; it is not there.
+  Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
+  top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
+  decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
+  provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
+  spec §6 step 5).
+
+## Chromium's ResizeObserver loop message in other dashboard suites (after W72h)
+
+W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
+notifications" from the Products tree's category name box. A261-3 (2026-10-05) and A349
+(2026-10-08) then saw the message in other dashboard suites, on their own candidates and on the
+commits before them; that comparison does not establish which observer causes it or its effect on
+the rendered screen. A407 (#1432) later recorded: "The original-main catalogue-only command passed
+270 cases without the warning; its historical occurrence was not reproduced and is not attributed
+to currency fields."
+
+The runs behind this are in
+[the catalogue names section](catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open).
+
+## Tests that close a dialog and then check after a single `flush` (A452, #1487)
+
+A452 made browser tests wait for a dialog's `wt-close` before checking what a screen does on close,
+but its search found only a click or Escape followed within three lines by a wait; one followed by
+a single-frame `flush` and an assertion was fixed in the Printers tests alone. Popovers (combobox,
+help tooltip, row actions) report their toggle late too, and were not looked at.
+
+**Next action:** search the browser suites for a dialog close followed by `flush` and an assertion
+on a close-driven effect, and decide whether the popovers need the same treatment.
+
+## The browser-purity guard checks only some of venue-service's dashboard files
+
+`scripts/dashboard-browser-purity.test.ts` checks venue-service's `src/dashboard/painter.ts` and
+the files it reaches by relative imports, beside bookings', adjustments' and staffing's dashboard
+folders. Nothing else in venue-service's dashboard folder is checked, including the
+`./dashboard/season-tint` export staffing uses, because the whole folder fails the guard: the scan
+reached `@waitron/db` or `drizzle-orm` from many of its files (receipt: the Task 4.0 corrections in
+`docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md`). **Next action:** list each
+browser-safe venue-service export as a file. Left open by the reviews of A261 step 5 (Hours,
+#1298) and by A585-4.
+
+Checked 2026-10-16 (A774): the guard's list now also names
+`packages/venue-service/src/dashboard/calendar-day-box.ts` and `fixed-title.ts`; `season-tint.ts`
+and `live-queries.ts`, both exported by `packages/venue-service/package.json`, are still not named,
+and no file the guard names imports `season-tint`.
+
+## Two browser tests failed once each during A454's work
+
+Two browser tests failed once each during A454's work (search everywhere), and neither was
+reproduced or checked on `main`: "edge scroll reaches hidden column choices during a stationary
+reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packages/ui` coverage
+run; and "cancel keeps reassignment selections and target until explicit local Discard"
+(`apps/dashboard/src/screens/units-reassignment.unsaved.test.ts`), once in seven runs, then six
+passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
+root (standing rule: a flaky test is fixed, never re-run to green).
+
+## A printers-screen test failed once during A435 step 2's review fixes
+
+"a press after one edit sends the edit and the field as it was read"
+(`apps/dashboard/src/screens/printers-screen.save-state.test.ts`) failed once in eight runs of the
+printers-screen files on 2026-10-10, then passed alone and in the seven later runs; its error was
+not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root
+(standing rule: a flaky test is fixed, never re-run to green).
