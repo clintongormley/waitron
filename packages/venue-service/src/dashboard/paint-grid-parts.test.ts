@@ -285,3 +285,18 @@ test("placePopover keeps a popup below its trigger near the bottom, and flips it
   placePopover(popup, trigger, false, true);
   expect(popup.style.top).toBe("44px");
 });
+
+test("placePopover keeps a popup that fits neither below nor above its trigger clamped on screen, even when asked to flip", () => {
+  const trigger = document.createElement("button");
+  trigger.style.cssText = "position: fixed; left: 100px; top: 30px; height: 24px;";
+  const popup = document.createElement("div");
+  popup.popover = "manual";
+  popup.style.cssText = `position: fixed; inset: auto; margin: 0; padding: 0; border: 0; width: 120px; height: ${innerHeight - 40}px;`;
+  document.body.append(trigger, popup);
+  onTestFinished(() => {
+    popup.remove();
+    trigger.remove();
+  });
+  placePopover(popup, trigger, false, true);
+  expect(popup.style.top).toBe("32px");
+});
