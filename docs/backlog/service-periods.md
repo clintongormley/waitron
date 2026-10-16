@@ -221,11 +221,6 @@ Its button goes on the Year view's season row.
 `opening-hours-year.ts`, `opening-hours-month.ts`; for point 7,
 `packages/staffing/src/dashboard/staffing-month.ts`.
 
-4. **Days are picked on the grid.** A click picks one day; a drag, or a click then a shift-click,
-   picks a run; a double-click (a long press on a phone) opens the special-day editor with those
-   dates, or the special day already there. No hint line (owner: discoverable enough). Keyboard: the
-   arrows move, Shift with an arrow extends, Enter opens. The special-day editor's date picker uses
-   the same code (A723 point 7).
 7. **The Staffing view's month follows**: no seasons or special-days row, and the same day box,
    offering "Edit {special day} staffing" or "Edit {season}'s standard week" (A724).
 
@@ -300,7 +295,8 @@ special-day write routes.
    closure outside its department's hours from any route.
 6. **A period chip's edit control is a visible "✎ Edit" button** (`paint-row.ts:165`), not a bare ✎.
 7. **The special-day editor's Range button goes.** A click adds or removes a date; a drag or a
-   shift-click adds a run; one hint line says so. The same picking code as A720 point 4.
+   shift-click adds a run; one hint line says so. `DayPicker` (`day-picking.ts`), with `dragOnTouch` on
+   inside the dialog.
 
 ## A753. Calendar colours: more of them, one shared picker, and who holds each staff role
 
