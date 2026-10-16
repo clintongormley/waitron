@@ -14,6 +14,7 @@ import {
   outward,
   resizeFrom,
   resizeFromCorner,
+  cornerSides,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -446,6 +447,13 @@ describe("floor plan geometry", () => {
       expect(out.x).toBeCloseTo(half, 9);
       expect(out.y).toBeCloseTo(-half, 9);
     });
+  });
+
+  it("names the two sides that meet at each corner", () => {
+    expect(cornerSides("top-left")).toEqual({ vertical: "top", horizontal: "left" });
+    expect(cornerSides("top-right")).toEqual({ vertical: "top", horizontal: "right" });
+    expect(cornerSides("bottom-right")).toEqual({ vertical: "bottom", horizontal: "right" });
+    expect(cornerSides("bottom-left")).toEqual({ vertical: "bottom", horizontal: "left" });
   });
 
   describe("resizeFromCorner", () => {

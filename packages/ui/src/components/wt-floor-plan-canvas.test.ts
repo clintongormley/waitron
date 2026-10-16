@@ -4,6 +4,7 @@ import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import {
   type PlanCorner,
   type PlanPlacement,
+  cornerSides,
   outward,
   resizeCursor,
   resizeFrom,
@@ -1134,7 +1135,7 @@ function dragCorner(el: WtFloorPlanCanvas, corner: string, dx: number, dy: numbe
 
 /** Screen px that move each of `corner`'s two sides `squares` squares outwards, turned `rotation`. */
 function cornerBy(corner: PlanCorner, rotation: number, squares: number) {
-  const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
+  const { vertical, horizontal } = cornerSides(corner);
   const a = outward(horizontal, rotation);
   const b = outward(vertical, rotation);
   return { x: squares * 12 * (a.x + b.x), y: squares * 12 * (a.y + b.y) };

@@ -217,10 +217,11 @@ it("at twice the zoom a corner drag changes two squares each way for 48 screen p
   expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 10 }]);
 });
 
-it("a finger on a selected table's corner resizes it, and on an unselected table's corner pans", async () => {
+it("a finger on a selected table's corner resizes it; once unselected, a finger at the same spot, on the grid, pans", async () => {
   const el = await canvas("T1");
   const changes = events(el, "wt-table-resize");
   const selections = events(el, "wt-table-select");
+  const moves = events(el, "wt-table-move");
   const at = centre(corner(el, "bottom-right"));
   pointer(corner(el, "bottom-right"), "pointerdown", 1, at.x, at.y);
   pointer(window, "pointermove", 1, at.x + 24, at.y + 24);
@@ -236,6 +237,7 @@ it("a finger on a selected table's corner resizes it, and on an unselected table
   const after = button(el).getBoundingClientRect();
   pointer(window, "pointerup", 1, at.x - 24, at.y - 36);
   expect(changes).toHaveLength(1);
+  expect(moves).toEqual([]);
   expect(selections).toEqual([]);
   expect(after.left).toBeCloseTo(before.left - 24);
   expect(after.top).toBeCloseTo(before.top - 36);

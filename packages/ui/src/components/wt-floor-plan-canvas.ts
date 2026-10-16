@@ -12,6 +12,7 @@ import {
   type PlanSide,
   bounds,
   clampToGrid,
+  cornerSides,
   gridExtent,
   outward,
   type ResizeCursor,
@@ -91,8 +92,8 @@ const isCorner = (handle: PlanSide | PlanCorner): handle is PlanCorner =>
 /** A side shorter than this, in squares, draws no dot; its corners resize it. */
 const SIDE_DOT_MIN_SQUARES = 4;
 
-/** Judged from `t.placement`, which during a drag is the placement the drag began with, never the
- *  draft, so a dot never vanishes under the pointer. */
+/** Judged from `t.placement`, never the draft: the canvas does not change `t.placement` during a
+ *  drag, so a drag alone never makes a dot vanish under the pointer. */
 function sidesWithDots(t: PlanCanvasTable): PlanSide[] {
   const { width, height } = t.placement;
   return SIDES.filter(
@@ -1027,7 +1028,7 @@ export class WtFloorPlanCanvas extends LitElement {
       const { handle } = drag;
       let next: PlanPlacement;
       if (isCorner(handle)) {
-        const [vertical, horizontal] = handle.split("-") as [PlanSide, PlanSide];
+        const { vertical, horizontal } = cornerSides(handle);
         next = resizeFromCorner(p, handle, along(horizontal), along(vertical));
       } else {
         next = resizeFrom(p, handle, along(handle));

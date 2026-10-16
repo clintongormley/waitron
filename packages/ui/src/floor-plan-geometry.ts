@@ -81,6 +81,14 @@ export function stepInside(p: PlanPlacement, from: PlanPlacement = p): PlanPlace
 export type PlanSide = "top" | "right" | "bottom" | "left";
 export type PlanCorner = "top-left" | "top-right" | "bottom-right" | "bottom-left";
 
+export function cornerSides(corner: PlanCorner): {
+  vertical: "top" | "bottom";
+  horizontal: "left" | "right";
+} {
+  const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
+  return { vertical, horizontal };
+}
+
 const SIZE_MIN = 1;
 const SIZE_MAX = 99;
 
@@ -205,7 +213,7 @@ export function resizeFromCorner(
   acrossBy: number,
   downBy: number,
 ): PlanPlacement {
-  const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
+  const { vertical, horizontal } = cornerSides(corner);
   return resizeSides(p, horizontal, acrossBy, vertical, downBy);
 }
 
