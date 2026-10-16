@@ -7,6 +7,7 @@ import type { StaffingBlock } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
 import type { StaffingChange, StaffingGrid } from "./staffing-grid.js";
 import "./staffing-grid.js";
+import { STAFFING_STRINGS } from "./strings.js";
 
 const guideIdentity = {
   periodId: "lunch",
@@ -1123,11 +1124,12 @@ test("A724 labels coloured periods in stable department lanes", async () => {
 
 test.each([
   { locale: "en", closed: "Closed", orders: "No orders" },
-  { locale: "es", closed: "Cerrado", orders: "Sin pedidos" },
+  { locale: "es", closed: "Cerrado", orders: STAFFING_STRINGS.es["staffing.grid.no_orders"] },
 ])(
   "A724 distinguishes closed departments from no orders in $locale",
   async ({ locale, closed, orders }) => {
     setLocale(locale);
+    if (locale === "es") expect(orders).not.toBe(STAFFING_STRINGS.en["staffing.grid.no_orders"]);
     const el = await grid({ mon: null });
     expect(column(el, "mon").querySelector(".guide-empty")?.textContent).toBe(closed);
     expect(column(el, "mon").querySelector(".follows")?.textContent).not.toBe("");

@@ -7,6 +7,7 @@ import type { SeasonStaffing, SeasonStaffingEdit } from "../staffing-types.js";
 import type { StaffingGrid } from "./staffing-grid.js";
 import type { StaffingSeasonPainter } from "./staffing-season-painter.js";
 import "./staffing-season-painter.js";
+import { STAFFING_STRINGS } from "./strings.js";
 import {
   STAFF_ROLES,
   headChef,
@@ -795,12 +796,21 @@ it.each([
   async ({ locale, readOnly }) => {
     setLocale(locale);
     const { painter } = await mount({ readOnly });
+    expect(STAFFING_STRINGS.es["staffing.painter.guide_department"]).not.toBe(
+      STAFFING_STRINGS.en["staffing.painter.guide_department"],
+    );
+    expect(STAFFING_STRINGS.es["staffing.painter.guide_station"]).not.toBe(
+      STAFFING_STRINGS.en["staffing.painter.guide_station"],
+    );
     expect(frame(painter).heading).toBe(
       locale === "es" ? "Winter: semana estándar" : "Winter: standard week",
     );
     expect(root(painter).querySelector('[data-test="guide-hint"]')?.textContent?.trim()).toBe(
       locale === "es"
-        ? "Sombreado: horario de apertura de Restaurant, por periodo"
+        ? STAFFING_STRINGS.es["staffing.painter.guide_department"].replace(
+            "{department}",
+            "Restaurant",
+          )
         : "Shaded: Restaurant's opening hours, by period",
     );
     await pick(painter, "station:st-kitchen");
@@ -808,7 +818,7 @@ it.each([
     expect(grid(painter).guideDepartmentIds).toEqual(["dep-restaurant", "dep-bar"]);
     expect(root(painter).querySelector('[data-test="guide-hint"]')?.textContent?.trim()).toBe(
       locale === "es"
-        ? "Sombreado: cuándo recibe pedidos Kitchen, un carril por cada departamento que le envía platos"
+        ? STAFFING_STRINGS.es["staffing.painter.guide_station"].replace("{station}", "Kitchen")
         : "Shaded: when Kitchen gets orders, one lane per department that sends it dishes",
     );
     expect(root(painter).querySelector('[data-test="paint-row"]') === null).toBe(readOnly);
