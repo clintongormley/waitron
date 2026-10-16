@@ -61,6 +61,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueName: "Bar Pepe",
       nif: "B12345678",
       orderFlow: "prepay",
+      formFactor: "till",
       capabilities: ["show-station", "show-expo", "show-schedule"],
     }),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
@@ -147,16 +148,18 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       }),
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the composed counter screen for Mode I (Place control + station queue together)", async () => {
+  it("has no violations on the composed counter screen for Mode I with the Place control", async () => {
     const api = stubApi({
       getTill: vi.fn().mockResolvedValue({
         locale: "es-ES",
         venueName: "Bar Pepe",
         nif: "B12345678",
         orderFlow: "ticket_then_pay",
+        formFactor: "till",
         capabilities: ["show-station", "show-expo", "show-schedule"],
       }),
       getStationQueue: vi.fn().mockResolvedValue({
@@ -191,6 +194,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       }),
     );
     await flush(el);
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

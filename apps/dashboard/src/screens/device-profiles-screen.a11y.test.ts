@@ -534,3 +534,48 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await expectNoA11yViolations(host);
   });
 });
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK profile editor $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api: stubApi() },
+        theme,
+      );
+      host.style.height = "900px";
+      host.style.overflow = "auto";
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!);
+      await flush(el);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=profile-save]"))
+        .not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=profile-name]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[name=canvasId]")).toBeNull();
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        fullPage: false,
+        path: `__screenshots__/a182-profile/${locale}-${theme}-${width}.png`,
+      });
+      host.scrollTop = host.scrollHeight;
+      await page.screenshot({
+        fullPage: false,
+        path: `__screenshots__/a182-profile/${locale}-${theme}-${width}-bottom.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

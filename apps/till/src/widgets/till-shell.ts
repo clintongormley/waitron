@@ -365,7 +365,7 @@ export class TillShell extends LitElement {
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
-   * resize it ("reports no ResizeObserver loop", tab-shell.test.ts). The chooser is observed
+   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). The chooser is observed
    * because its label can change once its language list loads. */
   #observe(): void {
     if (this.#observer === undefined) {

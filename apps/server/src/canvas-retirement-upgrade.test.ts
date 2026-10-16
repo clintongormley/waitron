@@ -362,7 +362,11 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     const newJournal = actual[journal]! as { created_at: number }[];
     expect(newJournal).toHaveLength(oldJournal.length + 2);
     expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
-    const retained = { ...before!, [journal]: newJournal, device_profile_admission_roles: [] };
+    const retained: Record<string, unknown[]> = {
+      ...before!,
+      [journal]: newJournal,
+      device_profile_admission_roles: [],
+    };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>
       Object.fromEntries(

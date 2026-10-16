@@ -899,7 +899,6 @@ describe("an offers load", () => {
 
 // ── Fix round 1 ──────────────────────────────────────────────────────────────────────────────────
 
-/** A till whose canvas mounts the table screen as the `order` tab's card, beside the counter. */
 const tableFormFactor: FormFactor = "till";
 
 const DINING = {
@@ -1497,7 +1496,6 @@ const tableB = {
 
 describe("a kept round and another table", () => {
   it("does not carry a refused round to the next table opened on the same screen", async () => {
-    // Floor and order share one tab, as a tablet canvas can, so the table screen stays mounted.
     const sideBySide: FormFactor = "till";
     const { el } = await mountApp(
       tableStubs(DINING, {
@@ -2167,7 +2165,7 @@ describe("keep-open changes refresh the order screen", () => {
       .toBe("Lunch · kept open until 14:30");
     expect(api.menuState.mock.calls.map(([zone]) => zone)).toEqual(["zone-counter"]);
   });
-  it("redraws the canvas table screen after a poll changes only the extension", async () => {
+  it("redraws the embedded Order screen after a poll changes only the extension", async () => {
     let service = initialService as ZoneOfferCatalogue["service"];
     const { el } = await mountApp(
       tableStubs(DINING, {
@@ -2190,7 +2188,7 @@ describe("keep-open changes refresh the order screen", () => {
       .toBe("Lunch · kept open until 14:30");
     expect(dialog(el)).toBeNull();
   });
-  it("passes the API and dining zone through the canvas card and refreshes it after a change", async () => {
+  it("passes the API and dining zone through the embedded Order mount and refreshes it after a change", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
         listZoneOffers: vi.fn((zone: string) =>

@@ -1,3 +1,9 @@
+import {
+  transactionRow,
+  billOptions,
+  listPage,
+  resolvedDates,
+} from "../test/find-bill-fixtures.js";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
@@ -15,7 +21,7 @@ import { TillApp } from "./till-app.js";
 import { SessionActivity } from "./session-activity.js";
 import { ServerRouter } from "./api/server-router.js";
 import { TillApi as TillClient } from "./api/client.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -5785,5 +5791,377 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     expect(order.receiptLanguages).toBe(receiptLanguages);
     expect(order.kitchenNote).toBe("No peanuts");
     expect(order.kitchenNoteRevision).toBe(4);
+  },
+);
+
+const retirementLookScreens = [
+  { name: "till-order", formFactor: "till", screen: "floor", tag: "till-table-order-screen" },
+  { name: "counter", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "counter-long", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "counter-waiting", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "till-floor", formFactor: "till", screen: "floor", tag: "till-floor-screen" },
+  { name: "phone-floor", formFactor: "phone-portrait", screen: "floor", tag: "till-floor-screen" },
+  {
+    name: "phone-order",
+    formFactor: "phone-portrait",
+    screen: "order",
+    tag: "till-table-order-screen",
+  },
+  {
+    name: "tablet-floor",
+    formFactor: "tablet-landscape",
+    screen: "floor",
+    tag: "till-floor-screen",
+  },
+  {
+    name: "tablet-order",
+    formFactor: "tablet-landscape",
+    screen: "order",
+    tag: "till-table-order-screen",
+  },
+  {
+    name: "kitchen-station",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-station-screen",
+    kind: "station",
+  },
+  {
+    name: "kitchen-pass",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-expo-screen",
+    kind: "pass",
+  },
+  {
+    name: "kitchen-monitor",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-expo-screen",
+    kind: "pass_monitor",
+  },
+  {
+    name: "kitchen-unselected",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-kitchen-screen-notice",
+  },
+] as const;
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280] as const)
+      it.each(retirementLookScreens)(
+        `A182 LOOK primary $name (${locale}, ${theme}, ${width})`,
+        async (view) => {
+          const previousLocale = currentLocale();
+          try {
+            await page.viewport(width, 844);
+            const kind = "kind" in view ? view.kind : undefined;
+            const dish: TillProduct = {
+              ...cafe,
+              customerName: { en: "Coffee for the guest", es: "Café de la casa" },
+              kitchenName: "CAFÉ COCINA",
+            };
+            const api = stubApi({
+              getTill: vi.fn().mockResolvedValue({
+                ...till,
+                locale,
+                formFactor: view.formFactor,
+                capabilities: [
+                  ...till.capabilities,
+                  "act-as-kds",
+                  "take-cash",
+                  "take-orders",
+                  "hand-over-orders",
+                ],
+              }),
+              getDeviceIdentity: vi.fn().mockResolvedValue({
+                deviceId: "a182-look",
+                name: "Kitchen",
+                formFactor: view.formFactor,
+                kitchenScreens: kind === undefined ? [] : [kitchenScreen(kind)],
+              }),
+              listDefaultZoneOffers: vi
+                .fn()
+                .mockResolvedValue(
+                  zoneOffers({ menus: [defaultMenu], products: [dish] }, "zone-counter"),
+                ),
+              getFloorPlan: vi
+                .fn()
+                .mockResolvedValue({ zoneId: "look-zone", revision: 0, savedAt: null, tables: [] }),
+              listCounterWaiting: vi.fn().mockResolvedValue(
+                view.name === "counter-waiting"
+                  ? [
+                      {
+                        id: "waiting",
+                        orderNumber: 11,
+                        label: "Ana",
+                        status: "settled",
+                        openedAt: "2026-10-16T10:00:00Z",
+                        settledAt: "2026-10-16T10:01:00Z",
+                        collectedAt: null,
+                        total: "7.80",
+                        canHandOver: true,
+                        serviceMode: null,
+                        movableDishes: [],
+                      },
+                    ]
+                  : [],
+              ),
+              getDeviceStationScreen: vi.fn().mockResolvedValue({
+                stations: [
+                  {
+                    id: "st-1",
+                    name: "Cocina",
+                    available: true,
+                    today: {
+                      open: true,
+                      isDefault: true,
+                      byHand: null,
+                      sendsTo: null,
+                      why: "open",
+                    },
+                    queue: [],
+                    notices: [],
+                    printersDown: [],
+                  },
+                ],
+              }),
+              getDevicePassScreen: vi
+                .fn()
+                .mockResolvedValue({ orders: [], stations: [], zones: null }),
+              getDevicePassMonitor: vi
+                .fn()
+                .mockResolvedValue({ orders: [], stations: [], zones: null }),
+              listIncomingDepartmentTransfers: vi.fn(async () => ({
+                receiving: false,
+                count: 0,
+                requests: [],
+              })),
+              listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+              readDepartmentTransferEvents: vi.fn(
+                (_reload: unknown, { signal }: { signal?: AbortSignal }) =>
+                  new Promise<void>((resolve) => {
+                    if (signal?.aborted) resolve();
+                    else signal?.addEventListener("abort", () => resolve(), { once: true });
+                  }),
+              ),
+            });
+            const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+            await flush(el);
+            if (view.formFactor !== "kds") {
+              expect(lock(el)).not.toBeNull();
+              emit(lock(el)!, "logged-in", {
+                personId: "p1",
+                displayName: "Ana",
+                permissions: ["sale.take_payment"],
+              });
+              await flush(el);
+              emit(shell(el)!, "screen-select", { screen: view.screen });
+              await flush(el);
+            }
+            Object.assign(el, {
+              zones: [
+                {
+                  id: "look-zone",
+                  name: "Terrace",
+                  displayOrder: 0,
+                  active: true,
+                  hasPlan: false,
+                  serviceMode: "table",
+                  closesAt: null,
+                  closed: false,
+                },
+              ],
+              tables: [
+                {
+                  id: "look-table",
+                  label: "Table 4",
+                  zoneId: "look-zone",
+                  state: "free",
+                  hasOpenTab: false,
+                  condition: "free",
+                  pendingDeliveries: 0,
+                  pendingToServe: 0,
+                  readyToServe: 0,
+                  enRoute: 0,
+                  timingBand: "fresh",
+                  status: null,
+                  nextReservation: null,
+                  today: null,
+                  party: null,
+                  signals: [],
+                },
+              ],
+            });
+            if (view.screen === "order" || view.name === "till-order")
+              Object.assign(el, {
+                orderParty: {
+                  id: "look-party",
+                  revision: 3,
+                  guestCount: 2,
+                  state: "open",
+                  name: null,
+                  displayName: "Table 4",
+                  mainBillId: "look-bill",
+                  outstanding: "0.00",
+                  billCount: 1,
+                  tableIds: ["look-table"],
+                  unsentDrafts: [],
+                  reminder: null,
+                  kitchenNote: {
+                    scope: { partyId: "look-party" },
+                    note: "No peanuts / Sin cacahuetes",
+                    revision: 4,
+                    ownerRevision: 3,
+                  },
+                },
+                ...(view.name === "till-order" ? { drill: { kind: "table-order" } } : {}),
+                activeTabId: "look-bill",
+                tableProducts: [dish],
+                tableMenus: servedMenus([defaultMenu], []),
+                tableService: {
+                  open: true,
+                  zoneOpen: true,
+                  periodName: null,
+                  keepOpen: null,
+                  zoneKeepOpen: null,
+                },
+              });
+            setLocale(locale);
+            await flush(el);
+            const screen = el.shadowRoot!.querySelector<
+              HTMLElement & { updateComplete: Promise<unknown> }
+            >(view.tag);
+            expect(screen).not.toBeNull();
+            await screen!.updateComplete;
+            if (view.name === "counter-long") {
+              for (let index = 0; index < 18; index++)
+                counter(el)!.store.addProduct(
+                  { ...dish, id: `dish-${index}`, name: `Café ${index + 1}` },
+                  "1",
+                );
+              await counter(el)!.updateComplete;
+              expect(counter(el)!.store.lines).toHaveLength(18);
+            }
+            if (view.name === "counter-waiting")
+              expect(screen!.shadowRoot!.querySelector("till-counter-waiting")).not.toBeNull();
+            if (view.formFactor === "kds")
+              expect(shell(el)!.shadowRoot!.querySelector("header")).toBeNull();
+            else expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
+            if (view.name === "kitchen-monitor")
+              expect((screen as unknown as { monitor: boolean }).monitor).toBe(true);
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            expect(window.innerWidth).toBe(width);
+            expect(host.getAttribute("data-theme")).toBe(theme);
+            const paint = getComputedStyle(host);
+            console.info(
+              "A182 LOOK",
+              JSON.stringify({
+                screen: view.name,
+                locale,
+                theme,
+                width: window.innerWidth,
+                background: paint.backgroundColor,
+                text: paint.getPropertyValue("--wt-color-text").trim(),
+              }),
+            );
+            expect(paint.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+            expect(paint.getPropertyValue("--wt-color-text").trim()).not.toBe("");
+            if (view.screen === "order" || view.name === "till-order")
+              expect((screen as unknown as { kitchenNote: string }).kitchenNote).toBe(
+                "No peanuts / Sin cacahuetes",
+              );
+            if (view.screen === "floor" && view.name !== "till-order")
+              expect(screen!.shadowRoot!.textContent).toContain("Table 4");
+            await page.screenshot({
+              path: `../__screenshots__/a182-primary/${view.name}-${locale}-${theme}-${width}.png`,
+            });
+            if (view.name === "counter-long") {
+              screen!.shadowRoot!.querySelector("till-tender-pay")!.scrollIntoView();
+              await page.screenshot({
+                path: `../__screenshots__/a182-primary/${view.name}-${locale}-${theme}-${width}-bottom.png`,
+              });
+            }
+          } finally {
+            setLocale(previousLocale);
+            await page.viewport(1280, 768);
+          }
+        },
+      );
+
+const retirementActionLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementActionLooks)(
+  "A182 LOOK Find bill receipt and Back $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      await page.viewport(width, 844);
+      const client = stubApi({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage()),
+        listTransactions: vi
+          .fn()
+          .mockResolvedValue({ ...listPage([transactionRow()]), dates: resolvedDates }),
+        getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+      });
+      const { el, host } = await mountWidget<TillApp>("till-app", { api: client }, theme);
+      await toCounter(el);
+      setLocale(locale);
+      await flush(el);
+      const menu =
+        shell(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="more-menu"]',
+        );
+      if (menu !== null) {
+        await menu.updateComplete;
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        await menu.updateComplete;
+      }
+      const find = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!;
+      expect(find).not.toBeNull();
+      await userEvent.click(find);
+      await flush(el);
+      const screen =
+        el.shadowRoot!.querySelector<
+          import("./screens/till-find-bill-screen.js").TillFindBillScreen
+        >("till-find-bill-screen")!;
+      expect(screen).not.toBeNull();
+      await screen.updateComplete;
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-find.png`,
+      });
+      emit(screen, "find-transaction-open", {
+        row: transactionRow({ saleId: "sale-filed", workingOrderId: "wo-filed" }),
+      });
+      await flush(el);
+      await ticket(el)!.updateComplete;
+      expect(ticket(el)!.result.invoiceNumber).toBe("F-0001");
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-receipt.png`,
+      });
+      const back = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-back-to-find-bill]")!;
+      expect(back).not.toBeNull();
+      await userEvent.click(back);
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(screen.active).toBe(true);
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-back.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
   },
 );

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooserFaces, cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
@@ -626,3 +627,70 @@ it("lets a held-order retrieve event reach the fixed Counter host", async () => 
   expect(captured?.bubbles).toBe(true);
   expect(captured?.detail).toEqual({ id: "wo-2" });
 });
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK fixed Counter actions $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      for (const state of ["cash", "card", "collect", "pay-rest", "busy"] as const) {
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "2");
+        const { el, host } = await mountWidget<TillCounterScreen>(
+          "till-counter-screen",
+          {
+            store,
+            products,
+            menus: servedMenus(
+              [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
+              [],
+            ),
+            service: {
+              open: true,
+              zoneOpen: true,
+              periodName: null,
+              keepOpen: null,
+              zoneKeepOpen: null,
+            },
+            takesCash: true,
+            stage: state === "collect" ? "collect" : "order",
+            payRest: state === "pay-rest" ? "1.50" : null,
+            busy: state === "busy",
+          },
+          theme,
+        );
+        const pay = tender(el);
+        await pay.updateComplete;
+        if (state === "cash" || state === "card") {
+          const button = pay.shadowRoot!.querySelector<HTMLElement>(
+            state === "cash" ? ".pay" : ".pay-card",
+          )!;
+          expect(button).not.toBeNull();
+          await userEvent.click(button);
+          await pay.updateComplete;
+          expect(pay.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+        }
+        if (state === "busy") expect(pay.busy).toBe(true);
+        if (state === "pay-rest")
+          expect(el.shadowRoot!.querySelector("[data-pay-rest]")).not.toBeNull();
+        expect(window.innerWidth).toBe(width);
+        expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+        pay.scrollIntoView();
+        await page.screenshot({
+          path: `__screenshots__/a182-actions/${state}-${locale}-${theme}-${width}.png`,
+        });
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

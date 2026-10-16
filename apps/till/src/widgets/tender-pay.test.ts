@@ -1863,7 +1863,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     expect(variants(el)).toEqual(["primary", "primary"]);
   });
 
-  it("draws both grey while the pay controls are held, as card-grid sends them", async () => {
+  it("draws both grey while the pay controls are held, when the screen holds its pay controls", async () => {
     const { el } = await mountPay(1, { busy: true, held: true });
     expect(variants(el)).toEqual(["secondary", "secondary"]);
   });

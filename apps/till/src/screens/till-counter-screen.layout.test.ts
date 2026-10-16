@@ -31,7 +31,6 @@ afterEach(async () => {
   await page.viewport(...DEFAULT_FRAME);
 });
 
-/** The till's default Counter tab (`packages/layouts/src/default-canvases.ts`). */
 
 function product(key: string, name: string, unitPrice: string): TillProduct {
   return {

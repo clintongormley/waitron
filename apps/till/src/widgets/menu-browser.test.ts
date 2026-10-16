@@ -354,7 +354,10 @@ describe("till-menu-browser", () => {
     });
 
     it.each([3, 6])("sizes a blank cell like a tile at %i columns", async (columns) => {
-      const { el, host } = await mount({ columns });
+      const { el, host } = await mount({
+        handheld: columns === 3,
+        menu: display(columns === 3 ? "handheld" : "till", { columns }),
+      });
       await widen(host, columns === 3 ? 390 : 1280);
       const cells = [
         ...root(el).querySelectorAll<HTMLElement>('[data-region="shortcuts"] .grid > *'),
@@ -422,8 +425,8 @@ describe("till-menu-browser", () => {
     });
 
     it("keeps the tile order at handheld and till column counts", async () => {
-      const handheld = await mount({ columns: 3 });
-      const till = await mount({ columns: 6 });
+      const handheld = await mount({ handheld: true, menu: display("handheld", { columns: 3 }) });
+      const till = await mount({ handheld: false, menu: display("till", { columns: 6 }) });
       expect(names(entries(till.el, "shortcuts"))).toEqual(
         names(entries(handheld.el, "shortcuts")),
       );
@@ -444,8 +447,12 @@ describe("till-menu-browser", () => {
     it("breaks a word longer than the tile inside the tile, rather than letting it spill out", async () => {
       const long = product("long", "Supercalifragilisticexpialidocious");
       const { el, host } = await mount({
-        columns: 3,
-        menu: lunch({ structure: { members: [member("long")] } }),
+        handheld: true,
+        menu: display(
+          "handheld",
+          { columns: 3 },
+          lunch({ structure: { members: [member("long")] } }),
+        ),
         products: [long],
       });
       await widen(host, 390);
@@ -462,7 +469,7 @@ describe("till-menu-browser", () => {
     });
 
     it("shows fewer columns where a tile would be too narrow, in the same order", async () => {
-      const { el, host } = await mount({ columns: 6 });
+      const { el, host } = await mount({ handheld: false, menu: display("till", { columns: 6 }) });
       await widen(host, 1280);
       const wide = readingOrder(el, "structure");
       const shortcuts = readingOrder(el, "shortcuts");
@@ -481,11 +488,15 @@ describe("till-menu-browser", () => {
       const desserts = section("sec-desserts", "desserts", { en: "Desserts" }, [member("water")]);
       // A till's six columns at a phone's width.
       const { el, host } = await mount({
-        columns: 6,
-        menu: lunch({
-          structure: { members: [long, short, desserts, member("lemonade")] },
-          ...withShortcuts([]),
-        }),
+        handheld: false,
+        menu: display(
+          "till",
+          { columns: 6 },
+          lunch({
+            structure: { members: [long, short, desserts, member("lemonade")] },
+            ...withShortcuts([]),
+          }),
+        ),
       });
       await widen(host, 390);
       for (const tile of entries(el, "structure")) {
@@ -641,10 +652,12 @@ describe("till-menu-browser", () => {
       expect(readingOrder(till.el, "structure")).toEqual(tillWide);
     });
 
-    it("lets a canvas card's own column count win over the display's", async () => {
-      const { el, host } = await mount({ menu: display("till", { columns: 8 }), columns: 4 });
+    it("uses the menu's display even with an obsolete authored columns attribute", async () => {
+      const { el, host } = await mount({ menu: display("till", { columns: 8 }) });
+      el.setAttribute("columns", "4");
+      await el.updateComplete;
       await widen(host, 1280);
-      for (const grid of grids(el)) expect(tracks(grid)).toBe(4);
+      for (const grid of grids(el)) expect(tracks(grid)).toBe(8);
     });
 
     describe("tile modes", () => {

@@ -194,3 +194,34 @@ it.each(cases)(
     }
   },
 );
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK retained receipt configuration $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      const { el, host, dialog } = await mountReceiptDialog(receiptApi(), theme);
+      expect(receiptField(el, "email").shadowRoot!.querySelector("input")).not.toBeNull();
+      expect(dialog.open).toBe(true);
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        path: `__screenshots__/a182-receipt/${locale}-${theme}-${width}.png`,
+      });
+      const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      body.scrollTop = body.scrollHeight;
+      await page.screenshot({
+        path: `__screenshots__/a182-receipt/${locale}-${theme}-${width}-bottom.png`,
+      });
+    } finally {
+      setLocale("en-GB");
+      await page.viewport(1280, 768);
+    }
+  },
+);

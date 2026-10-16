@@ -230,11 +230,6 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  // Mirrors the server's default `till` canvas (`packages/layouts/src/default-canvases.ts`), plus a
-  // `prep-queue` card gated `visibleWhen: ["has-items"]` so the mode-dependent station-queue assertions
-  // below hold: Mode P never refreshes the queue (empty ⇒ the gate hides the card), Modes I/T populate
-  // it. `receipt` is deliberately omitted so the ticket receipt defaults to {}; the `receipt` suite
-  // supplies it.
   formFactor: "till",
   capabilities: [
     "print-receipt",
@@ -572,8 +567,7 @@ const selectTab = (el: TillApp, key: string): void =>
 const floor = (el: TillApp) =>
   (activeTabGrid(el)?.shadowRoot?.querySelector("till-floor-screen") as TillFloorScreen | null) ??
   null;
-/** The station screen — a till reaches it as a `drill` overlay (app shadow); a KDS canvas mounts it as
- * its `kitchen` tab's `kds-board` card (inside the active tab's card grid). Look in both. */
+
 const station = (el: TillApp) =>
   (el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen") ??
     (activeTabGrid(el)?.shadowRoot?.querySelector(
@@ -583,8 +577,7 @@ const station = (el: TillApp) =>
 const enrolScreen = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-enrol-screen");
 const chooser = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { list?: unknown }>("till-device-chooser");
-/** The table-order screen — a TILL opens it as a `drill` (app shadow); a handheld/tablet whose canvas
- * authors an `order` tab mounts it as that tab's card (inside the active tab's card grid). Look in both. */
+
 const tableOrder = (el: TillApp) =>
   (el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
     (activeTabGrid(el)?.shadowRoot?.querySelector(
@@ -1934,8 +1927,6 @@ describe("till-app", () => {
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
-      // A handheld boots the phone canvas (floor + order tabs); its first tab is `floor`, so login lands
-      // the waiter there.
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
@@ -2015,9 +2006,6 @@ describe("till-app", () => {
       emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
-      // A stray back-to-counter bubbling up from the table-order subtree must not reach the counter POS.
-      // On the shell it sets the active tab to `counter`, but the phone canvas authors NO counter tab, so
-      // the shell falls back to its first tab (`floor`) — never the counter.
       emit(tableOrder(el)!, "back-to-counter");
       await flush(el);
       expect(counter(el)).toBeNull();
@@ -2127,7 +2115,7 @@ describe("till-app", () => {
       });
     });
 
-    it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
+    it("loads the counter's lists at login and shows held orders on fixed Counter", async () => {
       const el = await toFixedCounter(
         withCounterTab,
         {},
@@ -2141,7 +2129,7 @@ describe("till-app", () => {
     });
 
     it.each(["held-orders", "prep-queue"] as const)(
-      "loads the counter's lists at login when its canvas has a %s card, and the card shows them",
+      "loads the counter's %s list at login and displays its rows",
       async (type) => {
         // Not prepay, which never reads the station queue, so the prep-queue card has rows to show.
         const el = await toFixedCounter(
@@ -7633,7 +7621,6 @@ describe("till-app", () => {
   it("session activity: a handheld + 300s boot configures the controller; logout stops it", async () => {
     const sa = fakeSessionActivity();
     const api = stubApi({
-      // A handheld device (phone canvas) whose profile carries a 300s inactivity auto-logout.
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, formFactor: phoneFormFactor, inactivityTimeoutSeconds: 300 }),
@@ -7782,7 +7769,7 @@ describe("till-app", () => {
       listMyAbsences: vi.fn().mockResolvedValue([]),
     };
 
-    it("opens at sign-in, over the canvas's first tab", async () => {
+    it("opens at sign-in, over the fixed home screen", async () => {
       const { el } = await mountApp({
         ...rosterApi,
         getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
@@ -8597,9 +8584,6 @@ describe("till-app", () => {
       });
 
       it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
-        // A handheld may settle at `POST /api/sales` for cash OR a manual card tender, so the pay
-        // section SHOWS with both tenders. Opening a table SWITCHES to the phone canvas's order tab, mounting the
-        // table-order screen as that tab's card.
         const phoneFormFactor: FormFactor = "phone-portrait";
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
@@ -12037,9 +12021,7 @@ describe("till-app", () => {
     });
   });
 
-  describe("canvas tab shell (SP-B2.1)", () => {
-    // A `till` canvas with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
-    // capability, so it renders the card grid under the empty `capabilities` list).
+  describe("fixed primary shell", () => {
     const shellFormFactor: FormFactor = "till";
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
@@ -12147,7 +12129,7 @@ describe("till-app", () => {
       expect(location.pathname).toBe("/tabs/floor");
     });
 
-    it("replaces an unavailable URL tab with the canvas default", async () => {
+    it("replaces an unavailable URL tab with the fixed home screen", async () => {
       const url = new URL(location.href);
       url.pathname = "/tabs/removed";
       history.replaceState(null, "", url);
@@ -12159,7 +12141,7 @@ describe("till-app", () => {
       expect(location.pathname).toMatch(/^\/tabs\/counter(?:\/|$)/);
     });
 
-    it("renders the tab shell with the counter tab active when a canvas is present", async () => {
+    it("renders the tab shell with Counter selected on a till", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
@@ -12186,9 +12168,7 @@ describe("till-app", () => {
       expect(shell(el)!.activeScreen).toBe("floor");
     });
 
-    it("a HANDHELD with a canvas renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
-      // A `handheld` phone with a canvas is a SHELL device, and the waiter lands on the FLOOR tab (the
-      // phone canvas's first tab).
+    it("a handheld renders the shell with Floor selected", async () => {
       const phoneFormFactor: FormFactor = "phone-portrait";
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
@@ -12217,18 +12197,14 @@ describe("till-app", () => {
     });
   });
 
-  describe("canvas shell for handheld + kds (SP-B2.2)", () => {
+  describe("fixed shell for handheld and KDS", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { kiosk?: boolean; affordances?: unknown[] }>(
         "till-shell",
       );
 
-    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order` card).
     const phoneFormFactor: FormFactor = "phone-portrait";
 
-    // A KDS canvas: one `kitchen` tab carrying the `kds-board` card, whose embedded station screen the
-    // grid gates on the `act-as-kds` capability the canvas grants. A kds display runs the shell in KIOSK
-    // mode (the operator header suppressed — a display has no logged-in operator).
     const kdsFormFactor: FormFactor = "kds";
 
     it("renders the tab shell for a handheld whose profile has no screen switches, with only Find a bill in its full header", async () => {
@@ -12295,21 +12271,12 @@ describe("till-app", () => {
       expect(s).not.toBeNull();
       // KDS = kiosk: the operator header is suppressed (a display never logs in).
       expect(s.kiosk).toBe(true);
-      // The kitchen tab's kds-board card mounts the embedded station screen through the grid — nested in
-      // the grid's OWN shadow root (gated on the `act-as-kds` capability the canvas grants), so pierce it.
       const grid = el;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
 
-    // Capabilities at the RENDER axis come from the device PROFILE (the `/api/till` `capabilities`
-    // sibling, threaded through `this.capabilities`), NOT from the canvas. Same KDS canvas both times —
-    // only the profile's capability set differs:
-    //  - a device with NO profile boots the form-factor default canvas with `capabilities: []`, so the
-    //    `kds-board` card (which needs `act-as-kds`) is HIDDEN — its embedded station screen never mounts;
-    //  - a device whose profile grants `act-as-kds` renders it.
     it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds (§5.3)", async () => {
-      // No-profile device: same KDS canvas, but `capabilities: []` (a device with no device profile).
       const hidden = await mountApp({
         getTill: vi
           .fn()
@@ -12381,18 +12348,11 @@ describe("till-app", () => {
   });
 
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
-    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
-    // card). Because the canvas AUTHORS a tab whose cards mount a `table-order` card, opening a table on
-    // a handheld SWITCHES to that Order tab rather than pushing a drill-in — the tab bar owns the
-    // navigation, so there is no drill and no second Back. A till (no `order` tab) keeps the drill
-    // push/pop, asserted by the sibling "drill-in stack" describe.
     const phoneFormFactor: FormFactor = "phone-portrait";
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
 
-    /** Boots a handheld with the phone canvas and logs the waiter in — landing on the FLOOR tab (the
-     * phone canvas's first tab). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
@@ -12477,10 +12437,6 @@ describe("till-app", () => {
     });
 
     it("lands a handheld on its home (floor) tab after a new sale, refreshing the stale floor — not a phantom counter tab", async () => {
-      // This phone layout has NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
-      // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
-      // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
-      // return must re-read occupancy — a re-tap must resume nothing.
       const occupiedT1: TableState = {
         ...freeTable,
         state: "open-tab",
@@ -12519,9 +12475,6 @@ describe("till-app", () => {
   });
 
   describe("drill-in stack (SP-B2.1)", () => {
-    // A `till` canvas: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
-    // grid, not an empty tab) + a `floor` tab (a `floor-plan` card). Station/Expo/Schedule are NOT tabs,
-    // so the shell offers them as affordance buttons; the shell's Allergens button is always present.
     const shellFormFactor: FormFactor = "till";
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");

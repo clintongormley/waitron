@@ -474,3 +474,32 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 });
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK retained floor-plan editor $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("floor-plan-tables-panel"))
+        .not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-action=save]")).not.toBeNull();
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        path: `__screenshots__/a182-floor-editor/${locale}-${theme}-${width}.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);
