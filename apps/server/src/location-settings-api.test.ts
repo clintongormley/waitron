@@ -551,3 +551,212 @@ describe("receipt language", () => {
     }
   });
 });
+
+describe("venue defaults", () => {
+  const SPAIN_RECEIPT = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+  const PATH = "/management-api/venue-defaults";
+
+  const read = (cookie = venue.managerCookie) => app().request(PATH, { headers: { cookie } });
+  const write = (body: unknown, cookie = venue.managerCookie) =>
+    app().request(PATH, {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  let initialVatClass: string;
+  beforeAll(async () => {
+    initialVatClass = (await stored()).vatClass;
+    expect(initialVatClass).not.toBe("zero");
+  });
+  const stored = async (): Promise<{ languages: string[]; vatClass: string }> => {
+    const { rows } = await suite.db.execute<{ invoice_locales: string }>(
+      sql`select invoice_locales from locations where id = ${venue.cfg.locationId}`,
+    );
+    const settings = await suite.db.execute<{ default_product_vat_class: string }>(
+      sql`select default_product_vat_class from catalogue_settings where id = 1`,
+    );
+    return {
+      languages: JSON.parse(rows[0]!.invoice_locales) as string[],
+      vatClass: settings.rows[0]?.default_product_vat_class ?? "general",
+    };
+  };
+  const untouched = () => ({ languages: ["es-ES"], vatClass: initialVatClass });
+  /** The shared location placed in `province` with `invoiceLocales`; both values put back afterwards. */
+  async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
+    await suite.db.execute(
+      sql`update locations set province = ${province}, invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+    );
+    try {
+      await fn();
+    } finally {
+      await suite.db.execute(
+        sql`update locations set province = 'Madrid', invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+      );
+      await suite.db.execute(
+        sql`update catalogue_settings set default_product_vat_class = ${initialVatClass}`,
+      );
+    }
+  }
+
+  it("answers Barcelona's fixed language, the pack's choices and the VAT class", async () => {
+    await at("Barcelona", ["ca-ES"], async () => {
+      const response = await read();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        receiptLanguage: "ca-ES",
+        receiptLanguageChoices: SPAIN_RECEIPT,
+        fixedReceiptLanguage: "ca-ES",
+        defaultProductVatClass: initialVatClass,
+      });
+    });
+  });
+
+  it("answers no fixed language for Madrid", async () => {
+    await at("Madrid", ["es-ES"], async () => {
+      expect(await (await read()).json()).toEqual({
+        receiptLanguage: "es-ES",
+        receiptLanguageChoices: SPAIN_RECEIPT,
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: initialVatClass,
+      });
+    });
+  });
+
+  it("answers a stored language outside the choices as it is", async () => {
+    await at("Madrid", ["en-GB"], async () => {
+      expect((await (await read()).json()).receiptLanguage).toBe("en-GB");
+    });
+  });
+
+  it("saves the receipt language alone and leaves the VAT class", async () => {
+    await at("Madrid", ["es-ES"], async () => {
+      const response = await write({ receiptLanguage: "gl-ES" });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        receiptLanguage: "gl-ES",
+        receiptLanguageChoices: SPAIN_RECEIPT,
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: initialVatClass,
+      });
+      expect(await stored()).toEqual({ languages: ["gl-ES"], vatClass: initialVatClass });
+    });
+  });
+
+  it("saves the VAT class alone and leaves the receipt language", async () => {
+    await at("Madrid", ["es-ES"], async () => {
+      const response = await write({ defaultProductVatClass: "zero" });
+      expect(response.status).toBe(200);
+      expect((await response.json()).defaultProductVatClass).toBe("zero");
+      expect(await stored()).toEqual({ languages: ["es-ES"], vatClass: "zero" });
+    });
+  });
+
+  it("refuses a non-Catalan language in Barcelona and writes no VAT class", async () => {
+    await at("Barcelona", ["ca-ES"], async () => {
+      const response = await write({ receiptLanguage: "es-ES", defaultProductVatClass: "zero" });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "receipt.language_fixed",
+          params: { field: "receiptLanguage", language: "ca-ES" },
+        },
+      });
+      expect(await stored()).toEqual({ languages: ["ca-ES"], vatClass: initialVatClass });
+    });
+  });
+
+  it("takes back the language it wrote when the VAT class is refused", async () => {
+    await at("Madrid", ["es-ES"], async () => {
+      const response = await write({ receiptLanguage: "gl-ES", defaultProductVatClass: "bogus" });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "product.invalid", params: { field: "defaultProductVatClass" } },
+      });
+      expect(await stored()).toEqual(untouched());
+    });
+  });
+
+  it.each([
+    ["receiptLanguage", null, "management.request_invalid"],
+    ["receiptLanguage", [], "management.request_invalid"],
+    ["receiptLanguage", 10, "management.request_invalid"],
+    ["defaultProductVatClass", null, "product.invalid"],
+    ["defaultProductVatClass", [], "product.invalid"],
+    ["defaultProductVatClass", 10, "product.invalid"],
+    ["defaultProductVatClass", "unknown", "product.invalid"],
+  ])("refuses %s of %j as %s without writing", async (field, value, code) => {
+    const response = await write({ [field]: value });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: { code, params: { field } } });
+    expect(await stored()).toEqual(untouched());
+  });
+
+  it.each([
+    ["an empty body", {}],
+    ["another key", { other: 1 }],
+    ["another key beside a valid one", { defaultProductVatClass: "zero", other: 1 }],
+    ["a list", ["gl-ES"]],
+    ["null", null],
+    ["a bare string", "gl-ES"],
+  ])("refuses %s as an invalid body without writing", async (_label, body) => {
+    const response = await write(body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+    expect(await stored()).toEqual(untouched());
+  });
+
+  it("requires a session and configuration permission for reads and writes", async () => {
+    expect((await app().request(PATH)).status).toBe(401);
+    expect((await read(venue.staffCookie)).status).toBe(403);
+    const anonymous = await app().request(PATH, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ defaultProductVatClass: "zero" }),
+    });
+    expect(anonymous.status).toBe(401);
+    expect((await write({ defaultProductVatClass: "zero" }, venue.staffCookie)).status).toBe(403);
+    expect(await stored()).toEqual(untouched());
+  });
+
+  it("reads and writes in one transaction per request", async () => {
+    let opened = 0;
+    const counting = new Proxy(suite.db, {
+      get(target, key) {
+        if (key === "withWriteLock")
+          return (fn: Parameters<typeof target.withWriteLock>[0]) => {
+            opened += 1;
+            return target.withWriteLock(fn);
+          };
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    const counted = new Hono();
+    mountLocationSettingsApi(
+      counted,
+      { db: counting, cfg: venue.cfg, fiscal: realFiscal() },
+      () => {},
+    );
+    const answers: [number, number][] = [];
+    await at("Madrid", ["es-ES"], async () => {
+      for (const init of [
+        { headers: { cookie: venue.managerCookie } } as RequestInit,
+        {
+          method: "PUT",
+          headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+          body: JSON.stringify({ receiptLanguage: "es-ES", defaultProductVatClass: "zero" }),
+        },
+      ]) {
+        opened = 0;
+        const response = await counted.request(PATH, init);
+        answers.push([response.status, opened]);
+      }
+    });
+    expect(answers).toEqual([
+      [200, 1],
+      [200, 1],
+    ]);
+  });
+});

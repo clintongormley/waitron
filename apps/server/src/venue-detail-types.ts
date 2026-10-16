@@ -1,3 +1,4 @@
+import type { VatClass } from "@waitron/catalogue";
 import type { BusinessDayClock } from "@waitron/shared";
 export interface VenueDetailValues {
   name: string;
@@ -36,6 +37,14 @@ export interface VenueDetailsModel {
 export interface VenueDetailWrite {
   changes: VenueDetailPatch;
   expected: VenueDetailValues;
+}
+export interface VenueDefaults {
+  /** As stored, even when outside the choices. */
+  receiptLanguage: string;
+  receiptLanguageChoices: string[];
+  /** The one language the law gives the venue's region, if any. */
+  fixedReceiptLanguage: string | null;
+  defaultProductVatClass: VatClass;
 }
 
 export interface VenueClockView {
