@@ -20,6 +20,7 @@ import {
   droppedNotice,
   columnErrorsKeeper,
   guidesKeeper,
+  guideText,
   paintRow,
   painterStyles,
   refusedEdit,
@@ -357,6 +358,8 @@ export class StaffingSpecialDayPainter extends LitElement {
       .columns=${columns}
       .days=${this.draft.get(shown) ?? NOTHING_BY_KEY}
       .guides=${this.guides(read.guides[shown], columns)}
+      .guideKind=${read.areas.find(({ area }) => areaKey(area) === shown)!.area.kind}
+      .guideDepartmentIds=${read.areas.filter(({ area }) => area.kind === "department").map(({ area }) => area.id)}
       .staffRoles=${this.staffRoles}
       .chosen=${chosen}
       .headcount=${this.headcount}
@@ -371,6 +374,7 @@ export class StaffingSpecialDayPainter extends LitElement {
     const read = this.read;
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
+    const shownArea = read?.areas.find(({ area }) => areaKey(area) === shown);
     const paintable = !!read?.areas[0]?.dates.length;
     return html`<painter-frame
         .open=${true}
@@ -392,6 +396,7 @@ export class StaffingSpecialDayPainter extends LitElement {
         ${
           paintable && !this.readOnly
             ? paintRow({
+                guideText: guideText(shownArea!),
                 staffRoles: this.staffRoles,
                 chosen,
                 headcount: () => this.headcount,
@@ -408,6 +413,7 @@ export class StaffingSpecialDayPainter extends LitElement {
               })
             : nothing
         }
+        ${this.readOnly && shownArea ? html`<div slot="row" class="guide-read-only" data-test="guide-hint">${guideText(shownArea)}</div>` : nothing}
         ${this.content(read, shown, chosen)}
       </painter-frame>
       ${

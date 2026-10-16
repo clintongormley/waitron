@@ -64,21 +64,22 @@ describe.each(["light", "dark"] as const)("staffing grid (%s)", (theme) => {
           : [],
       ],
     ]);
+    el.guideKind = "station";
+    el.guideDepartmentIds = ["dining", "takeaway"];
     if (painted)
       el.guides = new Map([
         [
           "tue",
-          [
-            { ...guideIdentity, startsAt: "13:00", endsAt: "16:00" },
-            {
-              ...guideIdentity,
-              periodId: "dinner",
-              periodName: "Dinner",
-              periodColour: "green",
-              startsAt: "20:00",
-              endsAt: "00:00",
-            },
-          ],
+          CALENDAR_COLOURS.map((colour, i) => ({
+            ...guideIdentity,
+            periodId: `period-${colour}`,
+            periodName: `Period ${colour}`,
+            periodColour: colour,
+            departmentId: i % 2 ? "takeaway" : "dining",
+            departmentName: i % 2 ? "Takeaway" : "Dining room",
+            startsAt: hour(8 + i),
+            endsAt: hour(16 + i),
+          })),
         ],
       ]);
     if (state === "column-error") el.columnErrors = new Map([["tue", "Check this day's blocks."]]);

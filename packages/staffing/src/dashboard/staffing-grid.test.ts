@@ -726,7 +726,11 @@ test("a column named in columnErrors marks its heading and describes its day", a
   expect(el.shadowRoot!.querySelector('.heading[data-column="tue"][data-error]')).not.toBeNull();
   expect(el.shadowRoot!.querySelector('.heading[data-column="mon"][data-error]')).toBeNull();
   const described = column(el, "tue").getAttribute("aria-describedby")!;
-  expect(el.shadowRoot!.getElementById(described)!.textContent).toBe("Check this day's blocks.");
+  expect(described.split(" ")).toEqual(["column-error-tue", "guide-description-tue"]);
+  expect(el.shadowRoot!.getElementById("column-error-tue")!.textContent).toBe(
+    "Check this day's blocks.",
+  );
+  expect(el.shadowRoot!.getElementById("guide-description-tue")!.textContent).toBe("Closed");
 });
 
 test("a block whose staff role is unknown draws uncoloured and nameless rather than failing", async () => {
@@ -1034,4 +1038,196 @@ test("a read-only block is named in full, by its day, staff role, headcount and 
   const name = "Tuesday, Head chef, 1 person, 09:00–16:30";
   await expect.element(page.elementLocator(el).getByRole("img", { name })).toBeInTheDocument();
   expect(el.shadowRoot!.querySelector<HTMLElement>(".block")!.title).toBe(name);
+});
+
+test("A724 labels period bands with their colours and unsnapped endpoints", async () => {
+  const el = await grid(
+    { mon: [] },
+    {
+      guides: new Map([
+        [
+          "mon",
+          [
+            { ...guideIdentity, startsAt: "13:00", endsAt: "15:53" },
+            {
+              ...guideIdentity,
+              periodId: "dinner",
+              periodName: "Dinner",
+              periodColour: "green",
+              startsAt: "15:53",
+              endsAt: "17:00",
+            },
+          ],
+        ],
+      ]),
+    },
+  );
+  const bands = [...column(el, "mon").querySelectorAll<HTMLElement>(".guide")];
+  expect(bands[0]!.textContent).toContain("Lunch");
+  expect(bands[0]!.textContent).toContain("13:00–15:53");
+  expect(bands[0]!.dataset.colour).toBe("blue");
+  expect(bands[1]!.textContent).toContain("Dinner");
+  expect(bands[1]!.dataset.colour).toBe("green");
+  const box = column(el, "mon").getBoundingClientRect();
+  expect((bands[0]!.getBoundingClientRect().bottom - box.top) / box.height).toBeCloseTo(
+    593 / 1440,
+    3,
+  );
+  expect(bands[0]!.getBoundingClientRect().bottom).toBeCloseTo(
+    bands[1]!.getBoundingClientRect().top,
+    1,
+  );
+  const description = el.shadowRoot!.getElementById(
+    column(el, "mon").getAttribute("aria-describedby")!,
+  );
+  expect(description?.textContent).toContain("Lunch 13:00–15:53");
+});
+
+test("A724 labels coloured periods in stable department lanes", async () => {
+  const other = {
+    ...guideIdentity,
+    departmentId: "takeaway",
+    departmentName: "Takeaway",
+    periodId: "midday",
+    periodName: "Midday",
+    periodColour: "green" as const,
+    startsAt: "14:00",
+    endsAt: "18:00",
+  };
+  const el = await grid(
+    { mon: [], tue: [] },
+    {
+      guides: new Map([
+        ["mon", [{ ...guideIdentity, startsAt: "13:00", endsAt: "16:00" }, other]],
+        ["tue", [other]],
+      ]),
+    },
+  );
+  el.guideKind = "station";
+  el.guideDepartmentIds = ["dining", "takeaway"];
+  el.requestUpdate();
+  await el.updateComplete;
+  const monday = [...column(el, "mon").querySelectorAll<HTMLElement>(".guide")];
+  const tuesday = column(el, "tue").querySelector<HTMLElement>(".guide")!;
+  const box = column(el, "mon").getBoundingClientRect();
+  expect(monday[0]!.textContent).toContain("Dining room");
+  expect(monday[1]!.textContent).toContain("Takeaway");
+  expect(monday[0]!.getBoundingClientRect().width / box.width).toBeCloseTo(0.5, 2);
+  expect(
+    monday[1]!.getBoundingClientRect().left - monday[0]!.getBoundingClientRect().left,
+  ).toBeCloseTo(column(el, "mon").clientWidth / 2, 1);
+  const tueBox = column(el, "tue").getBoundingClientRect();
+  expect((tuesday.getBoundingClientRect().left - tueBox.left) / tueBox.width).toBeCloseTo(0.5, 2);
+  expect(tuesday.getBoundingClientRect().width / tueBox.width).toBeCloseTo(0.5, 2);
+});
+
+test.each([
+  { locale: "en", closed: "Closed", orders: "No orders" },
+  { locale: "es", closed: "Cerrado", orders: "Sin pedidos" },
+])(
+  "A724 distinguishes closed departments from no orders in $locale",
+  async ({ locale, closed, orders }) => {
+    setLocale(locale);
+    const el = await grid({ mon: null });
+    expect(column(el, "mon").querySelector(".guide-empty")?.textContent).toBe(closed);
+    expect(column(el, "mon").querySelector(".follows")?.textContent).not.toBe("");
+    el.guideKind = "station";
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(column(el, "mon").querySelector(".guide-empty")?.textContent).toBe(orders);
+    expect(column(el, "mon").querySelector(".follows")).not.toBeNull();
+  },
+);
+
+test("A724 guide backgrounds use palette tokens while labels stay at text strength", async () => {
+  const el = await grid(
+    { mon: [] },
+    { guides: new Map([["mon", [{ ...guideIdentity, startsAt: "13:00", endsAt: "16:00" }]]]) },
+  );
+  host.style.setProperty("--wt-color-palette-blue", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-text", "rgb(50, 60, 70)");
+  const band = column(el, "mon").querySelector<HTMLElement>(".guide")!;
+  expect(getComputedStyle(band, "::before").backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(band).color).toBe("rgb(50, 60, 70)");
+  expect(getComputedStyle(band).opacity).toBe("1");
+  expect(Number(getComputedStyle(band, "::before").opacity)).toBeGreaterThan(0);
+  expect(Number(getComputedStyle(band, "::before").opacity)).toBeLessThan(1);
+});
+
+test("A724 bands leave pointer painting and keyboard block editing available", async () => {
+  const el = await grid(
+    { mon: [] },
+    { guides: new Map([["mon", [{ ...guideIdentity, startsAt: "08:00", endsAt: "12:00" }]]]) },
+  );
+  const seen = changes(el);
+  const guide = column(el, "mon").querySelector<HTMLElement>(".guide")!;
+  const box = guide.getBoundingClientRect();
+  expect(el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + 3)).toBe(
+    column(el, "mon"),
+  );
+  expect(getComputedStyle(guide.querySelector(".guide-label")!).pointerEvents).toBe("none");
+  await drag(el, "mon", 180, 240);
+  expect(seen.at(-1)).toEqual({
+    key: "mon",
+    blocks: [{ staffRoleId: "sc", headcount: 1, startsAt: "09:00", endsAt: "10:00" }],
+  });
+  await drag(el, "mon", 360, 420);
+  expect(seen.at(-1)).toEqual({
+    key: "mon",
+    blocks: [{ staffRoleId: "sc", headcount: 1, startsAt: "12:00", endsAt: "13:00" }],
+  });
+  el.days = new Map([["mon", [headChef]]]);
+  await el.updateComplete;
+  block(el, "mon").focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon"));
+  expect(guide.querySelectorAll("[tabindex],button")).toHaveLength(0);
+  await userEvent.keyboard("{Delete}");
+  await el.updateComplete;
+  expect(seen.at(-1)).toEqual({ key: "mon", blocks: [] });
+});
+
+test("A724 a long department name leaves the period visible in its lane", async () => {
+  const el = await grid(
+    { mon: [], tue: [] },
+    {
+      guides: new Map([
+        [
+          "mon",
+          [
+            {
+              ...guideIdentity,
+              departmentName: "Restaurant and terrace with a very long department name",
+              startsAt: "13:00",
+              endsAt: "16:00",
+            },
+          ],
+        ],
+        [
+          "tue",
+          [
+            {
+              ...guideIdentity,
+              departmentId: "bar",
+              departmentName: "Bar",
+              startsAt: "13:00",
+              endsAt: "16:00",
+            },
+          ],
+        ],
+      ]),
+    },
+  );
+  el.guideKind = "station";
+  el.guideDepartmentIds = ["dining", "bar"];
+  el.requestUpdate();
+  await el.updateComplete;
+  const band = column(el, "mon").querySelector<HTMLElement>(".guide")!;
+  const labels = band.querySelectorAll<HTMLElement>(".guide-label");
+  expect(labels[1]!.textContent).toContain("Lunch");
+  expect(labels[1]!.getBoundingClientRect().top).toBeLessThan(band.getBoundingClientRect().bottom);
 });

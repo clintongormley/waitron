@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { applyTokens, registerIcons } from "@waitron/ui";
+import { applyTokens, registerIcons, DROPDOWN_ICONS } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
 import type { SeasonStaffing, SeasonStaffingEdit } from "../staffing-types.js";
@@ -18,7 +18,15 @@ import {
 
 import { LUNCH_GUIDE, BAR_GUIDE } from "../testing/season-staffing-fixture.js";
 
-registerIcons({ close: "M3 3l10 10M13 3L3 13" });
+registerIcons({
+  ...DROPDOWN_ICONS,
+  close:
+    "M3.7 2.6 8 6.9l4.3-4.3 1.1 1.1L9.1 8l4.3 4.3-1.1 1.1L8 9.1l-4.3 4.3-1.1-1.1L6.9 8 2.6 3.7Z",
+  kebab:
+    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
+});
 
 let painter: StaffingSeasonPainter | undefined;
 beforeEach(() => setLocale("en"));
@@ -93,7 +101,7 @@ const dinner: StaffingBlock = {
 it("titles the season's week and draws the first area's weekdays, Monday first, from one passive read", async () => {
   const { painter, request } = await mount();
   expect(frame(painter).open).toBe(true);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(byTest(painter, "season")!.textContent!.trim()).toBe("Winter · 1 Dec – 28 Feb");
   expect(grid(painter).columns.map(({ key }) => key)).toEqual(["1", "2", "3", "4", "5", "6", "0"]);
   expect(grid(painter).columns.map(({ label }) => label)).toEqual([
@@ -148,7 +156,7 @@ it("reads the new season when the address steps to it", async () => {
   const { painter, request } = await mount();
   painter.seasonId = "spring";
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(grid(painter).days.get("2")).toEqual([]);
   expect(request).toHaveBeenCalledWith(
     "/management-api/staffing/seasons/spring",
@@ -455,7 +463,7 @@ it("ignores a read that answers after the address has stepped to another season"
   await settle(painter);
   first(seasonStaffing("winter"));
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(grid(painter).days.get("2")).toEqual([]);
 });
 
@@ -528,7 +536,7 @@ it.each(["succeeds", "is refused"])(
     if (outcome === "succeeds") finish();
     else refuse({ code: "staffing.invalid", params: { field: "edits.0" } });
     await settle(painter);
-    expect(frame(painter).heading).toBe("Spring week");
+    expect(frame(painter).heading).toBe("Spring: standard week");
     expect(frame(painter).refusal).toBe("");
     expect(frame(painter).busy).toBe(false);
     expect(grid(painter).days.get("3")).toEqual([]);
@@ -570,7 +578,7 @@ it("a saved staff role the chips already show is chosen, not added again", async
 it("speaks Spanish", async () => {
   setLocale("es");
   const { painter } = await mount();
-  expect(frame(painter).heading).toBe("Semana de Winter");
+  expect(frame(painter).heading).toBe("Winter: semana estándar");
   expect(grid(painter).columns[0]!.label).toBe("lunes");
   expect(byTest(painter, "new-staff-role")!.textContent!.trim()).toBe("+ Nuevo rol de personal");
   expect(picker(painter).options[2]!.group).toBe("Estaciones de preparación");
@@ -776,3 +784,129 @@ it("at 1280×900 the grid fills the frame's height under the paint row, still sh
     await page.viewport(old[0]!, old[1]!);
   }
 });
+
+it.each([
+  { locale: "en", readOnly: false },
+  { locale: "es", readOnly: false },
+  { locale: "en", readOnly: true },
+  { locale: "es", readOnly: true },
+])(
+  "A724 explains department and station shading ($locale, readOnly=$readOnly)",
+  async ({ locale, readOnly }) => {
+    setLocale(locale);
+    const { painter } = await mount({ readOnly });
+    expect(frame(painter).heading).toBe(
+      locale === "es" ? "Winter: semana estándar" : "Winter: standard week",
+    );
+    expect(root(painter).querySelector('[data-test="guide-hint"]')?.textContent?.trim()).toBe(
+      locale === "es"
+        ? "Sombreado: horario de apertura de Restaurant, por periodo"
+        : "Shaded: Restaurant's opening hours, by period",
+    );
+    await pick(painter, "station:st-kitchen");
+    expect(grid(painter).guideKind).toBe("station");
+    expect(grid(painter).guideDepartmentIds).toEqual(["dep-restaurant", "dep-bar"]);
+    expect(root(painter).querySelector('[data-test="guide-hint"]')?.textContent?.trim()).toBe(
+      locale === "es"
+        ? "Sombreado: cuándo recibe pedidos Kitchen, un carril por cada departamento que le envía platos"
+        : "Shaded: when Kitchen gets orders, one lane per department that sends it dishes",
+    );
+    expect(root(painter).querySelector('[data-test="paint-row"]') === null).toBe(readOnly);
+  },
+);
+
+const a724LookCases = ([390, 1280] as const).flatMap((width) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    (["en", "es"] as const).flatMap((locale) =>
+      (["department", "station"] as const).map((kind) => ({ width, theme, locale, kind })),
+    ),
+  ),
+);
+it.each(a724LookCases)(
+  "A724 LOOK $width $theme $locale $kind",
+  async ({ width, theme, locale, kind }) => {
+    const previous = [innerWidth, innerHeight];
+    try {
+      await page.viewport(width, 900);
+      setLocale(locale);
+      const read = seasonStaffing();
+      const longName = "Restaurant and terrace with a long department name";
+      read.areas[0]!.name = longName;
+      for (const columns of Object.values(read.guides))
+        for (const ranges of Object.values(columns))
+          for (const range of ranges)
+            if (range.departmentId === "dep-restaurant") range.departmentName = longName;
+      read.guides["department:dep-restaurant"]![2]!.push(
+        {
+          ...LUNCH_GUIDE,
+          periodId: "tea",
+          periodName: "Tea",
+          periodColour: "amber",
+          departmentName: longName,
+          startsAt: "16:00",
+          endsAt: "16:15",
+        },
+        {
+          ...LUNCH_GUIDE,
+          periodId: "dinner",
+          periodName: "Dinner",
+          periodColour: "purple",
+          departmentName: longName,
+          startsAt: "19:00",
+          endsAt: "00:00",
+        },
+      );
+      read.guides["station:st-kitchen"]![2]!.push({
+        ...LUNCH_GUIDE,
+        periodId: "dinner",
+        periodName: "Dinner",
+        periodColour: "purple",
+        departmentName: longName,
+        startsAt: "19:00",
+        endsAt: "23:30",
+      });
+      const { painter } = await mount({
+        read: async () => read,
+        area: kind === "department" ? "department:dep-restaurant" : "station:st-kitchen",
+      });
+      painter.setAttribute("data-theme", theme);
+      await settle(painter);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(innerWidth).toBe(width);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      const hint = root(painter).querySelector<HTMLElement>('[data-test="guide-hint"]')!;
+      const hintBox = hint.getBoundingClientRect();
+      expect(hintBox.width).toBeGreaterThan(0);
+      expect(hintBox.left).toBeGreaterThanOrEqual(0);
+      expect(hintBox.right).toBeLessThanOrEqual(width);
+      const gridEl = grid(painter);
+      await gridEl.updateComplete;
+      expect(
+        gridEl.shadowRoot!.querySelector<HTMLElement>(".day")!.getBoundingClientRect().height,
+      ).toBeGreaterThan(300);
+      const save = saveButton(painter)
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .getBoundingClientRect();
+      expect(save.width).toBeGreaterThan(0);
+      expect(save.right).toBeLessThanOrEqual(width);
+      expect(save.bottom).toBeLessThanOrEqual(900);
+      await page.screenshot({
+        path: `__screenshots__/look/a724-season-${kind}-${locale}-${theme}-${width}.png`,
+      });
+      if (width === 390) {
+        const scroll = gridEl.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+        const ruler = gridEl.shadowRoot!.querySelector<HTMLElement>(".times")!;
+        const left = ruler.getBoundingClientRect().left;
+        scroll.scrollLeft = scroll.scrollWidth;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        expect(ruler.getBoundingClientRect().left).toBeCloseTo(left, 0);
+        await page.screenshot({
+          path: `__screenshots__/look/a724-season-${kind}-${locale}-${theme}-${width}-scrolled.png`,
+        });
+      }
+    } finally {
+      await page.viewport(previous[0]!, previous[1]!);
+      setLocale("en");
+    }
+  },
+);

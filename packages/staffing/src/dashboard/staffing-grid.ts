@@ -155,17 +155,49 @@ export class StaffingGrid extends LitElement {
       }
       .guide {
         position: absolute;
-        inset-inline: 0;
         box-sizing: border-box;
-        border-block: 1px dashed var(--wt-color-primary);
+        border-block: 1px solid var(--wt-color-border);
+        border-inline-end: 1px solid var(--wt-color-border);
+        overflow: hidden;
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        line-height: 1.25;
+        font-variant-numeric: tabular-nums;
+        padding: calc(var(--wt-space-1) / 2);
         pointer-events: none;
       }
       .guide::before {
         content: "";
         position: absolute;
         inset: 0;
-        background: var(--wt-color-primary);
+        background: var(--period-fill);
         opacity: calc(var(--wt-opacity-disabled) / 4);
+      }
+      .guide * {
+        pointer-events: none;
+      }
+      .guide-label {
+        position: relative;
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      .guide-department {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .guide-empty {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline: var(--wt-space-1);
+        text-align: end;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        pointer-events: none;
+      }
+      .day:has(.guide-empty) .follows {
+        inset-block-start: calc(var(--wt-space-1) + var(--wt-font-size-sm) * 1.5);
       }
       .follows {
         position: absolute;
@@ -190,6 +222,8 @@ export class StaffingGrid extends LitElement {
   /** Drawn faintly behind each column's blocks. */
   @property({ attribute: false }) guides: ReadonlyMap<string, readonly StaffingGuideRange[]> =
     new Map();
+  @property() guideKind: "department" | "station" = "department";
+  @property({ attribute: false }) guideDepartmentIds: readonly string[] = [];
   @property({ attribute: false }) staffRoles: readonly StaffRole[] = [];
   /** The staff role a drag adds; with none, a drag adds nothing. */
   @property({ attribute: false }) chosen: string | undefined = undefined;
@@ -512,13 +546,41 @@ export class StaffingGrid extends LitElement {
       ><span class="edge" data-edge="end" data-index=${index} aria-hidden="true"></span>
     </button>`;
   }
-  #guide(range: StaffingGuideRange) {
+  #guideDepartments(): readonly string[] {
+    const present = new Set(
+      [...this.guides.values()].flatMap((ranges) => ranges.map((range) => range.departmentId)),
+    );
+    return [...new Set([...this.guideDepartmentIds, ...present])].filter((id) => present.has(id));
+  }
+  #guideSummary(key: string): string {
+    const ranges = this.guides.get(key) ?? [];
+    return ranges.length
+      ? ranges
+          .map((range) =>
+            [
+              this.guideKind === "station" ? range.departmentName : "",
+              range.periodName,
+              `${range.startsAt}–${range.endsAt}`,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          )
+          .join("; ")
+      : t(this.guideKind === "station" ? "staffing.grid.no_orders" : "staffing.grid.closed");
+  }
+  #guide(range: StaffingGuideRange, departments: readonly string[]) {
     const { start, end } = drawnSpan(range, this.cutover);
+    const lanes = this.guideKind === "station" ? Math.max(1, departments.length) : 1;
+    const lane = this.guideKind === "station" ? departments.indexOf(range.departmentId) : 0;
     return html`<div
       class="guide"
       aria-hidden="true"
-      style=${styleMap({ top: `${(start / DAY) * 100}%`, height: `${((end - start) / DAY) * 100}%` })}
-    ></div>`;
+      data-colour=${range.periodColour}
+      style=${styleMap({ top: `${(start / DAY) * 100}%`, height: `${((end - start) / DAY) * 100}%`, "inset-inline-start": `${(lane / lanes) * 100}%`, width: `${100 / lanes}%` })}
+    >
+      ${this.guideKind === "station" ? html`<span class="guide-label guide-department">${range.departmentName}</span>` : nothing}
+      <span class="guide-label">${range.periodName} ${range.startsAt}–${range.endsAt}</span>
+    </div>`;
   }
   #preview(column: StaffingColumn) {
     const stretch = this.#stroke.preview;
@@ -587,6 +649,7 @@ export class StaffingGrid extends LitElement {
   }
 
   override render() {
+    const guideDepartments = this.#guideDepartments();
     // With no button inside, a read-only grid's scrolling region takes the focus itself.
     return html`<div
         class="scroll"
@@ -644,9 +707,7 @@ export class StaffingGrid extends LitElement {
               class="day"
               role="group"
               aria-label=${column.label}
-              aria-describedby=${ifDefined(
-                this.columnErrors.has(column.key) ? `column-error-${column.key}` : undefined,
-              )}
+              aria-describedby=${[this.columnErrors.has(column.key) ? `column-error-${column.key}` : "", `guide-description-${column.key}`].filter(Boolean).join(" ")}
               data-column=${column.key}
               tabindex="-1"
               @lostpointercapture=${this.#stroke.abort}
@@ -654,7 +715,11 @@ export class StaffingGrid extends LitElement {
               @keydown=${() => this.#stroke.forgetDrag()}
             >
               ${hourLines(this.cutover)}
-              ${(this.guides.get(column.key) ?? []).map((range) => this.#guide(range))}
+              <span hidden id=${`guide-description-${column.key}`}
+                >${this.#guideSummary(column.key)}</span
+              >
+              ${(this.guides.get(column.key) ?? []).map((range) => this.#guide(range, guideDepartments))}
+              ${!this.guides.get(column.key)?.length ? html`<span class="guide-empty">${this.#guideSummary(column.key)}</span>` : nothing}
               ${
                 this.#value(column.key) === null
                   ? html`<div class="follows">${t("staffing.grid.follows_season")}</div>`

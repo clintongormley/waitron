@@ -167,7 +167,12 @@ const en = {
   "staffing.grid.people_one": "1 person",
   "staffing.grid.people_other": "{count} people",
   "staffing.painter.heading": "Staffing",
-  "staffing.painter.week": "{season} week",
+  "staffing.painter.week": "{season}: standard week",
+  "staffing.painter.guide_department": "Shaded: {department}'s opening hours, by period",
+  "staffing.painter.guide_station":
+    "Shaded: when {station} gets orders, one lane per department that sends it dishes",
+  "staffing.grid.closed": "Closed",
+  "staffing.grid.no_orders": "No orders",
   "staffing.painter.previous_season": "Previous season",
   "staffing.painter.next_season": "Next season",
   "staffing.painter.area": "Department or prep station",
@@ -350,7 +355,13 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.people_one": "1 persona",
   "staffing.grid.people_other": "{count} personas",
   "staffing.painter.heading": "Personal",
-  "staffing.painter.week": "Semana de {season}",
+  "staffing.painter.week": "{season}: semana estándar",
+  "staffing.painter.guide_department":
+    "Sombreado: horario de apertura de {department}, por periodo",
+  "staffing.painter.guide_station":
+    "Sombreado: cuándo recibe pedidos {station}, un carril por cada departamento que le envía platos",
+  "staffing.grid.closed": "Cerrado",
+  "staffing.grid.no_orders": "Sin pedidos",
   "staffing.painter.previous_season": "Temporada anterior",
   "staffing.painter.next_season": "Temporada siguiente",
   "staffing.painter.area": "Departamento o estación de preparación",

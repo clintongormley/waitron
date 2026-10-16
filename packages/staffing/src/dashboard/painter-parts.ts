@@ -62,6 +62,24 @@ export const painterStyles = css`
     display: inline-flex;
     align-items: center;
   }
+  .paint .hint {
+    flex: 1 1 calc(var(--wt-space-6) * 12);
+    min-inline-size: 0;
+    margin-inline-start: auto;
+    text-align: end;
+  }
+  .guide-read-only {
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+    padding-block: var(--wt-space-2);
+  }
+  @media (width < 720px) {
+    .paint .hint {
+      flex-basis: 100%;
+      margin-inline-start: 0;
+      text-align: start;
+    }
+  }
   .message {
     margin: var(--wt-space-3) 0;
     color: var(--wt-color-text-muted);
@@ -139,7 +157,14 @@ export function areaPicker(
   ></wt-combobox>`;
 }
 
+export function guideText(area: { area: AreaRef; name: string }): string {
+  return area.area.kind === "department"
+    ? tf("staffing.painter.guide_department", { department: area.name })
+    : tf("staffing.painter.guide_station", { station: area.name });
+}
+
 export interface PaintRowOptions {
+  guideText: string;
   staffRoles: readonly StaffRole[];
   chosen: string | undefined;
   /** Read when How many changes or is left, so its handlers never see a stale number. */
@@ -196,6 +221,7 @@ export function paintRow(options: PaintRowOptions) {
           String(headcount());
       }}
     ></wt-number-stepper>
+    <span class="hint" data-test="guide-hint">${options.guideText}</span>
     ${
       rolesError
         ? html`<p class="message" role="alert" data-test="roles-error">${rolesError}</p>`
