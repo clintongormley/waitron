@@ -38,7 +38,23 @@ export function stripeClient(stripe: Stripe): StripeClient {
       const action = "action" in reader ? reader.action : null;
       if (!action || action.status === "in_progress") return { status: "in_progress" };
       if (action.status === "succeeded") return { status: "succeeded" };
-      return { status: "failed", failureCode: action.failure_code ?? undefined };
+      let failureCode =
+        action.api_error?.decline_code ??
+        action.api_error?.code ??
+        action.failure_code ??
+        undefined;
+      const intent = action.process_payment_intent?.payment_intent;
+      if (failureCode === "card_declined" && intent !== undefined) {
+        try {
+          const pi =
+            typeof intent === "string" ? await stripe.paymentIntents.retrieve(intent) : intent;
+          failureCode =
+            pi.last_payment_error?.decline_code ?? pi.last_payment_error?.code ?? failureCode;
+        } catch {
+          // A missing detail read must not replace the reader's completed refusal with an exception.
+        }
+      }
+      return { status: "failed", failureCode };
     },
     async cancelReaderAction(readerId) {
       await stripe.terminal.readers.cancelAction(readerId);

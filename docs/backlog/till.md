@@ -1228,6 +1228,12 @@ remains unverified.
 `#holdIdentity` rejection. Receipt: Lane D `receipts/a366-3b/b4-consumers.log`; no profile-switch
 fix or new cause is claimed.
 
+2026-10-16: A739a's `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts`
+reported 961 passing tests and logged the same `#holdIdentity` null-identity rejection. The
+triggering case and cause remain unverified. Local receipt: Lane F's
+`receipts/a739a-outcome/controller-all.log`. No profile-switch change was made.
+
+
 ## A card payment stuck `attempting` holds its device's profile switch
 
 Left open by W97 (#1311), found in its review and not fixed on the branch:
@@ -1989,21 +1995,14 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   belief, unchecked, is Chrome on Android only.
 - **The simulator asks at Card:** on Demo and Preparation installs, Card opens "Test card payment:
   Declined / Approved"; today's Approve/Decline toggle on the screen goes.
-- **Decline does not decline** (owner, 2026-10-15, seen on the Santet data). A read of the code
-  found the outcome passed along at every step (`tender-pay.ts` → `till-app.ts` →
-  `apps/till/src/api/client.ts` → `till-api.ts` → `till-sale.ts` → `packages/payments/src/simulator.ts`)
-  and no cause. Two suspects, neither confirmed: the Demo card reader chosen, which deliberately
-  ignores the toggle; or the draft restore putting `simulationOutcome` back to "captured". Reproduce
-  in a browser test first.
-  **Reproduction check, 2026-10-16:** on baseline `6dcffc9d3`, eight real-Chromium
-  counter probes clicked Decline then Card, with the pre-payment station check held until
-  explicitly released. English and Spanish, light and dark, at 390 and 1280 px all kept the
-  selection, sent `simulationOutcome: "declined"`, displayed the refusal and retained the
-  basket. These probes used a payment API fake that returned the requested outcome; they did
-  not run against the Santet installation. The existing real-database case
-  `runs a simulated decline through payment handling without filing a sale` in
-  `till-sale-integrated.db.test.ts` also passed. No product fix is established. Next: obtain
-  the exact Santet screen, reader choice and steps, then reproduce that path.
+- **A739a's outcome panel is separate from this payment-window redesign.** The owner reproduced
+  a completed decline offering Keep waiting, which returned to a spinner with no request behind
+  it (2026-10-16). The approved panel uses Retry and Cancel, explains a refusal or no answer,
+  and shows recognised provider reasons in English and Spanish. The owner-defined lost, stolen
+  and pickup cases show a staff-only keep-card instruction without Retry. The current simulator
+  toggle stays until A739. [Provider evidence and reproduction](../research/2026-10-16-card-reader-failure-reasons.md).
+  Stripe's stored timeout outcome remains the separate owner-approved A764 follow-up under M7b2 in
+  [payments.md](payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702).
 - **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
   data and nothing on the till says the decision is made on the dashboard). It came from A247
   (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry

@@ -1759,7 +1759,7 @@ export interface DevicePassMonitor {
  */
 export type PayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
-  | { outcome: "declined" }
+  | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" };
 

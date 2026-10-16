@@ -118,15 +118,27 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the card_outcome screen (retry / switch-tender / wait)", async () => {
+  it("has no violations on the card outcome screen (Retry / Cancel)", async () => {
     const store = new WorkingOrderStore();
     const { host } = await mountWidget<TillTenderPay>(
       "till-tender-pay",
-      { store, cardOutcome: "declined" },
+      { store, cardOutcome: { outcome: "declined" } },
       theme,
     );
     await expectNoA11yViolations(host);
   });
+
+  it.each([{ outcome: "timeout" }, { outcome: "declined", failureReason: "lost_card" }] as const)(
+    "has no violations on $outcome / $failureReason",
+    async (cardOutcome) => {
+      const { host } = await mountWidget<TillTenderPay>(
+        "till-tender-pay",
+        { store: new WorkingOrderStore(), cardOutcome },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("has no violations on the idle screen with the tip field and offline-consent toggle shown", async () => {
     const store = new WorkingOrderStore();

@@ -2256,8 +2256,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   then Cash or Card. Paying part of a counter order is new and follows the bill payments design
   (one receipt when the bill is fully paid). The simulator asks Declined/Approved at Card; Decline
   not declining is reproduced and fixed; the Demo card reader goes; no receipt screen after paying.
-  The reported ignored Decline still needs the exact Santet screen and steps; the 2026-10-16
-  counter browser probes did not reproduce it. After A738.
+  The owner identified Keep waiting after a completed refusal as A739a's separate outcome-panel
+  bug. Its approved Retry/Cancel, cause-specific messages and provider reasons leave the current
+  simulator toggle in place. Stripe's timeout bookkeeping is the separate owner-approved A764
+  follow-up under M7b2.
+  After A738.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A740 — zones on a device (owner, 2026-10-15; open).** A zone's menus, prices and trading name
@@ -3960,7 +3963,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **What M7b2 left open (a manager clearing a stuck card payment, #702).** When the reader poll
   times out or errors, `collect` cancels the reader action best-effort and fails the row. If that
   cancel fails and the customer then taps, the money is captured while the local row says `failed`;
-  only reconciliation sees it.
+  only reconciliation sees it. **A764, owner-approved 2026-10-16:** keep the attempt unknown and
+  check it automatically once collection stops, after demonstrating that a live collection cannot
+  be cancelled by the check. The manager action remains the fallback. After A739a.
   [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
 
 - **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.

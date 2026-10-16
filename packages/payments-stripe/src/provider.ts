@@ -180,6 +180,12 @@ export class StripeTerminalProvider implements PaymentProvider {
       state: row.state,
       amount: params.amount,
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
+      ...(outcome.kind === "failed" &&
+      row.state === "failed" &&
+      outcome.failureReason !== undefined &&
+      outcome.failureReason !== "card_declined"
+        ? { failureReason: outcome.failureReason }
+        : {}),
     };
   }
 
@@ -227,7 +233,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     claim: (piId: string) => Promise<"stamped" | "held_elsewhere" | "not_attempting">,
   ): Promise<
     | { kind: "captured"; settledAt: Date; piId: string }
-    | { kind: "failed" }
+    | { kind: "failed"; failureReason?: string }
     | { kind: "unclaimed"; claim: "held_elsewhere" | "not_attempting" }
   > {
     let piId: string;
@@ -240,7 +246,7 @@ export class StripeTerminalProvider implements PaymentProvider {
       piId = intent.id;
     } catch {
       await this.cancelReaderAction(readerId);
-      return { kind: "failed" };
+      return { kind: "failed", failureReason: "reader_unavailable" };
     }
 
     const claimed = await claim(piId);
@@ -251,14 +257,19 @@ export class StripeTerminalProvider implements PaymentProvider {
       for (let attempt = 0; attempt < this.poll.maxAttempts; attempt++) {
         const o = await this.opts.client.readerOutcome(readerId);
         if (o.status === "succeeded") return { kind: "captured", settledAt: new Date(), piId };
-        if (o.status === "failed") return { kind: "failed" };
+        if (o.status === "failed")
+          return {
+            kind: "failed",
+            failureReason:
+              o.failureCode === "connection_error" ? "reader_unavailable" : o.failureCode,
+          };
         await this.poll.sleep(this.poll.intervalMs);
       }
       await this.cancelReaderAction(readerId);
-      return { kind: "failed" };
+      return { kind: "failed", failureReason: "reader_unavailable" };
     } catch {
       await this.cancelReaderAction(readerId);
-      return { kind: "failed" };
+      return { kind: "failed", failureReason: "reader_unavailable" };
     }
   }
 

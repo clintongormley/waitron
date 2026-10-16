@@ -205,3 +205,111 @@ describe("stripeClient's refund through the Stripe SDK itself", () => {
     }
   });
 });
+
+describe("Stripe reader refusal details through the real SDK", () => {
+  it.each([
+    {
+      name: "current firmware",
+      apiError: { type: "card_error", code: "card_declined", decline_code: "insufficient_funds" },
+      lastError: null,
+      reason: "insufficient_funds",
+      reads: 0,
+    },
+    {
+      name: "older firmware",
+      apiError: null,
+      lastError: { type: "card_error", code: "card_declined", decline_code: "stolen_card" },
+      reason: "stolen_card",
+      reads: 1,
+    },
+    {
+      name: "expired card from an older reader",
+      apiError: null,
+      lastError: { type: "card_error", code: "expired_card", decline_code: null },
+      reason: "expired_card",
+      reads: 1,
+    },
+    {
+      name: "missing extra details",
+      apiError: null,
+      lastError: null,
+      reason: "card_declined",
+      reads: 1,
+    },
+    {
+      name: "unreachable extra details",
+      apiError: null,
+      lastError: "unreachable",
+      reason: "card_declined",
+      reads: 1,
+    },
+  ])(
+    "$name keeps the available reason without parsing provider prose",
+    async ({ apiError, lastError, reason, reads }) => {
+      const paths: string[] = [];
+      const server = createServer((req, res) => {
+        paths.push(req.url!);
+        res.setHeader("content-type", "application/json");
+        if (req.url === "/v1/terminal/readers/tmr_reason") {
+          res.end(
+            JSON.stringify({
+              id: "tmr_reason",
+              object: "terminal.reader",
+              action: {
+                status: "failed",
+                type: "process_payment_intent",
+                failure_code: "card_declined",
+                failure_message: "private provider prose must not become a reason code",
+                api_error: apiError,
+                process_payment_intent: { payment_intent: "pi_reason" },
+              },
+            }),
+          );
+        } else if (req.url === "/v1/payment_intents/pi_reason") {
+          if (lastError === "unreachable") {
+            res.statusCode = 503;
+            res.end(
+              JSON.stringify({ error: { type: "api_error", message: "temporarily unavailable" } }),
+            );
+          } else {
+            res.end(
+              JSON.stringify({
+                id: "pi_reason",
+                object: "payment_intent",
+                status: "requires_payment_method",
+                last_payment_error: lastError,
+              }),
+            );
+          }
+        } else {
+          res.statusCode = 404;
+          res.end("{}");
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const client = stripeClient(
+          new Stripe("sk_test_local", {
+            host: "127.0.0.1",
+            port,
+            protocol: "http",
+            maxNetworkRetries: 0,
+          }),
+        );
+        expect(await client.readerOutcome("tmr_reason")).toEqual({
+          status: "failed",
+          failureCode: reason,
+        });
+        expect(paths).toEqual([
+          "/v1/terminal/readers/tmr_reason",
+          ...Array<string>(reads).fill("/v1/payment_intents/pi_reason"),
+        ]);
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    },
+  );
+});

@@ -80,7 +80,10 @@ their full text.
     fails the row. If that cancel fails and the customer then taps, the money is captured while the
     local row says `failed`; only reconciliation sees it. Now that a resolver exists, leaving such a
     row `attempting` would hand it to the manager action instead. That would also lock the order
-    until a manager acts, so it is the owner's call.
+    until a manager acts. **Owner decision, 2026-10-16 (A764):** leave uncertain Stripe attempts
+    unknown and check them automatically once collection stops, with the manager action as
+    fallback. First demonstrate that the automatic check cannot cancel a live collection.
+    This remains separate from A739a's outcome panel; nothing has changed the stored states yet.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
     three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing

@@ -328,12 +328,12 @@ describe("till-counter-screen", () => {
     const { el } = await mount({
       cardProvider: "stripe_on_device",
       tipsEnabled: true,
-      cardOutcome: "declined",
+      cardOutcome: { outcome: "declined" },
     });
     const grid = tender(el);
     expect(grid.cardProvider).toBe("stripe_on_device");
     expect(grid.tipsEnabled).toBe(true);
-    expect(grid.cardOutcome).toBe("declined");
+    expect(grid.cardOutcome).toEqual({ outcome: "declined" });
   });
 
   it("passes the attempt count to payment controls", async () => {

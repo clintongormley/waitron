@@ -569,12 +569,11 @@ export interface IntegratedPayRequest {
 
 /**
  * The outcome of an integrated pay, as DATA — a decline, stall or offline refusal is never an
- * exception (CLAUDE.md §5). Only `captured` carries a ticket; the other arms filed nothing, so the
- * till simply retries.
+ * exception (CLAUDE.md §5). Only `captured` carries a ticket.
  */
 export type IntegratedPayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
-  | { outcome: "declined" }
+  | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" };
 
@@ -1979,7 +1978,12 @@ export function toPayOutcome(
   if (result.state === "attempting") {
     return { outcome: "timeout" };
   }
-  return { outcome: "declined" };
+  return {
+    outcome: "declined",
+    ...(result.state === "failed" && result.failureReason !== undefined
+      ? { failureReason: result.failureReason }
+      : {}),
+  };
 }
 
 /**

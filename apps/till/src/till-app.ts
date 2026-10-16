@@ -2534,7 +2534,7 @@ export class TillApp extends LitElement {
    * The outcome of the last non-captured `collect-card` attempt. Cleared wherever the basket it describes
    * leaves the counter, and deliberately not by `#onDiscardOrder`, which never touches the loaded basket.
    */
-  @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
+  @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>;
   /** Relayed to the pay card, which leaves its "Tap or insert card" spinner when this changes. */
   @state() private cardAttemptsOver = 0;
   /** Card attempts started and not yet ended; {@link cardAttemptsOver} moves when this returns to 0. */
@@ -4769,7 +4769,7 @@ export class TillApp extends LitElement {
           this.#store.id === id &&
           !this.#cancelledDemoReaderOrders.has(id)
         )
-          this.cardOutcome = out.outcome;
+          this.cardOutcome = out;
       }
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,

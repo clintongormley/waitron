@@ -99,6 +99,8 @@ export interface PaymentResult {
   settledAt: Date | null;
   /** Present only on a `captured` result whose provider can supply the card facts. */
   card?: CardDetails;
+  /** Staff-facing failure category or provider refusal code; absent when no reason was supplied. */
+  failureReason?: string;
 }
 
 /** `nextDueAt` is the only field a scheduler needs (null = nothing pending); the counts are for a

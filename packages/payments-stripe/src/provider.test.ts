@@ -115,6 +115,71 @@ describe("StripeTerminalProvider.collect", () => {
     expect(row?.state).toBe("failed");
   });
 
+  it.each([
+    "insufficient_funds",
+    "expired_card",
+    "incorrect_pin",
+    "lost_card",
+    "stolen_card",
+    "pickup_card",
+    "unknown_new_code",
+  ])(
+    "carries %s to the staff payment result without changing the failed row",
+    async (failureCode) => {
+      const fake = new FakeStripe();
+      vi.spyOn(fake, "readerOutcome").mockResolvedValue({ status: "failed", failureCode });
+      const result = await providerFor(fake).collect(await collectParams());
+      expect(result).toMatchObject({
+        state: "failed",
+        failureReason: failureCode,
+        settledAt: null,
+      });
+      expect((await rowFor(result.paymentRef))?.state).toBe("failed");
+    },
+  );
+
+  it("omits a generic card decline reason that adds no explanation", async () => {
+    const fake = new FakeStripe();
+    fake.declineNext();
+    const result = await providerFor(fake).collect(await collectParams());
+    expect(result.state).toBe("failed");
+    expect(result).not.toHaveProperty("failureReason");
+  });
+
+  it("identifies an unanswered reader separately from a bank refusal", async () => {
+    const fake = new FakeStripe();
+    fake.stallNext();
+    const result = await providerFor(fake).collect(await collectParams());
+    expect(result).toMatchObject({ state: "failed", failureReason: "reader_unavailable" });
+  });
+
+  it("identifies a reader connection error separately from a bank refusal", async () => {
+    const fake = new FakeStripe();
+    vi.spyOn(fake, "readerOutcome").mockResolvedValue({
+      status: "failed",
+      failureCode: "connection_error",
+    });
+    const result = await providerFor(fake).collect(await collectParams());
+    expect(result).toMatchObject({ state: "failed", failureReason: "reader_unavailable" });
+  });
+
+  it.each(["createPaymentIntent", "processPaymentIntent", "readerOutcome"] as const)(
+    "identifies an exception from %s as no answer rather than a bank refusal",
+    async (method) => {
+      const fake = new FakeStripe();
+      vi.spyOn(fake, method).mockRejectedValue(new Error("connection interrupted"));
+      const result = await providerFor(fake).collect(await collectParams());
+      expect(result).toMatchObject({
+        state: "failed",
+        failureReason: "reader_unavailable",
+        settledAt: null,
+      });
+      const row = await rowFor(result.paymentRef);
+      expect(row?.state).toBe("failed");
+      expect(row?.externalRef).toBeNull();
+    },
+  );
+
   it("throws when no readerRef is supplied — a Terminal collect cannot proceed without a reader", async () => {
     const p = await collectParams();
     const { readerRef, ...noReader } = p;
