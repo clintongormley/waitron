@@ -28,7 +28,7 @@ export class FloorPlanTablesPanel extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        --columns: var(--wt-tap-min) minmax(0, 1.5fr) var(--wt-space-6) minmax(0, 1fr);
+        --columns: var(--wt-tap-min) minmax(0, 2fr) var(--wt-space-6) minmax(0, 1fr);
       }
       .title {
         display: flex;
@@ -62,7 +62,7 @@ export class FloorPlanTablesPanel extends LitElement {
         display: grid;
         grid-template-columns: var(--columns);
         align-items: center;
-        column-gap: var(--wt-space-3);
+        column-gap: var(--wt-space-2);
       }
       .row {
         padding-inline: var(--wt-space-2);
@@ -77,7 +77,7 @@ export class FloorPlanTablesPanel extends LitElement {
         display: grid;
         grid-template-columns: subgrid;
         align-items: center;
-        column-gap: var(--wt-space-3);
+        column-gap: var(--wt-space-2);
       }
       .columns {
         padding-inline: var(--wt-space-2);
@@ -146,7 +146,7 @@ export class FloorPlanTablesPanel extends LitElement {
         grid-column: 1;
         margin: 0;
         padding: 0 var(--wt-space-2) var(--wt-space-2)
-          calc(var(--wt-space-2) + var(--wt-tap-min) + var(--wt-space-3));
+          calc(var(--wt-space-2) + var(--wt-tap-min) + var(--wt-space-2));
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }

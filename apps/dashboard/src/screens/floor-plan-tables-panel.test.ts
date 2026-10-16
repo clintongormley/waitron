@@ -443,3 +443,21 @@ it("A671: a short name stays on one line in the desktop panel", async () => {
   text.selectNodeContents(name);
   expect(text.getClientRects()).toHaveLength(1);
 });
+
+it.each(["Arial", "Verdana"])(
+  "A671: a short name stays on one line with fallback font %s",
+  async (font) => {
+    const el = await open({ draft: { tables: [table("c1", "Counter 1", true, 4)] } });
+    el.style.width = "288px";
+    el.style.setProperty("--wt-font-family", font);
+    await el.updateComplete;
+    const name = row(el, "Counter 1").querySelector<HTMLElement>("[data-name]")!;
+    const text = document.createRange();
+    text.selectNodeContents(name);
+    expect(text.getClientRects()).toHaveLength(1);
+    el.selected = "c1";
+    await el.updateComplete;
+    text.selectNodeContents(row(el, "Counter 1").querySelector("[data-name]")!);
+    expect(text.getClientRects()).toHaveLength(1);
+  },
+);

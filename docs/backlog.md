@@ -2505,8 +2505,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Until the next reset; the till hides it. Left open by A503 part 2 (#1601).
   [Detail](backlog/till.md#a568-a-part-placed-on-todays-map-while-its-joined-table-waited-keeps-its-place)
 
-- **A569. The floor plan editor's Made of picker and two wraps (2026-10-13).** A dropdown, not
-  the mockup's inline list; two wraps seen in #1601's look.
+- **A569. The floor plan editor's Made of picker and wrapping (2026-10-13).** The inline picker
+  and how its parts wrap remain open; Add button placement now follows A671.
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
 
 - **A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn

@@ -434,6 +434,10 @@ list, because no inline multi-pick primitive exists. #1601's look also saw, at 1
 list's Made of column wrap to two lines, and in Spanish the two Add buttons stack. Left open by
 A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call on the two wraps.
 
+2026-10-16: A671 replaces the Add button placement and column arrangement. Their current contract
+is in [design-system.md](../developers/design-system.md#departments-and-zones). The remaining open
+work here is the inline Made of picker and how its parts wrap.
+
 ## A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
 
 **A672 (owner, 2026-10-14).** In `wt-floor-plan-canvas` (`packages/ui/src/components/`) and
