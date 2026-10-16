@@ -376,6 +376,7 @@ just a green typecheck.
   What is left:
   - **Part 3b:** the till lets the person printing a simplified receipt change the number of
     guests or leave the line out, for that print only; waits for Q12.
+    [Mockup](mockups/a663-receipt-layout/3-guests-when-printing.png)
 
 ## The till's on-screen receipt is a second copy of the layout
 
@@ -578,6 +579,14 @@ returns `null`. This checks those readers, not every sale path.
   family through the link an adjustment's split leaves; any other split leaves none, so the moved
   part's own discount is counted with the whole-bill one in the end row at its rate. The table still
   comes to the filed bases.
+
+- **The guests line is read when the receipt is built, not when the sale is recorded (A663 Part
+  3a).** A later copy reads the party as it is then: a count changed after payment, or a new bill
+  the party opens after paying, changes or removes the line on that copy, while the order label
+  stays as recorded. While a party, with any party joined into it, holds more than one bill that is
+  not abandoned (bills kept separate after joining tables, or a split by item), none of those bills
+  prints the line, and nor does a bill of a party joined into another (`readReceiptGuests`,
+  `apps/server/src/receipt-guests.ts`).
 
 - **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
   from `formatReceipt` retains one sale, tender, header and drawer, then replays without another

@@ -3572,7 +3572,7 @@ built, nothing stored:
   both readings for two tables joined before either paid, bills merged (the survivor holds one
   open bill and one abandoned).
 
-**Read at print time.** Like the order label, the rule reads the party as it is when the receipt
+**Read at print time.** The rule reads the party as it is when the receipt
 is built, so a later copy can differ from the original: a party that orders again on a new bill
 after paying makes a reprint of the first bill print no line, and a count changed after payment
 changes the line on later copies. This plan accepts that as the default (owner FYI in the PR, no
