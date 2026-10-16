@@ -1674,19 +1674,23 @@ describe("Month view", () => {
     expect(view()!.model?.month).toBe("2026-12");
   });
 
-  it("an open Month box shows the error beside its hours when a later reread of its month fails, until a reread succeeds", async () => {
+  it("an open Month box keeps its hours and leaves the failed reread to the screen's one alert, until a reread succeeds", async () => {
     const { el, view, failNext } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
     );
     const box = await openBox(el, await shown(view));
     expect(box.error).toBe("");
+    const alert = () => el.shadowRoot!.querySelector("[data-test=month-read-error]")?.textContent;
     failNext(1);
     el.api.rereadWithSpecialDays();
-    await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
+    await expect.poll(alert).toBe(t("opening.load_error"));
+    await dayBox(el)!.updateComplete;
     expect(boxOpen(el)).toBe(true);
     expect(dayBox(el)!.rows.length).toBeGreaterThan(0);
+    expect(dayBox(el)!.error).toBe("");
+    expect(dayBox(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     el.api.rereadWithSpecialDays();
-    await expect.poll(() => dayBox(el)?.error).toBe("");
+    await expect.poll(alert).toBeUndefined();
     expect(boxOpen(el)).toBe(true);
   });
 
