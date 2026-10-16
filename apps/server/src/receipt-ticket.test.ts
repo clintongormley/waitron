@@ -3542,3 +3542,26 @@ describe("the full invoice's item table on roll paper (A663)", () => {
     expect(lines).toContain("1 raciones de menú degustación");
   });
 });
+
+describe("guests and the amount per person on roll paper", () => {
+  it("drops the amount to its own line on 58 mm", () => {
+    const lines = printedLines(
+      formatReceipt({
+        ...FULL_INVOICE_FIXTURE,
+        guests: 4,
+        printer: { paperWidth: "58mm", resolution: "180dpi" },
+      }),
+    );
+    const at = lines.findIndex((line) => line.includes("4 comensales · por persona"));
+    expect(at).toBeGreaterThan(-1);
+    expect(lines[at]).not.toContain("4,92 €");
+    expect(lines[at + 1]).toContain("4,92 €");
+  });
+
+  it("prints the amount on the same line on 80 mm", () => {
+    const lines = printedLines(formatReceipt({ ...FULL_INVOICE_FIXTURE, guests: 4 }));
+    expect(lines.find((line) => line.includes("4 comensales · por persona"))).toMatch(
+      /4 comensales · por persona +4,92 €$/u,
+    );
+  });
+});

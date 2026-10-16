@@ -161,3 +161,13 @@ describe("A4 office raster QR black square", () => {
     expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
   });
 });
+
+describe("guests and the amount per person on the A4 page", () => {
+  it("draws the guests line and the amount per person", () => {
+    const texts = layoutInvoicePages({ ...fixture, guests: 4 }).flatMap((page) =>
+      page.elements.flatMap((element) => (element.kind === "text" ? [element.text] : [])),
+    );
+    expect(texts).toContain("4 comensales · por persona");
+    expect(texts).toContain("4,92 €");
+  });
+});

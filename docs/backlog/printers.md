@@ -374,11 +374,9 @@ just a green typecheck.
   incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
   Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
   What is left:
-  - **Part 3: guests and the amount per person** when the table's guests were entered.
-    Joined tables' counts are added together when they join (or when guests move onto a seated
-    table), so the party's own count holds the sum, or no count when either party had none or the sum
-    is over 999; a bill split by item prints no guests line (A713, owner 2026-10-15, in
-    [till.md](till.md#decisions-and-deliberate-limits)).
+  - **Part 3b:** the till lets the person printing a simplified receipt change the number of
+    guests or leave the line out, for that print only; waits for Q12.
+    [Mockup](mockups/a663-receipt-layout/3-guests-when-printing.png)
 
 ## The till's on-screen receipt is a second copy of the layout
 
@@ -391,7 +389,8 @@ just a green typecheck.
   invoice's discounts with VAT where paper now prints them before VAT: the till shows each discount
   of a dish under the dish and a whole-bill discount once, where a printed full invoice shows a
   dish's own discount under it and the whole-bill discount once per rate at the end of the table. Bring it
-  into line with the printed receipt; A661 (#1745), which changed that file, has landed.
+  into line with the printed receipt; A661 (#1745), which changed that file, has landed. It does
+  not show the «N comensales · por persona» line either, which paper now prints (A663 Part 3a).
 
 ## On an A4 full invoice, a caption and its amount can split across pages
 
@@ -580,6 +579,14 @@ returns `null`. This checks those readers, not every sale path.
   family through the link an adjustment's split leaves; any other split leaves none, so the moved
   part's own discount is counted with the whole-bill one in the end row at its rate. The table still
   comes to the filed bases.
+
+- **The guests line is read when the receipt is built, not when the sale is recorded (A663 Part
+  3a).** A later copy reads the party as it is then: a count changed after payment, or a new bill
+  the party opens after paying, changes or removes the line on that copy, while the order label
+  stays as recorded. While a party, with any party joined into it, holds more than one bill that is
+  not abandoned (bills kept separate after joining tables, or a split by item), none of those bills
+  prints the line, and nor does a bill of a party joined into another (`readReceiptGuests`,
+  `apps/server/src/receipt-guests.ts`).
 
 - **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
   from `formatReceipt` retains one sale, tender, header and drawer, then replays without another

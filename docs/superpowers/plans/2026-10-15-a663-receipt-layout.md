@@ -33,7 +33,7 @@ the picture is kept as drawn.
 
 ## How the work is cut
 
-Eight pull requests (a ninth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+Nine pull requests (a tenth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
 two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
 #1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
@@ -48,7 +48,8 @@ request holds.
 | 2c | Each sale line stores its price before any discount, so every line prints its own price and discount (owner, Q9); the whole-bill discount prints once per VAT rate at the end of the table (owner, Q10). A database change | 2c.1, 2c.2, 2c.3a, 2c.3b, 2c.4, 2c.5, 2c.6, 2c.7, 2c.8 (nine dispatches) | After Part 2b has landed (#1772) |
 | 2d | Extras only on a dish sold by the unit: the server refuses them on a dish whose unit has a scale or decimals, and the till stops offering them (owner, 2026-10-15: "we don't offer half portions"). No migration | 2d.1, 2d.2, 2d.3 | After Part 2c has landed |
 | 2e | Every printed price before discounts comes from the stored price: the fallback that worked it back from the line's total is deleted, and the shared fixture and the tests that relied on it carry stored prices (owner, 2026-10-16). No migration | 2e.1, 2e.2, 2e.3 | After Part 2d has landed (#1779) |
-| 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
+| 3a | Guests and the amount per person, by the default rule, on every printed and A4 copy (owner Q2 answered 2026-10-15; A713 sums joined tables' counts) | 3a.1, 3a.2, 3a.3 | Now: Parts 1a–2e have landed |
+| 3b | The till's per-print choice: leave the guests line out or change the number, for that print only (owner, 2026-10-15) | 3b.1–3b.6 | After Part 3a has landed **and the owner has answered Q12**; the tasks build Q12's recommended answer |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
 Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
@@ -84,7 +85,8 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
   `feat/a663-2-full-invoice-layout`, `feat/a663-2b-one-rate-vat-lines`,
   `feat/a663-2c-price-before-discount`, `feat/a663-2d-whole-dish-extras`,
-  `feat/a663-2e-stored-list-price`, `feat/a663-3-guests`.
+  `feat/a663-2e-stored-list-price`, `feat/a663-3-guests` (Part 3a),
+  `feat/a663-3b-guests-when-printing`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -3496,97 +3498,272 @@ The fallback stays in this task, so every check stays green before and after.
 
 # Part 3 — guests and the amount per person
 
-Branch `feat/a663-3-guests`, from `main` after Parts 1a and 1b have merged **and A661 has merged** (A661 landed 2026-10-15, #1745)
-(this part edits `receipt-print.ts`). Uses owner question Q2's default unless the owner has answered.
+Revised 2026-10-16 on `main` at `77f1fb374`, after Parts 1a–2e landed and after the owner's
+2026-10-15 answers (Q2, and the per-print choice; `~/waitron-campaign-c/questions.md`, the entries
+from "WATCHER 2026-10-15 ~12:35" to "LANE A (A713, 2026-10-15 ~14:15)"). Two pull requests:
 
-Guests are stored on the party, not the bill: `parties.guest_count`, null or at least 1
-(`packages/db/src/schema/parties.ts:37, 62`), set when a table is seated
-(`apps/server/src/till-api.ts:2675-2685`). A bill belongs to a party through
-`working_orders.party_id` (`packages/db/src/schema/orders.ts:108`), and a party can hold several
-bills when it is split (`parties.ts:22-31`). A sale names its bill in `sales.working_order_id`.
+- **Part 3a — the default** (branch `feat/a663-3-guests`): the server prints the guests line on
+  every paper, A4, PDF and email copy by one rule, with no till change. It can land now.
+- **Part 3b — the per-print choice** (branch `feat/a663-3b-guests-when-printing`): the till lets
+  the person printing a simplified receipt change the number, or leave the line out, for that
+  print only. **It waits for owner question Q12** (where the choice sits), because the placement
+  is not obvious (see "Why Q12" below). Only Task 3b.1 is the same whatever the answer.
 
-Merged parties. A guest count is written only when a party is created (`insertParty`,
-`apps/server/src/parties.ts:247-256`; `git grep -n guestCount -- 'apps/server/src/*.ts'` on
-2026-10-15 found no other writer, and the two other party openings, `move-bill.ts:123-127` and
-`table-actions.ts:330-334`, pass `null`). When one party is merged into another, the absorbed party
-closes pointing at the survivor (`merged_into_party_id`, `table-actions.ts:289-292`), its main
-bill's items can be merged into the survivor's main bill (`mergeCheckedBills`,
-`table-actions.ts:259-270`), and the code treats a party and every party merged into it as one
-family (`partyFamily`, `parties.ts:431-437`). The survivor keeps only its own guest count, so after
-"table 4 (2 guests) joins table 5 (3 guests)" the survivor's bill holds both tables' food but says
-3 guests: dividing by it would be wrong.
+Why two: 3a is a server-only change to what prints; 3b changes a till→server request on three
+routes and adds a till control with browser tests. Together they are well past one reviewable pull
+request, and 3a should not wait for an answer it does not need.
 
-> **2026-10-15, A713:** this describes the code before A713. A guest count now has more writers:
-> the till's Guests sets or clears it at any time (`PUT /api/parties/:id/guests`); a Join, or a Move
-> guests onto a seated table, leaves the surviving party with both counts added together, or none
-> when either is unknown or the sum is over 999 (`combineParties`, `apps/server/src/table-actions.ts`);
-> and Split a table asks each side's count. The owner chose to add joined counts
-> ([till.md](../../backlog/till.md#decisions-and-deliberate-limits)), so a merged party's own count
-> already holds the sum. A bill split by item still has no count of its own. So the Rule's "no other
-> party was merged into it" condition and its "a merged party's bill print[s] neither" as it applies
-> to the survivor, the reader's `partyFamily` check, and Step 1's expectation of undefined for the
-> survivor's bill no longer match the owner's choice: a survivor's bill can print its own count.
+**Review path: FULL for both** (CLAUDE.md §5: a printed invoice is a legal document; 3b also
+changes a cross-package request shape): per-task reviews, then `/finish-branch` with the Codex
+run-it seat run twice, the second told to set this plan's checklist aside.
 
-Rule (Q2 default): print «4 comensales · por persona  101,75 €» when the sale's bill belongs to a
-party with a guest count, that party holds no other bill that is not `abandoned`
-(`workingOrderStatus`, `orders.ts:29-36`), no other party was merged into it (`partyFamily` returns
-only itself), and it was not itself merged into another (`merged_into_party_id` is null — whether a
-bill can still name a merged-away party when it is paid was not checked, so the reader refuses that
-case too). A split bill and a merged party's bill print neither. The per-person amount is
-`divideDecimal(total, guests, MONEY_SCALE)`, rounded half away from zero
-(`packages/shared/src/money.ts:100-101`). It is read when the receipt is printed, like the order
-label before issuance; nothing is stored.
+## What the owner decided, and what it means for the code
 
-### Task 3.1: Guests on the document
+1. **Joined tables print the sum, and the reader takes the party's own count.** A713 (landed)
+   adds the counts when parties combine: `combinedGuests` (`apps/server/src/table-actions.ts:207-211`)
+   gives the sum, or no count when either side had none or the sum is over 999, and it is written
+   onto the surviving party at `table-actions.ts:295`. The till can set or clear a party's count at
+   any time (`PUT /api/parties/:id/guests`, `apps/server/src/till-api.ts:2855`), and Split a table
+   sets each side's count (`POST /api/parties/:id/split-table`, `till-api.ts:2943`). So the reader
+   reads `parties.guest_count` of the bill's own party: no `partyFamily` sum of COUNTS (it would
+   add the merged-away party's count a second time, as lane A warned), and no "a party something
+   was merged into prints nothing" rule (the previous version of this part had both). The family
+   is still read, for BILLS: see the rule's last condition.
+2. **A bill split by item has no count of its own** (owner chose (B) for A713: no per-bill count
+   exists or is coming). So a party holding more than one bill that is not `abandoned` prints no
+   guests line by default. Merging a split bill back makes the emptied bill `abandoned`
+   (`mergeCheckedBills`, `apps/server/src/bill-actions.ts:197-200`), so the party prints its count
+   again.
+3. **The line is optional and editable when a receipt is printed** (owner, 2026-10-15 ~13:25):
+   on the till, the person printing a simplified receipt can leave the line out or change the
+   number for that print, starting from what would print by default. **The changed number is used
+   for that print only.** It never writes `parties.guest_count`, any sale, sale line, filed record
+   or anything a fingerprint reads; the only place it is kept is the printed bytes in that print
+   job's `print_jobs.payload` (`packages/db/src/schema/print-jobs.ts:48-50`), as every print's
+   bytes are. A full invoice prints the default (the owner's words name the receipt; Q12 says so).
+4. **Concise text.** The wording is the approved mockups' «4 comensales · por persona 101,75 €»
+   (both mockups, highlighted yellow, legend «optional: guests and per person (only when guests
+   were entered)»). One guest prints «1 comensal · por persona …», so a singular label is added.
+
+## The rule (the default, Part 3a)
+
+A sale prints «N comensales · por persona X €» when all of these hold, read when the receipt is
+built, nothing stored:
+
+- the sale names a bill (`sales.working_order_id`), and that bill belongs to a party
+  (`working_orders.party_id`, `packages/db/src/schema/orders.ts:108`) — a counter or delivery sale
+  has none;
+- the party has a count (`parties.guest_count`, null or 1 and up,
+  `packages/db/src/schema/parties.ts:37, 62`);
+- the party was not merged into another (`merged_into_party_id` is null, `parties.ts:45`). Its
+  count already went into the survivor's sum, and a bill paid before the join stays on it (P13,
+  `table-actions.ts:214-215`: «its paid and abandoned bills stay on it»), so printing it would print a
+  table's count beside the sum;
+- the party and every party merged into it (`partyFamily`, `apps/server/src/parties.ts:449`)
+  hold, together, exactly one bill whose status is not `abandoned` (`workingOrderStatus`,
+  `orders.ts:29-36`). Counting the family's bills, not only the party's own, matters when a table
+  that already paid joins another: its paid bill stays on the merged-away party (P13 above), its
+  guests are in the survivor's sum, and the survivor's own bill would otherwise print the sum
+  over a total that only the other table paid. Probe, 2026-10-16, a throwaway Vitest file on
+  `setupPartyVenue` (not committed): X seated 2 orders a Burger and pays 12,00 €; Y seated 3 orders
+  a Paella; Y joins X's table, bills merged. Y survives with count 5 and X is merged into Y. Reading
+  Y's paid 20,00 € bill, the party's own bills gave **5** («5 comensales · por persona 4,00 €»,
+  wrong: two of the five had paid); the family's bills gave **no line**. The same probe gave 5 by
+  both readings for two tables joined before either paid, bills merged (the survivor holds one
+  open bill and one abandoned).
+
+**Read at print time.** The rule reads the party as it is when the receipt
+is built, so a later copy can differ from the original: a party that orders again on a new bill
+after paying makes a reprint of the first bill print no line, and a count changed after payment
+changes the line on later copies. This plan accepts that as the default (owner FYI in the PR, no
+question); Part 3b's per-print choice is the way to print a different number on a copy.
+
+X is `divideDecimal(decimal(total), decimal(String(N)), MONEY_SCALE)`, rounded half away from zero
+(`packages/shared/src/money.ts:93-101`). It is the sale's TOTAL, tip excluded, divided by N.
+
+Worked examples, all 10% VAT, cash:
+
+| Case | Prints |
+| ---- | ------ |
+| Mesa 12 seated with 4, one bill of 407,00 € | «4 comensales · por persona 101,75 €» |
+| Mesa 4 (2) joins Mesa 5 (3), bills merged, one bill of 150,00 € | «5 comensales · por persona 30,00 €» |
+| The same join with bills kept separate (two bills on the survivor) | no line on either bill (probe, 2026-10-16) |
+| X seated 2 pays 12,00 €; then Y seated 3 joins X's table and pays 20,00 € | no line on Y's bill (probe above; the party's own count is 5) |
+| Mesa 7 seated with 4, a drink split onto a second bill | no line on either bill |
+| …and the split bill merged back before paying | «4 comensales · …» |
+| Mesa 4 seated with 4 and joined to Mesa 5, a bill split off, then Split a table with 3 staying and 1 leaving (`POST /api/parties/:id/split-table`, `requireSplitGuests`, `till-api.ts:781-789`) | «3 comensales · …» on the staying bill, «1 comensal · …» on the leaving one (probe, 2026-10-16: 3 and 1) |
+| Mesa 2 seated with 4, a bill split off and its only item moved back with Transfer items (`transferItems`, `apps/server/src/bill-actions.ts:210-232`), leaving the second bill open and empty | no line on the main bill (probe, 2026-10-16: the emptied bill stays `open`; what closes it later was not checked) |
+| Mesa 3 seated with no count | no line |
+| A counter sale | no line |
+| A table seated with 1, 12,00 € | «1 comensal · por persona 12,00 €» |
+
+**Where it prints.** After the payment block, in its own ruled section, before the footer message
+— where both approved mockups draw it. In `buildReceiptDocument` that is after the payment
+section's closing `rule()` (`apps/server/src/receipt-document.ts:421`) and before the footer
+(`:423-427`), followed by its own `rule()`; a bill with no payment block (a filed but unpaid
+invoice) prints it after the TOTAL section's rule (`:389`). **On both documents**: the simplified
+receipt and the full invoice, on paper and on the A4 page (both mockups draw it; the spec
+`docs/backlog/printers.md` A663 section lists Part 3 without limiting it to one).
+
+**Joined tables with separate bills print nothing.** The owner's words were "joined tables print
+the sum"; with bills kept separate there are two bills, so neither knows its share of the guests,
+and the default prints no line on either. The PR says so in one line, and Q12's preamble does too;
+Part 3b's per-print choice lets the waiter add a number to either.
+
+On 58 mm paper (30 columns, `packages/printing/src/layout.ts:8`) «4 comensales · por persona» is
+26 characters, so with the 8-character «101,75 €» the amount drops to its own line, as an amount
+row does when it does not fit (`receipt-document.ts:67`); on 80 mm (42 columns) it fits on one.
+
+## Every print path, and how each gets the guests
+
+Every paper receipt, simplified or full, is built by `buildReceiptBytes`
+(`apps/server/src/receipt-print.ts:170-227`), and every A4, PDF and email copy of a full invoice by
+`readInvoiceDocument` (`apps/server/src/invoice-document.ts:30-157`). Part 3a changes those two and
+nothing else; the paths below reach them unchanged:
+
+| Path | Route or caller | Reaches |
+| ---- | --------------- | ------- |
+| Automatic receipt at payment (department set to print automatically, or a full invoice) | `enqueueSaleReceipt` (`receipt-print.ts:251-276`) from `bill-payments.ts:772`, `till-sale.ts:997`, `:1601`, `:1762` | `enqueueOriginalReceipt` (`:511-540`) → `resolvePrinterAndReceipt` (`:233-248`) → `buildReceiptBytes` |
+| Print receipt on the till's paid-sale screen (department set to print on request) | `POST /api/sales/:id/receipt` (`till-api.ts:2524-2545`) → `printSaleReceipt(…, false, …)` (`till-sale.ts:843-868`) | `enqueueOriginalReceipt` → `buildReceiptBytes` |
+| Reprint on the paid-sale screen | `POST /api/sales/:id/reprint` (`till-api.ts:2547-2566`) → `reprintSale` (`till-sale.ts:2180-2188`) → `enqueueReceiptReprint` (`receipt-print.ts:308-319`) | `enqueueReceiptCopy` (`:322-339`) → `buildReceiptBytes` |
+| Reprint of a sale opened from Find a bill | `POST /api/transactions/:saleId/reprint` (`transaction-receipt-api.ts:43-85`) | `enqueueReceiptCopy` → `buildReceiptBytes` |
+| Reprint from the dashboard's orders | `reprintOrderReceipt` (`orders-reprint.ts:11-48`, called at `orders-api.ts:291`) | `enqueueReceiptCopy` → `buildReceiptBytes` |
+| A full invoice on a receipt printer | `enqueueInvoiceReceipt` (`receipt-print.ts:345-369`, from `invoice-delivery-actions.ts:101`) and `enqueueOriginalReceipt` (`invoice-delivery-actions.ts:246`) | `buildReceiptBytes` |
+| A full invoice on an A4 printer, by email, as a PDF | `boot.ts:1627` (delivery documents), `boot.ts:1670` (page printing, read at `page-print-api.ts:239`), `orders-invoice-pdf.ts:23` | `readInvoiceDocument` |
+
+Three paths RESEND a receipt already printed rather than build a new one: the till's retry of a
+failed original (`POST /api/sales/:id/receipt/retry`, `till-api.ts:2336-2355`), an invoice
+delivery's resend (`invoice-delivery-actions.ts:256`) and the print queue's resend
+(`print-api.ts:1487`). Each goes through `resendInvoicePrintJob` (`apps/server/src/invoice-print.ts:23`)
+to `resendPrintJob` (`packages/printing/src/outbox.ts`), which queues a new job holding the stored
+job's `payload`. They need no change: a resend prints what was printed, and in Part 3b a resend of
+a print made with a changed number prints that number again.
+
+`buildReceiptBytes` already has the sale's id (its `saleId` argument) and a transaction, so it
+reads the guests itself; no caller changes in 3a.
+
+## Why Q12: the per-print choice has no obvious home
+
+What the till offers today when a receipt prints (read 2026-10-16):
+
+- **No print dialog exists.** The paid-sale screen (`apps/till/src/screens/till-ticket-view.ts`)
+  shows the receipt on screen and a row of buttons (`:902-985`): Print receipt (`:925`, shown when
+  the department prints on request) or Reprint (`:908`, `:949`), Payment slip, Open drawer.
+  Reprint opens a window only when the venue offers more than one receipt language, and that
+  window asks only the language (`apps/till/src/widgets/reprint-language-dialog.ts`, opened from
+  `#reprint`, `till-app.ts:5829-5841`).
+- **In a department that prints automatically, nobody touches anything before the receipt
+  prints**: `enqueueSaleReceipt` prints it inside the payment (`receipt-print.ts:270-274`). A
+  choice made after payment can only reach a Reprint, and a reprint prints «DUPLICADO»
+  (`receipt-document.ts:209`, `duplicate` is true at `receipt-print.ts:331`).
+
+So the choice could sit on the paid-sale screen (A), in a window on every Print receipt and
+Reprint (B), or on the payment screen before charging (C), and each costs something different.
+That is a decision for the owner: **Q12**, with the mockup
+`docs/backlog/mockups/a663-receipt-layout/3-guests-when-printing.png`. The tasks for 3b below
+build the recommended A; B or C changes Tasks 3b.4–3b.6, and C also changes 3b.2–3b.3 (the
+override would ride on the payment request instead of the print routes).
+
+---
+
+## Part 3a — the default
+
+### Task 3a.1: Guests on the document
 
 **Files:**
-- Modify: `packages/country/src/country.ts`, `packages/country-es/src/receipt-labels.ts` — labels
-  `guests` («{count} comensales» / ca «{count} comensals» / gl «{count} comensais» / eu
-  «{count} mahaikide») and `perPerson` («por persona» / «per persona» / «por persoa» /
-  «pertsonako»)
-- Modify: `apps/server/src/receipt-document.ts` (`ReceiptDocumentInput.guests?: number`; a section
-  after payment: `row(\`${guestsText} · ${label.perPerson}\`, formatMoney(perPerson))`)
+- Modify: `packages/country/src/country.ts` (`RECEIPT_LABEL_KEYS`, `:57-92`): add `guest`,
+  `guests`, `perPerson`.
+- Modify: `packages/country-es/src/receipt-labels.ts`: es-ES `guest` «comensal», `guests`
+  «comensales», `perPerson` «por persona»; ca-ES «comensal», «comensals», «per persona»; gl-ES
+  «comensal», «comensais», «por persoa»; eu-ES «mahaikide», «mahaikide», «pertsonako» (Q7: ship
+  the plan's wording).
+- Modify: `apps/server/src/receipt-document.ts`: `ReceiptDocumentInput.guests?: number`; the
+  section described under "Where it prints".
 - Test: `apps/server/src/receipt-document.test.ts`, `apps/server/src/receipt-ticket.test.ts`,
-  `packages/country-es/src/spain.test.ts`
+  `apps/server/src/invoice-raster.test.ts` (it reads `layoutInvoicePages`).
+  `packages/country-es/src/spain.test.ts` needs no new case: «gives %s every label as non-empty
+  text» (`:269-276`) already fails until all four languages carry the three new keys.
 
-- [ ] **Step 1: Failing tests**
+- [ ] **Step 1: Failing tests** in `receipt-document.test.ts` (a new `describe("guests and the
+  amount per person")`):
 
 ```ts
-it("prints guests and the amount per person after the payment when guests were entered", () => {
-  const rows = buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 4 }).elements.flatMap((e) =>
-    e.kind === "amount" ? [[e.caption, e.amount]] : [],
-  );
-  const at = rows.findIndex(([caption]) => caption === "4 comensales · por persona");
-  expect(rows[at]).toEqual(["4 comensales · por persona", "4,92 €"]); // 19,69 ÷ 4 = 4,9225 → 4,92
-  expect(at).toBeGreaterThan(rows.findIndex(([caption]) => caption === "Cambio"));
+const amounts = (input: ReceiptDocumentInput) =>
+  buildReceiptDocument(input).elements.flatMap((e) => (e.kind === "amount" ? [[e.caption, e.amount]] : []));
+
+it("prints guests and the amount per person after the payment, in its own section", () => {
+  const { elements } = buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 4 });
+  const at = elements.findIndex((e) => e.kind === "amount" && e.caption === "4 comensales · por persona");
+  expect(elements[at]).toMatchObject({ amount: "4,92 €" }); // 19,69 ÷ 4 = 4,9225 → 4,92
+  const change = elements.findIndex((e) => e.kind === "amount" && e.caption === "Cambio");
+  expect(at).toBeGreaterThan(change);
+  expect(elements[at - 1]).toEqual({ kind: "rule" });
+  expect(elements[at + 1]).toEqual({ kind: "rule" }); // the fixture's footer «Hasta pronto» follows
 });
 
 it("prints no guests line without guests", () => {
-  const text = JSON.stringify(buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements);
-  expect(text).not.toContain("comensales");
+  expect(JSON.stringify(buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements)).not.toContain("comensal");
+});
+
+it("says comensal for one guest", () => {
+  expect(amounts({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 1 })).toContainEqual(["1 comensal · por persona", "19,69 €"]);
 });
 
 it("rounds a half cent away from zero", () => {
   const input = { ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 2, result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, total: "0.05" } };
-  expect(JSON.stringify(buildReceiptDocument(input).elements)).toContain("0,03 €");
+  expect(amounts(input)).toContainEqual(["2 comensales · por persona", "0,03 €"]);
+});
+
+it("prints the line in the receipt's language", () => {
+  expect(amounts({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 3, invoiceLocale: "ca-ES" })).toContainEqual(
+    ["3 comensals · per persona", "6,56 €"], // 19,69 ÷ 3 = 6,5633 → 6,56
+  );
 });
 ```
 
-Plus a 58 mm and 80 mm case in `receipt-ticket.test.ts` that the line reads back whole (on 58 mm
-the amount moves to its own line).
+  Plus a simplified-receipt case (the fixture with `invoiceType: "F2"`) asserting the same
+  position, and a case with no payment block (`tender: { method: "unpaid" }`, `till-sale.ts:267`, and no
+  `payments`) asserting the line follows the TOTAL section's rule, with no second rule between. In `receipt-ticket.test.ts`, a 58 mm and an
+  80 mm case: `printedLines` of `formatReceipt({ ...FULL_INVOICE_FIXTURE, guests: 4, printer })`
+  holds «4 comensales · por persona» whole; on 58 mm «4,92 €» is on the next line, on 80 mm on the
+  same one. In `invoice-raster.test.ts`, the A4 layout (`layoutInvoicePages`) of the fixture with
+  `guests: 4` draws «4 comensales · por persona» and «4,92 €».
+  «prints no guests line without guests» passes before any code: it is a guard against a line
+  printed unasked, not one of the failing tests.
+  Run `pnpm --filter @waitron/server exec vitest run src/receipt-document.test.ts` — the other
+  cases FAIL: they find no «comensales» row (`at` is -1, and `toContainEqual` reports the rows it
+  got). Vitest does not typecheck, so also run `pnpm --filter @waitron/server exec tsc --noEmit`,
+  which rejects `guests` as a property `ReceiptDocumentInput` does not have.
+- [ ] **Step 2: Code.** Labels in both files; in `buildReceiptDocument`, after the payment
+  section's `rule()` (`receipt-document.ts:421`), with `divideDecimal` and `MONEY_SCALE` from
+  `@waitron/shared`. No `Number` arithmetic on money (Global Constraints).
 
-- [ ] **Steps 2–5:** run (FAIL), implement, run (PASS) plus the receipt suites, commit.
+  ```ts
+  if (guests !== undefined) {
+    const people = `${guests} ${guests === 1 ? label.guest : label.guests}`;
+    const each = divideDecimal(decimal(result.total), decimal(String(guests)), MONEY_SCALE);
+    row(`${people} · ${label.perPerson}`, formatMoney(each, locale));
+    rule();
+  }
+  ```
+- [ ] **Step 3:** The four files pass; then the receipt suites (Global Constraints), reading the
+  `Tests` count. **The two captured byte files must not change**: `FULL_INVOICE_FIXTURE` has no
+  guests, so a run that changes `full-invoice-58mm.bin` or `full-invoice-80mm.bin` is a defect.
+  `pnpm --filter @waitron/server exec tsc --noEmit`, `pnpm --filter @waitron/country-es test`.
+  **Commit.**
 
-### Task 3.2: Reading the guests, and passing them to paper and A4
+### Task 3a.2: The reader, and both builders pass it
 
 **Files:**
 - Create: `apps/server/src/receipt-guests.ts`
-- Modify: `apps/server/src/receipt-print.ts:141-201` (`buildReceiptBytes`: read and pass `guests`)
-- Modify: `apps/server/src/invoice-document.ts:120-156` (pass `guests`)
-- Test: `apps/server/src/receipt-guests.test.ts` (`useVenueDb`), `apps/server/src/receipt-print.test.ts`
+- Modify: `apps/server/src/receipt-print.ts` (`buildReceiptBytes`, `:170-227`: read and pass
+  `guests`), `apps/server/src/invoice-document.ts` (`readInvoiceDocument`: the same)
+- Test: `apps/server/src/receipt-guests.test.ts` (new, `useVenueDb` through `setupPartyVenue`),
+  `apps/server/src/receipt-print.test.ts`, `apps/server/src/invoice-document.test.ts`
 
 **Interfaces:**
-- Produces: `readReceiptGuests(tx: Transaction, saleId: string): Promise<number | undefined>`.
+- Produces: `readReceiptGuests(tx: Transaction, saleId: string): Promise<number | undefined>` —
+  the count the rule above prints, or `undefined` for no line. Part 3b reuses it.
 
 ```ts
 export async function readReceiptGuests(tx: Transaction, saleId: string): Promise<number | undefined> {
@@ -3597,34 +3774,242 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
     .innerJoin(parties, eq(parties.id, workingOrders.partyId))
     .where(eq(sales.id, saleId));
   if (row === undefined || row.guests === null || row.mergedInto !== null) return undefined;
-  if ((await partyFamily(tx, row.partyId)).length > 1) return undefined;
+  const family = await partyFamily(tx, row.partyId);
   const bills = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(and(eq(workingOrders.partyId, row.partyId), ne(workingOrders.status, "abandoned")));
+    .where(and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned")))
+    .limit(2);
   return bills.length === 1 ? row.guests : undefined;
 }
 ```
 
-- [ ] **Step 1: Failing tests** (`receipt-guests.test.ts`, with `useVenueDb` and the server's own
-  seat/sale helpers — find the fixtures `till-api.receipt.test.ts` uses to seat a table and pay):
-  a seated party of 4 paying one bill → 4; a party seated with no guest count → undefined; a counter
-  sale → undefined; a party split into two bills → undefined for each; a party whose second bill was
-  abandoned → 4; a party of 3 that another party of 2 was merged into (`seatTable` both, then the
-  merge `table-actions.ts` performs) → undefined for the survivor's bill, and undefined for any bill
-  still on the absorbed party. Then a `receipt-print.test.ts` case: the printed receipt of a party-of-4 bill
-  contains «4 comensales · por persona».
-- [ ] **Steps 2–5:** run (FAIL), implement, run (PASS) plus the receipt suites, commit.
+- [ ] **Step 1: Failing tests.** `receipt-guests.test.ts`, with the helpers of
+  `apps/server/src/testing/party-venue.ts` (`seat(v, tableId, guestCount)`, `orderForParty`,
+  `split`, `pay`, `counterOrder`), each case paying the bill and reading the sale's id from
+  `sales.working_order_id`:
+  1. a party seated with 4 paying its one bill → 4;
+  2. a party seated with no count → `undefined`;
+  3. a counter sale → `undefined`;
+  4. a party of 4 with a dish split onto a second bill → `undefined` for each bill paid;
+  5. the same, the split bill merged back (`mergeBills`, `apps/server/src/bill-actions.ts:163`; `move-merge.test.ts` calls it) → 4;
+  6. Mesa 4 seated with 2 joining Mesa 5 seated with 3, bills merged (as the "guest counts when
+     parties combine" cases in `party-table-actions.test.ts:1575-1590` join) → 5 for the
+     survivor's bill; the same join with bills kept separate → `undefined` for both;
+  7. a bill paid on a party that was afterwards merged into another (`merged_into_party_id` set by
+     the join) → `undefined`;
+  8. a count changed after seating (`setPartyGuests`, `apps/server/src/parties.ts:224`, which
+     `PUT /api/parties/:id/guests` calls) → the new count;
+  9. X seated with 2 pays a Burger (12,00 €); Y seated with 3 orders a Paella, joins X's table with
+     bills merged (`joinTables(tx, cfg, y.partyId, xTable, { bills: "merge", otherPartyId:
+     x.partyId, … })`) and pays → `undefined` for Y's bill, though `parties.guest_count` of Y is 5
+     (assert that too, so the case shows why);
+  10. Split a table: a party seated with 4 at Mesa 4, joined to free Mesa 5, a Burger and a Vino,
+      the Vino split onto a second bill, then `splitTable(tx, cfg, partyId, mesa5, secondBill,
+      { …, guests: { staying: 3, leaving: 1 } })` (as `party-table-actions.test.ts:1100-1104`
+      does) → 3 for the staying bill and 1 for the leaving one once each is paid;
+  11. a party of 4 with a bill split off whose only item is moved back with `transferItems`
+      (`bill-actions.ts:210`), leaving that bill open and empty → `undefined` for the main bill.
+  Compute each command's revision (`revisionOf`) before opening the transaction that acts:
+  `revisionOf` opens a transaction of its own, and calling it inside `inTx` fails with «write
+  lock: a body asked for the lock it is already holding» (the probe hit this).
+  Then in `receipt-print.test.ts`, beside "a party's receipt names the party and its tables"
+  (`:2132`, which seats, configures an automatic receipt printer and decodes the printed job): a
+  party seated with 4 that pays 12,00 € prints «4 comensales · por persona» and «3,00 €»; a party
+  seated with no count prints no «comensal». In `invoice-document.test.ts`: a full invoice whose bill
+  belongs to a party of 4 reads `guests: 4`; one whose bill has no party reads none. Build it on
+  the `billWith` → `completeBillPayment` case («replays a paid discounted bill…»,
+  `invoice-document.test.ts:233-292`): insert a `parties` row with `guest_count` 4 and set the
+  bill's `working_orders.party_id` WHILE THE BILL IS OPEN, before `completeBillPayment`. Once the
+  bill is settled the trigger `working_orders_enforce_transition`
+  (`packages/db/drizzle/0086_working_orders_recreate_triggers.sql:9`) refuses the write. Probe,
+  2026-10-16, same throwaway file: setting `party_id` on a paid bill answered «working order cannot
+  make that transition»; on an open bill it was accepted. The `recordSale` cases have no bill at
+  all.
+  Run the three files — FAIL: `receipt-guests.ts` does not exist; the print case finds no
+  «comensales».
+- [ ] **Step 2: Code.** The reader as above; `buildReceiptBytes` passes
+  `guests: await readReceiptGuests(tx, saleId)` to `formatReceipt` (omitted when `undefined`);
+  `readInvoiceDocument` returns it the same way.
+- [ ] **Step 3: Proof by deletion.** Remove the `mergedInto` check: case 7 fails; remove the
+  `abandoned` filter: case 5 fails; remove the bill count: case 4 fails; count only the party's own
+  bills (`eq(workingOrders.partyId, row.partyId)` in place of the family): case 9 fails, answering
+  5. Restore each.
+- [ ] **Step 4:** The three files, then the receipt suites, reading the `Tests` count;
+  `tsc --noEmit`. **Commit.**
 
-### Task 3.3: LOOK, gate, backlog
+### Task 3a.3: LOOK, gate, backlog, pull request
 
-- [ ] Extend `receipt-look.ts` with `guests: 4` on the one-rate sample and the full invoice; run;
-  open the pictures; the line sits after the payment, before the footer, in its own ruled section.
-- [ ] Fiscal gate, unedited, PASS.
-- [ ] Backlog: point 6 deleted; A663 entry deleted from `docs/backlog/printers.md` and its line removed
-  from `docs/backlog.md` if no point is left open; if Q2 is still unanswered, leave a one-line entry "A663 Q2: split
-  bills print no guests line — owner to confirm".
-- [ ] Commit, then `/finish-branch`.
+- [ ] **Step 1: LOOK.** In `apps/server/scripts/receipt-look.ts`, give the one-rate sample
+  (`MOCKUP`, `:68-95`, total 407,00 €) `guests: 4` and the A4 `FULL` sample `guests: 4`; run
+  `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts /tmp/a663-3a-look` and open
+  every picture. Expected: «4 comensales · por persona 101,75 €» after Efectivo and Cambio, between
+  two rules, before «¡Gracias por su visita!», as `1-simplified-receipt.png` draws it; on 58 mm the
+  amount on the next line; on the A4 page after the payment rows. Only the pictures of those
+  samples change: run the script on `main` first into `/tmp/a663-3a-look-base` and `cmp` the rest.
+- [ ] **Step 2: The fiscal gate, UNEDITED** (Global Constraints). It must pass: nothing here
+  writes.
+- [ ] **Step 3: Backlog.** In `docs/backlog/printers.md`'s A663 entry replace the Part 3 bullet with
+  one for Part 3b: «Part 3b: the till lets the person printing a simplified receipt change the
+  number of guests or leave the line out, for that print only; waits for Q12.» In the entry «The
+  till's on-screen receipt is a second copy of the layout» (`printers.md`, and its line in
+  `docs/backlog.md`) add that it does not show the guests line. Check `docs/backlog.md`'s A663 line
+  still says what is left.
+- [ ] **Step 4: `/finish-branch`** (FULL). The PR says: what prints and when (the rule's table
+  above), that no filed figure, record or byte file changes, and that a full invoice prints the
+  line too, as both mockups draw it. Two owner FYI lines, no question: joined tables whose bills
+  were kept separate print no guests line on either bill; and a later copy reads the party as it
+  is then (a party that orders again after paying, or whose count changes, prints a different
+  line, or none, on a reprint).
+
+---
+
+## Part 3b — the per-print choice (waits for Q12)
+
+Branch `feat/a663-3b-guests-when-printing`, from `main` after Part 3a has landed **and the owner
+has answered Q12**. The tasks build option A, the recommended answer. If the owner picks B or C,
+rewrite Tasks 3b.4–3b.6 (and, for C, 3b.2–3b.3) before dispatching any of them; Task 3b.1 stands
+for every answer.
+
+**The request contract** (three routes): the JSON body may carry `guests`.
+
+- absent: the default rule (Part 3a), as today;
+- `null`: print no guests line;
+- a whole number from 1 to 999 (`isValidGuestCount`, `packages/shared/src/guest-count.ts:2-7`, the
+  bound A713's routes use through `requireGuestCount`, `till-api.ts:768-773`): print the line with
+  this number;
+- anything else (0, 1000, 2.5, `"4"`, `true`): refused, 400 `management.request_invalid` with
+  `{ field: "guests" }`, the code those routes already answer for a bad `language`
+  (`till-api.ts:2555-2557`, `transaction-receipt-api.ts:49-50`).
+
+It never writes `parties`, `working_orders`, `sales`, `sale_lines`, `registros_facturacion`,
+`receipt_reprints` beyond the row the reprint already writes, or anything else; it reaches only the
+bytes of the job it prints. The server applies it to whatever the route prints, a full invoice
+included; the till sends one only for a simplified receipt.
+
+### Task 3b.1: The ticket carries the default count
+
+**Files:** `packages/shared/src/receipt-text.ts` (`ReceiptPresentation`, `:44-48`: add
+`receiptGuests?: number` — what prints by default; absent, no line), `apps/server/src/receipt-presentation.ts`
+(`readReceiptPresentation` reads it with `readReceiptGuests`), test
+`apps/server/src/receipt-guests.test.ts` (or the suite that pins `GET /api/sales/:id`; find it
+with `git grep -l "api/sales/\${" -- 'apps/server/src/*.test.ts'`).
+
+`readReceiptPresentation` feeds every ticket the till reads: payment (`bill-payments.ts:757`,
+`till-sale.ts:983`, `:1587`, `:1748`), `GET /api/sales/:id` (`till-sale.ts:826`) and a sale opened
+from Find a bill (`transaction-receipt.ts:138`). `ReceiptDocumentInput.result` omits
+`ReceiptPresentation`'s keys (`receipt-document.ts:45`), so the document cannot read it by
+mistake. The till's `TillSaleResult` extends `ReceiptPresentation`
+(`apps/till/src/api/client.ts:881`), so the field reaches the till's type with no till change.
+
+- [ ] **Step 1: Failing test:** a party of 4 paying its one bill gets `receiptGuests: 4` on the
+  payment's ticket and on `GET /api/sales/:id`; a split bill's ticket has no `receiptGuests` key.
+  Run — FAILS: the key is absent.
+- [ ] **Step 2–3:** Code; the file passes; `pnpm --filter @waitron/shared exec tsc --noEmit`,
+  `pnpm --filter @waitron/server exec tsc --noEmit`, `pnpm --filter @waitron/till exec tsc
+  --noEmit`. **Commit.**
+
+### Task 3b.2: Print receipt and Reprint take an override
+
+**Files:** `apps/server/src/receipt-guests.ts` (add `type GuestsChoice = number | null | undefined`
+and `readGuestsChoice(body: Record<string, unknown>): GuestsChoice`, which throws the refusal
+above), `apps/server/src/receipt-print.ts` (`buildReceiptBytes` takes a `GuestsChoice`: `undefined`
+reads the default, `null` prints none, a number prints it; thread it through
+`enqueueOriginalReceipt`, `enqueueReceiptReprint`, `enqueueReceiptCopy` as a last optional
+argument, so no other caller changes), `apps/server/src/till-sale.ts` (`printSaleReceipt`,
+`reprintSale`), `apps/server/src/till-api.ts` (the `receipt` action of the loop at `:2524` reads
+the body — `payment-slip` does not — and `/api/sales/:id/reprint` at `:2547`). Test: a new
+`apps/server/src/receipt-guests.routes.test.ts`, built like `receipt-language.test.ts` (it signs in a
+till, pays, posts to these routes and reads `print_jobs.payload` with `printedLines`, `:235-277`).
+
+- [ ] **Step 1: Failing tests.** For a party of 4 paying 12,00 €: Reprint with `{ guests: 5 }`
+  prints «5 comensales · por persona» and «2,40 €»; with `{ guests: null }` prints no «comensal»;
+  with `{}` prints «4 comensales». Print receipt (a department set to print on request) with
+  `{ guests: 2 }` prints «2 comensales · por persona» and «6,00 €». A counter sale reprinted with
+  `{ guests: 3 }` prints «3 comensales». Each of `0`, `1000`, `2.5`, `"4"` answers 400
+  `management.request_invalid` `{ field: "guests" }` and queues no job. **Nothing written:**
+  after a reprint with `{ guests: 5 }`, `parties.guest_count` is still 4, the sale's
+  `registros_facturacion` count (`registroCount`, `testing/bill-venue.ts:378`) is unchanged, and a
+  following reprint with `{}` prints «4 comensales». Run — FAIL: the override is ignored («4
+  comensales» where 5 is expected) and the bad values answer 200.
+- [ ] **Step 2–3:** Code; the file passes; the receipt suites and `receipt-language.test.ts`;
+  `tsc`. **Commit.**
+
+### Task 3b.3: The Find a bill reprint takes the override
+
+**Files:** `apps/server/src/transaction-receipt-api.ts` (`:43-85`, read `guests` with
+`readGuestsChoice` beside `language`, pass it to `enqueueReceiptCopy`), test
+`apps/server/src/transaction-receipt-api.test.ts`.
+
+- [ ] **Step 1: Failing tests:** `{ guests: 5 }` prints «5 comensales»; `{ guests: null }` none;
+  `{ guests: 0 }` answers 400 `{ field: "guests" }` and queues nothing. Run — FAIL as in 3b.2.
+- [ ] **Step 2–3:** Code; the file passes; `tsc`. **Commit.**
+
+### Task 3b.4: The till's client sends it
+
+**Files:** `apps/till/src/api/client.ts` (`printReceipt` `:2737`, `reprint` `:2635`,
+`reprintTransaction` `:3475` each take an optional `guests?: number | null` and send the key only
+when it is not `undefined`), test `apps/till/src/api/client.test.ts`.
+
+- [ ] **Step 1: Failing tests:** each method's body with `guests: 5`, with `null`, and without
+  (no `guests` key; the language key unchanged). Run — FAIL. **Steps 2–3:** code, pass, **commit.**
+
+### Task 3b.5: The field on the paid-sale screen (option A)
+
+**Files:** `apps/till/src/screens/till-ticket-view.ts`, `apps/till/src/i18n/strings.ts` (en and
+es), tests `apps/till/src/screens/till-ticket-view.test.ts` and
+`apps/till/src/screens/till-ticket-view.a11y.test.ts` (real Chromium: `apps/till` runs Vitest in
+browser mode).
+
+What it builds (mockup panel A): above the receipt buttons (`:902`), when the sale is a simplified
+receipt (`invoiceType !== "F1"`) and the screen shows Print receipt or Reprint, one
+`wt-number-stepper` (`packages/ui/src/components/wt-number-stepper.ts`; a screen draws no field of
+its own, CLAUDE.md §3), `name="guests"`, label `seat.guest_count` («Comensales», the word the seat
+and Guests windows use), `min` 1, `max` 999, `clearable` (− at 1 empties it), placeholder
+`receipt.guests_none` «Sin línea» / "No line" — the one new string. It starts on the ticket's
+`receiptGuests`, or empty when absent, and starts again when another sale is shown. It saves
+nothing, so it takes no draft scope and asks nothing on leaving: leaving the screen forgets it.
+Print receipt and Reprint dispatch their events with `detail: { guests }`: `null` when the field is
+empty, the number otherwise. Validation follows design-system.md → Forms: nothing until the first
+press; a press on an invalid value (0, over 999, not a whole number — `parseGuestCount`,
+`apps/till/src/widgets/guest-count.ts:4-10`, which already reads blank as "none") marks the field
+with `seat.guest_count_invalid` (its sentence already says 1 to 999 or empty), shows `form.fix_fields`
+on its own line above the buttons, prints nothing, and keeps Print receipt and Reprint disabled
+until the field is fixed. A full invoice shows no field.
+
+- [ ] **Step 1: Failing tests** (`till-ticket-view.test.ts`): a simplified ticket with
+  `receiptGuests: 4` shows the field holding 4 above Reprint; Reprint's event carries
+  `{ guests: 4 }`; after + it carries 5; after emptying it carries `null`; a ticket without
+  `receiptGuests` shows the field empty with «No line» and Reprint carries `null`; typing 0 then
+  Reprint dispatches nothing, shows the field's sentence and the bottom sentence, and disables
+  Reprint until 3 is typed; an F1 ticket shows no field; Print receipt (on-request ticket) carries
+  the value the same way. a11y: the existing axe cases cover the screen with the field, in both
+  themes. Run `pnpm --filter @waitron/till exec vitest run src/screens/till-ticket-view.test.ts` —
+  FAILS: no `[name="guests"]` element.
+- [ ] **Step 2–3:** Code; both files pass. **Commit.**
+
+### Task 3b.6: The till sends the field's value, then LOOK, gate, PR
+
+**Files:** `apps/till/src/till-app.ts` (`#onPrintReceipt`, `:6192`; `#onReprint`,
+`#reprint`, `#sendReprint`, `#onReprintLanguage`, `:5819-5869` — the chosen guests ride in
+`reprintAsking` while the language window is open, so a reprint in another language keeps them),
+test `apps/till/src/till-app-bill-payments.test.ts` (or the till-app suite that already presses
+Reprint; find it with `git grep -l 'data-test="reprint"\|\[data-test=reprint\]' apps/till/src`).
+
+- [ ] **Step 1: Failing tests:** after paying, changing the field to 5 and pressing Reprint calls
+  `reprint(id, undefined, 5)`; with two receipt languages, choosing Català in the window calls
+  `reprint(id, "ca-ES", 5)`; a Find a bill receipt calls `reprintTransaction(saleId, undefined,
+  5)`; Print receipt on an on-request sale calls `printReceipt(id, 5)`; an untouched field sends
+  the ticket's own number. Run — FAIL. **Steps 2–3:** code, pass, **commit.**
+- [ ] **Step 4: LOOK** in real Chromium, both themes, at 390 px and 1280 px: the paid-sale screen
+  of a simplified sale with the field holding 4, empty, and marked invalid; a Find a bill receipt;
+  a full invoice (no field). Take them from the dev stack (`wa-wt demo <worktree-name>`), open
+  each, and attach them to the PR. What the printer receives is pinned by Task 3b.2's decoded jobs.
+- [ ] **Step 5:** The fiscal gate, UNEDITED. Backlog: delete the Part 3b bullet from the A663 entry
+  in `docs/backlog/printers.md`, and the A663 entry itself with its line in `docs/backlog.md` if
+  nothing else is left.
+- [ ] **Step 6: `/finish-branch`** (FULL; a cross-package request shape changes). The PR names the
+  contract above and that the override is never stored.
 
 ---
 
@@ -3768,7 +4153,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
   2.6 (operation date pinned); point 3 → 2.4; point 4 → 2.3b (the line it applies to is replaced;
   Q4); the owner's Q8 answer → 2.3a and 2.3d;
   point 5 → 1.3 (on paper and A4; the till's on-screen copy is a follow-up, Task 1.8); point 6 →
-  Part 3; point 7 (drink/food subtotals) → withdrawn by the owner on 2026-10-15. The BOE re-check is done above; Task 2.6 records the one open legal question.
+  Parts 3a and 3b; point 7 (drink/food subtotals) → withdrawn by the owner on 2026-10-15. The BOE re-check is done above; Task 2.6 records the one open legal question.
 - The "VERI\*FACTU line may be printed in bold for margin" option in the spec is not taken: the
   roll font is already a bold face, and Orden HAC/1177/2024 art. 20.1.b asks only that the phrase be
   as visible as the rest; the caption keeps the other lines' size and weight.
@@ -3776,8 +4161,9 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
   `formatAmount`, `ReceiptTable`, `ReceiptTableRow`, `tableLines`, `baseFromGross`,
   `beforeVatFigures`, `groupDiscounts` (replaced in Part 2c by `invoiceDiscounts`, `FiguredGroup`,
   `InvoiceDiscounts`), `GroupDiscount`, `quantityText`, `listUnitPriceGross` (`sale_lines`,
-  `RecordSaleLine`, `TillSaleLine`), `dishFamily`, `readReceiptGuests`,
-  `drinkFoodSubtotals`, label keys as in Tasks 1.2, 2.1, 3.1 and 4.5.
+  `RecordSaleLine`, `TillSaleLine`), `dishFamily`, `readReceiptGuests`, `receiptGuests`
+  (`ReceiptPresentation`), `GuestsChoice`, `readGuestsChoice`,
+  `drinkFoodSubtotals`, label keys as in Tasks 1.2, 2.1, 3a.1 and 4.5.
 
 ---
 
@@ -3785,7 +4171,8 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 
 Answer by quoting the question number. Q4, Q5, Q7 and Q8 were answered on 2026-10-15 and Part 2
 builds the answers; Q9, Q10 and Q11 were answered on 2026-10-15 with the alternatives, after Part 2
-had built the defaults, and Parts 2b and 2c build the answers; Part 3 can be built on Q2's default;
+had built the defaults, and Parts 2b and 2c build the answers; Q2 was answered on 2026-10-15 and
+Part 3a builds it; Q12 (2026-10-16) is open and Part 3b waits for it;
 Q1, Q3 and Q6 were for Part 4, which the owner withdrew on 2026-10-15. The Part 1b header order is
 answered at the end.
 
@@ -3797,8 +4184,11 @@ next month is too, with nothing to remember. The receipt uses the category each 
 was sold. Alternative: a "Drink" switch on every product — finer (a dessert wine filed under
 "Postres" could be a drink) but set product by product. Either needs one small database change.
 
-**Q2 — Guests on a split bill, and on joined tables.** (Part 3 builds the default unless told
-otherwise.)
+**Q2 — Guests on a split bill, and on joined tables.** ANSWERED 2026-10-15: «add joined counts.
+the waiter should always be able to update the number of people sitting at a table. when they
+split, the waiter should update each table's seats as well». A713 built the count changes (joined
+counts are added at the join; Split a table asks each side's count; a bill split by item has no
+count, the owner's (B)), and Part 3a prints the party's own count. The question as asked:
 Default: **a split bill prints no guests line.** Example: table 12 seats 4 and splits the bill in
 two; each half would otherwise say «4 comensales · por persona» of a half-total, which is wrong. A
 bill that is the table's only bill prints it. Alternative: print the guest count on every bill of
@@ -3998,3 +4388,25 @@ Part 1b landed (#1756): with a subtitle but no trading name, the plain subtitle 
 legal name, in bold, under it, as the order list in Task 1.5 says, while another sentence there said
 "legal name first and bold". ANSWERED 2026-10-15: «KEEP IT AS BUILT — subtitle first, bold legal
 name under it. No change.» Nothing is built; Task 1.5's sentence now matches the order list.
+
+**Q12 — Where the till asks about the guests line when a receipt is printed.** (Asked 2026-10-16.
+Part 3a lands without it; Part 3b waits for the answer.)
+You asked that the «comensales · por persona» line be optional and editable when a receipt is
+printed. (FYI, no answer needed: by default, joined tables whose bills were kept separate print no
+guests line, since neither bill knows its share; this choice is how a waiter adds one.) The till has no print window today: Print receipt and Reprint print at once (Reprint asks
+only the language, and only when the venue offers several), and in a department set to print
+receipts automatically the receipt prints during the payment, before anyone can touch anything.
+[Mockup](../../backlog/mockups/a663-receipt-layout/3-guests-when-printing.png).
+Example: Mesa 12 is seated with 4 and pays 407,00 € in cash. By default the receipt prints «4
+comensales · por persona 101,75 €». The waiter changes the number to 5 for this print: «5
+comensales · por persona 81,40 €»; empties it: no line. Either way the table's own count stays 4 and
+nothing filed changes. The number starts on what would print by default (empty for a bill split by
+item or a counter sale). A full invoice prints the default.
+Recommended: **A — a «Comensales» field on the paid-sale screen**, above Print receipt and
+Reprint, also on a sale opened from Find a bill. No extra tap when the number is right. Where the
+department prints receipts automatically, the receipt has already printed with the table's number,
+so a different number takes a Reprint, which prints «DUPLICADO».
+Alternatives: **B — a window on every Print receipt and Reprint** asking the number (one more tap
+on every receipt printed by hand; the same gap for automatic receipts). **C — the field on the
+payment screen, before charging** (it also reaches the automatic receipt, but adds a control to the
+busiest screen, and a later Reprint would still need A or B to change the number).
