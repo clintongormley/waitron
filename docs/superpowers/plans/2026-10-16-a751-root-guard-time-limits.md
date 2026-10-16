@@ -59,11 +59,11 @@ transaction, `probes/feed-probe`) — a product change in `packages/db`, recorde
 
 1. **Failing test first — isolation, not "nothing after the kill".** A killed run's `$(…)`
    subshells outlive the kill even with `exec` (plan review, 40 of 40 runs both ways), so one more
-   `gh` call after a kill is normal. What must hold is that it cannot reach ANOTHER run. Shape: run
-   A on the default-window input with a `sleep` stub that really sleeps (the stub reads an
-   environment variable, e.g. `STUB_SLEEP`, default instant) and a kill after ~100 ms; then run B
-   (one `gh` call expected); wait ~1 s; re-read B's `count`: it must still be 1. Watch it fail on
-   today's shared directory.
+   `gh` call after a kill is normal. What must hold is that it cannot reach ANOTHER run. As built
+   (a really-sleeping `sleep` stand-in passed on the old code, 5 of 5): run A slows one `gh` call
+   to 3 s through `GH_STUB_DELAY` and is killed after 1 s; run B starts at once; at 4.5 s B's
+   `count` must still be 1 and A's own directory must hold the leftover call. It failed on the
+   shared directory with `expected 2 to be 1`.
 2. Fix: the two stub EXECUTABLES stay built once per file (CLAUDE.md §4) in their own directory on
    `PATH`; each `runCrossCheck` call gets its own fresh STATE directory passed as `STUB_DIR` (which
    the stubs already read), removed in `afterAll`. Also `exec` the inner bash in `runVerdict` and
