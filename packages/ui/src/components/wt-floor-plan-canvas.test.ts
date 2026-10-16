@@ -2656,9 +2656,9 @@ it("one full turn by key walks a corner table away from the edge", async () => {
   expect(el.tables[0]!.placement).toMatchObject({ rotation: 0, x: 2, y: 2 });
 });
 
-it("Shift+ArrowDown on a turned table near the corner moves no other table", async () => {
+it("Shift+ArrowRight on a turned table near the corner steps it in, and moves no other table", async () => {
   const el = await canvas(
-    [table("t1", "T1", { x: 2, y: 2, rotation: 30 }), table("t2", "T2", { x: 20 })],
+    [table("t1", "T1", { x: 1, y: 1, rotation: 15 }), table("t2", "T2", { x: 20 })],
     { selected: "t1" },
   );
   const sized: TableResize[] = [];
@@ -2674,10 +2674,10 @@ it("Shift+ArrowDown on a turned table near the corner moves no other table", asy
   await settled(el);
   const t2 = at(button(el, "t2"));
   button(el, "t1").focus();
-  await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
   await settled(el);
   await settled(el);
-  expect(sized).toHaveLength(1);
+  expect(sized).toEqual([{ key: "t1", x: 1, y: 2, width: 9, height: 8 }]);
   expect(at(button(el, "t2"))).toEqual(t2);
   expect(overflows(el)).toBe(false);
 });

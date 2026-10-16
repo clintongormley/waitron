@@ -62,7 +62,8 @@ export interface TableMove {
   y: number;
 }
 
-/** `x` and `y`: where the table is after the turn, stepped in where the turn made it poke out. */
+/** `x` and `y`: where the table is after the turn, stepped in so it is no further past the plan's
+ *  top or left edge than it was before the turn. */
 export interface TableRotate {
   key: string;
   rotation: number;
