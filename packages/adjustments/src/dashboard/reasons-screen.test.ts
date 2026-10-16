@@ -86,7 +86,7 @@ it("names the reasons Filters panel in Spanish", async () => {
   const el = await mount(fakeApi());
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   expect(table.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-label")).toBe(
-    "Filtros",
+    "Filtros 1",
   );
 });
 

@@ -314,7 +314,7 @@ it("custom dates mark each field, keep the panel available, and never query unti
   await ready(el);
   await switchTab(el, "transactions");
   const grid = await ready(el, "transactions");
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters"]')!);
+  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 1"]')!);
   const change = (name: string, value: string) =>
     grid
       .querySelector(`[name="${name}"]`)!
@@ -333,7 +333,7 @@ it("custom dates mark each field, keep the panel available, and never query unti
   await el.updateComplete;
   expect(requests(fetcher, "/api/transactions")).toHaveLength(1);
   expect(
-    grid.shadowRoot!.querySelector('[aria-label="Filters"]')!.getAttribute("aria-expanded"),
+    grid.shadowRoot!.querySelector('[aria-label="Filters 1"]')!.getAttribute("aria-expanded"),
   ).toBe("true");
   change("to", "2026-10-25");
   await vi.waitFor(() => expect(requests(fetcher, "/api/transactions")).toHaveLength(2));
@@ -401,7 +401,7 @@ it("removing one chip keeps other filters; Clear all removes the date filter wit
     );
   await vi.waitFor(() => expect(requests(fetcher, "/api/transactions")).toHaveLength(4));
   await ready(el, "transactions");
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters"]')!);
+  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 2"]')!);
   await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>(".filters-clear-all")!);
   await vi.waitFor(() =>
     expect(requests(fetcher, "/api/transactions").at(-1)!.searchParams.get("preset")).toBe("any"),

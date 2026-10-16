@@ -2733,10 +2733,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return html`<button
       type="button"
       class="filters-trigger icon-button"
-      aria-label=${this.filtersLabel}
+      aria-label=${activeCount ? `${this.filtersLabel} ${activeCount}` : this.filtersLabel}
       aria-expanded=${this.filtersOpen}
       aria-controls="filters-panel"
-      aria-describedby=${activeCount ? "filters-count" : nothing}
       popovertarget="filters-panel"
       @click=${this.#toggleFilters}
       @pointerenter=${trackIconTooltip}
@@ -2744,11 +2743,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       @focus=${trackIconTooltip}
       @blur=${trackIconTooltip}
     >
-      <wt-icon name="table-filter"></wt-icon>${
-        activeCount
-          ? html`<span class="filters-count" id="filters-count">${activeCount}</span>`
-          : nothing
-      }<span class="icon-tooltip" aria-hidden="true">${this.filtersLabel}</span>
+      <wt-icon name="table-filter"></wt-icon>
+      <!-- Tooltip before the count, whitespace between: axe reads the drawn text as "Filters 1", matching the name. -->
+      <span class="icon-tooltip" aria-hidden="true">${this.filtersLabel}</span>
+      ${activeCount ? html`<span class="filters-count">${activeCount}</span>` : nothing}
     </button>`;
   }
 

@@ -1408,8 +1408,9 @@ the toolbar available so you can change the choice.
 The search box appears only when `searchable` is set. **Filters sits at the toolbar's start and
 opens its panel beside the rows.** It is an icon button (a funnel) drawn before the `toolbar-start`
 slot and the search box, named by `filtersLabel`, with the shared tooltip ("Icon buttons with a
-tooltip", below). Its count badge, which is also its accessible description, counts each filter
-whose current choice is not "all", including an `initial` choice, and the button reads as pressed
+tooltip", below). Its count badge counts each filter whose current choice is not "all", including
+an `initial` choice; while it shows, the count follows the label in the button's name ("Filters
+1"), so the name holds the drawn text axe reads (see "Accessible names"). The button reads as pressed
 while the panel is open. The panel lists every filtered column, including one that is hidden. Each
 section keeps its heading and choice control visible. Choose the column's "Any …" option to clear
 it; Clear all resets every filter. Opening focuses the first choice. A filtered column's heading
