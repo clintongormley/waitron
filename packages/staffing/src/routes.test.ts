@@ -108,7 +108,7 @@ async function routed() {
     expect(response.status).toBe(201);
     return (await response.json()) as StaffRole;
   };
-  return { ...venue, ...cookies, call, send, create };
+  return { ...venue, ...cookies, app, call, send, create };
 }
 
 async function answers(response: Response, status: number, body?: unknown) {
@@ -339,6 +339,18 @@ describe("the staff-role routes", () => {
         );
         await answers(await r.send("GET", "", r.manager), 200, before);
       }
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await r.app.request(`${BASE}${path}`, {
+            method,
+            headers: { cookie: r.manager, "content-type": "application/json" },
+            body,
+          }),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await r.send("GET", "", r.manager), 200, before);
+      }
       const denied = await r.send(method, path, r.supervisor, "x");
       expect(denied.status).toBe(403);
       expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
@@ -475,6 +487,18 @@ describe("the staffing paint routes", () => {
       for (const body of ["x", "", 1, true, [], ["x"], null]) {
         await answers(
           await p.call("PUT", path, p.manager, body),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+        await answers(await p.call("GET", path, p.manager), 200, before);
+      }
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await p.app.request(path, {
+            method: "PUT",
+            headers: { cookie: p.manager, "content-type": "application/json" },
+            body,
+          }),
           400,
           refusal("management.request_invalid", { field: "body" }),
         );
