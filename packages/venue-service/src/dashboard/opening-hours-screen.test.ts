@@ -1546,7 +1546,7 @@ describe("Month view", () => {
     await view()!.updateComplete;
     return view()!;
   }
-  async function ordinary(
+  async function openBox(
     el: Screen,
     view: HTMLElementTagNameMap["opening-hours-month"],
     date = "2026-12-10",
@@ -1678,7 +1678,7 @@ describe("Month view", () => {
     const { el, view, failNext } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
     );
-    const box = await ordinary(el, await shown(view));
+    const box = await openBox(el, await shown(view));
     expect(box.error).toBe("");
     failNext(1);
     el.api.rereadWithSpecialDays();
@@ -1699,7 +1699,7 @@ describe("Month view", () => {
       const { el, view, writes } = await monthMount(
         "/manage/opening-hours/view/month/month/2026-12",
       );
-      const box = await ordinary(el, await shown(view));
+      const box = await openBox(el, await shown(view));
       const closed = new Promise((resolve) =>
         box.addEventListener("calendar-day-box-close", resolve, { once: true }),
       );
@@ -1728,7 +1728,7 @@ describe("Month view", () => {
         request: async () => "proceeded",
       });
       onTestFinished(() => guard.dispose());
-      const box = await ordinary(el, await shown(view));
+      const box = await openBox(el, await shown(view));
       const closed = new Promise((resolve) =>
         box.addEventListener("calendar-day-box-close", resolve, { once: true }),
       );
@@ -1782,7 +1782,7 @@ describe("Month view", () => {
       withWinter,
     );
     const month = await shown(view);
-    const box = await ordinary(el, month);
+    const box = await openBox(el, month);
     const button = dateButton(month, "2026-12-10");
     expect(button.getRootNode()).toBe(month.shadowRoot);
     expect(box.getRootNode()).toBe(el.shadowRoot);
@@ -1798,13 +1798,13 @@ describe("Month view", () => {
     expect(boxButtons(el)).toEqual(["Make a special day", "Edit Winter's standard week"]);
   });
 
-  it("Edit the Winter week opens the season painter on that season, keeping the month's department", async () => {
+  it("Edit Winter's standard week opens the season painter on that season, keeping the month's department", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/department/bar/month/2026-12",
       false,
       withWinter,
     );
-    await ordinary(el, await shown(view));
+    await openBox(el, await shown(view));
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
@@ -1817,7 +1817,7 @@ describe("Month view", () => {
     expect(boxOpen(el)).toBe(false);
   });
 
-  it("Edit the Winter week carries a department chosen in the month's picker, and none after All departments", async () => {
+  it("Edit Winter's standard week carries a department chosen in the month's picker, and none after All departments", async () => {
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
       false,
@@ -1832,7 +1832,7 @@ describe("Month view", () => {
       await expect.poll(() => location.pathname).toBe(path);
     };
     await pick("bar", "/manage/opening-hours/view/month/department/bar/month/2026-12");
-    await ordinary(el, await shown(view));
+    await openBox(el, await shown(view));
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
@@ -1841,7 +1841,7 @@ describe("Month view", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await shown(view);
     await pick("all", "/manage/opening-hours/view/month/month/2026-12");
-    await ordinary(el, await shown(view));
+    await openBox(el, await shown(view));
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => location.pathname)
@@ -1853,7 +1853,7 @@ describe("Month view", () => {
 
   it("Make a special day opens a new special day holding the date", async () => {
     const { el, view, writes } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    await ordinary(el, await shown(view));
+    await openBox(el, await shown(view));
     boxButton(el, "special-add")!.click();
     const form = await specialPainter(el);
     expect(form.specialDayId).toBeNull();
@@ -1863,7 +1863,7 @@ describe("Month view", () => {
 
   it("a special date's box offers Edit special day, which opens its painter over the month", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
-    await ordinary(el, await shown(view), "2026-12-14");
+    await openBox(el, await shown(view), "2026-12-14");
     expect(boxButtons(el)[0]).toBe("Edit special day");
     boxButton(el, "special-edit")!.click();
     const form = await specialPainter(el);
@@ -1883,7 +1883,7 @@ describe("Month view", () => {
     expect(months).toEqual(["2026-10"]);
   });
 
-  it("passes read-only to the month and opens nothing from it", async () => {
+  it("passes read-only to the month, whose box offers no special-day button and opens no painter", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12", true);
     const month = await shown(view);
     expect(month.readOnly).toBe(true);
@@ -1910,7 +1910,7 @@ describe("Month view", () => {
       true,
       withWinter,
     );
-    await ordinary(el, await shown(view));
+    await openBox(el, await shown(view));
     expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
     boxButton(el, "edit-week")!.click();
     await expect

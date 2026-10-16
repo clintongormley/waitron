@@ -471,7 +471,7 @@ describe("after the painter writes", () => {
 });
 
 describe("links into the special-day painter", () => {
-  async function yearPanel(el: Screen, date: string, button: string) {
+  async function yearBox(el: Screen, date: string, button: string) {
     const year = el.shadowRoot!.querySelector("opening-hours-year")!;
     await expect
       .poll(() => year.shadowRoot!.querySelector(`td[data-date='${date}'] button`))
@@ -500,10 +500,10 @@ describe("links into the special-day painter", () => {
     el.shadowRoot!.querySelector<HTMLElement>(`calendar-day-box [data-test=${test}]`)!.click();
   }
 
-  it("the Year's Edit on a special day's date opens the painter on it, and closing goes back to that year", async () => {
+  it("the Year's box's Edit special day on a special day's date opens the painter on it, and closing goes back to that year", async () => {
     const { el } = await mount("/manage/opening-hours/view/year/year/2026", false, [], ["2026-12"]);
     const pushed = pushedPaths();
-    await yearPanel(el, "2026-12-14", "special-edit");
+    await yearBox(el, "2026-12-14", "special-edit");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/special-day/sd1");
@@ -516,14 +516,14 @@ describe("links into the special-day painter", () => {
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
-  it("the Year's Make on a public holiday opens a new day pre-filled from the holidays the Year sent", async () => {
+  it("the Year's box's Make a special day on a public holiday opens a new day pre-filled from the holidays the box sent", async () => {
     const { el, months } = await mount(
       "/manage/opening-hours/view/year/year/2026",
       false,
       [],
       ["2026-11"],
     );
-    await yearPanel(el, "2026-11-04", "special-add");
+    await yearBox(el, "2026-11-04", "special-add");
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/date/2026-11-04");
@@ -550,7 +550,7 @@ describe("links into the special-day painter", () => {
     expect(nameOf(await shownPainter(el))).toBe("Immaculate Conception");
   });
 
-  it("the ordinary date's Make this a special day opens a new day on that date", async () => {
+  it("an ordinary date's Make a special day opens a new day on that date", async () => {
     const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
     await monthBox(el, "2026-12-10", "special-add");
     await expect

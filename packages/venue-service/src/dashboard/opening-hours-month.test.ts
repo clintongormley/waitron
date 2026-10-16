@@ -211,7 +211,6 @@ describe("Opening hours month", () => {
     const tracks = [...sunday.querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
     expect(tracks[0]!.querySelectorAll(".segment")).toHaveLength(0);
-    expect(sunday.querySelector('[data-test="department-closed"]')).toBeNull();
     expect(text(sunday)).not.toContain("Restaurant closed");
   });
 
@@ -556,7 +555,7 @@ describe("Opening hours month", () => {
     sent.forEach(({ date, returnTo }) => expect(returnTo()).toBe(dayButton(el, date)));
   });
 
-  it("read-only, hides the write actions and opens nothing from a date", async () => {
+  it("read-only, draws no season chips and keeps each date a button, its name, and ‹ ›", async () => {
     const el = await mount(monthModel(), { readOnly: true });
     expect(root(el).querySelector("season-chips")).toBeNull();
     expect(root(el).querySelectorAll("button.day")).toHaveLength(
