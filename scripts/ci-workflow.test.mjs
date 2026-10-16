@@ -1,7 +1,8 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -10,7 +11,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { clearTimeout, setTimeout } from "node:timers";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   LIGHT_A_PACKAGES,
   LIGHT_B_PACKAGES,
@@ -38,20 +40,22 @@ import {
 // Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
 // file ever starts disagreeing with the workflow.
 
+// eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
+const { AbortController } = globalThis;
+
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
 
-// The shard cases below make many sequential `pnpm ls` spawns, which on a cold CI runner (no warm
-// pnpm store) outlast Vitest's 5000ms default. TWO failure modes, TWO timeouts, because one cannot
-// cover the other:
-//   * SLOW-BUT-COMPLETING cold run. `spawnSync` blocks the event loop, so Vitest's timer does not
-//     fire mid-case; the case runs to the end and is then failed for its duration alone.
-//     `PNPM_LS_TEST_TIMEOUT_MS` raises that per-test bound above the whole case's cold wall-clock.
-//   * GENUINE HANG in one `pnpm ls` — the Vitest timer CANNOT interrupt a stuck child (an earlier
-//     version of this comment said it could). Only the `timeout` option on `spawnSync` itself kills
-//     a hung child; `PNPM_LS_SPAWN_TIMEOUT_MS` is that per-call kill, and `pnpmLs` turns the killed
-//     result into a thrown error. It is smaller than the per-test bound so the clear per-call throw
-//     wins over a bare Vitest timeout.
+// `pnpm ls` runs two ways here, under two timeouts:
+//   * `workspaceListing()` runs once, through `spawnSync`, while the file is collected
+//     (`scriptsByPackage()` needs it then). `spawnSync` blocks the event loop, so no Vitest timer
+//     can fire meanwhile; only its own `timeout`, `PNPM_LS_SPAWN_TIMEOUT_MS`, kills a hung child,
+//     and `pnpmLs` turns the killed result into a thrown error.
+//   * The shard cases' `selects(...)` calls run side by side through `execFile`, under the same
+//     per-call kill. There the per-test bound, `PNPM_LS_TEST_TIMEOUT_MS`, can fail a case while a
+//     call is still running, but it does not stop the child: the per-call kill does, and so does
+//     the shards' `afterEach`, which aborts every call still running when a case ends. The per-call
+//     kill is the smaller, so a hung call fails with its own error rather than a bare timeout.
 const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
@@ -332,7 +336,36 @@ function spawnPnpm(args, spawn = spawnSync) {
  * command, so a killed child fails loudly rather than as `expected null to be 0`.
  */
 function pnpmLs(args, run = spawnPnpm) {
-  const result = run(args);
+  return parsePnpm(args, run(args));
+}
+
+/**
+ * The default runner behind `pnpmLsAsync`: `pnpm <args>` under the same per-call kill timeout,
+ * without blocking, and killed when `signal` aborts. Resolves to `spawnSync`'s result shape.
+ * `exec` is injected only so a test can assert what is passed.
+ */
+function execPnpm(args, signal, exec = execFile) {
+  return new Promise((resolveRun) => {
+    exec(
+      "pnpm",
+      args,
+      { encoding: "utf8", cwd: repoRoot, timeout: PNPM_LS_SPAWN_TIMEOUT_MS, signal },
+      (error, stdout, stderr) => {
+        if (error === null) resolveRun({ status: 0, error: undefined, stdout, stderr });
+        else if (typeof error.code === "number") {
+          resolveRun({ status: error.code, error: undefined, stdout, stderr });
+        } else resolveRun({ status: null, error, stdout, stderr });
+      },
+    );
+  });
+}
+
+/** `pnpmLs`, run without blocking so several can run side by side. */
+async function pnpmLsAsync(args, signal, run = execPnpm) {
+  return parsePnpm(args, await run(args, signal));
+}
+
+function parsePnpm(args, result) {
   if (result.error !== undefined) {
     throw new Error(
       `\`pnpm ${args.join(" ")}\` failed to run (killed after ${PNPM_LS_SPAWN_TIMEOUT_MS}ms?): ${result.error.message}`,
@@ -344,6 +377,9 @@ function pnpmLs(args, run = spawnPnpm) {
   return JSON.parse(result.stdout);
 }
 
+/** Each filter set's answer from `selects`, kept only once it has succeeded. */
+const selections = new Map();
+
 /**
  * What `pnpm <filters> ls --depth -1 --json` really selects, minus the workspace ROOT.
  *
@@ -353,16 +389,20 @@ function pnpmLs(args, run = spawnPnpm) {
  *
  * Dropping it is not cosmetic: `pnpm ls` LISTS the root and `pnpm run` does NOT RUN it.
  */
-function selects(filters) {
-  return pnpmLs([
-    ...filters.flatMap((filter) => ["--filter", filter]),
-    "ls",
-    "--depth",
-    "-1",
-    "--json",
-  ])
+async function selects(filters, signal) {
+  const key = JSON.stringify(filters);
+  const known = selections.get(key);
+  if (known !== undefined) return known;
+  const names = (
+    await pnpmLsAsync(
+      [...filters.flatMap((filter) => ["--filter", filter]), "ls", "--depth", "-1", "--json"],
+      signal,
+    )
+  )
     .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
     .map((pkg) => pkg.name);
+  selections.set(key, names);
+  return names;
 }
 
 /** Every workspace member (never the root) that declares a `test:coverage` script. */
@@ -430,6 +470,91 @@ describe("pnpmLs (the subprocess guard)", () => {
     const hang = () =>
       spawnSync("node", ["-e", "setTimeout(() => {}, 60000)"], { encoding: "utf8", timeout: 500 });
     expect(() => pnpmLs(["ls"], hang)).toThrow(/failed to run/);
+  });
+});
+
+describe("pnpmLsAsync (the side-by-side subprocess guard)", () => {
+  const hang = ["-e", "setTimeout(() => {}, 60000)"];
+  /** `execPnpm`'s own option and result handling, running `node <args>` in place of pnpm. */
+  const asNode =
+    (nodeArgs, overrides = {}) =>
+    (_cmd, _args, options, callback) =>
+      execFile("node", nodeArgs, { ...options, ...overrides }, callback);
+
+  it("returns parsed stdout on a clean exit", async () => {
+    const ok = async () => ({
+      status: 0,
+      error: undefined,
+      stdout: '[{"name":"@waitron/x"}]',
+      stderr: "",
+    });
+    await expect(pnpmLsAsync(["ls"], undefined, ok)).resolves.toEqual([{ name: "@waitron/x" }]);
+  });
+
+  it("throws, naming the command and stderr, on a non-zero exit", async () => {
+    const failed = async () => ({ status: 1, error: undefined, stdout: "", stderr: "boom" });
+    await expect(pnpmLsAsync(["ls", "-r"], undefined, failed)).rejects.toThrow(
+      /pnpm ls -r.*exited 1.*boom/,
+    );
+  });
+
+  it("throws, naming the command, when the child errors (the timeout-kill shape)", async () => {
+    const killed = async () => ({
+      status: null,
+      error: Object.assign(new Error("Command failed: pnpm ls"), { killed: true, code: null }),
+      stdout: "",
+      stderr: "",
+    });
+    await expect(pnpmLsAsync(["ls"], undefined, killed)).rejects.toThrow(
+      /pnpm ls.*failed to run.*Command failed/,
+    );
+  });
+
+  it("the default runner passes the per-call kill timeout and the signal to execFile", async () => {
+    let seen;
+    const spy = (cmd, args, options, callback) => {
+      seen = { cmd, args, options };
+      callback(null, "[]", "");
+    };
+    const { signal } = new AbortController();
+    await expect(execPnpm(["ls"], signal, spy)).resolves.toEqual({
+      status: 0,
+      error: undefined,
+      stdout: "[]",
+      stderr: "",
+    });
+    expect(seen.cmd).toBe("pnpm");
+    expect(seen.args).toEqual(["ls"]);
+    expect(seen.options.timeout).toBe(PNPM_LS_SPAWN_TIMEOUT_MS);
+    expect(seen.options.signal).toBe(signal);
+    expect(seen.options.cwd).toBe(repoRoot);
+  });
+
+  it("the default runner reports a real child's exit status and stderr", async () => {
+    const exits = asNode(["-e", "process.stderr.write('boom'); process.exit(3)"]);
+    await expect(
+      pnpmLsAsync(["ls"], undefined, (args) => execPnpm(args, undefined, exits)),
+    ).rejects.toThrow(/pnpm ls.*exited 3.*boom/);
+  });
+
+  it("really kills a hung child via execFile's own timeout", async () => {
+    const started = Date.now();
+    const slow = asNode(hang, { timeout: 500 });
+    await expect(
+      pnpmLsAsync(["ls"], undefined, (args) => execPnpm(args, undefined, slow)),
+    ).rejects.toThrow(/failed to run/);
+    expect(Date.now() - started).toBeLessThan(PNPM_LS_SPAWN_TIMEOUT_MS);
+  });
+
+  it("really kills a hung child when its signal aborts", async () => {
+    const calls = new AbortController();
+    const started = Date.now();
+    const run = pnpmLsAsync(["ls"], calls.signal, (args, signal) =>
+      execPnpm(args, signal, asNode(hang)),
+    );
+    setTimeout(() => calls.abort(), 100);
+    await expect(run).rejects.toThrow(/failed to run.*aborted/);
+    expect(Date.now() - started).toBeLessThan(PNPM_LS_SPAWN_TIMEOUT_MS);
   });
 });
 
@@ -565,7 +690,46 @@ function ciJobsApiStep() {
   return ciStepNamed(JOBS_API_STEP);
 }
 
-const VERDICT_SPAWN_TIMEOUT_MS = 10_000;
+// The slowest default-window case took 4.6 s in three root projects run at once beside eight CPU
+// burners, and 3.2 s in an idle root run; a 10 s kill fired in lane G's loaded push on 2026-10-16
+// (A751).
+const VERDICT_SPAWN_TIMEOUT_MS = 30_000;
+
+// A case's per-test bound clears the kill bound of every run it makes, plus five seconds for the
+// rest.
+const ONE_RUN_TEST_TIMEOUT_MS = 35_000;
+const TWO_RUNS_TEST_TIMEOUT_MS = 65_000;
+const THREE_RUNS_TEST_TIMEOUT_MS = 95_000;
+const FOUR_RUNS_TEST_TIMEOUT_MS = 125_000;
+const FIVE_RUNS_TEST_TIMEOUT_MS = 155_000;
+// The merge-job cases run once, or three times, per merge job, and are bounded for this many.
+const MERGE_JOBS_BOUNDED = 5;
+const FIFTEEN_RUNS_TEST_TIMEOUT_MS = 455_000;
+// The leftover-call case waits three times for a step of the killed run and makes one other run.
+const LEFTOVER_STEP_WAIT_MS = 15_000;
+const LEFTOVER_CALL_TEST_TIMEOUT_MS = 3 * LEFTOVER_STEP_WAIT_MS + VERDICT_SPAWN_TIMEOUT_MS + 5_000;
+
+/** Resolves once `check()` is true, polling; rejects naming `what` after `ms`. */
+async function waitUntil(check, ms, what) {
+  const giveUpAt = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() >= giveUpAt) throw new Error(`gave up after ${ms}ms waiting for ${what}`);
+    await new Promise((done) => setTimeout(done, 20));
+  }
+}
+
+/** `promise`'s value, or a rejection naming `what` after `ms`. */
+async function within(promise, ms, what) {
+  let timer;
+  const late = new Promise((_, refuse) => {
+    timer = setTimeout(() => refuse(new Error(`gave up after ${ms}ms waiting for ${what}`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // jq's exit status for an `error(...)` or a failed `fromjson`. A jq compile error exits 3 and a
 // missing jq 127, so neither can satisfy it; any error jq hits while running still exits 5, which
@@ -580,7 +744,8 @@ const JQ_REFUSED = 5;
 function runVerdict(needs) {
   const env = { PATH: process.env.PATH, VERDICT_SCRIPT: ciVerdictStep().script };
   if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
-  const result = spawnSync("bash", ["-c", 'bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
+  // `exec` leaves one shell for the kill to hit, not two.
+  const result = spawnSync("bash", ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
     encoding: "utf8",
     env,
     timeout: VERDICT_SPAWN_TIMEOUT_MS,
@@ -603,62 +768,84 @@ describe("the `ci` aggregate's verdict", () => {
     expect(step).toContain("          NEEDS: ${{ toJSON(needs) }}");
   });
 
-  it("passes when every needed job succeeded or was skipped, printing each one", () => {
-    expect(runVerdict(results("success", "success"))).toEqual({
-      status: 0,
-      output: "job-0: success\njob-1: success\n",
-    });
-    expect(runVerdict(results("success", "skipped", "skipped"))).toEqual({
-      status: 0,
-      output: "job-0: success\njob-1: skipped\njob-2: skipped\n",
-    });
-  });
+  it(
+    "passes when every needed job succeeded or was skipped, printing each one",
+    () => {
+      expect(runVerdict(results("success", "success"))).toEqual({
+        status: 0,
+        output: "job-0: success\njob-1: success\n",
+      });
+      expect(runVerdict(results("success", "skipped", "skipped"))).toEqual({
+        status: 0,
+        output: "job-0: success\njob-1: skipped\njob-2: skipped\n",
+      });
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("fails when one failed or was cancelled, printing every job before naming it", () => {
-    for (const bad of ["failure", "cancelled"]) {
-      const { status, output } = runVerdict(results("success", bad, "skipped"));
-      expect(status, bad).toBe(JQ_REFUSED);
-      const printed = output.split("\n");
-      const errorAt = printed.findIndex((line) => line.includes("not succeeded or skipped: job-1"));
-      expect(errorAt, output).toBeGreaterThan(-1);
-      expect(printed.slice(0, errorAt), output).toEqual([
-        "job-0: success",
-        `job-1: ${bad}`,
-        "job-2: skipped",
-      ]);
-    }
-  });
+  it(
+    "fails when one failed or was cancelled, printing every job before naming it",
+    () => {
+      for (const bad of ["failure", "cancelled"]) {
+        const { status, output } = runVerdict(results("success", bad, "skipped"));
+        expect(status, bad).toBe(JQ_REFUSED);
+        const printed = output.split("\n");
+        const errorAt = printed.findIndex((line) =>
+          line.includes("not succeeded or skipped: job-1"),
+        );
+        expect(errorAt, output).toBeGreaterThan(-1);
+        expect(printed.slice(0, errorAt), output).toEqual([
+          "job-0: success",
+          `job-1: ${bad}`,
+          "job-2: skipped",
+        ]);
+      }
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("fails on a result nobody anticipated, or none at all", () => {
-    for (const odd of ["neutral", "", null, "Success"]) {
-      const { status, output } = runVerdict(results("success", odd));
-      expect(status, String(odd)).toBe(JQ_REFUSED);
-      expect(output, String(odd)).toContain("not succeeded or skipped: job-1");
-    }
-    const missing = runVerdict({ a: { result: "success" }, b: { outputs: {} } });
-    expect(missing.status).toBe(JQ_REFUSED);
-    expect(missing.output).toContain("not succeeded or skipped: b");
-  });
+  it(
+    "fails on a result nobody anticipated, or none at all",
+    () => {
+      for (const odd of ["neutral", "", null, "Success"]) {
+        const { status, output } = runVerdict(results("success", odd));
+        expect(status, String(odd)).toBe(JQ_REFUSED);
+        expect(output, String(odd)).toContain("not succeeded or skipped: job-1");
+      }
+      const missing = runVerdict({ a: { result: "success" }, b: { outputs: {} } });
+      expect(missing.status).toBe(JQ_REFUSED);
+      expect(missing.output).toContain("not succeeded or skipped: b");
+    },
+    FIVE_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("fails when it was handed no results to read", () => {
-    for (const needs of ["{}", "[]"]) {
-      const { status, output } = runVerdict(needs);
-      expect(status, needs).toBe(JQ_REFUSED);
-      expect(output, needs).toContain("no needed job results to read");
-    }
-  });
+  it(
+    "fails when it was handed no results to read",
+    () => {
+      for (const needs of ["{}", "[]"]) {
+        const { status, output } = runVerdict(needs);
+        expect(status, needs).toBe(JQ_REFUSED);
+        expect(output, needs).toContain("no needed job results to read");
+      }
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("fails when NEEDS is unset or not JSON", () => {
-    for (const [needs, message] of [
-      [undefined, "only strings can be parsed"],
-      ["", "(while parsing '')"],
-      ["not json", "(while parsing 'not json')"],
-    ]) {
-      const { status, output } = runVerdict(needs);
-      expect(status, String(needs)).toBe(JQ_REFUSED);
-      expect(output, String(needs)).toContain(message);
-    }
-  });
+  it(
+    "fails when NEEDS is unset or not JSON",
+    () => {
+      for (const [needs, message] of [
+        [undefined, "only strings can be parsed"],
+        ["", "(while parsing '')"],
+        ["not json", "(while parsing 'not json')"],
+      ]) {
+        const { status, output } = runVerdict(needs);
+        expect(status, String(needs)).toBe(JQ_REFUSED);
+        expect(output, String(needs)).toContain(message);
+      }
+    },
+    THREE_RUNS_TEST_TIMEOUT_MS,
+  );
 
   const ciMergeJobs = mergeJobs.map(({ id, body }) => ({
     id,
@@ -676,47 +863,69 @@ describe("the `ci` aggregate's verdict", () => {
     return needs;
   };
 
-  it("fails when a selected package's coverage merge job was skipped, naming the package", () => {
-    expect(ciMergeJobs.length).toBeGreaterThan(0);
-    for (const { id, gate, pkg } of ciMergeJobs) {
-      const { status, output } = runVerdict(scoped({ code: "true", [gate]: "true" }, id));
-      expect(status, id).toBe(JQ_REFUSED);
-      expect(output, id).toContain(`${id}: skipped`);
-      expect(output, id).toContain(
-        `${pkg} was selected but its coverage merge job ${id} was skipped`,
-      );
-    }
-  });
-
-  it("passes a skipped merge job whose package was not selected, or when no code changed", () => {
-    for (const { id, gate } of ciMergeJobs) {
-      for (const outputs of [
-        { code: "true", [gate]: "false" },
-        { code: "false", [gate]: "true" },
-        {},
-      ]) {
-        expect(runVerdict(scoped(outputs, id)).status, `${id} ${JSON.stringify(outputs)}`).toBe(0);
+  it(
+    "fails when a selected package's coverage merge job was skipped, naming the package",
+    () => {
+      expect(ciMergeJobs.length).toBeGreaterThan(0);
+      expect(
+        ciMergeJobs.length,
+        "raise MERGE_JOBS_BOUNDED and the merge cases' bounds with it",
+      ).toBeLessThanOrEqual(MERGE_JOBS_BOUNDED);
+      for (const { id, gate, pkg } of ciMergeJobs) {
+        const { status, output } = runVerdict(scoped({ code: "true", [gate]: "true" }, id));
+        expect(status, id).toBe(JQ_REFUSED);
+        expect(output, id).toContain(`${id}: skipped`);
+        expect(output, id).toContain(
+          `${pkg} was selected but its coverage merge job ${id} was skipped`,
+        );
       }
-    }
-  });
+    },
+    FIVE_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("passes a selected package whose merge job succeeded", () => {
-    for (const { id, gate } of ciMergeJobs) {
-      expect(runVerdict(scoped({ code: "true", [gate]: "true" }, id, "success")).status, id).toBe(
-        0,
-      );
-    }
-  });
+  it(
+    "passes a skipped merge job whose package was not selected, or when no code changed",
+    () => {
+      for (const { id, gate } of ciMergeJobs) {
+        for (const outputs of [
+          { code: "true", [gate]: "false" },
+          { code: "false", [gate]: "true" },
+          {},
+        ]) {
+          expect(runVerdict(scoped(outputs, id)).status, `${id} ${JSON.stringify(outputs)}`).toBe(
+            0,
+          );
+        }
+      }
+    },
+    FIFTEEN_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("lets a failed job's message win over a skipped merge job's", () => {
-    const [{ id, gate }] = ciMergeJobs;
-    const needs = scoped({ code: "true", [gate]: "true" }, id);
-    needs.lint.result = "failure";
-    const { status, output } = runVerdict(needs);
-    expect(status).toBe(JQ_REFUSED);
-    expect(output).toContain("not succeeded or skipped: lint");
-    expect(output).not.toContain("was selected but");
-  });
+  it(
+    "passes a selected package whose merge job succeeded",
+    () => {
+      for (const { id, gate } of ciMergeJobs) {
+        expect(runVerdict(scoped({ code: "true", [gate]: "true" }, id, "success")).status, id).toBe(
+          0,
+        );
+      }
+    },
+    FIVE_RUNS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "lets a failed job's message win over a skipped merge job's",
+    () => {
+      const [{ id, gate }] = ciMergeJobs;
+      const needs = scoped({ code: "true", [gate]: "true" }, id);
+      needs.lint.result = "failure";
+      const { status, output } = runVerdict(needs);
+      expect(status).toBe(JQ_REFUSED);
+      expect(output).toContain("not succeeded or skipped: lint");
+      expect(output).not.toContain("was selected but");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
   // Reads ci.yml and the step's jq as TEXT: each `-merge` job's gate and package, against the
   // step's table; the cases above prove by running it that the table is what the step reads.
@@ -735,14 +944,24 @@ describe("the `ci` aggregate's verdict", () => {
 });
 
 // A stand-in for `gh`, first on PATH. Call n writes its arguments to args.n, prints out.n (or the
-// latest out file before it) and exits with status.n (default 0).
+// latest out file before it) and exits with status.n (default 0). With GH_STUB_HOLD set, each call
+// first creates held, waits for release (giving up after 1200 polls 50 ms apart), and creates
+// finished as it ends.
 const GH_STUB = `#!/usr/bin/env bash
+if [ -n "\${GH_STUB_HOLD:-}" ]; then
+  : > "$STUB_DIR/held"
+  for ((i = 0; i < 1200; i++)); do
+    [ -f "$STUB_DIR/release" ] && break
+    /bin/sleep 0.05
+  done
+fi
 n=$(( $(cat "$STUB_DIR/count" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "$STUB_DIR/count"
 printf '%s\n' "$@" > "$STUB_DIR/args.$n"
 for ((i = n; i >= 1; i--)); do
   if [ -f "$STUB_DIR/out.$i" ]; then cat "$STUB_DIR/out.$i"; break; fi
 done
+if [ -n "\${GH_STUB_HOLD:-}" ]; then : > "$STUB_DIR/finished"; fi
 exit "$(cat "$STUB_DIR/status.$n" 2>/dev/null || echo 0)"
 `;
 
@@ -753,16 +972,22 @@ echo "$1" >> "$STUB_DIR/sleeps"
 const STUBS = { gh: GH_STUB, sleep: SLEEP_STUB };
 
 describe("the `ci` aggregate's jobs API cross-check", () => {
-  let stubDir;
+  // The stubs are built once; each run gets its own state directory, because a killed run's
+  // leftover `gh` call still writes to the one it was given (the leftover-call case below).
+  let root;
+  let binDir;
+  let lastStateDir;
   beforeAll(() => {
-    stubDir = mkdtempSync(join(tmpdir(), "ci-jobs-api-"));
+    root = mkdtempSync(join(tmpdir(), "ci-jobs-api-"));
+    binDir = join(root, "bin");
+    mkdirSync(binDir);
     for (const [name, body] of Object.entries(STUBS)) {
-      writeFileSync(join(stubDir, name), body);
-      chmodSync(join(stubDir, name), 0o755);
+      writeFileSync(join(binDir, name), body);
+      chmodSync(join(binDir, name), 0o755);
     }
   });
   afterAll(() => {
-    if (stubDir !== undefined) rmSync(stubDir, { recursive: true, force: true });
+    if (root !== undefined) rmSync(root, { recursive: true, force: true, maxRetries: 3 });
   });
 
   // The page shape (`total_count`, `jobs`) and the job names (`test-heavy (1)`, `image / smoke`) are
@@ -785,16 +1010,17 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
    * Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. Runs with
    * three tries and no delay unless `defaults` is set.
    */
-  function runCrossCheck(needs, answers, { defaults = false } = {}) {
-    for (const name of readdirSync(stubDir)) if (!(name in STUBS)) rmSync(join(stubDir, name));
+  function prepareCrossCheck(needs, answers, { defaults = false, holdGh = false } = {}) {
+    const stateDir = mkdtempSync(join(root, "run-"));
+    lastStateDir = stateDir;
     answers.forEach((answer, at) => {
       const { out, status } = typeof answer === "string" ? { out: answer, status: 0 } : answer;
-      if (out !== undefined) writeFileSync(join(stubDir, `out.${at + 1}`), out);
-      writeFileSync(join(stubDir, `status.${at + 1}`), String(status ?? 0));
+      if (out !== undefined) writeFileSync(join(stateDir, `out.${at + 1}`), out);
+      writeFileSync(join(stateDir, `status.${at + 1}`), String(status ?? 0));
     });
     const env = {
-      PATH: `${stubDir}:${process.env.PATH}`,
-      STUB_DIR: stubDir,
+      PATH: `${binDir}:${process.env.PATH}`,
+      STUB_DIR: stateDir,
       GH_TOKEN: "token",
       REPO: "o/r",
       RUN_ID: "123",
@@ -802,8 +1028,26 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       VERDICT_SCRIPT: ciJobsApiStep().script,
     };
     if (!defaults) Object.assign(env, { JOBS_API_TRIES: "3", JOBS_API_DELAY: "0" });
+    if (holdGh) env.GH_STUB_HOLD = "1";
     if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
-    const result = spawnSync("bash", ["-c", 'bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
+    return { env, stateDir };
+  }
+  const CROSS_CHECK_COMMAND = ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'];
+
+  /**
+   * Starts a run whose every `gh` call waits for `release`, for the case to kill. The run leads its
+   * own process group, so the case can end the leftover subshell too however it exits.
+   */
+  function startHeldCrossCheck(needs, answers) {
+    const { env, stateDir } = prepareCrossCheck(needs, answers, { holdGh: true });
+    const child = spawn("bash", CROSS_CHECK_COMMAND, { env, stdio: "ignore", detached: true });
+    const exited = new Promise((done) => child.once("exit", (code, signal) => done(signal)));
+    return { child, exited, stateDir };
+  }
+
+  function runCrossCheck(needs, answers, options) {
+    const { env, stateDir } = prepareCrossCheck(needs, answers, options);
+    const result = spawnSync("bash", CROSS_CHECK_COMMAND, {
       encoding: "utf8",
       env,
       timeout: VERDICT_SPAWN_TIMEOUT_MS,
@@ -813,16 +1057,22 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
         `the cross-check script failed to run (killed after ${VERDICT_SPAWN_TIMEOUT_MS}ms?): ${result.error?.message ?? result.signal}`,
       );
     }
-    const calls = existsSync(join(stubDir, "count"))
-      ? Number(readFileSync(join(stubDir, "count"), "utf8"))
-      : 0;
-    const sleeps = existsSync(join(stubDir, "sleeps"))
-      ? readFileSync(join(stubDir, "sleeps"), "utf8").split("\n").filter(Boolean)
+    const calls = callsIn(stateDir);
+    const sleeps = existsSync(join(stateDir, "sleeps"))
+      ? readFileSync(join(stateDir, "sleeps"), "utf8").split("\n").filter(Boolean)
       : [];
-    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls, sleeps };
+    return {
+      status: result.status,
+      output: `${result.stdout}${result.stderr}`,
+      calls,
+      sleeps,
+      stateDir,
+    };
   }
+  const callsIn = (dir) =>
+    existsSync(join(dir, "count")) ? Number(readFileSync(join(dir, "count"), "utf8")) : 0;
   const argsOfCall = (n) =>
-    readFileSync(join(stubDir, `args.${n}`), "utf8")
+    readFileSync(join(lastStateDir, `args.${n}`), "utf8")
       .split("\n")
       .filter(Boolean);
 
@@ -854,44 +1104,56 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     expect(granted).toEqual(["actions: read"]);
   });
 
-  it("fails after twenty-one failed API calls, thirty seconds apart, with default settings", () => {
-    const { status, output, calls, sleeps } = runCrossCheck(
-      needsFor("lint"),
-      Array.from({ length: 21 }, () => ({ status: 1 })),
-      { defaults: true },
-    );
-    expect(status).not.toBe(0);
-    expect(calls, output).toBe(21);
-    expect(sleeps).toEqual(Array(20).fill("30"));
-    expect(output).toContain("the jobs API call failed");
-  });
+  it(
+    "fails after twenty-one failed API calls, thirty seconds apart, with default settings",
+    () => {
+      const { status, output, calls, sleeps } = runCrossCheck(
+        needsFor("lint"),
+        Array.from({ length: 21 }, () => ({ status: 1 })),
+        { defaults: true },
+      );
+      expect(status).not.toBe(0);
+      expect(calls, output).toBe(21);
+      expect(sleeps).toEqual(Array(20).fill("30"));
+      expect(output).toContain("the jobs API call failed");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
-  it("accepts a needed job first marked completed at the last default poll, ten minutes later", () => {
-    const { status, output, calls, sleeps } = runCrossCheck(
-      needsFor("lint"),
-      [
-        ...Array(20).fill(page([apiJob("lint", null, "in_progress")])),
-        page([apiJob("lint", "success")]),
-      ],
-      { defaults: true },
-    );
-    expect(status, output).toBe(0);
-    expect(calls).toBe(21);
-    expect(sleeps).toEqual(Array(20).fill("30"));
-    expect(output).toContain("lint: success");
-  });
+  it(
+    "accepts a needed job first marked completed at the last default poll, ten minutes later",
+    () => {
+      const { status, output, calls, sleeps } = runCrossCheck(
+        needsFor("lint"),
+        [
+          ...Array(20).fill(page([apiJob("lint", null, "in_progress")])),
+          page([apiJob("lint", "success")]),
+        ],
+        { defaults: true },
+      );
+      expect(status, output).toBe(0);
+      expect(calls).toBe(21);
+      expect(sleeps).toEqual(Array(20).fill("30"));
+      expect(output).toContain("lint: success");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
-  it("fails after the default window when a needed job never becomes completed", () => {
-    const { status, output, calls, sleeps } = runCrossCheck(
-      needsFor("lint"),
-      [page([apiJob("lint", null, "in_progress")])],
-      { defaults: true },
-    );
-    expect(status).not.toBe(0);
-    expect(calls, output).toBe(21);
-    expect(sleeps).toEqual(Array(20).fill("30"));
-    expect(output).toContain("not completed: lint");
-  });
+  it(
+    "fails after the default window when a needed job never becomes completed",
+    () => {
+      const { status, output, calls, sleeps } = runCrossCheck(
+        needsFor("lint"),
+        [page([apiJob("lint", null, "in_progress")])],
+        { defaults: true },
+      );
+      expect(status).not.toBe(0);
+      expect(calls, output).toBe(21);
+      expect(sleeps).toEqual(Array(20).fill("30"));
+      expect(output).toContain("not completed: lint");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
   it("matches only needed jobs that set no display `name:`, which the jobs API would report instead of the id", () => {
     const needs = needsOf(job("ci").body);
@@ -900,133 +1162,232 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     expect(named).toEqual([]);
   });
 
-  it("reads this run attempt's jobs, every page of them", () => {
-    const { status, calls } = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
-    expect(status).toBe(0);
-    expect(calls).toBe(1);
-    const args = argsOfCall(1);
-    expect(args).toContain("api");
-    expect(args).toContain("--paginate");
-    expect(args).toContain("repos/o/r/actions/runs/123/attempts/2/jobs?per_page=100");
-  });
+  // A kill ends the script's shell, not the `$(gh …)` subshell it is waiting on, so a killed run
+  // can still call `gh` after the next run has started. Receipt: docs/developers/testing-guide.md,
+  // "A `spawnSync` timeout kills only the process it started".
+  it(
+    "keeps a killed run's leftover call out of the next run's count",
+    async () => {
+      const killed = startHeldCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
+      try {
+        await waitUntil(
+          () => existsSync(join(killed.stateDir, "held")),
+          LEFTOVER_STEP_WAIT_MS,
+          "the killed run's `gh` call to start",
+        );
+        killed.child.kill("SIGTERM");
+        expect(
+          await within(killed.exited, LEFTOVER_STEP_WAIT_MS, "the killed run to end"),
+          "the signal that ended the killed run",
+        ).toBe("SIGTERM");
 
-  it("passes when every needed job succeeded or was skipped, printing each one", () => {
-    const { status, output } = runCrossCheck(
-      needsFor("lint", "test-heavy", "image", "bundle-smoke"),
-      [
-        page([
-          apiJob("lint", "success"),
-          apiJob("test-heavy (1)", "success"),
-          apiJob("test-heavy (2)", "success"),
-          apiJob("image / smoke", "success"),
-          apiJob("bundle-smoke", "skipped"),
-          apiJob("ci", null, "in_progress"),
-        ]),
-      ],
-    );
-    expect(status, output).toBe(0);
-    expect(output.split("\n").filter(Boolean)).toEqual([
-      "lint: success",
-      "test-heavy (1): success",
-      "test-heavy (2): success",
-      "image / smoke: success",
-      "bundle-smoke: skipped",
-    ]);
+        const next = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
+        expect(next.status, next.output).toBe(0);
+        expect(next.calls).toBe(1);
 
-    const skippedCaller = runCrossCheck(needsFor("image"), [page([apiJob("image", "skipped")])]);
-    expect(skippedCaller.status, skippedCaller.output).toBe(0);
-    expect(skippedCaller.output).toBe("image: skipped\n");
-  });
+        writeFileSync(join(killed.stateDir, "release"), "");
+        await waitUntil(
+          () => existsSync(join(killed.stateDir, "finished")),
+          LEFTOVER_STEP_WAIT_MS,
+          "the killed run's leftover `gh` call to finish",
+        );
+        expect(callsIn(next.stateDir), "calls the next run saw after the leftover call").toBe(1);
+        expect(callsIn(killed.stateDir), "calls the killed run's leftover call made").toBe(1);
+      } finally {
+        writeFileSync(join(killed.stateDir, "release"), "");
+        try {
+          process.kill(-killed.child.pid, "SIGKILL");
+        } catch {
+          // The group has already ended.
+        }
+      }
+    },
+    LEFTOVER_CALL_TEST_TIMEOUT_MS,
+  );
 
-  it("fails at once on a job GitHub never gave a runner, though `needs` says it succeeded", () => {
-    const never = { name: "test-ui", status: "completed", conclusion: "cancelled", runner_id: 0 };
-    const { status, output, calls } = runCrossCheck(needsFor("lint", "test-ui"), [
-      page([apiJob("lint", "success"), never]),
-    ]);
-    expect(status).not.toBe(0);
-    expect(calls).toBe(1);
-    const printed = output.split("\n");
-    const errorAt = printed.findIndex((line) => line.includes("not succeeded or skipped: test-ui"));
-    expect(errorAt, output).toBeGreaterThan(-1);
-    expect(printed.slice(0, errorAt), output).toEqual(["lint: success", "test-ui: cancelled"]);
-  });
-
-  it("fails on any other completed conclusion, a missing one included", () => {
-    for (const bad of ["failure", null, "neutral", "timed_out"]) {
-      const { status, output, calls } = runCrossCheck(needsFor("lint"), [
-        page([apiJob("lint", bad)]),
+  it(
+    "reads this run attempt's jobs, every page of them",
+    () => {
+      const { status, calls } = runCrossCheck(needsFor("lint"), [
+        page([apiJob("lint", "success")]),
       ]);
-      expect(status, String(bad)).not.toBe(0);
-      expect(calls, String(bad)).toBe(1);
-      expect(output, String(bad)).toContain("not succeeded or skipped: lint");
-    }
-  });
+      expect(status).toBe(0);
+      expect(calls).toBe(1);
+      const args = argsOfCall(1);
+      expect(args).toContain("api");
+      expect(args).toContain("--paginate");
+      expect(args).toContain("repos/o/r/actions/runs/123/attempts/2/jobs?per_page=100");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
-  it("does not take a job whose name only starts with the needed id as that job", () => {
-    const { status, output, calls } = runCrossCheck(needsFor("test-server"), [
-      page([apiJob("test-server-stream", "success")]),
-    ]);
-    expect(status).not.toBe(0);
-    expect(calls).toBe(3);
-    expect(output).toContain("test-server: not in the jobs API");
-    expect(output).toContain("no job in the jobs API for: test-server");
-  });
+  it(
+    "passes when every needed job succeeded or was skipped, printing each one",
+    () => {
+      const { status, output } = runCrossCheck(
+        needsFor("lint", "test-heavy", "image", "bundle-smoke"),
+        [
+          page([
+            apiJob("lint", "success"),
+            apiJob("test-heavy (1)", "success"),
+            apiJob("test-heavy (2)", "success"),
+            apiJob("image / smoke", "success"),
+            apiJob("bundle-smoke", "skipped"),
+            apiJob("ci", null, "in_progress"),
+          ]),
+        ],
+      );
+      expect(status, output).toBe(0);
+      expect(output.split("\n").filter(Boolean)).toEqual([
+        "lint: success",
+        "test-heavy (1): success",
+        "test-heavy (2): success",
+        "image / smoke: success",
+        "bundle-smoke: skipped",
+      ]);
 
-  it("combines every page, and retries until it has read as many jobs as the API counts", () => {
-    const twoPages =
-      page([apiJob("lint", "success")], 2) + "\n" + page([apiJob("typecheck", "success")], 2);
-    const whole = runCrossCheck(needsFor("lint", "typecheck"), [twoPages]);
-    expect(whole.status, whole.output).toBe(0);
-    expect(whole.output).toBe("lint: success\ntypecheck: success\n");
+      const skippedCaller = runCrossCheck(needsFor("image"), [page([apiJob("image", "skipped")])]);
+      expect(skippedCaller.status, skippedCaller.output).toBe(0);
+      expect(skippedCaller.output).toBe("image: skipped\n");
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 
-    const short = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")], 2)]);
-    expect(short.status).not.toBe(0);
-    expect(short.calls).toBe(3);
-    expect(short.output).toContain("read 1 of 2 jobs");
-  });
+  it(
+    "fails at once on a job GitHub never gave a runner, though `needs` says it succeeded",
+    () => {
+      const never = { name: "test-ui", status: "completed", conclusion: "cancelled", runner_id: 0 };
+      const { status, output, calls } = runCrossCheck(needsFor("lint", "test-ui"), [
+        page([apiJob("lint", "success"), never]),
+      ]);
+      expect(status).not.toBe(0);
+      expect(calls).toBe(1);
+      const printed = output.split("\n");
+      const errorAt = printed.findIndex((line) =>
+        line.includes("not succeeded or skipped: test-ui"),
+      );
+      expect(errorAt, output).toBeGreaterThan(-1);
+      expect(printed.slice(0, errorAt), output).toEqual(["lint: success", "test-ui: cancelled"]);
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
-  it("fails when the API call fails on every try", () => {
-    const failing = runCrossCheck(needsFor("lint"), [{ status: 1 }, { status: 1 }, { status: 1 }]);
-    expect(failing.status).not.toBe(0);
-    expect(failing.calls).toBe(3);
-    expect(failing.output).toContain("the jobs API call failed");
-  });
+  it(
+    "fails on any other completed conclusion, a missing one included",
+    () => {
+      for (const bad of ["failure", null, "neutral", "timed_out"]) {
+        const { status, output, calls } = runCrossCheck(needsFor("lint"), [
+          page([apiJob("lint", bad)]),
+        ]);
+        expect(status, String(bad)).not.toBe(0);
+        expect(calls, String(bad)).toBe(1);
+        expect(output, String(bad)).toContain("not succeeded or skipped: lint");
+      }
+    },
+    FOUR_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("passes when the API call fails once and then succeeds", () => {
-    const { status, output, calls } = runCrossCheck(needsFor("lint"), [
-      { out: "", status: 1 },
-      page([apiJob("lint", "success")]),
-    ]);
-    expect(status, output).toBe(0);
-    expect(calls).toBe(2);
-    expect(output).toContain("lint: success");
-  });
+  it(
+    "does not take a job whose name only starts with the needed id as that job",
+    () => {
+      const { status, output, calls } = runCrossCheck(needsFor("test-server"), [
+        page([apiJob("test-server-stream", "success")]),
+      ]);
+      expect(status).not.toBe(0);
+      expect(calls).toBe(3);
+      expect(output).toContain("test-server: not in the jobs API");
+      expect(output).toContain("no job in the jobs API for: test-server");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
 
-  it("waits for a needed job that has not completed, and fails if it never does", () => {
-    const later = runCrossCheck(needsFor("lint"), [
-      page([apiJob("lint", null, "in_progress")]),
-      page([apiJob("lint", "success")]),
-    ]);
-    expect(later.status, later.output).toBe(0);
-    expect(later.calls).toBe(2);
+  it(
+    "combines every page, and retries until it has read as many jobs as the API counts",
+    () => {
+      const twoPages =
+        page([apiJob("lint", "success")], 2) + "\n" + page([apiJob("typecheck", "success")], 2);
+      const whole = runCrossCheck(needsFor("lint", "typecheck"), [twoPages]);
+      expect(whole.status, whole.output).toBe(0);
+      expect(whole.output).toBe("lint: success\ntypecheck: success\n");
 
-    const never = runCrossCheck(needsFor("lint"), [page([apiJob("lint", null, "in_progress")])]);
-    expect(never.status).not.toBe(0);
-    expect(never.calls).toBe(3);
-    expect(never.output).toContain("lint: in_progress");
-    expect(never.output).toContain("not completed: lint");
-  });
+      const short = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")], 2)]);
+      expect(short.status).not.toBe(0);
+      expect(short.calls).toBe(3);
+      expect(short.output).toContain("read 1 of 2 jobs");
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 
-  it("fails without calling the API when it was handed no needed jobs", () => {
-    for (const needs of [undefined, "", "not json", "{}", "[]"]) {
-      const { status, calls } = runCrossCheck(needs, [page([apiJob("lint", "success")])]);
-      expect(status, String(needs)).not.toBe(0);
-      expect(calls, String(needs)).toBe(0);
-    }
-  });
+  it(
+    "fails when the API call fails on every try",
+    () => {
+      const failing = runCrossCheck(needsFor("lint"), [
+        { status: 1 },
+        { status: 1 },
+        { status: 1 },
+      ]);
+      expect(failing.status).not.toBe(0);
+      expect(failing.calls).toBe(3);
+      expect(failing.output).toContain("the jobs API call failed");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "passes when the API call fails once and then succeeds",
+    () => {
+      const { status, output, calls } = runCrossCheck(needsFor("lint"), [
+        { out: "", status: 1 },
+        page([apiJob("lint", "success")]),
+      ]);
+      expect(status, output).toBe(0);
+      expect(calls).toBe(2);
+      expect(output).toContain("lint: success");
+    },
+    ONE_RUN_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "waits for a needed job that has not completed, and fails if it never does",
+    () => {
+      const later = runCrossCheck(needsFor("lint"), [
+        page([apiJob("lint", null, "in_progress")]),
+        page([apiJob("lint", "success")]),
+      ]);
+      expect(later.status, later.output).toBe(0);
+      expect(later.calls).toBe(2);
+
+      const never = runCrossCheck(needsFor("lint"), [page([apiJob("lint", null, "in_progress")])]);
+      expect(never.status).not.toBe(0);
+      expect(never.calls).toBe(3);
+      expect(never.output).toContain("lint: in_progress");
+      expect(never.output).toContain("not completed: lint");
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "fails without calling the API when it was handed no needed jobs",
+    () => {
+      for (const needs of [undefined, "", "not json", "{}", "[]"]) {
+        const { status, calls } = runCrossCheck(needs, [page([apiJob("lint", "success")])]);
+        expect(status, String(needs)).not.toBe(0);
+        expect(calls, String(needs)).toBe(0);
+      }
+    },
+    FIVE_RUNS_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("the test shards", () => {
+  // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still
+  // running are killed.
+  let pnpmCalls = new AbortController();
+  afterEach(() => {
+    pnpmCalls.abort();
+    pnpmCalls = new AbortController();
+  });
+
   it("runs both UI packages sequentially and verifies the tarball", () => {
     const body = job("test-ui").body.join("\n");
     expect(literalFilters(shardStep(job("test-ui").body)).sort()).toEqual([
@@ -1137,16 +1498,19 @@ describe("the test shards", () => {
 
   it(
     "cover every package declaring test:coverage exactly once, on a global scope",
-    () => {
+    async () => {
       const declaring = membersDeclaringTests();
       expect(declaring.length).toBeGreaterThan(0);
 
+      const selected = await Promise.all(
+        shards.map((shard) => selects(shard.filters, pnpmCalls.signal)),
+      );
       const runs = new Map();
-      for (const shard of shards) {
-        for (const name of selects(shard.filters)) {
+      shards.forEach((shard, at) => {
+        for (const name of selected[at]) {
           runs.set(name, [...(runs.get(name) ?? []), shard.id]);
         }
-      }
+      });
 
       expect([...runs].filter(([, shardIds]) => shardIds.length > 1)).toEqual([]);
 
@@ -1179,16 +1543,24 @@ describe("the test shards", () => {
 
   it(
     "give each package its dedicated shard, with the UI pair sharing one",
-    () => {
-      for (const name of OWN_SHARD_PACKAGES) {
-        const dedicated = shards.filter((shard) => shard.filters.includes(name));
-        expect(dedicated).toHaveLength(1);
-        expect(selects(dedicated[0].filters)).toEqual(
+    async () => {
+      // Every shard is checked before any lookup starts: a lookup already running when a later
+      // check throws is aborted by `afterEach` with nothing to receive its refusal.
+      const dedicated = OWN_SHARD_PACKAGES.map((name) => {
+        const found = shards.filter((shard) => shard.filters.includes(name));
+        expect(found, name).toHaveLength(1);
+        return found[0];
+      });
+      const answers = await Promise.all(
+        dedicated.map((shard) => selects(shard.filters, pnpmCalls.signal)),
+      );
+      OWN_SHARD_PACKAGES.forEach((name, at) => {
+        expect(answers[at]).toEqual(
           name === "@waitron/ui" || name === "@waitron/ui-core"
             ? ["@waitron/ui", "@waitron/ui-core"]
             : [name],
         );
-      }
+      });
     },
     PNPM_LS_TEST_TIMEOUT_MS,
   );

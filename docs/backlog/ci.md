@@ -292,12 +292,46 @@ request for `/manage/devices` on 5190 returned the till HTML, while the same pat
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
 server without changing their deployed same-origin paths; this also affects setup's existing links.
 
+## At a load average near 60, more root guard files fail on time
+
+Measured 2026-10-16 on the 18-core Mac (64 GB, 58–60% of memory free), Node v26.11.1, Vitest
+4.1.11: three root projects at once (`pnpm vitest run`, one with `--coverage`) and eight shell
+loops that only spin; the one-minute load average peaked at 72 before the change and 102 on the
+branch. Receipts in lane B's campaign folder,
+`a751-receipts/heavy3/` (before A751) and `a751-receipts/verify-heavy3/` (A751's branch,
+`425cf16b8`).
+
+Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A751's branch each failed
+7–8 tests in four or five files, every one of them in all three runs except `guarded-teardowns` (one run):
+
+| File | Case | What it printed (one run) |
+| --- | --- | --- |
+| `scripts/fiscal-allocation-migration.test.ts` | the whole file | `Hook timed out in 60000ms`, in `useVenueDb`'s `beforeAll` (`packages/db/src/testing/venue-db.ts`) |
+| `scripts/guarded-teardowns.test.ts` | guards the resource it releases | `STACK_TRACE_ERROR` after 82 s |
+| `scripts/menu-sections-upgrade.test.ts` | both cases | `STACK_TRACE_ERROR` after 43–69 s |
+| `scripts/mutation-shard.test.mjs` | fills every shard | `STACK_TRACE_ERROR` after 51–58 s |
+| `scripts/pre-push.test.mjs` | four to five cases | assertion failures or `STACK_TRACE_ERROR`, after 17–40 s |
+
+`brand-build` (`status: null` after 10 s), `run-with-deadline` and `write-path-tables` failed the
+same load before A751 and passed it on the branch; whether that is A751's lighter `ci-workflow` and
+upgrade walk or chance was not measured. `fiscal-allocation-migration` passed the load before A751
+(7.1–7.5 s) and failed it in all three runs on the branch. It failed the same way, `Hook timed out
+in 60000ms`, on `main`'s code (`b81f1481c`) in the run where the load was kept up for 20 minutes
+(`a751-receipts/heavy3-lifted/root1.json`), so it fails under sustained load without A751. On the
+branch the load lasts longer because each root's upgrade walk is no longer cut off at 173 s. None of these failed with the root project and 16 spinning
+loops alone (`a751-receipts/loaded16-full-root.json`), nor in lane G's failing push of 2026-10-16.
+Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
+this load with the bound lifted, and whether the case can be made cheaper.
+
 ## Decisions and deliberate limits
 
-- **Upgrade-test deadline follows the migration count (A489, 2026-10-11).** The captured
-  110.242-second walk exceeded the old fixed deadline near its final step. Keep the workload
-  budget and remeasure it when a new reset changes the cost of rebuilding the baseline.
-  [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk).
+- **Upgrade-test work budget follows the migration count (A489, 2026-10-11) and counts the walk's
+  own processor time (A751, 2026-10-16).** The captured 110.242-second walk exceeded the old fixed
+  deadline near its final step. Keep the workload budget and remeasure it when a new reset changes
+  the cost of rebuilding the baseline. A walk with no phase start or finish for 120 s fails;
+  Vitest's 1,800 s bound is a backstop above CI's eight-minute `root-guards` limit.
+  [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk),
+  [processor time](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard

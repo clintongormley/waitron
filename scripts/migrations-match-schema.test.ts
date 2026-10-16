@@ -36,9 +36,12 @@ import {
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The per-test bound clears the spawn limit plus the copy and the comparison around it. */
-const GENERATE_TIMEOUT_MS = 30_000;
-const TEST_TIMEOUT_MS = 60_000;
+/**
+ * 300 s is 2.1x the slowest generate measured under load (A751). The per-test bound clears it plus
+ * the copy and the comparison around it.
+ */
+const GENERATE_TIMEOUT_MS = 300_000;
+const TEST_TIMEOUT_MS = 330_000;
 
 let scratch = "";
 beforeAll(() => {

@@ -488,13 +488,39 @@ the suite performs no wait at all.
 The one design choice worth knowing before trusting it in a gate: **a bound it cannot evaluate makes
 it decline to judge the file, not accuse it.** A guard that fails a correct file stops every push, so
 where precise reading fails — a bound written as an expression, a per-case bound past a regex literal
-or on a template-table `it.each`, a number after some other callback — it goes quiet instead. That is
+or on a template-table `it.each`, a number after some other callback — it goes quiet instead
+(`scripts/ci-workflow.test.mjs` and `scripts/migration-upgrade.test.ts` among them,
+`docs/backlog.md`). That is
 a deliberate hole, and its detector block has a case for each of those shapes recording the decline,
 alongside cases for what it does read and what it is blind to.
 
 **`scripts/spawn-timeout-budget.test.ts` does not cover a `spawnSync` timeout clearing the CHILD's
 own worst case, retry loops included** (the previous section) — it reads a `scripts/` suite's own
 declared waits, never the child's, so nothing guards that rule in general.
+
+## A `spawnSync` timeout kills only the process it started.
+
+When `spawnSync`'s `timeout` fires it signals the child it started, and nothing below it. The
+script's own children keep running with no parent, and any of them that writes into a directory
+the next test reads changes that test's result. `scripts/ci-workflow.test.mjs` ran its jobs-API
+script as `bash -c 'bash -e -c "$VERDICT_SCRIPT" 2>&1'`, and every case shared one stub directory
+whose `count` file says how many times the `gh` stand-in ran. Measured 2026-10-16 (Node v26.11.1,
+macOS) with a probe that killed the default-window case after 300 ms or 1,200 ms and then ran the
+case that expects one `gh` call: in two of four runs the inner `bash -e` was still alive after the
+kill, and that case read `count` 2 in one of them and 1 in the other, with the file reading 2 a
+second later. That is the "expected 2 to be 1" lane G's push failed on, after two cases were
+killed under load.
+
+`exec` in the wrapper makes the kill land on the script's own shell, and that is not enough: the
+script calls `gh` and `jq` inside `$(…)`, and the subshell running one outlives the kill. Killed
+100 ms in, 40 times with `exec` and 40 without, the stand-in's `count` grew after the kill in every
+run both ways (A751's plan review). So each run now keeps its own state directory, passed to the
+stubs as `STUB_DIR`, while the stub executables are still built once per file (next section). The
+case "keeps a killed run's leftover call out of the next run's count" starts a run whose `gh` call
+waits for a `release` file, kills the run with SIGTERM once that call has started, runs the next
+run, then releases the leftover call and waits for it to finish. It checks both that the next run's
+count is still 1 and that the killed run's own directory received the leftover call; with every run
+sharing one directory again it failed with `expected 2 to be 1`.
 
 ## Build a suite's executable stubs ONCE per file, not once per test.
 

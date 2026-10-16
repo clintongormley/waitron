@@ -75,9 +75,11 @@ const cuts = [
     ),
   ),
 ].sort((a, b) => a - b);
-const { deadlineMs: STALL_DEADLINE_MS, timeoutMs: TEST_BOUND_MS } = migrationUpgradeBudget(
-  cuts.length + 1,
-);
+const {
+  workMs: WORK_BUDGET_MS,
+  idleMs: NO_PROGRESS_LIMIT_MS,
+  timeoutMs: TEST_BOUND_MS,
+} = migrationUpgradeBudget(cuts.length + 1);
 const SCRATCH_PARENT = scratchParent();
 
 const scratch: string[] = [];
@@ -183,9 +185,16 @@ describe("upgrading a venue one migration at a time", () => {
     "applies every shipped migration on top of the change feed the step before installed",
     async () => {
       const watch = createStepWatch();
-      const held = await reportStallAfter(watch, STALL_DEADLINE_MS, () =>
-        upgradeOneStepAtATime(watch),
+      const wallStartedAt = performance.now();
+      const cpuStartedAt = process.threadCpuUsage();
+      const held = await reportStallAfter(
+        watch,
+        { workMs: WORK_BUDGET_MS, idleMs: NO_PROGRESS_LIMIT_MS },
+        () => upgradeOneStepAtATime(watch),
       );
+      const cpu = process.threadCpuUsage(cpuStartedAt);
+      const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
+      const wallMs = Math.round(performance.now() - wallStartedAt);
       // The control: a fill that wrote nothing would pass every row-count comparison.
       expect([...held].filter(([, rows]) => rows === 0).map(([table]) => table)).toEqual([]);
       const unreached = (list: object, seen: Set<string>) =>
@@ -197,7 +206,8 @@ describe("upgrading a venue one migration at a time", () => {
       }).toEqual({ RESETS: [], CANDIDATES: [], ONE_ROW: [] });
       console.log(
         `${watch.summary(5)}\n${held.size} tables hold rows after the last step.\n` +
-          `${cuts.length + 1} steps, ${STALL_DEADLINE_MS} ms deadline.\n` +
+          `${cuts.length + 1} steps: ${cpuMs} ms of processor time against a ${WORK_BUDGET_MS} ms work budget, ` +
+          `${wallMs} ms of wall time, ${NO_PROGRESS_LIMIT_MS} ms no-progress limit.\n` +
           `Scratch directory under ${SCRATCH_PARENT}.`,
       );
     },

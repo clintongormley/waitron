@@ -172,62 +172,96 @@ describe("watchFromAnotherThread", () => {
   function watchdog({ answered = 0 } = {}) {
     const port = new EventEmitter();
     const written = [];
-    let fire;
-    let delay;
+    const timers = [];
+    let time = 1000;
     watchFromAnotherThread(
       port,
-      { dueAt: 5000, ms: 3000, graceMs: 1000, answered: answeredFlag(answered), reportTo: 9 },
+      {
+        startedAt: 1000,
+        idleMs: 3000,
+        graceMs: 1000,
+        answered: answeredFlag(answered),
+        reportTo: 9,
+      },
       {
         write: (fd, text) => written.push([fd, text]),
-        now: () => 1000,
-        setTimer: (callback, ms) => {
-          fire = callback;
-          delay = ms;
-        },
+        now: () => time,
+        setTimer: (callback, ms) => timers.push({ callback, ms }),
         receive: () => undefined,
       },
     );
-    return { port, written, fire: () => fire(), delay: () => delay };
+    return {
+      port,
+      written,
+      at: (now) => (time = now),
+      delays: () => timers.map(({ ms }) => ms),
+      fireAt: (now) => {
+        time = now;
+        timers.at(-1).callback();
+      },
+    };
   }
 
-  it("writes the phase still running, and the phases before it, when the test's thread has not answered", () => {
+  it("writes the phase still running, and the phases before it, once the no-progress limit and the grace have passed since the last event", () => {
     const dog = watchdog();
-    dog.port.emit("message", { finished: { label: "core/0008: migrate", ms: 40 } });
-    dog.port.emit("message", { started: "core/0009: migrate", at: 400 });
-    dog.fire();
+    dog.port.emit("message", { finished: { label: "core/0008: migrate", ms: 40 }, at: 1200 });
+    dog.port.emit("message", { started: "core/0009: migrate", at: 1400 });
+    dog.fireAt(5000);
 
-    expect(dog.delay()).toBe(4000);
+    expect(dog.written).toEqual([]);
+    dog.fireAt(5400);
+
+    expect(dog.delays()).toEqual([4000, 400]);
     expect(dog.written).toEqual([
       [
         9,
-        "The test's thread has not run its 3000 ms deadline timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0009: migrate after 600 ms.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
+        "The test's thread has not run its 3000 ms no-progress timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0009: migrate after 4000 ms.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
       ],
     ]);
   });
 
   it("does not blame a finished phase for a stall after it", () => {
     const dog = watchdog();
-    dog.port.emit("message", { started: "core/0008: migrate", at: 400 });
-    dog.port.emit("message", { finished: { label: "core/0008: migrate", ms: 40 } });
-    dog.fire();
+    dog.port.emit("message", { started: "core/0008: migrate", at: 1400 });
+    dog.port.emit("message", { finished: { label: "core/0008: migrate", ms: 40 }, at: 1440 });
+    dog.fireAt(5440);
 
     expect(dog.written[0][1]).toContain(
       "Stalled between phases.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
     );
   });
 
+  it("counts from when it read an event that carries no time", () => {
+    const dog = watchdog();
+    dog.at(2000);
+    dog.port.emit("message", { finished: { label: "core/0008: migrate", ms: 40 } });
+    dog.fireAt(5000);
+    dog.fireAt(6000);
+
+    expect(dog.delays()).toEqual([4000, 1000]);
+    expect(dog.written).toHaveLength(1);
+  });
+
+  it("counts from its own start, not from a replayed phase that started before it", () => {
+    const dog = watchdog();
+    dog.port.emit("message", { started: "core/0009: migrate", at: 200 });
+    dog.fireAt(5000);
+
+    expect(dog.written[0][1]).toContain("Stalled in phase core/0009: migrate after 4800 ms.");
+  });
+
   it("reads the phases the test's thread already sent when its timer fires before they are delivered", () => {
     const { port1, port2 } = new MessageChannel();
     const written = [];
     try {
-      port2.postMessage({ finished: { label: "core/0008: migrate", ms: 40 } });
+      port2.postMessage({ finished: { label: "core/0008: migrate", ms: 40 }, at: 300 });
       port2.postMessage({ started: "core/0009: migrate", at: 400 });
       watchFromAnotherThread(
         port1,
-        { dueAt: 900, ms: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
+        { startedAt: 0, idleMs: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
         {
           write: (fd, text) => written.push(text),
-          now: () => 1000,
+          now: () => 5000,
           setTimer: (callback) => callback(),
         },
       );
@@ -236,16 +270,42 @@ describe("watchFromAnotherThread", () => {
     }
 
     expect(written).toEqual([
-      "The test's thread has not run its 3000 ms deadline timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0009: migrate after 600 ms.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
+      "The test's thread has not run its 3000 ms no-progress timer 1000 ms after it fell due: something synchronous is holding it. Stalled in phase core/0009: migrate after 4600 ms.\nPhases finished before it:\ncore/0008: migrate: 40 ms\n",
     ]);
+  });
+
+  it("re-arms rather than reports when the events it had not yet read show progress", () => {
+    const { port1, port2 } = new MessageChannel();
+    const written = [];
+    const delays = [];
+    try {
+      port2.postMessage({ started: "core/0009: migrate", at: 4500 });
+      watchFromAnotherThread(
+        port1,
+        { startedAt: 0, idleMs: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
+        {
+          write: (fd, text) => written.push(text),
+          now: () => 5000,
+          setTimer: (callback, ms) => {
+            delays.push(ms);
+            if (delays.length === 1) callback();
+          },
+        },
+      );
+    } finally {
+      port1.close();
+    }
+
+    expect(written).toEqual([]);
+    expect(delays).toEqual([0, 3500]);
   });
 
   it("arms its timer with no delay, not a negative one, when it starts after the time fell due", () => {
     let delay;
     watchFromAnotherThread(
       new EventEmitter(),
-      { dueAt: 900, ms: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
-      { now: () => 1000, setTimer: (_, ms) => (delay = ms) },
+      { startedAt: 0, idleMs: 3000, graceMs: 1000, answered: answeredFlag(0), reportTo: 9 },
+      { now: () => 5000, setTimer: (_, ms) => (delay = ms) },
     );
 
     expect(delay).toBe(0);
@@ -253,8 +313,8 @@ describe("watchFromAnotherThread", () => {
 
   it("writes nothing when the test's thread has answered", () => {
     const dog = watchdog({ answered: 1 });
-    dog.port.emit("message", { started: "core/0009: migrate", at: 400 });
-    dog.fire();
+    dog.port.emit("message", { started: "core/0009: migrate", at: 1400 });
+    dog.fireAt(9000);
 
     expect(dog.written).toEqual([]);
   });
@@ -266,8 +326,8 @@ describe("watchFromAnotherThread", () => {
     let writtenAfter;
     try {
       watchFromAnotherThread(port1, {
-        dueAt: startedAt + 100,
-        ms: 50,
+        startedAt,
+        idleMs: 50,
         graceMs: 50,
         answered: answeredFlag(0),
         reportTo: report.fd,
@@ -284,50 +344,190 @@ describe("watchFromAnotherThread", () => {
 
     expect(writtenAfter).toBeGreaterThanOrEqual(95);
     expect(report.read()).toBe(
-      "The test's thread has not run its 50 ms deadline timer 50 ms after it fell due: something synchronous is holding it. Stalled between phases.\nPhases finished before it:\n(none)\n",
+      "The test's thread has not run its 50 ms no-progress timer 50 ms after it fell due: something synchronous is holding it. Stalled between phases.\nPhases finished before it:\n(none)\n",
     );
   });
 });
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const threadCpuMs = () => {
+  const { user, system } = process.threadCpuUsage();
+  return (user + system) / 1000;
+};
+
 describe("reportStallAfter", () => {
-  it("fails with the watch's report when the body outlives the deadline", async () => {
+  it("passes a body whose phases keep moving, however long it runs in all and however little work it does", async () => {
+    const watch = createStepWatch();
+    const result = await reportStallAfter(
+      watch,
+      { workMs: 150, idleMs: 100 },
+      async () => {
+        for (const label of ["one", "two", "three", "four", "five"]) {
+          await watch.phase(label, () => wait(50));
+        }
+        return "migrated";
+      },
+      { cpuNow: () => 0 },
+    );
+
+    expect(result).toBe("migrated");
+    expect(watch.summary(5)).toMatch(/^5 phases, (\d+) ms in all/);
+    expect(Number(/(\d+) ms in all/.exec(watch.summary(5))[1])).toBeGreaterThanOrEqual(150);
+  });
+
+  it("fails naming the phase that stopped when no phase starts or finishes for the no-progress limit", async () => {
     const watch = createStepWatch({ resources: () => ["Timeout"] });
 
-    await expect(
-      reportStallAfter(watch, 20, () => watch.phase("hangs", () => new Promise(() => {}))),
-    ).rejects.toThrow(
-      /^Still running after \d+ ms, past the 20 ms deadline\. Stalled in phase hangs after \d+ ms\. Active resources: Timeout\./,
-    );
+    const error = await reportStallAfter(watch, { workMs: 2000, idleMs: 100 }, async () => {
+      for (const label of ["first", "second", "third", "fourth"]) {
+        await watch.phase(label, () => wait(40));
+      }
+      await watch.phase("hangs", () => new Promise(() => {}));
+    }).catch((caught) => caught);
+
+    const [, took, gap] =
+      /^Still running after (\d+) ms with no phase started or finished for (\d+) ms, past the 100 ms no-progress limit\. Stalled in phase hangs after \d+ ms\. Active resources: Timeout\.\nPhases finished before it:\nfirst: \d+ ms\nsecond: \d+ ms\nthird: \d+ ms\nfourth: \d+ ms$/.exec(
+        error.message,
+      );
+    expect(Number(gap)).toBeGreaterThanOrEqual(100);
+    expect(Number(took)).toBeGreaterThanOrEqual(Number(gap) + 160);
   });
 
   it("says how long the body had really run when the thread reached the timer late", async () => {
     const watch = createStepWatch({ resources: () => [] });
 
-    const error = await reportStallAfter(watch, 20, () =>
+    const error = await reportStallAfter(watch, { workMs: 10_000, idleMs: 20 }, () =>
       watch.phase("held, then hangs", () => {
         sleepHere(150);
         return new Promise(() => {});
       }),
     ).catch((caught) => caught);
 
-    const [, took] = /^Still running after (\d+) ms, past the 20 ms deadline\./.exec(error.message);
+    const [, took, gap] =
+      /^Still running after (\d+) ms with no phase started or finished for (\d+) ms, past the 20 ms no-progress limit\./.exec(
+        error.message,
+      );
     expect(Number(took)).toBeGreaterThanOrEqual(150);
+    expect(Number(gap)).toBeGreaterThanOrEqual(150);
   });
 
-  it("returns the body's value and clears its timer when the body finishes first", async () => {
+  it("fails at the phase event that sees the body's processor time past its work budget, even if the body never finishes", async () => {
+    let cpu = 0;
+    const watch = createStepWatch({ now: clock(0, 5, 5, 9) });
+
+    await expect(
+      reportStallAfter(
+        watch,
+        { workMs: 100, idleMs: 10_000 },
+        async () => {
+          await watch.phase("light", () => {
+            cpu = 40;
+          });
+          await watch.phase("heavy", () => {
+            cpu = 140;
+          });
+          return new Promise(() => {});
+        },
+        { cpuNow: () => cpu },
+      ),
+    ).rejects.toThrow(
+      /^Used 140 ms of processor time, past the 100 ms budget\. 2 phases, 9 ms in all; the slowest:\nlight: 5 ms\nheavy: 4 ms$/,
+    );
+  });
+
+  it("fails when the body's processor time reaches its work budget after the last phase event", async () => {
+    let cpu = 10;
+
+    await expect(
+      reportStallAfter(
+        createStepWatch(),
+        { workMs: 100, idleMs: 10_000 },
+        async () => {
+          cpu = 110;
+          return "migrated";
+        },
+        { cpuNow: () => cpu },
+      ),
+    ).rejects.toThrow(
+      /^Used 100 ms of processor time, past the 100 ms budget\. 0 phases, 0 ms in all; the slowest:\n$/,
+    );
+  });
+
+  it("rejects with a body's synchronous error, leaving no unhandled rejection, when a phase event had already failed the work budget", async () => {
+    const unhandled = [];
+    const record = (reason) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    let cpu = 0;
+    const watch = createStepWatch();
+    try {
+      await expect(
+        reportStallAfter(
+          watch,
+          { workMs: 100, idleMs: 10_000 },
+          () => {
+            cpu = 140;
+            void watch.phase("over budget", () => undefined);
+            throw new Error("the body's own error");
+          },
+          { cpuNow: () => cpu },
+        ),
+      ).rejects.toThrow("the body's own error");
+      await wait(50);
+    } finally {
+      process.off("unhandledRejection", record);
+    }
+
+    expect(unhandled.map((reason) => reason?.message)).toEqual([]);
+  });
+
+  it("measures the test thread's own processor time by default", async () => {
+    const watch = createStepWatch();
+
+    const error = await reportStallAfter(watch, { workMs: 100, idleMs: 10_000 }, () =>
+      watch.phase("busy", () => {
+        const until = threadCpuMs() + 150;
+        while (threadCpuMs() < until);
+      }),
+    ).catch((caught) => caught);
+
+    const [, used] = /^Used (\d+) ms of processor time, past the 100 ms budget\./.exec(
+      error.message,
+    );
+    expect(Number(used)).toBeGreaterThanOrEqual(150);
+  });
+
+  it("does not count time spent waiting as work, by default", async () => {
+    await expect(
+      reportStallAfter(createStepWatch(), { workMs: 100, idleMs: 10_000 }, async () => {
+        await wait(300);
+        return "migrated";
+      }),
+    ).resolves.toBe("migrated");
+  });
+
+  it("returns the body's value and clears every timer it armed when the body finishes first", async () => {
+    const armed = [];
     const cleared = [];
     const timers = {
-      setTimer: () => "the timer",
+      setTimer: (_, ms) => armed.push(ms),
       clearTimer: (timer) => cleared.push(timer),
     };
+    const watch = createStepWatch();
 
-    expect(await reportStallAfter(createStepWatch(), 1000, async () => "migrated", timers)).toBe(
-      "migrated",
-    );
-    expect(cleared).toEqual(["the timer"]);
+    expect(
+      await reportStallAfter(
+        watch,
+        { workMs: 5000, idleMs: 1000 },
+        () => watch.phase("only", async () => "migrated"),
+        timers,
+      ),
+    ).toBe("migrated");
+    expect(armed).toEqual([1000, 1000, 1000]);
+    expect(cleared).toEqual([1, 2, 3]);
   });
 
-  it("reports the phase a synchronous call holds the thread in, from another thread, while it still holds it", async () => {
+  it("reports the phase a synchronous call holds the thread in, from another thread, counting from the last phase event", async () => {
     const report = reportFile();
     let seenWhileHeld;
     const db = databaseHolding(() => {
@@ -338,11 +538,15 @@ describe("reportStallAfter", () => {
     const watch = createStepWatch();
     let outcome;
     try {
-      await watch.phase("core/0008_before: migrate", () => undefined);
       outcome = await reportStallAfter(
         watch,
-        100,
-        () => watch.phase("core/0009_held: migrate", db.query),
+        { workMs: 10_000, idleMs: 100 },
+        async () => {
+          for (const tag of ["0005", "0006", "0007", "0008"]) {
+            await watch.phase(`core/${tag}_before: migrate`, () => wait(60));
+          }
+          return watch.phase("core/0009_held: migrate", db.query);
+        },
         { graceMs: 100, reportTo: report.fd },
       ).catch((error) => error);
     } finally {
@@ -351,23 +555,26 @@ describe("reportStallAfter", () => {
     }
 
     expect(seenWhileHeld).toMatch(
-      /^The test's thread has not run its 100 ms deadline timer 100 ms after it fell due: something synchronous is holding it\. Stalled in phase core\/0009_held: migrate after \d+ ms\.\nPhases finished before it:\ncore\/0008_before: migrate: \d+ ms\n$/,
+      /^The test's thread has not run its 100 ms no-progress timer 100 ms after it fell due: something synchronous is holding it\. Stalled in phase core\/0009_held: migrate after \d+ ms\.\nPhases finished before it:\ncore\/0005_before: migrate: \d+ ms\ncore\/0006_before: migrate: \d+ ms\ncore\/0007_before: migrate: \d+ ms\ncore\/0008_before: migrate: \d+ ms\n$/,
     );
     expect(outcome).toBeInstanceOf(Error);
-    expect(outcome.message).toMatch(/past the 100 ms deadline/);
+    expect(outcome.message).toMatch(/past the 100 ms no-progress limit/);
   });
 
-  it("fails with the watch's report when a synchronous call held the thread past the deadline and then let go", async () => {
+  it("fails when a synchronous call held the thread inside a phase past the no-progress limit and then let go", async () => {
     const report = reportFile();
     const db = databaseHolding(() => sleepHere(250));
     const watch = createStepWatch();
     try {
       await expect(
-        reportStallAfter(watch, 110, () => watch.phase("core/0009_held: migrate", db.query), {
-          reportTo: report.fd,
-        }),
+        reportStallAfter(
+          watch,
+          { workMs: 10_000, idleMs: 110 },
+          () => watch.phase("core/0009_held: migrate", db.query),
+          { reportTo: report.fd },
+        ),
       ).rejects.toThrow(
-        /^Finished after \d+ ms, past the 110 ms deadline\. 1 phase, \d+ ms in all; the slowest:\ncore\/0009_held: migrate: \d+ ms$/,
+        /^No phase started or finished for \d+ ms, past the 110 ms no-progress limit, until phase core\/0009_held: migrate finished\. 1 phase, \d+ ms in all; the slowest:\ncore\/0009_held: migrate: \d+ ms$/,
       );
     } finally {
       db.close();
@@ -376,15 +583,41 @@ describe("reportStallAfter", () => {
     expect(report.read()).toBe("");
   });
 
+  it("fails when the thread was held between phases past the no-progress limit, at the next phase's start", async () => {
+    const watch = createStepWatch();
+
+    await expect(
+      reportStallAfter(watch, { workMs: 10_000, idleMs: 110 }, async () => {
+        await watch.phase("before", () => undefined);
+        sleepHere(250);
+        await watch.phase("after", () => undefined);
+      }),
+    ).rejects.toThrow(
+      /^No phase started or finished for (\d+) ms, past the 110 ms no-progress limit, until phase after started\. 1 phase, \d+ ms in all; the slowest:\nbefore: \d+ ms$/,
+    );
+  });
+
+  it("fails when the thread was held past the no-progress limit after the last phase event", async () => {
+    const watch = createStepWatch();
+
+    await expect(
+      reportStallAfter(watch, { workMs: 10_000, idleMs: 110 }, async () => {
+        await watch.phase("last", () => undefined);
+        sleepHere(250);
+        return "migrated";
+      }),
+    ).rejects.toThrow(
+      /^No phase started or finished for (\d+) ms, past the 110 ms no-progress limit, before the body finished\. 1 phase, \d+ ms in all; the slowest:\nlast: \d+ ms$/,
+    );
+  });
+
   it("writes no report when the body waits without holding the thread and finishes in time", async () => {
     const report = reportFile();
     try {
-      await reportStallAfter(
-        createStepWatch(),
-        300,
-        () => new Promise((resolve) => setTimeout(resolve, 150)),
-        { graceMs: 1, reportTo: report.fd },
-      );
+      await reportStallAfter(createStepWatch(), { workMs: 10_000, idleMs: 300 }, () => wait(150), {
+        graceMs: 1,
+        reportTo: report.fd,
+      });
     } finally {
       report.close();
     }
@@ -393,10 +626,11 @@ describe("reportStallAfter", () => {
   });
 
   it("has ended its watchdog thread by the time it returns", async () => {
-    await reportStallAfter(createStepWatch(), 1000, () => undefined);
+    const limits = { workMs: 1000, idleMs: 1000 };
+    await reportStallAfter(createStepWatch(), limits, () => undefined);
     const before = openFileDescriptors();
 
-    await reportStallAfter(createStepWatch(), 1000, () => undefined);
+    await reportStallAfter(createStepWatch(), limits, () => undefined);
 
     expect(openFileDescriptors()).toBe(before);
   });
@@ -406,15 +640,18 @@ describe("reportStallAfter", () => {
     try {
       const result = await reportStallAfter(
         createStepWatch(),
-        5000,
+        { workMs: 5000, idleMs: 5000 },
         async () => {
           const giveUpAt = Date.now() + 4000;
           while (warn.mock.calls.length === 0 && Date.now() < giveUpAt) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await wait(10);
           }
           return "migrated";
         },
-        { helper: pathToFileURL(join(import.meta.dirname, "no-such-step-watch.mjs")).href },
+        {
+          helper: pathToFileURL(join(import.meta.dirname, "no-such-step-watch.mjs")).href,
+          cpuNow: () => 0,
+        },
       );
 
       expect(result).toBe("migrated");
@@ -434,7 +671,7 @@ describe("reportStallAfter", () => {
       await expect(
         reportStallAfter(
           createStepWatch(),
-          100,
+          { workMs: 100, idleMs: 100 },
           () => {
             ran = true;
           },
@@ -446,14 +683,27 @@ describe("reportStallAfter", () => {
   );
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    "refuses a deadline of %s before running the body",
-    async (ms) => {
+    "refuses a work budget of %s before running the body",
+    async (workMs) => {
       let ran = false;
       await expect(
-        reportStallAfter(createStepWatch(), ms, () => {
+        reportStallAfter(createStepWatch(), { workMs, idleMs: 100 }, () => {
           ran = true;
         }),
-      ).rejects.toThrow("The deadline must be a positive finite number of milliseconds");
+      ).rejects.toThrow("The work budget must be a positive finite number of milliseconds");
+      expect(ran).toBe(false);
+    },
+  );
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, undefined])(
+    "refuses a no-progress limit of %s before running the body",
+    async (idleMs) => {
+      let ran = false;
+      await expect(
+        reportStallAfter(createStepWatch(), { workMs: 100, idleMs }, () => {
+          ran = true;
+        }),
+      ).rejects.toThrow("The no-progress limit must be a positive finite number of milliseconds");
       expect(ran).toBe(false);
     },
   );

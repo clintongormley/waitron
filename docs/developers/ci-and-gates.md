@@ -1784,12 +1784,21 @@ other trigger passes it (SQLite drops one silently: [conventions-data.md](conven
 
 `scripts/migration-upgrade.test.ts` times each migration step in five phases — migrate, open,
 change feed, close, rows — through `scripts/step-watch.mjs` (`watch.phase`), and runs the whole walk under
-`reportStallAfter`. At `STALL_DEADLINE_MS` it fails with the phase still running, the process's active resources
-(`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not stop
+`reportStallAfter`, which holds it to two limits. The first is the work budget, in the walk's own
+processor time ([below](#the-upgrade-budget-counts-the-walks-own-processor-time)). The second is
+the no-progress limit, `NO_PROGRESS_LIMIT_MS`: when no phase starts or finishes for that long in
+wall time, the test fails with the phase still running, the process's active resources
+(`process.getActiveResourcesInfo()`) and every finished phase's duration. The limit does not stop
 the stalled work; it only names it. The active resources are resource TYPES, not a cause, and
-the report's own timer is among them. A walk that finishes past the deadline fails too, with
-`Finished after N ms, past the M ms deadline.` and the summary.
+the report's own timer is among them. The gap is also checked at every phase event and when the
+walk ends, so a synchronous hold longer than the limit that then lets go fails too, with
+`No phase started or finished for N ms, past the M ms no-progress limit, until phase X started`
+(or `finished`, or `before the body finished` when the walk ends) and the summary.
 
+The two measurements below were taken when the limit was a whole-walk deadline. The report's
+content is the same; its first line now reads `Still running after N ms with no phase started or
+finished for G ms, past the M ms no-progress limit.`, and the worker's says `its M ms no-progress
+timer` where these say `deadline timer`.
 Measured 2026-09-28 (Vitest 4.1.11, Node v26.7.0) with the deadline set to one second, `CI=true`
 and the agent variables unset, the test failed:
 
@@ -1801,9 +1810,9 @@ Phases finished before it:
 followed by the list.
 
 **A synchronous hold.** The database engine is synchronous, so a stall inside one call also holds
-the test thread's timers, and the deadline cannot fire until the call returns. A second thread (a
+the test thread's timers, and the limit cannot fire until the call returns. A second thread (a
 worker) therefore watches too: if the test's thread has not answered `graceMs` (one second) after
-the deadline, the worker writes its own report straight to standard error with `fs.writeSync`,
+the limit fell due, counted from the last phase event the worker has read, the worker writes its own report straight to standard error with `fs.writeSync`,
 because a worker's `process.stderr` is relayed through the held thread: measured 2026-09-28 in a
 standalone Node v26.7.0 script with the main thread held for one second, a worker's
 `process.stderr.write` at 200 ms printed after the main thread was released and
@@ -1828,8 +1837,8 @@ those messages before it writes (`receiveMessageOnPort`). The case "reads the ph
 thread already sent when its timer fires before they are delivered" (`scripts/step-watch.test.mjs`)
 fires the timer before delivery, and failed without that read.
 
-A healthy run prints the number of timed phases, their summed time, the five slowest, and the
-step count and deadline. Measured
+A healthy run prints the number of timed phases, their summed time, the five slowest, the step
+count, the walk's processor and wall time, and both limits. Measured
 2026-09-28 with `CI=true`: `224 phases, 4976 ms in all; the slowest:`, then five lines, the first
 `payments/0001_payment_resolutions: migrate: 84 ms`. The total covers the timed phases only; copying
 the migration folders, rewriting their journals, and the per-source `pragma_table_info` reads and
@@ -1843,6 +1852,10 @@ root project's test process with `stdio: "pipe"` and passes its standard error t
 reporter.
 
 ### The upgrade deadline grows with the walk
+
+Since A751 (2026-10-16) this budget is spent in the walk's own processor time, not wall time: see
+"The upgrade budget counts the walk's own processor time" below. The measurements in this section
+are wall time.
 
 The fixed 110-second deadline failed near the end of a growing walk. On 2026-10-11, main run
 38137016367 (`e5447f902`, Node v26.7.0, Vitest 4.1.11, root coverage) printed
@@ -1868,18 +1881,18 @@ and successful retry totalled 1,540 ms. The three added cuts and reset added 16 
 (1,280 before #1528, 1,296 after). The earlier main run 38127537621 took 76,189 ms; these runs
 were on different runners, so their total difference does not measure the migration's cost.
 
-The deadline now allows 30 seconds plus 500 ms per distinct post-floor migration date, with one
-more step for the baseline. The test timeout leaves another ten seconds for the report. For
-249 steps that is a 154,500 ms deadline, 44,258 ms beyond the captured failing workload and
+The budget (a wall-time deadline until A751, processor time since) allows 30 seconds plus 500 ms
+per distinct post-floor migration date, with one more step for the baseline. Until A751 the test timeout left another ten seconds for the report. For
+249 steps that is a 154,500 ms budget, 44,258 ms beyond the captured failing workload and
 49,161 ms beyond the slowest passing run above. The fixed allowance covers setup and resets;
 the per-step allowance is slightly above the failed walk's average of about 443 ms per step.
 This is a workload budget, not a claim that every individual phase fits 500 ms. Two additional
 dates, such as the in-flight core 0140 and venue-service 0049, add 1,000 ms; their runtime has
 not been measured here. A new reset may require measuring this allowance again.
 
-`scripts/migration-upgrade-budget.test.mjs` sends the captured elapsed time through the real
-`reportStallAfter` with an injected clock: the new budget accepts it, and a walk at its new deadline
-still fails. During A489's failing-test experiment, substituting the old 110,000 ms budget rejected
+`scripts/migration-upgrade-budget.test.mjs` sends the captured workload through the real
+`reportStallAfter` as processor time, over the heaviest loaded wall time measured: the budget
+accepts it, and a walk whose work reaches the budget fails. During A489's failing-test experiment, substituting the old 110,000 ms budget rejected
 the captured workload and the doubled walk. All migration,
 row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
@@ -1894,8 +1907,8 @@ cache across migrations.
 
 Feed installation in this guard runs inside one `withWriteLock` transaction. The next migration
 still meets all the installed triggers; the guard does not exercise interruption partway through
-feed installation. Product boot and migration code are unchanged. The deadline remains 30 seconds
-plus 500 ms per step, with another ten seconds for the report.
+feed installation. Product boot and migration code are unchanged. The budget, still 30 seconds plus 500 ms per step,
+is now spent in processor time (below).
 
 Measured 2026-10-16 on macOS, Node v26.11.1 and Vitest 4.1.11, from main
 `3e713d3a780b8f65447ab203bc9a2f08f336f884`:
@@ -1969,6 +1982,39 @@ These probes identify and reduce repeated work. The reports' longest finished ph
 accumulated times do not identify which host scheduling or storage event caused the earlier
 overruns. The new samples and review experiments remain under
 `~/waitron-campaign-f/receipts/a736/`; the developer backlog retains this unresolved variation.
+
+### The upgrade budget counts the walk's own processor time
+
+The budget is the formula above, 30 seconds plus 500 ms per step (173,000 ms for 286 steps), spent
+in the walk's main-thread processor time (`process.threadCpuUsage()`; the engine is synchronous on
+that thread), checked at every phase event and when the walk ends. The no-progress limit is
+120,000 ms of wall time. Vitest's own bound for the case is 1,800,000 ms, a backstop for a walk
+that keeps moving while starved. Processor time on one thread cannot exceed the wall time that
+passed, so the work budget fails no walk the wall-time deadline passed; a walk slowed only by
+other work on the machine now passes. The no-progress limit is new, and stricter in one case: a
+walk with 120 s or more in which no phase starts or finishes (at the start, between phases, or
+before it ends), finishing inside the old 173 s deadline, passed before and fails now (the largest gap measured under the load below was 34 s). CI's `root-guards` job allows eight minutes (`timeout-minutes: 8`),
+below the Vitest bound, so a CI walk starved past that without spending its budget is cut off by
+GitHub without the walk's report. What neither limit sees: a walk that waits without using the
+processor — on the disk, say — in many gaps each under two minutes.
+
+Measured 2026-10-16 on an 18-core Mac (64 GB, 58–60% of memory free throughout, so processor
+starvation rather than swapping), Node v26.11.1, Vitest 4.1.11. "The load" is three root projects
+at once (`pnpm vitest run`, one with `--coverage`) plus eight shell loops that only spin; the
+one-minute load average peaked between 60 and 102 across the runs. Receipts are in lane B's campaign folder, `a751-receipts/`.
+
+| Run | Wall time | Main-thread processor time | Largest gap between phase events |
+| --- | ---: | ---: | ---: |
+| The walk alone, on this change | 50,299 ms | 45,145 ms | not recorded |
+| Under the load, limits lifted, load kept up for 20 minutes | 1,108,312 ms | 114,909 ms | 34,068 ms |
+| Under the load, on this change, one walk in each of the three roots | 901,422–906,051 ms | 114,453–117,148 ms | not recorded |
+
+Under the wall-time deadline the same load failed every walk at about 173 seconds, as it failed
+lane G's push on 2026-10-16 (`Still running after 174060 ms, past the 174000 ms deadline`). The
+loaded walk spent about 2.5 times the processor time of the walk alone. The budget's margin over
+the largest loaded figure is 1.5 times; a heavier load than this was not measured. The no-progress
+limit is 3.5 times the largest gap measured, and the Vitest bound 1.6 times the longest loaded wall
+time.
 
 ### The upgrade test keeps its database in memory on Linux
 

@@ -84,10 +84,11 @@ export default defineConfig({
     //
     // What thirty seconds does NOT buy, stated so nobody reads it as a guarantee: at a load average
     // near 48 on this machine — four subagents' suites, a coverage run and the other campaign lane
-    // all at once — `scripts/ci-workflow.test.mjs` still timed out, and it declares SIXTY seconds of
-    // its own. No bound survives an oversubscribed machine. This raises the floor from a default
-    // that a normal parallel run trips to one it does not; deciding test concurrency from measured
-    // headroom (`CLAUDE.md` §2) is the other half and this cannot replace it.
+    // all at once — `scripts/ci-workflow.test.mjs` still timed out, though some of its cases then
+    // declared sixty seconds of their own. No bound survives an oversubscribed machine. This raises
+    // the floor from a default that a normal parallel run trips to one it does not; deciding test
+    // concurrency from measured headroom (`CLAUDE.md` §2) is the other half and this cannot replace
+    // it.
     //
     // `scripts/spawn-timeout-budget.test.ts` does NOT read this: for a suite under `scripts/` it
     // reads that file's own text and falls back to Vitest's default, so it still asks a suite
