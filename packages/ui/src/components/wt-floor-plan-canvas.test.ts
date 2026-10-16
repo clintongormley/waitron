@@ -1137,18 +1137,33 @@ it("a turned table's dot resizes along the table's own side, not the screen's", 
 
 it("the top dot of a turned table near the plan's edge grows it and steps it in, never poking out", async () => {
   const p = place({ x: 2, y: 2, width: 6, height: 6, rotation: 30 });
-  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
-    selected: "t1",
-  });
+  const el = await canvas(
+    [
+      { key: "t1", label: "T1", fixed: false, placement: p },
+      table("left", "Left", { y: 12 }),
+      table("top", "Top", { x: 12 }),
+    ],
+    { selected: "t1" },
+  );
   await settled(el);
+  const edge = {
+    left: button(el, "left").getBoundingClientRect().left,
+    top: button(el, "top").getBoundingClientRect().top,
+  };
   const grid = part(el, "grid").getBoundingClientRect();
   const seen = resizes(el);
   const out = outward("top", 30);
   const at = dragDot(el, "top", 12 * out.x, 12 * out.y);
   await el.updateComplete;
   const during = button(el, "t1").getBoundingClientRect();
-  expect(during.left).toBeGreaterThanOrEqual(grid.left);
-  expect(during.top).toBeGreaterThanOrEqual(grid.top);
+  expect(during.left).toBeGreaterThanOrEqual(edge.left);
+  expect(during.top).toBeGreaterThanOrEqual(edge.top);
+  const now = part(el, "grid").getBoundingClientRect();
+  expect({ width: now.width, height: now.height }).toEqual({
+    width: grid.width,
+    height: grid.height,
+  });
+  expect([viewportOf(el).scrollLeft, viewportOf(el).scrollTop]).toEqual([0, 0]);
   await release(el, at);
   expect(resizeFrom(p, "top", 1)).toMatchObject({ x: 2, y: 2, width: 6, height: 7 });
   expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", ...resized(resizeFrom(p, "top", 1)) }]);
@@ -1972,12 +1987,20 @@ it("a table that arrived poking out is not stepped in by a wobbling click, and a
   const el = await canvas([table("t1", "T1", { rotation: 45 })]);
   await settled(el);
   const seen = moves(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const scroll = [viewportOf(el).scrollLeft, viewportOf(el).scrollTop];
   const box = button(el, "t1").getBoundingClientRect();
   const x = box.left + box.width / 2;
   const y = box.top + box.height / 2;
   pointer(button(el, "t1"), "pointerdown", 1, x, y);
   pointer(window, "pointermove", 1, x + 1, y + 1);
   await el.updateComplete;
+  const now = part(el, "grid").getBoundingClientRect();
+  expect({ width: now.width, height: now.height }).toEqual({
+    width: grid.width,
+    height: grid.height,
+  });
+  expect([viewportOf(el).scrollLeft, viewportOf(el).scrollTop]).toEqual(scroll);
   await release(el, { x: x + 1, y: y + 1 });
   expect(seen).toEqual([]);
   button(el, "t1").focus();
@@ -2154,7 +2177,7 @@ it.each([
   },
 );
 
-it("a turned table dropped at the corner is let go where it is drawn; its scroll room goes at the next change", async () => {
+it("a turned table dropped at the corner is let go where it is drawn, inside the plan, adding no scroll room", async () => {
   const el = await canvas([
     table("t1", "T1", { x: 10, y: 10, rotation: 45 }),
     table("t2", "T2", { x: 26 }),
@@ -2166,6 +2189,7 @@ it("a turned table dropped at the corner is let go where it is drawn; its scroll
   expect(after).toEqual(during);
   // It stops with its drawn outline inside the plan, so no room is added and none is kept.
   expect(viewportOf(el).scrollLeft).toBe(0);
+  expect(viewportOf(el).scrollTop).toBe(0);
   button(el, "t2").focus();
   await userEvent.keyboard("{ArrowDown}");
   await settled(el);

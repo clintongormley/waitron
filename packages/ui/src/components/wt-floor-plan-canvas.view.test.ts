@@ -578,12 +578,20 @@ it("at twice zoom a corner-bound table stops at (2, 2), where its drawn outline 
   ];
   await settled(el);
   await doubled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const scroll = [part(el, "viewport").scrollLeft, part(el, "viewport").scrollTop];
   const at = centre(button(el));
   pointer(button(el), "pointerdown", 1, at.x, at.y);
   pointer(window, "pointermove", 1, at.x - 240, at.y - 240);
   await el.updateComplete;
   expect(centre(button(el)).x).toBeCloseTo(at.x - 192);
   expect(centre(button(el)).y).toBeCloseTo(at.y - 192);
+  const now = part(el, "grid").getBoundingClientRect();
+  expect({ width: now.width, height: now.height }).toEqual({
+    width: grid.width,
+    height: grid.height,
+  });
+  expect([part(el, "viewport").scrollLeft, part(el, "viewport").scrollTop]).toEqual(scroll);
   pointer(window, "pointercancel", 1, at.x - 240, at.y - 240);
 });
 
