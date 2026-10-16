@@ -272,7 +272,7 @@ it("in a scrolling strip, a panel opened by Enter just after focus scrolled the 
 });
 
 it("in a scrolling strip, tabbing to the last page of a panel that scrolls leaves it open", async () => {
-  await atSize(844, 390, async () => {
+  await atSize(844, 300, async () => {
     const { el } = await mountApp();
     stripButton(el, "configuration").focus();
     await userEvent.keyboard("{Enter}");
@@ -280,6 +280,9 @@ it("in a scrolling strip, tabbing to the last page of a panel that scrolls leave
     const shown = el.shadowRoot!.querySelector<HTMLElement>("[data-test=strip-panel]")!;
     expect(shown.scrollHeight).toBeGreaterThan(shown.clientHeight);
     const pages = [...shown.querySelectorAll<HTMLElement>(".nav-item")];
+    expect(pages.at(-1)!.getBoundingClientRect().bottom).toBeGreaterThan(
+      shown.getBoundingClientRect().bottom,
+    );
     expect(el.shadowRoot!.activeElement).toBe(pages[0]);
     for (let i = 1; i < pages.length; i++) await userEvent.tab();
     await new Promise((resolve) => requestAnimationFrame(resolve));
