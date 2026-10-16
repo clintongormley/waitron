@@ -1,5 +1,10 @@
 # A585 Staffing needs and the rota — Implementation Plan
 
+> 2026-10-16: A710 aligns the staffing painter hint, creation action,
+> tooltips and headcount controls. The owner kept the whole-day scale, with tooltip and block menu
+> for short blocks; a later readability design remains open. The current contract is in
+> [the design system](../../developers/design-system.md#forms).
+
 > 2026-10-16: A724 changes the staffing painters’ guide contract, bands and season title.
 > Use its [Part 1 plan](2026-10-16-a724-staffing-guide-bands.md) for that work; the historical
 > A585 steps below retain their original contract. The month’s day-box work stays open.

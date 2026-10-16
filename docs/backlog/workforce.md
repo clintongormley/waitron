@@ -53,24 +53,11 @@ draws from the first date's changeover and says so when the dates' changeovers d
 decision on how one grid with one time ruler shows dates with different changeovers. Left open by
 A585-4.
 
-## A710. Staffing painter polish
+## A710. Readable initials in short staffing blocks
 
-Found by A585-4's look at both painters and its review:
-
-- The staffing paint row has no "Drag down a day to paint…" hint; Opening hours' paint row has one
-  (`painter.hint`, `packages/venue-service/src/dashboard/paint-row.ts`).
-- "+ New staff role" opens the staff-role dialog titled "Add staff role" with a Save button; the
-  period dialog opened from Opening hours' painter says "Add and paint with it".
-- A block shorter than about 45 minutes shows no text.
-- An editable block has no hover tooltip; a read-only one has its full name as `title`
-  (`staffing-grid.ts`).
-- The block menu's How many ignores a value outside 1–50, while the paint row's How many puts it
-  back within 1–50. Two tests pin the two rules: "How many changes the block's headcount, within 1
-  to 50, and keeps the menu open" (`staffing-grid.test.ts`) and "puts How many back to the number
-  it paints when it is given one it cannot use…" (`staffing-season-painter.test.ts`).
-- In the Staffing month, a focused day's ring and today's frame look alike.
-
-Left open by A585-4.
+A later zoom/readability design remains open for short blocks. Keep the whole-day overview without
+vertical scrolling. Read a short block's full name through its tooltip or block menu, as the owner
+decided on 2026-10-16. No new zoom or scrolling design is agreed.
 
 ## A711. Shared staffing painter code
 
@@ -158,6 +145,12 @@ can ask contributing modules for that count, or deliberately keep the confirmati
 The completed rota retirement does not depend on that choice.
 
 ## Decisions and deliberate limits
+
+### Whole-day staffing overview (A710, owner 2026-10-16)
+
+Keep both staffing painters at the whole-day scale without vertical scrolling. Short blocks use
+their tooltip and block menu for the full name. The two existing “still showing the whole day”
+tests stay unchanged; a later zoom/readability design remains open above.
 
 ### Named staffing guide bands (A724, owner 2026-10-15)
 

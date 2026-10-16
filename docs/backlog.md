@@ -4828,11 +4828,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
   how one grid shows dates with different changeovers. Left open by A585-4.
   [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
-- **A710. Staffing painter polish** — no "Drag down a day…" hint, + New staff role's dialog says
-  Save where Opening hours' period dialog says "Add and paint with it", short blocks show no text,
-  editable blocks have no tooltip, the two How many fields treat a number outside 1–50 differently,
-  and the month's focus ring looks like its today frame. Left open by A585-4.
-  [Detail](backlog/workforce.md#a710-staffing-painter-polish)
+- **A710. Readable initials in short staffing blocks** — a later zoom/readability design remains
+  open. Keep the whole-day overview without vertical scrolling; use the tooltip and block menu
+  for a short block's full name (owner, 2026-10-16).
+  [Detail](backlog/workforce.md#a710-readable-initials-in-short-staffing-blocks)
 - **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
   parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
   would remove the copies. Left open by A585-4.

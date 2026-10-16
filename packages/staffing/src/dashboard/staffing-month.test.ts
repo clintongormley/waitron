@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { StaffingMonth } from "../staffing-types.js";
@@ -786,3 +787,38 @@ describe("week link labels fit narrow month columns", () => {
     }
   });
 });
+
+it("A710 uses the theme focus ring outside the day, independently of today's inset frame", async () => {
+  const { el } = await mount({ canWrite: true });
+  el.style.setProperty("--wt-focus-ring", "4px dashed rgb(90, 80, 70)");
+  const today = cell(el, "2026-12-02").querySelector<HTMLButtonElement>("button.day")!;
+  today.focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowLeft}");
+  const style = getComputedStyle(today);
+  expect(today.matches(":focus-visible")).toBe(true);
+  expect(style.outlineStyle).toBe("dashed");
+  expect(style.outlineWidth).toBe("4px");
+  expect(style.outlineColor).toBe("rgb(90, 80, 70)");
+  expect(parseFloat(style.outlineOffset)).toBeGreaterThan(0);
+  expect(style.boxShadow).toBe("none");
+  expect(today.querySelector(".today")?.textContent).toBe("Today");
+});
+
+for (const theme of ["light", "dark"] as const)
+  it(`keeps today's badge distinct from the default keyboard-focus frame in ${theme}`, async () => {
+    const { el } = await mount({ canWrite: true });
+    el.parentElement!.setAttribute("data-theme", theme);
+    const today = cell(el, "2026-12-02").querySelector<HTMLButtonElement>("button.day")!;
+    today.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    const focused = cell(el, "2026-12-03").querySelector<HTMLButtonElement>("button.day")!;
+    expect(focused.matches(":focus-visible")).toBe(true);
+    expect(getComputedStyle(focused).outlineStyle).toBe("solid");
+    expect(getComputedStyle(focused).outlineWidth).toBe("2px");
+    expect(getComputedStyle(today).boxShadow).toBe("none");
+    expect(today.getAttribute("aria-current")).toBe("date");
+    expect(getComputedStyle(today.querySelector(".today")!).backgroundColor).not.toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+    expect(focused.hasAttribute("aria-current")).toBe(false);
+  });

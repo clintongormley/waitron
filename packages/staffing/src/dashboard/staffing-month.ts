@@ -159,7 +159,7 @@ export class StaffingMonthView extends LitElement {
       button.day:focus-visible,
       .rota-week:focus-visible,
       .chip button:focus-visible {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
       .chip button {
@@ -171,9 +171,6 @@ export class StaffingMonthView extends LitElement {
         text-align: start;
         overflow-wrap: anywhere;
         cursor: pointer;
-      }
-      .day[aria-current="date"] {
-        box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
       }
       td[data-tint] .day {
         border-block-start-color: var(--season-tint-line);

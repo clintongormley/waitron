@@ -920,3 +920,58 @@ it.each(a724LookCases)(
     }
   },
 );
+
+for (const [locale, hint] of [
+  ["en", "Drag down a day to paint"],
+  ["es", "Arrastra hacia abajo en un día para pintar"],
+] as const)
+  it(`A710 shows Opening hours' painting hint and creation action in ${locale}`, async () => {
+    setLocale(locale);
+    const { painter } = await mount();
+    expect(byTest(painter, "hint")?.textContent?.trim()).toBe(hint);
+    expect(byTest(painter, "guide-hint")?.textContent?.trim()).not.toBe("");
+  });
+for (const [locale, action] of [
+  ["en", "Add and paint with it"],
+  ["es", "Añadir y pintar con él"],
+] as const)
+  it(`A710 labels the painter's staff-role creation action in ${locale}`, async () => {
+    setLocale(locale);
+    const { painter } = await mount();
+    byTest(painter, "new-staff-role")!.click();
+    await settle(painter);
+    const dialog = root(painter).querySelector("staff-role-dialog")!;
+    await dialog.updateComplete;
+    const save = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-staff-role]",
+    )!;
+    expect(save.textContent?.trim()).toBe(action);
+  });
+
+it("A710 restores the native paint-row How many text, including a correction equal to its last render", async () => {
+  const { painter } = await mount();
+  const control = root(painter).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+    "wt-number-stepper[name=headcount]",
+  )!;
+  await control.updateComplete;
+  const input = control.shadowRoot!.querySelector("input")!;
+  for (const [typed, shown] of [
+    ["0", "1"],
+    ["60", "50"],
+    ["2.5", "50"],
+  ] as const) {
+    input.value = typed;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await settle(painter);
+    expect(input.value, typed).toBe(shown);
+    expect(grid(painter).headcount).toBe(Number(shown));
+  }
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await settle(painter);
+  expect(input.value).toBe("");
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+  await settle(painter);
+  expect(input.value).toBe("50");
+  expect(grid(painter).headcount).toBe(50);
+});
