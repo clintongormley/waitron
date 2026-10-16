@@ -4828,6 +4828,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
   how one grid shows dates with different changeovers. Left open by A585-4.
   [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
+- **A710. Readable initials in short staffing blocks** — the full-day grid leaves a quarter-hour
+  about 5px high. Normal 12px initials need a taller, vertically scrolling timeline, which conflicts
+  with both painters' tests requiring the whole day without vertical scroll. Owner decision:
+  keep the overview and use the block menu/tooltip, or allow vertical scrolling for readable labels.
+  [Detail](backlog/workforce.md#a710-readable-initials-in-short-staffing-blocks)
 - **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
   parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
   would remove the copies. Left open by A585-4.

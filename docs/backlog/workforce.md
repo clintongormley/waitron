@@ -53,6 +53,19 @@ draws from the first date's changeover and says so when the dates' changeovers d
 decision on how one grid with one time ruler shows dates with different changeovers. Left open by
 A585-4.
 
+## A710. Readable initials in short staffing blocks
+
+At the minimum whole-day scale, a quarter-hour block measures 5px high. Shrinking its initials to
+fit produced 2.4px text in A710's review probe. A taller grid kept normal 12px text and passed the
+short-label checks, but failed both painters' existing “still showing the whole day” tests.
+They require `scrollHeight <= clientHeight + 1`; the scrolling proposal measured 1773 against 635.
+All 372 other cases in that run passed, and neither existing assertion was changed.
+
+Choose whether to keep the whole-day overview and read short blocks through their menu or tooltip,
+or allow vertical scrolling so every quarter-hour holds normal-size initials. Keep the overview
+until that choice is made. The relevant tests are in `staffing-season-painter.test.ts` and
+`staffing-special-day-painter.test.ts`, under `packages/staffing/src/dashboard/`.
+
 ## A711. Shared staffing painter code
 
 - `staffing-season-painter.ts` and `staffing-special-day-painter.ts` (under

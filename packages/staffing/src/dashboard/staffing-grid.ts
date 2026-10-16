@@ -94,7 +94,6 @@ export class StaffingGrid extends LitElement {
          foot into a column past its end edge, and text too wide for its line onto that line's
          hidden second row. Each leads with an empty item, so even the first line can wrap away. */
       .block {
-        container-type: size;
         display: flex;
         flex-flow: column wrap;
         align-content: flex-start;
@@ -135,7 +134,6 @@ export class StaffingGrid extends LitElement {
         z-index: 2;
       }
       .block .name {
-        font-size: min(var(--wt-font-size-sm), calc(100cqb / 1.25));
         font-weight: var(--wt-font-weight-bold);
       }
       /* At most a quarter of the block, so a short block keeps both edges and a body to click. */

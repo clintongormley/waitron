@@ -1,7 +1,7 @@
 # A724 Part 1: staffing guide bands implementation plan
 
-> 2026-10-16: A710 aligns the staffing painter hint, creation action, short-block initials,
-> tooltips and headcount controls; the current contract is in
+> 2026-10-16: A710 aligns the staffing painter hint, creation action,
+> tooltips and headcount controls; short-block labels remain an owner decision; the current contract is in
 > [the design system](../../developers/design-system.md#forms).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task, inline. Steps use checkbox (`- [ ]`) syntax for tracking. The owner has approved the design and the runner authorises implementation; no approval pause or agent dispatch.

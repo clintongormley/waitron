@@ -1,7 +1,7 @@
 # A585 Staffing needs and the rota — Implementation Plan
 
-> 2026-10-16: A710 aligns the staffing painter hint, creation action, short-block initials,
-> tooltips and headcount controls; the current contract is in
+> 2026-10-16: A710 aligns the staffing painter hint, creation action,
+> tooltips and headcount controls; short-block labels remain an owner decision; the current contract is in
 > [the design system](../../developers/design-system.md#forms).
 
 > 2026-10-16: A724 changes the staffing painters’ guide contract, bands and season title.

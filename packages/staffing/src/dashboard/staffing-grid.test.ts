@@ -1257,30 +1257,6 @@ test("A710 editable blocks offer their full day, name, count and times as a hove
   expect(block(el, "tue").title).toBe("Tuesday, Head chef, 1 person, 09:00–16:30");
 });
 
-for (const [width, height] of [
-  [390, 844],
-  [1280, 900],
-] as const)
-  test(`A710 short blocks keep their initials wholly visible at ${width}px`, async () => {
-    const old = [window.innerWidth, window.innerHeight];
-    try {
-      await page.viewport(width, height);
-      const el = await grid({
-        mon: [
-          { ...headChef, startsAt: "09:00", endsAt: "09:15" },
-          { ...sous, startsAt: "10:00", endsAt: "10:30" },
-        ],
-      });
-      for (const initials of ["HC", "SC"]) {
-        const text = blockTexts(el).find((text) => text.text === initials)!;
-        expect(inside(text.box, text.clip), initials).toBe(true);
-        expect(text.box.height).toBeGreaterThan(0);
-      }
-    } finally {
-      await page.viewport(old[0]!, old[1]!);
-    }
-  });
-
 test("painting across an existing staffing block adds a block and retains the original", async () => {
   const el = await grid({ mon: [headChef] });
   const seen = changes(el);

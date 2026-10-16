@@ -172,9 +172,6 @@ export class StaffingMonthView extends LitElement {
         overflow-wrap: anywhere;
         cursor: pointer;
       }
-      .day[aria-current="date"] {
-        box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
-      }
       td[data-tint] .day {
         border-block-start-color: var(--season-tint-line);
       }

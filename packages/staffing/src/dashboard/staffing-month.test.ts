@@ -800,5 +800,25 @@ it("A710 uses the theme focus ring outside the day, independently of today's ins
   expect(style.outlineWidth).toBe("4px");
   expect(style.outlineColor).toBe("rgb(90, 80, 70)");
   expect(parseFloat(style.outlineOffset)).toBeGreaterThan(0);
-  expect(style.boxShadow).toContain("inset");
+  expect(style.boxShadow).toBe("none");
+  expect(today.querySelector(".today")?.textContent).toBe("Today");
 });
+
+for (const theme of ["light", "dark"] as const)
+  it(`keeps today's badge distinct from the default keyboard-focus frame in ${theme}`, async () => {
+    const { el } = await mount({ canWrite: true });
+    el.parentElement!.setAttribute("data-theme", theme);
+    const today = cell(el, "2026-12-02").querySelector<HTMLButtonElement>("button.day")!;
+    today.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    const focused = cell(el, "2026-12-03").querySelector<HTMLButtonElement>("button.day")!;
+    expect(focused.matches(":focus-visible")).toBe(true);
+    expect(getComputedStyle(focused).outlineStyle).toBe("solid");
+    expect(getComputedStyle(focused).outlineWidth).toBe("2px");
+    expect(getComputedStyle(today).boxShadow).toBe("none");
+    expect(today.getAttribute("aria-current")).toBe("date");
+    expect(getComputedStyle(today.querySelector(".today")!).backgroundColor).not.toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+    expect(focused.hasAttribute("aria-current")).toBe(false);
+  });
