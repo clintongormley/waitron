@@ -1,7 +1,7 @@
 import { CALENDAR_MONTH_PLAN_READS } from "@waitron/venue-service/dashboard/live-queries";
 
 export const QUERY_DEPENDENCIES = {
-  "staff-roles": ["staff_roles", "person_staff_roles", "persons"],
+  "staff-roles": ["staff_roles", "person_staff_roles"],
   "staff-role-delete-impact": [
     "staff_roles",
     "person_staff_roles",
