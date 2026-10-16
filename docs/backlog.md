@@ -1968,6 +1968,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
+  In progress on `feat/a737-post-invoice-refund`: guarded storage and refundable-balance reads;
+  refund commands, recovery, reporting, screens and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
