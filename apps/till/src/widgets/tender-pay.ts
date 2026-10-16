@@ -140,6 +140,11 @@ export class TillTenderPay extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .pending-check {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+
       .row {
         display: flex;
         align-items: baseline;
@@ -1041,6 +1046,11 @@ export class TillTenderPay extends LitElement {
     return html`
       <div class="summary card-outcome">
         <p class="prompt" role="status">${message}</p>
+        ${
+          this.cardOutcome?.outcome === "timeout"
+            ? html`<p class="pending-check" role="status">${t("card.pending_check")}</p>`
+            : nothing
+        }
       </div>
       <div class="actions">
         ${

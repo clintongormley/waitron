@@ -105,6 +105,14 @@ describe.each(["en-GB", "es-ES"])("card failure messages in %s", (locale) => {
     expect(el.shadowRoot!.querySelector(".prompt")!.textContent).toBe(
       locale === "es-ES" ? row.es : row.en,
     );
+    const explanation = el.shadowRoot!.querySelector(".pending-check");
+    if (row.outcome === "timeout") {
+      expect(explanation?.textContent?.trim()).toBe(
+        locale === "es-ES"
+          ? "Waitron está comprobando el pago. El pedido sigue bloqueado hasta conocer el resultado. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta."
+          : "Waitron is checking the payment. This order stays locked until the result is known. If it stays unresolved, ask a manager to check Card payments.",
+      );
+    } else expect(explanation).toBeNull();
     expect(el.shadowRoot!.querySelector(".retry") !== null).toBe(row.retry);
     expect(el.shadowRoot!.querySelector(".wait")).toBeNull();
     expect(el.shadowRoot!.querySelector(".switch-tender")).not.toBeNull();
