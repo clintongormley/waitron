@@ -10,6 +10,8 @@ export type MenuUse =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "allergy.invalid": { field: string };
+    "allergy.out_of_date": { revision: number };
     "kitchen_note.invalid": { field: "note" | "scope" | "revision" };
     "kitchen_note.too_long": { length: number; limit: number };
     "kitchen_note.out_of_date": { revision: number };

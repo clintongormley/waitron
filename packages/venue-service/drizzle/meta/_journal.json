@@ -386,6 +386,13 @@
       "when": 1792106418853,
       "tag": "0054_kitchen_note_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1792172603245,
+      "tag": "0055_party_allergy",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
@@ -407,6 +407,10 @@ export async function submitDraft(
           joinGroupId,
           operatorId,
           billId: input.billId,
+          sourceDraftLineIds: groups.flatMap(({ lineIds }) => {
+            const selected = new Set(lineIds);
+            return lines.filter((line) => selected.has(line.id)).map((line) => line.id);
+          }),
           revisionMoved: true,
         },
         attendance === undefined ? undefined : { recorder: attendance, at },
@@ -693,7 +697,22 @@ async function addDiscardedDraft(
     ...stored.filter(({ draftId }) => draftId === into.id),
     ...stored.filter(({ draftId }) => draftId === fromDraftId),
   ].map(({ line }) => line);
-  await replaceLines(tx, [into.id, fromDraftId], into.id, normaliseDraftLines(combined));
+  const [owner] = await tx
+    .select({ partyId: orderDrafts.partyId })
+    .from(orderDrafts)
+    .where(eq(orderDrafts.id, into.id));
+  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, owner!.partyId);
+  const assigned = new Set(
+    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+  );
+  await replaceLines(
+    tx,
+    [into.id, fromDraftId],
+    into.id,
+    normaliseDraftLines(
+      combined.map((line) => (assigned.has(line.id) ? { ...line, noMerge: true } : line)),
+    ),
+  );
   await tx
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })
@@ -785,10 +804,19 @@ async function replaceLines(
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
-  await tx.delete(orderDraftLines).where(inArray(orderDraftLines.draftId, [...fromDraftIds]));
-  if (lines.length === 0) return;
-  await tx.insert(orderDraftLines).values(
-    lines.map((line, index) => ({
+  await tx.delete(orderDraftLines).where(
+    and(
+      inArray(orderDraftLines.draftId, [...fromDraftIds]),
+      lines.length === 0
+        ? undefined
+        : notInArray(
+            orderDraftLines.id,
+            lines.map((line) => line.id),
+          ),
+    ),
+  );
+  for (const [index, line] of lines.entries()) {
+    const row = {
       id: line.id,
       draftId: intoDraftId,
       position: index + 1,
@@ -802,8 +830,12 @@ async function replaceLines(
       courseId: line.courseId,
       makeAtStationId: line.makeAt ?? null,
       noMerge: line.noMerge,
-    })),
-  );
+    };
+    await tx
+      .insert(orderDraftLines)
+      .values(row)
+      .onConflictDoUpdate({ target: orderDraftLines.id, set: row });
+  }
 }
 
 /** One open draft of the party, which the caller knows is there. */

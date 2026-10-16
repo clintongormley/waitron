@@ -12,3 +12,4 @@ export * from "./kitchen-screens.js";
 export * from "./department-receipts.js";
 export * from "./seasons.js";
 export * from "./order-kitchen-notes.js";
+export * from "./party-allergy.js";

@@ -1,3 +1,4 @@
+import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -2538,4 +2539,125 @@ describe("finishing the table", () => {
       { code: "party.bill_outstanding" },
     );
   });
+});
+
+describe("A669 allergy ticks on real draft submission", () => {
+  it("maps reordered groups to their own guests, skips extras children and retains an unsent tick", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", {
+        options: [v.rare],
+        extras: [{ listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] }],
+      }),
+      item(v, "fish"),
+      item(v, "beer"),
+    ]);
+    const state = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window seat", allergens: { milk: {} }, note: "Severe" },
+            { who: "Red coat", allergens: { fish: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[1]!.id },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[2]!.id },
+      ]),
+    );
+    await submit(v, partyId, draft, ALEX, [
+      { lineIds: [draft.lines[1]!.id], release: "hold" },
+      { lineIds: [draft.lines[0]!.id], release: "fire" },
+    ]);
+    const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    const working = await db.select().from(workingOrderLines);
+    expect(ticks).toHaveLength(3);
+    expect(ticks).toEqual(
+      expect.arrayContaining([
+        {
+          guestId: state.guests[0]!.id,
+          draftLineId: null,
+          workingLineId: working.find((line) => line.productId === v.productId.burger)!.id,
+        },
+        {
+          guestId: state.guests[1]!.id,
+          draftLineId: null,
+          workingLineId: working.find((line) => line.productId === v.productId.fish)!.id,
+        },
+        { guestId: state.guests[1]!.id, draftLineId: draft.lines[2]!.id, workingLineId: null },
+      ]),
+    );
+    const extra = working.find((line) => line.parentLineId !== null)!;
+    expect(extra.productId).toBe(v.productId.sauce);
+    expect(ticks.some((tick) => tick.workingLineId === extra.id)).toBe(false);
+  });
+});
+
+it("A669 keeps separately assigned identical dishes when joining two drafts of the same owner", async () => {
+  const v = await setupVenue();
+  const a = await seated(v, "Allergy join A"),
+    b = await seated(v, "Allergy join B");
+  const da = await save(v, a.partyId, ALEX, null, 0, [item(v, "beer")]);
+  const dbb = await save(v, b.partyId, ALEX, null, 0, [item(v, "beer")]);
+  const ga = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      a.partyId,
+      await partyRevision(a.partyId),
+      { answer: "allergies", guests: [{ who: "Left seat", allergens: { milk: {} } }] },
+      ALEX,
+    ),
+  );
+  const gb = await inTx(async (tx) =>
+    savePartyAllergy(
+      tx,
+      b.partyId,
+      await partyRevision(b.partyId),
+      { answer: "allergies", guests: [{ who: "Right seat", allergens: { eggs: {} } }] },
+      ALEX,
+    ),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, a.partyId, [
+      { guestId: ga.guests[0]!.id, draftLineId: da.lines[0]!.id },
+    ]),
+  );
+  await inTx((tx) =>
+    setAllergyLineTicks(tx, b.partyId, [
+      { guestId: gb.guests[0]!.id, draftLineId: dbb.lines[0]!.id },
+    ]),
+  );
+  await inTx(async (tx) =>
+    joinTables(tx, v.cfg, a.partyId, b.tableId, {
+      expectedPartyRevision: await partyRevision(a.partyId),
+      operatorId: ALEX,
+      bills: "separate",
+      otherPartyId: b.partyId,
+      expectedOtherPartyRevision: await partyRevision(b.partyId),
+    }),
+  );
+  const joined = await draftsOf(v, a.partyId);
+  expect(joined).toHaveLength(1);
+  expect(joined[0]!.lines.map((line) => [line.id, line.quantity])).toEqual([
+    [da.lines[0]!.id, "1.000"],
+    [dbb.lines[0]!.id, "1.000"],
+  ]);
+  const result = await inTx((tx) => readPartyAllergy(tx, a.partyId));
+  expect(result.ticks).toHaveLength(2);
+  expect(result.ticks).toEqual(
+    expect.arrayContaining([
+      { guestId: ga.guests[0]!.id, draftLineId: da.lines[0]!.id, workingLineId: null },
+      { guestId: gb.guests[0]!.id, draftLineId: dbb.lines[0]!.id, workingLineId: null },
+    ]),
+  );
 });

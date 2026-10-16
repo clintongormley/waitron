@@ -1,4 +1,12 @@
 import {
+  readPartyAllergy,
+  savePartyAllergy,
+  setAllergyLineTicks,
+  moveAllergyDraftTicks,
+  mergePartyAllergies,
+  splitPartyAllergies,
+} from "./party-allergy.js";
+import {
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
 } from "./business-day-schedule.js";
@@ -107,6 +115,12 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  readPartyAllergy,
+  savePartyAllergy,
+  setAllergyLineTicks,
+  moveAllergyDraftTicks,
+  mergePartyAllergies,
+  splitPartyAllergies,
   kitchenNoteKey,
   readKitchenNotes,
   writeKitchenNote,
