@@ -384,7 +384,7 @@ describe("the Staffing view's month", () => {
   it("fits a phone's width without scrolling sideways", async () => {
     const { el } = await mount({ width: "390px" });
     expect(el.scrollWidth).toBeLessThanOrEqual(390);
-    for (const part of root(el).querySelectorAll<HTMLElement>("table, .head, .sub, .day"))
+    for (const part of root(el).querySelectorAll<HTMLElement>("table, .head, .day"))
       expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
         el.parentElement!.getBoundingClientRect().right + 0.5,
       );
@@ -736,7 +736,7 @@ describe("the Staffing view's month", () => {
     it("fits a phone's width with its day buttons", async () => {
       const { el } = await mount({ width: "390px", canWrite: true });
       expect(el.scrollWidth).toBeLessThanOrEqual(390);
-      for (const part of root(el).querySelectorAll<HTMLElement>("table, .head, .sub, .day"))
+      for (const part of root(el).querySelectorAll<HTMLElement>("table, .head, .day"))
         expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
           el.parentElement!.getBoundingClientRect().right + 0.5,
         );
@@ -790,6 +790,13 @@ describe("the day box", () => {
       painter: "special-day",
       "special-day": "sd-eve",
     });
+  });
+
+  it("a writer's special day a season holds offers no Edit Winter's standard week", async () => {
+    const { el } = await mount({ canWrite: true });
+    const box = await openBox(el, "2026-12-24");
+    expect(box.line).toBe("Special day — replaces Winter's standard staffing");
+    expect(boxButtons(el)).toEqual(["Edit Christmas Eve staffing"]);
   });
 
   it("a viewer's box offers Show Christmas Eve staffing and Show Winter's standard week", async () => {
