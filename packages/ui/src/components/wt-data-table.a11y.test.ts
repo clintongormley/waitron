@@ -8,8 +8,51 @@ import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
 import "./wt-data-table.js";
 import "./wt-switch.js";
+import "./wt-input.js";
 
 afterEach(cleanup);
+
+describe.each(["light", "dark"] as const)("server-paged table a11y (%s)", (theme) => {
+  test.each(["page", "loading", "empty", "error", "dates"])("%s", async (state) => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Transactions"></wt-data-table>',
+      theme,
+    )) as WtDataTable<{ id: string; name: string }>;
+    el.columns = [
+      { key: "name", label: "Invoice", cell: (row) => row.name, searchValue: (row) => row.name },
+    ];
+    el.rows = state === "empty" ? [] : [{ id: "sale-1", name: "T1/51" }];
+    el.rowKey = (row) => row.id;
+    el.serverPaging = { page: 1, pageSize: 50, total: 101 };
+    el.searchable = true;
+    el.loading = state === "loading";
+    el.errorMessage = state === "error" ? "The read failed" : "";
+    if (state === "dates") {
+      el.externalFilterCount = 1;
+      el.style.width = "390px";
+      const dates = document.createElement("div");
+      dates.slot = "filters-start";
+      dates.innerHTML =
+        '<wt-input name="from" label="From" type="date"></wt-input><wt-input name="to" label="To" type="date"></wt-input>';
+      el.appendChild(dates);
+    }
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".table-search")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-next-page]")).not.toBeNull();
+    if (state === "dates") {
+      await userEvent.click(
+        page.elementLocator(el.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!),
+      );
+      expect(el.shadowRoot!.querySelector(".filters-trigger")!.getAttribute("aria-expanded")).toBe(
+        "true",
+      );
+      expect(
+        el.querySelector('wt-input[name="from"]')!.shadowRoot!.querySelector('input[type="date"]'),
+      ).not.toBeNull();
+    }
+    await expectNoA11yViolations(host);
+  });
+});
 
 type Row = { id: string; name: string; status: string };
 

@@ -2157,12 +2157,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   After A668's data shape. [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A737 — Find a bill becomes a page with Bills and Transactions tabs (owner, 2026-10-15; open).**
-  Today a dialog with one search box. Bills lists every open order; Transactions lists sales, full
-  invoices and refunds, today by default. Both use the shared table's search, Filters and
-  Customise, with a new date range (Today… This month, or From–To) at the top of Filters and shown
-  as a chip. The first server-paged table: 50 rows a page, search, filters and sort on the server,
-  never every row in memory. [Detail](backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+- **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
+  Add Refund to the transaction receipt for returning a correct charge, without changing its
+  invoice. Record the attempt before contacting the provider, keep one key per attempt, and
+  recover interrupted returns. Keep the existing permission, manager-PIN, manual-terminal and
+  cash-drawer rules. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
+  [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
+  [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
@@ -3075,8 +3076,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
   Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list of
   tabs, each tab a grid of cards, chosen per device profile. **Decided the same day: delete now**,
-  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A737–A740**, which
-  wait on part 2.
+  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A738–A740**, which
+  wait on part 2. The separate Find a bill page is A737 Part 1
+  ([#1778](https://github.com/clintongormley/waitron/pull/1778)); its post-invoice Refund stays open
+  as A737 Part 2.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268
@@ -5610,6 +5613,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **The pnpm setup guard's successful stub once needed a second attempt (2026-10-16; open).**
+  A737's local push hook observed `installed on attempt 2 of 3` where
+  `scripts/ci-setup-pnpm.test.mjs:133` expects attempt 1. The cause is unverified; capture the
+  first attempt's refusal before changing the test or its time limits.
+  [Detail](backlog/ci.md#the-pnpm-setup-guards-successful-stub-once-needed-a-second-attempt).
 
 - **A745. The image build's pnpm install has no time limit or retry of its own.**
   `deploy/Dockerfile`'s build stage runs `npm install --global pnpm@9.15.0` and then

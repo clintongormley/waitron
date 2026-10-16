@@ -193,14 +193,18 @@ screen is designed.
   else has left, the tabs scroll sideways. The More button is the hamburger (three lines);
   `design-system.md` says which icon means which menu. While More is open nothing moves out of
   it; the bar refits when it closes.
+  Since A737 Part 1 (2026-10-16), Find a bill stays in More at every width; the other actions
+  retain that priority and the current contract is in `design-system.md`.
   - **Open, decided as built:** a change in the pending-transfer count alone never brings items
     back onto the bar, so when the count shrinks or goes away, items can stay in More although they
     would now fit, until the next resize or other change refits the bar.
-  - **Open: three cases run close to, and sometimes past, their 15 s limit locally.** The "fits as a fresh bar does when
+  - **Open: the timing-variation header tests spend most of their time waiting for frames.** The "fits as a fresh bar does when
     …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
     owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
     changes" case timed out at 15.4 s both before and after A425's order change. Find what makes
-    them slow rather than raising the limit.
+    them slow rather than raising the limit. A737 Part 1 (2026-10-16) measured reset/final waits
+    of 70–267 ms in a local probe and splits the same 0–40 microtask cuts into smaller cases,
+    retaining the 15 s limit and every layout assertion. The frame-wait cost remains to investigate.
   - **Open:** three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test (deleting
     any one leaves every test passing): the phone-width early return in `#release`, the return
     after re-adding a step in `#fit`, and the unobserve of a replaced language chooser.
@@ -1701,33 +1705,11 @@ shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-bro
 whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
 are.
 
-## A737–A740: the counter till redesigned (owner, 2026-10-15)
-
-Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
-boards are in [mockups/a737-a740-till-counter-redesign/](mockups/a737-a740-till-counter-redesign/):
-1 the counter screen, 2 the windows opened from the order, 3 paying, 4 Find a bill, 5 zones on a
-device. Where a board and this text differ, this text wins. This is A182 part 1 for the counter
-till (the handheld, kitchen screen and pass are not covered). **A182 part 2, retiring canvases,
-runs first** (owner, 2026-10-08), and it was not in any lane's queue on 2026-10-15. A738 also
-waits on A668's data shape (allergen icons, cereal and nut kinds, the product info window); A668's
-spec was awaiting the owner's review on 2026-10-15.
-
-What the code does today, read on 2026-10-15 (read, not run), so the entries below can be checked
-against it: the Counter/Floor header buttons are canvas tabs (`apps/till/src/widgets/tab-shell.ts`);
-Kitchen, Pass and My schedule follow the profile's `show-station`, `show-expo` and `show-schedule`;
-Find a bill, Allergens and Equipment always show. "Refresh menus" re-sends the zone choice
-(`apps/till/src/screens/till-counter-screen.ts`), while `MenuStatePoll` already checks every 15 s
-(`apps/till/src/state/menu-state-poll.ts`). A line's Note opens an inline field that closes only
-when Note is pressed again (`apps/till/src/widgets/basket.ts`). "Make at…" picks the preparation
-station and shows only with two or more stations. "Modifiers" under a line is the button that opens
-the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading. After every sale
-the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
-order off a short screen.
-
 ### A737. Find a bill becomes a page with Bills and Transactions tabs
 
-Today Find a bill is a dialog with a "Search for" dropdown and one text box. It becomes a full
-page, opened from ☰, with Back to the counter (board 4):
+Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
+☰, with Back to the counter (board 4). [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778) covers the page, lists and receipt printing; the
+post-invoice Refund action remains Part 2. The approved page contract is:
 
 - **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
   total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
@@ -1746,6 +1728,47 @@ page, opened from ☰, with Back to the counter (board 4):
   into memory). The server does the search, filters, sort and paging and answers one page (50 rows)
   plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
   table keeps loading everything.
+
+## A737–A740: the counter till redesigned (owner, 2026-10-15)
+
+Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
+boards are in [mockups/a737-a740-till-counter-redesign/](mockups/a737-a740-till-counter-redesign/):
+1 the counter screen, 2 the windows opened from the order, 3 paying, 4 Find a bill, 5 zones on a
+device. Where a board and this text differ, this text wins. This is A182 part 1 for the counter
+till (the handheld, kitchen screen and pass are not covered). **A182 part 2, retiring canvases,
+runs first** (owner, 2026-10-08), and it was not in any lane's queue on 2026-10-15. A738 also
+waits on A668's data shape (allergen icons, cereal and nut kinds, the product info window); A668's
+spec was awaiting the owner's review on 2026-10-15.
+
+2026-10-16: the revised campaign order puts the separate A737 Part 1 page
+([#1778](https://github.com/clintongormley/waitron/pull/1778)) before canvas retirement.
+A738–A740 still follow canvas retirement; A737 Part 2 keeps the post-invoice Refund work.
+
+What the code does today, read on 2026-10-15 (read, not run), so the entries below can be checked
+against it: the Counter/Floor header buttons are canvas tabs (`apps/till/src/widgets/tab-shell.ts`);
+Kitchen, Pass and My schedule follow the profile's `show-station`, `show-expo` and `show-schedule`;
+Find a bill, Allergens and Equipment always show. "Refresh menus" re-sends the zone choice
+(`apps/till/src/screens/till-counter-screen.ts`), while `MenuStatePoll` already checks every 15 s
+(`apps/till/src/state/menu-state-poll.ts`). A line's Note opens an inline field that closes only
+when Note is pressed again (`apps/till/src/widgets/basket.ts`). "Make at…" picks the preparation
+station and shows only with two or more stations. "Modifiers" under a line is the button that opens
+the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading. After every sale
+the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
+order off a short screen.
+
+### A737 Part 2. Refund a paid sale after its invoice
+
+Add Refund to the transaction receipt for returning money when the original charge was right.
+The invoice keeps its original fiscal record. A wrong charge still needs the separate correction
+workflow and is outside this item.
+
+Before calling a card provider, store the attempt with one stable idempotency key. Resume an
+interrupted attempt as the [bill-payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)
+§6b describes. Keep the existing permission and manager-PIN checks, manual-terminal confirmation
+and cash-drawer rule. Close only the post-invoice half of the
+[durable-refund follow-up](payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time);
+the reconciler's reversal remains separate. Follow the
+[Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ### A738. The counter screen: fewer distractions
 

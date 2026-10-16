@@ -150,11 +150,18 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
     },
   );
 
-  it("the full bar, wide enough for everything, has no violations", async () => {
+  it("the full bar with Find a bill in More, closed and open, has no violations", async () => {
     await atViewport(2560, 844, async () => {
       const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
-      expect(el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')).toBeNull();
+      const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+      await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(1));
+      expect(menu.querySelector("wt-button.find-bill")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);
+      await vi.waitFor(() =>
+        expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+      );
       await expectNoA11yViolations(host);
     });
   });

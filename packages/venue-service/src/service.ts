@@ -66,6 +66,7 @@ import {
   readZoneKeepOpenState,
   readZoneClosingStates,
   orderInZones,
+  orderZoneIdSql,
 } from "./operations.js";
 import {
   acknowledgeKitchenNotice,
@@ -181,6 +182,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   assertPassScreenZone,
   readStationScreens,
   orderInZones,
+  orderZoneIdSql,
   recordOrderContext: recordOrderServiceContext,
   retargetOrderContext: retargetOrderServiceContext,
   recordLineContexts: recordWorkingLineContexts,

@@ -1496,6 +1496,32 @@ visibility is remembered per browser in local storage under `<viewKey>:columns` 
 stored keys are ignored and newly added columns take their declared place. Sort and filter memory
 remains in session storage. Blocked storage and malformed JSON leave the defaults in place.
 
+For a list searched and paged by the server, pass `serverPaging` with a zero-based `page`,
+positive `pageSize` and `total`. For example, `{ page: 1, pageSize: 50, total: 2314 }` draws
+“51–100 of 2,314”. Pass only that page's flat rows. The table keeps their order and leaves their
+searching, filtering and sorting to the server. Existing tables leave `serverPaging` unset.
+
+The server mode emits `wt-query-change` after its columns and remembered choices are ready,
+then when its effective query changes. Its detail carries `search` (including trailing spaces),
+`sortKey`, `sortDirection` and `filters`. A hidden or unavailable sort column gives an empty
+`sortKey`; the caller chooses its fallback. Filters carry their effective single value or list,
+including an initial choice. Receiving rows, a total or a loading state does not request another
+query. The existing sort and filter events continue too. Listen to one query path to fetch pages,
+and reset the page when that query changes.
+
+Previous and Next emit `wt-page-change` with `{ page }`. Update `serverPaging` when you receive
+the requested page; the table neither changes it optimistically nor remembers it in storage.
+`pageRangeLabel(from, to, total)`, `previousPageLabel` and `nextPageLabel` supply localized words.
+Both buttons wait while `loading`; the first and last page disable their unavailable direction.
+
+Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
+`toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also
+offers Filters when no column has a filter. Clear all emits `wt-filters-clear` with an empty detail
+object, so you can clear those controls along with the column choices. The toolbar and filter
+panel remain available during loading, errors and empty results. At phone width, opening Filters
+focuses its first slotted field when present, and Tab stays within the panel, including native date
+fields' own segments.
+
 Every list a dashboard screen or dashboard module shows as its main content with `wt-data-table`
 offers customisation for every column except the one that names the row and the one holding the row's
 buttons, which are always shown. A column starts shown unless the screen has a reason to hide it
@@ -4237,15 +4263,20 @@ content.
 The till's tab-shell bar is one row at every width. On a phone (40rem wide or less) it holds the
 tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
 its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
-The bar draws its actions left to right in priority order — Find a bill, Pass, Kitchen, My
-schedule, Allergens, Profile, Equipment, Transfers (the count and its button together) — and More
-takes them from the right: the Waitron name is hidden first, then Transfers, Equipment, Profile,
-Allergens, My schedule, Kitchen, Pass, Find a bill, and last the operator's name with Log out,
-which keep their place after the language chooser. Inside More the items keep the bar's order. The tabs and the language
-chooser never leave the bar; once everything else has left, the tabs scroll sideways. Items come
-back when the screen grows wider, the bar's content other than the transfer count changes, or the
-language changes, but not while More is open. While the transfers are in More, its button carries the pending count. Cases:
-`apps/till/src/widgets/tab-shell.test.ts`.
+Find a bill stays in More at every width and opens the Bills and Transactions page. Its Back
+returns to the counter without replacing the basket. A transaction receipt keeps the page's tab,
+query and server page for its own Back action.
+
+The other bar actions run left to right in priority order: Pass, Kitchen, My schedule, Allergens,
+Profile, Equipment and Transfers (the count and its button together). More takes these from the
+right. The Waitron name hides first, followed by Transfers, Equipment, Profile, Allergens, My
+schedule, Kitchen, Pass, and finally the operator's name with Log out after the language chooser.
+Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
+chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
+when the screen grows wider, the content other than the transfer count changes, or the language
+changes, but they stay in an open More menu until it closes. While Transfers is in More, the
+menu's button carries its pending count. Cases: `apps/till/src/widgets/tab-shell.test.ts` and the
+A737 cases in `apps/till/src/till-app.test.ts`.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation

@@ -1,5 +1,10 @@
 # A453 — The menu Structure tab gets a root row; long windows keep their buttons in view
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md)
+> replaces Find a bill's many-result dialog with a full page. Its selected-bill collector remains
+> a dialog; the historical long-dialog scenario below records the earlier UI.
+
+
 > **2026-10-10 — A462 supersedes the always-open Products and Structure roots described here.**
 > Both now have a root chevron and cascading closure; see
 > [A462](2026-10-10-a462-table-toolbars.md). Structure also uses one Select mode for checkboxes and grips.

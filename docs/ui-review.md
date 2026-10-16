@@ -170,7 +170,9 @@ Much more polished than the login screen (proper top bar, product grid, basket c
       moved into a More menu; wider screens unchanged. Since 2026-10-08 (A395), wider screens move them
       into More as far as the bar needs to stay one row. Since 2026-10-10 (A425), the actions run left
       to right in priority order, Find a bill first and Transfers last, and More takes them from the
-      right; the operator's name and Log out stay after the language chooser and leave last.)
+      right; the operator's name and Log out stay after the language chooser and leave last.
+      Since 2026-10-16 (A737 Part 1), Find a bill stays in More at every width; the remaining
+      actions retain their priority.)
 - [ ] **Per-kg deli items** (e.g. White tuna belly €54.00/kg) — confirm the add-to-basket weight-entry
       flow is intuitive when tapped (not yet exercised).
 - [ ] **Menu tab labels** — "Casa Delgado" (the venue name?) vs "Menú del Día"; confirm the à-la-carte

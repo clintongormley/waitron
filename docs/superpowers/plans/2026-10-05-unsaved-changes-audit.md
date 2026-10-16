@@ -1,5 +1,11 @@
 # W69 editable-form inventory
 
+> **2026-10-16, A737 Part 1:** [The page plan](2026-10-15-a737-find-bill-page.md) supersedes
+> the till's modal search and header placement described below. Find a bill stays in More and
+> opens Bills/Transactions with server paging; collection receives a fresh selected bill.
+> Historical receipts open by sale ID. Use that plan for the current search and collection contract.
+
+
 > **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
 > the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
 > editor. References below describe the code when this document was written.

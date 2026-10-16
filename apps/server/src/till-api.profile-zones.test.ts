@@ -68,6 +68,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  *
  * | Route                                                   | Zone from              | Case that fails without the gate                     |
  * | ------------------------------------------------------- | ---------------------- | ---------------------------------------------------- |
+ * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | every original order; explicit zone query | find-bill-api.test.ts: "refuses a requested foreign zone and hides out-of-scope bills, counts, transactions and options"; allowed: "allows a legitimate bill with no recorded zone even when the permitted-zone set is empty" |
+ * | GET /api/transactions/:saleId/receipt; POST /api/transactions/:saleId/reprint | every correction/substitution source order | transaction-receipt-api.test.ts: "a substitution uses its own receipt, and source-zone access checks all of its original bills"; allowed orderless controls in "reads paid and orderless original sales and a correction by their own identity" |
  * | GET /api/clock/state | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on state" |
  * | POST /api/clock/in | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on in" |
  * | POST /api/clock/out | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on out" |

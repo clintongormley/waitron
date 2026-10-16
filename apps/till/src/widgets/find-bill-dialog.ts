@@ -11,10 +11,9 @@ import {
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { BillLookupRow, InvoiceLookupRow, Tender, TillApi } from "../api/client.js";
+import type { BillLookupRow, Tender } from "../api/client.js";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, overLimitText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -43,24 +42,6 @@ export class TillFindBillDialog extends LitElement {
           calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
         );
       }
-      .results {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-      }
-      .bill {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        text-align: start;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        cursor: pointer;
-      }
       .summary {
         display: flex;
         flex-direction: column;
@@ -76,16 +57,9 @@ export class TillFindBillDialog extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) api!: TillApi;
+  @property({ attribute: false }) bill: BillLookupRow | null = null;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) error?: StringKey | { overLimit: string } | { code: string };
-  @state() private kind: "bills" | "invoices" = "bills";
-  @state() private invoiceResults: InvoiceLookupRow[] | null = null;
-  @state() private query = "";
-  @state() private queryError = false;
-  @state() private searchFailed = false;
-  @state() private searching = false;
-  @state() private results: BillLookupRow[] | null = null;
   @state() private selected: BillLookupRow | null = null;
   @state() private method: "cash" | "card" = "cash";
   @state() private cash = "";
@@ -114,6 +88,8 @@ export class TillFindBillDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("bill") && this.bill !== null && this.bill !== this.selected)
+      this.#select(this.bill);
     if (changed.has("busy") && this.busy && this.#baseline) this.#scope?.commit(this.#baseline);
     if (!this.isConnected || !this.active || this.selected === null || this.#scope) return;
     this.#baseline ??= this.#draft();
@@ -168,63 +144,37 @@ export class TillFindBillDialog extends LitElement {
 
   #back(): void {
     if (!this.isConnected || !this.active || this.busy) return;
-    if (this.selected === null) {
-      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
-      return;
-    }
-    const proceed = () => {
-      this.#scope?.dispose();
-      this.#scope = undefined;
-      this.#baseline = undefined;
-      this.selected = null;
-      this.#emit("find-bill-selection");
-    };
-    if (this.#scope) void this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
-    else proceed();
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
   }
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  async #search(): Promise<void> {
-    if (!this.isConnected || !this.active || this.busy) return;
-    const q = this.query;
-    const generation = ++this.#generation;
-    this.results = null;
-    this.invoiceResults = null;
-    this.searchFailed = false;
-    this.queryError = q.trim() === "";
-    if (this.queryError) {
-      this.searching = false;
-      return;
-    }
-    this.searching = true;
-    try {
-      if (this.kind === "invoices") {
-        const { invoices } = await this.api.lookUpInvoices(q);
-        if (generation === this.#generation) this.invoiceResults = invoices;
-      } else {
-        const { bills } = await this.api.lookUpBills(q);
-        if (generation === this.#generation) this.results = bills;
-      }
-    } catch {
-      if (generation === this.#generation) this.searchFailed = true;
-    } finally {
-      if (generation === this.#generation) this.searching = false;
-    }
-  }
-
   #select(row: BillLookupRow): void {
     if (!this.isConnected || !this.active || this.busy) return;
-    this.#scope?.dispose();
-    this.#scope = undefined;
-    this.#baseline = undefined;
-    this.selected = row;
-    this.cash = row.stillOwed;
-    this.cashError = false;
-    this.method = "cash";
-    this.#emit("find-bill-selection");
+    const generation = ++this.#generation;
+    const accept = () => {
+      if (
+        !this.isConnected ||
+        !this.active ||
+        this.busy ||
+        this.bill !== row ||
+        generation !== this.#generation
+      )
+        return;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#baseline = undefined;
+      this.selected = row;
+      this.cash = row.stillOwed;
+      this.cashError = false;
+      this.method = "cash";
+      this.#emit("find-bill-selection");
+    };
+    if (this.#scope?.isDirty()) {
+      void this.#leave!.request({ scopes: [this], reason: "navigation", proceed: accept });
+    } else accept();
   }
 
   #collect(): void {
@@ -255,13 +205,10 @@ export class TillFindBillDialog extends LitElement {
     } satisfies FindBillPayDetail);
   }
 
-  #when(iso: string): string {
-    return new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium" }).format(new Date(iso));
-  }
-
   override render() {
     const bill = this.selected;
-    const amount = bill ? formatMoney(bill.stillOwed, currentLocale()) : "";
+    if (bill === null) return nothing;
+    const amount = formatMoney(bill.stillOwed, currentLocale());
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -271,168 +218,65 @@ export class TillFindBillDialog extends LitElement {
       @wt-close=${this.#closed}
     >
       <div class="body">
+        <div class="summary">
+          <span>${bill.invoiceNumber ?? bill.orderNumber} ${bill.label ?? ""}</span
+          ><span>${bill.tables.join(", ")} ${bill.partyName ?? ""}</span
+          ><strong>${t("find_bill.owes").replace("{amount}", amount)}</strong>
+        </div>
+        <div class="methods">
+          <wt-button
+            variant=${this.method === "cash" ? "primary" : "secondary"}
+            .disabled=${this.busy}
+            @click=${() => {
+              if (!this.isConnected || !this.active || this.busy) return;
+              this.method = "cash";
+              this.#scope?.changed();
+            }}
+            >${t("find_bill.cash")}</wt-button
+          >
+          <wt-button
+            data-card
+            variant=${this.method === "card" ? "primary" : "secondary"}
+            .disabled=${this.busy}
+            @click=${() => {
+              if (!this.isConnected || !this.active || this.busy) return;
+              this.method = "card";
+              this.#scope?.changed();
+            }}
+            >${t("find_bill.card")}</wt-button
+          >
+        </div>
         ${
-          bill === null
-            ? html`
-                <wt-combobox
-                  name="search-kind"
-                  search="never"
-                  .label=${t("find_bill.kind")}
-                  .value=${this.kind}
-                  .disabled=${this.busy}
-                  .options=${[
-                    { value: "bills", label: t("find_bill.unpaid") },
-                    { value: "invoices", label: t("find_bill.invoices") },
-                  ]}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    if (this.busy) return;
-                    this.kind = event.detail.value === "invoices" ? "invoices" : "bills";
-                    this.#generation++;
-                    this.searching = false;
-                    this.results = null;
-                    this.invoiceResults = null;
-                    this.queryError = false;
-                    this.searchFailed = false;
-                  }}
-                ></wt-combobox>
-                <form
-                  @keydown=${(event: KeyboardEvent) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    void this.#search();
-                  }}
-                  @submit=${(event: Event) => {
-                    event.preventDefault();
-                    void this.#search();
-                  }}
-                >
-                  <wt-input
-                    name="bill-search"
-                    .label=${t(this.kind === "invoices" ? "find_bill.invoice_search" : "find_bill.search")}
-                    .value=${this.query}
-                    .required=${true}
-                    .error=${this.queryError ? t(this.kind === "invoices" ? "find_bill.invoice_query_required" : "find_bill.query_required") : ""}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      this.query = event.detail.value;
-                      this.queryError = false;
-                    }}
-                  ></wt-input>
-                  <wt-button
-                    data-search
-                    variant="secondary"
-                    .loading=${this.searching}
-                    .disabled=${this.busy || this.queryError}
-                    @click=${() => void this.#search()}
-                    >${t("find_bill.search_action")}</wt-button
-                  >
-                </form>
-                ${this.searchFailed ? html`<p role="alert">${t("find_bill.search_failed")}</p>` : nothing}
-                ${this.results?.length === 0 ? html`<p>${t("find_bill.none")}</p>` : nothing}
-                ${this.invoiceResults?.length === 0 ? html`<p>${t("find_bill.invoice_none")}</p>` : nothing}
-                <div class="results">
-                  ${this.invoiceResults?.map(
-                    (row) =>
-                      html`<button
-                        class="bill"
-                        data-invoice
-                        type="button"
-                        ?disabled=${this.busy}
-                        @click=${() => {
-                          if (!this.busy)
-                            this.#emit("find-invoice-open", { workingOrderId: row.workingOrderId });
-                        }}
-                      >
-                        <span>${row.invoiceNumber}</span><span>${row.customerName}</span>
-                        <span
-                          >${this.#when(row.issuedAt)} ·
-                          ${formatMoney(row.total, currentLocale())}</span
-                        >
-                      </button>`,
-                  )}
-                  ${this.results?.map(
-                    (row) =>
-                      html` <button
-                        class="bill"
-                        data-bill
-                        type="button"
-                        @click=${() => this.#select(row)}
-                      >
-                        <span
-                          >${row.invoiceNumber ?? row.orderNumber ?? ""} ${row.label ?? ""}</span
-                        >
-                        <span>${row.tables.join(", ")} ${row.partyName ?? ""}</span>
-                        ${row.departedAt ? html`<span>${t("find_bill.left_on").replace("{date}", this.#when(row.departedAt))}</span>` : nothing}
-                        <span
-                          >${t("find_bill.owes").replace("{amount}", amount || formatMoney(row.stillOwed, currentLocale()))}</span
-                        >
-                      </button>`,
-                  )}
-                </div>
-              `
-            : html`
-                <div class="summary">
-                  <span>${bill.invoiceNumber ?? bill.orderNumber} ${bill.label ?? ""}</span
-                  ><span>${bill.tables.join(", ")} ${bill.partyName ?? ""}</span
-                  ><strong>${t("find_bill.owes").replace("{amount}", amount)}</strong>
-                </div>
-                <div class="methods">
-                  <wt-button
-                    variant=${this.method === "cash" ? "primary" : "secondary"}
-                    .disabled=${this.busy}
-                    @click=${() => {
-                      if (!this.isConnected || !this.active || this.busy) return;
-                      this.method = "cash";
-                      this.#scope?.changed();
-                    }}
-                    >${t("find_bill.cash")}</wt-button
-                  >
-                  <wt-button
-                    data-card
-                    variant=${this.method === "card" ? "primary" : "secondary"}
-                    .disabled=${this.busy}
-                    @click=${() => {
-                      if (!this.isConnected || !this.active || this.busy) return;
-                      this.method = "card";
-                      this.#scope?.changed();
-                    }}
-                    >${t("find_bill.card")}</wt-button
-                  >
-                </div>
-                ${
-                  this.method === "cash"
-                    ? html`<wt-price-input
-                        name="cash-received"
-                        decimal-locale=${currentLocale()}
-                        .label=${t("find_bill.cash_received")}
-                        unit="€"
-                        .fixedUnit=${true}
-                        .value=${live(this.cash)}
-                        .disabled=${this.busy}
-                        .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          if (!this.isConnected || !this.active || this.busy) return;
-                          this.cash = event.detail.value;
-                          this.cashError = false;
-                          this.#scope?.changed();
-                        }}
-                      ></wt-price-input>`
-                    : html`<wt-input
-                        name="terminal-reference"
-                        .label=${t("find_bill.card_reference")}
-                        .value=${live(this.externalRef)}
-                        .disabled=${this.busy}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          if (!this.isConnected || !this.active || this.busy) return;
-                          this.externalRef = event.detail.value;
-                          this.#scope?.changed();
-                        }}
-                      ></wt-input>`
-                }
-              `
+          this.method === "cash"
+            ? html`<wt-price-input
+                name="cash-received"
+                decimal-locale=${currentLocale()}
+                .label=${t("find_bill.cash_received")}
+                unit="€"
+                .fixedUnit=${true}
+                .value=${live(this.cash)}
+                .disabled=${this.busy}
+                .error=${this.cashError ? t("find_bill.cash_short").replace("{amount}", amount) : ""}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (!this.isConnected || !this.active || this.busy) return;
+                  this.cash = event.detail.value;
+                  this.cashError = false;
+                  this.#scope?.changed();
+                }}
+              ></wt-price-input>`
+            : html`<wt-input
+                name="terminal-reference"
+                .label=${t("find_bill.card_reference")}
+                .value=${live(this.externalRef)}
+                .disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (!this.isConnected || !this.active || this.busy) return;
+                  this.externalRef = event.detail.value;
+                  this.#scope?.changed();
+                }}
+              ></wt-input>`
         }
         <wt-form-actions
           .error=${
@@ -442,27 +286,23 @@ export class TillFindBillDialog extends LitElement {
                 ? "code" in this.error
                   ? codeMessage(this.error.code)
                   : overLimitText(this.error.overLimit)
-                : this.queryError || this.cashError
+                : this.cashError
                   ? t("form.fix_fields")
                   : ""
           }
         >
           <wt-button slot="cancel" variant="secondary" .disabled=${this.busy} @click=${this.#back}>
-            ${bill === null ? t("find_bill.close") : t("find_bill.back")}</wt-button
+            ${t("find_bill.back")}</wt-button
           >
-          ${
-            bill === null
-              ? nothing
-              : html`<wt-button
-                  data-collect
-                  variant="primary"
-                  .loading=${this.busy}
-                  .disabled=${this.busy || this.cashError}
-                  @click=${() => this.#collect()}
-                >
-                  ${t("find_bill.confirm").replace("{amount}", amount)}</wt-button
-                >`
-          }
+          <wt-button
+            data-collect
+            variant="primary"
+            .loading=${this.busy}
+            .disabled=${this.busy || this.cashError}
+            @click=${() => this.#collect()}
+          >
+            ${t("find_bill.confirm").replace("{amount}", amount)}</wt-button
+          >
         </wt-form-actions>
       </div>
     </wt-dialog>`;

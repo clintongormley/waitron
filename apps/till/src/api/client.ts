@@ -1,5 +1,13 @@
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { readTransferEvents } from "./transfer-events.js";
+import type {
+  BillRow,
+  BillsQuery,
+  FindBillOptions,
+  FindBillPage,
+  TransactionsPage,
+  TransactionsQuery,
+} from "./find-bill-types.js";
 import type { ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
@@ -79,6 +87,29 @@ export function isNetworkFailure(err: unknown): boolean {
  * {@link isNetworkFailure} counts as no answer. */
 export interface ReadOptions {
   signal?: AbortSignal;
+}
+
+function findBillParams(query: BillsQuery | TransactionsQuery): string {
+  const params = new URLSearchParams({
+    q: query.q,
+    page: String(query.page),
+    sort: query.sort.key,
+    direction: query.sort.direction,
+  });
+  if (query.staffId !== undefined) params.set("staffId", query.staffId);
+  if ("dates" in query) {
+    params.set("preset", query.dates.preset);
+    if (query.dates.preset === "custom") {
+      params.set("from", query.dates.from);
+      params.set("to", query.dates.to);
+    }
+    if (query.method !== undefined) params.set("method", query.method);
+    if (query.type !== undefined) params.set("type", query.type);
+  } else {
+    if (query.zoneId !== undefined) params.set("zoneId", query.zoneId);
+    if (query.state !== undefined) params.set("state", query.state);
+  }
+  return params.toString();
 }
 
 export type TillClockStatus = "out" | "working" | "on_break";
@@ -3403,6 +3434,49 @@ export class TillApi {
       "GET",
       undefined,
       options.signal,
+    );
+  }
+
+  listBills(query: BillsQuery, options: ReadOptions = {}): Promise<FindBillPage<BillRow>> {
+    return this.#request(`/api/bills?${findBillParams(query)}`, "GET", undefined, options.signal);
+  }
+
+  listTransactions(query: TransactionsQuery, options: ReadOptions = {}): Promise<TransactionsPage> {
+    return this.#request(
+      `/api/transactions?${findBillParams(query)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  getFindBill(workingOrderId: string, options: ReadOptions = {}): Promise<BillRow> {
+    return this.#request(
+      `/api/bills/${encodeURIComponent(workingOrderId)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  findBillOptions(options: ReadOptions = {}): Promise<FindBillOptions> {
+    return this.#request("/api/find-bill/options", "GET", undefined, options.signal);
+  }
+
+  getTransactionReceipt(saleId: string, options: ReadOptions = {}): Promise<TillSaleResult> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/receipt`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  async reprintTransaction(saleId: string, language?: string): Promise<void> {
+    await this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/reprint`,
+      "POST",
+      language === undefined ? {} : { language },
     );
   }
 

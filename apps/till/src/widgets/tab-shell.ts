@@ -316,7 +316,7 @@ export class TillTabShell extends LitElement {
   #present(): BarItem[] {
     const has: Record<BarItem, boolean> = {
       transfers: this.transferCount !== undefined || this.transferAvailable,
-      "find-bill": this.affordances.includes("find-bill"),
+      "find-bill": false,
       station: this.affordances.includes("station"),
       expo: this.affordances.includes("expo"),
       schedule: this.affordances.includes("schedule"),
@@ -333,8 +333,13 @@ export class TillTabShell extends LitElement {
   #moved(): ReadonlySet<BarItem> {
     const present = this.#present();
     const fitted = this.phone ? present : present.slice(0, Math.max(0, this.steps - 1));
-    if (!this.#menuOpen()) return new Set(fitted);
-    return new Set(present.filter((item) => fitted.includes(item) || this.#shown.has(item)));
+    const moved = new Set(
+      this.#menuOpen()
+        ? present.filter((item) => fitted.includes(item) || this.#shown.has(item))
+        : fitted,
+    );
+    if (this.affordances.includes("find-bill")) moved.add("find-bill");
+    return moved;
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -674,7 +679,7 @@ export class TillTabShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.steps > 0 || moved.size > 0 ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
                   <nav class="tabs" role="tablist">
                     ${this.tabs.map(
                       (tab) => html`

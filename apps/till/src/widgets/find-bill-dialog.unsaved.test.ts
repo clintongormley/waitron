@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { BillLookupRow, TillApi } from "../api/client.js";
+import type { BillLookupRow } from "../api/client.js";
 import "./find-bill-dialog.js";
 import type { FindBillPayDetail, TillFindBillDialog } from "./find-bill-dialog.js";
 
@@ -20,15 +20,15 @@ const debt: BillLookupRow = {
   status: "waiting_for_payment",
   stillOwed: "30.00",
 };
-const api = { lookUpBills: async () => ({ bills: [debt] }) } as unknown as TillApi;
 class CollectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
+  bill = debt;
   closes = 0;
   selections = 0;
   submitted: FindBillPayDetail[] = [];
   override render() {
     return html`<till-find-bill-dialog
-        .api=${api}
+        .bill=${this.bill}
         @find-bill-close=${() => this.closes++}
         @find-bill-selection=${() => this.selections++}
         @find-bill-pay=${(event: CustomEvent<FindBillPayDetail>) => this.submitted.push(event.detail)}
@@ -39,18 +39,11 @@ class CollectionLeaveApp extends LitElement {
 customElements.define("collection-leave-test-app", CollectionLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount(selected = true) {
+async function mount() {
   const { el: app } = await mountWidget<CollectionLeaveApp>("collection-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("till-find-bill-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
-  if (selected) {
-    await fill(form, "bill-search", "A/12");
-    click(form, "[data-search]");
-    await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
-    click(form, "[data-bill]");
-    await form.updateComplete;
-  }
   return { app, form };
 }
 function field(form: TillFindBillDialog, name: string) {
@@ -98,11 +91,7 @@ for (const route of ["Back", "Escape"]) {
     else await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    if (route === "Back") {
-      await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
-      expect(app.closes).toBe(0);
-      expect(app.selections).toBe(2);
-    } else await expect.poll(() => app.closes).toBe(1);
+    await expect.poll(() => app.closes).toBe(1);
     expect(app.submitted).toEqual([]);
     expect(unload()).toBe(false);
   });
@@ -118,12 +107,11 @@ it("collection defaults and reverted normalized cash are clean but invalid cash 
   await fill(form, "cash-received", "30.0");
   expect(unload()).toBe(false);
   click(form, "[slot=cancel]");
-  await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
+  await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-it("search text and result selection are exempt from warnings", async () => {
-  const { app, form } = await mount(false);
-  await fill(form, "bill-search", "A/12");
+it("an unedited selected bill closes without warnings", async () => {
+  const { app, form } = await mount();
   expect(unload()).toBe(false);
   click(form, "[slot=cancel]");
   await expect.poll(() => app.closes).toBe(1);
@@ -211,9 +199,11 @@ it("a reverted payment method ignores dormant entry fields and returning to a bi
   await form.updateComplete;
   expect(unload()).toBe(false);
   click(form, "[slot=cancel]");
-  await expect.poll(() => form.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
-  click(form, "[data-bill]");
-  await form.updateComplete;
+  await expect.poll(() => app.closes).toBe(1);
+  const dialog = form.shadowRoot!.querySelector("wt-dialog")!;
+  await expect.poll(() => dialog.open).toBe(false);
+  const reopened = await mount();
+  expect(field(reopened.form, "cash-received").value).toBe("30.00");
   expect(field(form, "cash-received").value).toBe("30.00");
   expect(unload()).toBe(false);
   expect((await question(app)).open).toBe(false);
@@ -255,5 +245,50 @@ it("starting collection invalidates an earlier Discard without losing the failed
   expect(unload()).toBe(true);
   click(form, "[slot=cancel]");
   expect((await question(app)).open).toBe(true);
+  expect(app.submitted).toEqual([]);
+});
+
+it("a changed selected bill asks before replacing edited collection details", async () => {
+  const { app, form } = await mount();
+  await fill(form, "cash-received", "40.00");
+  const next = { ...debt, workingOrderId: "collection-2", stillOwed: "12.00" };
+  app.bill = next;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  expect(field(form, "cash-received").value).toBe("40.00");
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(field(form, "cash-received").value).toBe("40.00");
+  app.bill = { ...next };
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => field(form, "cash-received").value).toBe("12.00");
+  expect(unload()).toBe(false);
+  expect(app.submitted).toEqual([]);
+});
+
+it("an obsolete selection cannot replace the cash draft when the bill changes as Discard is answered", async () => {
+  const { app, form } = await mount();
+  await fill(form, "cash-received", "40.00");
+  app.bill = { ...debt, workingOrderId: "collection-2", stillOwed: "12.00" };
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  app.bill = debt;
+  app.requestUpdate();
+  await form.updateComplete;
+  await expect.poll(() => q.open).toBe(false);
+  expect(field(form, "cash-received").value).toBe("30.00");
+  expect(app.selections).toBe(1);
   expect(app.submitted).toEqual([]);
 });
