@@ -3,7 +3,6 @@ import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
@@ -24,6 +23,7 @@ import { closedHatch } from "./period-colour-styles.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
+import { showPicker } from "./calendar-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -49,11 +49,10 @@ export interface CalendarDaysOpen {
 }
 
 /** The months the month read serves: its first week must start in year 0100 or later. */
-const FIRST_MONTH = "0100-02";
-const LAST_MONTH = "9998-12";
+export const FIRST_MONTH = "0100-02";
+export const LAST_MONTH = "9998-12";
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
-const ALL = "all";
 
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
@@ -549,31 +548,6 @@ export class OpeningHoursMonthView extends LitElement {
     </td>`;
   }
 
-  #picker(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
-    const value = chosen || ALL;
-    const options = [
-      { value: ALL, label: t("opening.all_departments") },
-      ...model.days[0]!.departments.map((d) => ({
-        value: d.departmentId,
-        label: names.name(d.departmentId),
-      })),
-    ];
-    return html`<wt-combobox
-      name="departmentId"
-      label=${t("opening.show")}
-      search="never"
-      .options=${options}
-      .value=${value}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
-        chooser.value = value;
-        const next = event.detail.value === ALL ? "" : event.detail.value;
-        if (next !== chosen) this.#emit("month-department-change", { departmentId: next });
-      }}
-    ></wt-combobox>`;
-  }
-
   override render() {
     const current = this.month || this.model?.month;
     if (!current) return nothing;
@@ -626,7 +600,12 @@ export class OpeningHoursMonthView extends LitElement {
 
   #tools(model: OpeningHoursMonth) {
     if (this.stationMode) return nothing;
-    return this.#picker(model, this.#chosen(model), monthNames(this.departments));
+    return showPicker({
+      model,
+      chosen: this.#chosen(model),
+      names: monthNames(this.departments),
+      onDepartment: (departmentId) => this.#emit("month-department-change", { departmentId }),
+    });
   }
 
   #grid(model: OpeningHoursMonth) {
