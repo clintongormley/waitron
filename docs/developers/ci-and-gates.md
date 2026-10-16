@@ -1881,9 +1881,9 @@ and successful retry totalled 1,540 ms. The three added cuts and reset added 16 
 (1,280 before #1528, 1,296 after). The earlier main run 38127537621 took 76,189 ms; these runs
 were on different runners, so their total difference does not measure the migration's cost.
 
-The deadline now allows 30 seconds plus 500 ms per distinct post-floor migration date, with one
-more step for the baseline. Until A751 the test timeout left another ten seconds for the report. For
-249 steps that is a 154,500 ms deadline, 44,258 ms beyond the captured failing workload and
+The budget (a wall-time deadline until A751, processor time since) allows 30 seconds plus 500 ms
+per distinct post-floor migration date, with one more step for the baseline. Until A751 the test timeout left another ten seconds for the report. For
+249 steps that is a 154,500 ms budget, 44,258 ms beyond the captured failing workload and
 49,161 ms beyond the slowest passing run above. The fixed allowance covers setup and resets;
 the per-step allowance is slightly above the failed walk's average of about 443 ms per step.
 This is a workload budget, not a claim that every individual phase fits 500 ms. Two additional
@@ -1992,8 +1992,8 @@ that thread), checked at every phase event and when the walk ends. The no-progre
 that keeps moving while starved. Processor time on one thread cannot exceed the wall time that
 passed, so the work budget fails no walk the wall-time deadline passed; a walk slowed only by
 other work on the machine now passes. The no-progress limit is new, and stricter in one case: a
-walk with a gap of more than 120 s between phase events, finishing inside the old 173 s deadline,
-passed before and fails now (the largest gap measured under the load below was 34 s). CI's `root-guards` job allows eight minutes (`timeout-minutes: 8`),
+walk with 120 s or more in which no phase starts or finishes (at the start, between phases, or
+before it ends), finishing inside the old 173 s deadline, passed before and fails now (the largest gap measured under the load below was 34 s). CI's `root-guards` job allows eight minutes (`timeout-minutes: 8`),
 below the Vitest bound, so a CI walk starved past that without spending its budget is cut off by
 GitHub without the walk's report. What neither limit sees: a walk that waits without using the
 processor — on the disk, say — in many gaps each under two minutes.

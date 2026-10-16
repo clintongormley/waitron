@@ -5806,8 +5806,10 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
   On recurrence, retain the phase report and host state before retrying; compare repeated samples
   before assigning the variation to CPU scheduling or storage. Since A751 the budget counts the
-  walk's own processor time, so a recurrence fails only when the walk's own processor time passes
-  the budget or no phase moves for 120 s; keep that report's processor and wall times.
+  walk's own processor time, so a recurrence fails the test when that time passes the budget or no
+  phase starts or finishes for 120 s (or, starved further, at CI's eight-minute `root-guards` limit
+  with no report). Keep the failure report: a work-budget failure names the processor time used, a
+  no-progress failure the wall time.
   [Measurement](developers/ci-and-gates.md#reducing-repeated-upgrade-test-setup-work-a736)
 
 - **What moving the upgrade test's scratch directory to `/dev/shm` (A122, #856) left open:**
