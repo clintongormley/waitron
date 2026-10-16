@@ -154,3 +154,23 @@ Boot supplies its existing database handle without opening another database here
 The broader Task 4 command still reports the retained unowned Live provision refusal above.
 Its success assertion is unchanged. Keep Task 4 open until the owned production fixture and all
 entry paths are qualified; this checkpoint is not branch readiness.
+
+### Task 4 runtime clock collection
+
+No prior assertion or fixture was changed in this continuation. The appended
+`hour-selection.test.ts` case requires a trusted reader's matching clock confirmation and refuses
+it after the decision changes. Previously the selection adapter passed no such confirmation to
+its engine; the new real-host unavailable-comparison case refused even after explicit confirmation.
+The selector now accepts that opaque proof from its trusted facts reader. Uploaded JSON still
+cannot recreate the clock module's proof.
+
+New clock tests time a browser response against a server-issued challenge, compare it with the
+box and module-selected internet source, and project surviving observations to a later box reading.
+A detected 180-second correction retires the displayed comparison. An old browser answer cannot
+consume a newer challenge; a comparison already waiting on the internet cannot overwrite a newer
+comparison. Missing release metadata still refuses after
+manual confirmation. The new default-provider test reaches the unchanged activation writer and
+retains one intent; real-host tests cover production and preproduction, with the external response
+and embedded release controlled. These do not exercise an actual browser, external network, or
+the configured wizard/CLI entry paths. Those paths and the retained production-readiness fixture
+remain open under Task 4.

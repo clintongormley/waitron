@@ -22,6 +22,7 @@ export interface HourSelectionFacts {
   readonly bases: readonly { readonly code: string; readonly purpose: string }[];
   readonly contextKey: string;
   readonly clock: HourClockDecision;
+  readonly confirmation?: object;
   readonly history: readonly HourHistorySource[];
 }
 export type HourSelectionStore = NonNullable<ModuleOperationHost["withPreparationState"]>;
@@ -247,7 +248,7 @@ export function createHourSelection(options: {
       if (sameEvent.some((entry) => fingerprint(entry) !== fingerprint(base)))
         return refuse("event_mismatch");
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
-      const permitted = canSelectHour(facts.clock, request.confirmation);
+      const permitted = canSelectHour(facts.clock, request.confirmation ?? facts.confirmation);
       if (!permitted) {
         if (wait !== undefined && intent === undefined)
           return {

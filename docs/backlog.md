@@ -335,8 +335,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the disposable hour allocator is now the default under the owner's exact 20:00 test permission.
   The initial hour preparation adapter and the host's activation transition have component checks;
   saved intents now retain their authenticated operator.
-  The hosted adapter has focused checks against frozen context and real local history; its clock
-  provider remains controlled in these checks, and the full mode and CLI wiring is unfinished.
+  The hosted adapter has focused checks against frozen context and real local history. Its default
+  clock collector times browser responses, uses the module's authenticated internet observer and
+  binds manual confirmation to the displayed comparison. Real-host checks control only the external
+  response and release stamp; complete wizard, mode, import and CLI wiring is unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

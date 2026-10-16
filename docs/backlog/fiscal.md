@@ -293,6 +293,15 @@ callback entering `activation-started`, while new preparation revisions remain r
 The configured fiscal setup and disposable defaults remain unchanged. This is not qualification
 of the real wizard, every host or the later recovery/PDF journeys; Task 4 remains incomplete.
 
+**Later Task 4 checkpoints, 2026-10-16:** the owner's exact 20:00 approval switches the disposable
+allocator and its named checks to hour syntax. The hosted adapter now has a default clock collector
+with timed browser challenges, the existing authenticated internet observer and an embedded release
+floor. Component checks reach the unchanged activation writer; real-host checks cover production
+and preproduction with external replies and release metadata controlled. The configured wizard,
+import, CLI and retained owned-production readiness fixture remain unfinished. The
+[changed-check inventory](../operations/a679-changed-checks.md#task-4-runtime-clock-collection)
+records this limit; the earlier unchanged-default checkpoint above describes its earlier tree.
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the

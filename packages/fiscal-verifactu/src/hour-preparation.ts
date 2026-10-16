@@ -13,6 +13,7 @@ import { createHourSelection, type HourSelectionFacts } from "./hour-selection.j
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { HourHistorySource } from "./hour-history.js";
+import { createSetupHourClock } from "./hour-setup-clock.js";
 import "./errors.js";
 
 type SelectionOptions = Parameters<typeof createHourSelection>[0];
@@ -127,20 +128,25 @@ export function createHourPreparation(
 export function createHostedHourPreparation(
   host: ModuleOperationHost,
   options: {
-    readClock(
+    readClock?(
       context: InitialSetupContext,
     ): Promise<{ clock: HourClockDecision; confirmation?: object }>;
-    monotonicNow(): number;
-  },
+    monotonicNow?(): number;
+  } = {},
 ) {
   if (host.readSetupFacts === undefined || host.withPreparationState === undefined)
     return refuse("outside_confirmation_missing");
-  return createHourPreparation({
+  const clocks = createSetupHourClock();
+  const confirmed = new Map<string, string>();
+  const preparation = createHourPreparation({
     withState: host.withPreparationState,
-    monotonicNow: options.monotonicNow,
+    monotonicNow: options.monotonicNow ?? (() => performance.now()),
     read: async (binding) => {
       const facts = await host.readSetupFacts!(binding);
-      const clock = await options.readClock(structuredClone(facts.context));
+      const clock =
+        options.readClock === undefined
+          ? clocks.read(facts.contextKey, confirmed.get(facts.contextKey))
+          : await options.readClock(structuredClone(facts.context));
       return {
         scope: { taxpayerNif: facts.context.taxId, environment: facts.context.environment },
         bases: facts.context.bases,
@@ -151,4 +157,36 @@ export function createHostedHourPreparation(
       };
     },
   });
+  const withFacts = <T>(
+    binding: ModuleOperationInput["binding"],
+    run: (
+      facts: Awaited<ReturnType<NonNullable<ModuleOperationHost["readSetupFacts"]>>>,
+    ) => T | Promise<T>,
+  ) => host.withPreparationState!(binding, async () => run(await host.readSetupFacts!(binding)));
+  return {
+    ...preparation,
+    clockChallenge(binding: ModuleOperationInput["binding"]) {
+      return withFacts(binding, (facts) => {
+        confirmed.delete(facts.contextKey);
+        return clocks.challenge(facts.contextKey);
+      });
+    },
+    compareClocks(
+      binding: ModuleOperationInput["binding"],
+      browser: Parameters<typeof clocks.compare>[2],
+    ) {
+      return withFacts(binding, (facts) => {
+        confirmed.delete(facts.contextKey);
+        return clocks.compare(facts.contextKey, facts.context.environment, browser);
+      });
+    },
+    confirmClock(binding: ModuleOperationInput["binding"], comparisonId: string) {
+      return withFacts(binding, (facts) => {
+        const reading = clocks.read(facts.contextKey, comparisonId);
+        if (confirmed.size === 64) confirmed.delete(confirmed.keys().next().value!);
+        confirmed.set(facts.contextKey, comparisonId);
+        return reading.clock;
+      });
+    },
+  };
 }

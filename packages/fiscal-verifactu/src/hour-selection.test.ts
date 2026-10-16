@@ -574,3 +574,14 @@ it("a host that omits retained revisions cannot authorise a fresh hour", async (
   });
   expect(f.writes).toEqual([]);
 });
+
+it("accepts only a matching clock confirmation from the trusted facts reader", async () => {
+  const f = fixture();
+  f.at(instant, 0, instant + 300_000);
+  f.facts = Object.assign({}, f.facts, { confirmation: confirmHourClock(f.facts.clock) });
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "06RB" });
+  const before = f.writes.length;
+  f.at(instant, 1, instant + 400_000);
+  await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
+  expect(f.writes).toHaveLength(before);
+});
