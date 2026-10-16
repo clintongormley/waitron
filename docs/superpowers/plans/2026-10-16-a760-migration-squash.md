@@ -2,7 +2,23 @@
 
 > **For the later executor:** use `superpowers:executing-plans` for native execution in one job.
 > Do not delegate implementation. Check off each step and retain its receipt. This procedure is
-> awaiting owner approval; publishing this document does not authorise a squash or a reset.
+> approved on 16 October 2026. Start only when the watcher records the freeze and named reset
+> roster below; this documentation update does not start the job.
+
+## Owner approval, 16 October 2026
+
+The owner approved the recommended combined decision at 18:00, as relayed by the watcher: squash
+all 14 populated sets including fiscal-verifactu, keep fiscal source/tests and empty fiscal-none
+unchanged, approve the named history-harness changes, pause other mutating Waitron/Cloud jobs,
+and land only after green review and CI. The watcher starts the single job after big work drains
+and migration branches finish. Record a named operator for every pre-live reset; stop the job if
+you discover a production or real-trading venue.
+
+At 18:05 the owner excluded the physical home box, `waitron.local`, from the job's resets. Keep it
+off, with its image pinned and a recorded **must reset before next start** quarantine. The owner
+resets it on return after 2 November. The job resets the laptop dev-stack slots and Santet
+data venue through the procedures below, once the watcher records their actual paths and operators.
+Unreachable boxes stay offline. No unidentified venue or production reset is authorised.
 
 **Goal:** replace each populated Waitron migration history with one baseline before go-live,
 while retaining the exact fresh schema, installed protections and product behavior.
@@ -35,9 +51,8 @@ refreshes the appendix before deleting any history.
 
 Keep `packages/fiscal-verifactu/src/**`, its huella fixtures, golden assertions and
 `inmutabilidad` **unedited**.
-H2 does not silently exempt fiscal migration SQL: the owner must explicitly approve squashing
-fiscal-verifactu, including the SQL defining `registros_facturacion`, with unchanged schema and
-behavior. A refusal or missing answer keeps execution parked. If any change to fiscal production
+The approval above includes squashing fiscal-verifactu's SQL/meta, including the SQL defining
+`registros_facturacion`, with unchanged schema and behavior. If any change to fiscal production
 source or a protected test becomes necessary, stop this job for a separate decision.
 
 Use one registered feature worktree and one PR. No compatibility reader, journal/hash rewrite,
@@ -74,10 +89,9 @@ If a real venue goes live before execution, this pre-live plan expires and you s
 Keep `packages/migrations/migrations.manifest.json`, module descriptors, `requires`, classification,
 runtime installers and schema declarations unchanged unless a refreshed inventory reveals a specific
 necessary correction. Such a correction needs its own receipt and must still satisfy exact equality.
-Do not change a guard or assertion just to get green. Owner approval of this procedure must include
-the named history-harness changes: guards are controversial under
-the lane's test-change rule. List every changed test check, before/after and this authorisation in
-the PR. Preserve the fiscal source tree except the separately approved fiscal **SQL/meta** replacement.
+Do not change a guard or assertion just to get green. The approval above covers the named
+history-harness changes; guards remain controversial under the lane's test-change rule. List every
+changed test check, before/after and this authorisation in the PR. Preserve the fiscal source tree except the separately approved fiscal **SQL/meta** replacement.
 
 ## Freeze before you create the squash branch
 
@@ -576,10 +590,8 @@ is mandatory before the freeze lifts. Report PR coverage accurately if it is sco
 
 ## Land, reset the approved roster, then release the freeze
 
-- [ ] The watcher/parent obtains the one combined decision below **before execution**. That decision
-  must explicitly authorise this later single job's branch/PR/landing and reset policy. The watcher
-  then fills and acknowledges the actual named roster before starting, within that approved
-  pre-live scope. An unidentified venue has no reset authority. Anything outside the approved
+- [ ] The watcher records the combined approval above and fills and acknowledges the actual named
+  roster before starting, within that approved pre-live scope. An unidentified venue has no reset authority. Anything outside the approved
   scope needs a new decision; do not assume a roster was attached to the planning approval.
   Land only with green current-head checks and resolved review conversations. Keep the same H11
   owner hold through `land-branch`, main update, `pnpm install`, and branch/worktree cleanup.
@@ -598,7 +610,8 @@ is mandatory before the freeze lifts. Report PR coverage accurately if it is sco
 | Normal laptop demo/onboarding, first shared slot | Single-job operator, with current instance owner's acknowledgement | Read `wa-wt ls`; choose the recorded worktree updated to the merge. Run `wa-wt reset demo NAME` or `wa-wt reset onboarding NAME` for the approved target. The first slot uses `$HOME/workspace/.waitron-dev/box`; reset it once, then refresh other first-slot checkout env copies through wa-wt. |
 | Other laptop slots | Each recorded instance owner, coordinated by the job | Same named wa-wt reset for each distinct `$HOME/workspace/.waitron-dev/instances/NAME/box/venue`; do not confuse shared slot zero with isolated later slots. Stop old code first. |
 | Santet real-data laptop venue | Santet worktree owner or the explicitly approved operator | Use **only** the procedure below with `local/square/reset.sh`; no demo reset and no fresh Square fetch by default. |
-| Owner's physical test box; any additional test/demo box | Owner or a named operator with actual access | At that host's inspected installer location run `sudo bash waitron.sh --reset --yes install MERGE_SHA`. Keep TLS by default; no `--all`, `--force-production` or guessed remote login. `WAITRON_DIR` defaults to `/opt/waitron` (`deploy/waitron.sh:15`) but confirm an override. |
+| Owner's physical home box, `waitron.local` | Owner on return after 2 November | Do not reset it in this job. Keep it off/quarantined, image pinned, with **must reset before next start** recorded. |
+| Any additional test/demo box | Named operator with actual access | At that host's inspected installer location run `sudo bash waitron.sh --reset --yes install MERGE_SHA` only for a recorded pre-live reset target. Keep TLS by default; no `--all`, `--force-production` or guessed remote login. `WAITRON_DIR` defaults to `/opt/waitron` (`deploy/waitron.sh:15`) but confirm an override. |
 | Cloud-hosted Waitron node, mirror, restore/rehearsal target or offline spare, **if present** | Named node operator | Inventory actual deployment and venue volume. Use that deployment's approved pre-live whole-venue reset and candidate image, or leave it stopped/quarantined pending access. Do not reset the Waitron Cloud control-plane PostgreSQL database. |
 | A production-stamped or real-trading venue, **if discovered** | Owner | Stop the whole squash procedure; this plan has no production-reset authority. |
 
@@ -606,7 +619,8 @@ Do not infer a host, account or credential from these types. Unreachable approve
 remain physically offline only with a recorded “must reset before next start” quarantine and image
 pin; a reachable box with old data must not automatically pull the new image. If any roster row
 lacks an assigned operator/access path, finish the schema/PR work but hold deployment and freeze
-release for that row. The one owner decision must approve any offline quarantine policy.
+release for that row. The owner approved offline quarantine above; record it explicitly for each
+affected box, including `waitron.local`.
 
 Santet's actual script was read at
 `~/workspace/worktrees/waitron-local-santet-data/local/square/reset.sh:1`. Its memory is
@@ -667,10 +681,11 @@ place; do not compensate with skipped tests, broader normalization, an active-lo
 parallel lanes. A fresh job must not start while the old process still owns the operation. Follow
 H10 after two unresolved finish/land failures; no third blind attempt.
 
-## One combined decision for the parent to put to the owner
+## Combined decision approved on 16 October 2026
 
-The parent owns fresh review, publication and the single phone-readable question. Do not ask
-additional authoring questions or write campaign state from this worktree.
+The owner answered the following published question as recommended at 18:00. The dated approval
+above records that answer and the 18:05 home-box exception. Do not repeat the question or treat
+approval as clearance of the execution freeze or reset roster.
 
 > Approve this plan for the sole job once migration work drains? Recommended: squash all populated
 > sets including fiscal-verifactu, keep fiscal source/tests and empty fiscal-none unchanged, approve

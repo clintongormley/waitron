@@ -6191,9 +6191,12 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
 - **A760. Squash every migration set before go-live.** The [operator plan](superpowers/plans/2026-10-16-a760-migration-squash.md)
-  and [inventory](superpowers/plans/2026-10-16-a760-migration-squash-inventory.md) await owner approval.
-  Run later as the sole job after migration work drains; all sets, fiscal scope, the full freeze
-  and named venue resets need one combined approval.
+  and [inventory](superpowers/plans/2026-10-16-a760-migration-squash-inventory.md) are approved
+  (owner, 2026-10-16), including fiscal SQL/meta and the named history-harness changes.
+  The watcher starts the sole job after big work and migration branches drain, with the full
+  Waitron/Cloud mutation freeze and named reset/operator roster recorded. Reset the laptop
+  dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
+  off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up
   (owner, 2026-10-14; open; needs a design first; not queued).** Google login becomes an optional
