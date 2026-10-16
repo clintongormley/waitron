@@ -933,6 +933,37 @@ counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bou
 case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
 the `ci` check. Nothing measures a job's time against 4 minutes.
 
+### A job far over its usual time on unchanged code: read the runner's setup times first
+
+A test job that runs several times its usual length can be a slow RUNNER rather than a slow file.
+The tell is in the job's own log, before any test starts: the pnpm self-install
+(npm's `added 1 package in …` line, printed while `scripts/ci-setup-pnpm.sh` runs) and `pnpm install` (`Done in …`) take
+several times what they take on other runs, and then every file is slower by about the same factor.
+A slow file is the opposite: setup as usual, one file stretched.
+
+The two cases, both on 2026-10-16:
+
+- Run 38947429454 attempt 1, `test-server (4)` (job 117130599004, region centralus), cancelled at its
+  10-minute limit with 20 files finished. Its self-install took 6 s and its install 18.9 s; attempt 2
+  on the same head (job 117136086883, also centralus) took 985 ms and 4 s, and passed in 2 min 49 s.
+  For the 20 files both attempts finished, the `[file-progress]` times summed 1,766.4 s against
+  265.0 s — 6.7 times — and no file was less than 4.4 or more than 7.3 times slower. No
+  `provisioning.database_holder_frozen` line appears in attempt 1's log.
+- Run 38932759150, `test-venue-service (1)` (job 117080878600, region eastus2): self-install 13 s and
+  install 54.5 s, against 1 s and 3.1 s on run 38921822907's passing shard 1 (centralus). There the
+  slowness also let the venue watchdog kill a test worker (testing-guide.md, "A file of synchronous
+  database work gets no timer turn unless `useVenueDb` yields one", fixed in #1815).
+
+How rare: over CI's latest 60 runs (created 2026-10-16 12:28:48Z to 19:59:00Z), every attempt (the
+jobs API with `filter=all`), 1,084 `test-*` jobs other than the merge jobs ran; two took more than
+twice their group's median successful time, and they are the two above. What made those runners
+slow is inside GitHub's machine and not measured here; the region does not explain it, since
+centralus served both the slow and the fast `test-server (4)`.
+
+What is kept when it happens: the job log always carries the two setup times. A `test-venue-service`
+shard cancelled at its limit also keeps its sampled load and memory (`resources.log`, "A failed
+venue-service shard keeps its browser start-up record" below); no other test job samples the runner.
+
 ### A cheap job can still be the critical path
 
 The since-removed `mutation-verifactu` job was ungated because a mutant is cheap; on run 30650089655
