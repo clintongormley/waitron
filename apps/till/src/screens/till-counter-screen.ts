@@ -8,11 +8,16 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { type DietPredicate, hasDietData } from "../menu-filter.js";
-import type { TabDef } from "../layout.js";
+import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
+import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
-import "../widgets/card-grid.js";
+import "../widgets/menu-browser.js";
+import "../widgets/basket.js";
+import "../widgets/total.js";
+import "../widgets/tender-pay.js";
+import "../widgets/held-orders.js";
+import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "./till-allergen-screen.js";
@@ -37,12 +42,6 @@ import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 /** A brand wordmark is a fixed name, not translated UI copy. */
 const BRAND = "Waitron";
 
-/**
- * The Counter POS shell. Its sale body is DATA-DRIVEN: the {@link counterTab}'s cards are laid out by
- * `till-card-grid`, and the screen hardcodes no card tags, so a different tab rearranges or drops cards
- * without the screen changing. The cards coordinate through the shared {@link store}, not through this
- * screen.
- */
 @customElement("till-counter-screen")
 export class TillCounterScreen extends LitElement {
   constructor() {
@@ -112,9 +111,48 @@ export class TillCounterScreen extends LitElement {
         margin-bottom: 0;
       }
 
-      till-card-grid {
+      .sale-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto auto;
+        gap: var(--wt-space-3);
         flex: 1;
         min-height: 0;
+      }
+      .sale-grid > div {
+        min-width: 0;
+        min-height: 0;
+      }
+      .menu-cell {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+        overflow: auto;
+      }
+      .basket-cell {
+        grid-column: 2;
+        grid-row: 1;
+        overflow: auto;
+      }
+      .total-cell {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .payment-cell {
+        grid-column: 2;
+        grid-row: 3;
+      }
+      .pay-rest {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-3);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text);
+      }
+      .pay-rest p {
+        margin: 0;
+        font-weight: var(--wt-font-weight-bold);
       }
 
       @media ${unsafeCSS(PHONE_WIDTH)} {
@@ -125,6 +163,15 @@ export class TillCounterScreen extends LitElement {
 
         .body.grid-body {
           padding-inline: 0;
+        }
+        .sale-grid {
+          display: flex;
+          flex-direction: column;
+          flex: none;
+        }
+        .menu-cell,
+        .basket-cell {
+          overflow: visible;
         }
       }
 
@@ -186,10 +233,8 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;
-  /** See the card grid's `payRest`. */
+  /** Outstanding amount offered through the bill-payment flow. */
   @property() payRest: string | null = null;
-  /** When undefined the grid renders nothing. */
-  @property({ attribute: false }) counterTab?: TabDef;
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
@@ -204,14 +249,34 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) receiptLanguages: string[] = [];
   @property({ type: Boolean }) fullInvoices = false;
   @property() receiptLanguage = "";
-  /**
-   * Set when rendered INSIDE the canvas tab shell, which owns the header chrome, so the screen drops its
-   * own. The app always mounts it embedded (`till-app.ts` `#tabBody`), so the own-header branch is
-   * exercised only by this screen's tests.
-   */
+  /** The enclosing shell owns the header. */
   @property({ type: Boolean }) embedded = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
+
+  @state() private phone = false;
+  #phoneWidth?: MediaQueryList;
+  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
+    this.phone = event.matches;
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
+    this.phone = this.#phoneWidth.matches;
+    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
+    this.#phoneWidth = undefined;
+  }
+
+  readonly #browserProducts = memoVisibleProducts();
+  readonly #searchProducts = memoVisibleProducts();
+  readonly #unfilteredProducts = memoVisibleProducts();
+  readonly #unfilteredSearchProducts = memoVisibleProducts();
 
   #logout(): void {
     this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
@@ -325,52 +390,92 @@ export class TillCounterScreen extends LitElement {
     `;
   }
 
-  /** The card grid narrows the products to the shown menu and diet lens itself; the allergen screen
-   * keeps the FULL set, because allergen lookup must reach every product. */
-  #gridBody(): TemplateResult {
-    return html`<div class="body grid-body">
-      <till-card-grid
-        fitSale
-        .tab=${this.counterTab}
-        .store=${this.store}
-        .storedLines=${this.storedLines}
-        .makeAtStations=${this.makeAtStations}
-        .orderInFlight=${this.orderInFlight}
-        .products=${this.products}
-        .menus=${this.menus}
-        .service=${this.service}
-        .departmentName=${this.departmentName}
-        .zoneName=${this.zoneName}
-        .selectedMenuId=${this.selectedMenuId}
-        .selectedDiet=${this.selectedDiet}
-        .handheld=${this.handheld}
-        .heldOrders=${this.heldOrders}
-        .counterWaiting=${this.counterWaiting}
+  #menu(): TemplateResult | typeof nothing {
+    if (this.service?.open !== true || !this.service.zoneOpen) return nothing;
+    const menu = shownMenu(this.menus, this.selectedMenuId);
+    if (menu === undefined) return nothing;
+    const served = this.products.filter((product) =>
+      this.menus.some((each) => each.id === product.catalogueId && each.orderable),
+    );
+    return html`<till-menu-browser
+      .menu=${menu}
+      .products=${this.#browserProducts(this.products, menu.id, this.selectedDiet)}
+      .unfilteredProducts=${this.#unfilteredProducts(this.products, menu.id, null)}
+      .menus=${this.menus}
+      .servedProducts=${this.#searchProducts(served, "", this.selectedDiet)}
+      .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", null)}
+      .store=${this.store}
+      .handheld=${this.handheld}
+    ></till-menu-browser>`;
+  }
+
+  #lists(): TemplateResult | typeof nothing {
+    if (this.heldOrders.length === 0 && this.counterWaiting.length === 0) return nothing;
+    return html`<till-held-orders
+        .orders=${this.heldOrders}
         .tables=${this.tables}
         .zones=${this.zones}
-        .stationQueue=${this.stationQueue}
-        .defaultStationId=${this.defaultStationId}
-        .busy=${this.busy}
-        .payHeld=${this.payHeld}
-        .payRest=${this.payRest}
-        .orderFlow=${this.orderFlow}
-        .stage=${this.stage}
-        .cardProvider=${this.cardProvider}
-        .takesCash=${this.takesCash}
-        .canMoveStation=${this.canMoveStation}
+      ></till-held-orders>
+      <till-counter-waiting
+        .orders=${this.counterWaiting}
         .canEditKitchenNote=${this.canEditKitchenNote}
-        .tipsEnabled=${this.tipsEnabled}
-        .cardOutcome=${this.cardOutcome}
-        .cardAttemptsOver=${this.cardAttemptsOver}
-        .activeReaders=${this.activeReaders}
-        .defaultReaderId=${this.defaultReaderId}
-        .receiptLanguages=${this.receiptLanguages}
-        .fullInvoices=${this.fullInvoices}
-        .receiptLanguage=${this.receiptLanguage}
-        ><div slot="menu-controls" class="menu-controls">
-          ${this.#menuControls()}
-        </div></till-card-grid
+        .canMoveStation=${this.canMoveStation}
+      ></till-counter-waiting>`;
+  }
+
+  #takeRest(outstanding: string): TemplateResult {
+    return html`<section class="pay-rest" data-counter-bill-payments>
+      <p>
+        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(outstanding, currentLocale()))}
+      </p>
+      <wt-button
+        variant="primary"
+        data-pay-rest
+        .disabled=${this.busy}
+        @click=${() => this.dispatchEvent(new CustomEvent("counter-bill-pay", { detail: { amount: outstanding }, bubbles: true, composed: true }))}
+        >${t("bill.take_rest")}</wt-button
       >
+    </section>`;
+  }
+
+  #gridBody(): TemplateResult {
+    return html`<div class="body grid-body">
+      <div class="sale-grid">
+        <div class="menu-cell">
+          <div class="menu-controls">${this.#menuControls()}</div>
+          ${this.#menu()}${this.phone ? nothing : this.#lists()}
+        </div>
+        <div class="basket-cell">
+          <till-basket
+            ?stacked=${this.phone}
+            .store=${this.store}
+            .storedLines=${this.storedLines}
+            .makeAtStations=${this.makeAtStations}
+            .orderInFlight=${this.orderInFlight}
+          ></till-basket>
+        </div>
+        <div class="total-cell"><till-total .store=${this.store}></till-total></div>
+        <div class="payment-cell">
+          ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
+            .store=${this.store}
+            .busy=${this.busy || this.payHeld}
+            .held=${this.payHeld && !this.busy}
+            .mode=${this.orderFlow}
+            .stage=${this.stage}
+            .cardProvider=${this.cardProvider}
+            .takesCash=${this.takesCash}
+            .tipsEnabled=${this.tipsEnabled}
+            .cardOutcome=${this.cardOutcome}
+            .cardAttemptsOver=${this.cardAttemptsOver}
+            .activeReaders=${this.activeReaders}
+            .defaultReaderId=${this.defaultReaderId}
+            .receiptLanguages=${this.receiptLanguages}
+            .fullInvoices=${this.fullInvoices}
+            .receiptLanguage=${this.receiptLanguage}
+          ></till-tender-pay>
+        </div>
+        ${this.phone ? this.#lists() : nothing}
+      </div>
     </div>`;
   }
 

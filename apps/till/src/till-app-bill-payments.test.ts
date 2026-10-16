@@ -1936,7 +1936,7 @@ describe("till-app: a partly paid order at the counter", () => {
   });
   const counter = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-  const grid = (el: TillApp) => counter(el).shadowRoot!.querySelector("till-card-grid")!;
+  const grid = (el: TillApp) => counter(el);
   const payRest = (el: TillApp) =>
     grid(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]");
 

@@ -639,16 +639,12 @@ const tableOrder = (el: TillApp) =>
       "till-table-order-screen",
     ) as TillTableOrderScreen | null) ??
     null) as TillTableOrderScreen | null;
-/** The card grid the embedded counter screen delegates its sale body to — the sale cards render
- * inside ITS shadow root, so the pay/queue helpers pierce through it. */
-const counterGrid = (el: TillApp) =>
-  counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+const counterBody = (el: TillApp) => counter(el);
 const tenderPay = (el: TillApp) =>
-  counterGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-/** The station-queue card inside the card grid, or `null` when the `prep-queue` card is hidden (its
- * `has-items` gate — Mode P never populates the queue, so it stays hidden). */
+  counterBody(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+
 const stationQueueWidget = (el: TillApp) =>
-  counterGrid(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
+  counterBody(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -2155,7 +2151,7 @@ describe("till-app", () => {
 
     async function counterHome(el: TillApp): Promise<{ regions: string[]; columns: string[] }> {
       const browser =
-        counterGrid(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+        counterBody(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
       await browser.updateComplete;
       const shadow = browser.shadowRoot!;
       return {
@@ -6369,9 +6365,9 @@ describe("till-app", () => {
   }
 
   const basketText = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!.textContent!;
+    counterBody(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!.textContent!;
   const totalText = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
+    counterBody(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
 
   it("shows a retrieved pick no list offers any more, marked, and counts it in the total", async () => {
     // Nothing offers `p-milk` now, so the pick cannot be re-sent, but the unedited order is paid
@@ -7410,7 +7406,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1", notOffered: true }]);
-    const basket = counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
     expect(basket.querySelector(".line")!.textContent).toContain(t("basket.not_offered"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
@@ -10652,7 +10648,6 @@ describe("till-app", () => {
       const c = await toCounter(el);
       expect(tenderPay(el).mode).toBe("prepay");
       expect(tenderPay(el).stage).toBe("order");
-      // Mode P never fetches the queue, so the counter tab's has-items-gated prep-queue card stays hidden.
       expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(c.products).toEqual([
@@ -10665,17 +10660,16 @@ describe("till-app", () => {
       ]);
     });
 
-    it("boots into ticket-then-pay: tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
+    it("boots into ticket-then-pay with its order stage and queue read, without a prep rail", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(stationQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
       // Resolves the default station once, then reads its queue on entering the counter.
       expect(currentApi.listStations).toHaveBeenCalledOnce();
       expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
@@ -10685,22 +10679,21 @@ describe("till-app", () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
-      expect(stationQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
-    it("renders the station queue from fetched data, not just an empty placeholder", async () => {
+    it("retains the fetched station data without drawing a prep rail", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
     });
 
     it("no default station configured leaves the counter queue empty rather than throwing", async () => {
@@ -10711,7 +10704,6 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      // No default station ⇒ the queue is never fetched ⇒ empty ⇒ the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -11732,7 +11724,7 @@ describe("till-app", () => {
           .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
 
       emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-2", to: "preparing" });
       await flush(el);
@@ -11740,7 +11732,6 @@ describe("till-app", () => {
       expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      // The refresh returned an EMPTY queue (the item advanced off), so the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -11776,7 +11767,7 @@ describe("till-app", () => {
           .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
 
       emit(c, "mark-collected", { orderId: "wo-1" });
       await flush(el);
@@ -11788,7 +11779,6 @@ describe("till-app", () => {
       );
       // once on entering the counter, once after the handover — so the collected order drops off the queue.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      // The refresh returned an EMPTY queue (the order handed over), so the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -12105,21 +12095,15 @@ describe("till-app", () => {
     });
   });
 
-  describe("layout canvas (SP-B1)", () => {
-    // A `till` canvas whose `counter` tab is what #boot reads and #tabBody threads to the counter screen.
-    // Only the fields the assertion checks (key/columns) matter; the rest complete a valid CanvasDef.
-    const counterCanvas: CanvasDef = {
-      formFactor: "till",
-      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
-    };
-
-    it("threads the canvas's counter tab into the counter screen", async () => {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
-      });
+  describe("fixed Counter", () => {
+    it("opens its selling controls without a configurable renderer", async () => {
+      const { el } = await mountApp();
       await toCounter(el);
       const c = counter(el)!;
-      expect(c.counterTab).toMatchObject({ key: "counter", columns: 12 });
+      expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+      expect(c.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-total")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
     });
   });
 
@@ -12891,14 +12875,11 @@ describe("till-app", () => {
       expect(shell(el)!.activeTabKey).toBe("counter");
     });
 
-    it("completes a sale through the shell + grid counter and lands on the ticket drill-in (sale-path guard)", async () => {
+    it("completes a sale through fixed Counter and lands on the ticket drill-in (sale-path guard)", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
-      // The counter tab renders through the card grid (its cards include tender-pay); the store is
-      // the app's own working order. The card grid lives in the counter screen's shadow root.
-      const cardGrid = c.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
-      expect(cardGrid).not.toBeNull();
-      expect(cardGrid!.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+      expect(c.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -13480,7 +13461,7 @@ describe("till-app", () => {
      * product-grid card lives inside the counter's card grid shadow root. */
     const gridNames = (el: TillApp) =>
       [
-        ...counterGrid(el)!
+        ...counterBody(el)!
           .shadowRoot!.querySelector("till-menu-browser")!
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
@@ -13940,7 +13921,7 @@ describe("remembered dietary filters", () => {
       .getAttribute("aria-pressed");
   const names = (el: TillApp) =>
     [
-      ...counterGrid(el)!
+      ...counterBody(el)!
         .shadowRoot!.querySelector("till-menu-browser")!
         .shadowRoot!.querySelectorAll(".name"),
     ].map((n) => n.textContent);
@@ -15179,7 +15160,7 @@ describe("a failed list refresh after a successful write", () => {
     await tick(el, 5000);
 
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).toBeNull();
-    expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+    expect(counter(el)!.stationQueue).toEqual([stationGroup]);
   });
 
   it.each([
@@ -15744,7 +15725,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     party: luisParty,
   };
   const heldList = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
+    counterBody(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
       "till-held-orders",
     )!;
   const toast = (el: TillApp) =>
@@ -16374,7 +16355,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   const waitingList = (el: TillApp) =>
-    counterGrid(el)?.shadowRoot?.querySelector<TillCounterWaiting>("till-counter-waiting") ?? null;
+    counterBody(el)?.shadowRoot?.querySelector<TillCounterWaiting>("till-counter-waiting") ?? null;
   const rowOf = (el: TillApp, id: string) =>
     waitingList(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`);
   const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
@@ -16428,7 +16409,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const { el } = await counterWaiting();
     expect(currentApi.listCounterWaiting).toHaveBeenCalled();
     expect(waitingList(el)).toBeNull();
-    expect(counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+    expect(counterBody(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
   });
 
   it("offers Pay on a till that pays at ordering, and collects the order there in its own mode until the next sale", async () => {
@@ -19881,7 +19862,7 @@ describe("W69 held move basket protection", () => {
               theme,
             );
             c.store.label = "Local lunch";
-            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
             async function pick() {
               await held.updateComplete;
               await userEvent.click(
@@ -20242,7 +20223,7 @@ describe("basket native replacement warning", () => {
             c.store.addProduct(jamon, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
-            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
             await held.updateComplete;
             const retrieve = held
               .shadowRoot!.querySelector(".retrieve")!

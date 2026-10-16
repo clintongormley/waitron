@@ -74,12 +74,6 @@ for (const locale of ["en", "es"] as const)
                           embedded: true,
                           selectedServiceZoneId: "terrace",
                           store: new WorkingOrderStore(),
-                          counterTab: {
-                            key: "counter",
-                            title: "Counter",
-                            columns: 4,
-                            cards: [{ type: "basket", colSpan: 4, rowSpan: 2, config: {} }],
-                          },
                         },
                         theme,
                       )

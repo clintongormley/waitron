@@ -246,10 +246,7 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-const basket = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillBasket>("till-basket")!;
+const basket = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
 const inBasket = (el: TillApp, selector: string) =>
   basket(el).shadowRoot!.querySelector<HTMLElement>(selector);
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");

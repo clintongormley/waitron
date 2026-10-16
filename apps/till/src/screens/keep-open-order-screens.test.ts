@@ -59,12 +59,6 @@ for (const kind of ["counter", "table"] as const) {
               selectedServiceZoneId: "counter /1",
               embedded: true,
               store: new WorkingOrderStore(),
-              counterTab: {
-                key: "counter",
-                title: "Counter",
-                columns: 4,
-                cards: [{ type: "basket", colSpan: 4, rowSpan: 2, config: {} }],
-              },
             })
           : await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
               ...shared,

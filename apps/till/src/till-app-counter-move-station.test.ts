@@ -174,9 +174,7 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const waitingList = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
+  counter(el).shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
 const moveButton = (el: TillApp, id = "wo-paid") =>
   waitingList(el)?.shadowRoot!.querySelector<HTMLElement>(
     `[data-waiting-order="${id}"] [data-waiting-move-station]`,

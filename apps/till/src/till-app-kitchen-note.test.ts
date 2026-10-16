@@ -228,10 +228,7 @@ function emit(source: Element, type: string, detail?: unknown) {
 }
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-const basket = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillBasket>("till-basket")!;
+const basket = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
 const heading = (el: TillApp) =>
   basket(el).shadowRoot!.querySelector<TillOrderKitchenNote>("till-order-kitchen-note")!;
 async function mounted(overrides: Record<string, unknown> = {}, retrieve = true) {
@@ -1381,7 +1378,7 @@ it("opens the Waiting note from its real row action and returns focus after Canc
     listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
     getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
   });
-  const grid = counter(el).shadowRoot!.querySelector("till-card-grid")!;
+  const grid = counter(el);
   const waiting = grid.shadowRoot!.querySelector("till-counter-waiting")!;
   const button = waiting.shadowRoot!.querySelector<HTMLElement>("[data-waiting-kitchen-note]");
   expect(button).not.toBeNull();

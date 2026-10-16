@@ -11339,7 +11339,6 @@ export class TillApp extends LitElement {
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading}
         .payHeld=${this.#payHeld()}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
-        .counterTab=${tab}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .canMoveStation=${this.capabilities.includes("take-orders")}

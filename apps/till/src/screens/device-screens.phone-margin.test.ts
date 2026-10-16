@@ -19,7 +19,6 @@ import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TabDef } from "../layout.js";
 
 const DEFAULT_FRAME = [414, 896] as const;
 
@@ -58,13 +57,6 @@ function contentBox(el: HTMLElement, selector: string): { left: number; width: n
   const right = parseFloat(style.paddingRight);
   return { left: rect.left + left, width: rect.width - left - right };
 }
-
-const counterTab: TabDef = {
-  key: "counter",
-  title: "Counter",
-  columns: 12,
-  cards: [{ type: "basket", colSpan: 12, rowSpan: 1, config: {} }],
-};
 
 const TILL_SPACING = { left: 40, width: 1200 };
 /** A screen drawn as one card: the page's 24px, then the card's 1px border and 16px padding. */
@@ -110,7 +102,6 @@ const screens: [string, () => Promise<HTMLElement>, string, { left: number; widt
     async () =>
       (
         await mountWidget<TillCounterScreen>("till-counter-screen", {
-          counterTab,
           store: new WorkingOrderStore(),
           operatorName: "Ana",
         })
