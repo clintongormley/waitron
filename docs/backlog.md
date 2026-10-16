@@ -4081,11 +4081,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it),
   [screenshots](backlog/mockups/a653-table-scrolling/)
 
-- **A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
-  (found building A654, 2026-10-15; open).** design-system.md → "Icon buttons with a tooltip" gives
-  a pressed `.icon-button` a `--wt-color-primary-text` icon, but `wt-icon` sets its own colour.
-  [Detail](backlog/dashboard.md#a728--a-pressed-icon-buttons-icon-may-not-take-the-primary-colour-design-systemmd-gives-it)
-
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).** A form's own Cancel, in a
   dialog or on a full page (the floor plan editor's Cancel link), drops the unsaved edits and goes
   without the "Discard changes?" question. Escape, a click outside, a dialog's ✕, and leaving a page

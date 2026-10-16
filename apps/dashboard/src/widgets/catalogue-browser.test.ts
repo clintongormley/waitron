@@ -4835,3 +4835,48 @@ it.each([
     );
   },
 );
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)(
+  "A728 Products Select and Filters paint their pressed icons at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    const { page } = await import("vitest/browser");
+    setLocale(locale);
+    onTestFinished(() => setLocale("en-GB"));
+    const original = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(...original));
+    expect(window.innerWidth).toBe(width);
+    const el = await mountBrowser();
+    const host = el.parentElement!;
+    host.setAttribute("data-theme", theme);
+    host.style.background = "var(--wt-color-bg)";
+    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    const table = await tableOf(el);
+    const filters = table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!;
+    for (const [name, button, attribute] of [
+      ["select", select, "aria-pressed"],
+      ["filters", filters, "aria-expanded"],
+    ] as const) {
+      const icon = button.querySelector("wt-icon")!;
+      await icon.updateComplete;
+      expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
+      expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
+      await userEvent.click(button);
+      await vi.waitFor(() => expect(button.getAttribute(attribute)).toBe("true"));
+      await page.screenshot({
+        path: `__screenshots__/a728/products-${width}-${locale}-${theme}-${name}.png`,
+      });
+      expect.soft(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
+      if (name === "filters") await userEvent.keyboard("{Escape}");
+      else await userEvent.click(button);
+      await vi.waitFor(() => expect(button.getAttribute(attribute)).toBe("false"));
+      expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
+    }
+  },
+);

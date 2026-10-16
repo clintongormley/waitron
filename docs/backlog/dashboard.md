@@ -1136,15 +1136,3 @@ still asks, and a full page's own Cancel leaves without asking too.
 - **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
   Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
   that asserts Cancel asks is now asserting the old rule.
-
-## A728 — a pressed icon button's icon may not take the primary colour design-system.md gives it
-
-Found building A654, 2026-10-15; open. design-system.md → "Icon buttons with a tooltip" says a
-pressed or open `.icon-button` draws a `--wt-color-primary-text` icon, but `wt-icon` sets its own
-colour to `--wt-color-text` (`packages/ui-core/src/base-styles.ts`), so a colour on the button
-around it does not reach it. Measured only on A654's sidebar strip, where removing the strip's own
-colour rule left an `aria-expanded="true"` button's icon in the text colour. Look at the Filters,
-Products Select and Structure Select buttons pressed, in both themes, and fix the doc or the style.
-A fix in `wt-icon` must keep every sidebar icon in the text colour (A654): the headers and an open
-strip button set the primary colour around their icons today, and
-`apps/dashboard/src/dashboard-app.sidebar-fold.test.ts` checks both.

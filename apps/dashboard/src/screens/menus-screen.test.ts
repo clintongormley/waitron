@@ -11489,3 +11489,37 @@ describe("a name put into a sentence", () => {
     );
   });
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => [width, locale, theme] as const),
+    ),
+  ),
+)(
+  "A728 Structure Select paints its pressed icon at %i px (%s, %s)",
+  async (width, locale, theme) => {
+    registerIcons(DASHBOARD_ICONS);
+    const originalLocale = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(originalLocale));
+    const original = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(...original));
+    expect(window.innerWidth).toBe(width);
+    const el = await mountLunch();
+    el.parentElement!.setAttribute("data-theme", theme);
+    el.parentElement!.style.background = "var(--wt-color-bg)";
+    const button = modeToggle(el);
+    const icon = button.querySelector("wt-icon")!;
+    await icon.updateComplete;
+    expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
+    expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(button.getAttribute("aria-pressed")).toBe("true"));
+    await page.screenshot({
+      path: `__screenshots__/a728/structure-${width}-${locale}-${theme}.png`,
+    });
+    expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
+  },
+);

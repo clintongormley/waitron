@@ -25,6 +25,10 @@ export const iconButtonStyles = css`
     cursor: pointer;
   }
 
+  .icon-button > wt-icon {
+    color: inherit;
+  }
+
   .icon-button:disabled {
     cursor: default;
     opacity: var(--wt-opacity-disabled);

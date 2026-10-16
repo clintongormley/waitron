@@ -3017,8 +3017,8 @@ language's labels, and signing out empties the box.
 A header's text starts at the same leading edge as its page labels; its section's icon
 (`icon` on every `NAV_GROUPS` entry, small size) occupies the gutter before it, a `--wt-space-1`
 gap from the label. Every sidebar icon, here and in the folded strip, draws in `--wt-color-text`,
-never the headers' primary colour (owner, 2026-10-15, A654); `wt-icon` sets that colour on itself,
-so a colour on the header or button around it does not reach the icon. The trailing chevron uses `--wt-space-4` (16px), reserves its
+never the headers' primary colour (owner, 2026-10-15, A654). The strip's buttons explicitly keep
+that text colour in their resting and expanded states. The trailing chevron uses `--wt-space-4` (16px), reserves its
 space while hidden, and centres on the label's first line. It appears under hover or keyboard
 focus, and stays visible on devices without hover. Search labels reserve that same trailing space.
 The sidebar is 34ch wide, capped at 85vw in the phone drawer, with a border and `--wt-shadow-1`.
