@@ -1547,35 +1547,35 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
 
 - **For the owner: the Business day card's actions with a scheduled change** — left open by A755
-  (the A755 PR). The mock-up draws only "Change start". As built, a change that can still be
+  (#1809). The mock-up draws only "Change start". As built, a change that can still be
   altered shows "Replace change" and "Cancel scheduled change"; one past its lock shows no action
   and the locked note. [Mockups](backlog/mockups/a755-venue-settings/)
 
-- **For the owner: the Venue card's lock wording** — left open by A755 (the A755 PR). The mock-up's
+- **For the owner: the Venue card's lock wording** — left open by A755 (#1809). The mock-up's
   foot names the field ("The time zone is locked because the venue has recorded sales."); as built
   it says one sentence per reason ("Locked: the venue has recorded sales."), and the "· locked"
   marker beside a field names it. [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **The Venue card says nothing about a time zone locked by a past business-day change** — left open
-  by A755 (the A755 PR). The server gives the reason `business_day_history`
+  by A755 (#1809). The server gives the reason `business_day_history`
   (`apps/server/src/venue-details.ts`); `REASONS` in `apps/dashboard/src/screens/venue-details-panel.ts`
   has no sentence for it.
 
-- **For the owner: who sees the Defaults card** — left open by A755 (the A755 PR). As built, only a
+- **For the owner: who sees the Defaults card** — left open by A755 (#1809). As built, only a
   session holding `venue.configure`; a supervisor (who holds `venue.view` alone) sees the other three
   cards read-only and no Defaults card.
 
 - **For the owner: the legal paragraph beside setup's fixed receipt language** — left open by A755
-  (the A755 PR), which took it out of Venue settings. The setup wizard still shows it
+  (#1809), which took it out of Venue settings. The setup wizard still shows it
   (`fixedReceiptLocale.reason`, `apps/setup/src/screens/venue-screen.ts`). Should it go there too?
 
-- **For the owner: Province on the Venue card** — left open by A755 (the A755 PR). The mock-up draws
+- **For the owner: Province on the Venue card** — left open by A755 (#1809). The mock-up draws
   it editable; the server refuses every province change, so it shows as a locked row until
   _Province edits in Venue details_ below is decided. Is that right?
   [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
-  while doing A755 (the A755 PR); none had one before it either: `departments_zones`,
+  while doing A755 (#1809); none had one before it either: `departments_zones`,
   `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
   `preview_paper`, `trading_name_location`, `trim_save_error`, `venue_defaults` and `venue_wide`.
 
