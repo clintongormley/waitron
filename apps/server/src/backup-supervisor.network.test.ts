@@ -284,22 +284,50 @@ describe("BackupSupervisor status, one destination at a time", () => {
         return Promise.reject(new AppError("backup.destination_object_too_large", { maxBytes: 1 }));
       return realList.call(this, prefix, call);
     });
-    // Each wait between ticks is held until the test lets it go, so no status read overlaps a tick.
-    let sleeps = 0;
-    let wake = () => {};
+    // A tick is counted by the outcome it logs, never by the waits around it: the sweep can wait
+    // more than once before a tick, or not at all. A wait is let go at once while the tick asked
+    // for has not reported, and held once it has, so no status read overlaps a tick.
+    const logs: LogLine[] = [];
+    const ticks = () =>
+      count(logs, "backup.destination_completed", "local") +
+      count(logs, "backup.destination_failed", "local") +
+      count(logs, "backup.destination_prune_failed", "local");
+    let wanted = 1;
+    let held: (() => void) | undefined;
     const sleep = (ms: number, signal: AbortSignal) =>
       new Promise<void>((resolve) => {
-        sleeps++;
-        wake = () => setTimeout(resolve, ms);
+        const go = () => void setTimeout(resolve, ms);
+        if (ticks() < wanted) go();
+        else held = go;
         signal.addEventListener("abort", () => resolve(), { once: true });
       });
-    const logs: LogLine[] = [];
+    const tickReported = () =>
+      poll(() => {
+        expect(logs.filter((l) => l.event === "backup.failed")).toEqual([]);
+        return ticks() >= wanted && held !== undefined ? true : undefined;
+      });
+    const nextTick = async () => {
+      wanted = ticks() + 1;
+      const go = held;
+      held = undefined;
+      go?.();
+      await tickReported();
+    };
+    // The next clock read after `stepBack` is set reads an hour early, so the sweep finds its next
+    // tick not yet due and waits again before running it.
+    let stepBack = false;
+    const now = () => {
+      const at = Date.now() - (stepBack ? 60 * 60 * 1000 : 0);
+      stepBack = false;
+      return new Date(at);
+    };
     const dir = await tempDir("waitron-bsupnet-local-");
     const sup = await supervisor(
       () => config([{ id: "local", dir }], { schedule: { kind: "interval", ms: 1 } }),
       logs,
       undefined,
       sleep,
+      { now },
     );
     const local = async () => {
       const d = byId((await destinations(sup)).destinations, "local");
@@ -312,29 +340,26 @@ describe("BackupSupervisor status, one destination at a time", () => {
     const records: unknown[] = [];
     try {
       await sup.reload();
-      await poll(() => (sleeps >= 1 ? true : undefined));
+      await tickReported();
       records.push(await local());
 
       failPut = false;
       failPrune = true;
-      wake();
-      await poll(() => (sleeps >= 2 ? true : undefined));
+      await nextTick();
       failPrune = false;
       records.push(await local());
 
       failPut = true;
-      wake();
-      await poll(() => (sleeps >= 3 ? true : undefined));
+      await nextTick();
       failPut = false;
       records.push(await local());
 
-      wake();
-      await poll(() => (sleeps >= 4 ? true : undefined));
+      stepBack = true;
+      await nextTick();
       records.push(await local());
 
       failPut = true;
-      wake();
-      await poll(() => (sleeps >= 5 ? true : undefined));
+      await nextTick();
       records.push(await local());
     } finally {
       await sup.stop();
