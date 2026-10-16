@@ -1915,7 +1915,7 @@ jobs:
       - test-light-b
       - mutation-shared
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
     # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
     permissions:
@@ -1967,7 +1967,7 @@ jobs:
       # absent or still running) is retried a bounded number of times, then fails.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
-        timeout-minutes: 5
+        timeout-minutes: 12
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -1976,8 +1976,8 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          tries="${JOBS_API_TRIES:-6}"
-          delay="${JOBS_API_DELAY:-10}"
+          tries="${JOBS_API_TRIES:-21}"
+          delay="${JOBS_API_DELAY:-30}"
 
           if ! jq -en '$ENV.NEEDS | fromjson | type == "object" and length > 0' >/dev/null; then
             echo "::error::no needed job results to read"

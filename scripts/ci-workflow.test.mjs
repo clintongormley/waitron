@@ -826,10 +826,11 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       .split("\n")
       .filter(Boolean);
 
-  it("is wired to always run, read this run's jobs with a token allowed to, carry a five-minute step limit, and keep its default tries", () => {
+  it("is wired to always run, read this run's jobs with a token allowed to, allow twelve minutes inside a fifteen-minute job, and keep its default tries", () => {
     const { keys, step } = ciJobsApiStep();
     expect(keys).toContain("        if: always()");
-    expect(keys).toContain("        timeout-minutes: 5");
+    expect(keys).toContain("        timeout-minutes: 12");
+    expect(job("ci").body).toContain("    timeout-minutes: 15");
     for (const line of [
       "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
       "          REPO: ${{ github.repository }}",
@@ -853,16 +854,43 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     expect(granted).toEqual(["actions: read"]);
   });
 
-  it("tries six times, ten seconds apart, when nothing overrides its defaults", () => {
+  it("fails after twenty-one failed API calls, thirty seconds apart, with default settings", () => {
     const { status, output, calls, sleeps } = runCrossCheck(
       needsFor("lint"),
-      Array.from({ length: 6 }, () => ({ status: 1 })),
+      Array.from({ length: 21 }, () => ({ status: 1 })),
       { defaults: true },
     );
     expect(status).not.toBe(0);
-    expect(calls, output).toBe(6);
-    expect(sleeps).toEqual(["10", "10", "10", "10", "10"]);
+    expect(calls, output).toBe(21);
+    expect(sleeps).toEqual(Array(20).fill("30"));
     expect(output).toContain("the jobs API call failed");
+  });
+
+  it("accepts a needed job first marked completed at the last default poll, ten minutes later", () => {
+    const { status, output, calls, sleeps } = runCrossCheck(
+      needsFor("lint"),
+      [
+        ...Array(20).fill(page([apiJob("lint", null, "in_progress")])),
+        page([apiJob("lint", "success")]),
+      ],
+      { defaults: true },
+    );
+    expect(status, output).toBe(0);
+    expect(calls).toBe(21);
+    expect(sleeps).toEqual(Array(20).fill("30"));
+    expect(output).toContain("lint: success");
+  });
+
+  it("fails after the default window when a needed job never becomes completed", () => {
+    const { status, output, calls, sleeps } = runCrossCheck(
+      needsFor("lint"),
+      [page([apiJob("lint", null, "in_progress")])],
+      { defaults: true },
+    );
+    expect(status).not.toBe(0);
+    expect(calls, output).toBe(21);
+    expect(sleeps).toEqual(Array(20).fill("30"));
+    expect(output).toContain("not completed: lint");
   });
 
   it("matches only needed jobs that set no display `name:`, which the jobs API would report instead of the id", () => {
