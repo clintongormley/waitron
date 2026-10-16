@@ -28,11 +28,19 @@ afterEach(() => {
 
 it.each(cases)("Defaults card: $locale / $theme", async ({ theme, locale }) => {
   setLocale(locale);
-  for (const state of ["view", "edit", "field-error", "barcelona-open"] as const) {
+  for (const state of [
+    "view",
+    "edit",
+    "changed",
+    "saving",
+    "field-error",
+    "barcelona-open",
+  ] as const) {
     const api = {
       getVenueDefaults: async () => (state === "barcelona-open" ? BARCELONA : MADRID),
       getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es", "ca"] }),
       putVenueDefaults: async () => {
+        if (state === "saving") return new Promise(() => {});
         throw { code: "receipt.language_orders_open" };
       },
     } as unknown as DashboardApi;
@@ -48,6 +56,22 @@ it.each(cases)("Defaults card: $locale / $theme", async ({ theme, locale }) => {
       await expect.poll(() => root.querySelector("wt-combobox[name=receiptLanguage]")).toBeTruthy();
     }
     const language = root.querySelector<WtCombobox>("wt-combobox[name=receiptLanguage]");
+    if (state === "changed" || state === "saving") {
+      root.querySelector("wt-combobox[name=defaultProductVatClass]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "zero" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      const save = root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+      expect(save.disabled).toBe(false);
+      if (state === "saving") {
+        save.click();
+        await expect.poll(() => save.loading).toBe(true);
+      }
+    }
     if (state === "field-error") {
       language!.dispatchEvent(
         new CustomEvent("wt-change", { detail: { value: "ca-ES" }, bubbles: true, composed: true }),
