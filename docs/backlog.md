@@ -5614,11 +5614,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **The pnpm setup guard's successful stub once needed a second attempt (2026-10-16; open).**
-  A737's local push hook observed `installed on attempt 2 of 3` where
-  `scripts/ci-setup-pnpm.test.mjs:133` expects attempt 1. The cause is unverified; capture the
-  first attempt's refusal before changing the test or its time limits.
-  [Detail](backlog/ci.md#the-pnpm-setup-guards-successful-stub-once-needed-a-second-attempt).
+- **A pnpm setup retry does not identify which command failed.** A746 removes the test fixture's
+  blanket one-second version deadline, with a controlled slow-check regression. The original
+  intermittent A737 retry was not reproduced, and its first failure's cause remains unknown.
+  On recurrence, retain separate install and version-check statuses before assigning a cause.
+  [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
 - **A745. The image build's pnpm install has no time limit or retry of its own.**
   `deploy/Dockerfile`'s build stage runs `npm install --global pnpm@9.15.0` and then

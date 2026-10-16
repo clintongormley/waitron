@@ -62,17 +62,19 @@ for arg in "$@"; do
   esac
 done
 printed="$spec"
+before=""
 after=""
 case "$STUB_NPM_MODE" in
   hang) exec sleep 300 ;;
   ignore-term) trap '' TERM; sleep 300; exit 0 ;;
   fail-then-ok) if [ "$attempt" -eq 1 ]; then exit 1; fi ;;
   wrong-version) printed="0.0.1" ;;
+  slow-first-version) if [ "$attempt" -eq 1 ]; then before="sleep 2"; fi ;;
   version-then-fails) after="exit 1" ;;
   version-then-hangs) after="exec sleep 300" ;;
 esac
 mkdir -p "$prefix/bin"
-printf '#!/usr/bin/env sh\\necho %s\\n%s\\n' "$printed" "$after" > "$prefix/bin/pnpm"
+printf '#!/usr/bin/env sh\\n%s\\necho %s\\n%s\\n' "$before" "$printed" "$after" > "$prefix/bin/pnpm"
 chmod +x "$prefix/bin/pnpm"
 `,
 );
@@ -100,7 +102,6 @@ function run(mode, env = {}, scriptPath = script) {
       GITHUB_PATH: githubPath,
       PNPM_SETUP_ATTEMPT_SECONDS: "20",
       PNPM_SETUP_KILL_SECONDS: "1",
-      PNPM_SETUP_VERSION_SECONDS: "1",
       ...env,
     },
   });
@@ -130,7 +131,17 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
     expect(result.npmArgs).toContain(`pnpm@${VERSION}`);
-    expect(result.stdout).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+    expect(result.stdout, result.stderr).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+  });
+
+  it("keeps a slow successful first version check on its first install attempt", () => {
+    const result = run("slow-first-version");
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, result.stderr).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+    expect(failureLines(result.stderr)).toEqual([]);
+    expect(result.npmArgs.trim().split("\n")).toHaveLength(1);
+    expect(result.githubPath).toBe(`${join(result.runnerTemp, "pnpm-setup", "bin")}\n`);
   });
 
   it("gives up after three stalled attempts, each cut off by its time limit", () => {
@@ -184,7 +195,7 @@ describe("ci-setup-pnpm.sh", () => {
 
   it("treats an installed pnpm that prints the version and then stalls as a failure", () => {
     // Failing case: exit 0 on attempt 1 with the bin directory on GITHUB_PATH.
-    const result = run("version-then-hangs");
+    const result = run("version-then-hangs", { PNPM_SETUP_VERSION_SECONDS: "1" });
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(failureLines(result.stderr)).toHaveLength(3);
