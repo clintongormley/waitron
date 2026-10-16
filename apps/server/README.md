@@ -2,10 +2,11 @@
 
 The host process. It boots from environment config, loads the credential vault's key ring, applies
 every migration set behind the venue directory's own migration lock, resolves the AEAT transport and the Stripe
-account, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile, the
-per-tick card `resolvePending` sweep (this node's own `attempting` card rows), the release of stale
-card-payment marks (`withStalePaymentRelease`: open orders no card attempt is still behind), fold
-the result into a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
+account, then runs the fiscal submission and Stripe reconciliation loop. An independent card loop
+checks pending provider outcomes, recovers automatic captures through the existing till path,
+releases stale payment marks and completes pending bill payments. It runs immediately and sleeps
+at most one minute between passes; slow provider requests can extend a pass. Sale recovery and bill
+completion run only on the primary. It also serves several HTTP routes on one Hono app:
 `GET /health` (unauthenticated), the till API under `/api/*`, the management-dashboard API under
 `/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe`.
 
@@ -561,19 +562,19 @@ The ones worth grepping for:
 - **`reconcile.complete`** (`info`) — the reconcile equivalent. `ran` is broken down by outcome —
   `{ succeeded, failed, parked }` — rather than a bare total, plus `deferred`, `beyondHorizon`,
   `skipped` (matching the body above) and the duty's own `nextDueAt`.
-- **`resolve_pending.failed`** (`warn`) — `{ error }`. This node's per-tick card `resolvePending`
+- **`resolve_pending.failed`** (`warn`) — `{ error }`. This node's card `resolvePending`
   sweep threw. The sweep is deliberately NOT health-tracked (`withPendingSweep`, `src/boot.ts`), so
   this line is the SOLE operator signal of a stuck card sweep — grep it. A card-settlement backstop,
   not a fiscal-legal or process-liveness signal; it does not flip `/health`.
 - **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
-  per-tick summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
+  summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
   `payment.pending_outcome_unactionable` incidents raised for a human.
 - **`payment_attempt.released`** (`info`) — `{ released }`. After a pass, the loop cleared the "a
   card is paying this order" mark on that many open orders: each one's card attempt is not running
   in this process, and the order has no payment still `attempting`, nor a `captured` or
   `accepted_offline` one no sale records (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
   `withStalePaymentRelease`, `src/boot.ts`). The loop's first pass runs at start, before any sleep;
-  after that, the sleep between passes is at most `WAITRON_MAX_TICK_MS`. Until its mark is cleared,
+  after that, its independent card loop sleeps at most 60 seconds between passes. Until its mark is cleared,
   the server refuses changes to that order with `order.payment_in_flight`, except marking its lines
   served or taking that back.
 - **`payment_attempt.release_failed`** (`warn`) — `{ error }`, plus `workingOrderId` when it is the
@@ -595,13 +596,19 @@ The ones worth grepping for:
 - **`pass.complete`** (`info`) — one line per pass: both duties' `ok`/`errorCode`/`durationMs` (the
   per-duty elapsed time, from an injected monotonic clock), the pass's OWN `durationMs` (the whole
   pass, both duties included), and the folded `nextDueAt` the loop is about to sleep on.
-- **`loop.sleeping`** (`info`) — `{ sleepMs }`, immediately after `pass.complete`.
-- **`pass.threw`** (`error`) — `{ errorCode }`. Something escaped `runPass` itself, rather than
+- **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the
+  existing till recovery path. `payment.automatic_recovery_failed` (`warn`) names a retained payment
+  and its error, or a failure reading the recovery set. Captured payments stay available for retry.
+- **`loop.sleeping`** (`info`) — `{ sleepMs }`. The card loop's own scheduling and failure messages
+  additionally carry `loop: "pending_cards"`; the fiscal loop reports its duties through `pass.complete`.
+- **`pass.threw`** (`error`) — `{ errorCode }`. On the fiscal loop, something escaped `runPass` itself, rather than
   being contained per-duty by `attempt` — genuinely unforeseen. `onPass` is never called for this
   cycle (it sits inside the same `try` that just threw), so `consecutiveFailures` does **not**
   increment on this line the way it does for a contained `duty.failed` — see
   ["What `/health` means"](#what-health-means) above for how to tell the two apart from the body
-  alone. The loop logs this and retries on `WAITRON_MIN_TICK_MS` rather than exiting.
+  alone. The fiscal loop retries on `WAITRON_MIN_TICK_MS`. With `loop: "pending_cards"`, this
+  message instead names an escaped card-pass failure; that loop retries on its five-second floor
+  and does not report a fiscal health result.
 - **`onPass.threw`** (`error`) — `{ errorCode }`. A bug in the health-recording side observer
   itself, not the pass — the pass already succeeded and its real `nextDueAt` is unaffected.
 - **`sleep.threw`** (`error`) — `{ errorCode }`. The injected `sleep` rejected for something other

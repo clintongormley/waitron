@@ -30,6 +30,7 @@ import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { freePorts } from "./testing/free-ports.js";
 
 /**
@@ -87,6 +88,11 @@ vi.mock("./tender-refund-recovery.js", async (importOriginal) => {
   return { ...actual, runTenderRefundRecoveryLoop: vi.fn(actual.runTenderRefundRecoveryLoop) };
 });
 
+vi.mock("./pending-card-recovery.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+  return { ...actual, runPendingCardLoop: vi.fn(actual.runPendingCardLoop) };
+});
+
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -128,6 +134,7 @@ afterEach(async () => {
   vi.mocked(startMenuActivation).mockClear();
   vi.mocked(startAppendOnlyWatch).mockClear();
   vi.mocked(runTenderRefundRecoveryLoop).mockReset();
+  vi.mocked(runPendingCardLoop).mockReset();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -1072,6 +1079,84 @@ describe("settled-tender recovery boot lifetime", () => {
       release();
       if (closing !== undefined) await closing;
       else await server.close();
+    }
+  }, 60_000);
+});
+
+describe("pending card checks boot lifetime", () => {
+  it("stops the pending card loop when a later boot step fails", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    const failure = new Error("late card-loop boot failure");
+    let signal: AbortSignal | undefined;
+    let stopped = false;
+    let release = () => {};
+    vi.mocked(runPendingCardLoop).mockImplementationOnce((options) => {
+      signal = options.signal;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+        options.signal.addEventListener(
+          "abort",
+          () => {
+            stopped = true;
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    });
+    vi.mocked(startMdnsResponder).mockImplementationOnce(() => {
+      throw failure;
+    });
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(runPendingCardLoop).toHaveBeenCalledOnce();
+      expect(signal?.aborted).toBe(true);
+      expect(stopped).toBe(true);
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      release();
+    }
+  }, 60_000);
+
+  it("awaits the pending card loop before closing its venue", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    let signal: AbortSignal | undefined;
+    let release = () => {};
+    let markAborted!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      markAborted = resolve;
+    });
+    vi.mocked(runPendingCardLoop).mockImplementationOnce((options) => {
+      signal = options.signal;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+        options.signal.addEventListener("abort", markAborted, { once: true });
+      });
+    });
+    const server = await startServer(env);
+    const deadline = new AbortController();
+    let closing: Promise<void> | undefined;
+    try {
+      await listening(Number(env.WAITRON_HTTP_PORT));
+      closing = server.close();
+      await Promise.race([aborted, closing]);
+      expect(signal?.aborted).toBe(true);
+      expect(
+        await Promise.race([
+          closing.then(() => "closed"),
+          delay(50, "waiting", { signal: deadline.signal }),
+        ]),
+      ).toBe("waiting");
+      expect(readVenueHolder(venueDir)).not.toBeNull();
+      release();
+      await closing;
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      deadline.abort();
+      release();
+      await server.close();
     }
   }, 60_000);
 });

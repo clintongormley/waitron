@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
-import { isAppError } from "@waitron/shared";
+import { decimal, deviceOrigin, isAppError, workingOrderId } from "@waitron/shared";
+import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
+import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import type { CardProviderContribution, IncidentSink, PaymentProvider } from "@waitron/payments";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -16,7 +20,7 @@ const KEY_ENV = {
 };
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,
 });
 const ring = loadKeyRing(KEY_ENV);
@@ -80,6 +84,81 @@ function fakeProvider(name: string): PaymentProvider {
 }
 
 describe("createCardProviderPool", () => {
+  it("a replacement provider leaves an evicted instance's live Stripe collect alone", async () => {
+    const client = new FakeStripe();
+    client.stallNext();
+    const created = vi.spyOn(client, "createPaymentIntent");
+    const cancel = vi.spyOn(client, "cancelPaymentIntent");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const process = client.processPaymentIntent.bind(client);
+    vi.spyOn(client, "processPaymentIntent").mockImplementation(async (reader, intent) => {
+      enter();
+      await released;
+      return process(reader, intent);
+    });
+    const pool = createCardProviderPool({
+      providers: [
+        fakeContribution(
+          "stripe",
+          () =>
+            new StripeTerminalProvider({
+              db: suite.db,
+              client,
+              poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
+            }),
+        ),
+      ],
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      incidents,
+    });
+    const seeded = await seedWorkingOrder(suite.db);
+    const first = await pool.get("stripe");
+    const collecting = first
+      .collect({
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: workingOrderId(seeded.workingOrderId),
+        amount: decimal("12.10"),
+        readerRef: "reader_evicted",
+      })
+      .catch(() => undefined);
+    let replacement: PaymentProvider;
+    const now = new Date("2026-10-17T00:00:00Z");
+    try {
+      await entered;
+      pool.evict("stripe");
+      replacement = await pool.get("stripe");
+      expect(replacement).not.toBe(first);
+      expect(await replacement.resolvePending(now)).toEqual({
+        nextDueAt: new Date(now.getTime() + 60_000),
+        forwarded: 0,
+        declined: 0,
+        incidentsRaised: 0,
+      });
+      expect(cancel).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await collecting;
+    }
+    const result = (await collecting)!;
+    expect(result.state).toBe("attempting");
+    const intent = await created.mock.results[0]!.value;
+    client.setIntent(intent.id, { status: "succeeded", amount: 1210, amountReceived: 1210 });
+    expect((await replacement!.resolvePending(now)).forwarded).toBe(1);
+    expect(
+      (await getPaymentByRef(suite.db, { provider: "stripe", paymentRef: result.paymentRef }))
+        ?.state,
+    ).toBe("captured");
+  });
+
   it("builds once and caches: a second get returns the same instance without calling build again", async () => {
     const build = vi.fn(() => fakeProvider("sumup"));
     const pool = createCardProviderPool({
