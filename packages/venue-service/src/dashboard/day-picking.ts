@@ -1,5 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { capturePointer, DRAG_THRESHOLD_PX, releasePointer } from "@waitron/dashboard-kit";
+import { pointerElementsAt } from "@waitron/ui/src/reorder-table.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 
@@ -13,8 +14,6 @@ export interface DayPickerOptions {
   /** The button for a date, for focus and for finding the day under a pointer; null when the grid
    *  does not draw it. The button, or an element around it, carries the date as `data-date`. */
   button(date: LocalDate): HTMLElement | null;
-  /** Every drawn date, in order, for hit-testing a pointer's position. */
-  dates(): readonly LocalDate[];
   /** False: a click and Space still choose; nothing picks a run and nothing opens. */
   canPick(): boolean;
   /** A touch drag picks a run at once, with no long press. Default false. */
@@ -23,8 +22,8 @@ export interface DayPickerOptions {
   holdMs?: number;
   /** A click, a tap, Space. */
   choose(date: LocalDate, trigger: HTMLElement): void;
-  /** The run changed. */
-  picked(run: DayRun | null): void;
+  /** The run changed. The picker asks the host to redraw either way. */
+  picked?(run: DayRun | null): void;
   /** A double-click, a long press, Enter. */
   open?(date: LocalDate, run: DayRun, trigger: HTMLElement): void;
 }
@@ -37,8 +36,6 @@ interface Gesture {
   date: LocalDate;
   /** The last day the pointer was over; a point between buttons keeps it. */
   last: LocalDate;
-  /** The drawn days' rectangles, and where the grid was when they were read; null until read. */
-  boxes: { left: number; top: number; days: { date: LocalDate; box: DOMRect }[] } | null;
   trigger: HTMLElement;
   x: number;
   y: number;
@@ -142,7 +139,7 @@ export class DayPicker implements ReactiveController {
   #set(run: DayRun | null): void {
     if (run?.from === this.#run?.from && run?.to === this.#run?.to) return;
     this.#run = run;
-    this.#options.picked(run);
+    this.#options.picked?.(run);
     this.#host.requestUpdate();
   }
 
@@ -162,27 +159,16 @@ export class DayPicker implements ReactiveController {
     return button === null ? null : { date, button };
   }
 
-  /** Every drawn day's rectangle, read again whenever the grid has moved. */
-  #boxes(gesture: Gesture): { date: LocalDate; box: DOMRect }[] {
-    // A scroll can come from any ancestor, including one inside a shadow root whose scroll events
-    // never reach window, so the grid's own position is what tells the rectangles are stale.
-    const { left, top } = gesture.grid.getBoundingClientRect();
-    if (gesture.boxes?.left !== left || gesture.boxes.top !== top) {
-      const days = this.#options.dates().flatMap((date) => {
-        const button = this.#options.button(date);
-        return button === null ? [] : [{ date, box: button.getBoundingClientRect() }];
-      });
-      gesture.boxes = { left, top, days };
-    }
-    return gesture.boxes.days;
-  }
-
-  #dateAt(gesture: Gesture, x: number, y: number): LocalDate | null {
-    return (
-      this.#boxes(gesture).find(
-        ({ box }) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
-      )?.date ?? null
-    );
+  /** The day whose button is painted under the point; null between buttons. A captured pointer's
+   *  events all name the grid, so the point, not the target, says where it is. */
+  #dateAt(x: number, y: number): LocalDate | null {
+    const path = pointerElementsAt(x, y);
+    const date = path.find(
+      (node): node is HTMLElement => node instanceof HTMLElement && "date" in node.dataset,
+    )?.dataset.date;
+    if (date === undefined) return null;
+    const button = this.#options.button(date);
+    return button !== null && path.includes(button) ? date : null;
   }
 
   /** The run `open` receives: the picked run when the date is inside it, else that one day. */
@@ -210,7 +196,6 @@ export class DayPicker implements ReactiveController {
       grid: event.currentTarget as HTMLElement,
       date,
       last: date,
-      boxes: null,
       trigger,
       x: event.clientX,
       y: event.clientY,
@@ -263,7 +248,7 @@ export class DayPicker implements ReactiveController {
       gesture.dragging = true;
       capturePointer(gesture.grid, gesture.pointerId);
     }
-    gesture.last = this.#dateAt(gesture, event.clientX, event.clientY) ?? gesture.last;
+    gesture.last = this.#dateAt(event.clientX, event.clientY) ?? gesture.last;
     this.#pick(gesture.date, gesture.last);
   }
 

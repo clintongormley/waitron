@@ -198,14 +198,12 @@ export class OpeningHoursYearView extends LitElement {
   #connection = {};
   #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
-    dates: () => this.model?.days.map((day) => day.date) ?? [],
     canPick: () => !this.readOnly,
     choose: (date) =>
       this.#emit<CalendarDayOpen>("calendar-day-open", {
         date,
         returnTo: () => this.#dayButton(date),
       }),
-    picked: () => {},
     open: (date, { from, to }) =>
       this.#emit<CalendarDaysOpen>("calendar-days-open", { date, from, to }),
   });

@@ -32,7 +32,6 @@ class DayPickingHost extends LitElement {
     const options: DayPickerOptions = {
       button: (date) =>
         this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] > button`),
-      dates: () => DATES,
       canPick: () => this.allowPicking,
       dragOnTouch: this.dragOnTouch,
       holdMs: 300,
@@ -217,6 +216,26 @@ describe("DayPicker", () => {
     await commands.mouseDrag([sel(20), sel(25), "#outside"]);
     await expectRun(host, run(20, 25));
     expect(host.chosen).toEqual([]);
+  });
+
+  it("a drag over a day's cell but outside its button keeps the last day crossed", async () => {
+    const host = await mount();
+    const cell = button(host, 24).closest("td")!;
+    cell.style.padding = "16px";
+    const box = cell.getBoundingClientRect();
+    const marker = document.createElement("div");
+    marker.id = "cell-padding";
+    Object.assign(marker.style, {
+      position: "fixed",
+      insetBlockStart: `${box.top + 2}px`,
+      insetInlineStart: `${box.left + 2}px`,
+      inlineSize: "8px",
+      blockSize: "8px",
+      pointerEvents: "none",
+    });
+    page!.append(marker);
+    await commands.mouseDrag([sel(20), sel(23), "#cell-padding"]);
+    await expectRun(host, run(20, 23));
   });
 
   it("a finger that moves before the hold scrolls the page and picks nothing", async () => {
