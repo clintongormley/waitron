@@ -234,12 +234,6 @@ export class TillBasket extends LitElement {
         border-radius: var(--wt-radius-full, 999px);
       }
 
-      /* The pending note earns emphasis — a waiter must not read an unreviewed dish as allergen-free. */
-      .allergen-pending {
-        color: var(--wt-color-warning-text, var(--wt-color-text));
-        font-weight: 600;
-      }
-
       /* A selected extra's OWN allergens/diet (nutrition redesign, pass 1), indented under its option
          row, its own list beside the dish's own rows below — never a fold. The chip/badge look comes from
          the shared .allergen-chip and dietBadgeStyles; only the indent + spacing is basket-specific. */

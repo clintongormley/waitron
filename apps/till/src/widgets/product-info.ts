@@ -40,7 +40,7 @@ export class TillProductInfo extends LitElement {
         flex-shrink: 0;
       }
       .pending {
-        color: var(--wt-color-warning-text);
+        color: var(--wt-color-text);
       }
     `,
   ];
