@@ -558,7 +558,6 @@ async function seedDeviceProfiles(
       managementSessionId: session.token,
       name: profile.name,
       formFactor: profile.formFactor,
-      canvasId: null,
       capabilities: profile.capabilities,
       inactivityTimeoutSeconds: profile.inactivityTimeoutSeconds,
     });

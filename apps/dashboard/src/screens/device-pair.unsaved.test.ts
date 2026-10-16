@@ -33,7 +33,7 @@ const profile: DeviceProfile = {
   personExceptions: [],
   id: "p1",
   name: "Counter",
-  canvasId: "c1",
+
   capabilities: [],
   formFactor: "till",
   inactivityTimeoutSeconds: null,
@@ -139,7 +139,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     ],
     listDeviceProfiles: async () => [
       profile,
-      { ...profile, id: "p2", name: "Kitchen", canvasId: null, formFactor: "kds" },
+      { ...profile, id: "p2", name: "Kitchen", formFactor: "kds" },
     ],
     pairingMode: async () => ({
       open: false,

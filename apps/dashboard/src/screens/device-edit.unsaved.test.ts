@@ -37,7 +37,7 @@ const profile: DeviceProfile = {
   personExceptions: [],
   id: "p1",
   name: "Counter",
-  canvasId: "c1",
+
   capabilities: [],
   formFactor: "till",
   inactivityTimeoutSeconds: null,
@@ -576,7 +576,7 @@ const kitchenDisplay = {
       ],
     },
   ],
-  listDeviceProfiles: async () => [{ ...profile, canvasId: null, formFactor: "kds" as const }],
+  listDeviceProfiles: async () => [{ ...profile, formFactor: "kds" as const }],
   listProfileKitchenScreens: async () => [
     {
       profileId: "p1",

@@ -120,7 +120,7 @@ const scopeChoices: ProfileScopeChoices = {
 const till: DeviceProfile = {
   id: "p1",
   name: "Front counter",
-  canvasId: "c1",
+
   // Not in the form's order.
   capabilities: ["take-orders", "show-station", "integrated-card-payment"],
   formFactor: "till",
@@ -149,7 +149,7 @@ const kds: DeviceProfile = {
   ...till,
   id: "p2",
   name: "Kitchen",
-  canvasId: null,
+
   capabilities: ["show-station", "prepare-orders"],
   formFactor: "kds",
   inactivityTimeoutSeconds: null,
@@ -176,10 +176,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createDeviceProfile: vi.fn().mockResolvedValue({ ...till, id: "p9" }),
     updateDeviceProfile: vi.fn().mockResolvedValue(till),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
-    listCanvases: vi.fn().mockResolvedValue([
-      { id: "c1", name: "Counter till", definition: {} },
-      { id: "c2", name: "Kitchen board", definition: {} },
-    ]),
+
     listPrinters: vi.fn().mockResolvedValue(printers),
     listPagePrinters: vi.fn().mockResolvedValue([]),
     listStations: vi
@@ -317,7 +314,6 @@ const value = (el: DeviceProfilesScreen, test: string) =>
 const tillSent = (name: string) => [
   "p1",
   name,
-  "c1",
   ["integrated-card-payment", "show-station", "take-orders"],
   "till",
   90,
@@ -328,7 +324,6 @@ describe("the device profile editor's Save", () => {
   it("opens a till profile with every field filled and Save quiet, and a press sends nothing", async () => {
     const { el, api } = await openEdit();
     expect(value(el, "profile-name")).toBe("Front counter");
-    expect(value(el, "profile-canvas")).toBe("c1");
     expect(value(el, "profile-form-factor")).toBe("till");
     expect(value(el, "profile-inactivity")).toBe("1.5");
     expect(value(el, "profile-department")).toBe("d1");
@@ -481,7 +476,7 @@ describe("the device profile editor's Save", () => {
     await press(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Waiter",
-      null,
+
       [],
       "till",
       null,
@@ -514,11 +509,6 @@ describe("the device profile editor's Save", () => {
     (el: DeviceProfilesScreen) => Promise<void>,
     (el: DeviceProfilesScreen) => Promise<void>,
   ][] = [
-    [
-      "the canvas",
-      (el) => change(el, "profile-canvas", "c2"),
-      (el) => change(el, "profile-canvas", "c1"),
-    ],
     [
       "the form factor",
       (el) => change(el, "profile-form-factor", "phone-portrait"),

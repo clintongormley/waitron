@@ -137,7 +137,7 @@ const deviceProfiles: DeviceProfile[] = [
   {
     id: "dp1",
     name: "Counter till",
-    canvasId: "p1",
+
     capabilities: [],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
@@ -159,7 +159,7 @@ const deviceProfiles: DeviceProfile[] = [
   {
     id: "dp2",
     name: "Waiter handheld",
-    canvasId: "p2",
+
     capabilities: [],
     formFactor: "phone-portrait",
     inactivityTimeoutSeconds: null,
@@ -181,7 +181,7 @@ const deviceProfiles: DeviceProfile[] = [
   {
     id: "dp3",
     name: "Pass screen",
-    canvasId: null,
+
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,

@@ -294,8 +294,6 @@ export const QUERY_DEPENDENCIES = {
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],
   listPendingSwaps: ["shift_swaps", "shifts"],
-  listCanvases: ["canvases"],
-  getCanvas: ["canvases"],
   listCatalogues: ["catalogues"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
   getMenuStructure: ["menu_details", "sections", "section_members", "catalogues"],
@@ -395,7 +393,6 @@ export const QUERY_DEPENDENCIES = {
     "device_profiles",
     "device_profile_printers",
     "devices",
-    "canvases",
     "device_profile_service_access",
     "device_profile_zones",
     "device_profile_admission_roles",
@@ -404,7 +401,6 @@ export const QUERY_DEPENDENCIES = {
   getDeviceProfile: [
     "device_profiles",
     "device_profile_printers",
-    "canvases",
     "device_profile_service_access",
     "device_profile_zones",
     "device_profile_admission_roles",

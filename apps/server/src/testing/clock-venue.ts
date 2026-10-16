@@ -79,7 +79,6 @@ export async function createClockVenue(
       managementSessionId: management.token,
       name: "Clock only",
       formFactor: "till",
-      canvasId: null,
       capabilities: ["clock-in"],
     });
     const [person] = await tx

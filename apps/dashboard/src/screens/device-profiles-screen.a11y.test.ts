@@ -5,7 +5,6 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type {
-  Canvas,
   DeviceProfile,
   DashboardApi,
   PersonSummary,
@@ -15,16 +14,15 @@ import type {
 } from "../api/client.js";
 
 /**
- * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`,
+ * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`,
  * `listPrinters` and `getDeviceProfile`, or a stray rejection pollutes the run.
  */
-const canvases: Canvas[] = [{ id: "c1", name: "Counter till", definition: {} }];
 
 const profiles: DeviceProfile[] = [
   {
     id: "p1",
     name: "Front counter",
-    canvasId: "c1",
+
     capabilities: ["integrated-card-payment"],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
@@ -107,7 +105,7 @@ function stubApi(
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
-    listCanvases: vi.fn().mockResolvedValue(canvases),
+
     listStations: vi.fn().mockResolvedValue([]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),

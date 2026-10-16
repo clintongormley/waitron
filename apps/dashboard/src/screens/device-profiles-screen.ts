@@ -44,7 +44,6 @@ import {
 } from "../device-profile-types.js";
 import { toggleMembership } from "../array-utils.js";
 import type {
-  Canvas,
   DeviceProfile,
   DashboardApi,
   KitchenScreenKind,
@@ -83,7 +82,6 @@ type PrinterChoice = { printer: ListablePrinter; listed: boolean; label: string 
 
 interface ProfileDraft {
   name: string;
-  canvasId: string | null;
   capabilities: CapabilityFlag[];
   formFactor: FormFactor;
   inactivityMinutes: number | null;
@@ -288,7 +286,6 @@ function liveZones(
 /** The editor's fields a check or a refusal can mark, in the order the form draws them. */
 const FIELDS = [
   "name",
-  "canvas",
   "inactivity",
   "department",
   "zones",
@@ -316,7 +313,6 @@ type FieldErrors = Partial<Record<EditorField, string>>;
 /** Where each field is drawn; a group of switches takes focus on its first switch. */
 const FIELD_TARGET: Record<EditorField, string> = {
   name: "[data-test=profile-name]",
-  canvas: "[data-test=profile-canvas]",
   inactivity: "[data-test=profile-inactivity]",
   department: "[data-test=profile-department]",
   zones: "[data-test=profile-zones] wt-switch",
@@ -342,7 +338,6 @@ const FIELD_TARGET: Record<EditorField, string> = {
 /** The request field a refusal names, as the editor field that shows it. */
 const FIELD_BY_PARAM: Record<string, EditorField> = {
   name: "name",
-  canvasId: "canvas",
   inactivityTimeoutSeconds: "inactivity",
   capabilities: "actions",
   departmentId: "department",
@@ -382,7 +377,6 @@ const FIELD_SENTENCE: Partial<Record<EditorField, StringKey>> = {
 
 /** `device_profile.invalid`'s reasons that are about one field. */
 const FIELD_BY_REASON: Record<string, EditorField> = {
-  bad_canvas_ref: "canvas",
   bad_inactivity_timeout: "inactivity",
   bad_capabilities: "actions",
   shared_display_action: "actions",
@@ -528,8 +522,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private profiles: DeviceProfile[] = [];
 
-  @state() private canvases: Canvas[] = [];
-
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
   @state() private printersState: "loading" | "ready" | "failed" = "loading";
@@ -555,7 +547,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private editingId: string | null = null;
   @state() private draftName = "";
-  @state() private draftCanvasId: string | null = null;
   @state() private draftCapabilities: CapabilityFlag[] = [];
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
   @state() private draftInactivityMinutes: number | null = null;
@@ -604,7 +595,6 @@ export class DeviceProfilesScreen extends LitElement {
     const ordering = this.#ordering();
     return {
       name: this.draftName.trim(),
-      canvasId: this.draftCanvasId,
       capabilities: this.draftCapabilities
         .filter((flag) => ordering || sharedDisplayMay(flag))
         .sort(),
@@ -636,7 +626,6 @@ export class DeviceProfilesScreen extends LitElement {
       equal: sameValue,
       restore: (value) => {
         this.draftName = value.name;
-        this.draftCanvasId = value.canvasId;
         this.draftCapabilities = [...value.capabilities];
         this.draftFormFactor = value.formFactor;
         this.draftInactivityMinutes = value.inactivityMinutes;
@@ -681,9 +670,6 @@ export class DeviceProfilesScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
-        }),
-        this.#queries.watch("listCanvases", [], (value) => {
-          this.canvases = value;
         }),
         this.#queries
           .watch("listPrinters", [], (value) => {
@@ -739,7 +725,6 @@ export class DeviceProfilesScreen extends LitElement {
       this.#showError(codeOf(error), owner);
   }
 
-  /** Reloads only the PROFILES: no profile write changes the canvas or printer set. */
   async #mutate(action: () => Promise<unknown>): Promise<void> {
     this.narrowed = [];
     this.#showError(null);
@@ -788,13 +773,6 @@ export class DeviceProfilesScreen extends LitElement {
     return { field, sentence };
   }
 
-  #canvasLabel(canvasId: string | null): string {
-    if (canvasId === null) return t("device_profiles.canvas_default");
-    const canvas = this.canvases.find((c) => c.id === canvasId);
-    return canvas ? canvas.name : t("device_profiles.canvas_unknown");
-  }
-
-  /** Only the KNOWN flags, so an unknown wire value is ignored rather than shown. */
   #capabilitySummary(capabilities: string[]): string {
     const known = CAPABILITY_FLAGS.filter((flag) => capabilities.includes(flag));
     if (known.length === 0) return t("device_profiles.no_capabilities");
@@ -997,7 +975,6 @@ export class DeviceProfilesScreen extends LitElement {
     this.#leave = undefined;
     this.editingId = null;
     this.draftName = "";
-    this.draftCanvasId = null;
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
@@ -1115,7 +1092,6 @@ export class DeviceProfilesScreen extends LitElement {
       this.editingId = id;
       this.#loaded = profile;
       this.draftName = profile.name;
-      this.draftCanvasId = profile.canvasId;
       this.draftCapabilities = CAPABILITY_FLAGS.filter((flag) =>
         profile.capabilities.includes(flag),
       );
@@ -1222,14 +1198,6 @@ export class DeviceProfilesScreen extends LitElement {
     event.stopPropagation();
     this.draftName = event.detail.value;
     this.#clearRefusal("name");
-    this.#draftScope?.changed();
-  }
-
-  #onCanvas(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    const value = event.detail.value;
-    this.draftCanvasId = value === "" ? null : value;
-    this.#clearRefusal("canvas");
     this.#draftScope?.changed();
   }
 
@@ -1529,7 +1497,6 @@ export class DeviceProfilesScreen extends LitElement {
     }
     const name = this.draftName.trim();
     const id = this.editingId;
-    const canvasId = this.draftCanvasId;
     const formFactor = this.draftFormFactor;
     const capabilities = this.draftCapabilities.filter(
       (flag) => !isSharedDisplay(formFactor) || sharedDisplayMay(flag),
@@ -1562,7 +1529,6 @@ export class DeviceProfilesScreen extends LitElement {
           ? await this.api.updateDeviceProfile(
               id,
               name,
-              canvasId,
               capabilities,
               formFactor,
               inactivityTimeoutSeconds,
@@ -1571,7 +1537,6 @@ export class DeviceProfilesScreen extends LitElement {
             )
           : await this.api.createDeviceProfile(
               name,
-              canvasId,
               capabilities,
               formFactor,
               inactivityTimeoutSeconds,
@@ -1650,7 +1615,6 @@ export class DeviceProfilesScreen extends LitElement {
       const created = await this.api.copyDeviceProfile(
         profile.id,
         name,
-        profile.canvasId,
         profile.capabilities,
         profile.formFactor,
         profile.inactivityTimeoutSeconds,
@@ -1702,9 +1666,6 @@ export class DeviceProfilesScreen extends LitElement {
           <div class="details">
             <span class="label" data-test="profile-name-${profile.id}">${profile.name}</span>
             <span class="meta">
-              <span data-test="profile-canvas-${profile.id}"
-                >${t("device_profiles.canvas_label")}: ${this.#canvasLabel(profile.canvasId)}</span
-              >
               <span data-test="profile-caps-${profile.id}"
                 >${this.#capabilitySummary(profile.capabilities)}</span
               >
@@ -1776,13 +1737,6 @@ export class DeviceProfilesScreen extends LitElement {
           : nothing
       }
     `;
-  }
-
-  #canvasOptions(): { value: string; label: string }[] {
-    return [
-      { value: "", label: t("device_profiles.canvas_default") },
-      ...this.canvases.map((canvas) => ({ value: canvas.id, label: canvas.name })),
-    ];
   }
 
   /** The list's own printers first, in its order, switched-off ones included so a save keeps them;
@@ -2428,21 +2382,6 @@ export class DeviceProfilesScreen extends LitElement {
           .error=${errors.name ?? ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onName(e)}
         ></wt-input>
-        <wt-combobox
-          class="field"
-          data-test="profile-canvas"
-          name="canvasId"
-          label=${t("device_profiles.canvas_label")}
-          search="auto"
-          placeholder=${t("device_profiles.canvas_default")}
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${this.#canvasOptions()}
-          .value=${this.draftCanvasId ?? ""}
-          .error=${errors.canvas ?? ""}
-          .invalid=${Boolean(errors.canvas)}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCanvas(e)}
-        ></wt-combobox>
         <wt-combobox
           class="field"
           data-test="profile-form-factor"

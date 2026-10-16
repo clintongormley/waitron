@@ -79,7 +79,6 @@ import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
-import "./screens/canvas-editor-screen.js";
 import "./screens/floor-plan-editor.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
@@ -128,7 +127,6 @@ const CORE_SCREENS = [
   "purchases",
   "devices",
   "printers",
-  "canvas-editor",
   "floor-plan",
   "device-profiles",
   "diagnostics",
@@ -273,7 +271,6 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "payments", labelKey: "nav.payments", requiresManager: true },
-      { screen: "canvas-editor", labelKey: "nav.canvases" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
@@ -1339,7 +1336,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
-    this.#url.write({ dashboard: null, canvas: null, "canvas-tab": null }, true);
+    this.#url.write({ dashboard: null }, true);
     if (this.isConnected) {
       setLocale(this.#loginLocale ?? this.#venueLocale);
       void this.#seedLocale();
@@ -2499,10 +2496,6 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("printer.manage")}
         ></dashboard-printers-screen>`;
-      case "canvas-editor":
-        return html`<dashboard-canvas-editor-screen
-          .api=${this.api}
-        ></dashboard-canvas-editor-screen>`;
       case "floor-plan":
         return html`<dashboard-floor-plan-editor .api=${this.api}
           >${this.#notices("notices")}</dashboard-floor-plan-editor

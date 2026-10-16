@@ -65,7 +65,7 @@ const printers = [
 const profile = (id: string, name: string, extra: Partial<DeviceProfile> = {}): DeviceProfile => ({
   id,
   name,
-  canvasId: null,
+
   capabilities: [],
   formFactor: "till",
   inactivityTimeoutSeconds: null,

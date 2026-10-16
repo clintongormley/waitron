@@ -15,8 +15,6 @@ import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
-import { DEFAULT_CANVASES } from "@waitron/layouts";
-import type { CanvasDef } from "@waitron/layouts";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -58,14 +56,9 @@ function nextNif(): string {
   return `${String(75_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Profile and canvas names are unique and the database is not reset between tests. */
+/** Profile names are unique and the database is not reset between tests. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
-}
-
-function phoneCanvas(title: string): CanvasDef {
-  const base = DEFAULT_CANVASES["phone-portrait"];
-  return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
 /** The venue the station and watcher list routes are scoped to, as boot threads it. */
@@ -180,7 +173,6 @@ type ProfileRow = {
   id: string;
   name: string;
   formFactor: string;
-  canvasId: string | null;
   capabilities: string[];
   inactivityTimeoutSeconds: number | null;
   receiptPrinterIds: string[];
@@ -192,16 +184,6 @@ type ProfileRow = {
   invoicePrinterIds: string[];
   invoicePrinterDefaultId: string | null;
 };
-
-async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
-  const res = await app.request("/management-api/canvases", {
-    method: "POST",
-    headers: { ...JSON_HEADERS, cookie },
-    body: JSON.stringify({ name, definition: phoneCanvas(name) }),
-  });
-  expect(res.status).toBe(201);
-  return ((await res.json()) as { id: string }).id;
-}
 
 describe("Management API — device-profile CRUD (Task 4)", () => {
   let managerCookie: string;
@@ -223,7 +205,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name,
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       }),
     });
@@ -234,7 +216,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       id: row.id,
       name,
       formFactor: "till",
-      canvasId: null,
+
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
@@ -263,7 +245,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       id,
       name,
       formFactor: "till",
-      canvasId: null,
+
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
       inactivityTimeoutSeconds: null,
       receiptPrinterIds: [],
@@ -298,7 +280,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: renamed,
         formFactor: "kds",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
       }),
     });
@@ -307,7 +289,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       id,
       name: renamed,
       formFactor: "kds",
-      canvasId: null,
+
       capabilities: ["act-as-kds"],
       // A `kds` profile always coerces the timeout to null in the store, regardless of the body.
       inactivityTimeoutSeconds: null,
@@ -344,28 +326,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
   });
 
-  it("binds a profile to a real canvasId (create → get round-trip)", async () => {
-    const app = mountApp();
-    const canvasId = await seedCanvas(app, managerCookie, uniqueName("Bound canvas"));
-    const created = await app.request("/management-api/device-profiles", {
-      method: "POST",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({
-        name: uniqueName("Bound"),
-        formFactor: "till",
-        ...ordering,
-        canvasId,
-        capabilities: [],
-      }),
-    });
-    expect(created.status).toBe(201);
-    const { id } = (await created.json()) as ProfileRow;
-    const got = await app.request(`/management-api/device-profiles/${id}`, {
-      headers: { cookie: managerCookie },
-    });
-    expect(((await got.json()) as ProfileRow).canvasId).toBe(canvasId);
-  });
-
   it("saves the three screen switches and reads them back", async () => {
     const app = mountApp();
     const created = await app.request("/management-api/device-profiles", {
@@ -375,7 +335,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Screens"),
         formFactor: "phone-portrait",
         ...ordering,
-        canvasId: null,
+
         capabilities: ["show-station", "show-expo", "show-schedule"],
       }),
     });
@@ -401,7 +361,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Handheld"),
         formFactor: "phone-portrait",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
         inactivityTimeoutSeconds: 300,
       }),
@@ -424,7 +384,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Handheld2"),
         formFactor: "phone-portrait",
-        canvasId: null,
+
         capabilities: [],
         inactivityTimeoutSeconds: 120,
       }),
@@ -439,7 +399,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Handheld3"),
         formFactor: "phone-portrait",
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -457,7 +417,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name: uniqueName("BadTimeout"),
           formFactor: "phone-portrait",
-          canvasId: null,
+
           capabilities: [],
           inactivityTimeoutSeconds: bad,
         }),
@@ -481,7 +441,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name: uniqueName("BadTimeoutType"),
           formFactor: "phone-portrait",
-          canvasId: null,
+
           capabilities: [],
           inactivityTimeoutSeconds: bad,
         }),
@@ -507,7 +467,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Kitchen"),
         formFactor: "kds",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
         inactivityTimeoutSeconds: 300,
       }),
@@ -546,7 +506,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Ghost"),
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -568,26 +528,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
   });
 
-  it("POST with a canvasId that references no canvas → 400 device_profile.invalid (bad_canvas_ref)", async () => {
-    const app = mountApp();
-    const res = await app.request("/management-api/device-profiles", {
-      method: "POST",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({
-        name: uniqueName("BadRef"),
-        formFactor: "till",
-        canvasId: randomUUID(),
-        capabilities: [],
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { reason: string } } },
-    ).toMatchObject({
-      error: { code: "device_profile.invalid", params: { reason: "bad_canvas_ref" } },
-    });
-  });
-
   it("POST with an unknown capability → 400 device_profile.invalid (bad_capabilities)", async () => {
     const app = mountApp();
     const res = await app.request("/management-api/device-profiles", {
@@ -596,7 +536,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("BadCap"),
         formFactor: "till",
-        canvasId: null,
+
         capabilities: ["fly"],
       }),
     });
@@ -617,7 +557,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Referenced"),
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -656,7 +596,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name,
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
         ...ordering,
       }),
@@ -668,7 +608,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name,
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
         ...ordering,
       }),
@@ -697,7 +637,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const noName = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ canvasId: null, capabilities: [] }),
+      body: JSON.stringify({ capabilities: [] }),
     });
     expect(noName.status).toBe(400);
     expect(
@@ -708,43 +648,13 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const noCaps = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("NoCaps"), canvasId: null }),
+      body: JSON.stringify({ name: uniqueName("NoCaps") }),
     });
     expect(noCaps.status).toBe(400);
     expect(
       (await noCaps.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "capabilities" } },
-    });
-
-    // A canvasId of the wrong TYPE (a number, neither string nor null) → the canvasId screen.
-    const badCanvasType = await app.request("/management-api/device-profiles", {
-      method: "POST",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("BadType"), canvasId: 42, capabilities: [] }),
-    });
-    expect(badCanvasType.status).toBe(400);
-    expect(
-      (await badCanvasType.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "canvasId" } },
-    });
-
-    // A canvasId that is a string but NOT a UUID → the UUID-shape screen (`requireBodyUuid`).
-    const malformedCanvas = await app.request("/management-api/device-profiles", {
-      method: "POST",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({
-        name: uniqueName("BadShape"),
-        canvasId: "not-a-uuid",
-        capabilities: [],
-      }),
-    });
-    expect(malformedCanvas.status).toBe(400);
-    expect(
-      (await malformedCanvas.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "canvasId" } },
     });
 
     // A missing OR out-of-set formFactor → the closed-set screen (`requireEnum` over FORM_FACTORS).
@@ -755,7 +665,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name: uniqueName("BadFF"),
           ...(formFactor === undefined ? {} : { formFactor }),
-          canvasId: null,
+
           capabilities: [],
         }),
       });
@@ -778,7 +688,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Editable"),
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -799,7 +709,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const noName = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ canvasId: null, capabilities: [] }),
+      body: JSON.stringify({ capabilities: [] }),
     });
     expect(noName.status).toBe(400);
     expect(
@@ -810,7 +720,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const noCaps = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("E2"), canvasId: null }),
+      body: JSON.stringify({ name: uniqueName("E2") }),
     });
     expect(noCaps.status).toBe(400);
     expect(
@@ -818,21 +728,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "capabilities" } },
     });
-
-    // A canvasId of the wrong TYPE (a number, neither string nor null) → the canvasId screen.
-    const badCanvasType = await app.request(`/management-api/device-profiles/${id}`, {
-      method: "PUT",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name: uniqueName("E3"), canvasId: 42, capabilities: [] }),
-    });
-    expect(badCanvasType.status).toBe(400);
-    expect(
-      (await badCanvasType.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "canvasId" } },
-    });
   });
-
   it("refuses every device-profile route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
     const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
@@ -843,7 +739,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Target"),
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -858,7 +754,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name: uniqueName("Nope"),
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       }),
@@ -868,7 +764,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name: uniqueName("Nope"),
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       }),
@@ -909,7 +805,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name: uniqueName("Listed"),
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
         receiptPrinterIds: [p1],
         paymentSlipPrinterIds: [],
@@ -942,7 +838,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name,
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
         receiptPrinterIds: [p1],
         paymentSlipPrinterIds: [p2],
@@ -965,7 +861,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const kept = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
-      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
+      body: JSON.stringify({ name, formFactor: "till", capabilities: [] }),
     });
     expect(kept.status).toBe(200);
     const keptRow = (await kept.json()) as ProfileRow;
@@ -978,7 +874,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name,
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
         receiptPrinterIds: [],
       }),
@@ -1012,7 +908,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       })
       .returning({ id: printers.id });
     const name = uniqueName("Defaults");
-    const base = { name, formFactor: "till", ...ordering, canvasId: null, capabilities: [] };
+    const base = { name, formFactor: "till", ...ordering, capabilities: [] };
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -1083,7 +979,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("refuses a printer list that is not an array of ids, and a printer that does not exist", async () => {
     const app = mountApp();
-    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const base = { formFactor: "till", capabilities: [], ...ordering };
     const DUPLICATE = randomUUID();
     for (const [field, value] of [
       ["receiptPrinterIds", "x"],
@@ -1151,7 +1047,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       })
       .returning({ id: pagePrinters.id });
     const officeId = office!.id;
-    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const base = { formFactor: "till", capabilities: [], ...ordering };
     const existing = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -1212,7 +1108,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const app = mountApp();
     const office = await seedOfficePrinter(uniqueName("Office"));
     const receipt = await seedPrinter(uniqueName("Bar"));
-    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const base = { formFactor: "till", capabilities: [], ...ordering };
     const name = uniqueName("Invoices");
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
@@ -1261,7 +1157,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("refuses a malformed invoice list and default, and an invoice id that names no printer of either kind", async () => {
     const app = mountApp();
-    const base = { formFactor: "till", canvasId: null, capabilities: [], ...ordering };
+    const base = { formFactor: "till", capabilities: [], ...ordering };
     for (const [field, value] of [
       ["invoicePrinterIds", "x"],
       ["invoicePrinterIds", ["not-a-uuid"]],
@@ -1309,7 +1205,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       body: JSON.stringify({
         name: uniqueName("Staff"),
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
         receiptPrinterIds: [randomUUID()],
       }),
@@ -1392,7 +1288,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
             name,
             formFactor: "till",
             ...ordering,
-            canvasId: null,
+
             capabilities: [],
             ...formNaming(p, q, role, asDefault),
           }),
@@ -1426,7 +1322,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
             name,
             formFactor: "till",
             ...ordering,
-            canvasId: null,
+
             capabilities: [],
             ...form,
           }),
@@ -1475,7 +1371,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
             name: uniqueName("Renamed"),
             formFactor: "till",
             ...ordering,
-            canvasId: null,
+
             capabilities: [],
             ...form,
             // A new printer beside the stale one, so a partial save would show.
@@ -1505,7 +1401,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           name,
           formFactor: "till",
           ...ordering,
-          canvasId: null,
+
           capabilities: [],
           receiptPrinterIds: [q, p],
           receiptPrinterDefaultId: p,
@@ -1522,7 +1418,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           name,
           formFactor: "till",
           ...ordering,
-          canvasId: null,
+
           capabilities: [],
           receiptPrinterDefaultId: p,
         }),
@@ -1550,7 +1446,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           name: uniqueName("Clean"),
           formFactor: "till",
           ...ordering,
-          canvasId: null,
+
           capabilities: [],
           receiptPrinterIds: [q, off],
           paymentSlipPrinterIds: [q],
@@ -1592,7 +1488,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const kitchen = (name: string, extra: Record<string, unknown> = {}) => ({
       name,
       formFactor: "kds",
-      canvasId: null,
+
       capabilities: ["act-as-kds", "prepare-orders"],
       ...extra,
     });
@@ -1713,7 +1609,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           name: uniqueName("Till"),
           formFactor: "till",
           ...ordering,
-          canvasId: null,
+
           capabilities: [],
         }),
       });
@@ -1725,7 +1621,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify({
           name,
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
           kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: null } },
         }),
@@ -1751,7 +1647,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         name,
         formFactor: "till",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
         ...extra,
       });
@@ -1820,7 +1716,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
             name,
             formFactor: "till",
             ...ordering,
-            canvasId: null,
+
             capabilities: ["show-station", "show-expo"],
             kitchenScreens,
           }),
@@ -2028,7 +1924,7 @@ describe("Management API — a device profile's home layouts", () => {
         name: uniqueName("Handheld"),
         formFactor: "phone-portrait",
         ...ordering,
-        canvasId: null,
+
         capabilities: [],
       }),
     });
@@ -2125,7 +2021,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
   const handheld = (name: string, extra: Record<string, unknown> = {}) => ({
     name,
     formFactor: "phone-portrait",
-    canvasId: null,
+
     capabilities: ["take-orders", "take-cash", "show-schedule"],
     ...extra,
   });
@@ -2149,7 +2045,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       id,
       name,
       formFactor: "phone-portrait",
-      canvasId: null,
+
       capabilities: ["take-orders", "take-cash", "show-schedule"],
       inactivityTimeoutSeconds: null,
       startingScreen: "show-schedule",
@@ -2463,7 +2359,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
         ...(await send("POST", {
           name: uniqueName("Kitchen"),
           formFactor: "kds",
-          canvasId: null,
+
           capabilities: ["act-as-kds", action],
         })),
       }).toEqual({
@@ -2477,7 +2373,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     const taking = await send("POST", {
       name: uniqueName("Kitchen pass"),
       formFactor: "kds",
-      canvasId: null,
+
       capabilities: ["act-as-kds", "take-orders", "hand-over-orders"],
     });
     expect(taking.status).toBe(201);
@@ -2486,7 +2382,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     });
     const kitchen = {
       formFactor: "kds",
-      canvasId: null,
+
       capabilities: ["act-as-kds", "prepare-orders"],
     };
     expect(await send("POST", { ...kitchen, name: uniqueName("Kitchen"), ...ordering })).toEqual({
@@ -2511,11 +2407,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     const name = uniqueName("Becomes kitchen");
     const created = await send("POST", handheld(name, ordering));
     const id = (created.body as Detail).id;
-    const res = await send(
-      "PUT",
-      { name, formFactor: "kds", canvasId: null, capabilities: ["act-as-kds"] },
-      id,
-    );
+    const res = await send("PUT", { name, formFactor: "kds", capabilities: ["act-as-kds"] }, id);
     expect(res.status).toBe(200);
     expect(await read(id)).toMatchObject({
       formFactor: "kds",
