@@ -21,6 +21,7 @@ import {
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { TillConfig } from "./till-config.js";
 import type { RefundableTender } from "./tender-refund-types.js";
+import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 
 const ZERO = decimal("0.00");
 const maximum = (left: Decimal, right: Decimal) =>
@@ -139,27 +140,12 @@ export async function readRefundableTenders(
     let last4: string | null = null;
     let manual = false;
     if (row.method === "card") {
-      // A direct tender has no capture key. Only an unambiguous one-card/one-capture sale can name its original payment.
-      if (
-        row.billPaymentId === null &&
-        rows.filter((tender) => tender.method === "card" && tender.billPaymentId === null)
-          .length !== 1
-      )
-        continue;
-      const matching = captures.filter(
-        (capture) =>
-          (row.billPaymentId === null
-            ? capture.saleId === saleId && capture.billPaymentId === null
-            : capture.billPaymentId === row.billPaymentId) &&
-          ["captured", "settled", "partially_refunded", "refunded"].includes(capture.state),
+      const payment = matchTenderRefundCapture(
+        row,
+        captures,
+        rows.filter((tender) => tender.method === "card" && tender.billPaymentId === null).length,
       );
-      if (matching.length !== 1) continue;
-      const payment = matching[0]!;
-      if (
-        row.billPaymentId === null &&
-        compareDecimal(centsToDecimal(payment.amount), row.amount) !== 0
-      )
-        continue;
+      if (payment === undefined) continue;
       last4 = payment.cardLast4;
       manual = payment.provider === MANUAL_PROVIDER;
       const preInvoice = sumDecimals(

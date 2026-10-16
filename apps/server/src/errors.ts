@@ -546,6 +546,9 @@ declare module "@waitron/shared" {
      * what is left of the payment.
      */
     "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
+    "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
+    "tender.refund_unavailable": { tenderId: string };
+    "tender.refund_in_progress": { tenderId: string };
     /**
      * A refund of an item payment asked for less than the whole of it: an item payment is given
      * back whole, which frees its lines. `applied` and `tip` are that whole.
