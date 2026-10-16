@@ -9,6 +9,7 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
 import { orderDraftEvents, orderDraftLines, orderDrafts } from "./order-drafts.js";
+import { orderGroups } from "./order-groups.js";
 import { parties } from "./parties.js";
 
 const ALEX = "cccccccc-2222-4000-8000-000000000001";
@@ -155,6 +156,91 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
       ),
     );
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  describe("draft line placement", () => {
+    async function lineOnParty() {
+      const partyId = await party();
+      const draftId = await draft({ partyId, ownerId: ALEX });
+      const [group] = await inTx((tx) =>
+        tx
+          .insert(orderGroups)
+          .values({ partyId, position: 1, state: "held", submittedBy: ALEX })
+          .returning({ id: orderGroups.id }),
+      );
+      return {
+        groupId: group!.id,
+        line: {
+          draftId,
+          position: 1,
+          menuItemId: MENU_ITEM,
+          options: [],
+          extras: [],
+          quantity: 1000,
+        },
+      };
+    }
+
+    it("defaults a line to Fire now without a held-group destination", async () => {
+      const { line } = await lineOnParty();
+      const [row] = await inTx((tx) => tx.insert(orderDraftLines).values(line).returning());
+      expect(row).toMatchObject({ slot: 0, joinGroupId: null, afterGroupId: null });
+    });
+
+    it.each(["join", "after", "new"] as const)("stores a line's %s placement", async (place) => {
+      const { line, groupId } = await lineOnParty();
+      const destination = {
+        slot: place === "join" ? 0 : 2,
+        joinGroupId: place === "join" ? groupId : null,
+        afterGroupId: place === "after" ? groupId : null,
+      };
+      const [inserted] = await inTx((tx) =>
+        tx
+          .insert(orderDraftLines)
+          .values({ ...line, ...destination })
+          .returning(),
+      );
+      const [row] = await inTx((tx) =>
+        tx.select().from(orderDraftLines).where(eq(orderDraftLines.id, inserted!.id)),
+      );
+      expect(row).toMatchObject(destination);
+    });
+
+    it.each(["joinGroupId", "afterGroupId"] as const)(
+      "refuses a %s naming no stored group",
+      async (field) => {
+        const { line } = await lineOnParty();
+        const error = await captureError(() =>
+          inTx((tx) =>
+            tx.insert(orderDraftLines).values({
+              ...line,
+              slot: field === "afterGroupId" ? 1 : 0,
+              [field]: MISSING,
+            }),
+          ),
+        );
+        expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+      },
+    );
+
+    it.each([
+      { slot: -1, join: false, after: false, check: "order_draft_lines_slot_ck" },
+      { slot: 1, join: true, after: false, check: "order_draft_lines_place_ck" },
+      { slot: 0, join: false, after: true, check: "order_draft_lines_after_ck" },
+    ])("refuses a destination breaking $check", async ({ slot, join, after, check }) => {
+      const { line, groupId } = await lineOnParty();
+      const error = await captureError(() =>
+        inTx((tx) =>
+          tx.insert(orderDraftLines).values({
+            ...line,
+            slot,
+            joinGroupId: join ? groupId : null,
+            afterGroupId: after ? groupId : null,
+          }),
+        ),
+      );
+      expect(checkFailed(error, check)).toBe(true);
+    });
   });
 
   describe("order_draft_events", () => {

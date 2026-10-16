@@ -1205,6 +1205,13 @@
       "when": 1792367756050,
       "tag": "0171_course_held_until_fired",
       "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "6",
+      "when": 1792367783505,
+      "tag": "0172_draft_line_place",
+      "breakpoints": true
     }
   ]
 }
