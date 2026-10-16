@@ -26,6 +26,7 @@ function api(readers: ReaderRow[] = [reader], overrides: Partial<DashboardApi> =
     readerStatus: vi.fn().mockResolvedValue({ online: false }),
     listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
+    listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;

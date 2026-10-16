@@ -1,3 +1,8 @@
+import type {
+  RefundableTender,
+  TenderRefundRequest,
+  TenderRefundView,
+} from "./tender-refund-types.js";
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { readTransferEvents } from "./transfer-events.js";
 import type {
@@ -3523,6 +3528,43 @@ export class TillApi {
       "GET",
       undefined,
       options.signal,
+    );
+  }
+
+  getRefundableTenders(saleId: string, options: ReadOptions = {}): Promise<RefundableTender[]> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/refundable-tenders`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  refundTransaction(saleId: string, request: TenderRefundRequest): Promise<TenderRefundView> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/refunds`,
+      "POST",
+      request,
+    );
+  }
+
+  getTenderRefund(refundId: string, options: ReadOptions = {}): Promise<TenderRefundView> {
+    return this.#request(
+      `/api/tender-refunds/${encodeURIComponent(refundId)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  retryTenderRefund(
+    refundId: string,
+    override?: TenderRefundRequest["override"],
+  ): Promise<TenderRefundView> {
+    return this.#request(
+      `/api/tender-refunds/${encodeURIComponent(refundId)}/retry`,
+      "POST",
+      override === undefined ? {} : { override },
     );
   }
 

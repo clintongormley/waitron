@@ -1,3 +1,4 @@
+import type { TenderRefundView, StuckTenderRefundRow } from "../api/tender-refund-types.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -82,7 +83,9 @@ function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
 }
 
 type BillTarget =
-  { kind: "payment"; row: StuckBillPaymentRow } | { kind: "refund"; row: StuckBillRefundRow };
+  | { kind: "payment"; row: StuckBillPaymentRow }
+  | { kind: "refund"; row: StuckBillRefundRow }
+  | { kind: "tender"; row: StuckTenderRefundRow };
 
 type BillDraft = { outcome: string; note: string; pin: string };
 
@@ -401,6 +404,9 @@ export class PaymentsScreen extends LitElement {
   @state() private stuckResult: { text: string; refused: boolean } | null = null;
   @state() private billPayments: StuckBillPaymentRow[] = [];
   @state() private billRefunds: StuckBillRefundRow[] = [];
+  @state() private tenderRefunds: StuckTenderRefundRow[] = [];
+  @state() private tenderRefundLoadError: string | null = null;
+  #tenderRefundRead = 0;
   @state() private billPaymentLoadError: string | null = null;
   @state() private billRefundLoadError: string | null = null;
   @state() private billResult: { text: string; refused: boolean } | null = null;
@@ -457,6 +463,14 @@ export class PaymentsScreen extends LitElement {
     () => this.api,
     (error) => {
       this.billRefundLoadError = codeOf(error);
+    },
+  );
+
+  readonly #tenderRefundQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.tenderRefundLoadError = codeOf(error);
     },
   );
 
@@ -533,6 +547,13 @@ export class PaymentsScreen extends LitElement {
         this.billPaymentLoadError = null;
       })
       .catch(() => undefined);
+    void this.#tenderRefundQuery
+      .watch("listStuckTenderRefunds", [], (rows) => {
+        this.#tenderRefundRead++;
+        this.tenderRefunds = rows;
+        this.tenderRefundLoadError = null;
+      })
+      .catch(() => undefined);
     void this.#billRefundQuery
       .watch("listStuckBillRefunds", [], (rows) => {
         this.billRefunds = rows;
@@ -543,6 +564,7 @@ export class PaymentsScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#tenderRefundRead++;
     this.#closeDelete();
     this.#statusVersion++;
     this.#billOperation = undefined;
@@ -1056,16 +1078,19 @@ export class PaymentsScreen extends LitElement {
     return row.label ? `${order} · ${row.label}` : order;
   }
 
-  #billOrder(row: StuckBillPaymentRow | StuckBillRefundRow): string {
+  #billOrder(row: StuckBillPaymentRow | StuckBillRefundRow | StuckTenderRefundRow): string {
+    if ("saleId" in row) return fill("payments.tender.sale", { id: row.invoiceNumber });
     const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
     return row.label ? `${order} · ${row.label}` : order;
   }
 
   async #loadBillRecovery(background: boolean): Promise<void> {
+    const tenderRead = ++this.#tenderRefundRead;
     const client = background ? (this.api.background ?? this.api) : this.api;
-    const [payments, refunds] = await Promise.allSettled([
+    const [payments, refunds, tenders] = await Promise.allSettled([
       client.listStuckBillPayments(),
       client.listStuckBillRefunds(),
+      client.listStuckTenderRefunds(),
     ]);
     if (payments.status === "fulfilled") {
       this.billPayments = payments.value;
@@ -1075,6 +1100,12 @@ export class PaymentsScreen extends LitElement {
       this.billRefunds = refunds.value;
       this.billRefundLoadError = null;
     } else this.billRefundLoadError = codeOf(refunds.reason);
+    if (tenderRead === this.#tenderRefundRead && this.isConnected) {
+      if (tenders.status === "fulfilled") {
+        this.tenderRefunds = tenders.value;
+        this.tenderRefundLoadError = null;
+      } else this.tenderRefundLoadError = codeOf(tenders.reason);
+    }
   }
 
   #openBillAction(target: BillTarget, mode: "check" | "attest"): void {
@@ -1100,7 +1131,14 @@ export class PaymentsScreen extends LitElement {
     } else this.#billLeave = leaveCoordinatorFor(this);
   }
 
-  #billOutcomeText(answer: BillRecoveryOutcome): string | null {
+  #billOutcomeText(
+    answer: BillRecoveryOutcome | { outcome: TenderRefundView["state"] },
+    kind: BillTarget["kind"],
+  ): string | null {
+    if (kind === "tender" && (answer.outcome === "completed" || answer.outcome === "failed"))
+      return t(
+        answer.outcome === "completed" ? "payments.tender.completed" : "payments.tender.failed",
+      );
     switch (answer.outcome) {
       case "received":
         return t("payments.bill.received");
@@ -1122,17 +1160,23 @@ export class PaymentsScreen extends LitElement {
     this.billBusy = true;
     this.billResult = null;
     const target = action.target;
+    const operation = (this.#billOperation = {});
+    const current = () => this.isConnected && this.#billOperation === operation;
     try {
       const answer =
         target.kind === "payment"
           ? await this.api.resolveStuckBillPayment(target.row.billPaymentId)
-          : await this.api.resolveStuckBillRefund(target.row.refundId);
-      const message = this.#billOutcomeText(answer);
+          : target.kind === "refund"
+            ? await this.api.resolveStuckBillRefund(target.row.refundId)
+            : await this.api.resolveStuckTenderRefund(target.row.id);
+      if (!current()) return;
+      const message = this.#billOutcomeText(answer, target.kind);
       this.billResult = {
         text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
         refused: message === null,
       };
     } catch (error) {
+      if (!current()) return;
       this.billResult = {
         text: `${this.#billOrder(target.row)}: ${billRefusalText(error)}`,
         refused: true,
@@ -1141,7 +1185,10 @@ export class PaymentsScreen extends LitElement {
     try {
       await this.#loadBillRecovery(true);
     } finally {
-      this.billBusy = false;
+      if (current()) {
+        this.#billOperation = undefined;
+        this.billBusy = false;
+      }
     }
   }
 
@@ -1172,14 +1219,20 @@ export class PaymentsScreen extends LitElement {
               note,
               pin,
             })
-          : await this.api.attestStuckBillRefund(target.row.refundId, {
-              outcome: outcome as "completed" | "failed",
-              note,
-              pin,
-            });
+          : target.kind === "refund"
+            ? await this.api.attestStuckBillRefund(target.row.refundId, {
+                outcome: outcome as "completed" | "failed",
+                note,
+                pin,
+              })
+            : await this.api.attestStuckTenderRefund(target.row.id, {
+                outcome: outcome as "completed" | "failed",
+                note,
+                pin,
+              });
       if (!this.isConnected || this.billAction !== action) return;
       scope?.commit({ outcome, note, pin });
-      const message = this.#billOutcomeText(answer);
+      const message = this.#billOutcomeText(answer, target.kind);
       this.billResult = {
         text: `${this.#billOrder(target.row)}: ${message ?? t("payments.bill.check_failed")}`,
         refused: message === null,
@@ -1195,6 +1248,8 @@ export class PaymentsScreen extends LitElement {
       if (!this.isConnected || this.billAction !== action) return;
       const code = codeOf(error);
       if (
+        code === "tender.refund_not_stuck" ||
+        code === "tender.refund_not_found" ||
         code === "bill.payment_not_stuck" ||
         code === "bill.refund_not_stuck" ||
         code === "bill.payment_not_found" ||
@@ -1261,6 +1316,47 @@ export class PaymentsScreen extends LitElement {
   }
 
   #renderBillRow(target: BillTarget): TemplateResult {
+    if (target.kind === "tender")
+      return html`<li class="stuck" data-test=${`tender-refund-${target.row.id}`}>
+        <div class="stuck-body">
+          <p class="stuck-order">${this.#billOrder(target.row)}</p>
+          <p>${t("payments.tender.intro")}</p>
+          <dl class="stuck-details">
+            <dt>${t("payments.bill.refund_reason")}</dt>
+            <dd>${target.row.reason}</dd>
+            <dt>${t("payments.stuck.provider")}</dt>
+            <dd>
+              ${target.row.provider ? this.#providerName(target.row.provider) : t("payments.bill.provider_unknown")}
+            </dd>
+            <dt>${t("payments.tender.reference")}</dt>
+            <dd>${target.row.providerPaymentRef ?? t("payments.bill.provider_unknown")}</dd>
+            <dt>${t("payments.tender.attempt")}</dt>
+            <dd>${target.row.id}</dd>
+            <dt>${t("payments.stuck.amount")}</dt>
+            <dd>${formatMoney(billAmount(target), currentLocale())}</dd>
+            <dt>${t("payments.stuck.started")}</dt>
+            <dd>
+              <time datetime=${target.row.createdAt}>${formatAlertTime(target.row.createdAt)}</time>
+            </dd>
+          </dl>
+        </div>
+        <wt-button
+          variant="secondary"
+          data-test=${`check-tender-refund-${target.row.id}`}
+          aria-label=${`${t("payments.bill.check")}: ${this.#billOrder(target.row)}`}
+          ?disabled=${this.billBusy}
+          @click=${() => this.#openBillAction(target, "check")}
+          >${t("payments.bill.check")}</wt-button
+        >
+        <wt-button
+          variant="secondary"
+          data-test=${`attest-tender-refund-${target.row.id}`}
+          aria-label=${`${t("payments.bill.attest")}: ${this.#billOrder(target.row)}`}
+          ?disabled=${this.billBusy}
+          @click=${() => this.#openBillAction(target, "attest")}
+          >${t("payments.bill.attest")}</wt-button
+        >
+      </li>`;
     const id = target.kind === "payment" ? target.row.billPaymentId : target.row.refundId;
     const kind = target.kind === "payment" ? "bill-payment" : "bill-refund";
     return html`<li class="stuck" data-test=${`${kind}-${id}`}>
@@ -1325,15 +1421,21 @@ export class PaymentsScreen extends LitElement {
   #renderBillRecovery(): TemplateResult | typeof nothing {
     const errors = [
       ...new Set(
-        [this.billPaymentLoadError, this.billRefundLoadError]
+        [this.billPaymentLoadError, this.billRefundLoadError, this.tenderRefundLoadError]
           .filter((code): code is string => code !== null)
           .map((code) => codeMessage(code)),
       ),
     ];
-    if (!this.billPayments.length && !this.billRefunds.length && !this.billResult && !errors.length)
+    if (
+      !this.billPayments.length &&
+      !this.billRefunds.length &&
+      !this.tenderRefunds.length &&
+      !this.billResult &&
+      !errors.length
+    )
       return nothing;
     return html`<section
-      class="stuck-section ${this.billPayments.length || this.billRefunds.length ? "pending" : ""}"
+      class="stuck-section ${this.billPayments.length || this.billRefunds.length || this.tenderRefunds.length ? "pending" : ""}"
       data-test="bill-recovery"
       aria-labelledby="bill-recovery-heading"
     >
@@ -1364,6 +1466,14 @@ export class PaymentsScreen extends LitElement {
             </ul>`
           : html`<p>${t("payments.bill.no_refunds")}</p>`
       }
+      ${
+        this.tenderRefunds.length
+          ? html`<h3>${t("payments.tender.heading")}</h3>
+              <ul class="stuck-list">
+                ${this.tenderRefunds.map((row) => this.#renderBillRow({ kind: "tender", row }))}
+              </ul>`
+          : nothing
+      }
     </section>`;
   }
 
@@ -1374,12 +1484,14 @@ export class PaymentsScreen extends LitElement {
       return html`<wt-dialog
         data-test="bill-check-dialog"
         .open=${true}
-        heading=${t("payments.bill.check_heading")}
+        heading=${t(action.target.kind === "tender" ? "payments.tender.check_heading" : "payments.bill.check_heading")}
         @wt-close=${() => {
           if (!this.billBusy) this.billAction = null;
         }}
       >
-        <p>${fill("payments.bill.check_body", { order: this.#billOrder(action.target.row) })}</p>
+        <p>
+          ${fill(action.target.kind === "tender" ? "payments.tender.check_body" : "payments.bill.check_body", { order: this.#billOrder(action.target.row) })}
+        </p>
         <wt-form-actions slot="footer">
           <wt-button
             slot="cancel"

@@ -80,7 +80,10 @@ async function choose(app: AttestationLeaveApp, decision: "keep" | "discard") {
   await expect.poll(() => confirmation.open).toBe(false);
 }
 async function open(screen: PaymentsScreen, kind: string) {
-  q(screen, `[data-test=attest-bill-${kind}-${kind === "payment" ? "bp-1" : "br-1"}]`)!.click();
+  q(
+    screen,
+    `[data-test=${kind === "tender" ? "attest-tender-refund-tr-1" : `attest-bill-${kind}-${kind === "payment" ? "bp-1" : "br-1"}`}]`,
+  )!.click();
   await screen.updateComplete;
   await dialog(screen)!.updateComplete;
 }
@@ -92,6 +95,23 @@ async function mount(kind: string, overrides: Partial<DashboardApi> = {}) {
       listReaders: async () => [],
       listStuckPayments: async () => [],
       listStuckBillPayments: async () => [PAYMENT],
+      listStuckTenderRefunds: async () => [
+        {
+          invoiceNumber: "A/17",
+          reason: "Goodwill",
+          provider: "fake",
+          providerPaymentRef: "capture-1",
+          id: "tr-1",
+          saleId: "sale-1",
+          tenderId: "tender-1",
+          state: "pending",
+          appliedAmount: "12.50",
+          tipAmount: "1.00",
+          createdAt: "2026-10-16T12:00:00.000Z",
+          completedAt: null,
+        },
+      ],
+      attestStuckTenderRefund: async () => ({ outcome: "completed" }),
       listStuckBillRefunds: async () => [REFUND],
       attestStuckBillPayment: async () => ({ outcome: "received" }),
       attestStuckBillRefund: async () => ({ outcome: "completed" }),
@@ -368,4 +388,28 @@ it("provider-check confirmation remains a direct-close exemption", async () => {
   await expect.poll(() => q(screen, "[data-test=bill-check-dialog]")).toBeNull();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(unload()).toBe(false);
+});
+
+it("post-invoice attestation keeps its note and PIN through Cancel/Keep, then discards without a refund", async () => {
+  let writes = 0;
+  const { app, screen } = await mount("tender", {
+    attestStuckTenderRefund: async () => {
+      writes++;
+      return { outcome: "completed" };
+    },
+  });
+  await fill(screen, "tender");
+  expect(unload()).toBe(true);
+  cancel(screen);
+  await choose(app, "keep");
+  expect(value(screen, "note")).toBe("  Provider confirmed  ");
+  expect(value(screen, "pin")).toBe("1234");
+  await userEvent.keyboard("{Escape}");
+  await choose(app, "discard");
+  await expect.poll(() => dialog(screen)).toBeNull();
+  expect(writes).toBe(0);
+  expect(unload()).toBe(false);
+  await open(screen, "tender");
+  expect(value(screen, "pin")).toBe("");
+  expect(value(screen, "note")).toBe("");
 });

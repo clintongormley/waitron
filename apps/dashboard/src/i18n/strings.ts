@@ -2407,6 +2407,16 @@ export const en = {
     "This card provider is no longer connected. Connect it again, then check the payment.",
   "payments.stuck.failed":
     "Something went wrong while checking this payment. If it is still listed, try again in a minute.",
+  "payments.tender.heading": "Refunds after invoicing",
+  "payments.tender.completed": "Refund completed. The original invoice is unchanged.",
+  "payments.tender.failed": "Refund not made. The original invoice is unchanged.",
+  "payments.tender.check_heading": "Check this refund with the provider?",
+  "payments.tender.check_body":
+    "Waitron will ask the card provider about {order} and record only a confirmed outcome. If the outcome is unclear, the refund stays pending and its money stays reserved. The original invoice stays unchanged.",
+  "payments.tender.sale": "Invoice {id}",
+  "payments.tender.attempt": "Refund attempt",
+  "payments.tender.reference": "Provider payment reference",
+  "payments.tender.intro": "This returns money; the original invoice stays unchanged.",
   "payments.bill.heading": "Bill payments and refunds awaiting a card provider",
   "payments.bill.intro":
     "Check with the card provider before recording an outcome. A manager may record only the outcome the provider confirms, with a note and their PIN.",
@@ -5383,6 +5393,16 @@ export const es: Record<StringKey, string> = {
     "Este proveedor de pagos ya no está conectado. Vuelve a conectarlo y consulta de nuevo el cobro.",
   "payments.stuck.failed":
     "Algo salió mal al consultar este cobro. Si sigue en la lista, vuelve a intentarlo en un minuto.",
+  "payments.tender.heading": "Devoluciones después de facturar",
+  "payments.tender.completed": "Devolución realizada. La factura original no cambia.",
+  "payments.tender.failed": "Devolución no realizada. La factura original no cambia.",
+  "payments.tender.check_heading": "¿Consultar esta devolución al proveedor?",
+  "payments.tender.check_body":
+    "Waitron consultará al proveedor sobre {order} y solo registrará un resultado confirmado. Si el resultado no está claro, la devolución seguirá pendiente y el importe reservado. La factura original no cambia.",
+  "payments.tender.sale": "Factura {id}",
+  "payments.tender.attempt": "Intento de devolución",
+  "payments.tender.reference": "Referencia del pago del proveedor",
+  "payments.tender.intro": "Esta acción devuelve dinero; la factura original no cambia.",
   "payments.bill.heading": "Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas",
   "payments.bill.intro":
     "Consulta al proveedor de pagos antes de registrar un resultado. Un gerente solo puede registrar el resultado que confirme el proveedor, con una nota y su PIN.",

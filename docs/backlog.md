@@ -1982,8 +1982,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   provider evidence; a manager can record a provider-confirmed outcome with their own PIN and note.
   Operational reporting now subtracts completed returns on their completion business day,
   recorded device/source and node, including returned tips. The reporting cases keep prior
-  closes frozen and the original invoice's VAT and counts unchanged. Screens and acknowledgments
-  remain to be built.
+  closes frozen and the original invoice's VAT and counts unchanged. Typed browser clients and
+  the Payments screen's post-invoice recovery section now show the original invoice/provider
+  reference and offer scoped provider checks or a manager's PIN-and-note confirmation.
+  The till refund window, Transactions refund rows and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),

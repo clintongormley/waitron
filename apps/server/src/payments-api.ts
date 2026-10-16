@@ -15,6 +15,8 @@ import {
   withTransaction,
   workingOrders,
   tenderRefunds,
+  sales,
+  invoiceSeries,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -1331,8 +1333,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, (tx) =>
         tx
-          .select()
+          .select({
+            refund: tenderRefunds,
+            invoiceNumber: sales.invoiceNumber,
+            seriesCode: invoiceSeries.code,
+          })
           .from(tenderRefunds)
+          .innerJoin(sales, eq(sales.id, tenderRefunds.saleId))
+          .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
           .where(
             and(
               eq(tenderRefunds.locationId, deps.cfg.locationId),
@@ -1344,7 +1352,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .orderBy(tenderRefunds.createdAt, sql`${tenderRefunds}.rowid`),
       );
       return c.json(
-        rows.filter((row) => !tenderRefundIsLive(deps.db, row.id)).map(toTenderRefundView),
+        rows
+          .filter(({ refund }) => !tenderRefundIsLive(deps.db, refund.id))
+          .map(({ refund, invoiceNumber, seriesCode }) => ({
+            ...toTenderRefundView(refund),
+            invoiceNumber: `${seriesCode}/${invoiceNumber}`,
+            reason: refund.reason,
+            provider: refund.provider,
+            providerPaymentRef: refund.providerPaymentRef,
+          })),
       );
     }),
   );

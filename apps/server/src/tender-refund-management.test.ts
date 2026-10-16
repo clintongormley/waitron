@@ -646,3 +646,20 @@ it("allows another writer to commit while a valid manager PIN is being derived",
   expect(await watchedOrder()).toEqual(["writer", "derived"]);
   expect((await snapshot()).evidence).toHaveLength(1);
 });
+
+it("gives a manager the original invoice and provider reference to identify the refund", async () => {
+  const t = await pending();
+  const [original] = await store.db.select().from(sales).where(eq(sales.id, t.saleId));
+  const saved = await row(t.id);
+  const result = await list();
+  expect(result.status).toBe(200);
+  expect(result.json).toEqual([
+    expect.objectContaining({
+      id: t.id,
+      invoiceNumber: `A/${original!.invoiceNumber}`,
+      reason: saved.reason,
+      provider: "fake",
+      providerPaymentRef: saved.providerPaymentRef,
+    }),
+  ]);
+});
