@@ -73,11 +73,7 @@ export async function recoverTenderRefunds(
       if (work) await resumeTenderRefund(deps, id, "loop");
       await withTransaction(deps.db, async (tx) => {
         const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
-        if (
-          row?.state === "pending" &&
-          !tenderRefundIsLive(deps.db, id) &&
-          now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS
-        )
+        if (row?.state === "pending" && now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS)
           await raiseTenderRefundUnresolved(tx, row, now);
       });
     }),

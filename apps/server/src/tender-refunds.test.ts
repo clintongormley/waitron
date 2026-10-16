@@ -1493,6 +1493,48 @@ describe("settled-tender refund scheduled recovery", () => {
       for (const release of releases) release();
     }
   });
+  it.each([true, false])(
+    "warns after an hour while resolver ownership is live=%s without repeating provider work",
+    async (live) => {
+      const { refund, provider } = await abandoned();
+      const lookup = vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });
+      const release = claimTenderRefund(store.db, refund.id);
+      let released = false;
+      try {
+        at(59 * 60_000);
+        await recoverTenderRefunds(deps);
+        expect(await store.db.select().from(incidents)).toEqual([]);
+        if (!live) {
+          release();
+          released = true;
+        }
+        at(60 * 60_000 + 1);
+        await recoverTenderRefunds(deps);
+        expect(await store.db.select().from(incidents)).toMatchObject([
+          {
+            code: "payment.tender_refund_unresolved",
+            severity: "warning",
+            params: {
+              refundId: refund.id,
+              saleId: refund.saleId,
+              amount: "2.00",
+              pendingSince: AT,
+            },
+          },
+        ]);
+        expect(tenderRefundIsLive(store.db, refund.id)).toBe(live);
+        expect(lookup).toHaveBeenCalledTimes(live ? 0 : 1);
+        expect(await row(refund.id)).toMatchObject({ state: "pending", sentAt: AT, sendCount: 1 });
+        at(90 * 60_000);
+        await recoverTenderRefunds(deps);
+        expect(await store.db.select().from(incidents)).toHaveLength(1);
+        expect(provider.refundCalls).toEqual([]);
+        expect(await store.db.select().from(paymentRefunds)).toEqual([]);
+      } finally {
+        if (!released) release();
+      }
+    },
+  );
   it("raises one unresolved alert after an hour even before the next provider lookup is due", async () => {
     const { refund, provider } = await abandoned();
     vi.spyOn(provider, "lookupRefund").mockResolvedValue({ kind: "unreachable" });

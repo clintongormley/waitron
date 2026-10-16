@@ -2043,3 +2043,16 @@ Clicking its first cell passed the same exact bill/transaction event assertions 
 pnpm --filter @waitron/till exec vitest run src/screens/till-find-bill-screen.test.ts \
   -t 'row activation at'
 ```
+
+## Observe an old refund while its resolver still owns it
+
+Resolver ownership prevents another provider operation. It does not settle the refund or remove
+its age warning. Test those two effects separately.
+
+A737 Part 2's first whole-branch review found the unresolved-warning path also checking ownership.
+The held/released control in `apps/server/src/tender-refunds.test.ts`, "warns after an hour while
+resolver ownership is live", moves the trusted clock from 59 minutes to one hour plus 1 ms.
+Before the fix, the held case recorded no incident and failed while the released control passed.
+After the warning gate changed, both cases passed; the held case still made no provider lookup or
+send and retained its pending row. A later pass checks that the warning is recorded once. This
+uses a controlled resolver claim and simulated age, not a real hour-long network call.
