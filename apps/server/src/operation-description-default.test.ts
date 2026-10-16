@@ -6,7 +6,5 @@ it.each([undefined, "", "  \t"])("a missing or blank seat default (%j) offers no
 });
 
 it("a seat default with text is offered as given", () => {
-  expect(offeredOperationDescriptionDefault(" Venta en establecimiento ")).toBe(
-    " Venta en establecimiento ",
-  );
+  expect(offeredOperationDescriptionDefault(" Seat default ")).toBe(" Seat default ");
 });

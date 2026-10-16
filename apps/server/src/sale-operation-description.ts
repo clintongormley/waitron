@@ -1,6 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { AppError, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
+import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import "./errors.js";
 
 export async function readSaleOperationDescription(
@@ -40,11 +41,9 @@ export async function readSaleOperationDescription(
       ? await VENUE_SERVICE.readRetainedDepartmentReceipt(tx, scope, departmentId)
       : await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
   if (receipt.operationDescription === undefined || receipt.operationDescription.trim() === "") {
-    if (
-      cfg.operationDescriptionDefault !== undefined &&
-      cfg.operationDescriptionDefault.trim() !== ""
-    ) {
-      return cfg.operationDescriptionDefault;
+    const offered = offeredOperationDescriptionDefault(cfg.operationDescriptionDefault);
+    if (offered !== undefined) {
+      return offered;
     }
     throw new AppError("department.operation_description_required", { departmentId });
   }
