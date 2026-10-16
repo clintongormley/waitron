@@ -117,10 +117,9 @@ export interface SetupDeps {
    * seat. */
   db?: Database;
   ring?: KeyRing;
-  /** Provision path only. */
   establishIdentity?: (nodeId: string) => Promise<void>;
   /** Mints the venue's term-0 membership document after `establishIdentity` seals the identity key.
-   * Provision path only. */
+   */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** Persists `trading.env` so the next boot enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;

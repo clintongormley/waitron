@@ -1,4 +1,4 @@
-import { startServerOrFirstSetupResolution } from "./node-entry.js";
+import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { nameVenueHolder } from "./holder-identity.js";
 import { installShutdownHandlers } from "./run-server.js";
 import "./errors.js";

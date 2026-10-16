@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { enabledModules } from "@waitron/module";
+import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   createFirstSetupCoordinator,
@@ -24,6 +24,8 @@ import { request, PASSWORD, MODULE } from "./first-fiscal.js";
 export const publicDigest = (value: unknown) =>
   createHash("sha256").update(declaredHistoryBytes(value)).digest("hex");
 export async function declaredFirstFiscalFixture(options?: {
+  modules?: readonly WaitronModule[];
+  moduleConfig?: ModuleConfig;
   extendHistory(
     history: DeclaredRegisterHistory,
     context: import("@waitron/module").InitialSetupContext,
@@ -35,10 +37,12 @@ export async function declaredFirstFiscalFixture(options?: {
       venueDir = join(root, "venue"),
       coordinator = createFirstSetupCoordinator();
     const store = createFirstSetupStore({ stateDir, venueDir, coordinator });
-    const modules = ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name));
+    const modules =
+      options?.modules ??
+      ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name));
     const selectedModules = enabledModules(
       modules,
-      venueFiscalSelection(modules, "ES-common").config,
+      venueFiscalSelection(modules, "ES-common", options?.moduleConfig).config,
     );
     const ownerOptions = {
       stateDir,
@@ -202,6 +206,7 @@ export async function declaredFirstFiscalFixture(options?: {
       input,
       statement,
       modules,
+      ...(options?.moduleConfig === undefined ? {} : { moduleConfig: options.moduleConfig }),
       bootId: "boot-1",
       ownerAttempt: {
         attemptId: state.frozen.attemptId,

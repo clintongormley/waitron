@@ -1,7 +1,15 @@
+import {
+  httpPortFrom,
+  landingConfigFrom,
+  serveRecovery,
+  type RecoveryServeOptions,
+} from "./recovery-listener.js";
+export { serveRecovery, recoveryTlsFiles } from "./recovery-listener.js";
+export type { RecoveryServeOptions } from "./recovery-listener.js";
+export { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
@@ -17,23 +25,9 @@ import {
 } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
-import {
-  BOX_HOSTNAME,
-  DEFAULT_MIGRATIONS_ROOT,
-  DEFAULT_STATE_ROOT,
-  startLandingListener,
-  startServer,
-  type LandingListenerConfig,
-} from "./boot.js";
+import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
-import { listBoxIpv4, parseBoxAddresses } from "./box-reach.js";
-import {
-  DEFAULT_HTTP_HOST,
-  DEFAULT_HTTP_LANDING_PORT,
-  DEFAULT_HTTP_PORT,
-  MAX_HTTP_PORT,
-  resolveConfigDir,
-} from "./config.js";
+import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -51,10 +45,6 @@ import {
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
-import { buildServeOptions, type TlsFiles } from "./tls.js";
-import { mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
-import { errnoOf } from "./errno.js";
-import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
@@ -63,134 +53,10 @@ import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { classifyBootFailure } from "./boot-failure.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { redactSecrets } from "./redact-secrets.js";
-import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
 /** How long a boot must survive before its failure counter is cleared (spec §9.2). */
 const STAYED_UP_MS = 120_000;
-
-/**
- * The box's own minted leaf for the recovery page, or `undefined` when it has never minted one, in
- * which case the page is served over plain HTTP.
- */
-export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
-  return mintedBoxLeaf(stateDir);
-}
-
-export interface RecoveryServeOptions {
-  stateDir: string;
-  port: number;
-  httpHost?: string;
-  log: Logger;
-  /** The plain-HTTP trust/landing listener's config. Omitted → no landing listener. */
-  landing?: LandingListenerConfig;
-  /** Defaults to the real `startLandingListener`. */
-  startLanding?: (
-    config: LandingListenerConfig,
-    log: Logger,
-  ) => { close(): Promise<void> } | undefined;
-  /** Defaults to the real `tightenTlsDir`. */
-  tightenTls?: (stateDir: string) => Promise<void>;
-}
-
-/**
- * Bind the recovery page on the box's own HTTPS port with the box's existing leaf, so an
- * already-trusting phone reaches it at the same URL. Beside it, when `opts.landing` is given and
- * `startLandingListener` binds one, the plain-HTTP trust/landing page: a phone that does not yet
- * trust the leaf hits the certificate interstitial before any recovery page loads.
- *
- * Resolves once the socket is bound and rejects if the bind fails; the caller lets that escape, so
- * the process exits non-zero rather than leaving a page-less container up.
- */
-export async function serveRecovery(
-  app: Hono,
-  opts: RecoveryServeOptions,
-): Promise<ReturnType<typeof serve>> {
-  // Logged rather than thrown, as at a trading start: a certificate folder left readable is no
-  // reason to take the recovery page down.
-  try {
-    await (opts.tightenTls ?? tightenTlsDir)(opts.stateDir);
-  } catch (error: unknown) {
-    opts.log("warn", "tls.tighten_failed", { errno: errnoOf(error) });
-  }
-  return new Promise((resolve, reject) => {
-    const tls = recoveryTlsFiles(opts.stateDir);
-    const surface = new Hono();
-    mountDiscovery(
-      surface,
-      {
-        stateDir: opts.stateDir,
-        hostname:
-          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
-            ? opts.httpHost
-            : BOX_HOSTNAME,
-        port: opts.port,
-        secure: tls !== undefined,
-        listIpv4: () =>
-          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
-            ? []
-            : (opts.landing?.boxAddresses ?? listBoxIpv4()),
-        discoveryEnabled: false,
-      },
-      opts.log,
-    );
-    surface.route("/", app);
-    const server = serve(
-      buildServeOptions(
-        { fetch: surface.fetch, port: opts.port, hostname: opts.httpHost ?? DEFAULT_HTTP_HOST },
-        tls,
-      ),
-      (info) => {
-        opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
-        // Best-effort: `startLandingListener` logs its own bind failure rather than throwing, so an
-        // unbindable landing page never takes the recovery page down.
-        const startLanding = opts.startLanding ?? startLandingListener;
-        const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
-        if (landing !== undefined) {
-          server.on("close", () => void landing.close().catch(() => {}));
-        }
-        resolve(server);
-      },
-    );
-    server.on("error", (error: NodeJS.ErrnoException) => {
-      reject(new AppError("server.listen_failed", { port: opts.port, code: error.code ?? "" }));
-    });
-  });
-}
-
-/**
- * The landing listener's config for the recovery path, built from env reads that never throw:
- * recovery never runs `loadConfig`, because a broken config is what lands a box here. `tls` is
- * always undefined because recovery presents only the box's own minted leaf, never an operator
- * certificate.
- */
-function landingConfigFrom(
-  env: NodeJS.ProcessEnv,
-  stateDir: string,
-  httpPort: number,
-): LandingListenerConfig {
-  let boxAddresses: string[] | undefined;
-  try {
-    boxAddresses = parseBoxAddresses(env.WAITRON_BOX_ADDRESSES);
-  } catch {
-    // A malformed WAITRON_BOX_ADDRESSES must not crash recovery; fall back to enumerating interfaces.
-    boxAddresses = undefined;
-  }
-  const raw = env.WAITRON_HTTP_LANDING_PORT;
-  // `0` is kept, unlike in `httpPortFrom`: it disables the listener.
-  const landingPort = isUnset(raw) ? DEFAULT_HTTP_LANDING_PORT : Number.parseInt(raw, 10);
-  return {
-    landingPort:
-      Number.isInteger(landingPort) && landingPort >= 0 && landingPort <= MAX_HTTP_PORT
-        ? landingPort
-        : DEFAULT_HTTP_LANDING_PORT,
-    httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
-    stateDir,
-    httpPort,
-    boxAddresses,
-    tls: undefined,
-  };
-}
 
 export interface EntryDeps {
   /** The arguments the process was started with, after the script's own path. */
@@ -243,16 +109,6 @@ export interface EntryDeps {
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
-}
-
-/**
- * `WAITRON_HTTP_PORT`, or the default — resolved here rather than through `loadConfig`, whose throw
- * on a broken config would take the page down with it. Zero is refused because to `listen` it means
- * "any free port", which puts the page somewhere the operator cannot find it.
- */
-function httpPortFrom(env: NodeJS.ProcessEnv): number {
-  const port = Number.parseInt(env.WAITRON_HTTP_PORT ?? "", 10);
-  return Number.isInteger(port) && port > 0 && port <= MAX_HTTP_PORT ? port : DEFAULT_HTTP_PORT;
 }
 
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
@@ -569,66 +425,6 @@ async function runAdmittedEntry(deps: EntryDeps): Promise<void> {
 
   deps.installShutdownHandlers(server);
   deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, stayedUpClear));
-}
-
-export async function startServerOrFirstSetupResolution(
-  env: NodeJS.ProcessEnv,
-  base: NodeJS.ProcessEnv = {},
-  seams: {
-    startServer?: (
-      env: NodeJS.ProcessEnv,
-      base: NodeJS.ProcessEnv,
-    ) => Promise<{ close(): Promise<void> }>;
-    serveResolution?: (
-      app: Hono,
-      options: RecoveryServeOptions,
-    ) => Promise<{ close(): Promise<void> }>;
-    requestRestart?: () => void;
-  } = {},
-): Promise<{ close(): Promise<void> }> {
-  const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
-  const log = createLogger(
-    (line) => process.stdout.write(line),
-    () => new Date(),
-  );
-  const admission = await resolveFirstSetupEntry(
-    { stateDir, venueDir },
-    env,
-    seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM")),
-    log,
-  );
-  if (admission.kind === "normal")
-    return admission.run(async () => {
-      if (admission.roots.binding === null) return (seams.startServer ?? startServer)(env, base);
-      const selectedBase = {
-        ...env,
-        WAITRON_STATE_DIR: admission.roots.stateDir,
-        WAITRON_VENUE_DIR: admission.roots.venueDir,
-      };
-      const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
-      return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
-    });
-  const port = httpPortFrom(env);
-  if (seams.serveResolution !== undefined)
-    return seams.serveResolution(admission.app, {
-      stateDir: admission.roots.stateDir,
-      port,
-      log,
-      httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
-    });
-  const listener = await serveRecovery(admission.app, {
-    stateDir: admission.roots.stateDir,
-    port,
-    log,
-    httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
-  });
-  return {
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        listener.close((error) => (error ? reject(error) : resolve())),
-      ),
-  };
 }
 
 /**

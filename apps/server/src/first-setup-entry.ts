@@ -1,3 +1,5 @@
+import { readModuleConfig } from "./module-config.js";
+import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
 import { isDeepStrictEqual } from "node:util";
 import { lockVenueDatabase } from "@waitron/db";
@@ -61,7 +63,7 @@ export async function resolveFirstSetupEntry(
   } catch {
     return {
       kind: "resolution" as const,
-      app: resolutionApp(roots, environment, requestRestart, log),
+      app: await resolutionApp(roots, environment, requestRestart, log),
       roots,
     };
   }
@@ -73,13 +75,13 @@ export async function resolveFirstSetupEntry(
     if (admission.unresolved)
       return {
         kind: "resolution" as const,
-        app: resolutionApp(target, environment, requestRestart, log),
+        app: await resolutionApp(target, environment, requestRestart, log),
         roots: target,
       };
   } catch {
     return {
       kind: "resolution" as const,
-      app: resolutionApp(target, environment, requestRestart, log),
+      app: await resolutionApp(target, environment, requestRestart, log),
       roots: target,
     };
   }
@@ -108,13 +110,19 @@ export async function resolveFirstSetupEntry(
   };
 }
 
-function resolutionApp(
+async function resolutionApp(
   roots: FirstSetupRoots,
   environment: Readonly<Record<string, string | undefined>>,
   requestRestart?: () => void,
   log: Logger = () => {},
 ) {
-  const host = createFirstSetupModuleHost({ ...roots, environment, modules: ALL_MODULES });
+  const moduleConfig = await readModuleConfig(roots.stateDir).catch(() => undefined);
+  const host = createFirstSetupModuleHost({
+    ...roots,
+    environment,
+    modules: ALL_MODULES,
+    moduleConfig,
+  });
   const app = new Hono();
   app.get("/setup-api/first-setup/status", (c) =>
     c.json({ claimed: true, resolution: true }, 200, { "Cache-Control": "no-store" }),
@@ -122,6 +130,12 @@ function resolutionApp(
   const actions = createFirstSetupResolutionActions({ ...roots, host });
   mountFirstSetupResolutionApi(app, host, log, {
     startAgain: actions.startAgainFirstSetup,
+    ...(moduleConfig === undefined
+      ? {}
+      : {
+          withPublication: <T>(body: (deps: import("./setup-api.js").SetupDeps) => Promise<T>) =>
+            withFirstSetupPublication(roots, environment, host, body),
+        }),
     ...(requestRestart === undefined ? {} : { requestRestart }),
   });
   return app;

@@ -1,5 +1,6 @@
 import {
   activateFirstFiscal,
+  finishFirstFiscalSetup,
   checkedFirstFiscalCommit,
   firstFiscalPayload,
   firstFiscalProvisionRequest,
@@ -531,6 +532,7 @@ export function mountFirstSetupResolutionApi(
       typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
     >["startAgainFirstSetup"];
     requestRestart?: () => void;
+    withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
@@ -575,6 +577,116 @@ export function mountFirstSetupResolutionApi(
       );
     }),
   );
+
+  if (options.withPublication !== undefined) {
+    app.get(`${root}/resolution/publication`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+        if (!(socket instanceof TLSSocket) || !socket.encrypted)
+          throw new AppError("setup.owner_required", {});
+        const owner = firstFiscalOwner(c);
+        return host.resolution.withVenueExclusion(() =>
+          host.coordinator.run(async (hold) => {
+            const state = await host.owner.authorize(owner);
+            host.assertSelection(state);
+            if (!["activation-started", "committed", "publication"].includes(state.status))
+              throw new AppError("setup.attempt_uncertain", {});
+            const stage = await host.keys.readStage(owner, hold);
+            return c.json({
+              state: publicFirstSetupState(state),
+              stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
+              modules: state.frozen.modules
+                .filter((m) => initialSetupFor(host.modules, m.module) !== undefined)
+                .map((m) => ({
+                  module: m.module,
+                  request: m.request,
+                  input: state.inputs[m.module],
+                })),
+            });
+          }),
+        );
+      }),
+    );
+    for (const action of ["reconfirm", "document", "document-kept", "finish"] as const)
+      app.post(`${root}/resolution/${action}`, (c) =>
+        boundary(c, log, async () => {
+          assertFirstFiscalRequest(c);
+          const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming
+            ?.socket;
+          if (!(socket instanceof TLSSocket) || !socket.encrypted)
+            throw new AppError("setup.owner_required", {});
+          const owner = firstFiscalOwner(c);
+          const body = object(
+            await readFirstFiscalBody(c, action === "document" ? 8 * 1024 * 1024 : 131072),
+          );
+          // Password derivation must finish before taking either the venue or coordinator lock.
+          if (action === "reconfirm") {
+            exact(body, ["password", "purpose"]);
+            if (body.purpose !== "activation") invalid();
+            const state = await host.owner.authorize(owner);
+            if (!["activation-started", "committed", "publication"].includes(state.status))
+              throw new AppError("setup.attempt_uncertain", {});
+            return c.json({
+              reconfirmation: await host.owner.reconfirm(owner, text(body.password), "activation"),
+            });
+          }
+          return host.resolution.withVenueExclusion(() =>
+            host.coordinator.run(async (hold) => {
+              const state = await host.owner.authorize(owner);
+              host.assertSelection(state);
+              if (!["activation-started", "committed", "publication"].includes(state.status))
+                throw new AppError("setup.attempt_uncertain", {});
+              if (action !== "finish") {
+                const fields = [
+                  "module",
+                  "stageId",
+                  "inputDigest",
+                  "historyDigest",
+                  "documentDigest",
+                ];
+                if (action === "document") {
+                  exact(body, [...fields, "statement"]);
+                  if (object(body.statement).priorActivation !== "committed")
+                    throw new AppError("sif.allocation_invalid", {
+                      reason: "outside_confirmation_missing",
+                    });
+                  await host.delivery.registerFirstFiscalDelivery(
+                    owner,
+                    body as unknown as import("./first-fiscal-delivery.js").FirstFiscalDeliveryInput,
+                    hold,
+                  );
+                } else {
+                  exact(body, [...fields, "kept", "reconfirmation"]);
+                  const { reconfirmation, ...input } = body;
+                  await host.delivery.confirmFirstFiscalDocumentKept(
+                    owner,
+                    input as unknown as import("./first-fiscal-delivery.js").FirstFiscalKeptInput,
+                    text(reconfirmation),
+                    hold,
+                  );
+                }
+                return c.json({ accepted: true });
+              }
+              exact(body, ["inspectionId", "revision", "ownerGeneration", "publication"]);
+              const inspected = await host.resolution.inspectFirstSetupResolution();
+              if (
+                body.inspectionId !== inspected.inspectionId ||
+                body.revision !== state.revision ||
+                body.ownerGeneration !== state.ownerGeneration
+              )
+                throw new AppError("setup.attempt_conflict", {});
+              const publication = object(body.publication);
+              await options.withPublication!((deps) =>
+                finishFirstFiscalSetup(host, deps, owner, publication, hold),
+              );
+              setTimeout(() => options.requestRestart?.(), 0);
+              return c.json({ provisioned: true, restarting: true });
+            }),
+          );
+        }),
+      );
+  }
 
   if (options.startAgain !== undefined)
     app.post(`${root}/resolution/start-again`, (c) =>
