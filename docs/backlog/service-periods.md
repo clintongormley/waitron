@@ -263,9 +263,8 @@ keeps `/view/week` out of search while it still means the old season painter.
    from `zoneOwnHours` (`packages/venue-service/src/zone-own-hours.ts`).
 2. **A block too short for its label shows the whole label** — department or zone, period, times —
    when it is pointed at or tapped (Lunch 16:00–17:00 is a sliver).
-3. **Which week the Week button opens:** the week of the day last clicked; otherwise this week, when
-   the year or month on screen holds today; otherwise the first week of the month (or year) on
-   screen. ‹ › step a week.
+3. **No Week button (A759, owner 2026-10-16).** The Week opens from the day box's "Open this week"
+   (point 5) on that date's week; its title links back to the month and the year. ‹ › step a week.
 4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
    for the next day.
 5. **No painting here.** Clicking a day's name opens the Calendar's day box (`calendar-day-box.ts`).
@@ -356,6 +355,23 @@ Adjustment reasons tabs away, leaving Venue settings one page with no tabs.
    unheaded panel; the owner, 2026-10-16: it is a venue setting, not a page of its own. **Both
    settings on the card fall under `venue.configure`** (owner, 2026-10-16), so the VAT default no
    longer needs `catalogue.manage`.
+
+## A759. The Calendar's Year | Month switch goes; the title moves between views
+
+**A759 (owner, 2026-10-16).** Owner: "i'm not sure whether we need the Year|Month … it is now obvious
+that the month names in the annual calendar are clickable, and with the < February 2026 > we can
+just make 2026 an obvious link to get back to the annual view". Files: the Calendar toolbar in
+`packages/venue-service/src/dashboard/opening-hours-screen.ts` (A720 points 1–3, landed), and A722
+before it is built.
+
+1. **The Year | Month switch goes**, and A722 adds no Week button to it.
+2. **Year to Month:** a month name, as today. **Month to Year:** in "‹ February 2026 ›" the year is
+   an obvious link. **To Week:** the day box's "Open this week" (A722 point 5). **Week back out:** in
+   "‹ 9–15 February 2026 ›" the month opens that month and the year the Year view.
+3. **The "‹ title ›" has a fixed width**, so the arrows do not move as the title changes: wide
+   enough for the longest month-and-year title in every interface language, with digits of equal
+   width. The Week view's longer title ("28 September – 4 October 2026") takes its own fixed width.
+4. **The Staffing month follows** (A720 point 7).
 
 ## Decisions and deliberate limits
 

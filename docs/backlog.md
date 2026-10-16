@@ -1548,6 +1548,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   its own Defaults page, under `venue.configure`. No tabs once A756, A757 and A758 have taken
   theirs. [Detail](backlog/service-periods.md#a755-venue-settings-four-cards-on-one-page), [mockups](backlog/mockups/a755-venue-settings/)
 
+- **A759. The Calendar's Year | Month switch goes; the title moves between views (owner,
+  2026-10-16).** A month name in Year opens that month; in "‹ February 2026 ›" the year is a link
+  back to Year; the day box's "Open this week" opens A722's Week, whose title links back to its
+  month and year. The "‹ title ›" keeps a fixed width so the arrows stay put. Before A722 is built.
+  [Detail](backlog/service-periods.md#a759-the-calendars-year--month-switch-goes-the-title-moves-between-views)
+
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
@@ -1557,7 +1563,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
   makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
   the Staffing month follows. Points
-  1, 2, 3, 5 and 6 landed in #1765, #1770 and #1784; the Week button is A722's, "Seasons…" and the
+  1, 2, 3, 5 and 6 landed in #1765, #1770 and #1784; the Year | Month switch goes (A759), "Seasons…" and the
   chips' ✎ A721's; 4 and 7 remain. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
@@ -1566,7 +1572,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
   and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  After A720. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  Reached from the day box's "Open this week", with no Week button (A759). After A720. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
