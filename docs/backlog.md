@@ -140,9 +140,7 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **A696. Invoice issue dates and record offsets follow the process zone.** The audit measured
-  walk-up, bill, card, correction and substitution paths with the venue fixed to Madrid:
-  `2026-10-14T23:30Z` stores 14 October under UTC and 15 October under Madrid.
+- **A696. Invoice issue dates and record offsets follow the process zone.**
   [Owner decision, 2026-10-15](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone):
   every new invoice date and record offset, ordinary receipt and till use the saved venue zone,
   DST included, independently of the process zone; old records stay unchanged. The owner also
@@ -181,25 +179,23 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   answer. Until 2026-10-12 this entry asked that the consent request say how the invoice will arrive
   and how consent is withdrawn._
 
-- **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
-  matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
-  `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
-  resent cancellation is not established. The owner may want to confirm this choice. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
-
-- **`HUELLA_MISMATCH` is filed and flagged, not refused.** It is not expected to occur, since
-  Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may be
-  preferred since a wrong fingerprint is permanent. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
+- **Loose ends left by A230 (`@waitron/verifactu` 0.2.1, #1099).**
+  - A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
+    matches the cancellation's (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
+    `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
+    resent cancellation is not established. The owner may want to confirm this choice.
+  - `HUELLA_MISMATCH` is filed and flagged, not refused. It is not expected to occur, since
+    Waitron's own builder computes the fingerprint; nothing tests that it cannot. Refusing it may
+    be preferred since a wrong fingerprint is permanent.
+  - A voided sale whose lookup AEAT answers under the sale's own reference is not handled; not
+    shown to happen either way.
+  - An unusable `TiempoEsperaEnvio` is not recorded anywhere (the raw value is dropped).
 
 - **No sale over €3,000 can be made at all** — left open by A230 (`@waitron/verifactu` 0.2.1, #1099). Waitron issues only simplified invoices and no screen accepts a customer's tax ID, so a full invoice is not offered. [Detail](backlog/fiscal.md#no-sale-over-3000-can-be-made-at-all)
 
 - **The till offers no way back to a simplified invoice for a bill already saved as a full one** —
   left open by A741 (#1774). The bill still shows its Full invoice line and payment refuses it; the server
   accepts a change back (`setOrderInvoiceChoice`), but nothing on the till sends one.
-
-- **A voided sale whose lookup AEAT answers under the sale's own reference** is not handled; not
-  shown to happen either way. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
-
-- **An unusable `TiempoEsperaEnvio` is not recorded** anywhere (the raw value is dropped). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
 - **Owner decision 2026-09-24: a void counts on the day it is made, not the day of the sale** —
   found by #601 while pruning comments. The quarterly _modelo 303_ keeps its old behaviour, pinned
@@ -220,10 +216,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   how the count is read.
   [Detail](backlog/fiscal.md#two-sql-comments-inside-a-sql-string-in-packagesfiscalsrctestingfake-backendts-are-code-not-comments)
 
-- **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** a failed
-  lookup, when the save reaches its line, still backs the whole batch off, discarding every line's
-  outcome and the reply's receipt code (the CSV, one per submission), which AEAT does not send
-  again. [Detail](backlog/fiscal.md#packagesfiscal-verifactu-code)
+- **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
+  try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead; removing
+  `appendToChain`'s nested `tx.transaction` makes no test fail; and `write-path.e2e.test.ts` points
+  at fixture lines that have moved. [Detail](backlog/fiscal.md#packagesfiscal-verifactu-code)
 
 - **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
   `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
@@ -255,10 +251,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1a. A foreign business customer needs an identifier-type decision** — `recordSale` now names
   a Spanish recipient on a full invoice. A non-Spanish one is refused by name
-  (`fiscal.foreign_recipient_unsupported`), deliberately: AEAT's `IDOtro` needs an `IDType` —
-  NIF-IVA, passport, residence certificate and so on, enumerated in `@waitron/verifactu`'s AEAT XSD
-  (`SuministroInformacion.xsd`) — and choosing wrongly files a record into an append-only table that
-  can never be unfiled. Whoever wires up business-customer sales makes that call. [Detail](backlog/fiscal.md#a1a-a-foreign-business-customer-needs-an-identifier-type-decision)
+  (`fiscal.foreign_recipient_unsupported`), deliberately. Whoever wires up business-customer sales
+  makes that call. [Detail](backlog/fiscal.md#a1a-a-foreign-business-customer-needs-an-identifier-type-decision)
 
 - **The audited AEAT package's own shared record fixture (`@waitron/verifactu`'s `ALTA_INPUT`) is
   still a full invoice naming no recipient** — the shape A1 corrected everywhere else. Not free to
@@ -273,12 +267,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1e. Simplified and full invoices use separate series** — BUILT, PUBLIC F1 DISABLED
   (2026-10-06); and **A231. Full invoices at the till** — GATED IMPLEMENTATION LANDED (2026-10-06).
-  The two entries name the same open work, public F1. Public F1 issuance remains disabled; no route
-  calls `recordSubstitution`. Asesor Q5(d) remains open for F3 and R5. **Next action:** verify
+  Public F1 issuance remains disabled; no route calls `recordSubstitution`. **Next action:** verify
   physical 58/80 mm paper and QR output, settle what paying at the counter does with an email or A4
   choice (A555), obtain the asesor's manual-remedy approval and settle applicable B2B delivery
-  before enabling public F1; what else enabling it changes since A741 is in the A231 detail.
-  The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
+  before enabling public F1.
   [A1e detail](backlog/fiscal.md#a1e-simplified-and-full-invoices-use-separate-series--built-public-f1-disabled-2026-10-06), [A231 detail](backlog/fiscal.md#a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06)
 
 - **A554. Should any screen show the address an invoice email went to?** An owner question, open
@@ -306,20 +298,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   till and the dashboard, in English and Spanish (`apps/till/src/i18n/codes.ts`,
   `apps/dashboard/src/i18n/codes.ts`). A wording decision left open by A231q.
 
-- **When the business e-invoicing regime starts** — found by A231d's research. So from about October 2027,
-  or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured
-  message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact
-  end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are
-  asked as
-  [Q45](compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07).
+- **When the business e-invoicing regime starts** — found by A231d's research. So from about
+  October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a
+  structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1).
   [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
 - **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — WAITS ON ASESOR Q42
-  (2026-10-06).
-  [Q42](compliance/asesor-questions.md#q42-a-bill-paid-later-by-bank-transfer--invoice-now-or-a-proforma-and-the-invoice-on-payment-added-2026-10-06)
-  asks the asesor whether both are lawful and which is recommended, for full invoices (F1, A231) and
-  simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
-  asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
+  (2026-10-06). **No design or build until the asesor answers and the owner decides.**
+  [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
 - **A679. First Live setup: one page and one recovery PDF.** Complete the existing First Live setup
   branch through the [hour-code implementation plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
@@ -354,37 +340,27 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
-  The successor probes are finished: W41s-1c's [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
-  records warning-free `Correcto` successors after a 3000 refusal and after an unsent
-  cancellation, and a 3000 answer to an exact re-send. The holds after a 3000 conflict and behind a
-  cancellation of a refused invoice were dropped on 2026-10-12 (owner); the brake and the wait
-  behind an unknown answer are unchanged.
-  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  [Detail](backlog/fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
-  again).** — left open by W41s-3b (#1303), which says "Nothing releases the hold yet." Task 8 as
-  planned resolves records that have a case of their own; a record the brake holds has none.
-  The hourly retry in [#1309](https://github.com/clintongormley/waitron/pull/1309) releases eligible
-  brake holds after an accept or a different-code refusal. A manual release remains Task 8.
+  again).** — left open by W41s-3b (#1303). Task 8 as planned resolves records that have a case of
+  their own; a record the brake holds has none. The hourly retry in
+  [#1309](https://github.com/clintongormley/waitron/pull/1309) releases eligible brake holds after
+  an accept or a different-code refusal. A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Still open after W41s-3c (#1304)** — in AEAT's preproduction environment two runs of shuffled
-  envíos of up to 1,000 records each got their replies back in the order sent (verifactu #138's
-  probe, recorded in [Q43](compliance/asesor-questions.md)); production is not measured, and the
-  question stays with the asesor. One option for the owner, not built: after a mismatch, send each
-  unknown record again in an envío of its own. And no run against real AEAT has shown that a
-  cancellation's reply line names the cancelled invoice (the schema types the line's `IDFactura`
-  with the plain field names, and the library's fake echoes the cancelled invoice there).
+  envíos of up to 1,000 records each got their replies back in the order sent; production is not
+  measured. And no run against real AEAT has shown that a cancellation's reply line names the
+  cancelled invoice.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
-  asesor; owner 2026-10-06). The owner kept the hold for now (it landed with W41s-3c, #1304) and
-  asked to revisit it when the asesor answers Q37 and its siblings
-  ([questions](compliance/asesor-questions.md)): drop the hold, keep it, or add the overtaking case
-  to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
-  results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
-  The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-  (S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000 conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  asesor; owner 2026-10-06). The decision is put to the asesor as
+  [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
+  (S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000
+  conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner).
+  [Detail](backlog/fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-the-asesor-answers)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
@@ -409,45 +385,29 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
   table that leaves without paying).
 
-- **For the owner, from B33's review: the cancel checks the permission after its payment refusals.**
-  Moving it earlier changes who gets which refusal; not decided. Left open by C126 (cancelling an
-  order whose invoice was issued credits it, #1030).
+- **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
+  - **For the owner, from B33's review: the cancel checks the permission after its payment
+    refusals.** Moving it earlier changes who gets which refusal; not decided.
+  - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.** Every
+    role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and `cash.drawer`, so
+    its cases cannot tell which of those it reads.
+  - **C132 (landed as #1060): a credit note's line names the invoice line it reverses.** Open, for
+    partial corrections only, which no product code makes yet (only tests and demo scripts do):
+    whether a line a correction ADDS stays unlinked, and whether two adjustments may name the same
+    invoice line. When a report starts reading the link it will want an index on the column.
+  - **A fully credited bill's original invoice can still be reprinted**, from the till and from the
+    dashboard; the server allows it. Whether a reprint should say the invoice was credited is not
+    decided.
+  - **An invoice that already has a correction cannot be cancelled.** No route issues a credit note
+    other than this one.
+  - **The credit note is not printed** for the customer (asesor Q32 (b)).
 
-- **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.** Every
-  role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and `cash.drawer`, so its
-  cases cannot tell which of those it reads. Left open by C126 (cancelling an order whose invoice
-  was issued credits it, #1030).
-
-- **C132 (landed as #1060): a credit note's line names the invoice line it reverses.** Open, for
-  partial corrections only, which no product code makes yet (only tests and demo scripts do):
-  whether a line a correction ADDS (a new charge, not a change to an invoice line) stays unlinked,
-  and whether two adjustments may name the same invoice line. When a report starts reading the link
-  it will want an index on the column, as `sales_corrects_idx` serves `sales.corrects_sale_id`. Left
-  open by C126 (cancelling an order whose invoice was issued credits it, #1030).
-
-- **A fully credited bill's original invoice can still be reprinted**, from the till and from the
-  dashboard; the server allows it. Whether a reprint should say the invoice was credited is not
-  decided. Left open by C126 (cancelling an order whose invoice was issued credits it, #1030).
-
-- **An invoice that already has a correction cannot be cancelled.** No route issues a credit note
-  other than this one. Left open by C126 (cancelling an order whose invoice was issued credits it,
-  #1030).
-  [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-
-- **The credit note is not printed** for the customer (asesor Q32 (b)). Left open by C126
-  (cancelling an order whose invoice was issued credits it, #1030).
-
-- **Asesor questions to send:**
-  [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
-  (money before the invoice, then a split; printing the invoice first),
-  [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
-  (unpaid departure; built on the owner's decision, asked to confirm) and
-  [Q29](compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
-  (how a discount or comp appears on the invoice), and
-  [Q32](compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
-  (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
-  open.
+- **Asesor questions to send:** Q27 (money before the invoice, then a split; printing the invoice
+  first), Q28 (unpaid departure; built on the owner's decision, asked to confirm), Q29 (how a
+  discount or comp appears on the invoice) and Q32 (a cancelled, already-issued ticket: credit or
+  annul; built on the owner's decision). Q19 stays open.
+  [Detail](backlog/fiscal.md#asesor-questions-to-send)
 
 - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows the
   original invoice total.** **PARKED (owner, 2026-09-29)** until the product can issue a corrective

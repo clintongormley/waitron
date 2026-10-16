@@ -127,10 +127,6 @@ No stored fiscal row is to be rewritten.
 ## `packages/fiscal-verifactu` code
 
 - `packages/fiscal-verifactu` code, found by #562; not changed unless marked:
-  - **`drain.ts`'s Route B lookup (`client.consultar`) — PARTLY DONE (W21, #1130).**
-    - **Open:** a failed lookup, when the save reaches its line, still backs the whole batch off,
-      discarding every line's outcome and the reply's receipt code (the CSV, one per
-      submission), which AEAT does not send again.
   - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
     removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
     rejection.
@@ -1411,3 +1407,41 @@ required CI passed on final branch head `efcf71c9e6333a6d6bef01da80a52ae14d46460
 Follow the [offline restore procedure](../developers/offline-fiscal-restore.md) for the outside
 mounts and operator steps. Task 11 still owns the complete operational exercise; these checks
 did not test physical power loss, a physical printer or remote incident storage.
+
+## Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases
+
+**Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
+that applies to every later record (one about the taxpayer's identity, say) opens one case per
+record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
+The successor probes are finished: W41s-1c's [receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
+records warning-free `Correcto` successors after a 3000 refusal and after an unsent
+cancellation, and a 3000 answer to an exact re-send. The holds after a 3000 conflict and behind a
+cancellation of a refused invoice were dropped on 2026-10-12 (owner); the brake and the wait
+behind an unknown answer are unchanged.
+[W41s detail](#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+
+## Re-examine the hold behind an unknown outcome once the asesor answers
+
+**Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
+asesor; owner 2026-10-06). The owner kept the hold for now (it landed with W41s-3c, #1304) and
+asked to revisit it when the asesor answers Q37 and its siblings
+([questions](../compliance/asesor-questions.md)): drop the hold, keep it, or add the overtaking case
+to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
+results are in [W41s-1c's receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
+The decision is put to the asesor as [Q47](../compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
+(S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000
+conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner).
+[W41s detail](#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+
+## Asesor questions to send
+
+- **Asesor questions to send:**
+  [Q27](../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
+  (money before the invoice, then a split; printing the invoice first),
+  [Q28](../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
+  (unpaid departure; built on the owner's decision, asked to confirm) and
+  [Q29](../compliance/asesor-questions.md#q29-how-a-discount-or-comp-appears-on-a-simplified-invoice-added-2026-09-26)
+  (how a discount or comp appears on the invoice), and
+  [Q32](../compliance/asesor-questions.md#q32-cancelling-an-order-whose-ticket-was-already-issued--a-corrective-invoice-or-an-annulment-added-2026-10-02)
+  (a cancelled, already-issued ticket: credit or annul; built on the owner's decision). Q19 stays
+  open.
