@@ -462,18 +462,49 @@ run to install the new trigger. Owner question Q5 of A483.
   `packages/db/src/testing/errors.ts` names the old wrapper on purpose and is pinned verbatim by its
   test.
 
-## A1c. Dead pointers to deleted test suites
+## `modules.json` has no flow-down channel from a primary to its standby
 
-Comments across many packages still cite deleted guard suites, from two deletions. The per-package
-`errors.reachability.test.ts` suites went on 2026-08-11 (the real guard is
-`scripts/errors-reachable.test.ts`); the outbox removal (#280) deleted
-`apps/server/src/sync-origin.test.ts` and left comments across the tree describing capture-origin
-machinery that no trigger does any more. Fix whenever a file is open anyway; the comment-pruning
-sweep (B9 → _Prune the comments_) reaches every package and takes these as it goes. Two grep
-hazards: searching `sync-origin.test.ts` finds only the comments that name the file and misses those
-that cite it obliquely; and searching "sync origin" also reaches a still-live thing — the mirror's
-own `origin_node_id` column (`packages/db/src/schema/mirror-config.ts`), which is outside this item
-and must not be swept with it.
+- **`modules.json` has no flow-down channel** from a primary to its standby (matters under
+  _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
+  load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
+
+  Read during A10-2 planning, not run: non-mirror trading startup calls `endMirrorViewer`
+  (`apps/server/src/boot.ts:1333`), which updates identity-owned `management_sessions`
+  (`apps/server/src/mirror-session.ts:70–80`). Probe real startup with identity and its dependants
+  disabled before changing that path; the runtime outcome remains unverified.
+
+## A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
+
+**A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** — OPEN,
+low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
+A394-4 landed as #1441, #1444, #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows
+break the rule (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a
+missing id (A394-1 to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the
+rows: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+
+## Raw engine imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`
+
+**Raw engine imports in `apps/server/src/recovery-lock.ts` and
+`apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155), which closed
+"`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of
+non-test files under `apps/` and `packages/` also found raw engine imports in
+`apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
+action:** review each remaining raw connection separately before deciding whether a shared store
+API fits.
+
+## Location-scope the by-id verb family together
+
+**Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
+`updateHeldOrder`/`abandonHeldOrder`/`openTab`) when multi-location lands — alongside `handOver`,
+`cancelPlacedOrder`, `readLockedLines`, `priceStoredOrder` and `priceStoredOrderForIssuance` in
+`apps/server/src/working-order.ts`.
+[Order-path detail](#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location).
+Floor plans slice 1 (A429) added more read and written by id alone: in
+`apps/server/src/table-removal.ts`, `tablesTied` and `removeLiveTables`' label read and the deletes
+after it; `releaseDeliveries` (`apps/server/src/delivery-release.ts`); `followersOf`
+(`apps/server/src/floor-plan.ts`); and bookings' `release` (`packages/bookings/src/table-removal.ts`),
+unscoped on purpose so a stray booking under another location cannot block a table's final delete
+(`25ecf900b`) — scoping it needs that case answered first.
 
 ## Decisions and deliberate limits
 

@@ -5593,11 +5593,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Proposed design](superpowers/specs/2026-10-16-a646-modules-page-design.md);
   [static mockups](backlog/mockups/a646-modules-page/README.md).
   Build remains open and waits for owner agreement plus A739/A764 to land; no implementation plan yet.
-  Google login becomes an optional
-  module whose client ID and secret are entered there instead of in environment variables; SumUp
-  and Stripe move their setup there, and Card payments links to the list filtered to card
-  providers. The proposal defines runtime application and safe refusals without a restart. Its first
-  independent build PR must fix the still-OPEN
+  Its first independent build PR must fix the still-OPEN
   [disabled-module protection defect](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
@@ -5612,40 +5608,44 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   customer name. The existing working-order case "names a variant line with no customer or kitchen
   name" instead reads its frozen staff-name map. Left open by A612; remove the misleading comment.
 
-- **The till's status for an original whose printer was deleted uses the error code's sentence**
-  ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose
-  the wording. Left open by A435 step 2.
-- **The Spanish for `printer.deleted` breaks its twin's pattern**: "por lo que no se volverá a
-  intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
-  intentar". Left open by A435 step 2.
-- **Shorter printer-delete copy was offered to the owner during the build**: for the till's
-  deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
-  shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se detiene"),
-  and one dialog line per inherited default. Left open by A435 step 2.
-- **`refuseDeletedPrinters` lives in `@waitron/layouts`** though `@waitron/printing` holds the
-  printer functions and `printer.not_found`'s registry. Left open by A435 step 2.
-- **`deletePrinter` writes the device choices, profile lists and holders that layouts owns**; one
-  layouts function could clear them. Left open by A435 step 2.
-- **Several printer queries that already require an active printer or a live job also filter
-  `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
-  copies. Left open by A435 step 2.
-- **The devices and payments screens copy the printers screen's delete-dialog logic**
-  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
-  Pull it into one shared piece, with the `names` helper that
-  `printer-delete-copy.ts`, `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the
-  `line` helper the first two share. Left open by A435 step 4 (#1519) and step 3.
-- **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` in several
-  files; one named check would keep a new query from forgetting it. Left open by A435
-  step 4 (#1519).
-- **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
-  which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
+- **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
+  - The till's status for an original whose printer was deleted uses the error code's sentence
+    ("…this job will not be retried."), where its neighbours speak of "the original". Owner to
+    choose the wording.
+  - The Spanish for `printer.deleted` breaks its twin's pattern: "por lo que no se volverá a
+    intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
+    intentar".
+  - Shorter printer-delete copy was offered to the owner during the build: for the till's
+    deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
+    shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
+    detiene"), and one dialog line per inherited default.
+  - `refuseDeletedPrinters` lives in `@waitron/layouts` though `@waitron/printing` holds the
+    printer functions and `printer.not_found`'s registry.
+  - `deletePrinter` writes the device choices, profile lists and holders that layouts owns; one
+    layouts function could clear them.
+  - Several printer queries that already require an active printer or a live job also filter
+    `deleted_at`; one test pinning "deleted means switched off with no live jobs" could replace
+    the copies.
+  - The devices and payments screens copy the printers screen's delete-dialog logic
+    (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
+    Pull it into one shared piece, with the `names` helper that `printer-delete-copy.ts`,
+    `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the `line` helper the
+    first two share. Left open by A435 step 4 (#1519) and step 3.
+
+- **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
+  - "A device that is not deleted" is written by hand as `isNull(devices.deletedAt)` in several
+    files; one named check would keep a new query from forgetting it. Step 4 (#1519).
+  - A Stripe reader's delete confirmation does not say the reader stays registered at Stripe, which
+    a SumUp reader's does while SumUp is not connected. Step 3b.
+  - The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
+    device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
+    has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
+    (#1520), whose plan kept the existing sentence.
+
 - **The Disable dialog's failed-unpair message says the reader is "still enabled"** (A518, #1562),
   which is untrue if another session disables it while the dialog is open, because the Unpair route
   checks only that the reader exists. Left as it is: right whenever nobody else acts at the same moment.
-- **The till names a reader deleted elsewhere with `reader.not_found`'s general sentence**
-  ("This device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted
-  printer has its own "That printer no longer exists". Owner to choose whether readers get one too.
-  Left open by A435 step 3 (#1520), whose plan kept the existing sentence.
+
 - **Unchecked: pairing a new reader can undo the SumUp registration it just made** when SumUp is
   disconnected during the add (the "Disconnected mid-add" branch of the add-reader route,
   `apps/server/src/payments-api.ts`), and an adoption running at the same time is not told.
@@ -5654,11 +5654,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is
   load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
-
-  Read during A10-2 planning, not run: non-mirror trading startup calls `endMirrorViewer`
-  (`apps/server/src/boot.ts:1333`), which updates identity-owned `management_sessions`
-  (`apps/server/src/mirror-session.ts:70–80`). Probe real startup with identity and its dependants
-  disabled before changing that path; the runtime outcome remains unverified.
+  [Detail](backlog/architecture.md#modulesjson-has-no-flow-down-channel-from-a-primary-to-its-standby)
 
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax
@@ -5746,24 +5742,21 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries.
   [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
 
-- **`GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an unknown
-  location** — left open by A394-3 (#1447).
+- **Loose ends left by A394-3 (#1447).**
+  - `GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an
+    unknown location.
+  - A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22,
+    while the course route answers 404.
+  - The two location routes' body menu id keeps 404 until A394-11.
+  - Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
+    PATH location answers `location.not_found`. If workforce moves to the new code, declare it in
+    `packages/db/src/errors.ts`.
 
-- **A malformed menu or location path id still answers 400 `shared.invalid_id` until A394-22, while
-  the course route answers 404** — left open by A394-3 (#1447).
-
-- **The two location routes' body menu id keeps 404 until A394-11** — left open by A394-3 (#1447).
-
-- **Workforce refuses an unknown BODY location as `management.request_invalid` while catalogue's
-  PATH location answers `location.not_found`** — left open by A394-3 (#1447). If workforce moves to
-  the new code, declare it in `packages/db/src/errors.ts`.
-
-- **A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** — OPEN, low priority, not queued — owner
-  2026-10-08: take them from here when a lane has room. (A394-1 to A394-4 landed as #1441, #1444,
-  #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows break the rule
-  (`docs/developers/conventions-data.md`); 17 defects answer 500 or success for a missing id (A394-1
-  to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the rows:
+- **A394-5, A394-6, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** —
+  OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room.
+  (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+  [Detail](backlog/architecture.md#a394-5-a394-6-a394-8-to-a394-17-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
 
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26). A
   pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was fixed only
@@ -5794,12 +5787,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
 
 - **Raw engine imports in `apps/server/src/recovery-lock.ts` and
-  `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155), which closed
-  "`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of
-  non-test files under `apps/` and `packages/` also found raw engine imports in
-  `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
-  action:** review each remaining raw connection separately before deciding whether a shared store
-  API fits.
+  `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155). **Next action:**
+  review each remaining raw connection separately before deciding whether a shared store API fits.
+  [Detail](backlog/architecture.md#raw-engine-imports-in-appsserversrcrecovery-lockts-and-appsserverscriptscloud-backup-fixturets)
 
 - **Files that still spell the store's file names themselves** — left by #757, which exported them
   from `@waitron/store`. #757's checks do not cover `migrations.lock`, Litestream's
@@ -5812,23 +5802,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four near-identical
   word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
 
-- **A switched-off module's append-only tables are neither re-protected nor checked** — OPEN, left
-  open by A483, #1544. A start migrates, re-protects and checks only the modules switched on, so
-  nothing puts back or checks the triggers of `time_entries` (workforce), `payment_resolutions`
-  (payments), or `registros_facturacion` and its filing-case tables on a box later moved to
-  `fiscal-none`.
-  [Detail](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
-
-- **Putting back a changed append-only trigger is a hand-typed command** — OPEN, left open by A483,
-  #1544. Retry cannot clear `append_only.triggers_changed` for a changed trigger; the installer runs
-  the `node -e` drop in `deploy/README.md` (_When the page names `append_only.triggers_changed`_)
-  and then presses Retry. **Next action:** decide whether Waitron ships that as an operator command.
-
-- **The append-only check does not read `PRAGMA recursive_triggers`** — OPEN, left open by A483,
-  #1544. With the pragma off, `INSERT OR REPLACE` rewrites an append-only row without touching a
-  trigger (measured, `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts`
-  reads only the triggers' stored text. Whether anything on a running server can turn the pragma off
-  is unmeasured.
+- **Loose ends left by A483 (#1544).** OPEN.
+  - **A switched-off module's append-only tables are neither re-protected nor checked.** A start
+    migrates, re-protects and checks only the modules switched on.
+    [Detail](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+  - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
+    `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
+    `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses
+    Retry. **Next action:** decide whether Waitron ships that as an operator command.
+  - **The append-only check does not read `PRAGMA recursive_triggers`.** With the pragma off,
+    `INSERT OR REPLACE` rewrites an append-only row without touching a trigger (measured,
+    `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts` reads only the
+    triggers' stored text. Whether anything on a running server can turn the pragma off is
+    unmeasured.
 
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree** — left
   behind by the TypeScript 7 upgrade (#460, 2026-09-20). Moving the WHOLE cohort would settle it,
@@ -5836,41 +5822,28 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#appsserver--appsprint-agent-is-the-first-app-to-app-workspace-edge-in-the-tree)
 
 - **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
-  `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
-  alongside `handOver`, `cancelPlacedOrder`, `readLockedLines`, `priceStoredOrder` and
-  `priceStoredOrderForIssuance` in `apps/server/src/working-order.ts`.
-  [Order-path detail](backlog/architecture.md#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location). Floor plans
-  slice 1 (A429) added more read and written by id alone: `refuseFloorPlanChange`
-  (`apps/server/src/tables.ts`); in `apps/server/src/table-removal.ts`, `tablesTied` and
-  `removeLiveTables`' label read and the deletes after it; `releaseDeliveries`
-  (`apps/server/src/delivery-release.ts`); `followersOf` (`apps/server/src/floor-plan.ts`); and
-  bookings' `release` (`packages/bookings/src/table-removal.ts`), unscoped on purpose so a stray
-  booking under another location cannot block a table's final delete (`25ecf900b`) — scoping it
-  needs that case answered first.
+  `updateHeldOrder`/`abandonHeldOrder`/`openTab`) when multi-location lands.
+  [Detail](backlog/architecture.md#location-scope-the-by-id-verb-family-together)
 
 - **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
-- **These index and key names still read `tenant`, and the columns they name are gone** — left
-  behind by the tenant-column removal (#378, 2026-09-16). This is its own slice, not a tidy-up:
-  THREE of the four `persons_*` names are matched BY NAME in production error translation —
-  `persons_tenant_email_uq` (`packages/identity/src/staff.ts` and `account-action.ts`),
-  `persons_tenant_live_display_name_uq` and `persons_tenant_pending_email_uq` (`staff.ts`) — so
-  renaming them changes behaviour and wants its own failing tests first.
-  [Detail](backlog/architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
-
-- **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
-  translation of the invoice-number unique-index violation that was never written. Decide whether
-  that translation is still wanted before deleting the code (A77 kept it pending this).
-  Listed with the names left behind by the tenant-column removal (#378, 2026-09-16).
-
-- **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
-  facts about the process itself** — left behind by the tenant-column removal (#378, 2026-09-16).
-  **Next action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in
-  one change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
-  [Detail](backlog/architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
+- **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
+  - **These index and key names still read `tenant`, and the columns they name are gone.** This is
+    its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
+    production error translation, so renaming them changes behaviour and wants its own failing
+    tests first.
+    [Detail](backlog/architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
+  - **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
+    translation of the invoice-number unique-index violation that was never written. Decide whether
+    that translation is still wanted before deleting the code (A77 kept it pending this).
+  - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
+    for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
+    is the nearest sibling) and rename it in one change, checking the prefix matchers
+    `docs/developers/conventions-data.md` lists.
+    [Detail](backlog/architecture.md#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself)
 
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16). A rename would want to keep that "did this pass
@@ -5890,11 +5863,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`void cfg` lines remain in `apps/server/src`** (`git grep -n 'void cfg;' apps/server/src`): test
   helpers, and production functions (`apps/server/src/working-order.ts` holds several) that take
   `cfg` and discard it. Left open by SQLite slice 1 (#490 and the preparation tasks).
-
-- **A1c. Dead pointers to deleted test suites** — Comments across many packages still cite deleted
-  guard suites, from two deletions. Fix whenever a file is open anyway; the comment-pruning sweep
-  (B9 → _Prune the comments_) reaches every package and takes these as it goes.
-  [Detail](backlog/architecture.md#a1c-dead-pointers-to-deleted-test-suites)
 
 - `resolveInstalledDefaultContentLanguage` (`packages/country-packs/src/registry.ts`) **is now
   called only by its own tests; delete it with its cases**: nothing else calls it, because the built
