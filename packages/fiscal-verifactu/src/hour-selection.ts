@@ -235,7 +235,12 @@ export function createHourSelection(options: {
       );
       const intent = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
       if (mode === "selected" && intent === undefined) return refuse("reservation_missing");
-      const answer = mode === "selected" ? intent!.answer : request.answer!;
+      const answer =
+        mode === "selected"
+          ? intent!.answer
+          : mode === "preview" && sameEvent.length > 0
+            ? sameEvent[0]!.answer
+            : request.answer!;
       const base: EntryBase = {
         softwareId: WAITRON_ID_SISTEMA,
         operatorId,

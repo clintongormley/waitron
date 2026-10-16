@@ -338,7 +338,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The hosted adapter has focused checks against frozen context and real local history. Its default
   clock collector times browser responses, uses the module's authenticated internet observer and
   binds manual confirmation to the displayed comparison. Real-host checks control only the external
-  response and release stamp; complete wizard, mode, import and CLI wiring is unfinished.
+  response and release stamp. The configured module and owned API now share that session and
+  exercise actual provisioning with hour names; waits remain unfrozen and can be read without
+  another password grant. Legacy fiscal-check changes await exact permission. Complete wizard,
+  mode, import and CLI qualification is unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

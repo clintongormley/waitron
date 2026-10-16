@@ -1,3 +1,4 @@
+import { hostedHourPreparation } from "./hour-preparation.js";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
@@ -54,6 +55,11 @@ function configuredOperations(
         binding: Object.freeze({ ...supplied.binding }),
         input: snapshotOperationInput(supplied.input),
       };
+      if (operation.binding.action === "setup") {
+        if (host === undefined)
+          throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
+        return hostedHourPreparation(host).prepare(operation, run);
+      }
       const retired = (await host?.readRetiredSetup?.("fiscal-verifactu")) ?? [];
       if (
         retired.some(

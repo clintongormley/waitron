@@ -400,6 +400,27 @@ export function mountSetupFirstFiscalApi(
       });
     }),
   );
+  app.post(`${root}/preparation`, (c) =>
+    boundary(c, log, async () => {
+      const body = exact(await readFirstFiscalBody(c), ["module", "proposal"]);
+      boundedPublic(body.proposal);
+      return host.coordinator.run(async () => {
+        const state = await host.owner.authorize(firstFiscalOwner(c));
+        host.assertSelection(state);
+        const module = text(body.module);
+        const entry = state.frozen.modules.find((value) => value.module === module);
+        const installed = host.modules.find((value) => value.name === module);
+        const seat = initialSetupFor(host.modules, module);
+        if (!entry || entry.version !== installed?.version || seat?.preparation === undefined)
+          invalid();
+        const preparation = await seat.preparation(
+          firstSetupModuleContext(state, module),
+          body.proposal,
+        );
+        return c.json({ state: publicFirstSetupState(state), preparation });
+      });
+    }),
+  );
   for (const action of ["candidates", "input", "enrol", "current-master", "abandon"] as const)
     app.post(`${root}/${action}`, (c) =>
       boundary(c, log, async () => {
@@ -436,6 +457,10 @@ export function mountSetupFirstFiscalApi(
             const request = await host.withPreparationAuthorization(confirm, async () =>
               seat.request(context, await seat.candidates(context, body.proposal)),
             );
+            if (seat.pending?.(request)) {
+              await confirm();
+              return c.json({ state: publicFirstSetupState(state), preparation: request });
+            }
             await host.assertFreshAssignment(
               {
                 ...state,

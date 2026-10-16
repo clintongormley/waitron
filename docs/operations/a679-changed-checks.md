@@ -174,3 +174,32 @@ retains one intent; real-host tests cover production and preproduction, with the
 and embedded release controlled. These do not exercise an actual browser, external network, or
 the configured wizard/CLI entry paths. Those paths and the retained production-readiness fixture
 remain open under Task 4.
+
+
+## Task 4 configured module and API
+
+No existing test file or assertion changes in this continuation. The new
+`apps/server/src/first-fiscal-hour-configured.test.ts` uses the actual configured contribution,
+shared host, owner routes and provisioning writer. Only internet responses and immutable-release
+metadata are controlled. `packages/fiscal-verifactu/src/initial-hour-setup.test.ts` covers exact
+frozen-input validation and the configured contribution with controlled host facts; its host
+fixture is not database or ownership qualification.
+
+The first counted route run failed six cases because `/preparation` returned 404. The new route
+and configured hour dispatch made those six pass. The complete new route file also covers actual
+provisioning, committed-result reading, changed names, manual clock consent and refusal before
+contacting an uploaded source. A later countdown case failed with `event_mismatch`: preview
+substituted No for the stored Yes answer. It passes after preview retains the stored answer.
+
+The five-file Task 4 command returned 55 passed and two failed. Both failures are in
+`apps/server/src/fiscal-readiness-first-setup.test.ts`: the supplied production provisioning
+case receives `setup.attempt_conflict` instead of its retained 200, and direct readiness receives
+`outside_confirmation_missing` instead of `environment_mismatch`. The focused eight-file fiscal
+command returned 201 passed and one failed: `initial-setup.test.ts` still expects configured
+paper evidence to activate `S000001`. The tests and all their assertions remain untouched.
+These results are failures, not whole-branch qualification. The proposed fiscal-check patch is
+kept in Lane E receipts for exact permission before any application.
+
+The protected allocation writer, restore hook, filing implementation and golden suites remain
+outside this continuation's changed paths. Verify their Git blobs against the continuation base
+when resuming; this inventory does not substitute for running their checks.

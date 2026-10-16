@@ -34,11 +34,10 @@ function initialOperator(operation: Pick<ModuleOperationInput, "binding" | "auth
   if (operation.binding.action !== "setup") return refuse("event_mismatch");
   return operator.operatorId;
 }
-function inputFor(
-  selected: Selected,
-  operation: Pick<ModuleOperationInput, "binding" | "authority">,
+export function hourSetupInput(
+  selected: Pick<Selected, "binding" | "scope" | "bases" | "identity" | "issuedAt">,
+  operatorId: string,
 ) {
-  const operatorId = initialOperator(operation);
   return {
     allocation: {
       version: 1,
@@ -99,7 +98,7 @@ export function createHourPreparation(
           authority: held.authority,
           confirmation: facts.confirmation,
         });
-        if (!isDeepStrictEqual(inputFor(selected, held), held.input))
+        if (!isDeepStrictEqual(hourSetupInput(selected, initialOperator(held)), held.input))
           return refuse("event_mismatch");
         return withHourAdmission(
           held,
@@ -115,11 +114,15 @@ export function createHourPreparation(
   };
   return {
     ...operations,
+    preview(request: Omit<SelectionRequest, "answer">) {
+      initialOperator(request);
+      return engine.preview(request);
+    },
     async select(request: SelectionRequest) {
       initialOperator(request);
       const selected = await engine.select(request);
       return selected.status === "selected"
-        ? { ...selected, input: inputFor(selected, request) }
+        ? { ...selected, input: hourSetupInput(selected, initialOperator(request)) }
         : selected;
     },
   };
@@ -189,4 +192,14 @@ export function createHostedHourPreparation(
       });
     },
   };
+}
+
+const hosted = new WeakMap<ModuleOperationHost, ReturnType<typeof createHostedHourPreparation>>();
+export function hostedHourPreparation(host: ModuleOperationHost) {
+  let value = hosted.get(host);
+  if (value === undefined) {
+    value = createHostedHourPreparation(host);
+    hosted.set(host, value);
+  }
+  return value;
 }

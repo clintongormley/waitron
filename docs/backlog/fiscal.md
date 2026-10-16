@@ -302,6 +302,18 @@ import, CLI and retained owned-production readiness fixture remain unfinished. T
 [changed-check inventory](../operations/a679-changed-checks.md#task-4-runtime-clock-collection)
 records this limit; the earlier unchanged-default checkpoint above describes its earlier tree.
 
+**Configured Task 4 checkpoint, 2026-10-16:** the configured contribution and owned preparation API
+share the clock session with operation preparation. The new route suite provisions the selected
+`06RB` through the unchanged writer and reads it back through the committed seat; production and
+preproduction retain their target scope. Yes and unknown answers save a wait without freezing a
+request or returning activation input. Reading the saved wait reproduced an `event_mismatch` when
+preview substituted No for the retained answer; preview now keeps that answer. Network replies
+and release metadata remain controlled in these tests. No complete wizard or mode qualification is
+claimed. Existing fiscal tests remain unchanged: the focused fiscal run has one failing legacy
+configured-paper success check, and the planned server run has two retained readiness failures.
+Exact changes to those checks need the lane's fiscal-test permission. See the
+[check inventory](../operations/a679-changed-checks.md#task-4-configured-module-and-api).
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the

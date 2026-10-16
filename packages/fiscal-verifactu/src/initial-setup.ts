@@ -1,3 +1,4 @@
+import { createHourInitialSetup, readHourSetupInput } from "./initial-hour-setup.js";
 import { projectHourHistory } from "./hour-history.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import "./errors.js";
@@ -37,7 +38,6 @@ import {
   readInitialCloudRequest,
   isInitialCloudRequest,
   prepareInitialCloudSetup,
-  configuredCloudTrust,
   confirmInitialCloudSetup,
   readInitialCloudConfirmation,
 } from "./initial-cloud-setup.js";
@@ -365,22 +365,7 @@ function createInitialSetup(
     },
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
-      const paths = (names: readonly string[]) =>
-        names
-          .map((name) => host.environment[name])
-          .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
-      return createInitialSetup(() => configuredCloudTrust(host.environment), {
-        files: paths([
-          "WAITRON_FISCAL_CUSTODIAN_FILE",
-          "WAITRON_FISCAL_CLOUD_TRUST_FILE",
-          "WAITRON_FISCAL_CONFIRMATION_FILE",
-          "WAITRON_FISCAL_PAPER_HISTORY_FILE",
-        ]),
-        directories: paths([
-          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
-          "WAITRON_FISCAL_EMERGENCY_DIRECTORY",
-        ]),
-      });
+      return createHourInitialSetup(host, contribution);
     },
     assignmentPositions(context, input) {
       const { scope, allocations } = assignmentFacts(context, input);
@@ -597,7 +582,10 @@ function createInitialSetup(
       return freeze(structuredClone(expected));
     },
     async committed(tx, context, value) {
-      const { input } = readInput(context, value, receiptTrust());
+      const input =
+        record(context.request) && context.request.kind === "waitron-hour-setup"
+          ? readHourSetupInput(context, value)
+          : readInput(context, value, receiptTrust()).input;
       const [retained] = await tx
         .select()
         .from(fiscalAllocations)

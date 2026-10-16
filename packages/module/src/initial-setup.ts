@@ -37,6 +37,9 @@ export interface InitialSetupContribution {
   assignmentKeys?(context: InitialSetupContext, input?: unknown): readonly string[];
   resolutionEvidence?(): { files: readonly string[]; directories: readonly string[] };
   configure?(host: ModuleOperationHost): InitialSetupContribution;
+  preparation?(context: InitialSetupContext, proposal: unknown): Promise<unknown>;
+  /** A pending result stays unfrozen so the owner can finish waiting before choosing material. */
+  pending?(request: unknown): boolean;
   candidates(context: InitialSetupContext, proposal: unknown): unknown;
   request(context: InitialSetupContext, validatedCandidates: unknown): unknown;
   inspect(context: InitialSetupContext, input: unknown): InitialSetupImport;
