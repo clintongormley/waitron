@@ -216,7 +216,13 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
           unitPrice: null,
           available: true,
           active: true,
-          effective: { unitPrice: "3.00", vatClass: "general" as const, primaryCategoryId: null },
+          allergensInherited: true,
+          effective: {
+            allergens: null,
+            unitPrice: "3.00",
+            vatClass: "general" as const,
+            primaryCategoryId: null,
+          },
         },
       ],
     };

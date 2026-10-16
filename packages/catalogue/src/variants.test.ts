@@ -8,6 +8,7 @@ import {
   addProductToMenu,
   listMenuOffers,
   listProducts,
+  updateProduct,
 } from "./operations.js";
 import {
   listProductVariants,
@@ -404,5 +405,56 @@ describe("reading the variants of no products", () => {
     } as unknown as Transaction;
 
     expect(await variantsOfProducts(refuses, [])).toEqual(new Map());
+  });
+});
+
+describe("listed variant allergens", () => {
+  it("lists effective allergens and their inheritance after parent edits", async () => {
+    const saved = await run((tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [
+          variant("Inherited", "2.00"),
+          variant("Eggs", "3.00"),
+          variant("None", "4.00"),
+          variant("Archived", "5.00"),
+        ],
+        "en",
+      ),
+    );
+    await run(async (tx) => {
+      await updateProduct(tx, productId, { allergens: { milk: {} } });
+      await updateProduct(tx, saved[1]!.id, { allergens: { eggs: {} } });
+      await updateProduct(tx, saved[2]!.id, { allergens: {} });
+      await setProductVariants(tx, productId, saved.slice(0, 3), "en");
+    });
+    const listed = async () =>
+      (await run((tx) => listProducts(tx)))[0]!.variants.map((entry) => ({
+        id: entry.id,
+        active: entry.active,
+        allergens: entry.effective.allergens,
+        inherited: entry.allergensInherited,
+      }));
+    expect(await listed()).toEqual([
+      { id: saved[0]!.id, active: true, allergens: { milk: {} }, inherited: true },
+      { id: saved[1]!.id, active: true, allergens: { eggs: {} }, inherited: false },
+      { id: saved[2]!.id, active: true, allergens: {}, inherited: false },
+      { id: saved[3]!.id, active: false, allergens: { milk: {} }, inherited: true },
+    ]);
+    await run((tx) => updateProduct(tx, productId, { allergens: null }));
+    expect(await listed()).toEqual([
+      { id: saved[0]!.id, active: true, allergens: null, inherited: true },
+      { id: saved[1]!.id, active: true, allergens: { eggs: {} }, inherited: false },
+      { id: saved[2]!.id, active: true, allergens: {}, inherited: false },
+      { id: saved[3]!.id, active: false, allergens: null, inherited: true },
+    ]);
+    await run((tx) => updateProduct(tx, productId, { allergens: {} }));
+    expect((await listed())[0]).toEqual({
+      id: saved[0]!.id,
+      active: true,
+      allergens: {},
+      inherited: true,
+    });
   });
 });

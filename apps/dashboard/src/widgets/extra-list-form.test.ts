@@ -2316,7 +2316,13 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
     image: null,
     unitPrice: null,
     ...flags,
-    effective: { unitPrice: "4.00", vatClass: "general" as const, primaryCategoryId: null },
+    allergensInherited: true,
+    effective: {
+      allergens: null,
+      unitPrice: "4.00",
+      vatClass: "general" as const,
+      primaryCategoryId: null,
+    },
   };
 }
 

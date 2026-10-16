@@ -47,7 +47,9 @@ function variant(id: string, name: string, unitPrice: string | null) {
     image: null,
     unitPrice,
     available: true,
+    allergensInherited: true,
     effective: {
+      allergens: null,
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
       primaryCategoryId: null,

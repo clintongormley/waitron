@@ -153,7 +153,8 @@ const bunVariant = {
  * whichever one it happened to find. */
 function product(
   overrides: Omit<Partial<Product>, "variants"> & {
-    variants?: (Omit<ListedVariant, "effective"> & Partial<Pick<ListedVariant, "effective">>)[];
+    variants?: (Omit<ListedVariant, "effective" | "allergensInherited"> &
+      Partial<Pick<ListedVariant, "effective" | "allergensInherited">>)[];
   } = {},
 ): Product {
   const { variants = [], ...rest } = overrides;
@@ -188,7 +189,9 @@ function product(
     ...base,
     variants: variants.map((variant) => ({
       ...variant,
+      allergensInherited: variant.allergensInherited ?? true,
       effective: variant.effective ?? {
+        allergens: base.allergens,
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
@@ -1291,7 +1294,9 @@ describe("product-list", () => {
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
+              allergensInherited: true,
               effective: {
+                allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "food",
@@ -1332,7 +1337,9 @@ describe("product-list", () => {
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
+              allergensInherited: true,
               effective: {
+                allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "category-1",

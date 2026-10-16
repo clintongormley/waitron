@@ -140,7 +140,9 @@ const products: Product[] = [
         unitPrice: "4.50",
         available: false,
         active: true,
+        allergensInherited: true,
         effective: {
+          allergens: {},
           unitPrice: "4.50",
           vatClass: "general",
           primaryCategoryId: "cat-1",
@@ -155,7 +157,9 @@ const products: Product[] = [
         unitPrice: null,
         available: true,
         active: false,
+        allergensInherited: true,
         effective: {
+          allergens: {},
           unitPrice: "3.00",
           vatClass: "reduced",
           primaryCategoryId: "cat-1",

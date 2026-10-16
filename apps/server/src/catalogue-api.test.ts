@@ -2679,7 +2679,9 @@ describe("mountCatalogueApi — products", () => {
         name: "Café doble",
         active: true,
         unitPrice: "2.40",
+        allergensInherited: true,
         effective: {
+          allergens: { milk: {} },
           unitPrice: "2.40",
           vatClass: "general",
           primaryCategoryId: categoryId,
@@ -2689,7 +2691,9 @@ describe("mountCatalogueApi — products", () => {
         name: "Café corto",
         active: false,
         unitPrice: null,
+        allergensInherited: true,
         effective: {
+          allergens: { milk: {} },
           unitPrice: "2.00",
           vatClass: "reduced",
           primaryCategoryId: categoryId,

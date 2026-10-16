@@ -1077,6 +1077,8 @@ async function listedVariantsOfProducts(
       kitchenName: products.kitchenName,
       image: products.image,
       ownPrice: products.unitPrice,
+      ownAllergens: products.allergens,
+      allergens: effective.allergens,
       available: products.available,
       active: products.active,
       unitPrice: effective.unitPrice,
@@ -1088,12 +1090,23 @@ async function listedVariantsOfProducts(
     .where(inArray(products.parentId, [...productIds]))
     .orderBy(products.parentId, products.variantOrder, products.id);
   const grouped = new Map<string, ListedVariant[]>();
-  for (const { parentId, ownPrice, unitPrice, vatClass, primaryCategoryId, ...row } of rows) {
+  for (const {
+    parentId,
+    ownPrice,
+    ownAllergens,
+    allergens,
+    unitPrice,
+    vatClass,
+    primaryCategoryId,
+    ...row
+  } of rows) {
     const held = grouped.get(parentId!) ?? [];
     held.push({
       ...row,
       unitPrice: priceOrNull(ownPrice),
+      allergensInherited: ownAllergens === null,
       effective: {
+        allergens,
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
         primaryCategoryId,
