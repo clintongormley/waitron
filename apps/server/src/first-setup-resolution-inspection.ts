@@ -7,6 +7,7 @@ import { AppError } from "@waitron/shared";
 import type { SQLWrapper } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase, type Database } from "@waitron/db";
+import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import {
   assertFirstSetupBootTarget,
   canonicalFirstSetupDirectory,
@@ -35,6 +36,7 @@ export interface FirstSetupInspection {
   revision: number | null;
   ownerGeneration: number | null;
   repairEligible: boolean;
+  emptyDatabase: boolean;
   artifacts: FirstSetupArtifact[];
 }
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -78,12 +80,15 @@ async function artifact(
 async function inspectDatabase(
   roots: FirstSetupRoots,
   file: FirstSetupArtifact,
-): Promise<FirstSetupInspection["database"]> {
-  if (file.status === "missing") return "missing";
-  if (file.status !== "present") return "unreadable";
+  migrationsRoot: string | null,
+  requiredSets: readonly string[],
+): Promise<Pick<FirstSetupInspection, "database" | "emptyDatabase">> {
+  if (file.status === "missing") return { database: "missing", emptyDatabase: false };
+  if (file.status !== "present") return { database: "unreadable", emptyDatabase: false };
   let connection: DatabaseSync | undefined;
   try {
     connection = new DatabaseSync(join(roots.venueDir, "venue.db"), { readOnly: true });
+    connection.exec("begin");
     const dialect = new SQLiteSyncDialect();
     const target: Pick<Database, "execute"> = {
       execute<Row extends Record<string, unknown>>(query: SQLWrapper | string) {
@@ -100,17 +105,24 @@ async function inspectDatabase(
     };
     const tenants = await readTenantIdentities(target);
     const locations = await readOperationalVenueIds(target);
-    return tenants.length === 0 && locations.length === 0 ? "no-venue-rows" : "occupied";
+    const database = tenants.length === 0 && locations.length === 0 ? "no-venue-rows" : "occupied";
+    return {
+      database,
+      emptyDatabase:
+        database === "no-venue-rows" &&
+        (await firstSetupDatabaseIsEmpty(connection, migrationsRoot, requiredSets)),
+    };
   } catch (error) {
-    if (error instanceof Error && /no such table/.test(error.message)) return "partial";
+    if (error instanceof Error && /no such table/.test(error.message))
+      return { database: "partial", emptyDatabase: false };
     if (
       typeof error === "object" &&
       error !== null &&
       "errcode" in error &&
       [11, 26].includes(Number(error.errcode))
     )
-      return "corrupt";
-    return "unknown";
+      return { database: "corrupt", emptyDatabase: false };
+    return { database: "unknown", emptyDatabase: false };
   } finally {
     connection?.close();
   }
@@ -118,11 +130,22 @@ async function inspectDatabase(
 export function createFirstSetupResolutionInspection(
   options: FirstSetupRoots & {
     store: FirstSetupStore;
+    migrationsRoot?: string | null;
+    expectedMigrationSets?: readonly string[];
     publicEvidencePaths?: readonly string[];
     publicEvidenceDirectories?: readonly string[];
   },
 ) {
   const service = {
+    async recheckEmptyDatabase(roots: FirstSetupRoots, requiredSets: readonly string[]) {
+      const inspected = await inspectDatabase(
+        roots,
+        await artifact(roots.venueDir, "venue.db", 128 * 1024 * 1024, false),
+        options.migrationsRoot ?? null,
+        [...(options.expectedMigrationSets ?? []), ...requiredSets],
+      );
+      return inspected.emptyDatabase;
+    },
     async captureFirstSetupOriginals() {
       const inspection = await service.inspectFirstSetupResolution();
       const originals: { name: string; bytes: Buffer | null }[] = [];
@@ -329,9 +352,14 @@ export function createFirstSetupResolutionInspection(
         pair =
           stateFile.status === "missing" || marker.status === "missing" ? "partial" : "invalid";
       }
-      const database = await inspectDatabase(
+      const { database, emptyDatabase } = await inspectDatabase(
         options,
         artifacts.find((a) => a.name === "venue.db")!,
+        options.migrationsRoot ?? null,
+        [
+          ...(options.expectedMigrationSets ?? []),
+          ...(repair?.state.frozen.modules.map((entry) => entry.module) ?? []),
+        ],
       );
       const noOtherEvidence = artifacts.every(
         (a) =>
@@ -344,10 +372,11 @@ export function createFirstSetupResolutionInspection(
         version: 2 as const,
         pair,
         database,
+        emptyDatabase,
         password: repair === null ? ("uncheckable" as const) : ("checkable" as const),
         revision: repair?.state.revision ?? null,
         ownerGeneration: repair?.state.ownerGeneration ?? null,
-        repairEligible: pair === "repairable" && database === "no-venue-rows" && noOtherEvidence,
+        repairEligible: pair === "repairable" && emptyDatabase && noOtherEvidence,
         artifacts,
       };
       return {

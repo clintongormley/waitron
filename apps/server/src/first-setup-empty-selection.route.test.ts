@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createFirstSetupResolutionStore,
@@ -23,7 +23,7 @@ import { request, PASSWORD } from "../test/first-fiscal.js";
 
 vi.mock("node:fs/promises", { spy: true });
 afterEach(() => vi.restoreAllMocks());
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const noMaster = { kind: "no-current-master", confirmed: true } as const;
 
 async function fixture(
@@ -341,6 +341,28 @@ it("an unused password-authorised retirement still requires its original passwor
     expect((await resolveFirstSetupWorkspace(f.roots)).binding?.workspaceId).toBe(
       inspection.workspaceId,
     );
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("rechecks the empty proof against the current image before resuming local reset", async () => {
+  const f = await fixture();
+  try {
+    const host = createFirstSetupModuleHost({
+      ...f.roots,
+      environment: { WAITRON_MIGRATIONS_DIR: "/missing/setup-empty-proof-migrations" },
+      modules: [],
+    });
+    const actions = createFirstSetupResolutionActions({ ...f.roots, host });
+    const inspection = await actions.inspectWorkspaceSelection();
+    expect(inspection).not.toBeNull();
+    await expect(
+      actions.resumeWorkspaceSelection({ ...inspection!, register: noMaster }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(resolveFirstSetupWorkspace(f.roots)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
   } finally {
     await f.dispose();
   }

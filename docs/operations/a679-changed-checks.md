@@ -34,3 +34,10 @@ in `first-fiscal-declared-publication.test.ts` and `first-setup-finish.route.tes
 assertions stay unchanged. New cases check the audit records, original bytes, interrupted writes
 and refusal before a database opens. The request addition follows the replacement plan's Task 8
 and its retained `RegisterAnswer` shape; it does not replace fresh outside confirmation.
+
+The empty-selection HTTPS fixture in `apps/server/src/first-setup-empty-selection.route.test.ts`
+now migrates the complete application schema instead of core alone. The real resolution listener
+composes every available module; the new empty proof checks their required schema. Its earlier
+assertions stay unchanged. The schema-scanner tests deliberately retain isolated orphan rows
+without parents, so a parent table cannot conceal a missing scan of the sale or filing table.
+The owner authorised this read-only empty-proof inspection on 2026-10-16 at 13:40.

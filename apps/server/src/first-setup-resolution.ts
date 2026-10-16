@@ -117,6 +117,10 @@ export function createFirstSetupResolutionActions(
           current.record.action !== "retire" ||
           current.record.register.kind !== "no-current-master" ||
           !unused(current.state) ||
+          !(await host.resolution.recheckEmptyDatabase(
+            current.retired,
+            current.state.frozen.modules.map((entry) => entry.module),
+          )) ||
           (await host.resolution.inspectFirstSetupResolution()).artifacts.some((artifact) =>
             artifact.name.startsWith("outside-"),
           )
@@ -189,8 +193,7 @@ export function createFirstSetupResolutionActions(
               record.register.kind === "no-current-master" &&
               unused(state),
           );
-          const emptyWorkspace =
-            inspection.database === "no-venue-rows" && unused(state) && noOtherHistory;
+          const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
           const empty = emptyWorkspace && noInheritedRegister;
           let authority: "original-password" | "local-empty-no-custodian";
           if (request.owner === undefined) {

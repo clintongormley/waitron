@@ -858,3 +858,85 @@ it.each(["file", "directory"])(
     expect(after.inspectionId).not.toBe(before.inspectionId);
   },
 );
+
+it("refuses empty-only restart with retained catalogue rows and no taxpayer or location", async () => {
+  const { catalogues } = await import("@waitron/db");
+  await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
+  const f = await actionsFixture();
+  const inspection = await f.service.inspectFirstSetupResolution();
+  expect(inspection.database).toBe("no-venue-rows");
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("requires the configured module schema for empty-only restart", async () => {
+  const f = await fixture("active");
+  const { ALL_MODULES } = await import("@waitron/composition");
+  const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
+  const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
+  const host = createFirstSetupModuleHost({
+    ...f,
+    environment: {},
+    modules: ALL_MODULES.filter((module) => module.name === "scheduler"),
+  });
+  const actions = createFirstSetupResolutionActions({ ...f, host });
+  const inspection = await host.resolution.inspectFirstSetupResolution();
+  expect(inspection.database).toBe("no-venue-rows");
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: inspection.inspectionId,
+      revision: inspection.revision!,
+      ownerGeneration: inspection.ownerGeneration!,
+      register: { kind: "no-current-master", confirmed: true },
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+});
+
+it("refuses empty-only marker repair with retained catalogue rows", async () => {
+  const { catalogues } = await import("@waitron/db");
+  await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
+  const f = await fixture();
+  const inspection = await f.service.inspectFirstSetupResolution();
+  expect(inspection.database).toBe("no-venue-rows");
+  expect(inspection.repairEligible).toBe(false);
+  const before = await readFile(f.markerPath);
+  await expect(
+    f.recovering.recoverFirstSetupOwner({
+      inspectionId: inspection.inspectionId,
+      revision: inspection.revision!,
+      ownerGeneration: inspection.ownerGeneration!,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      password: PASSWORD,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(await readFile(f.markerPath)).toEqual(before);
+});
+
+it.each(["missing-table", "missing-column", "short-journal", "foreign-journal"])(
+  "refuses empty-only restart with %s despite intact taxpayer and location reads",
+  async (kind) => {
+    const { DatabaseSync } = await import("node:sqlite");
+    const f = await actionsFixture();
+    const connection = new DatabaseSync(join(f.venueDir, "venue.db"));
+    try {
+      if (kind === "missing-table") connection.exec('drop table "catalogues"');
+      if (kind === "missing-column") connection.exec('alter table "catalogues" drop column "name"');
+      if (kind === "short-journal")
+        connection.exec('delete from "__drizzle_migrations_db" where rowid = 1');
+      if (kind === "foreign-journal")
+        connection.exec("update \"__drizzle_migrations_db\" set hash = 'unknown' where rowid = 1");
+    } finally {
+      connection.close();
+    }
+    expect((await f.service.inspectFirstSetupResolution()).database).toBe("no-venue-rows");
+    await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+  },
+);

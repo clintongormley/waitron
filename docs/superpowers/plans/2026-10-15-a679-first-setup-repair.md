@@ -106,6 +106,9 @@ Missing, unreadable, corrupt, partly migrated and unclassifiable databases remai
 
 **Qualification limit:** the current claim check reads tenants and locations (`boot.ts:789`); those reads alone are not a general proof that every business table is empty. Require complete preactivation provenance as well. If that cannot establish the approved EMPTY condition using existing readers, report the exact missing proof; H2 does not authorise adding SQL or weakening the definition.
 
+**Owner amendment, 2026-10-16 13:40:** read-only database inspection is authorised solely for this positive empty proof. Require the expected tables/columns and migration journals; any retained application row, missing schema, failed read or unknown result refuses empty-only admission. Keep the taxpayer/location classification separate. Recheck under the existing exclusions and coordinator. No database writes, migrations, fiscal writers, hashes, numbering, old fiscal assertions or root guards change. This permission does not itself enable the unused-enrolled-PDF exception or change allocation authority.
+
+
 ## Task 2: Implement password recovery and ownership rebind
 
 **Files:** `first-setup-owner.ts`, resolution service, `module-operation-host.ts`, owner/evidence tests.

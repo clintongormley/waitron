@@ -57,7 +57,7 @@
 - A731/A732/A733 remain separate before-go-live work; no repair-page mutations for them here.
 - Paper-to-Cloud import is not required and has no open build dependency. Joining Cloud retains the paper PDF; later paper allocations, including after leaving Cloud, continue the existing S/P register.
 - Unsigned paper machine reporting remains unavailable unless separately decided; this plan authorises no new reporting implementation.
-- No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change.
+- No hash, numbering, registros, alta, `registerSif`, `restoreFiscal`, SQL or existing protected assertions change. **Owner amendment, 2026-10-16 13:40:** new read-only queries may establish the separate empty-database proof, with the scope and refusals recorded in the repair plan. No existing SQL or database write changes.
 - The owner’s removal covers paper-signature admission semantics, not an exception to H2 or protected assertions.
 - No scanner, QR, image decoding, camera, offline tool, PBKDF gate, ink or loss exercise.
 - No sale-path network, automatic conflict switching, seller-fencing or missing-sales reconstruction.
@@ -324,7 +324,7 @@ Node-key format is display metadata, never a replacement secret value.
 - [ ] Observe RED; reuse password derivation outside transactions, `inTurn`, throttling and under-exclusion rereads.
 - [ ] Existence check precedes database opener; inspection creates/migrates/checkpoints nothing.
 - [ ] Preserve missing/corrupt/unreadable/partial/unknown classifications; exceptions never mean empty or no register.
-- [ ] Eligible marker repair needs complete preactivation provenance and successful existing unused reads, without new SQL.
+- [ ] Eligible marker repair needs complete preactivation provenance and the separate positive database proof; read-only inspection is permitted by the owner amendment of 2026-10-16 13:40.
 - [ ] Invalidate all old owner/evidence/delivery grants after rebind; abandoned remains abandoned.
 - [ ] Repeat the command; require counted GREEN and strict-reader positives/refusals.
 - [ ] Commit: `git commit -s -m "feat: inspect and recover unfinished setup ownership without weakening admission"`.
