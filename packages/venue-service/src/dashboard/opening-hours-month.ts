@@ -93,6 +93,23 @@ export class OpeningHoursMonthView extends LitElement {
         gap: var(--wt-space-2) var(--wt-space-4);
         margin-block-end: var(--wt-space-2);
       }
+      .year-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .year-link:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .year-hint {
+        ${visuallyHiddenStyles}
+      }
       .rows {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -298,6 +315,8 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
+  /** Draws the title's year as a link sending `month-year-open`, where a Year view exists. */
+  @property({ type: Boolean }) linkYear = false;
   #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     canPick: () => !this.readOnly && !this.stationMode,
@@ -541,22 +560,36 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
+    const shown = Number(current.slice(5, 7));
+    // A candidate is shaped as the title is: a plain title one text node, a linked one with its
+    // year an inline-block. Shaped otherwise, Chromium measured the title a hair wider.
     const title = (month: number, language?: string) =>
-      `${formatMonthName(month, language)} ${year}`;
+      this.linkYear
+        ? html`${formatMonthName(month, language)} <span class="year-link">${year}</span>`
+        : `${formatMonthName(month, language)} ${year}`;
     const titles = Object.keys(VENUE_SERVICE_STRINGS).flatMap((language) =>
       Array.from({ length: 12 }, (_, index) => title(index + 1, language)),
     );
-    // One text node, as each candidate is: as two, Chromium measured the title a hair wider.
+    const heading = this.linkYear
+      ? html`${formatMonthName(shown)}
+          <button
+            type="button"
+            class="year-link"
+            data-test="month-year"
+            aria-describedby="year-hint"
+            @click=${() => this.#emit("month-year-open", { year })}
+          >
+            ${year}
+          </button>`
+      : title(shown);
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
-        ${fixedTitle(
-          html`<h2 data-test="month" aria-live="polite">${title(Number(current.slice(5, 7)))}</h2>`,
-          titles,
-        )}
+        ${fixedTitle(html`<h2 data-test="month" aria-live="polite">${heading}</h2>`, titles)}
         ${step(1, "next-month", "month.next", "›")}
         <slot name="switch"></slot>
         ${model ? this.#tools(model) : nothing}
       </div>
+      ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
       ${model ? this.#grid(model) : nothing}`;
   }
 

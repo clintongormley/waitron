@@ -3,7 +3,10 @@ import { css, html, type TemplateResult } from "lit";
 /** Draws `title` centred in a box as wide as the widest of `candidates`, so what sits beside the
  *  box stays put whichever candidate shows. The candidates are laid out unseen and unread in the
  *  same grid cell; the font rules sit on the box so the title and the candidates share them. */
-export function fixedTitle(title: TemplateResult, candidates: readonly string[]): TemplateResult {
+export function fixedTitle(
+  title: TemplateResult,
+  candidates: readonly (string | TemplateResult)[],
+): TemplateResult {
   return html`<div class="fixed-title">
     ${title}
     ${candidates.map(
