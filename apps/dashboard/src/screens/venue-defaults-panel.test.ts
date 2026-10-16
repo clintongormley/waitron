@@ -707,3 +707,26 @@ it("Retry reads through the background client, as every read after the first doe
   expect(r.api.getVenueDefaults).toHaveBeenCalledTimes(1);
   expect(r.background.getVenueDefaults).toHaveBeenCalledTimes(1);
 });
+
+it("a VAT refusal and its value survive a live read", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  r.api.putVenueDefaults.mockRejectedValueOnce({
+    code: "product.invalid",
+    params: { field: "defaultProductVatClass" },
+  });
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "defaultProductVatClass", "zero");
+  saveButton(el).click();
+  await expect
+    .poll(() => combo(el, "defaultProductVatClass")!.error)
+    .toBe(t("catalogue_settings.invalid"));
+  r.liveData.invalidate([{ type: "catalogue_settings" }]);
+  await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
+  await flush(el);
+  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
+  expect(combo(el, "defaultProductVatClass")!.error).toBe(t("catalogue_settings.invalid"));
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).disabled).toBe(false);
+});
