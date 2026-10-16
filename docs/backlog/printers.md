@@ -562,6 +562,27 @@ returns `null`. This checks those readers, not every sale path.
   puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
+## A754. The receipt's date and time on a line of their own
+
+**A754 (owner, 2026-10-16) — a mock-up for the owner's approval before building; it changes what
+printed invoices look like, so the owner lands it.** Seen on the printer's sample receipt
+(`apps/server/src/sample-receipt.ts`) in Catalan: "Mesa 6 · Comanda 41" and "15 de gen. 2026,
+12:34" did not fit one row, so the date dropped to a line of its own, right-aligned.
+
+Today the simplified invoice puts the order and the date on one row and lets an overflow wrap
+(`buildReceiptDocument`, `apps/server/src/receipt-document.ts:217-221`); the full invoice's
+order-and-date row is built the same way (`:223`). The owner first asked for a numeric date so the
+row fits, then: "we'll soon run out of space eg if the table name is longer or the order number
+gets longer, so we should just make it look good with the date on its own line".
+
+- **The date and time always get their own line**, laid out deliberately, on simplified and full
+  invoices. The layout and the date's format are what the mock-up decides.
+- **The law asks for the date and sets no format**: RD 1619/2012 art. 7.1.b, «La fecha de su
+  expedición», quoted in [verifactu-findings.md](../compliance/verifactu-findings.md). Whether
+  Orden HAC/1177/2024 sets a printed date format was not checked; check it before choosing one.
+- The sample's Spanish "Mesa 6" and "Café y tostada" on a Catalan receipt are fine: they are
+  internal sample values (owner).
+
 ## Decisions and deliberate limits
 
 - **TOTAL is printed double size with no asesor question (owner, 2026-10-14).** Orden HAC/1177/2024

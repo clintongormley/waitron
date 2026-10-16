@@ -196,6 +196,48 @@ cooks should still acknowledge each dish. The current implementation is the defa
 [plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md), not a separate owner decision
 about grouping these corrections.
 
+## A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
+
+**A756 (owner, 2026-10-16) — the owner approved the mock-ups.** Mock-ups:
+[where each setting goes](mockups/a756-kitchen-settings/01-where-each-setting-goes.png),
+[Courses page](mockups/a756-kitchen-settings/02-courses-page.png),
+[department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
+[Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
+were drawn on is https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT (owner's account only).
+After A725, which changes the same station editor.
+
+Every setting on Venue settings' Kitchen tab is stored once for the venue today: the courses; bump
+mode and fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
+`kitchen_timing_defaults`, which a station may override in `kitchen_station_timing`
+(`packages/db/src/schema/kitchen-timing.ts`); and `service_settings`
+(`packages/venue-service/src/schema/settings.ts`) — `edit_sent_lines`, `kitchen_ticket_grouping`,
+`print_held_work`, `print_moved_slips` (a station may override it), `release_reminder_minutes`, and
+`clearing_workflow`, which is A757's. Moving them to departments and stations is a migration; before
+go-live nothing is carried forward.
+
+1. **Courses get their own page under Products and menus**, because products name them: a list with
+   drag handles, Add course, and Delete in each row's menu (courses already delete through
+   `wt-delete-dialog`).
+2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Service gains
+   "Courses and the kitchen": who sends a held course to the kitchen (today's "Fire control":
+   Waiter, Kitchen or Expo) and the reminder to send the next course. A757 adds its optional table
+   states there. Receipt editing (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves
+   into the Receipts tab, and the departments table's Receipt link
+   (`packages/venue-service/src/dashboard/departments-list.ts:215-226`) goes.
+3. **Prep stations gets an "Every station" card**, and each setting on it can differ per station:
+   late flags; done on the screen (today's bump mode: one item at a time or the whole ticket);
+   identical dishes on a ticket; held courses (print in advance marked HOLD, or when sent); MOVED
+   slips; changes after sending. The stations table gains a "Differs from every station" column.
+   **Changes after sending and held-course printing are per station** (owner, 2026-10-16): the
+   switch exists for a printer-only station, which cannot see a change. A dish is believed to go
+   to exactly one station (routing is single-target, A9), so one station answers whether an item
+   may change; check that against the code.
+4. **The Kitchen tab goes.**
+
+Wording: in the mock-ups a station's inherited choice reads "Same as every station". A725 point 6's
+"Venue setting: Print" was chosen when the default lived on Venue settings; the owner is asked to
+confirm the new wording when A756 is picked up.
+
 ## Decisions and deliberate limits
 
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one

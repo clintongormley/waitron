@@ -1535,6 +1535,19 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
+- **A753. Calendar colours: more of them, one shared picker, and who holds each staff role (owner,
+  2026-10-16).** Periods, staff roles and menus pick from six colours; the palette grows (the
+  owner sees a swatch board first), every place picking one uses A725's shared colour popup — the
+  staff role dialog's dropdown included — and the Staff roles list names the people holding each
+  role, with "plus N more" past 5 or 10, whichever reads better.
+  [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
+
+- **A755. Venue settings: four cards on one page (owner, 2026-10-16).** Business, Venue, Business
+  day and Defaults, each editing on its own; the business-day start shown once; no "?" buttons;
+  "Default receipt language" without its legal paragraph; the VAT class for new products back from
+  its own Defaults page, under `venue.configure`. No tabs once A756, A757 and A758 have taken
+  theirs. [Detail](backlog/service-periods.md#a755-venue-settings-four-cards-on-one-page), [mockups](backlog/mockups/a755-venue-settings/)
+
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
@@ -1824,6 +1837,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
   colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
+- **A756. The Kitchen tab split up (owner, 2026-10-16).** Courses get a page under Products and
+  menus; who sends held courses and the next-course reminder go to a new Service tab in a tabbed
+  department dialog, which also takes the receipt editor (the departments table's Receipt link
+  goes); late flags, bump mode, ticket grouping, held-course printing, MOVED slips and changes
+  after sending go to an "Every station" card on Prep stations, each overridable per station.
+  Migration. After A725. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+
 - **Consider consolidating paper for a whole-order kitchen-note change.** The current correction
   path produces one slip and one acknowledged notice for each affected dish at its station.
   Decide whether paper should instead summarise the affected work once per printer, and whether
@@ -2111,6 +2131,25 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   further. Decide: should extras keep their earlier choice, as the dish does?
 
 ### The till, devices and table service
+
+- **A752. Device profile form: an empty starting-zone list and errors that cannot be cleared
+  (owner, 2026-10-16).** On Santet, "Every zone in this department" is on, the Starting zone list
+  says "No results" although the department's five zones are active, and two errors ask for things
+  already done or impossible. Find why the list is empty; word a department with no zones plainly.
+  [Detail](backlog/till.md#a752-device-profile-form-an-empty-starting-zone-list-and-errors-that-cannot-be-cleared)
+
+- **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
+  Design first. Decided: the Tables tab goes; optional states are switched per department; an
+  optional state is one the code understands, not a label the venue makes up. The review maps every
+  state, A508's future ones included, and comes back to the owner before building.
+  [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab)
+
+- **A758. Adjustment reasons: review the rules, then a page of their own (owner, 2026-10-16).**
+  Design first: an approver never asked, limits nobody can approve, one kind per reason, role lists
+  instead of a ranking, give-away against 100% discount, the bill-wide limit, staff meals, how a
+  Square import sorts reasons, and a starter list. Then the page under Service, with search, drag
+  handles and Delete. Role lists with or after editable roles.
+  [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642. The drag's override sheet is added to the document and to every
@@ -2542,7 +2581,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A504. Floor plans published for a future date, and one per service period (owner,
   2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
-  different layouts for different periods. Backlog only, not queued to a lane. Until it lands, the
+  different layouts for different periods. Owner, 2026-10-16: floor plans get a page of their own,
+  edited as named sets a period picks. Backlog only, not queued to a lane. Until it lands, the
   Periods page's Floor plan column shows a muted dash, and the period dialog a disabled Floor plan
   field except when a painter's + New period opens it (`periods-screen.ts`, `period-dialog.ts`).
   [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
@@ -3364,6 +3404,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
+
+- **A754. The receipt's date and time on a line of their own (owner, 2026-10-16).** Today they
+  share the order's row and wrap when it overflows; a longer table name or order number will
+  overflow more. A mock-up for the owner first; it changes printed invoices, so the owner lands it.
+  [Detail](backlog/printers.md#a754-the-receipts-date-and-time-on-a-line-of-their-own)
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
@@ -4320,7 +4365,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   review should propose the whole list: which permissions to merge, the names, and which role holds
   each, and then rename the call sites in one change. **Do it before the editable-roles item below**
   (owner, 2026-09-26). Since A494 (2026-10-11), `catalogue.manage` gates the catalogue,
-  units and content languages, and the "VAT class for new products" default.
+  units and content languages, and the "VAT class for new products" default; A755 moves that
+  default under `venue.configure` (owner, 2026-10-16).
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
@@ -4582,9 +4628,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `packages/venue-service/src/dashboard/strings.ts`, against design-system.md → Wording's
   "Add …". The "+" label comes from the A506 seasons spec.
   Seen by A546's review; not changed there.
-
-- **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
-  look pass (#1484), not changed; not checked whether it predates that branch.
 
 - **An update bar (dashboard or till) added while the tab is hidden is believed to show only its button until the tab
   is seen again**: `wt-banner` puts its message in two animation frames after it joins the page.

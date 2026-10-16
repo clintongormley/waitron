@@ -516,6 +516,10 @@ owner's A579 design and left as it is.
 - **Different layouts for different periods** of the day, for example lunch and dinner. This needs
   deciding how a change of layout meets tables that are occupied when the period changes. A506's
   Periods page and period dialog already leave a Floor plan column and field for it.
+- **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
+  floor plans, one layout per zone, and a period picks the set it uses. The departments table's
+  per-zone floor-plan link (`packages/venue-service/src/dashboard/departments-list.ts:239`) goes
+  when that page lands, because a link to one zone's single plan no longer fits.
 
 ## A508. A table's QR code: order, call a waiter, ask for the bill or pay
 
@@ -1438,7 +1442,154 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
 
+## A752. Device profile form: an empty starting-zone list and errors that cannot be cleared
+
+**A752 (owner, 2026-10-16).** Seen on the Santet venue: a device profile's "Where it serves" with
+department Santet Deli Co and "Every zone in this department" switched on. The Starting zone
+dropdown says "No results", and the form shows two errors nobody can clear: "Choose at least one
+zone, or switch on Every zone in this department" (the switch is already on) and "Choose the zone
+a device starts in" (there is nothing to choose).
+
+In a copy of that venue's database taken on 13 October, all five zones (Counter, Front Bar, Main
+Bar, Saloon, Terrace) are active and every one has a `zone_service_policies` row naming that
+department, so the list should not be empty. The form lists a department's zones with
+`activeZones` (`apps/dashboard/src/screens/device-profiles-screen.ts:271`), filtering the reply of
+`GET /management-api/venue-service/departments-and-zones` by `departmentId` and `active`. Which
+side loses them was not traced.
+
+1. **Find why the list is empty** — a failing test first, through the real route.
+2. **A department with no switched-on zones says so**, and where zones are added, instead of
+   asking for a switch that is already on.
+3. **The starting zone is not marked as a required error when there is nothing to pick**; the
+   department's message covers it.
+
+The form's two "?" buttons, beside Department and Starting zone, are A237 candidates
+([setup.md](setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)).
+
+## A757. Table states: review the lifecycle, then retire the Tables tab
+
+**A757 (owner, 2026-10-16) — design first; it comes back to the owner before anything is built.**
+
+Today Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) holds two
+things:
+
+- **Needs clearing, on or off for the whole venue** (`service_settings.clearing_workflow`,
+  `packages/venue-service/src/schema/settings.ts`). When on, a table a party leaves shows "Needs
+  clearing" on the till's floor until someone taps "Mark cleared".
+- **Statuses the venue makes up** (`table_service_statuses`,
+  `packages/db/src/schema/table-service-statuses.ts`): a label and a colour. A waiter puts one on a
+  table from the till's table screen (`apps/till/src/screens/till-table-order-screen.ts:2558`); a
+  table carries at most one (`dining_tables.status_id`), and the floor shows its colour. They sit
+  beside the lifecycle the till works out itself — Free, Reserved, Seated, Needs clearing — and
+  change none of it.
+
+Decided (owner, 2026-10-16):
+
+- **The Tables tab goes.**
+- **Optional states are switched on or off per department**, in the department dialog's Service
+  tab (A756), "Needs clearing" among them.
+- **An optional state is one the code understands** — it knows when the state can appear and what
+  clears it — rather than a label a waiter puts on any table. The owner said "maybe", so the review
+  confirms it. Example: "Bill requested" could appear only on a seated table and clear when the
+  bill is paid.
+
+The review: write down every state a table goes through and what moves it between them, including
+the states A508's table QR code would add (call a waiter, bill requested); say which are optional;
+decide what becomes of the statuses a venue has already made. It comes back with the lifecycle
+drawn out and a recommendation. The open note that the Tables tab's colour field label is cut to
+"C…" at 390 px goes with the screen.
+
+## A758. Adjustment reasons: review the rules, then a page of their own
+
+**A758 (owner, 2026-10-16) — design first; the review comes back to the owner with worked examples
+and mock-ups before anything is built.** The owner: the page is ugly, the edit form assumes the
+roles are a ranking, and "does the logic work? are we asking the right questions?"
+
+How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
+(void), give away (comp), a percentage discount and an amount discount; it may cap the percentage
+off one item (counting percentage discounts only) and the total off one bill (counting everything
+the reason does on that bill); a person below "lowest role that applies it without approval" needs
+someone at or above "lowest role that may approve it"; and it may require a note.
+
+What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-apply.ts:804-808`):
+
+| | On the bill and receipt | Kitchen | Counts towards the bill's discount limit |
+|---|---|---|---|
+| Cancel (void) | The item goes | Told | Only if the cancel raises the discount share of what is left |
+| Give away (comp) | Stays at zero, printed "Invitació" | Not told | No |
+| 100% discount | Stays at full price with a discount line | Not told | Yes |
+
+**What the review settles**, each with a worked example:
+
+1. **An approver who is never asked.** "Entry error" reads "Staff / Supervisor approves", but staff
+   is the lowest role, so nobody ever needs approval for it. The seed writes that pair
+   (`packages/adjustments/src/provisioning.ts`).
+2. **Going past a reason's limit cannot be approved by anyone** — the limit refuses before approval
+   is considered (`evaluateAdjustment`). Deliberate or not.
+3. **One kind per reason.** A reason that mixes actions makes the limits unclear, and the form
+   offers a percentage cap and a bill cap to a cancel-only reason. Void and give-away stay separate:
+   they tell the kitchen different things, and a report separates mistakes from hospitality. The
+   till should make the choice plain ("Take it off the bill" or "Give it free").
+4. **Role lists, not a ranking** — "Who can apply it without approval" and "Who can approve it" —
+   because roles become something an admin defines (the editable-roles entry under _Users, sign-in
+   and the dashboard shell_); the role lists are built with or after it. The venue-wide bill limit's
+   approver, written into the code as "manager" (`policy.ts:139`), becomes a role list too.
+5. **Give-away or 100% discount.** In Square, Santet filed complaints as a void, a comp and a "100%"
+   discount depending on the button. As a give-away, a comped coffee alone on a bill goes through;
+   as a 100% discount it is 100% of the bill and asks for a manager's PIN. Decide whether a 100%
+   discount should exist beside a give-away.
+6. **The venue-wide limit on a bill's discounts**: a share of the bill, so a one-item bill reaches
+   100% at once. Options: drop it and rely on each reason's own limits; a euro amount per bill; the
+   share only above a minimum bill. Its paragraph of explanation goes, for one short hint.
+7. **Staff meals** — a give-away or a discount, and whether reports need them apart.
+8. **What a Square import does with reasons that are not adjustments.** Every Square reason at
+   Santet was made by the venue (owner, 2026-10-16), so the lists show what a venue needs:
+   - Square's void reasons: ENTRY ERROR, ITEM NO LONGER AVAILABLE and CUSTOMER CHANGED MIND are
+     voids; COMPLAINT is a give-away; CUSTOMER LEFT WITHOUT PAYING is Waitron's "Record unpaid
+     departure" (the bill is invoiced and the debt recorded), not a void; PAID SEPARATELY and ALREADY
+     PAID mean the item belongs on the bill that was paid; TRAINING is believed to be practice
+     mode's job (not checked).
+   - Square's comp reasons: Entry error and Customer changed mind are voids (both are on the void
+     list too); Customer complaint, Friends and family, Manager special and INVITED BY STAFF are
+     give-aways; Employee discount is item 7; CUSTOMER LEFT WITHOUT PAYING again is an unpaid
+     departure.
+   - Square's discounts came in as percentage reasons: EVENT GUEST 100%, INVITATIONAL ITEM 100%,
+     CUSTOMER COMPLAINT 100%, FAMILY DISCOUNT 10%.
+9. **A starter list for a new venue** (decided: a venue starts with a list it can delete or change;
+   today it gets one, "Entry error"). Draft to settle:
+
+   | Kind | English / Spanish | Who can apply it |
+   |---|---|---|
+   | Void | Entry error / Error al marcar | Anyone |
+   | Void | Item not available / Producto agotado | Anyone |
+   | Void | Customer changed mind / Cambio del cliente | Approval once the kitchen has it |
+   | Give-away | Complaint / Queja del cliente | Approval |
+   | Give-away | On the house / Invitación | Approval |
+   | Give-away | Staff meal / Comida de personal | Approval |
+   | Discount | Discount / Descuento (percentage) | Approval |
+
+   Whether an approval rule can depend on the item having been sent was not checked.
+
+**Then the page:**
+
+- **Its own page under Service** (owner, 2026-10-16), leaving Venue settings without tabs (A755).
+- **The list:** a search bar, drag handles instead of Move up and Move down, a cleaner layout.
+- **Delete, not Disable.** The DELETE route only switches a reason off today
+  (`deactivateAdjustmentReason`, `packages/adjustments/src/routes.ts:258`). A recorded adjustment
+  keeps its own copy of the reason's name and rules (`reason_name`, `policy_snapshot`, no foreign key:
+  `packages/adjustments/src/schema/adjustments.ts:60-64`), so deleting leaves history intact. Real
+  Delete through `wt-delete-dialog`, as courses and stations; the Status column, Status filter and
+  Enable go, and design-system.md's "Switching off versus deleting" stops listing adjustment
+  reasons among the things switched off.
+- **The edit form** asks only what applies to the reason's kind, with the role lists.
+
 ## Decisions and deliberate limits
+
+### An order's number is never reset (owner, 2026-10-16)
+
+A working order's number comes from one counter per node that starts at 1 and only climbs
+(`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). It does not restart each
+business day: staff search for orders by number, so a number must stay unique.
 
 ### Joined-table seat suggestions (owner, 2026-10-16; A747)
 

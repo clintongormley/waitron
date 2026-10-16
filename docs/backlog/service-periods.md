@@ -302,6 +302,61 @@ special-day write routes.
 7. **The special-day editor's Range button goes.** A click adds or removes a date; a drag or a
    shift-click adds a run; one hint line says so. The same picking code as A720 point 4.
 
+## A753. Calendar colours: more of them, one shared picker, and who holds each staff role
+
+**A753 (owner, 2026-10-16).** Three points that share one palette.
+
+1. **More colours for periods** ("we need more colours for periods"). Periods, staff roles, menus
+   and special dates pick from the six calendar colours — red, amber, grey, blue, green, purple
+   (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts:6`; their tokens are the
+   `--wt-color-palette-*` pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette.
+   How many and which colours go to the owner first as a swatch board in both themes, each with
+   its text colour at readable contrast. Check whether a stored column or a CHECK lists the six
+   before adding any (a migration if so).
+2. **One picker for every calendar colour.** The staff role dialog shows the colour as a dropdown
+   (`packages/staffing/src/dashboard/staff-role-dialog.ts:296-305`); the period dialog draws its
+   own swatches (`packages/venue-service/src/dashboard/period-dialog.ts:446-531`). A725 point 7
+   already plans one shared colour popup for stations, periods and seasons; staff roles use it too.
+   Whichever of A725 and A753 lands first builds it, and the other adopts it. The category and
+   product colour field (`apps/dashboard/src/widgets/color-field.ts`, a different set of 24) stays
+   apart.
+3. **The Staff roles list names who holds each role.** The People column says "3 people"; it shows
+   the names, then "plus N more" past a cut-off. Owner: try 5 and 10 names on the real screen and
+   keep the one that reads better.
+
+## A755. Venue settings: four cards on one page
+
+**A755 (owner, 2026-10-16) — the owner approved the mock-ups as drawn.** Mock-ups:
+[view](mockups/a755-venue-settings/01-venue-details-view.png),
+[editing the venue card](mockups/a755-venue-settings/02-editing-the-venue-card.png),
+[editing the defaults card](mockups/a755-venue-settings/03-editing-the-defaults-card.png); the
+canvas they were drawn on is https://claude.ai/artifact/6YxjmqL8TnptCV9S9evCnE (owner's account
+only). The boards still draw today's tabs; A756, A757 and A758 take the Kitchen, Tables and
+Adjustment reasons tabs away, leaving Venue settings one page with no tabs.
+
+1. **Four cards, each editing on its own**, the others staying in view mode:
+   - **Business:** legal name, tax ID, country, with "Change legal name";
+   - **Venue:** venue name, the address as one block, time zone, with Edit;
+   - **Business day:** starts at, scheduled change, with "Change start";
+   - **Defaults:** default receipt language and VAT class for new products, with Edit.
+2. **The business-day start shows once.** Today it shows twice: in the business-day editor and as
+   the "Business day starts at" row (`apps/dashboard/src/screens/venue-details-panel.ts:654`), and
+   "Change start" touches the Venue name label below it.
+3. **The edit form:** fields stop at a readable width (560 px in the mock-up); postcode and city
+   side by side; no "?" buttons (the owner saw them on the address fields, A237) — the hint is the
+   placeholder; the lock reason and the note about the address on receipts said once at the card's
+   foot; Save quiet until something changes (A331).
+4. **The receipt language becomes "Default receipt language"**, because staff can still print
+   another at the till. Its legal paragraph goes (`fixedReceiptLocale.reason`,
+   `packages/country-es/src/spain.ts:197-203`; check what else reads it before deleting it). In
+   Catalonia editing shows a dropdown offering only Catalan, not today's read-only card
+   (`apps/dashboard/src/screens/receipt-language-panel.ts`).
+5. **The VAT class for new products comes back from Products and menus** into the Defaults card,
+   and the Defaults page and its sidebar entry go. A494 moved it out on 2026-10-11, when it was an
+   unheaded panel; the owner, 2026-10-16: it is a venue setting, not a page of its own. **Both
+   settings on the card fall under `venue.configure`** (owner, 2026-10-16), so the VAT default no
+   longer needs `catalogue.manage`.
+
 ## Decisions and deliberate limits
 
 - **The Calendar's day box does not add a date to an existing special day (A720, 2026-10-15).** The
