@@ -201,6 +201,33 @@ would be again by any sale written on an order that is not settled. Not re-run s
 decide what the fallback does when the order is not settled (for example, fail and leave the charge
 for reconciliation rather than show a receipt).
 
+## Check how real Stripe answers a malformed reader id, and one from another Stripe account
+
+- **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
+  left open by A519 (#1566). The add-reader route answers `reader.reference_unknown` when Stripe's
+  library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts`
+  `readers.add`), and its tests used a local server pretending to be Stripe answering 404
+  `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
+  sandbox case beside `checkout.sandbox.test.ts` would settle it.
+
+## A provider that keeps sending data slowly, or a connection that is slow to open, can take longer
+
+- **A provider that keeps sending data slowly, or a connection that is slow to open, can take
+  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Stripe
+  gives up on an attempt after 80 seconds of silence once connected and tries three times (stated
+  in `defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps
+  sending data slowly, or a connection that is slow to open, can take longer, since Stripe's limit
+  is on silence, not on the whole answer. Left open by A255 (#1145, lane A's W18c).
+
+## The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit
+
+- **The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit.**
+  The SumUp pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
+  `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other
+  screens' reads are not limited, and it was not measured in a real browser against a real silent
+  provider. Left open by A260 (several card readers' status reads at once can use up the browser's
+  connections to the box; W18c #1145 and W48 #1162).
+
 ## Decisions and deliberate limits
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

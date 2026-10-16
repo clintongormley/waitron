@@ -3348,23 +3348,22 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   rows the first resolved. The comment at `listAttempting` now says so. Found by #558 while pruning
   comments.
 
-- **`packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
-  that no source file opens a bare `.transaction(`.** Left open by A633.
-
-- **`packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
-  although the normal suite reaches it** (CLAUDE.md §2). Left open by A633.
+- **Loose ends left by A633.**
+  - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
+    that no source file opens a bare `.transaction(`.
+  - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
+    although the normal suite reaches it (CLAUDE.md §2).
 
 - **The Stripe webhook endpoint still has to be repointed by hand, at Stripe** — left behind by the
   tenant-column removal (#378, 2026-09-16). **Next action:** change it in the Stripe dashboard
   before any card payment is taken through a Stripe webhook.
   [Detail](backlog/payments.md#the-stripe-webhook-endpoint-still-has-to-be-repointed-by-hand-at-stripe)
 
-- Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.
-
-- **SumUp's older `refund` call still parses a 2xx or 4xx body as JSON**
+- **Lift `reverseViaStripe` and `reverseViaSumUp` into one neutral reversal primitive.** SumUp's
+  older `refund` call still parses a 2xx or 4xx body as JSON
   (`packages/payments-sumup/src/sumup-client.ts`, `refund` through `call`), so a 404 answered with
   an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
-  reversal primitive above. Left open by A632.
+  reversal primitive. Left open by A632.
 
 - Pre-existing `forward` retry backoff.
 
@@ -3376,15 +3375,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same durable-attempt rule. Left open by the service, ordering and billing plan.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
-- The reader pay's `tipOf` (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against
-  CLAUDE.md §3's rule that a default applies only when the field is absent; it predates B28, and
-  paying a non-zero bill on the reader is believed to accept it the same way (read, not run). Next:
-  a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept. Left by B28's
-  review (#1005), not acted on, under service Task 17 (#991).
-
-- After a free sale settles on the reader, a stale card-attempt mark on the order is left in place;
-  manual Pay is believed to leave it the same way (read, not run). Left by B28's review (#1005), not
-  acted on, under service Task 17 (#991).
+- **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
+  - The reader pay's `tipOf` (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip,
+    against CLAUDE.md §3's rule that a default applies only when the field is absent; it predates
+    B28, and paying a non-zero bill on the reader is believed to accept it the same way (read, not
+    run). Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
+  - After a free sale settles on the reader, a stale card-attempt mark on the order is left in
+    place; manual Pay is believed to leave it the same way (read, not run).
 
 - **A placed order with no invoice is not checked against stored card payments when it is
   cancelled.** Its cancel sees a card running at the reader in this process, but not a stored
@@ -3445,20 +3442,19 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.
   [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
 
-- **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
-  `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning and
-  a return from locking the phone. Left open by W102; simulated readers do not verify the phone.
-  [Detail](backlog/payments.md#check-nfc-pick-up-on-the-boxs-address)
-
-- **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
-  Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable one.
-  Left open by W102; simulated writers do not verify the phone.
-  [Detail](backlog/payments.md#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
-
-- **Check equipment labels on a physical venue printer.** Print a portable printer's label on
-  itself and a reader's label on another active printer, scan the paper and check the name and code.
-  Confirm neither print opens the drawer. Left open by W102; paper output remains unverified.
-  [Detail](backlog/payments.md#check-equipment-labels-on-a-physical-venue-printer)
+- **Loose ends left by W102 (NFC and equipment labels).**
+  - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
+    `https://waitron.local` and try equipment stickers across till screens, sign-in, QR scanning
+    and a return from locking the phone. Simulated readers do not verify the phone.
+    [Detail](backlog/payments.md#check-nfc-pick-up-on-the-boxs-address)
+  - **Check NFC sticker writing and locking on the box's address.** Write a spare sticker from
+    Equipment label, read it on the till, test a moved-sticker retry and lock only a disposable
+    one. Simulated writers do not verify the phone.
+    [Detail](backlog/payments.md#check-nfc-sticker-writing-and-locking-on-the-boxs-address)
+  - **Check equipment labels on a physical venue printer.** Print a portable printer's label on
+    itself and a reader's label on another active printer, scan the paper and check the name and
+    code. Confirm neither print opens the drawer. Paper output remains unverified.
+    [Detail](backlog/payments.md#check-equipment-labels-on-a-physical-venue-printer)
 
 - **The webhook `recordSale` hand-off** (Mode 3) and the reconcile remediation UI. The hand-off sits
   BEHIND the `AsyncPaymentProvider` seam and is therefore provider-neutral — building it against the
@@ -3487,11 +3483,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   2026-10-15); delete this entry when it lands.
 
 - **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
-  left open by A519 (#1566). The add-reader route answers `reader.reference_unknown` when Stripe's
-  library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts`
-  `readers.add`), and its tests used a local server pretending to be Stripe answering 404
-  `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
-  sandbox case beside `checkout.sandbox.test.ts` would settle it.
+  left open by A519 (#1566). Whether test-mode Stripe answers those two cases the same way is
+  unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
+  [Detail](backlog/payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
 
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
@@ -3507,18 +3501,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   payment (read, not run). Left open by W97 (#1311).
 
 - **A provider that keeps sending data slowly, or a connection that is slow to open, can take
-  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Stripe
-  gives up on an attempt after 80 seconds of silence once connected and tries three times (stated
-  in `defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps
-  sending data slowly, or a connection that is slow to open, can take longer, since Stripe's limit
-  is on silence, not on the whole answer. Left open by A255 (#1145, lane A's W18c).
+  longer** — a reader's status and the provider's available readers wait up to 250 seconds. Left
+  open by A255 (#1145, lane A's W18c).
+  [Detail](backlog/payments.md#a-provider-that-keeps-sending-data-slowly-or-a-connection-that-is-slow-to-open-can-take-longer)
 
 - **The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit.**
-  The SumUp pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
-  `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other
-  screens' reads are not limited, and it was not measured in a real browser against a real silent
-  provider. Left open by A260 (several card readers' status reads at once can use up the browser's
+  Left open by A260 (several card readers' status reads at once can use up the browser's
   connections to the box; W18c #1145 and W48 #1162).
+  [Detail](backlog/payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 - **A Stripe card payment that a crash leaves `attempting` on a placed order has no manager way to
   clear it**, and it refuses that order's collect, card payment and unpaid departure
