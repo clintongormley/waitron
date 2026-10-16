@@ -447,7 +447,7 @@ describe("Opening hours year", () => {
     expect(pressed(el)).toEqual(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"]);
   });
 
-  it("a viewer picks nothing", async () => {
+  it("a viewer's drag and double-click pick no run and open nothing", async () => {
     const el = await mount(yearModel(), { readOnly: true });
     const runs = opensRun(el);
     await commands.mouseDrag(["2027-10-20", "2027-10-21", "2027-10-22", "2027-10-23"].map(daySel));

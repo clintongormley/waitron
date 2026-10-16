@@ -38,7 +38,7 @@ export default defineConfig({
             provider: playwright({}),
             headless: true,
             instances: [{ browser: "chromium" }],
-            // The dashboard a11y suites import a11y-helpers.ts, whose beforeEach runs this command.
+            // The dashboard a11y suites import a11y-helpers.ts, whose beforeEach runs `parkPointer`.
             commands: { ...parkPointerCommands, ...pointerGestureCommands },
           },
         },

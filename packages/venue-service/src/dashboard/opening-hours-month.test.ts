@@ -735,7 +735,7 @@ describe("Opening hours month", () => {
     expect(pressed(el)).toEqual(DRAG);
   });
 
-  it("a viewer picks nothing", async () => {
+  it("a viewer's drag and double-click pick no run and open nothing", async () => {
     const el = await mount(monthModel(), { readOnly: true });
     const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
     await commands.mouseDrag(DRAG.map(daySel));

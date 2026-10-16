@@ -245,7 +245,10 @@ per-pull-request signal.
 the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
 `packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
 move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
-Owner's call.
+Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position:
+in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-service`'s Vitest
+config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
+`scripts/mutation-shard.test.mjs` pins.
 
 ## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
 

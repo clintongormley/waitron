@@ -5878,7 +5878,7 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
   the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
-  Owner's call.
+  Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
   [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left

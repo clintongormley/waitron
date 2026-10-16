@@ -2084,7 +2084,8 @@ stretch. A department paints its periods and Closed; a zone paints Open and Clos
 department's day, with the zone's season closures drawn as Closed. A date's ⋮ offers Copy to… and
 Clear. The grid is drawn from the first date's changeover; when the dates' changeovers differ, a
 notice says so. Opened on a public holiday with no special day, a new day starts with the holiday's
-name and date and can be saved as it opened; when a special day of that name exists, the painter
+name and its date (on a picked run whose first date is the holiday, every date of the run) and can
+be saved as it opened; when a special day of that name exists, the painter
 first offers Add to <name>, which opens the one with the latest date with this date, or every date of the picked run, added as an
 unsaved change, or New special day; once the new day is edited or a save of it is sent, no offer is made. Save stays quiet until the draft changes and sends the name,
 Every year, the dates and their Closed ticks, and paint only for each department or zone and date

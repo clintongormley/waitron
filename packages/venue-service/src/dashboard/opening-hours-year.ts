@@ -196,7 +196,7 @@ export class OpeningHoursYearView extends LitElement {
   @state() private areaBusy = false;
 
   #connection = {};
-  #picker = new DayPicker(this, {
+  #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     dates: () => this.model?.days.map((day) => day.date) ?? [],
     canPick: () => !this.readOnly,
@@ -221,8 +221,8 @@ export class OpeningHoursYearView extends LitElement {
     if (!changes.has("model")) return;
     const before = changes.get("model") as OpeningHoursYear | undefined;
     if (before?.year !== this.model?.year) {
-      this.#picker.clear();
-      this.#picker.forgetFocus();
+      this.#dayPicker.clear();
+      this.#dayPicker.forgetFocus();
     }
     if (before?.area.addressKey !== this.model?.area.addressKey) {
       this.#areaRequest = {};
@@ -250,7 +250,7 @@ export class OpeningHoursYearView extends LitElement {
     const key = `${yearKey(model.year)}-${month}`;
     const grid = monthGrid(key);
     const headingId = `month-${month}`;
-    const handlers = this.#picker.handlers;
+    const handlers = this.#dayPicker.handlers;
     return html`<section class="month" data-month=${key}>
       <button
         type="button"
@@ -298,7 +298,7 @@ export class OpeningHoursYearView extends LitElement {
                     type="button"
                     class="day"
                     tabindex=${date === stop ? 0 : -1}
-                    aria-pressed=${this.#picker.isPicked(date) ? "true" : "false"}
+                    aria-pressed=${this.#dayPicker.isPicked(date) ? "true" : "false"}
                     aria-label=${[
                       formatLongDate(date),
                       day?.specialDay?.name,
@@ -452,7 +452,7 @@ export class OpeningHoursYearView extends LitElement {
     </tr>`;
     const prefix = `${yearKey(model.year)}-`;
     const stop =
-      [this.#picker.focusDate, model.today].find(
+      [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
     return html`<season-chips
