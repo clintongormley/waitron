@@ -3827,7 +3827,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.read_only": "Este valor es de solo lectura.",
   "venue_settings.tab.venue_details": "Datos del local",
   "venue_settings.title": "Ajustes del local",
-  "venue_settings.card.business": "Empresa",
+  "venue_settings.card.business": "Negocio",
   "venue_settings.card.venue": "Local",
   "venue_settings.card.business_day": "Día de trabajo",
   "venue_settings.card.defaults": "Valores predeterminados",

@@ -2249,7 +2249,7 @@ and nothing guards it across screens:
   they keep their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a: the service-status rows and the new status's Save; the
-  kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
+  kitchen's late flags; the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
   form;
@@ -3258,7 +3258,9 @@ tab draws four cards — Business, Venue, Business day and Defaults — with
 `apps/dashboard/src/widgets/settings-card.ts`. Each card's heading is inside the card and its
 action sits in the card's header. The Venue and Defaults cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
-and the Business day card's change of start open dialogs.
+and the Business day card's change of start open dialogs. Inside each card a row puts its label
+beside its value, the label muted and the value in normal weight, and stacks them on a phone
+(`settingsRows`), as the owner's approved mock-ups draw (`docs/backlog/mockups/a755-venue-settings/`).
 
 Printer details are a navigable destination with a different edit pattern. The printer name edits
 beside the heading, network host and port edit inside Connection, and Active saves in Status. Status

@@ -1549,12 +1549,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **For the owner: the Business day card's actions with a scheduled change** — left open by A755
   (the A755 PR). The mock-up draws only "Change start". As built, a change that can still be
   altered shows "Replace change" and "Cancel scheduled change"; one past its lock shows no action
-  and the locked note.
+  and the locked note. [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **For the owner: the Venue card's lock wording** — left open by A755 (the A755 PR). The mock-up's
   foot names the field ("The time zone is locked because the venue has recorded sales."); as built
   it says one sentence per reason ("Locked: the venue has recorded sales."), and the "· locked"
-  marker beside a field names it.
+  marker beside a field names it. [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **The Venue card says nothing about a time zone locked by a past business-day change** — left open
   by A755 (the A755 PR). The server gives the reason `business_day_history`
@@ -1572,6 +1572,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **For the owner: Province on the Venue card** — left open by A755 (the A755 PR). The mock-up draws
   it editable; the server refuses every province change, so it shows as a locked row until
   _Province edits in Venue details_ below is decided. Is that right?
+  [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
   while doing A755 (the A755 PR); none had one before it either: `departments_zones`,
