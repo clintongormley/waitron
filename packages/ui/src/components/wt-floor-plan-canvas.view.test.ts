@@ -570,7 +570,7 @@ it("a keyboard turn at twice zoom gives back only the corner margin already scro
   expect(centre(other)).toEqual(before);
 });
 
-it("grid growth at twice zoom leaves a corner-bound table under the pointer", async () => {
+it("at twice zoom a corner-bound table stops at (2, 2), where its drawn outline meets the plan's edge", async () => {
   const el = await canvas("T1");
   el.tables = [
     { ...table("T1", 10, 10), placement: { ...table("T1", 10, 10).placement, rotation: 45 } },
@@ -582,8 +582,8 @@ it("grid growth at twice zoom leaves a corner-bound table under the pointer", as
   pointer(button(el), "pointerdown", 1, at.x, at.y);
   pointer(window, "pointermove", 1, at.x - 240, at.y - 240);
   await el.updateComplete;
-  expect(centre(button(el)).x).toBeCloseTo(at.x - 240);
-  expect(centre(button(el)).y).toBeCloseTo(at.y - 240);
+  expect(centre(button(el)).x).toBeCloseTo(at.x - 192);
+  expect(centre(button(el)).y).toBeCloseTo(at.y - 192);
   pointer(window, "pointercancel", 1, at.x - 240, at.y - 240);
 });
 

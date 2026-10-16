@@ -19,6 +19,7 @@ import {
   rotatedRect,
   showsName,
   snapToSquare,
+  stepInside,
 } from "../floor-plan-geometry.js";
 import { ROTATION_STEP, snapRotation } from "../floor.js";
 import { Gestures, type GesturePoint } from "../gestures.js";
@@ -780,9 +781,12 @@ export class WtFloorPlanCanvas extends LitElement {
     if (arrow === undefined) return;
     e.preventDefault();
     e.stopPropagation();
-    const x = clampToGrid(t.placement.x + arrow.dx);
-    const y = clampToGrid(t.placement.y + arrow.dy);
-    if (x === t.placement.x && y === t.placement.y) return;
+    const p = t.placement;
+    const { x, y } = stepInside(
+      { ...p, x: clampToGrid(p.x + arrow.dx), y: clampToGrid(p.y + arrow.dy) },
+      p,
+    );
+    if (x === p.x && y === p.y) return;
     this.#keyHold({ key: t.key, placement: { ...t.placement, x, y } });
     this.#move(t.key, x, y);
   }
@@ -914,8 +918,14 @@ export class WtFloorPlanCanvas extends LitElement {
     const p = drag.table.placement;
     const now = this.draft?.placement ?? p;
     if (drag.kind === "move") {
-      const x = clampToGrid(p.x + snapToSquare((e.clientX - drag.startX) / this.zoom));
-      const y = clampToGrid(p.y + snapToSquare((e.clientY - drag.startY) / this.zoom));
+      const { x, y } = stepInside(
+        {
+          ...p,
+          x: clampToGrid(p.x + snapToSquare((e.clientX - drag.startX) / this.zoom)),
+          y: clampToGrid(p.y + snapToSquare((e.clientY - drag.startY) / this.zoom)),
+        },
+        p,
+      );
       if (x !== now.x || y !== now.y) {
         this.draft = { key: drag.table.key, placement: { ...p, x, y } };
       }
