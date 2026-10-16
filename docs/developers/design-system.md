@@ -3954,13 +3954,15 @@ Opening hours' Year.
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens, and Staffing's month and
   A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
+  It follows its date as the page scrolls or the window resizes, and closes once the date scrolls
+  out of view.
   It is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
   them; then each department's hours followed by its zones' (in the Month, with one department
   picked, that department alone). A zone that follows its department reads "as <department>"; a
   zone with hours of its own lists them and its closed times, in bold as a department is. Opened
-  from the Year, it reads its date's month and says Loading… until that read answers, or that it
-  could not be read. Make a
+  from the Year, it reads its date's month and says Loading… until that read answers; when its
+  month's read fails it says so, beside any hours it already shows. Make a
   special day (Edit special day on a special-day date) opens the special-day painter (Forms above,
   hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is a
   public holiday, or on the stored day; Edit <season>'s standard week opens the season painter. A
