@@ -1,5 +1,5 @@
 import { css, html, nothing } from "lit";
-import { codeMessage, codeOf } from "@waitron/dashboard-kit";
+import { codeMessage, codeOf, t as catalogueText } from "@waitron/dashboard-kit";
 import { conjunctionList } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
@@ -7,6 +7,7 @@ import { MAX_HEADCOUNT } from "../block-model.js";
 import { areaKey, type AreaRef } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
+import { showHeadcount } from "./headcount-control.js";
 import { formatLocale } from "./format.js";
 import type { StaffingColumn } from "./staffing-grid.js";
 import { t, tf } from "./strings.js";
@@ -214,13 +215,16 @@ export function paintRow(options: PaintRowOptions) {
           ? Math.min(Math.max(value, 1), MAX_HEADCOUNT)
           : headcount();
         options.setHeadcount(next);
-        (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value = String(next);
+        showHeadcount(event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"], next);
       }}
       @focusout=${(event: FocusEvent) => {
-        (event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"]).value =
-          String(headcount());
+        showHeadcount(
+          event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"],
+          headcount(),
+        );
       }}
     ></wt-number-stepper>
+    <span class="hint" data-test="hint">${catalogueText("painter.hint").split(" · ")[0]}</span>
     <span class="hint" data-test="guide-hint">${options.guideText}</span>
     ${
       rolesError
@@ -240,6 +244,7 @@ export function staffRoleDialog(
   return html`<staff-role-dialog
     .api=${api}
     .open=${open}
+    .createLabel=${catalogueText("painter.add_and_paint")}
     @staff-role-saved=${(event: CustomEvent<StaffRole>) => {
       event.stopPropagation();
       saved(event.detail);

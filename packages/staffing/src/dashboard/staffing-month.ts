@@ -159,7 +159,7 @@ export class StaffingMonthView extends LitElement {
       button.day:focus-visible,
       .rota-week:focus-visible,
       .chip button:focus-visible {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
       .chip button {

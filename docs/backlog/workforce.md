@@ -53,25 +53,6 @@ draws from the first date's changeover and says so when the dates' changeovers d
 decision on how one grid with one time ruler shows dates with different changeovers. Left open by
 A585-4.
 
-## A710. Staffing painter polish
-
-Found by A585-4's look at both painters and its review:
-
-- The staffing paint row has no "Drag down a day to paint…" hint; Opening hours' paint row has one
-  (`painter.hint`, `packages/venue-service/src/dashboard/paint-row.ts`).
-- "+ New staff role" opens the staff-role dialog titled "Add staff role" with a Save button; the
-  period dialog opened from Opening hours' painter says "Add and paint with it".
-- A block shorter than about 45 minutes shows no text.
-- An editable block has no hover tooltip; a read-only one has its full name as `title`
-  (`staffing-grid.ts`).
-- The block menu's How many ignores a value outside 1–50, while the paint row's How many puts it
-  back within 1–50. Two tests pin the two rules: "How many changes the block's headcount, within 1
-  to 50, and keeps the menu open" (`staffing-grid.test.ts`) and "puts How many back to the number
-  it paints when it is given one it cannot use…" (`staffing-season-painter.test.ts`).
-- In the Staffing month, a focused day's ring and today's frame look alike.
-
-Left open by A585-4.
-
 ## A711. Shared staffing painter code
 
 - `staffing-season-painter.ts` and `staffing-special-day-painter.ts` (under

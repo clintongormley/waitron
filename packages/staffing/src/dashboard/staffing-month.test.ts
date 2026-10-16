@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { StaffingMonth } from "../staffing-types.js";
@@ -785,4 +786,19 @@ describe("week link labels fit narrow month columns", () => {
       expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
     }
   });
+});
+
+it("A710 uses the theme focus ring outside the day, independently of today's inset frame", async () => {
+  const { el } = await mount({ canWrite: true });
+  el.style.setProperty("--wt-focus-ring", "4px dashed rgb(90, 80, 70)");
+  const today = cell(el, "2026-12-02").querySelector<HTMLButtonElement>("button.day")!;
+  today.focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowLeft}");
+  const style = getComputedStyle(today);
+  expect(today.matches(":focus-visible")).toBe(true);
+  expect(style.outlineStyle).toBe("dashed");
+  expect(style.outlineWidth).toBe("4px");
+  expect(style.outlineColor).toBe("rgb(90, 80, 70)");
+  expect(parseFloat(style.outlineOffset)).toBeGreaterThan(0);
+  expect(style.boxShadow).toContain("inset");
 });

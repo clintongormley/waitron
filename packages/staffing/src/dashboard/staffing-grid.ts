@@ -33,6 +33,7 @@ import {
 } from "../block-model.js";
 import { blockSpan, type StaffingBlock } from "../slots.js";
 import type { StaffRole, StaffingGuideRange } from "../staffing-types.js";
+import { showHeadcount } from "./headcount-control.js";
 import { roleInitials } from "./role-initials.js";
 import { peopleNeeded, t } from "./strings.js";
 
@@ -93,6 +94,7 @@ export class StaffingGrid extends LitElement {
          foot into a column past its end edge, and text too wide for its line onto that line's
          hidden second row. Each leads with an empty item, so even the first line can wrap away. */
       .block {
+        container-type: size;
         display: flex;
         flex-flow: column wrap;
         align-content: flex-start;
@@ -133,6 +135,7 @@ export class StaffingGrid extends LitElement {
         z-index: 2;
       }
       .block .name {
+        font-size: min(var(--wt-font-size-sm), calc(100cqb / 1.25));
         font-weight: var(--wt-font-weight-bold);
       }
       /* At most a quarter of the block, so a short block keeps both edges and a body to click. */
@@ -457,15 +460,18 @@ export class StaffingGrid extends LitElement {
     this.#emit(selected.key, changeBlock(this.#day(selected.key), selected.index, { staffRoleId }));
     void this.#focusAfter(selected.key, selected.index);
   }
-  #changeHeadcount(value: string): void {
+  #changeHeadcount(value: string): number | undefined {
     const selected = this.selected;
-    const headcount = Number(value);
-    if (selected === null || !/^\d+$/.test(value) || headcount < 1 || headcount > MAX_HEADCOUNT)
-      return;
+    if (selected === null) return undefined;
+    const number = Number(value);
+    const headcount = Number.isInteger(number)
+      ? Math.min(Math.max(number, 1), MAX_HEADCOUNT)
+      : selected.block.headcount;
     this.selected = { ...selected, block: { ...selected.block, headcount } };
     const day = this.#day(selected.key);
-    if (day[selected.index]?.headcount === headcount) return;
-    this.#emit(selected.key, changeBlock(day, selected.index, { headcount }));
+    if (day[selected.index]?.headcount !== headcount)
+      this.#emit(selected.key, changeBlock(day, selected.index, { headcount }));
+    return headcount;
   }
   #deleteAt(key: string, index: number): void {
     const day = deleteBlock(this.#day(key), index);
@@ -529,6 +535,7 @@ export class StaffingGrid extends LitElement {
       data-index=${index}
       data-colour=${colour ?? nothing}
       aria-label=${label}
+      title=${label}
       aria-haspopup="dialog"
       aria-controls="block-menu"
       aria-expanded=${expanded ? "true" : "false"}
@@ -632,8 +639,23 @@ export class StaffingGrid extends LitElement {
                 min="1"
                 max=${MAX_HEADCOUNT}
                 .value=${String(block.headcount)}
-                @wt-change=${(event: CustomEvent<{ value: string }>) =>
-                  this.#changeHeadcount(event.detail.value)}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (event.detail.value === "") return;
+                  const next = this.#changeHeadcount(event.detail.value);
+                  if (next !== undefined) {
+                    const control =
+                      event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
+                    showHeadcount(control, next);
+                  }
+                }}
+                @focusout=${(event: FocusEvent) => {
+                  if (this.selected !== null) {
+                    const control =
+                      event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
+                    showHeadcount(control, this.selected.block.headcount);
+                  }
+                }}
               ></wt-number-stepper>
               <wt-button
                 variant="danger"

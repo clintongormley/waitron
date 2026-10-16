@@ -511,11 +511,29 @@ test("How many changes the block's headcount, within 1 to 50, and keeps the menu
   await el.updateComplete;
   expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 3 }] }]);
   expect(menu(el).matches(":popover-open")).toBe(true);
-  for (const value of ["0", "51", "", "2.5", "2"])
-    stepper(el).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-    );
-  expect(seen).toHaveLength(1);
+  el.addEventListener("staffing-change", (event) => {
+    el.days = new Map([[event.detail.key, event.detail.blocks]]);
+  });
+  for (const [value, expected] of [
+    ["0", 1],
+    ["51", 50],
+    ["2.5", 50],
+    ["", 50],
+    ["2", 2],
+  ] as const) {
+    const input = stepper(el).shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await stepper(el).updateComplete;
+    if (value === "") {
+      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+      await stepper(el).updateComplete;
+    }
+    expect(input.value, value).toBe(String(expected));
+    expect(menu(el).matches(":popover-open")).toBe(true);
+  }
+  expect(seen.map((change) => change.blocks![0]!.headcount)).toEqual([3, 1, 50, 2]);
 });
 
 test("Delete in the menu removes the block; Backspace on a focused block removes it too", async () => {
@@ -1232,4 +1250,45 @@ test("A724 a long department name leaves the period visible in its lane", async 
   const labels = band.querySelectorAll<HTMLElement>(".guide-label");
   expect(labels[1]!.textContent).toContain("Lunch");
   expect(labels[1]!.getBoundingClientRect().top).toBeLessThan(band.getBoundingClientRect().bottom);
+});
+
+test("A710 editable blocks offer their full day, name, count and times as a hover tooltip", async () => {
+  const el = await grid({ tue: [headChef] });
+  expect(block(el, "tue").title).toBe("Tuesday, Head chef, 1 person, 09:00–16:30");
+});
+
+for (const [width, height] of [
+  [390, 844],
+  [1280, 900],
+] as const)
+  test(`A710 short blocks keep their initials wholly visible at ${width}px`, async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, height);
+      const el = await grid({
+        mon: [
+          { ...headChef, startsAt: "09:00", endsAt: "09:15" },
+          { ...sous, startsAt: "10:00", endsAt: "10:30" },
+        ],
+      });
+      for (const initials of ["HC", "SC"]) {
+        const text = blockTexts(el).find((text) => text.text === initials)!;
+        expect(inside(text.box, text.clip), initials).toBe(true);
+        expect(text.box.height).toBeGreaterThan(0);
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+test("painting across an existing staffing block adds a block and retains the original", async () => {
+  const el = await grid({ mon: [headChef] });
+  const seen = changes(el);
+  await drag(el, "mon", 240, 300, block(el, "mon"));
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "10:00", endsAt: "11:00" }],
+    },
+  ]);
 });

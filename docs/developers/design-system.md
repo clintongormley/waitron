@@ -2113,8 +2113,12 @@ venue-service exports from `@waitron/venue-service/painter`. The season painter'
 heading "<season>: standard week", ‹ the season chip ›, a department-or-prep-station picker, and
 Cancel and Save, over a column per weekday. The special-day painter's bar holds ✕, the special day's name, the
 picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
-+ New staff role, which opens the staff-role dialog and chooses the role it saves, and How many,
-from 1 to 50. Dragging down a column adds a block of the chosen role and number, dragging a block's
++ New staff role, which opens the staff-role dialog with “Add and paint with it” and chooses the
+role it saves, and How many, from 1 to 50. The paint row reuses the “Drag down a day to paint”
+clause from Opening hours' hint; staffing adds overlapping blocks rather than replacing them.
+Both How many controls clamp whole numbers to 1–50, restore the last count for other text,
+and let you clear the input while typing, restoring the count when you leave it. A block's
+initials shrink to fit its height; its hover tooltip keeps the full day, role name, count and times. Dragging down a column adds a block of the chosen role and number, dragging a block's
 top or bottom edge resizes it, and clicking a block offers another staff role, How many and Delete.
 Each column's ⋮ offers Copy to… and Clear; in the special-day painter it also offers Follow the
 season, and a date that follows the season reads "Follows the season". Behind the staffing blocks,

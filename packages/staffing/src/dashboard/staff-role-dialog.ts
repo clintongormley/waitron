@@ -61,6 +61,7 @@ export class StaffRoleDialog extends LitElement {
   @property({ attribute: false }) api!: StaffingApi;
   /** The staff role being edited; absent for a new one. */
   @property({ attribute: false }) staffRole?: StaffRole;
+  @property() createLabel = "";
   @state() private draft: Draft = draftOf();
   @state() private attempted = false;
   @state() private busy = false;
@@ -337,7 +338,7 @@ export class StaffRoleDialog extends LitElement {
           ?disabled=${action.unchanged || this.busy || (this.attempted && this.failsOwnChecks)}
           ?loading=${this.busy}
           @click=${() => void this.save()}
-          >${t("staffing.role.save")}</wt-button
+          >${!this.savedId && this.createLabel ? this.createLabel : t("staffing.role.save")}</wt-button
         >
       </wt-form-actions>`;
   }
