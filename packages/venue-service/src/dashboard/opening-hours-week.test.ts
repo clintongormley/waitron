@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
@@ -16,8 +16,10 @@ beforeEach(async () => {
   await page.viewport(1280, 800);
   expect(window.innerWidth).toBe(1280);
 });
-afterEach(() => {
+afterEach(async () => {
+  await commands.parkPointer();
   for (const host of hosts.splice(0)) host.remove();
+  window.scrollTo(0, 0);
   setLocale("en");
 });
 
@@ -312,5 +314,166 @@ describe("Opening hours week", () => {
     expect(atEnd.getBoundingClientRect().right).toBeLessThanOrEqual(
       el.getBoundingClientRect().right,
     );
+  });
+});
+
+/** December's model with the Restaurant's Lunch on 2 December moved to 16:00–17:00. */
+function sliverModel(): OpeningHoursMonth {
+  const model = monthModel();
+  model.days = model.days.map((d) =>
+    d.date === "2026-12-02"
+      ? {
+          ...d,
+          departments: d.departments.map((dep) =>
+            dep.departmentId === "rest"
+              ? {
+                  ...dep,
+                  ranges: dep.ranges.map((r) =>
+                    r.periodId === "lunch" ? { ...r, startsAt: "16:00", endsAt: "17:00" } : r,
+                  ),
+                }
+              : dep,
+          ),
+        }
+      : d,
+  );
+  return model;
+}
+
+const blockSelector = (date: LocalDate, key: string, nth: number) =>
+  `opening-hours-week section[data-date="${date}"] .row[data-row="${key}"] .block:nth-child(${nth})`;
+const block = (el: OpeningHoursWeekView, date: LocalDate, key: string, nth: number) =>
+  track(el, date, key).querySelector<HTMLElement>(`.block:nth-child(${nth})`)!;
+const tip = (el: OpeningHoursWeekView) => testId(el, "block-tip")!;
+const open = (el: OpeningHoursWeekView) => tip(el).matches(":popover-open");
+const frames = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+describe("Opening hours week: a block's label", () => {
+  it("a sliver's label shows whole when pointed at, above it", async () => {
+    const el = await mount({ model: sliverModel() });
+    const lunch = block(el, "2026-12-02", "rest", 2);
+    expect(text(lunch)).toBe("Lunch 16:00–17:00");
+    const words = lunch.querySelector<HTMLElement>(".text")!;
+    expect(words.scrollWidth).toBeGreaterThan(words.clientWidth);
+    expect(open(el)).toBe(false);
+    await userEvent.hover(lunch);
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Lunch 16:00–17:00");
+    expect(tip(el).getBoundingClientRect().bottom).toBeLessThan(lunch.getBoundingClientRect().top);
+    await commands.parkPointer();
+    expect(open(el)).toBe(false);
+
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    document.body.append(spacer);
+    hosts.push(spacer);
+    const first = block(el, "2026-11-30", "rest", 1);
+    window.scrollTo(0, first.getBoundingClientRect().top + window.scrollY);
+    await frames();
+    expect(Math.abs(first.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+    await userEvent.hover(first);
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+    expect(tip(el).getBoundingClientRect().top).toBeGreaterThan(
+      first.getBoundingClientRect().bottom,
+    );
+  });
+
+  it("a click pins it, and leaving does not hide a pinned tip", async () => {
+    const el = await mount({ model: sliverModel() });
+    const lunch = block(el, "2026-12-02", "rest", 2);
+    await userEvent.click(lunch);
+    expect(open(el)).toBe(true);
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    await userEvent.click(lunch);
+    expect(open(el)).toBe(false);
+  });
+
+  it("a click elsewhere hides a pinned tip", async () => {
+    const el = await mount({ model: sliverModel() });
+    await userEvent.click(block(el, "2026-12-02", "rest", 2));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    await userEvent.click(testId(el, "week-month")!);
+    expect(open(el)).toBe(false);
+  });
+
+  it("Escape hides it and goes no further", async () => {
+    const el = await mount({ model: sliverModel() });
+    await userEvent.click(block(el, "2026-12-02", "rest", 2));
+    expect(open(el)).toBe(true);
+    const seen: string[] = [];
+    const listener = (event: KeyboardEvent) => seen.push(event.key);
+    document.addEventListener("keydown", listener);
+    try {
+      await userEvent.keyboard("{Escape}");
+    } finally {
+      document.removeEventListener("keydown", listener);
+    }
+    expect(open(el)).toBe(false);
+    expect(seen).toEqual([]);
+  });
+
+  it("a tap shows it and it stays after the tap's own pointerleave", async () => {
+    const el = await mount({ model: sliverModel() });
+    const lunch = block(el, "2026-12-02", "rest", 2);
+    const order: string[] = [];
+    for (const type of ["pointerenter", "pointerdown", "pointerup", "pointerleave", "click"])
+      lunch.addEventListener(type, () => order.push(type));
+    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
+    await frames();
+    expect(order).toEqual(["pointerenter", "pointerdown", "pointerup", "pointerleave", "click"]);
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Lunch 16:00–17:00");
+    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
+    await frames();
+    expect(open(el)).toBe(false);
+    await commands.touchGesture({ at: blockSelector("2026-12-02", "rest", 2) });
+    await frames();
+    expect(open(el)).toBe(true);
+    await commands.touchGesture({
+      at: 'opening-hours-week [data-test="week-month"][data-month="2026-12"]',
+    });
+    await frames();
+    expect(open(el)).toBe(false);
+  });
+
+  it("a scroll hides a pinned tip", async () => {
+    const el = await mount({ model: sliverModel() });
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    document.body.append(spacer);
+    hosts.push(spacer);
+    await userEvent.click(block(el, "2026-12-02", "rest", 2));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    window.scrollBy(0, 40);
+    await frames();
+    expect(window.scrollY).toBeGreaterThan(0);
+    expect(open(el)).toBe(false);
+  });
+
+  it("a faded zone piece names its zone", async () => {
+    const el = await mount({ departmentId: "rest" });
+    const faded = block(el, "2026-12-02", "terrace", 2);
+    expect(faded.hasAttribute("data-faded")).toBe(true);
+    await userEvent.hover(faded);
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Terrace · Lunch 13:00–16:00");
+  });
+
+  it("stays on a phone's screen", async () => {
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    const el = await mount();
+    const dinner = block(el, "2026-12-02", "rest", 3);
+    await userEvent.hover(dinner);
+    expect(open(el)).toBe(true);
+    const box = tip(el).getBoundingClientRect();
+    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(box.left).toBeGreaterThanOrEqual(8);
+    expect(box.left).toBeLessThan(dinner.getBoundingClientRect().left);
   });
 });

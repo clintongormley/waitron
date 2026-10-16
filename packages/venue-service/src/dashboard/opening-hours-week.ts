@@ -39,6 +39,22 @@ function titleCandidates(): TitlePart[][] {
   return widthCandidates;
 }
 
+const TIP_EDGE = 8;
+
+/** Shows `tip` and places it in the same call, so it never paints where it was last: above
+ *  `block` when it fits inside the window, else below; its left lined up with the block's and
+ *  kept inside the window's edges. */
+function placeTip(tip: HTMLElement, block: HTMLElement): void {
+  if (!tip.matches(":popover-open")) tip.showPopover();
+  tip.style.maxWidth = `${window.innerWidth - 2 * TIP_EDGE}px`;
+  const gap = parseFloat(getComputedStyle(tip).getPropertyValue("--wt-space-1"));
+  const at = block.getBoundingClientRect();
+  const size = tip.getBoundingClientRect();
+  const above = at.top - gap - size.height;
+  tip.style.top = `${above >= 0 ? above : at.bottom + gap}px`;
+  tip.style.left = `${Math.max(TIP_EDGE, Math.min(at.left, window.innerWidth - TIP_EDGE - size.width))}px`;
+}
+
 function clockText(cutover: string, minutes: number): string {
   const [h, m] = cutover.split(":").map(Number) as [number, number];
   const total = (h * 60 + m + minutes) % 1440;
@@ -194,6 +210,18 @@ export class OpeningHoursWeekView extends LitElement {
       .block[data-faded] {
         opacity: var(--wt-opacity-disabled);
       }
+      .tip {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface-raised);
+        box-shadow: var(--wt-shadow-1);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+      }
       .text {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -209,6 +237,80 @@ export class OpeningHoursWeekView extends LitElement {
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
   @property({ attribute: false }) departments: readonly MonthDepartment[] = [];
+
+  /** The block the tip was pinned to by a click or tap; leaving does not hide a pinned tip. */
+  #pinned: HTMLElement | null = null;
+  #shownFor: HTMLElement | null = null;
+
+  #tip(): HTMLElement | null {
+    return this.renderRoot.querySelector<HTMLElement>('[data-test="block-tip"]');
+  }
+
+  #showTip(block: HTMLElement, label: string, pinned: boolean): void {
+    const tip = this.#tip();
+    if (!tip) return;
+    tip.textContent = label;
+    this.#shownFor = block;
+    this.#pinned = pinned ? block : null;
+    placeTip(tip, block);
+  }
+
+  #hideTip(): void {
+    this.#pinned = null;
+    this.#shownFor = null;
+    const tip = this.#tip();
+    if (tip?.matches(":popover-open")) tip.hidePopover();
+  }
+
+  #leave(event: PointerEvent, keepOn: Element | null): void {
+    if (this.#pinned || !this.#shownFor) return;
+    if (keepOn && event.relatedTarget instanceof Node && keepOn.contains(event.relatedTarget))
+      return;
+    this.#hideTip();
+  }
+
+  #onWindowClick = (event: MouseEvent): void => {
+    if (!this.#shownFor) return;
+    const path = event.composedPath();
+    const tip = this.#tip();
+    if (
+      path.some(
+        (node) =>
+          node === tip ||
+          (node instanceof HTMLElement &&
+            node.classList.contains("block") &&
+            this.renderRoot.contains(node)),
+      )
+    )
+      return;
+    this.#hideTip();
+  };
+
+  #onWindowKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.#shownFor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#hideTip();
+  };
+
+  #onScroll = (): void => {
+    if (this.#shownFor) this.#hideTip();
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    window.addEventListener("click", this.#onWindowClick);
+    window.addEventListener("keydown", this.#onWindowKeydown, { capture: true });
+    window.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    window.removeEventListener("click", this.#onWindowClick);
+    window.removeEventListener("keydown", this.#onWindowKeydown, { capture: true });
+    window.removeEventListener("scroll", this.#onScroll, { capture: true });
+    this.#hideTip();
+  }
 
   #emit<T>(name: string, detail: T): void {
     this.dispatchEvent(new CustomEvent<T>(name, { detail, bubbles: true, composed: true }));
@@ -287,7 +389,14 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${days && this.model ? this.#week(this.model, days) : nothing}`;
+      ${days && this.model ? this.#week(this.model, days) : nothing}
+      <div
+        popover="manual"
+        class="tip"
+        data-test="block-tip"
+        aria-hidden="true"
+        @pointerleave=${(event: PointerEvent) => this.#leave(event, this.#shownFor)}
+      ></div>`;
   }
 
   #show(model: OpeningHoursMonth) {
@@ -374,6 +483,16 @@ export class OpeningHoursWeekView extends LitElement {
                         (block.periodId && names.period(block.periodId).colour) || nothing
                       }
                       ?data-faded=${block.faded}
+                      @pointerenter=${(event: PointerEvent) => {
+                        if (event.pointerType === "mouse" && !this.#pinned)
+                          this.#showTip(event.currentTarget as HTMLElement, block.label, false);
+                      }}
+                      @pointerleave=${(event: PointerEvent) => this.#leave(event, this.#tip())}
+                      @click=${(event: MouseEvent) => {
+                        const target = event.currentTarget as HTMLElement;
+                        if (this.#pinned === target) this.#hideTip();
+                        else this.#showTip(target, block.label, true);
+                      }}
                       style=${styleMap({
                         left: `${(block.start / span) * 100}%`,
                         width: `${((block.end - block.start) / span) * 100}%`,
