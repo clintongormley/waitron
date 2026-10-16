@@ -1481,10 +1481,12 @@ async function bootServer(
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const operationDescriptionDefault = enabledFiscal.venueFields?.defaults?.operationDescription;
   const till: TillConfig = {
     ...config.till,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
+    operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the
@@ -1798,6 +1800,7 @@ async function bootServer(
       locationId: till.locationId,
       contentDefaultLanguage: venueLocale,
       operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
+      operationDescriptionDefault,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     core: moduleCoreServices(till, tableRemovals),

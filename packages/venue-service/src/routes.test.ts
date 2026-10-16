@@ -73,7 +73,10 @@ interface Fixture {
   categoryId: string;
 }
 
-async function fixture(operationDescriptionRequired?: boolean): Promise<Fixture> {
+async function fixture(
+  operationDescriptionRequired?: boolean,
+  operationDescriptionDefault?: string,
+): Promise<Fixture> {
   await seedTenant(db);
   const [location] = await db
     .insert(locations)
@@ -140,7 +143,11 @@ async function fixture(operationDescriptionRequired?: boolean): Promise<Fixture>
     app,
     {
       db,
-      cfg: Object.assign({ locationId: scopedLocationId }, { operationDescriptionRequired }),
+      cfg: Object.assign(
+        { locationId: scopedLocationId },
+        { operationDescriptionRequired },
+        operationDescriptionDefault === undefined ? {} : { operationDescriptionDefault },
+      ),
       core: {
         seatTable: () => Promise.reject(new Error("route fixture: seating needs the server seat")),
         floorDeletion: {
@@ -3954,6 +3961,36 @@ describe("department description setup in the live model", () => {
           ).json()
         ).readiness,
       ).not.toContainEqual(expect.objectContaining({ departmentId: department.id }));
+    },
+  );
+  it.each([
+    undefined,
+    "{}",
+    JSON.stringify({ operationDescription: "  \t " }),
+    '{"operationDescription":23}',
+    "{broken",
+    JSON.stringify({ operationDescription: "x".repeat(501) }),
+    JSON.stringify({ operationDescription: "bad\u0001text" }),
+  ])(
+    "a required description with a default offered reports no department for receipt %j",
+    async (receipt) => {
+      const fx = await fixture(true, "Seat default");
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Dining" }),
+      );
+      if (receipt !== undefined)
+        await db.execute(
+          sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${receipt}, ${"2026-10-12T12:00:00Z"})`,
+        );
+      expect(
+        (
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json()
+        ).readiness,
+      ).not.toContainEqual(
+        expect.objectContaining({ code: "department.operation_description_required" }),
+      );
     },
   );
   it.each([false, undefined])(

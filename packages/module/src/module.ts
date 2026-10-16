@@ -51,6 +51,7 @@ export interface ModuleRouteContext {
     locationId: LocationId;
     contentDefaultLanguage?: string;
     operationDescriptionRequired?: boolean;
+    operationDescriptionDefault?: string;
   };
   maxUploadBytes?: number;
   core: CoreServices;
