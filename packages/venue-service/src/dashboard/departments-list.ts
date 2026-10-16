@@ -7,12 +7,10 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import {
-  placedTables,
   type Department,
   type ServiceZone,
   type VenueServiceApi,
   type VenueServiceView,
-  type ZoneFloorPlan,
 } from "./client.js";
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
@@ -143,43 +141,14 @@ export class DepartmentsList extends LitElement {
     }
   }
   @property({ attribute: false }) api?: VenueServiceApi;
-  @state() private plan?: ZoneFloorPlan;
-  @state() private planFailed = false;
-  private planDetach?: () => void;
-  private planZone = "";
-  private planApi?: VenueServiceApi;
   override disconnectedCallback() {
     this.drag.dispose();
     this.generation = {};
     this.moving = new Set();
-    this.planDetach?.();
-    this.planDetach = undefined;
-    this.planZone = "";
-    this.planApi = undefined;
     super.disconnectedCallback();
   }
   protected override willUpdate() {
     this.drag.reconcile();
-    if (
-      this.planZone &&
-      (this.api !== this.planApi ||
-        !this.model?.zones.some(
-          (zone) =>
-            zone.id === this.planZone &&
-            zone.active !== false &&
-            this.model?.departments.some(
-              (department) => department.id === zone.departmentId && department.active,
-            ) &&
-            this.model?.floorZones.find((floor) => floor.id === zone.id)?.active !== false,
-        ))
-    ) {
-      this.planDetach?.();
-      this.planDetach = undefined;
-      this.planZone = "";
-      this.planApi = undefined;
-      this.plan = undefined;
-      this.planFailed = false;
-    }
   }
   @property({ attribute: false }) model?: VenueServiceView;
   @property({ attribute: false }) receiptAvailable?: (department: Department) => boolean;
@@ -240,26 +209,36 @@ export class DepartmentsList extends LitElement {
       row.kind === "department" ? { departmentId: row.id } : { zoneId: row.id },
     );
   }
-  #watchPlan(id: string) {
-    if (id === this.planZone && this.api === this.planApi) return;
-    this.planDetach?.();
-    this.planZone = id;
-    this.planApi = this.api;
-    this.plan = undefined;
-    this.planFailed = false;
-    this.planDetach = this.api?.watchZoneFloorPlan(
-      id,
-      (plan) => {
-        this.plan = plan;
-        this.planFailed = false;
-      },
-      () => {
-        this.planFailed = true;
-      },
-      () => {
-        this.planFailed = false;
-      },
-    );
+  #also(row: DepartmentZoneRow) {
+    if (row.kind === "department") {
+      if (this.receiptAvailable?.(row) === false) return nothing;
+      const label = t("venue.receipt");
+      return html`<a
+        part="link"
+        data-own-click
+        data-test=${`receipt-department-${row.id}`}
+        aria-label=${`${row.name}: ${label}`}
+        href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
+        @click=${(event: MouseEvent) => {
+          if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+            return;
+          event.preventDefault();
+          this.#emit("edit-receipt", { departmentId: row.id });
+        }}
+        >${label}</a
+      >`;
+    }
+    const placed =
+      this.model!.floorZones.find((floor) => floor.id === row.id)?.hasPlacedTables !== false;
+    const label = t(placed ? "venue.floor_plan" : "venue.add_floor_plan");
+    // No data-own-click: the dashboard shell's link handler must route this href itself.
+    return html`<a
+      part="link"
+      data-test=${`floor-plan-zone-${row.id}`}
+      aria-label=${`${row.name}: ${label}`}
+      href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent("/manage/venue-operations")}`}
+      >${label}</a
+    >`;
   }
   #policy(row: DepartmentZoneRow, field: PolicyField) {
     const parentId = row.kind === "department" ? row.id : row.departmentId;
@@ -292,30 +271,13 @@ export class DepartmentsList extends LitElement {
       ? [
           { key: `open-department-${row.id}`, label: t("venue.edit"), event: "open-department" },
           { key: `add-zone-${row.id}`, label: t("venue.add_department_zone"), event: "add-zone" },
-          {
-            key: `receipt-department-${row.id}`,
-            label: t("venue.edit_receipt"),
-            event: "edit-receipt",
-          },
         ]
       : [{ key: `edit-zone-${row.id}`, label: t("venue.edit"), event: "edit-zone" }];
-    if (department && this.receiptAvailable && !this.receiptAvailable(row))
-      actions.splice(
-        actions.findIndex((action) => action.event === "edit-receipt"),
-        1,
-      );
     const detail = department ? { departmentId: row.id } : { zoneId: row.id };
-    const placed =
-      this.planZone === row.id && this.plan && placedTables(this.plan.tables).length > 0;
     return html`<wt-row-actions
       data-zone-id=${department ? nothing : row.id}
       label=${`${row.name}: ${t("venue.actions")}`}
       align="end"
-      @click=${(event: MouseEvent) => {
-        const menu = event.currentTarget as HTMLElementTagNameMap["wt-row-actions"];
-        if (!department && event.composedPath().includes(menu.shadowRoot!.querySelector("button")!))
-          this.#watchPlan(row.id);
-      }}
     >
       ${actions.map(
         (action) =>
@@ -329,7 +291,6 @@ export class DepartmentsList extends LitElement {
             >${action.label}</wt-button
           >`,
       )}
-      ${department ? nothing : html`${this.planZone === row.id && this.planFailed ? html`<p role="alert" part="setup-issue">${t("venue.floor_plan_load_error")}</p>` : nothing}<a part="link" data-test=${`floor-plan-zone-${row.id}`} href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent("/manage/venue-operations")}`}>${t(placed ? "venue.zone_floor_plan" : "venue.zone_add_floor_plan")}</a>`}
       <wt-button
         variant="danger"
         data-test=${`delete-${row.kind}-${row.id}`}
@@ -406,20 +367,22 @@ export class DepartmentsList extends LitElement {
       {
         key: "orderStart",
         label: t("venue.order_start"),
-        choosable: "shown",
         cell: (row) => this.#policy(row, "orderStart"),
       },
       {
         key: "paidWhen",
         label: t("venue.counter_paid_when"),
-        choosable: "shown",
         cell: (row) => this.#policy(row, "paidWhen"),
       },
       {
         key: "receiptPrintMode",
         label: t("venue.print_receipt"),
-        choosable: "shown",
         cell: (row) => this.#policy(row, "receiptPrintMode"),
+      },
+      {
+        key: "also",
+        label: t("venue.also_edit"),
+        cell: (row) => this.#also(row),
       },
       {
         key: "actions",
@@ -458,7 +421,7 @@ export class DepartmentsList extends LitElement {
       ${model.departments.length > 0 && model.readiness.some((issue) => issue.code === "venue.department_missing") ? html`<p class="issue" data-test="no-enabled-department">${t("venue.no_enabled_department")}</p>` : nothing}
       ${this.moveFailure ? html`<p role="alert">${this.moveFailure}</p>` : nothing}
       <wt-data-table
-        viewKey="waitron.venue.departments"
+        viewKey="waitron.venue.departments-zones"
         aria-label=${t("venue.departments")}
         .rows=${rows}
         .columns=${columns}
@@ -469,16 +432,6 @@ export class DepartmentsList extends LitElement {
         .rowClickLabel=${(row: DepartmentZoneRow) => `${t("venue.edit")}: ${row.name}`}
         .emptyMessage=${t("venue.no_departments")}
         .noMatchesMessage=${tableNoMatches()}
-        customiseColumnsLabel=${t("venue.customise_columns")}
-        customiseLabel=${t("venue.customise")}
-        restoreColumnsLabel=${t("venue.restore_columns")}
-        doneLabel=${t("venue.done")}
-        moveColumnLabel=${t("venue.move_column")}
-        showColumnLabel=${t("venue.show_column")}
-        hideColumnLabel=${t("venue.hide_column")}
-        alwaysShownColumnLabel=${t("venue.column_always_shown")}
-        lastShownColumnLabel=${t("venue.column_last_shown")}
-        columnPositionLabel=${t("venue.column_position")}
       ></wt-data-table>
       ${unassigned.length > 0 ? html`<p class="unassigned" data-test="unassigned-zones">${t("venue.zones_no_department")}: ${unassigned.map((issue, index) => html`${index > 0 ? ", " : nothing}${issue.zoneName}<wt-button variant="secondary" data-test=${`add-zone-to-department-${issue.zoneId}`} aria-label=${`${issue.zoneName}: ${t("venue.add_to_department")}`} @click=${() => this.#emit("add-to-department", { zoneId: issue.zoneId })}>${t("venue.add_to_department")}</wt-button>`)}</p>` : nothing}
     `;
