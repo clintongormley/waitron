@@ -274,6 +274,59 @@ describe("calendar-day-box", () => {
     expect(scrollY).toBe(600);
   });
 
+  it("closes when its date scrolls out of its scrolling box, though still inside the window", async () => {
+    const shadowHost = document.createElement("div");
+    host.prepend(shadowHost);
+    const root = shadowHost.attachShadow({ mode: "open" });
+    const banner = document.createElement("header");
+    banner.style.height = "100px";
+    const scroller = document.createElement("div");
+    scroller.style.cssText = "height: 300px; overflow: auto;";
+    const inner = document.createElement("button");
+    inner.textContent = "17";
+    inner.style.marginTop = "50px";
+    const tail = document.createElement("div");
+    tail.style.height = "1000px";
+    scroller.append(inner, tail);
+    root.append(banner, scroller);
+    box.show(inner);
+    const scroll = scrolled(scroller);
+    scroller.scrollTop = 120;
+    await scroll;
+    const date = inner.getBoundingClientRect();
+    expect(date.bottom).toBeLessThan(scroller.getBoundingClientRect().top);
+    expect(date.top).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => closes).toBe(1);
+    expect(box.shown).toBe(false);
+  });
+
+  it("stays open beside its date when the page scrolls, its root element setting its own overflow", async () => {
+    document.documentElement.style.overflowY = "scroll";
+    try {
+      host.style.height = "3000px";
+      anchor.style.marginTop = "900px";
+      box.show(anchor);
+      const scroll = scrolled(window);
+      window.scrollBy(0, 300);
+      await scroll;
+      expect(anchor.getBoundingClientRect().top).toBeGreaterThan(innerHeight - 300);
+      expect(anchor.getBoundingClientRect().bottom).toBeLessThan(innerHeight);
+      expect(box.shown).toBe(true);
+    } finally {
+      document.documentElement.style.overflowY = "";
+    }
+  });
+
+  it("closes when the window shrinks and leaves its date below the fold", async () => {
+    anchor.style.marginTop = "600px";
+    box.show(anchor);
+    await page.viewport(1280, 500);
+    await expect.poll(() => innerHeight).toBe(500);
+    expect(anchor.getBoundingClientRect().top).toBeGreaterThan(innerHeight);
+    await expect.poll(() => closes).toBe(1);
+    expect(box.shown).toBe(false);
+  });
+
   it.each([
     ["closed", () => box.hide()],
     [

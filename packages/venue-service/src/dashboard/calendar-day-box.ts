@@ -106,8 +106,10 @@ export class CalendarDayBox extends LitElement {
   #scrollTargets: EventTarget[] = [];
 
   /** Opens below `anchor`, or above it when only there it fits, kept on screen; called again after
-   *  the content changes, it places the box again without moving focus. While open it follows
-   *  `anchor` as the window resizes or anything scrolls, and closes once `anchor` is out of view. */
+   *  the content changes, it places the box again without moving focus. While open, on each
+   *  window resize and each scroll the window or a shadow root above `anchor` sees, it places
+   *  itself again, or closes when no part of `anchor` is left inside the window and every box that
+   *  clips it. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
@@ -142,15 +144,38 @@ export class CalendarDayBox extends LitElement {
     window.removeEventListener("resize", this.#onResize);
   }
 
+  // Held on screen, a box whose date has gone would sit beside some other day.
   readonly #onScroll = (): void => {
-    const date = this.#anchor!.getBoundingClientRect();
-    // Held on screen, a box whose date has gone would sit beside some other day.
-    if (date.bottom < 0 || date.top > innerHeight || date.right < 0 || date.left > innerWidth)
-      this.hide();
-    else this.#place();
+    if (this.#anchorInView()) this.#place();
+    else this.hide();
   };
 
-  readonly #onResize = (): void => this.#place();
+  readonly #onResize = this.#onScroll;
+
+  /** Whether any of the anchor is inside the window and inside every box that clips it, up the
+   *  flattened tree across shadow roots and slots. */
+  #anchorInView(): boolean {
+    const date = this.#anchor!.getBoundingClientRect();
+    let top = Math.max(date.top, 0);
+    let left = Math.max(date.left, 0);
+    let bottom = Math.min(date.bottom, innerHeight);
+    let right = Math.min(date.right, innerWidth);
+    // The window bounds already stand for the root element's own scrolling.
+    for (
+      let at = flatParent(this.#anchor!);
+      at !== null && at !== document.documentElement;
+      at = flatParent(at)
+    ) {
+      const style = getComputedStyle(at);
+      if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+      const clip = at.getBoundingClientRect();
+      top = Math.max(top, clip.top + at.clientTop);
+      left = Math.max(left, clip.left + at.clientLeft);
+      bottom = Math.min(bottom, clip.top + at.clientTop + at.clientHeight);
+      right = Math.min(right, clip.left + at.clientLeft + at.clientWidth);
+    }
+    return top < bottom && left < right;
+  }
 
   override disconnectedCallback(): void {
     this.#stopFollowing();
@@ -218,6 +243,11 @@ export class CalendarDayBox extends LitElement {
       </div>
     </div>`;
   }
+}
+
+function flatParent(at: Element): Element | null {
+  const parent = at.parentNode;
+  return at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
 }
 
 declare global {
