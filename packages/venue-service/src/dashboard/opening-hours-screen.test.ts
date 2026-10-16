@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { html, LitElement } from "lit";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import {
   CALENDAR_OWN_VIEW_IDS,
   registerCatalogue,
@@ -16,6 +16,7 @@ import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import { formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -28,29 +29,16 @@ beforeEach(() => {
   setLocale("en");
   history.replaceState(null, "", "/manage/opening-hours/view/year");
 });
-// The browser announces a scroll or a resize a frame late, so one left pending reaches the next
-// test, where it closes a day box open on a date out of view. Each is put back and awaited here.
-const announced = (type: "scroll" | "resize") =>
-  new Promise((resolve) => addEventListener(type, resolve, { once: true }));
 async function useViewport(width: number, height: number) {
   const before = [innerWidth, innerHeight] as const;
-  const resize = async (w: number, h: number) => {
-    if (innerWidth === w && innerHeight === h) return;
-    const resized = announced("resize");
-    await page.viewport(w, h);
-    await resized;
-  };
-  await resize(width, height);
-  onTestFinished(() => resize(...before));
+  await resizeViewport(width, height);
+  onTestFinished(() => resizeViewport(...before));
 }
 afterEach(async () => {
   vi.useRealTimers();
-  if (scrollX !== 0 || scrollY !== 0) {
-    const scrolled = announced("scroll");
-    scrollTo(0, 0);
-    await scrolled;
-  }
-  for (const host of hosts.splice(0)) host.remove();
+  await emptyPageAtTop(() => {
+    for (const host of hosts.splice(0)) host.remove();
+  });
   setLocale("en");
   history.replaceState(null, "", originalUrl);
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
+import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import type { CalendarDayBox } from "./calendar-day-box.js";
 import "./calendar-day-box.js";
 
@@ -11,7 +12,7 @@ let box: CalendarDayBox;
 let closes: number;
 
 beforeEach(async () => {
-  await page.viewport(1280, 800);
+  await resizeViewport(1280, 800);
   host = document.createElement("div");
   anchor = document.createElement("button");
   anchor.textContent = "16";
@@ -27,9 +28,8 @@ beforeEach(async () => {
   await box.updateComplete;
 });
 afterEach(async () => {
-  host.remove();
-  scrollTo(0, 0);
-  await page.viewport(1280, 800);
+  await emptyPageAtTop(() => host.remove());
+  await resizeViewport(1280, 800);
 });
 
 const popup = () => box.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
