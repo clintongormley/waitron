@@ -15,8 +15,9 @@ import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
 import { closedHatch } from "./period-colour-styles.js";
+import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -71,6 +72,7 @@ export class OpeningHoursMonthView extends LitElement {
   static override styles = [
     baseStyles,
     seasonTintStyles,
+    fixedTitleStyles,
     css`
       :host {
         display: block;
@@ -83,13 +85,6 @@ export class OpeningHoursMonthView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-      }
-      .head h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-      }
-      .head h2::first-letter {
-        text-transform: uppercase;
       }
       .sub {
         display: flex;
@@ -546,11 +541,18 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
+    const title = (month: number, language?: string) =>
+      `${formatMonthName(month, language)} ${year}`;
+    const titles = Object.keys(VENUE_SERVICE_STRINGS).flatMap((language) =>
+      Array.from({ length: 12 }, (_, index) => title(index + 1, language)),
+    );
+    // One text node, as each candidate is: as two, Chromium measured the title a hair wider.
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
-        <h2 data-test="month" aria-live="polite">
-          ${formatMonthName(Number(current.slice(5, 7)))} ${year}
-        </h2>
+        ${fixedTitle(
+          html`<h2 data-test="month" aria-live="polite">${title(Number(current.slice(5, 7)))}</h2>`,
+          titles,
+        )}
         ${step(1, "next-month", "month.next", "›")}
         <slot name="switch"></slot>
         ${model ? this.#tools(model) : nothing}

@@ -52,6 +52,7 @@ export class OpeningHoursYearView extends LitElement {
       .head h2 {
         margin: 0;
         font-size: var(--wt-font-size-lg);
+        font-variant-numeric: tabular-nums;
       }
       season-chips {
         margin-block-end: var(--wt-space-2);

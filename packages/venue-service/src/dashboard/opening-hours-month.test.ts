@@ -474,7 +474,7 @@ describe("Opening hours month", () => {
     expect(root(el).querySelector("season-chips")).toBeNull();
     const parts = [
       '[data-test="previous-month"]',
-      '[data-test="month"]',
+      '.fixed-title:has(> [data-test="month"])',
       '[data-test="next-month"]',
       'slot[name="switch"]',
       'wt-combobox[name="departmentId"]',
@@ -483,6 +483,29 @@ describe("Opening hours month", () => {
     expect([...head.children].map((child) => parts.find((part) => child.matches(part)))).toEqual(
       parts,
     );
+  });
+
+  it("keeps ‹ and › in place whatever month and year it shows, in every language", async () => {
+    const months = [
+      ...Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, "0")}`),
+      "2011-05",
+      "2088-05",
+    ];
+    const lefts: [string, number][] = [];
+    for (const locale of ["en", "es"] as const) {
+      setLocale(locale);
+      const el = document.createElement("opening-hours-month");
+      applyTokens(el);
+      document.body.append(el);
+      hosts.push(el);
+      for (const month of months) {
+        el.month = month;
+        await el.updateComplete;
+        lefts.push([`${locale} ${month}`, testId(el, "next-month")!.getBoundingClientRect().left]);
+      }
+      el.remove();
+    }
+    expect(lefts).toEqual(lefts.map(([shown]) => [shown, lefts[0]![1]]));
   });
 
   it("keeps station mode as it was", async () => {

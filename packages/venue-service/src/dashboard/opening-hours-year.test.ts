@@ -312,6 +312,21 @@ describe("Opening hours year", () => {
     expect(root(el).children).toHaveLength(0);
   });
 
+  it("keeps › in place whatever year it shows", async () => {
+    const el = document.createElement("opening-hours-year");
+    applyTokens(el);
+    document.body.append(el);
+    hosts.push(el);
+    const lefts: [number, number][] = [];
+    for (const year of [2011, 2088]) {
+      el.year = year;
+      await el.updateComplete;
+      const next = root(el).querySelector('[data-test="next-year"]')!;
+      lefts.push([year, next.getBoundingClientRect().left]);
+    }
+    expect(lefts).toEqual(lefts.map(([year]) => [year, lefts[0]![1]]));
+  });
+
   it("keeps the pressed › and its focus when the year's read arrives and when it is cleared", async () => {
     const el = document.createElement("opening-hours-year");
     el.year = 2027;
