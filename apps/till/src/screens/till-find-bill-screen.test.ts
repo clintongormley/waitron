@@ -48,7 +48,11 @@ function requests(fetcher: ReturnType<typeof findBillApi>["fetcher"], path = "/a
     .filter((url) => url.pathname === path);
 }
 async function ready(el: Screen, tab = "bills") {
-  await vi.waitFor(() => expect(table(el, tab)?.rows.length).toBeGreaterThan(0));
+  await vi.waitFor(() => {
+    expect(table(el, tab)?.loading).toBe(false);
+    expect(table(el, tab)?.rows.length).toBeGreaterThan(0);
+  });
+  await table(el, tab).updateComplete;
   return table(el, tab);
 }
 async function switchTab(el: Screen, tab: string) {
@@ -504,6 +508,88 @@ it("changing the API context drops old rows/options and reads the new context ev
     { value: "new-zone", label: "New location" },
   ]);
   expect(requests(replacement.fetcher)).toHaveLength(1);
+});
+it("reconnecting the retained page refreshes its rows without reloading its options", async () => {
+  let calls = 0;
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : listPage([billRow({ label: ++calls === 1 ? "Before leaving" : "After returning" })]),
+    ),
+  );
+  const { el, host, fetcher } = await mount(source);
+  await ready(el);
+  el.remove();
+  host.appendChild(el);
+  await vi.waitFor(() => expect(table(el).shadowRoot!.textContent).toContain("After returning"));
+  expect(table(el).shadowRoot!.textContent).not.toContain("Before leaving");
+  expect(requests(fetcher)).toHaveLength(2);
+  expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(1);
+});
+it("reconnecting during the options read requests fresh options and ignores the detached visit", async () => {
+  let finishOld!: (response: Response) => void;
+  let optionsCalls = 0;
+  const source = findBillApi(async (url) =>
+    url.pathname.endsWith("options")
+      ? ++optionsCalls === 1
+        ? new Promise((resolve) => {
+            finishOld = resolve;
+          })
+        : json({ ...billOptions, zones: [{ id: "new-zone", name: "Returned venue" }] })
+      : json(listPage([billRow({ label: "Returned order" })])),
+  );
+  const { el, host, fetcher } = await mount(source);
+  await vi.waitFor(() => expect(finishOld).toBeTypeOf("function"));
+  el.remove();
+  host.appendChild(el);
+  await ready(el);
+  finishOld(json(billOptions));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await el.updateComplete;
+  expect(table(el).shadowRoot!.textContent).toContain("Returned order");
+  expect(table(el).columns.find((column) => column.key === "zone")!.filter!.options).toEqual([
+    { value: "new-zone", label: "Returned venue" },
+  ]);
+  expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(2);
+  expect(requests(fetcher)).toHaveLength(1);
+});
+it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
+  const { el, fetcher } = await mount();
+  await ready(el);
+  const grid = table(el);
+  grid.chooseFilter("zone", ["zone-1"]);
+  grid.chooseFilter("state", ["held"]);
+  await el.updateComplete;
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(
+      grid.querySelector('[data-chip="state"]')?.shadowRoot?.querySelector("button"),
+    ).toBeInstanceOf(HTMLButtonElement),
+  );
+  await userEvent.click(
+    grid.querySelector('[data-chip="state"]')!.shadowRoot!.querySelector("button")!,
+  );
+  await ready(el);
+  const query = requests(fetcher).at(-1)!.searchParams;
+  expect(query.get("zoneId")).toBe("zone-1");
+  expect(query.has("state")).toBe(false);
+  expect(grid.querySelector('[data-chip="zone"]')).not.toBeNull();
+  expect(grid.querySelector('[data-chip="state"]')).toBeNull();
+  const count = requests(fetcher).length;
+  grid.dispatchEvent(
+    new CustomEvent("wt-query-change", {
+      detail: {
+        search: "",
+        sortKey: "openedAt",
+        sortDirection: "descending",
+        filters: { zone: "zone-1" },
+      },
+    }),
+  );
+  await el.updateComplete;
+  expect(requests(fetcher)).toHaveLength(count);
+  expect(grid.shadowRoot!.textContent).toContain("Lucía");
 });
 it("removing the screen aborts options and a late options response cannot start a list request", async () => {
   let finish!: (response: Response) => void;
