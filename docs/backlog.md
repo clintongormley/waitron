@@ -1584,6 +1584,20 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`. Left
   open by A720.
 
+- **Try the Calendar's long press on a real phone.** The long press that opens the special-day
+  editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only under
+  headless Chromium's touch emulation. Check on an Android and an iOS phone that the page stops
+  scrolling, no number is selected, and no click or menu follows the lift. Left open by A720.
+
+- **Add `to` to Opening hours' address words.** `apps/dashboard/src/navigation.ts` does not list the
+  special-day address's new `to`. Nothing breaks, because that list keeps words it does not name,
+  but adding it changes an exact-match check in `navigation.test.ts`. Left open by A720.
+
+- **Move the pointer-gesture commands' type declarations into `packages/ui`.** They live in
+  `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
+  themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
+  uses the commands. Left open by A720.
+
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
   ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
