@@ -456,5 +456,6 @@ it("offers no column chooser", async () => {
   const el = await setup();
   const list = table(el);
   expect(list.shadowRoot!.querySelector(".columns-trigger")).toBeNull();
+  expect(list.shadowRoot!.querySelector(".table-search")).toBeNull();
   expect(list.columns.filter((column) => column.choosable !== undefined)).toEqual([]);
 });

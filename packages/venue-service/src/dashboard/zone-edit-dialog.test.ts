@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { setLocale } from "@waitron/dashboard-kit";
-import { VenueServiceApi } from "./client.js";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   cleanupZoneEditors,
@@ -17,9 +16,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 it("shows no season sentence, hours link, floor-plan link or preview, and reads neither", async () => {
-  const plans = vi.spyOn(VenueServiceApi.prototype, "watchZoneFloorPlan");
   const hours = vi.spyOn(OpeningHoursApi.prototype, "watchOpeningHours");
-  const { el } = await mountZoneEditor();
+  const paths: string[] = [];
+  const { el } = await mountZoneEditor((async (path: string) => {
+    paths.push(path);
+    return { tables: [] };
+  }) as DashboardRequest);
   await new Promise((resolve) => setTimeout(resolve, 50));
   await el.updateComplete;
   const root = el.shadowRoot!;
@@ -28,7 +30,7 @@ it("shows no season sentence, hours link, floor-plan link or preview, and reads 
   expect(root.querySelector("[data-test=zone-floor-plan]")).toBeNull();
   expect(root.querySelector("wt-floor-plan-preview")).toBeNull();
   expect(root.querySelector("a")).toBeNull();
-  expect(plans).not.toHaveBeenCalled();
+  expect(paths.filter((path) => path.includes("/floor-plan"))).toEqual([]);
   expect(hours).not.toHaveBeenCalled();
 });
 it.each([1280, 390])("Save's right edge lines up with the last field's at %i px", async (width) => {

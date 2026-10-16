@@ -1,7 +1,6 @@
 import type { DeleteImpact } from "@waitron/shared";
 import type { LocalDate } from "../hours-types.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { PlanPlacement, PreviewTable } from "@waitron/ui";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { ModelWatches } from "./model-watch.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -92,16 +91,6 @@ export interface FloorZone extends NamedRow {
   active?: boolean;
   hasPlacedTables?: boolean;
 }
-export interface ZoneFloorPlan {
-  /** `id` is null only for a live table offered for adoption, which is never placed. */
-  tables: { id: string | null; fixed: boolean; placement: PlanPlacement | null }[];
-}
-
-export function placedTables(tables: ZoneFloorPlan["tables"]): PreviewTable[] {
-  return tables.flatMap(({ id, fixed, placement }) =>
-    placement && id ? [{ key: id, fixed, placement }] : [],
-  );
-}
 export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
@@ -151,28 +140,6 @@ export class VenueServiceApi {
   ) {
     this.openingHours = new OpeningHoursApi(request, liveData);
     this.#watches = new ModelWatches(liveData);
-  }
-
-  watchZoneFloorPlan(
-    zoneId: string,
-    apply: (plan: ZoneFloorPlan) => void,
-    failed: (error: unknown) => void,
-    recovered: () => void,
-  ): () => void {
-    return this.#watches.watch(
-      `venue-service:floor-plan:${zoneId}`,
-      QUERY_DEPENDENCIES["floor-plan"],
-      () =>
-        this.request<ZoneFloorPlan>(
-          `/management-api/zones/${encodeURIComponent(zoneId)}/floor-plan`,
-          "GET",
-          undefined,
-          { passive: true },
-        ),
-      apply,
-      failed,
-      recovered,
-    );
   }
 
   getZoneDeleteImpact(id: string): Promise<DeleteImpact> {

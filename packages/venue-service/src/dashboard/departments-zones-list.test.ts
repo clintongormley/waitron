@@ -238,22 +238,17 @@ it("labels a zone's floor-plan link by whether a table is placed, and its click 
 });
 
 it("makes no floor-plan read, on mount or when a zone's menu opens", async () => {
-  const watch = vi.spyOn(VenueServiceApi.prototype, "watchZoneFloorPlan");
-  try {
-    const reads: unknown[][] = [];
-    const { table } = await setup((async (...args) => {
-      reads.push(args);
-      return { tables: [] };
-    }) as DashboardRequest);
-    const menu = table.shadowRoot!.querySelector('[data-row-key="zone:z1"] wt-row-actions')!;
-    expect(menu, "the zone has its own row menu").not.toBeNull();
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(watch).not.toHaveBeenCalled();
-    expect(reads).toEqual([]);
-  } finally {
-    watch.mockRestore();
-  }
+  const reads: unknown[][] = [];
+  const { table } = await setup((async (...args) => {
+    reads.push(args);
+    return { tables: [] };
+  }) as DashboardRequest);
+  const menu = table.shadowRoot!.querySelector('[data-row-key="zone:z1"] wt-row-actions')!;
+  expect(menu, "the zone has its own row menu").not.toBeNull();
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(reads.filter(([path]) => String(path).includes("/floor-plan"))).toEqual([]);
+  expect(reads).toEqual([]);
 });
 
 it("keeps the floor-plan link out of the zone's menu", async () => {
