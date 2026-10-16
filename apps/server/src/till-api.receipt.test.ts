@@ -1761,10 +1761,12 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
       expect(jobs[0]!.kind).toBe("drawer");
       expect([...jobs[0]!.payload]).toEqual([...DRAWER_KICK]);
       expect(audits).toHaveLength(1);
+      expect(audits[0]!.tenderRefundId).toBeNull();
       expect(Object.keys(audits[0]!).sort()).toEqual(
         [
           "id",
           "billPaymentId",
+          "tenderRefundId",
           "printerId",
           "deviceId",
           "saleId",
