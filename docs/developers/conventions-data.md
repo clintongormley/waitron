@@ -1995,8 +1995,8 @@ naming no parent reports the same words under 787 (both driven in
 words on one layer, and it would also accept a trigger that raised exactly those words (none does
 today).
 
-The layouts stores (`packages/layouts/src/canvas-store.ts`, `device-profile-store.ts`) had asked for
-1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
+The former canvas store (`canvas-store.ts`) and the profile store
+(`packages/layouts/src/device-profile-store.ts`) had asked for 1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
 `device_profile_form_factor_locked`, whose meaning matched `device_profile.in_use`. That store now
 matches it by its own words (`FORM_FACTOR_REFUSAL`, `packages/db/src/trigger-refusals.ts`).
 
