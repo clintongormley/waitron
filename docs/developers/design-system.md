@@ -4333,7 +4333,7 @@ Beside the plan, or in its bottom sheet on a phone, you see Add tables and Add j
 above the selected table's form and the tables list. The form reserves its space even when no
 table is selected, so selecting or clearing a table does not move the list. That space stays
 empty without a selection. There is no subtitle, selection hint or colour key. Add buttons sit
-side by side where they fit and wrap otherwise, including Spanish in the desktop column.
+side by side where they fit and wrap otherwise.
 
 The form holds Name, then Seats, Shape and Moveable in one row of equal-height boxes. Seats is
 the narrower box. Shape shows the current Rectangle or Round icon in one button; pressing it

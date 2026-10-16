@@ -320,6 +320,11 @@ it("A671: a full plan keeps the joined-table form and its values open until a pl
   expect(field(el, "table-name").value).toBe("Long table");
   expect(madeOf(el).values).toEqual(["c3", "c4", "c5"]);
   expect(addButton(el).disabled).toBe(false);
+  await set(el, "table-name", "Long table 2");
+  expect(formError(el)).toBe("");
+  await pressAdd(el);
+  expect(changes).toEqual([]);
+  expect(formError(el)).toBe("No room on the plan.");
   el.draft = draft;
   await el.updateComplete;
   await pressAdd(el);

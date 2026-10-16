@@ -73,7 +73,16 @@ export class FloorPlanTablePanel extends LitElement {
       }
       .moveable wt-switch {
         align-self: center;
-        margin-block-start: var(--wt-space-3);
+        box-sizing: border-box;
+        min-height: var(--wt-field-height);
+        padding-block-start: var(--wt-space-3);
+      }
+      .moveable wt-switch::part(label) {
+        position: absolute;
+        inset-inline: var(--wt-space-2);
+        top: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       .caption {
         position: absolute;
@@ -245,10 +254,8 @@ export class FloorPlanTablePanel extends LitElement {
         ></wt-number-stepper>
         ${table.placement === null ? nothing : this.#shape(table)}
         <div class="moveable">
-          <span class="caption">${t("floor_plan_editor.moveable")}</span>
           <wt-switch
             name="moveable"
-            hide-label
             label=${t("floor_plan_editor.moveable")}
             .checked=${!table.fixed}
             .description=${fixedError}

@@ -1,9 +1,8 @@
-> 2026-10-12, A503 part 1: saved joins (`floor_plan_joins`, `floor_reset_joins` and their member
-
 > 2026-10-16: A671 supersedes the editor side-panel arrangement, placement click targets and
 > new joined-table placement described below. The current contract is in
 > [design-system.md](../../developers/design-system.md#departments-and-zones).
 
+> 2026-10-12, A503 part 1: saved joins (`floor_plan_joins`, `floor_reset_joins` and their member
 > tables), `savedJoinSeats`, `copyJoins`, the editor's Joins section and its Join dialog are gone; a
 > merge's seats come only from the till, whose seats prompt opens empty. See
 > [the A503 design](../specs/2026-10-12-a503-joined-tables-design.md).

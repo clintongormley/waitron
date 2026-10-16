@@ -254,6 +254,12 @@ it("writes a marked table's message under its name in the error colour, as its d
   const mark = markedRow.querySelector<HTMLElement>("[data-mark]")!;
   expect(nameOf(markedRow)).toBe("Terrace 10");
   expect(mark.textContent!.trim()).toBe("Booked 12 Oct, 21:00");
+  const text = document.createRange();
+  text.selectNodeContents(mark);
+  expect(text.getBoundingClientRect().left).toBeCloseTo(
+    markedRow.querySelector("[data-name]")!.getBoundingClientRect().left,
+    0,
+  );
   expect(getComputedStyle(mark).color).toBe("rgb(7, 8, 9)");
   const described = toggle(markedRow).getAttribute("aria-describedby")!;
   expect(el.shadowRoot!.getElementById(described)).toBe(mark);

@@ -1453,7 +1453,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 Owner decisions, 2026-10-14: Add tables and Add joined table sit above the form; the form keeps
 its space empty while nothing is selected. Seats, one button showing and switching the current
 Shape, and Moveable share one row of equal-height boxes. The subtitle, selection help sentence
-and colour key go. Placement markers are squares: primary filled on the plan, outlined off it,
+and colour key go. The removed explanation of first-save and later-change timing belongs in help
+mode (A582). Placement markers are squares: primary filled on the plan, outlined off it,
 grey filled for a joined table's parts. Only the square changes placement; a placed table's name
 selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
 Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and

@@ -153,7 +153,7 @@ it("names the current shape by a visible caption, with no tooltip", async () => 
 
 it("keeps Seats, Shape and Moveable on one row in a narrow panel", async () => {
   const el = await open();
-  el.style.width = "260px";
+  el.style.width = "180px";
   await el.updateComplete;
   const seats = field(el, "seats")!.getBoundingClientRect();
   const shape = shapeGroup(el)!.getBoundingClientRect();
@@ -162,7 +162,7 @@ it("keeps Seats, Shape and Moveable on one row in a narrow panel", async () => {
 });
 
 for (const locale of ["en-GB", "es-ES"]) {
-  it(`puts Shape beside Seats in the editor's widest side column (${locale})`, async () => {
+  it(`puts Shape beside Seats in a 288 px panel (${locale})`, async () => {
     setLocale(locale);
     const el = await open();
     el.style.width = "288px";
@@ -562,4 +562,15 @@ it("A671: the shape caption shares the filled field box without an opaque button
   expect(getComputedStyle(shapeButtons(el)[0]!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
   const seatsBox = field(el, "seats")!.shadowRoot!.querySelector("[part=field]")!;
   expect(getComputedStyle(shape).backgroundColor).toBe(getComputedStyle(seatsBox).backgroundColor);
+});
+
+it("A671: clicking Moveable's visible caption changes the native switch once", async () => {
+  const el = await open();
+  const { changes } = listen(el);
+  const moveable = field(el, "moveable")!;
+  await userEvent.click(moveable.parentElement!, { position: { x: 12, y: 12 } });
+  await el.updateComplete;
+  expect(changes).toHaveLength(1);
+  expect(tableOf(changes[0], "m1")!.fixed).toBe(true);
+  expect(moveable.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(false);
 });

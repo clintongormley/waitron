@@ -146,7 +146,7 @@ export class FloorPlanTablesPanel extends LitElement {
         grid-column: 1;
         margin: 0;
         padding: 0 var(--wt-space-2) var(--wt-space-2)
-          calc(var(--wt-space-2) + 2 * var(--wt-space-3));
+          calc(var(--wt-space-2) + var(--wt-tap-min) + var(--wt-space-3));
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
