@@ -99,14 +99,32 @@ export function columnMenu(
   >`;
 }
 
-/** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen. */
-export function placePopover(popup: HTMLElement, trigger: HTMLElement, alignEnd: boolean): void {
+const POPOVER_MARGIN = 8;
+
+/** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen; with
+ *  `flipAbove`, it sits above `trigger` instead when only there it fits without covering it. */
+export function placePopover(
+  popup: HTMLElement,
+  trigger: HTMLElement,
+  alignEnd: boolean,
+  flipAbove = false,
+): void {
   if (!popup.matches(":popover-open")) popup.showPopover({ source: trigger });
   const anchor = trigger.getBoundingClientRect();
   const box = popup.getBoundingClientRect();
   const left = alignEnd ? anchor.right - box.width : anchor.left;
-  popup.style.left = `${Math.max(8, Math.min(left, innerWidth - box.width - 8))}px`;
-  popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
+  const above = anchor.top - box.height;
+  const top =
+    flipAbove &&
+    anchor.bottom + box.height > innerHeight - POPOVER_MARGIN &&
+    above >= POPOVER_MARGIN
+      ? above
+      : Math.max(
+          POPOVER_MARGIN,
+          Math.min(anchor.bottom, innerHeight - box.height - POPOVER_MARGIN),
+        );
+  popup.style.left = `${Math.max(POPOVER_MARGIN, Math.min(left, innerWidth - box.width - POPOVER_MARGIN))}px`;
+  popup.style.top = `${top}px`;
 }
 
 /** Keeps `data-overflow` on the host naming the sides that have columns scrolled out of sight;

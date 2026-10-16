@@ -117,13 +117,7 @@ export class CalendarDayBox extends LitElement {
   }
 
   #place(): void {
-    const anchor = this.#anchor!;
-    placePopover(this.popup, anchor, false);
-    const below = anchor.getBoundingClientRect();
-    const height = this.popup.getBoundingClientRect().height;
-    // It never covers the day it explains while it fits above it.
-    if (below.bottom + height > innerHeight - 8 && below.top - height >= 8)
-      this.popup.style.top = `${below.top - height}px`;
+    placePopover(this.popup, this.#anchor!, false, true);
   }
 
   #follow(anchor: HTMLElement): void {

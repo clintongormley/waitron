@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -9,6 +9,7 @@ import {
   columnMenu,
   hourMarks,
   isDeleteKey,
+  placePopover,
   type Stretch,
 } from "./paint-grid-parts.js";
 
@@ -262,4 +263,25 @@ test("a press during another pointer's stroke does not start one, and says so", 
   point(el, 960, "pointerup");
   expect(el.began).toEqual([true, false]);
   expect(el.released).toEqual([{ key: "mon", start: 840, end: 960 }]);
+});
+
+test("placePopover keeps a popup below its trigger near the bottom, and flips it above only when asked", () => {
+  const trigger = document.createElement("button");
+  trigger.style.cssText = `position: fixed; left: 100px; top: ${innerHeight - 44}px; height: 24px;`;
+  const popup = document.createElement("div");
+  popup.popover = "manual";
+  popup.style.cssText =
+    "position: fixed; inset: auto; margin: 0; padding: 0; border: 0; width: 120px; height: 100px;";
+  document.body.append(trigger, popup);
+  onTestFinished(() => {
+    popup.remove();
+    trigger.remove();
+  });
+  placePopover(popup, trigger, false);
+  expect(popup.style.top).toBe(`${innerHeight - 108}px`);
+  placePopover(popup, trigger, false, true);
+  expect(popup.style.top).toBe(`${innerHeight - 144}px`);
+  trigger.style.top = "20px";
+  placePopover(popup, trigger, false, true);
+  expect(popup.style.top).toBe("44px");
 });
