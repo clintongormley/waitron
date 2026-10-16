@@ -2124,6 +2124,57 @@ describe("Month view", () => {
       expect(lost()).toBe(true);
     });
 
+    /** Presses the Month's year link from the keyboard while the Year's read is held, and returns
+     *  once the Year is drawn without its month names, with focus on nothing. */
+    async function pressYearLinkHeld() {
+      const mounted = await monthMount("/manage/opening-hours/view/month/month/2026-03");
+      const release = mounted.holdYears();
+      yearLink(await shown(mounted.view, "2026-03"))!.focus();
+      await userEvent.keyboard("{Enter}");
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+      await expect.poll(() => year(mounted.el)).not.toBeNull();
+      await mounted.el.updateComplete;
+      await year(mounted.el)!.updateComplete;
+      expect(monthName(mounted.el, "2026-03")).toBeNull();
+      expect(lost()).toBe(true);
+      return { el: mounted.el, release };
+    }
+    async function drawnWithoutFocus(el: Screen, release: () => void) {
+      release();
+      await expect.poll(() => monthName(el, "2026-03")).not.toBeNull();
+      await year(el)!.updateComplete;
+      await el.updateComplete;
+      expect(lost(), `Focused: ${focused()?.outerHTML}`).toBe(true);
+    }
+
+    it("forgets the month to focus when the address moves to another one in the same Year before it draws", async () => {
+      const { el, release } = await pressYearLinkHeld();
+      history.pushState(null, "", "/manage/opening-hours/view/year/year/2026?keep=yes");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await el.updateComplete;
+      await drawnWithoutFocus(el, release);
+    });
+
+    it("forgets the month to focus when the address leaves the Year and returns before it draws", async () => {
+      const { el, release } = await pressYearLinkHeld();
+      history.pushState(null, "", "/manage/opening-hours/view/month/month/2026-05");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      history.pushState(null, "", "/manage/opening-hours/view/year/year/2026");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await drawnWithoutFocus(el, release);
+    });
+
+    it("forgets the month to focus once focus has moved elsewhere, even when it falls back to the page", async () => {
+      const { el, release } = await pressYearLinkHeld();
+      const heading = el.shadowRoot!.querySelector("h1")!;
+      heading.tabIndex = -1;
+      heading.focus();
+      expect(focused()).toBe(heading);
+      heading.blur();
+      expect(lost()).toBe(true);
+      await drawnWithoutFocus(el, release);
+    });
+
     it("leaves focus alone when Back or Forward changes the view", async () => {
       const { el, view } = await monthMount("/manage/opening-hours/view/year/year/2026");
       await expect.poll(() => year(el)?.model).toBeDefined();

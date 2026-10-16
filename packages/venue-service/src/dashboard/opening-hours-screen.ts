@@ -59,6 +59,7 @@ type SpecialAddress = {
   to?: LocalDate | null;
 };
 const painterEntryKey = "openingHoursPainter";
+const focusLost = () => !document.activeElement || document.activeElement === document.body;
 /** The other modules' views the Calendar offers beside Opening hours, as the app worked them out. */
 export type CalendarViews = {
   ctx: DashboardModuleContext;
@@ -161,8 +162,16 @@ export class OpeningHoursScreen extends LitElement {
   private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
   /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's year link held focus
-   *  as it opened the Year, and the Year draws its month names only once its read arrives. */
-  private focusMonth?: string;
+   *  as it opened the Year, and the Year draws its month names only once its read arrives. Only
+   *  the address change numbered `navigation` keeps it; `armed` once that change has been followed. */
+  private focusHandOff?: { month: string; navigation: number; armed: boolean };
+  private readonly endFocusHandOff = () => {
+    this.focusHandOff = undefined;
+    document.removeEventListener("focusin", this.endFocusHandOff, true);
+  };
+  /** Counts the addresses followed, so a hand-off can tell its own navigation from any other. */
+  private navigations = 0;
+  private followedHref = "";
   /** The open request the box was last shown for: once that box is hidden, a content change
    *  while its close is on the way must not show it again. */
   private dayBoxPlaced?: CalendarDayOpen;
@@ -205,8 +214,13 @@ export class OpeningHoursScreen extends LitElement {
     },
   });
   private followUrl() {
-    if (this.url.read("dashboard") !== "opening-hours") return;
     const current = new URL(navigationGuardFor(window)?.href ?? location.href);
+    if (current.href !== this.followedHref) {
+      this.followedHref = current.href;
+      this.navigations++;
+      if (this.focusHandOff?.navigation !== this.navigations) this.endFocusHandOff();
+    }
+    if (this.url.read("dashboard") !== "opening-hours") return;
     const windowId = this.url.read("window");
     const requestedView = this.url.read("view");
     if (
@@ -508,6 +522,7 @@ export class OpeningHoursScreen extends LitElement {
     this.holidayWatch.stop();
     this.boxMonthWatch.stop();
     this.afterDayBox = undefined;
+    this.endFocusHandOff();
     this.generation = {};
     super.disconnectedCallback();
   }
@@ -531,7 +546,7 @@ export class OpeningHoursScreen extends LitElement {
         changed.has("departmentId"))
     )
       void this.placeDayBox();
-    if (this.focusMonth) void this.focusPendingMonth();
+    if (this.focusHandOff?.armed) void this.focusPendingMonth();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     // A new list without the shown view returns to Opening hours, replacing the address naming it.
@@ -1114,15 +1129,32 @@ export class OpeningHoursScreen extends LitElement {
   private openYearFromMonth(event: CustomEvent<{ year: number }>) {
     event.stopPropagation();
     const held = this.heldFocus(event.currentTarget, "[data-test=month-year]");
-    const month = this.shownMonth();
+    this.endFocusHandOff();
+    const handOff = held && {
+      month: this.shownMonth(),
+      navigation: this.navigations + 1,
+      armed: false,
+    };
+    // Listens from the press, not from the arming: focus that moved away and fell back to the
+    // page in between ends where it would have been had it never moved.
+    if (handOff) {
+      this.focusHandOff = handOff;
+      document.addEventListener("focusin", this.endFocusHandOff, true);
+    }
     void this.openYear(String(event.detail.year)).then(() => {
-      this.focusMonth = held ? month : undefined;
+      if (!handOff || this.focusHandOff !== handOff) return;
+      if (this.navigations !== handOff.navigation) {
+        this.endFocusHandOff();
+        return;
+      }
+      handOff.armed = true;
       void this.focusPendingMonth();
     });
   }
   private async focusPendingMonth() {
-    const month = this.focusMonth;
-    if (!month) return;
+    const handOff = this.focusHandOff;
+    if (!handOff?.armed) return;
+    const { month } = handOff;
     if (
       !focusLost() ||
       this.view !== "year" ||
@@ -1130,7 +1162,7 @@ export class OpeningHoursScreen extends LitElement {
       this.overlaid() ||
       this.shownYear() !== Number(month.slice(0, 4))
     ) {
-      this.focusMonth = undefined;
+      this.endFocusHandOff();
       return;
     }
     const year = this.shadowRoot?.querySelector("opening-hours-year");
@@ -1138,8 +1170,8 @@ export class OpeningHoursScreen extends LitElement {
     const name = year?.shadowRoot?.querySelector<HTMLElement>(
       `[data-month="${month}"] [data-test=month-name]`,
     );
-    if (this.focusMonth !== month || !name) return;
-    this.focusMonth = undefined;
+    if (this.focusHandOff !== handOff || !name) return;
+    this.endFocusHandOff();
     if (this.isConnected && focusLost()) name.focus();
   }
   private month() {
@@ -1214,7 +1246,6 @@ export class OpeningHoursScreen extends LitElement {
     ${this.seasonPainter()} ${this.specialPainter()} ${this.seasonsWindow()}`;
   }
 }
-const focusLost = () => !document.activeElement || document.activeElement === document.body;
 declare global {
   interface HTMLElementTagNameMap {
     "dashboard-opening-hours-screen": OpeningHoursScreen;
