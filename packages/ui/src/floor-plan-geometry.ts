@@ -6,7 +6,7 @@ export const NAME_MIN_PX = 28;
 
 const GRID_MAX = 999;
 const CROP_MARGIN = 2;
-const EXTENT_MARGIN = 8;
+export const EXTENT_MARGIN = 8;
 const FREE_SPOT_COLUMNS = 40;
 // Floating-point noise allowed when comparing positions in grid squares.
 const EPSILON = 1e-9;

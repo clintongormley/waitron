@@ -679,7 +679,8 @@ you set spacing without replacing its error and folding behaviour.
 | `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid, initially 12 px per square, that fills its
-box and reaches at least 8 squares past the furthest table. Above and left of the plan it always
+box and reaches at least 8 squares past the furthest table and, where a turn points a selected
+table's turn arrow lower than every table, 8 squares below that arrow. Above and left of the plan it always
 keeps a margin, drawn blank so the grid's lines start at the plan's own top and left edge, of
 `√((--wt-space-5 / 2 + --wt-space-1 + --wt-tap-min)² + (--wt-tap-min / 2)²)` (the turn arrow's
 furthest reach from the middle of a table's top side), rounded up to whole squares and enlarged
@@ -750,12 +751,12 @@ Shift+ArrowUp its own bottom side; on a table that is not selected they do nothi
 the top or left side or a corner. The selected
 table's button is described by `copy.keys`, and after each keyboard resize a polite status region
 says `copy.size`. A size badge (`size-badge`, `{width} × {height}` in squares, the `.icon-tooltip`
-look) shows centred under the table's drawn box, past its bottom handles, while a dot or corner is
-dragged, and after a keyboard resize until the table loses focus.
+look) shows centred under the table's drawn box, past its bottom handles and, where a turn points the turn
+arrow lower than those, past the arrow, while a dot or corner is dragged, and after a keyboard resize until the table loses focus.
 
 A table with `refused` set has a 2 px `--wt-color-danger` outline and that text below it in the
-same colour, centred but kept inside the grid, past a selected table's bottom handles, and below the
-size badge while that shows. The text is a sibling of the button, so a round table does not clip
+same colour, centred but kept inside the grid, past a selected table's bottom handles and turn arrow
+as the size badge is, and below the size badge while that shows. The text is a sibling of the button, so a round table does not clip
 it, and is the button's accessible description, before `copy.keys` on the selected table.
 `bottomInset` (px) is how much of the canvas's bottom its parent draws over; the grid is drawn that
 much taller, so every table can be scrolled above it. `reveal(key)` scrolls the canvas, never the

@@ -875,3 +875,110 @@ it.each([1, 2])(
     expect(errors).toEqual([]);
   },
 );
+
+function overlap(a: DOMRect, b: DOMRect): number {
+  const across = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const down = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return Math.max(0, across) * Math.max(0, down);
+}
+
+const refusedAt = (rotation: number, y: number): PlanCanvasTable => ({
+  ...table("T1", 10, y),
+  refused: "Table is in use",
+  placement: { ...table("T1", 10, y).placement, height: 4, rotation },
+});
+
+const ZOOMS = [
+  [0.5, 10000],
+  [1, 0],
+  [4, -10000],
+] as const;
+
+/** A refused 8 × 4 `T1` at (10, `y`) turned `rotation`, at `zoom` (reached by a Ctrl+wheel of
+ *  `deltaY`), with --wt-space-1 4px and --wt-space-5 24px; selected, it shows its size badge after
+ *  a keyboard resize the parent does not apply. */
+async function feedbackCanvas(
+  deltaY: number,
+  { y = 10, rotation = 0, selected = true } = {},
+): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 500px; --wt-space-1: 4px; --wt-space-5: 24px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [refusedAt(rotation, y)];
+  el.selected = selected ? "T1" : null;
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+  }
+  if (selected) {
+    button(el).focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    await settled(el);
+  }
+  return el;
+}
+
+it.each(ZOOMS)(
+  "at zoom %s, a selected table's size badge and refusal sit clear of its turn arrow at every turn, moved only where the arrow reaches lower than the table and its dots",
+  async (zoom, deltaY) => {
+    const el = await feedbackCanvas(deltaY);
+    // The bottom dot's hit area reaches --wt-space-5 / 2, at the control scale, past the table.
+    const dot = 12 * Math.max(1, 1 / zoom) * zoom;
+    let moved = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [refusedAt(rotation, 10)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const badge = part(el, "size-badge").getBoundingClientRect();
+      const reason = part(el, "refused-reason").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      expect(overlap(arrow, badge), at).toBe(0);
+      expect(overlap(arrow, reason), at).toBe(0);
+      expect(overlap(badge, reason), at).toBe(0);
+      expect(badge.top, at).toBeCloseTo(Math.max(box.bottom + dot, arrow.bottom) + 4 * zoom, 0);
+      if (arrow.bottom > box.bottom + dot) moved++;
+    }
+    // The turns whose arrow reaches below the dots, so both rules were checked.
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeLessThan(24);
+  },
+);
+
+it("an unselected refused table turned 180° keeps its reason one --wt-space-1 under it, with no turn arrow to clear", async () => {
+  const el = await feedbackCanvas(0, { rotation: 180, selected: false });
+  expect(el.shadowRoot!.querySelector('[part="rotate-handle"]')).toBeNull();
+  const box = button(el).getBoundingClientRect();
+  expect(part(el, "refused-reason").getBoundingClientRect().top).toBeCloseTo(box.bottom + 4, 0);
+});
+
+it.each(ZOOMS)(
+  "at zoom %s, the grid runs 8 squares past the lowest table or, lower still, its selected turn arrow, so it holds the size badge and refusal at every turn and scrolls no further",
+  async (zoom, deltaY) => {
+    const unselected = await feedbackCanvas(deltaY, { y: 200, rotation: 180, selected: false });
+    const plain = part(unselected, "grid").getBoundingClientRect().height;
+    cleanup();
+    const el = await feedbackCanvas(deltaY, { y: 200 });
+    expect(part(el, "grid").getBoundingClientRect().height).toBe(plain);
+    const square = 12 * zoom;
+    let lower = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [refusedAt(rotation, 200)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const lowest = (Math.max(box.bottom, arrow.bottom) - grid.top) / square;
+      expect(grid.height / square, at).toBe(Math.ceil(lowest - 0.01) + 8);
+      for (const name of ["size-badge", "refused-reason"]) {
+        const bottom = part(el, name).getBoundingClientRect().bottom;
+        expect(bottom, `${at} ${name}`).toBeLessThanOrEqual(grid.bottom);
+      }
+      expect(part(el, "viewport").scrollHeight, at).toBe(grid.height);
+      if (arrow.bottom > box.bottom) lower++;
+    }
+    expect(lower).toBeGreaterThan(0);
+  },
+);
