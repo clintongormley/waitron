@@ -4,6 +4,8 @@ import {
   devices,
   deviceProfiles,
   tenderRefunds,
+  receiptReprints,
+  sales,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -13,7 +15,12 @@ import { AppError, centsToDecimal, isUuid } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { asObject } from "./bill-payments-api.js";
 import { refundProvidersOf } from "./bill-refunds.js";
-import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./device-session.js";
+import {
+  assertDeviceCapability,
+  deviceBindingColumns,
+  deviceProfileJoin,
+  toDeviceBinding,
+} from "./device-session.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
@@ -30,6 +37,13 @@ import { overridePinAttempts, parseOverrideField, STATUS, type TillApiDeps } fro
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { assertSubjectZones } from "./zone-access.js";
 import type { DeviceRequestConfig } from "./till-config.js";
+import { enqueuePrintJob } from "@waitron/printing";
+import { resolveReceiptPrinter } from "./receipt-print.js";
+import {
+  readTenderRefundAcknowledgment,
+  formatTenderRefundAcknowledgment,
+} from "./tender-refund-receipt.js";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import "./errors.js";
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
@@ -163,6 +177,64 @@ export function mountTenderRefundApi(
         return toTenderRefundView(row);
       });
       return c.json(result);
+    }),
+  );
+  app.get("/api/tender-refunds/:refundId/receipt", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { passive: true });
+      const cfg = requestCfg(deps.cfg, session),
+        id = pathId(c.req.param("refundId"), "refund");
+      const result = await withTransaction(deps.db, async (tx) => {
+        const row = await readRefund(tx, id);
+        await checkAccess(tx, cfg, session, row.saleId);
+        return readTenderRefundAcknowledgment(deps.backend, tx, cfg, id);
+      });
+      return c.json(result);
+    }),
+  );
+  app.post("/api/tender-refunds/:refundId/reprint", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(deps, c, "print-receipt", "reprint", session.device);
+      const cfg = requestCfg(deps.cfg, session),
+        id = pathId(c.req.param("refundId"), "refund");
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const { language } = body;
+      if (language !== undefined && typeof language !== "string")
+        throw new AppError("management.request_invalid", { field: "language" });
+      await withTransaction(deps.db, async (tx) => {
+        const row = await readRefund(tx, id);
+        await checkAccess(tx, cfg, session, row.saleId);
+        const acknowledgment = await readTenderRefundAcknowledgment(deps.backend, tx, cfg, id);
+        const [sale] = await tx
+          .select({ locale: sales.locale })
+          .from(sales)
+          .where(eq(sales.id, row.saleId));
+        if (
+          language !== undefined &&
+          language !== sale!.locale &&
+          !(await readOfferedReceiptLanguages(tx, cfg)).includes(language)
+        )
+          throw new AppError("management.request_invalid", { field: "language" });
+        const printer = await resolveReceiptPrinter(tx, cfg.origin);
+        if (printer === undefined) return;
+        const payload = formatTenderRefundAcknowledgment(
+          acknowledgment,
+          language ?? sale!.locale,
+          printer,
+        );
+        const job = await enqueuePrintJob(
+          tx,
+          { locationId: cfg.locationId },
+          printer.id,
+          payload,
+          "document",
+        );
+        await tx
+          .insert(receiptReprints)
+          .values({ saleId: row.saleId, printJobId: job.jobId, personId: session.personId });
+      });
+      return c.body(null, 200);
     }),
   );
   app.post("/api/tender-refunds/:refundId/retry", (c) =>

@@ -2,6 +2,7 @@ import type {
   RefundableTender,
   TenderRefundRequest,
   TenderRefundView,
+  TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
 import { readTransferEvents } from "./transfer-events.js";
@@ -3565,6 +3566,26 @@ export class TillApi {
       `/api/tender-refunds/${encodeURIComponent(refundId)}/retry`,
       "POST",
       override === undefined ? {} : { override },
+    );
+  }
+
+  getTenderRefundAcknowledgment(
+    refundId: string,
+    options: ReadOptions = {},
+  ): Promise<TenderRefundAcknowledgment> {
+    return this.#request(
+      `/api/tender-refunds/${encodeURIComponent(refundId)}/receipt`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  async reprintTenderRefund(refundId: string, language?: string): Promise<void> {
+    await this.#request(
+      `/api/tender-refunds/${encodeURIComponent(refundId)}/reprint`,
+      "POST",
+      language === undefined ? {} : { language },
     );
   }
 

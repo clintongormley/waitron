@@ -1,3 +1,4 @@
+import type { TillSaleResult } from "./till-sale.js";
 import type { TenderMethod } from "./find-bill-types.js";
 import type { Override } from "@waitron/identity";
 
@@ -31,4 +32,13 @@ export interface TenderRefundView {
   tipAmount: string;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface TenderRefundAcknowledgment {
+  refund: TenderRefundView;
+  invoiceNumber: string;
+  issuer: NonNullable<TillSaleResult["issuer"]>;
+  customerName: string | null;
+  method: TenderMethod;
+  last4: string | null;
 }

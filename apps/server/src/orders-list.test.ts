@@ -664,6 +664,8 @@ describe("rows written within one millisecond, read in the order they were writt
             locationId: venue.cfg.locationId,
             printerId: venue.printerId,
             payload: Uint8Array.from([0x01]),
+            saleId,
+            receiptCopy: true,
           })
           .returning({ id: printJobs.id });
         await tx

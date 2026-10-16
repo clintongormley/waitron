@@ -11,6 +11,7 @@ import {
   saleSettlements,
   saleSubstitutions,
   tenders,
+  tenderRefunds,
   workingOrders,
   parties,
 } from "@waitron/db";
@@ -554,5 +555,172 @@ describe("Find Transactions SQL paging", () => {
         )
       ).rows.map((r) => r.saleId),
     ).toEqual([foreign]);
+  });
+});
+
+describe("completed post-invoice refund Transactions", () => {
+  async function returned(saleId: string, values: Partial<typeof tenderRefunds.$inferInsert> = {}) {
+    return inTx(venue, async (tx) => {
+      const [tender] = await tx.select().from(tenders).where(eq(tenders.saleId, saleId));
+      const [row] = await tx
+        .insert(tenderRefunds)
+        .values({
+          saleId,
+          tenderId: tender!.id,
+          submissionId: randomUUID(),
+          fingerprint: randomUUID(),
+          appliedAmount: 200,
+          tipAmount: 30,
+          reason: "Customer returned",
+          authorizedBy: venue.supervisorId,
+          requestedBy: venue.supervisorId,
+          source: "device",
+          deviceId: venue.deviceId,
+          nodeId: venue.cfg.nodeId,
+          locationId: venue.cfg.locationId,
+          method: "cash",
+          state: "completed",
+          createdAt: AT,
+          completedAt: "2026-10-16T09:00:00.000Z",
+          ...values,
+        })
+        .returning();
+      return row!;
+    });
+  }
+  it("shows completed money once with its original invoice, completion date and returning staff", async () => {
+    const saleId = await invoice({ counterpartyLegalName: "Cliente Norte" });
+    const refund = await returned(saleId);
+    const result = await list();
+    expect(result.total).toBe(2);
+    expect(result.rows[0]).toEqual({
+      transactionId: `refund:${refund.id}`,
+      refundId: refund.id,
+      saleId,
+      workingOrderId: null,
+      scopeOrderIds: [],
+      issuedAt: "2026-10-16T09:00:00.000Z",
+      invoiceNumber: "A/900001",
+      type: "refund",
+      tableName: null,
+      customerName: "Cliente Norte",
+      methods: [{ method: "cash", last4: null }],
+      staff: { id: venue.supervisorId, name: "Sofía" },
+      amount: "-2.30",
+    });
+    expect(result.rows[1]).toMatchObject({
+      transactionId: `sale:${saleId}`,
+      refundId: null,
+      amount: "12.10",
+      type: "sale",
+    });
+  });
+  it("excludes pending/failed attempts and filters completion dates, refund method, type and requester before counting", async () => {
+    const saleId = await invoice();
+    const cash = await returned(saleId);
+    const card = await returned(saleId, {
+      method: "card",
+      manual: true,
+      appliedAmount: 100,
+      tipAmount: 0,
+      requestedBy: venue.operatorId,
+    });
+    await returned(saleId, { state: "pending", completedAt: null });
+    await returned(saleId, { state: "failed", completedAt: null, failedAt: AT });
+    expect((await list()).total).toBe(3);
+    for (const [filter, wanted] of [
+      [{ type: "refund" }, [card.id, cash.id]],
+      [{ type: "refund", method: "cash" }, [cash.id]],
+      [{ type: "refund", method: "card" }, [card.id]],
+      [{ staffId: venue.supervisorId }, [cash.id]],
+      [{ preset: "custom", from: "2026-10-16", to: "2026-10-16" }, [card.id, cash.id]],
+    ] as [Record<string, string>, string[]][]) {
+      const result = await list(filter);
+      expect(result.total).toBe(wanted.length);
+      expect(new Set(result.rows.map((r) => r.refundId))).toEqual(new Set(wanted));
+      expect(await list({ ...filter, page: "1" })).toMatchObject({
+        rows: [],
+        total: wanted.length,
+      });
+    }
+    expect(
+      (await list({ preset: "custom", from: "2026-10-15", to: "2026-10-15" })).rows.map(
+        (r) => r.transactionId,
+      ),
+    ).toEqual([`sale:${saleId}`]);
+  });
+  it("searches only the refunded capture's last four while retaining original sale labels and customer", async () => {
+    const order = await parked(venue, "Tarta");
+    const saleId = await invoice(
+      { workingOrderId: order, counterpartyLegalName: "Refund Customer" },
+      false,
+    );
+    await tender(saleId, "card", { amount: 600 });
+    await tender(saleId, "cash", { amount: 610 });
+    await settle(saleId);
+    await attempt(order, saleId, "3210", { provider: "fake", paymentRef: "capture-returned" });
+    await attempt(order, saleId, "0091", { provider: "fake", paymentRef: "other-capture" });
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ label: "Retained table" }).where(eq(workingOrders.id, order)),
+    );
+    const refund = await returned(saleId, {
+      method: "card",
+      provider: "fake",
+      providerPaymentRef: "capture-returned",
+    });
+    for (const q of ["3210", "Refund Customer", "Retained table", "A/900001"]) {
+      expect((await list({ q, type: "refund" })).rows.map((r) => r.refundId)).toEqual([refund.id]);
+    }
+    expect((await list({ q: "0091", type: "refund" })).total).toBe(0);
+    expect((await list({ type: "refund" })).rows[0]!.methods).toEqual([
+      { method: "card", last4: "3210" },
+    ]);
+    expect((await list({ type: "refund", method: "cash" })).total).toBe(0);
+  });
+  it("keeps refund original-sale zone and location scope in addition to their distinct refund identity", async () => {
+    const allowed = await parked(venue, "Caña");
+    const party = await seatedWith(venue, "Tarta");
+    const own = await invoice({ workingOrderId: allowed });
+    const denied = await invoice({ workingOrderId: party.tabId });
+    const a = await returned(own),
+      b = await returned(denied);
+    const condition = (id: ReturnType<typeof sql>) =>
+      VENUE_SERVICE.orderInZones(venue.cfg, id, [venue.counterZone]);
+    const result = await inTx(venue, (tx) =>
+      readFindTransactions(tx, venue.cfg, query(), condition),
+    );
+    expect(result.rows.map((r) => r.transactionId)).toEqual([`refund:${a.id}`, `sale:${own}`]);
+    expect(result.total).toBe(2);
+    expect((await list({ type: "refund" })).rows.map((r) => r.refundId)).toContain(b.id);
+    const otherLocation = await inTx(venue, async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(locations)
+        .where(eq(locations.id, venue.cfg.locationId));
+      const [other] = await tx
+        .insert(locations)
+        .values({ ...current!, id: randomUUID(), name: "Other" })
+        .returning();
+      return other!.id;
+    });
+    expect(
+      await inTx(venue, (tx) =>
+        readFindTransactions(tx, { ...venue.cfg, locationId: locationId(otherLocation) }, query()),
+      ),
+    ).toMatchObject({ rows: [], total: 0 });
+  });
+  it("pages across invoices and refunds without collapsing shared sale ids and sorts signed amounts", async () => {
+    const saleId = await invoice();
+    const ids: string[] = [];
+    for (let i = 0; i < 51; i++)
+      ids.push((await returned(saleId, { appliedAmount: i + 1, tipAmount: 0 })).id);
+    const first = await list({ sort: "amount", direction: "ascending" });
+    expect(first).toMatchObject({ total: 52, pageSize: 50, page: 0 });
+    expect(first.rows.map((r) => r.refundId)).toEqual([...ids].reverse().slice(0, 50));
+    expect(
+      (await list({ sort: "amount", direction: "ascending", page: "1" })).rows.map(
+        (r) => r.transactionId,
+      ),
+    ).toEqual([`refund:${ids[0]}`, `sale:${saleId}`]);
   });
 });

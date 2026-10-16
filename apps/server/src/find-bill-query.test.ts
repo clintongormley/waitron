@@ -103,7 +103,7 @@ describe("Find a bill query", () => {
   });
   it.each([
     ["sort=openedAt", "sort"],
-    ["type=refund", "type"],
+    ["type=credit-note", "type"],
     ["type=", "type"],
     ["method=crypto", "method"],
     ["preset=week", "preset"],

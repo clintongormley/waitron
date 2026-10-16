@@ -5,7 +5,7 @@ export type FindBillDates =
 export type FindBillSort = { key: string; direction: "ascending" | "descending" };
 export type FindBillQuery = { q: string; page: number; sort: FindBillSort; staffId?: string };
 export type BillState = "unpaid" | "held" | "part-paid" | "paid-not-handed-over";
-export type TransactionType = "sale" | "full-invoice" | "correction";
+export type TransactionType = "sale" | "full-invoice" | "correction" | "refund";
 export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 export type BillsQuery = FindBillQuery & { zoneId?: string; state?: BillState };
 export type TransactionsQuery = FindBillQuery & {
@@ -53,6 +53,7 @@ export interface BillRow {
 
 export interface TransactionRow {
   transactionId: string;
+  refundId: string | null;
   saleId: string;
   workingOrderId: string | null;
   scopeOrderIds: string[];

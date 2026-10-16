@@ -45,6 +45,8 @@ import {
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
  * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
+ * | GET /api/tender-refunds/:refundId/receipt | admitted session; original-sale zones | tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt", "checks every original source zone on read and reprint and admits the allowed case" |
+ * | POST /api/tender-refunds/:refundId/reprint | print-receipt; original-sale zones | same refusal and allowed cases; document only, never drawer |
  * | GET /api/transactions/:saleId/receipt | session only; no profile action | transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | POST /api/transactions/:saleId/reprint | print-receipt | reprint; transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | GET /api/transactions/:saleId/refundable-tenders; GET /api/tender-refunds/:refundId | admitted session; no payment capability | tender-refund-api.test.ts: "%s reads are passive and require no payment capability"; shared display refused in "does not expose a refund command or its reads on a shared kitchen display" |

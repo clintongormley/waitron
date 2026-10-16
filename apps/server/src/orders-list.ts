@@ -1014,7 +1014,7 @@ async function readReprints(tx: Transaction, saleId: string): Promise<OrderRepri
     .innerJoin(printJobs, eq(printJobs.id, receiptReprints.printJobId))
     .innerJoin(printers, eq(printers.id, printJobs.printerId))
     .leftJoin(persons, eq(persons.id, receiptReprints.personId))
-    .where(eq(receiptReprints.saleId, saleId))
+    .where(and(eq(receiptReprints.saleId, saleId), eq(printJobs.receiptCopy, true)))
     .orderBy(receiptReprints.requestedAt, sql`${receiptReprints}.rowid`);
   return rows;
 }

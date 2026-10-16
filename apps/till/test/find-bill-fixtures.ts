@@ -26,6 +26,7 @@ export const billRow = (patch: Partial<BillRow> = {}): BillRow => ({
 });
 export const transactionRow = (patch: Partial<TransactionRow> = {}): TransactionRow => ({
   transactionId: "sale-1",
+  refundId: null,
   saleId: "sale-1",
   workingOrderId: null,
   scopeOrderIds: [],

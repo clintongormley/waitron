@@ -1995,8 +1995,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   metadata; an ordinary reload
   retains it, and an authorized return to the receipt can discover a server-side pending refund.
   Completion closes the form before refreshing balances and keeps the invoice, basket and
-  Transactions query/page. Actual refund rows and separate payment acknowledgments/printing
-  remain, followed by the two required whole-branch reviews and delivery gates.
+  Transactions query/page. The server Transactions source now includes completed refund rows
+  with their own identity, completion date and negative payment-plus-tip amount. Scoped read and
+  reprint adapters provide a separate payment acknowledgment with the original invoice reference;
+  document jobs retain a copy-request audit without entering invoice delivery or opening a drawer.
+  Typed browser clients expose those adapters. The till's refund-row navigation, acknowledgment
+  screen and its reprint controls remain, followed by final integration, the two required
+  whole-branch reviews and delivery gates.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),

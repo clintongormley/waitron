@@ -91,3 +91,39 @@ describe("settled tender refund client", () => {
     });
   });
 });
+
+it("reads the separate refund acknowledgment with cancellation and an encoded refund id", async () => {
+  const body = {
+    refund: { ...view, state: "completed", completedAt: "2026-10-16T12:01:00.000Z" },
+    invoiceNumber: "A/12",
+    issuer: { venueName: "Original issuer", nif: "61000002T" },
+    customerName: null,
+    method: "cash",
+    last4: null,
+  };
+  const fetcher = vi.fn().mockResolvedValue(response(body));
+  const api = new TillApi("", fetcher),
+    signal = new AbortController().signal;
+  expect(api.getTenderRefundAcknowledgment).toBeTypeOf("function");
+  expect(await api.getTenderRefundAcknowledgment("refund/1", { signal })).toEqual(body);
+  expect(fetcher).toHaveBeenCalledWith("/api/tender-refunds/refund%2F1/receipt", {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+});
+it.each([undefined, "es-ES"])(
+  "reprints a payment acknowledgment in language %j without posting another refund",
+  async (language) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetcher);
+    expect(api.reprintTenderRefund).toBeTypeOf("function");
+    await api.reprintTenderRefund("refund/1", language);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/tender-refunds/refund%2F1/reprint", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(language === undefined ? {} : { language }),
+    });
+  },
+);
