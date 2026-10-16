@@ -94,3 +94,44 @@ it("does not say the languages are available at the till", async () => {
   const { el } = await mountReceiptDialog();
   expect(el.shadowRoot!.textContent).not.toContain("Available at the till.");
 });
+
+it.each([1280, 390])(
+  "at %ipx a wide logo leaves the dialog at its no-logo width",
+  async (width) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 900);
+    try {
+      const dialogWidth = (el: DepartmentReceiptDialog) =>
+        el
+          .shadowRoot!.querySelector("wt-modal")!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect().width;
+      const plain = await mountReceiptDialog();
+      const without = dialogWidth(plain.el);
+      cleanupWidgets();
+      const { el } = await mountReceiptDialog(
+        receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, logo: "wide.png" } }),
+      );
+      const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+      await upload.updateComplete;
+      const img = upload.shadowRoot!.querySelector<HTMLImageElement>(
+        "[data-test=choose-image] img",
+      )!;
+      const canvas = document.createElement("canvas");
+      canvas.width = 2000;
+      canvas.height = 600;
+      canvas.getContext("2d")!.fillRect(0, 0, 2000, 600);
+      const loaded = new Promise((resolve) =>
+        img.addEventListener("load", resolve, { once: true }),
+      );
+      img.src = canvas.toDataURL("image/png");
+      await loaded;
+      expect(img.naturalWidth).toBe(2000);
+      expect(dialogWidth(el)).toBeCloseTo(without, 0);
+      const fields = el.shadowRoot!.querySelector(".fields")!.getBoundingClientRect();
+      expect(img.getBoundingClientRect().right).toBeLessThanOrEqual(fields.right);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

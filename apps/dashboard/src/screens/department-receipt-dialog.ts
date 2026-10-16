@@ -714,8 +714,8 @@ export class DepartmentReceiptDialog extends LitElement {
                 ${this.model.venueAddress.length ? nothing : html`<p class="note" data-test="venue-address">${t("receipts.no_address")}</p>`}
                 <dashboard-image-upload
                   name="logo"
+                  logo
                   .api=${this.api}
-                  label=${t("receipts.logo")}
                   .image=${this.draft.receipt.logo ?? null}
                   .draftParent=${this.#scope?.id}
                   .disabled=${this.saving}

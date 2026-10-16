@@ -119,6 +119,12 @@ function renderPiece(piece: Piece, widthDots: number) {
   }
 }
 
+/** Paper and ink keep their physical colours in both application themes. */
+export const paperGround = css`
+  color: #000;
+  background: #fff;
+`;
+
 /** The paper a print job's preview is drawn on; the host adds it to its own styles. */
 export const paperStyles = css`
   .paper,
@@ -128,9 +134,7 @@ export const paperStyles = css`
     font: 2.5mm / 3.75mm monospace;
   }
   .paper {
-    /* Paper and ink keep their physical colours in both application themes. */
-    color: #000;
-    background: #fff;
+    ${paperGround}
   }
   .paper-strut {
     padding-block: 0;
