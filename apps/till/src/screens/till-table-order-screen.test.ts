@@ -5655,6 +5655,57 @@ describe("closed department ordering", () => {
 });
 
 describe("A668 nutrition after table-order names", () => {
+  it("shows nutrition in the last-added draft summary and the draft review row", async () => {
+    const draft = new WorkingOrderStore();
+    const dish: TillProduct = {
+      ...cafe,
+      allergens: { milk: {} },
+      dietaryDeclarations: ["no_meat"],
+    };
+    draft.addProduct(dish, "1");
+    const { el } = await mount({ draftStore: draft });
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
+      ),
+    ).not.toBeNull();
+    await openReview(el);
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-select] .draft-line-name wt-icon[name="allergen-milk"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-select] .draft-line-name wt-icon[name="diet-no_meat"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("shows nutrition in a group row before Current orders has been read", async () => {
+    const line: TabLine = {
+      ...pendingLine,
+      groupId: "held",
+      nutrition: { allergens: { gluten: { kinds: ["rye"] } }, dietaryDeclarations: ["kosher"] },
+    };
+    const { el } = await mount({
+      lines: [line],
+      groups: [{ ...orderGroup("held", "held"), lineIds: [line.id] }],
+      currentOrders: null,
+    });
+    await openDrawer(el);
+    const name = el.shadowRoot!.querySelector("[data-group-line] .group-line-name")!;
+    expect(name.querySelector('wt-icon[name="allergen-gluten"]')?.getAttribute("label")).toMatch(
+      /rye|centeno/i,
+    );
+    expect(name.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
+  });
+
   it("shows each persisted pending and served line's own nutrition without reading the current menu", async () => {
     const { el } = await mount({
       lines: [

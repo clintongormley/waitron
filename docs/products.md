@@ -237,3 +237,6 @@ Order lines show nutrition icons after the dish’s name. An unreviewed dish sho
 information window rather than treating the absence of icons as a declaration. Extras keep their
 own nutrition separate from the dish. There is no separate Allergens screen or printed allergen
 sheet in the till.
+
+Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
+still selects the dish (owner decision, 2026-10-16).

@@ -711,6 +711,14 @@ describe("readTabLines", () => {
       nutrition: { allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["kosher"] },
     });
     expect(rows[0]!.nutrition!.allergens).not.toHaveProperty("milk");
+    await db.execute(
+      sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
+    );
+    const inherited = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(inherited[0]!.nutrition).toEqual({
+      allergens: { milk: {} },
+      dietaryDeclarations: ["halal"],
+    });
   });
 
   it("reads an open tab's lines in line_no order with locked gross price, quantity and served state", async () => {

@@ -100,6 +100,32 @@ describe("product nutrition on the menu", () => {
     expect(info(el)).toBeNull();
   });
 
+  it.each([
+    { name: "short moved press", type: "pointermove", expected: 1 },
+    { name: "cancelled press", type: "pointercancel", expected: 0 },
+  ])("handles a native click after a $name", async ({ type, expected }) => {
+    const { el, store, button } = await mount();
+    const pointer = (name: string, x: number) =>
+      button.dispatchEvent(
+        new PointerEvent(name, {
+          bubbles: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          button: 0,
+          clientX: x,
+          clientY: 10,
+        }),
+      );
+    pointer("pointerdown", 10);
+    pointer(type, 20);
+    pointer("pointerup", 20);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, detail: 1 }));
+    expect(store.lines).toHaveLength(expected);
+    expect(info(el)).toBeNull();
+  });
+
   it("a held mouse press opens the dish information and never adds it", async () => {
     const { el, store, button } = await mount();
     await userEvent.click(button, { delay: 650 });
@@ -203,6 +229,67 @@ describe("product nutrition on the menu", () => {
     ).toBe(true);
     expect(store.lines).toHaveLength(0);
   });
+
+  it("disables Add when the open dish sells out in a menu refresh", async () => {
+    const { el, store, button } = await mount();
+    await userEvent.click(button, { delay: 650 });
+    el.products = [{ ...dish, available: false }];
+    await el.updateComplete;
+    expect(
+      (info(el)!.shadowRoot!.querySelector("[data-add]") as HTMLElement & { disabled: boolean })
+        .disabled,
+    ).toBe(true);
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it("Add uses the refreshed offer's price and nutrition", async () => {
+    const { el, store, button } = await mount();
+    await userEvent.click(button, { delay: 650 });
+    const refreshed: TillProduct = {
+      ...dish,
+      unitPrice: "4.00",
+      allergens: { nuts: { kinds: ["almonds"] } },
+    };
+    el.products = [refreshed];
+    await el.updateComplete;
+    await userEvent.click(info(el)!.shadowRoot!.querySelector<HTMLElement>("[data-add]")!);
+    expect(store.lines[0]!.product.unitPrice).toBe("4.00");
+    expect(store.lines[0]!.product.allergens).toEqual({ nuts: { kinds: ["almonds"] } });
+  });
+
+  it("cannot add a removed offer even before its pending redraw closes information", async () => {
+    const { el, store, button } = await mount();
+    await userEvent.click(button, { delay: 650 });
+    const add = info(el)!.shadowRoot!.querySelector<HTMLElement>("[data-add]")!;
+    el.products = [];
+    add.click();
+    await el.updateComplete;
+    expect(store.lines).toHaveLength(0);
+    expect(info(el)).toBeNull();
+  });
+
+  it("Enter still selects after a held press was closed", async () => {
+    const { el, store, button } = await mount();
+    await userEvent.click(button, { delay: 650 });
+    await userEvent.click(info(el)!.shadowRoot!.querySelector<HTMLElement>("[data-close]")!);
+    await el.updateComplete;
+    button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(store.lines).toHaveLength(1);
+    expect(info(el)).toBeNull();
+  });
+
+  it.each(["{Shift>}{F10}{/Shift}", "{ContextMenu}"])(
+    "%s opens the focused product's information without adding",
+    async (keys) => {
+      const { el, store, button } = await mount();
+      button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+      await userEvent.keyboard(keys);
+      await el.updateComplete;
+      expect(info(el)).not.toBeNull();
+      expect(store.lines).toHaveLength(0);
+    },
+  );
 
   it("keyboard activation selects a product without opening information", async () => {
     const { el, store, button } = await mount();

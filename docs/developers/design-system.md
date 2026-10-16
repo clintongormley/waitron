@@ -4669,3 +4669,6 @@ Counter and table-order lines place the dish’s allergen and positive diet icon
 Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens
 shows no line icons. The separate As served and Diet rows are retired. Kitchen allergen chips stay
 textual and omit the unreviewed-allergen warning.
+
+Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
+still selects the dish (owner decision, 2026-10-16).

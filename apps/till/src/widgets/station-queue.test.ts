@@ -699,7 +699,7 @@ describe("till-station-queue", () => {
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-p"]')!;
       expect(item.querySelector(".allergen-pending")).toBeNull();
-      expect(item.textContent).not.toContain(t("allergens.not_reviewed"));
+      expect(item.textContent).not.toMatch(/review|revisi/i);
     });
 
     it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {

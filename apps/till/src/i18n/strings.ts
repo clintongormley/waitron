@@ -728,15 +728,11 @@ export const en = {
   "equipment.close": "Close",
   "equipment.picked_up": "Picked up {item}",
   "equipment.no_printer_role": "No printer role selected. Choose a role in Equipment.",
-  // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "product_info.add": "Add to order",
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
   "allergens.contains": "Contains",
-  // `not_reviewed` must read as "review pending": `widgets/basket.test.ts` pins /review|pendiente/i.
-  "allergens.as_served": "As served",
   "allergens.as_served_none": "No declared allergens",
-  "allergens.not_reviewed": "Allergens not fully reviewed",
   // Dietary classification
   "diet.label": "Diet",
   "diet.vegan": "Vegan",
@@ -2257,9 +2253,7 @@ export const es: Record<StringKey, string> = {
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",
   "allergens.contains": "Contiene",
-  "allergens.as_served": "Tal como se sirve",
   "allergens.as_served_none": "Sin alérgenos declarados",
-  "allergens.not_reviewed": "Alérgenos pendientes de revisión",
   "diet.label": "Dieta",
   "diet.vegan": "Vegano",
   "diet.vegetarian": "Vegetariano",

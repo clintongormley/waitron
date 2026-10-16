@@ -110,9 +110,6 @@ export class TillMenuBrowser extends LitElement {
         if (at.target === this.#pressedTarget && this.#pressedProduct)
           this.infoProduct = this.#pressedProduct;
       },
-      pan: () => {
-        this.#suppressClick = true;
-      },
       cancel: () => {
         this.#suppressClick = true;
       },
@@ -434,8 +431,21 @@ export class TillMenuBrowser extends LitElement {
     return index;
   }
 
+  #currentInfoOffer(product: TillProduct): TillProduct | undefined {
+    const key = product.menuItemId ?? product.id;
+    return [
+      ...(this.unfilteredProducts ?? this.products),
+      ...(this.unfilteredServedProducts ?? this.servedProducts),
+    ].find(
+      (candidate) =>
+        (candidate.menuItemId ?? candidate.id) === key &&
+        candidate.ordering !== "not_sold_separately",
+    );
+  }
+
   /** The open section is judged before each render, so a menu that has lost it never draws it. */
   override willUpdate(): void {
+    if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
     if (this.menu === undefined) return;
     const pending = this.#pendingSection;
     if (pending !== undefined) {
@@ -616,6 +626,12 @@ export class TillMenuBrowser extends LitElement {
       ?disabled=${!sellable}
       ?data-nutrition=${marked}
       @contextmenu=${(event: Event) => event.preventDefault()}
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+          event.preventDefault();
+          this.infoProduct = product;
+        }
+      }}
       @pointerdown=${(event: PointerEvent) => {
         this.#pressedProduct = product;
         this.#pressedTarget = event.composedPath()[0];
@@ -830,8 +846,9 @@ export class TillMenuBrowser extends LitElement {
               }}
               @add-product=${(event: CustomEvent<TillProduct>) => {
                 event.stopPropagation();
+                const current = this.#currentInfoOffer(event.detail);
                 this.infoProduct = undefined;
-                this.#pick(event.detail);
+                if (current) this.#pick(current);
               }}
             ></till-product-info>`
           : nothing

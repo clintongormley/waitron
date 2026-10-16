@@ -1931,6 +1931,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   handles and Delete. Role lists with or after editable roles.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own)
 
+- **Review follow-up: nutrition for extras in Current orders.** The A668-5 reviewer’s
+  read-only finding is that Current orders’ extra summaries carry names and quantities, while the
+  pending/served child rows can show their own nutrition icons. Reproduce the two views with a
+  dish and a differently declared extra, then decide whether the Current orders wire and rows
+  should carry the extra’s nutrition too. The visual difference is unverified; A668-5’s explicit
+  dish-name scope does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`)
+  and `apps/till/src/screens/till-table-order-screen.ts` (`#currentRow`).
+
 - **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
   bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
   name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.

@@ -9,6 +9,7 @@
 ## Constraints and integration
 
 - Reuse the shared `Gestures` recogniser and `NUTRITION_ICONS`.
+- Owner answer 2026-10-16: Shift+F10 or the context-menu key opens the focused product’s information; Enter adds. The three Spanish labels are approved.
 - A normal click anywhere on a product, including its mark, selects it once. A held mouse press opens information and never selects it. Double clicks remain two selections.
 - Information opens for all products. Its Add action follows the existing product-selection path, including variants, extras and weighing.
 - Read a dish's own values and keep extras separate, following `state/as-served.ts`; this slice changes presentation, not nutrition calculation.
