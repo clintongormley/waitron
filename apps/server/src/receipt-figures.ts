@@ -6,7 +6,6 @@ import {
   divideDecimal,
   isZeroDecimal,
   multiplyDecimal,
-  MONEY_SCALE,
   resolveSnapshotText,
   subtractDecimal,
   sumDecimals,
@@ -39,25 +38,12 @@ export interface FiguredLine {
 export function beforeVatFigures(line: FiledLine): BeforeVatFigures {
   const net = line.net;
   const filed = { price: decimal(net.unitPrice), amount: decimal(net.base), discount: ZERO };
-  if (line.listGross === undefined) return filed;
-  const listGross = decimal(line.listGross);
-  const listUnitGross = listUnitGrossOf(line, listGross);
-  if (listUnitGross === null) return filed;
+  if (line.listGross === undefined || line.listUnitPriceGross === undefined) return filed;
   const rate = decimal(net.rate);
-  const amount = baseFromGross(listGross, rate);
+  const amount = baseFromGross(decimal(line.listGross), rate);
   const discount = subtractDecimal(amount, filed.amount);
   if (compareDecimal(discount, ZERO) < 0) return filed;
-  return { price: baseFromGross(listUnitGross, rate), amount, discount };
-}
-
-/** The line's stored unit price with VAT before any discount, else one worked back from its total. */
-function listUnitGrossOf(line: FiledLine, listGross: Decimal): Decimal | null {
-  if (line.listUnitPriceGross !== undefined) return decimal(line.listUnitPriceGross);
-  const quantity = decimal(line.quantity);
-  const priceQuantity = decimal(line.net.priceQuantity);
-  // Under one priced unit the list price cannot be divided back exactly.
-  if (compareDecimal(quantity, priceQuantity) < 0) return null;
-  return divideDecimal(multiplyDecimal(listGross, priceQuantity), quantity, MONEY_SCALE);
+  return { price: baseFromGross(decimal(line.listUnitPriceGross), rate), amount, discount };
 }
 
 export interface GroupDiscount {

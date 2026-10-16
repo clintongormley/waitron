@@ -56,13 +56,26 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "11.36", amount: "11.36", discount: "1.13" });
   });
 
+  it("prints the filed figures, and no discount, when a line has a list total but no stored price", () => {
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "2",
+          gross: "6.00",
+          listGross: "6.66",
+          net: net("2.48", "4.96", "21.00"),
+        }),
+      ),
+    ).toEqual({ price: "2.48", amount: "4.96", discount: "0.00" });
+  });
+
   it("reads a line no discount touched as filed", () => {
     expect(
       beforeVatFigures(filed({ quantity: "2", gross: "8.80", net: net("4.00", "8.00", "10") })),
     ).toEqual({ price: "4.00", amount: "8.00", discount: "0.00" });
   });
 
-  it("divides a counted line's list total back to its unit price", () => {
+  it("prices a counted line at its stored unit price", () => {
     // Croquetas: 2 × 3,33 with 21% VAT, part of a whole-bill discount.
     expect(
       beforeVatFigures(
@@ -77,8 +90,7 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "2.75", amount: "5.50", discount: "0.54" });
   });
 
-  it("keeps the filed price and base for less than one priced unit", () => {
-    // Jamón: 0.123 kg at 24,00 €/kg; 2,95 ÷ 0.123 would give 23,98 a kilo, not 24,00.
+  it("prints a weighed line with no stored price at its filed figures", () => {
     expect(
       beforeVatFigures(
         filed({
@@ -151,7 +163,7 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "9.50", amount: "9.50", discount: "0.00" });
   });
 
-  it("prices an extra per its portion", () => {
+  it("prices an extra at its stored price per portion", () => {
     // Two 0.05 portions at 1,50 with 21% VAT, 10% off: 1,50 a portion is 1,24 before VAT.
     expect(
       beforeVatFigures(
