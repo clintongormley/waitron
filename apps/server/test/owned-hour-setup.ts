@@ -8,6 +8,7 @@ export async function ownedHourSetup(
   base: string,
   venue: unknown,
   password: string,
+  claim: { configurationImport: true; newTaxpayer: boolean } | undefined = undefined,
 ) {
   let owner: { state: PublicFirstSetupState; capability: string } | undefined;
   const headers = () => ({
@@ -42,7 +43,11 @@ export async function ownedHourSetup(
       owner = { state: value.state, capability: value.capability ?? owner!.capability };
     return value;
   };
-  await send("claim", { venue, clientClaimNonce: randomBytes(32).toString("base64url") });
+  await send("claim", {
+    venue,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    ...claim,
+  });
   const module = "fiscal-verifactu";
   const challenge = await send("preparation", { module, proposal: { action: "clock-challenge" } });
   await send("preparation", {

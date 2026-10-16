@@ -251,3 +251,40 @@ files. The fiscal run returned 148 cases including the unchanged golden and immu
 Six guard omissions each failed the intended check and passed after restoration. Three package
 typechecks, scoped lint and focused root guards pass. Whole boot remains 60 passed and two failed
 as listed above; these focused results do not establish branch readiness.
+
+## Task 4 hour import qualification, 2026-10-16
+
+To reproduce configuration import under the hour policy, run
+`pnpm --filter @waitron/server exec vitest run src/first-fiscal-hour-import.e2e.test.ts`.
+Its source venue uses the configured hour host and real provisioning: `06RA` with counters at 42.
+The target imports its menu, uses `06RB` with counters at 1, and has different node and administrator
+identities. The cases cover development Live targeting preproduction and production Live, each
+with the same taxpayer or a new taxpayer. They close the server before reading its database,
+restart successful setups and refuse replaced or missing staged imports before venue writes.
+
+These are synthetic local journeys. The clock advances from a controlled instant with real
+monotonic elapsed time. External clock observations, the release stamp, certificate validation and
+AEAT drain replies are controlled. They do not establish actual external-clock, certificate or
+filing behavior. The setup helper gains only an optional import claim; its existing assertions and
+callers retain their checks. No production source changes in this continuation.
+
+The eight-file focused setup/import command returned 72 passes; the unchanged golden and
+immutability pair returned 20 passes. The retained `first-fiscal-setup.e2e.test.ts` still sends
+`serials: [1]` and expects paper enrolment and register confirmation. Its selected readiness-after-
+import case returned 400 at candidate selection instead of 200. The exact proposed fixture update
+is in Lane E's `receipts/a679-hour-task4-import-20261016-2330/`; it has not been applied or run.
+The A679 queue requires exact owner approval for existing fiscal-check changes.
+
+A separate temporary CLI probe used the real command-line runner and its configured module host.
+It returned exit 1 with `sif.allocation_invalid` / `reauthentication_required`, no taxpayer rows and
+a preproduction stamp. Its desired-success assertion failed. Keep that reproduction when adding
+the CLI's durable host; do not treat an uploaded input file as trusted hour-selection state.
+The probe is retained in the same receipt directory, outside product source.
+
+An independently installed checkout returned six import passes. Removing the import-digest guard
+made the replaced artifact return 200 instead of 409; removing the table import left the expected
+product absent. Both new checks failed on those omissions. After restoring the source, both
+selected cases passed. No production file in the feature checkout was changed for these controls.
+
+Task 4 remains incomplete. CLI admission, the retained import fixture, the two boot configuration
+failures and later wizard/recovery/PDF tasks still need their own qualification.
