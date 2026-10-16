@@ -414,7 +414,7 @@ function runImageInstall(command: string, mode: string) {
   const state = mkdtempSync(join(installScratch, "state-"));
   const result = spawnSync(
     INSTALL_TIMEOUT,
-    ["-k", "1", "12", "sh", "-ec", `${run!.slice(4)}\nprintf 'install-complete\\n'`],
+    ["-k", "1", "12", "sh", "-c", `${run!.slice(4)}\nprintf 'install-complete\\n'`],
     {
       encoding: "utf8",
       timeout: INSTALL_SPAWN_TIMEOUT_MS,
