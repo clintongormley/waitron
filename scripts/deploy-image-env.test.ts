@@ -1,7 +1,18 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
 import { esbuildArgs } from "./bundle-node.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
@@ -351,6 +362,127 @@ describe("the print-agent image and its compose wiring", () => {
   it("smokes the print-agent target it ships", () => {
     expect(IMAGE_SMOKE).toContain("target: print-agent");
   });
+});
+
+const INSTALL_TIMEOUT = spawnSync("sh", ["-c", "command -v gtimeout || command -v timeout"], {
+  encoding: "utf8",
+}).stdout.trim();
+const INSTALL_SPAWN_TIMEOUT_MS = 20_000;
+vi.setConfig({ testTimeout: INSTALL_SPAWN_TIMEOUT_MS + 10_000 });
+const installScratch = mkdtempSync(join(tmpdir(), "image-install-"));
+afterAll(() => rmSync(installScratch, { recursive: true, force: true }));
+const installStub = `#!/bin/sh
+printf '%s\\n' "$$" >> "$INSTALL_STATE/pids"
+printf '%s\\n' "$*" >> "$INSTALL_STATE/calls"
+attempt=$(wc -l < "$INSTALL_STATE/calls" | tr -d ' ')
+case "$INSTALL_MODE" in
+  hang) exec sleep 60 ;;
+  ignore-term) trap '' TERM; exec sleep 60 ;;
+  fail) exit 23 ;;
+  second) [ "$attempt" -ge 2 ] || exit 23 ;;
+  third) [ "$attempt" -ge 3 ] || exit 23 ;;
+esac
+`;
+for (const command of ["npm", "pnpm", "timeout"]) {
+  const path = join(installScratch, command);
+  writeFileSync(
+    path,
+    command === "timeout"
+      ? `#!/bin/sh
+printf '%s\\n' "$*" >> "$INSTALL_STATE/limits"
+if [ "$1" = -k ]; then
+  grace="$2"; shift 2
+  case "$grace" in ''|0|*[!0-9]*) exit 91 ;; esac
+  bound="$1"; shift
+  case "$bound" in ''|0|*[!0-9]*) exit 92 ;; esac
+  case "$INSTALL_MODE" in hang|ignore-term) grace=1; bound=1 ;; esac
+  exec "$INSTALL_REAL_TIMEOUT" -k "$grace" "$bound" "$@"
+fi
+shift
+exec "$INSTALL_REAL_TIMEOUT" 1 "$@"
+`
+      : installStub,
+  );
+  chmodSync(path, 0o755);
+}
+
+function runImageInstall(command: string, mode: string) {
+  const run = DOCKERFILE.replace(/\\\n/g, " ")
+    .split("\n")
+    .find((line) => /^RUN\s/.test(line) && line.includes(command));
+  expect(run, `no RUN installing ${command}`).toBeDefined();
+  const state = mkdtempSync(join(installScratch, "state-"));
+  const result = spawnSync(
+    INSTALL_TIMEOUT,
+    ["-k", "1", "12", "sh", "-ec", `${run!.slice(4)}\nprintf 'install-complete\\n'`],
+    {
+      encoding: "utf8",
+      timeout: INSTALL_SPAWN_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        PATH: `${installScratch}:${process.env.PATH}`,
+        INSTALL_STATE: state,
+        INSTALL_MODE: mode,
+        INSTALL_REAL_TIMEOUT: INSTALL_TIMEOUT,
+      },
+    },
+  );
+  const lines = (name: string) => {
+    const path = join(state, name);
+    return existsSync(path) ? readFileSync(path, "utf8").trim().split("\n") : [];
+  };
+  for (const pid of lines("pids")) {
+    try {
+      process.kill(Number(pid), "SIGKILL");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+  return { ...result, calls: lines("calls"), limits: lines("limits") };
+}
+
+describe("the Dockerfile's package install waits", () => {
+  it("requires a real timeout command for the stalled-install controls", () => {
+    expect(INSTALL_TIMEOUT).not.toBe("");
+  });
+
+  for (const [name, command, args] of [
+    [
+      "pnpm setup",
+      "npm install --global pnpm@",
+      `install --global ${JSON.parse(read("package.json")).packageManager}`,
+    ],
+    ["workspace install", "pnpm install --frozen-lockfile", "install --frozen-lockfile"],
+  ] as const) {
+    describe(name, () => {
+      it.each([
+        ["ok", 1],
+        ["second", 2],
+        ["third", 3],
+      ])("completes %s on its first successful attempt", (mode, attempts) => {
+        const result = runImageInstall(command, mode);
+        expect(result.error).toBeUndefined();
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toBe("install-complete\n");
+        expect(result.calls).toEqual(Array(attempts).fill(args));
+        expect(result.limits).toHaveLength(attempts);
+        for (const limit of result.limits) expect(limit).toMatch(/^-k [1-9]\d* [1-9]\d* /);
+      });
+
+      it.each(["fail", "hang", "ignore-term"])("stops after three %s attempts", (mode) => {
+        const result = runImageInstall(command, mode);
+        expect(result.error).toBeUndefined();
+        expect(result.status, result.stderr).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.calls).toEqual([args, args, args]);
+        expect(result.limits).toHaveLength(3);
+        for (const limit of result.limits) expect(limit).toMatch(/^-k [1-9]\d* [1-9]\d* /);
+        for (const attempt of [1, 2, 3]) {
+          expect(result.stderr).toContain(`attempt ${attempt} of 3 failed or stalled: ${command}`);
+        }
+      });
+    });
+  }
 });
 
 /**

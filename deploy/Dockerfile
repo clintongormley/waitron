@@ -13,7 +13,9 @@ FROM node:26 AS build
 # pnpm is installed by npm rather than corepack: corepack is no longer shipped in the node image
 # (measured on node:26 — `corepack: not found`). The version is the root package.json's
 # `packageManager` field; the two must stay equal or the lockfile check below is meaningless.
-RUN npm install --global pnpm@9.15.0
+RUN set -eux; \
+  bounded() { for attempt in 1 2 3; do timeout -k 10 60 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
+  bounded npm install --global pnpm@9.15.0
 
 # The root `prepare` script installs git hooks, which a build context without .git cannot do and an
 # image has no use for.
@@ -21,7 +23,9 @@ ENV HUSKY=0
 
 WORKDIR /src
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN set -eux; \
+  bounded() { for attempt in 1 2 3; do timeout -k 10 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
+  bounded pnpm install --frozen-lockfile
 
 # `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
 # four operator CLIs and dist/drizzle/ (copy-migrations.mjs); the three web apps emit dist/ via vite.
