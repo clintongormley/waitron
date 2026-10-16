@@ -1,10 +1,10 @@
 # A679: keep invoice names distinct after recovery
 
-> **2026-10-16 direction:** Tasks 9–12 wait for owner approval of the
-> [hour-coded series proposal](2026-10-16-a679-hour-coded-series-design.md) and a replacement implementation plan.
-> This document retains the earlier register-based design as history; the new naming
-> policy is proposed, not implemented. Owner PDF acceptance is viewing generated
-> EN/ES PDFs through Drive, replacing the physical owner typing exercise.
+> **Superseded naming design, 2026-10-16 at 14:50:** the owner approved
+> [hour-coded series](2026-10-16-a679-hour-coded-series-design.md).
+> Follow its [replacement implementation plan](../plans/2026-10-16-a679-hour-code-implementation.md).
+> This document retains the earlier register-based design as history. Owner PDF acceptance is
+> viewing generated EN/ES PDFs through Drive; automated entry of rendered keys belongs to the driver.
 
 **Owner update, 2026-10-15 at 22:15:** group each typed field independently in fours.
 Register continuation takes 20 entered characters, 23 including grouping spaces.

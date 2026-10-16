@@ -1,10 +1,11 @@
 # A679 One-PDF Implementation Plan — replacement, 2026-10-15 21:30 revision, amended at 22:15
 
-> **2026-10-16 direction:** Tasks 9–12 wait for owner approval of the
-> [hour-coded series proposal](../specs/2026-10-16-a679-hour-coded-series-design.md) and a replacement implementation plan.
-> This document retains the earlier register-based design as history; the new naming
-> policy is proposed, not implemented. Owner PDF acceptance is viewing generated
-> EN/ES PDFs through Drive, replacing the physical owner typing exercise.
+> **Superseded naming and integration plan, 2026-10-16 at 14:50:** the owner approved
+> [hour-coded series](../specs/2026-10-16-a679-hour-coded-series-design.md).
+> Use the [replacement plan](2026-10-16-a679-hour-code-implementation.md), including its
+> requalification of completed components. This file retains the register-based plan and its
+> receipts as history; do not execute its Tasks 9–12. The owner now views generated EN/ES PDFs
+> through Drive; automated entry of rendered keys belongs to the driver.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` for INLINE execution, one task at a time. Read `superpowers:test-driven-development` before implementation or tests. Observe the intended RED before implementing. Do not delegate automatically or reopen settled owner requirements.
 

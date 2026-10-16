@@ -1,5 +1,9 @@
 # A679 First Live Fiscal Setup Implementation Plan
 
+> **2026-10-16 at 14:50:** the owner approved [hour-coded series](../specs/2026-10-16-a679-hour-coded-series-design.md).
+> Follow the [hour-code implementation plan](2026-10-16-a679-hour-code-implementation.md).
+> Earlier custody, allocation and acceptance instructions below remain historical where superseded.
+
 **Owner update, 2026-10-15 at 21:30:** paper custody signing keys are withdrawn. Follow the
 [current redesign](../specs/2026-10-15-a679-two-route-redesign.md) and its
 [replacement plan](../plans/2026-10-15-a679-one-pdf-implementation.md) for unsigned paper history

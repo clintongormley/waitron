@@ -242,10 +242,11 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## A venue without Cloud needs a usable paper-custodian route
 
-**Owner direction, 2026-10-16 at 12:50 and 13:00:** after Task 8, stop for approval
-of the [hour-coded series proposal](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md).
-It proposes replacing paper/Cloud name allocation with four UTC-hour characters,
-leaving a recovery-key PDF. Tasks 9–12 wait for that decision and a replacement plan.
+**Owner approval, 2026-10-16 at 14:50:** implement the
+[hour-coded series design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
+through the [replacement plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
+Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery-key PDF.
+The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
 where superseded. No hour-code implementation or generated-PDF acceptance is claimed.

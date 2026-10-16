@@ -1,6 +1,12 @@
 # A679: hour-coded invoice series
 
-**Proposed, pending owner approval.**
+**Approved by the owner, 2026-10-16 at 14:50.**
+
+The owner accepted this design as written, including the epoch, clock threshold and disclosed limits.
+References below to proposals and recommendations record the design presented for that decision.
+Follow the [replacement implementation plan](../plans/2026-10-16-a679-hour-code-implementation.md)
+before building. Approval does not waive protected-code or fiscal-assertion restrictions; the later
+generated-PDF viewing check remains separate.
 
 This replaces the register’s job of handing out names with the owner’s seven requirements of **2026-10-16 ~12:50**. It incorporates the **12:20** Start again exception, **13:00** PDF acceptance and **13:40** read-only empty-database proof permission.
 
