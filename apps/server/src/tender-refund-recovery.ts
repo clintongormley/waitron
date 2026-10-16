@@ -5,7 +5,8 @@ import { raiseTenderRefundUnresolved } from "./bill-refund-alerts.js";
 import {
   resumeTenderRefund,
   tenderRefundIsLive,
-  waitForTenderRefundResolvers,
+  startTenderRefundResolvers,
+  stopTenderRefundResolvers,
 } from "./tender-refund-sends.js";
 import { realSleep, sleepMsFor } from "./loop.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
@@ -105,10 +106,17 @@ export async function runTenderRefundRecoveryLoop(
     signal: AbortSignal;
     isPrimary: () => boolean;
     onError: (error: unknown) => void;
+    onShutdownTimeout?: (refundIds: string[]) => void;
     sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   },
 ): Promise<void> {
   const sleep = deps.sleep ?? realSleep;
+  if (!deps.signal.aborted) startTenderRefundResolvers(deps.db);
+  let stopping: Promise<string[]> | undefined;
+  const stop = () => {
+    stopping ??= stopTenderRefundResolvers(deps.db);
+  };
+  deps.signal.addEventListener("abort", stop, { once: true });
   try {
     while (!deps.signal.aborted) {
       let wait = RECHECK_MS;
@@ -128,6 +136,9 @@ export async function runTenderRefundRecoveryLoop(
       }
     }
   } finally {
-    await waitForTenderRefundResolvers(deps.db);
+    deps.signal.removeEventListener("abort", stop);
+    stop();
+    const timedOut = await stopping!;
+    if (timedOut.length > 0) deps.onShutdownTimeout?.(timedOut);
   }
 }

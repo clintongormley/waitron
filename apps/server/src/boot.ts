@@ -2401,6 +2401,8 @@ async function bootServer(
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           attendance: attendanceRecorder,
           signal: tenderRefundController.signal,
+          onShutdownTimeout: (refundIds) =>
+            log("warn", "tender_refund.shutdown_pending", { refundIds }),
           isPrimary: () => holders.singletonRole.current === "primary",
           onError: (error) =>
             log("error", "tender_refund.recovery_failed", { errorCode: codeOf(error) }),

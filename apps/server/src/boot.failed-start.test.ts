@@ -937,6 +937,51 @@ describe("closing a started server", () => {
 });
 
 describe("settled-tender recovery boot lifetime", () => {
+  it("logs the unresolved refund ids when recovery reaches its shutdown limit", async () => {
+    const venueDir = await seededVenueDir();
+    const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
+    const refundId = "66666666-6666-4666-8666-666666666666";
+    const lines: string[] = [];
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation((line) => {
+      lines.push(String(line));
+      return true;
+    });
+    vi.mocked(runTenderRefundRecoveryLoop).mockImplementationOnce(
+      (options) =>
+        new Promise<void>((resolve) => {
+          options.signal.addEventListener(
+            "abort",
+            () => {
+              options.onShutdownTimeout?.([refundId]);
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer(env);
+      await listening(Number(env.WAITRON_HTTP_PORT));
+      await server.close();
+      const entries = lines
+        .flatMap((line) => line.trim().split("\n"))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(entries.filter((entry) => entry.event === "tender_refund.shutdown_pending")).toEqual([
+        {
+          at: expect.any(String),
+          level: "warn",
+          event: "tender_refund.shutdown_pending",
+          refundIds: [refundId],
+        },
+      ]);
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      await server?.close();
+      stdout.mockRestore();
+    }
+  }, 60_000);
+
   it("aborts and awaits recovery when a later trading-start step fails", async () => {
     const venueDir = await seededVenueDir();
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }), {

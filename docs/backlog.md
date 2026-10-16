@@ -1974,7 +1974,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   unmounted connected command now commits send evidence, keeps one attempt key and resolves
   provider outcomes with bounded responses and ownership through late settlement. Recovery now
   scans due connected returns in stable batches of 50, persists lookup backoff and raises an alert
-  after an hour unresolved; its boot duty drains active resolutions before shutdown completes.
+  after an hour unresolved. Shutdown gives active provider resolutions two seconds to finish,
+  then logs unresolved ids and leaves pending attempts for restart recovery.
   Manager/status/API routes, reporting, screens and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).

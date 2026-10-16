@@ -47,6 +47,7 @@ import {
   claimTenderRefund,
   resumeTenderRefund,
   tenderRefundIsLive,
+  startTenderRefundResolvers,
 } from "./tender-refund-sends.js";
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import type { RefundAnswer, RefundLookup } from "@waitron/payments";
@@ -69,6 +70,7 @@ let counter: number;
 let deps: TenderRefundDeps;
 beforeEach(async () => {
   const db = store.db;
+  startTenderRefundResolvers(db);
   await seedTenant(db);
   const [place] = await db
     .insert(locations)
@@ -1674,17 +1676,15 @@ describe("settled-tender refund recovery loop lifetime", () => {
       onError: (error) => {
         throw error;
       },
-      sleep: async () => {
-        throw new Error("stopped loop must not sleep");
-      },
     }).then(() => {
       stopped = true;
     });
     try {
       await Promise.race([entered, work]);
       expect(provider.lookupRefund).toHaveBeenCalledTimes(1);
-      control.abort();
       await vi.advanceTimersByTimeAsync(10_000);
+      control.abort();
+      await vi.advanceTimersByTimeAsync(1_999);
       expect(stopped).toBe(false);
       expect(tenderRefundIsLive(store.db, refund.id)).toBe(true);
       release();
@@ -1732,4 +1732,145 @@ it("contains a failed recovery sleep and does not run a pass after an already-ab
   });
   expect(await row(pending.id)).toMatchObject({ state: "pending", nextRetryAt: null });
   expect(provider.lookupCalls).toEqual([]);
+});
+
+describe("settled-tender refund bounded shutdown", () => {
+  for (const waitingOn of ["send", "lookup", "snapshot", "provider"] as const) {
+    it(`stops after two seconds waiting on ${waitingOn}, fences late work and recovers on restart`, async () => {
+      const { t, provider } = await connected();
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let refundId: string;
+      let command: Promise<unknown> | undefined;
+      if (waitingOn === "lookup" || waitingOn === "provider") {
+        provider.scriptNextRefund({ made: false, answer: LOST });
+        refundId = (await refundSettledTender(deps, cfg, t.saleId, request(t), operator())).id;
+      } else {
+        refundId = "";
+      }
+      const lookup = vi.spyOn(provider, "lookupRefund");
+      if (waitingOn === "lookup")
+        lookup.mockImplementation(async () => {
+          enter();
+          await held;
+          return {
+            kind: "match",
+            outcome: "completed",
+            providerRefundRef: "late",
+            providerStatus: "succeeded",
+          };
+        });
+      if (waitingOn === "provider")
+        deps.refundProviderFor = async () => {
+          enter();
+          await held;
+          return provider;
+        };
+      if (waitingOn === "snapshot")
+        provider.existingRefundRefs = async () => {
+          enter();
+          await held;
+          return [];
+        };
+      if (waitingOn === "send")
+        vi.spyOn(provider, "sendRefund").mockImplementation(async () => {
+          enter();
+          await held;
+          return {
+            kind: "outcome",
+            outcome: "completed",
+            providerRefundRef: "late",
+            providerStatus: "succeeded",
+          };
+        });
+      vi.useFakeTimers();
+      if (waitingOn === "send" || waitingOn === "snapshot") {
+        command = refundSettledTender(deps, cfg, t.saleId, request(t), operator());
+        await entered;
+        refundId = (await store.db.select().from(tenderRefunds))[0]!.id;
+      }
+      const control = new AbortController();
+      const timeouts: string[][] = [];
+      const errors: unknown[] = [];
+      let stopped = false;
+      const work = runTenderRefundRecoveryLoop({
+        ...deps,
+        signal: control.signal,
+        isPrimary: () => true,
+        onError: (error) => errors.push(error),
+        onShutdownTimeout: (ids: string[]) => timeouts.push(ids),
+      }).then(() => {
+        stopped = true;
+      });
+      try {
+        await entered;
+        control.abort();
+        await vi.advanceTimersByTimeAsync(1_999);
+        expect(stopped).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(stopped).toBe(true);
+        await work;
+        await command;
+        expect(timeouts).toEqual([[refundId]]);
+        expect(errors).toEqual([]);
+        const before = await row(refundId);
+        expect(before).toMatchObject({ state: "pending", completedAt: null, failedAt: null });
+        expect(tenderRefundIsLive(store.db, refundId)).toBe(false);
+        const writes = vi.spyOn(store.db, "withWriteLock");
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(writes).not.toHaveBeenCalled();
+        expect(await row(refundId)).toEqual(before);
+        expect(await store.db.select().from(paymentRefunds)).toEqual([]);
+        const lookupCount = lookup.mock.calls.length;
+        expect((await resumeTenderRefund(deps, refundId, "retry")).state).toBe("pending");
+        expect(lookup).toHaveBeenCalledTimes(lookupCount);
+        if (waitingOn === "snapshot") expect(provider.refundCalls).toEqual([]);
+        writes.mockRestore();
+        lookup.mockResolvedValue({
+          kind: "match",
+          outcome: "completed",
+          providerRefundRef: "recovered",
+          providerStatus: "succeeded",
+        });
+        deps.refundProviderFor = async () => provider;
+        const restart = new AbortController();
+        deps.clock = createTrustedClock({
+          deviceId: cfg.origin.deviceId,
+          monotonic: () => 0,
+          wallClock: () => Date.parse(AT) + 60_000,
+          degradedAfterSeconds: 300,
+        });
+        await runTenderRefundRecoveryLoop({
+          ...deps,
+          signal: restart.signal,
+          isPrimary: () => true,
+          onError: (error) => errors.push(error),
+          sleep: async () => {
+            restart.abort();
+          },
+        });
+        expect(await row(refundId)).toMatchObject({
+          state: waitingOn === "snapshot" ? "failed" : "completed",
+        });
+        expect(await store.db.select().from(paymentRefunds)).toHaveLength(
+          waitingOn === "snapshot" ? 0 : 1,
+        );
+        expect(errors).toEqual([]);
+      } finally {
+        release();
+        control.abort();
+        await vi.advanceTimersByTimeAsync(20_000);
+        await work;
+        await command;
+        vi.useRealTimers();
+      }
+    });
+  }
 });
