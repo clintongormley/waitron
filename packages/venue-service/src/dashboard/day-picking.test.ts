@@ -277,6 +277,57 @@ describe("DayPicker", () => {
     expect(host.chosen).toEqual([]);
   });
 
+  it("a tap and then a long press on the same day open it once", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15) });
+    await commands.touchGesture({ at: sel(15), holdMs: 400 });
+    await settle();
+    expect(host.opened).toEqual([[day(15), run(15, 15)]]);
+    expect(host.chosen).toEqual([day(15)]);
+  });
+
+  it("after a drag the browser sends no click for, the next click with no press still chooses", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    await settle();
+    await expectRun(host, run(15, 17));
+    button(host, 9).click();
+    expect(host.chosen).toEqual([day(9)]);
+    await expectRun(host, run(9, 9));
+
+    // A browser whose click is a plain MouseEvent: one a press made (detail 1) is the gesture's.
+    const mouseClick = (detail: number) =>
+      button(host, 11).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, detail }),
+      );
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    mouseClick(1);
+    expect(host.chosen).toEqual([day(9)]);
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    mouseClick(0);
+    expect(host.chosen).toEqual([day(9), day(11)]);
+  });
+
+  it("picking turned off during a press opens nothing and picks no run", async () => {
+    const host = await mount();
+    const offAtPress = () =>
+      document.addEventListener("pointerdown", () => (host.allowPicking = false), { once: true });
+
+    offAtPress();
+    await commands.touchGesture({ at: sel(15), holdMs: 400 });
+    await settle();
+    expect(host.opened).toEqual([]);
+    await expectRun(host, run(15, 15));
+    expect(host.chosen).toEqual([day(15)]);
+
+    host.allowPicking = true;
+    offAtPress();
+    await commands.mouseDrag([sel(20), sel(23)]);
+    await expectRun(host, run(15, 15));
+    expect(host.opened).toEqual([]);
+    expect(host.chosen).toEqual([day(15)]);
+  });
+
   it("a drag stays right when a scrolling box inside a shadow root scrolls mid-drag", async () => {
     const host = await mount({ inScrollBox: true });
     const box = host.parentElement!;

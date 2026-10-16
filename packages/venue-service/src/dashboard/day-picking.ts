@@ -65,7 +65,12 @@ export class DayPicker implements ReactiveController {
   #anchor: LocalDate | null = null;
   #focus: LocalDate | null = null;
   #gesture: Gesture | null = null;
-  #swallowClick = false;
+  /** The gesture whose click to swallow. Measured in Chromium: the click after a gesture carries
+   *  its pointerId, a script's or a key's click carries -1, and after a touch drag none comes. A
+   *  browser whose click is a plain MouseEvent is told apart by `detail`, 0 for a click no press made. */
+  #swallowClick: number | null = null;
+  /** The swallowed click was a gesture's second, so the dblclick that follows is the gesture's. */
+  #ignoreDblclick = false;
   #lastPointerTouch = false;
   /** The run before the first click of a possible double-click, which that click replaced. */
   #runBeforeClick: DayRun | null = null;
@@ -192,7 +197,7 @@ export class DayPicker implements ReactiveController {
   }
 
   #pointerdown(event: PointerEvent): void {
-    this.#swallowClick = false;
+    this.#swallowClick = null;
     this.#lastPointerTouch = event.pointerType === "touch";
     if (event.button !== 0 || this.#gesture !== null || !this.#options.canPick()) return;
     const day = this.#dayOf(event);
@@ -226,6 +231,10 @@ export class DayPicker implements ReactiveController {
   }
 
   #hold(gesture: Gesture): void {
+    if (!this.#options.canPick()) {
+      this.#cancel(gesture);
+      return;
+    }
     gesture.held = true;
     gesture.timer = undefined;
     if (!this.isPicked(gesture.date)) this.#pick(gesture.date, gesture.date);
@@ -234,7 +243,8 @@ export class DayPicker implements ReactiveController {
   #pointer = (event: PointerEvent): void => {
     const gesture = this.#gesture;
     if (gesture === null || event.pointerId !== gesture.pointerId) return;
-    if (event.type === "pointermove") this.#move(gesture, event);
+    if (!this.#options.canPick()) this.#cancel(gesture);
+    else if (event.type === "pointermove") this.#move(gesture, event);
     else if (event.type === "pointerup") this.#release(gesture);
     else this.#cancel(gesture);
   };
@@ -259,7 +269,7 @@ export class DayPicker implements ReactiveController {
 
   #release(gesture: Gesture): void {
     if (gesture.held) {
-      this.#swallowClick = true;
+      this.#swallowClick = gesture.pointerId;
       if (!gesture.movedSinceHold)
         this.#open(
           gesture.date,
@@ -267,7 +277,7 @@ export class DayPicker implements ReactiveController {
           gesture.trigger,
         );
     } else if (gesture.dragging) {
-      this.#swallowClick = true;
+      this.#swallowClick = gesture.pointerId;
     }
     this.#end();
   }
@@ -289,8 +299,12 @@ export class DayPicker implements ReactiveController {
   }
 
   #click(event: MouseEvent): void {
-    if (this.#swallowClick) {
-      this.#swallowClick = false;
+    const swallow =
+      this.#swallowClick !== null &&
+      (event instanceof PointerEvent ? event.pointerId === this.#swallowClick : event.detail > 0);
+    this.#swallowClick = null;
+    this.#ignoreDblclick = swallow && event.detail > 1;
+    if (swallow) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -309,13 +323,17 @@ export class DayPicker implements ReactiveController {
   }
 
   #dblclick(event: MouseEvent): void {
+    if (this.#ignoreDblclick) {
+      this.#ignoreDblclick = false;
+      return;
+    }
     const day = this.#dayOf(event);
     if (day === null || !this.#options.canPick()) return;
     this.#open(day.date, this.#runToOpen(day.date, this.#runBeforeClick), day.button);
   }
 
   #keydown(event: KeyboardEvent): void {
-    this.#swallowClick = false;
+    this.#swallowClick = null;
     const day = this.#dayOf(event);
     if (day === null) return;
     const { date } = day;
