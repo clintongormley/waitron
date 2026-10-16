@@ -331,38 +331,7 @@ export function mountSetupFirstFiscalApi(
       );
     }),
   );
-  app.get(`${root}/resolution`, (c) =>
-    boundary(c, log, async () => c.json(await host.resolution.inspectFirstSetupResolution())),
-  );
-  app.post(`${root}/resolution/recover`, (c) =>
-    boundary(c, log, async () => {
-      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-      if (!(socket instanceof TLSSocket) || !socket.encrypted)
-        throw new AppError("setup.owner_required", {});
-      const body = exact(await readFirstFiscalBody(c), [
-        "inspectionId",
-        "revision",
-        "ownerGeneration",
-        "clientClaimNonce",
-        "password",
-      ]);
-      if (
-        ![body.revision, body.ownerGeneration].every(
-          (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-        )
-      )
-        invalid();
-      return c.json(
-        await host.owner.recoverFirstSetupOwner({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          clientClaimNonce: text(body.clientClaimNonce),
-          password: text(body.password),
-        }),
-      );
-    }),
-  );
+  mountFirstSetupResolutionApi(app, host, log);
   app.post(`${root}/recover`, (c) =>
     boundary(c, log, async () => {
       const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
@@ -551,4 +520,118 @@ export function mountSetupFirstFiscalApi(
       }),
     ),
   );
+}
+
+export function mountFirstSetupResolutionApi(
+  app: Hono,
+  host: FirstFiscalHost,
+  log: Logger,
+  options: {
+    startAgain?: ReturnType<
+      typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
+    >["startAgainFirstSetup"];
+    requestRestart?: () => void;
+  } = {},
+) {
+  const root = "/setup-api/first-setup";
+  for (const path of [`${root}/resolution`, `${root}/resolution/*`])
+    app.use(path, (c, next) => {
+      c.header("Cache-Control", "no-store");
+      return next();
+    });
+  app.get(`${root}/resolution`, (c) =>
+    boundary(c, log, async () => {
+      assertFirstFiscalRequest(c);
+      return c.json(await host.resolution.inspectFirstSetupResolution());
+    }),
+  );
+  app.post(`${root}/resolution/recover`, (c) =>
+    boundary(c, log, async () => {
+      assertFirstFiscalRequest(c);
+      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+      if (!(socket instanceof TLSSocket) || !socket.encrypted)
+        throw new AppError("setup.owner_required", {});
+      const body = exact(await readFirstFiscalBody(c), [
+        "inspectionId",
+        "revision",
+        "ownerGeneration",
+        "clientClaimNonce",
+        "password",
+      ]);
+      if (
+        ![body.revision, body.ownerGeneration].every(
+          (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+        )
+      )
+        invalid();
+      return c.json(
+        await host.owner.recoverFirstSetupOwner({
+          inspectionId: text(body.inspectionId),
+          revision: body.revision as number,
+          ownerGeneration: body.ownerGeneration as number,
+          clientClaimNonce: text(body.clientClaimNonce),
+          password: text(body.password),
+        }),
+      );
+    }),
+  );
+
+  if (options.startAgain !== undefined)
+    app.post(`${root}/resolution/start-again`, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+        if (!(socket instanceof TLSSocket) || !socket.encrypted)
+          throw new AppError("setup.owner_required", {});
+        const body = exact(await readFirstFiscalBody(c), [
+          "inspectionId",
+          "revision",
+          "ownerGeneration",
+          "register",
+        ]);
+        if (
+          ![body.revision, body.ownerGeneration].every(
+            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+          )
+        )
+          invalid();
+        const raw = object(body.register);
+        let register: import("@waitron/provisioning").RegisterAnswer;
+        if (raw.kind === "no-current-master") {
+          exact(raw, ["kind", "confirmed"]);
+          if (raw.confirmed !== true) invalid();
+          register = { kind: "no-current-master", confirmed: true };
+        } else {
+          exact(raw, ["kind", "status", "custodian", "reference", "consultedAt"]);
+          if (
+            raw.kind !== "current-master" ||
+            typeof raw.status !== "string" ||
+            !["Consumed", "Not consumed", "Unknown"].includes(raw.status)
+          )
+            invalid();
+          register = {
+            kind: "current-master",
+            status: raw.status as "Consumed" | "Not consumed" | "Unknown",
+            custodian: text(raw.custodian),
+            reference: text(raw.reference),
+            consultedAt: text(raw.consultedAt),
+          };
+        }
+        const selected = await options.startAgain!({
+          inspectionId: text(body.inspectionId),
+          revision: body.revision as number,
+          ownerGeneration: body.ownerGeneration as number,
+          register,
+          ...(c.req.header("X-Waitron-Setup-Owner") === undefined
+            ? {}
+            : { owner: firstFiscalOwner(c) }),
+        });
+        setTimeout(() => options.requestRestart?.(), 0);
+        return c.json({
+          workspaceId: selected.workspaceId,
+          selectionGeneration: selected.selectionGeneration,
+          restarting: true,
+        });
+      }),
+    );
 }

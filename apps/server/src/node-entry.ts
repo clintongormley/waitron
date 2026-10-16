@@ -61,7 +61,9 @@ import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { classifyBootFailure } from "./boot-failure.js";
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { redactSecrets } from "./redact-secrets.js";
+import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
 /** How long a boot must survive before its failure counter is cleared (spec §9.2). */
@@ -78,6 +80,7 @@ export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
 export interface RecoveryServeOptions {
   stateDir: string;
   port: number;
+  httpHost?: string;
   log: Logger;
   /** The plain-HTTP trust/landing listener's config. Omitted → no landing listener. */
   landing?: LandingListenerConfig;
@@ -117,17 +120,26 @@ export async function serveRecovery(
       surface,
       {
         stateDir: opts.stateDir,
-        hostname: BOX_HOSTNAME,
+        hostname:
+          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
+            ? opts.httpHost
+            : BOX_HOSTNAME,
         port: opts.port,
         secure: tls !== undefined,
-        listIpv4: () => opts.landing?.boxAddresses ?? listBoxIpv4(),
+        listIpv4: () =>
+          opts.httpHost !== undefined && isLoopbackHost(opts.httpHost)
+            ? []
+            : (opts.landing?.boxAddresses ?? listBoxIpv4()),
         discoveryEnabled: false,
       },
       opts.log,
     );
     surface.route("/", app);
     const server = serve(
-      buildServeOptions({ fetch: surface.fetch, port: opts.port }, tls),
+      buildServeOptions(
+        { fetch: surface.fetch, port: opts.port, hostname: opts.httpHost ?? DEFAULT_HTTP_HOST },
+        tls,
+      ),
       (info) => {
         opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
         // Best-effort: `startLandingListener` logs its own bind failure rather than throwing, so an
@@ -372,11 +384,11 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * Five orderings carry the design, and each is invisible in production if it is wrong:
+ * These orderings keep recovery from changing a database it cannot admit:
  *
- * 1. The level is read first, before anything opens the venue database: a database-side failure is
- *    exactly what puts a box in recovery.
- * 2. The failure counter is written before the boot's first step, never only in a failure handler:
+ * 1. First-setup resolution precedes recovery-level handling and staged work. Its inspection is
+ *    read-only; the recovery level still precedes ordinary database opens.
+ * 2. The failure counter is written before ordinary boot's first step, never only in a failure handler:
  *    a boot that hangs never throws, and would restart-loop without ever reaching the page.
  * 3. It clears only from the stayed-up callback — `startServer` resolved and the process then
  *    survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing seconds in
@@ -406,7 +418,44 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
-  // Outside the lock: it decides only whether this start boots or serves the page. Every change
+  const admission = await resolveFirstSetupEntry(
+    deps,
+    deps.baseEnv,
+    () => (deps.exit ?? DEFAULT_EXIT)(0),
+    deps.log,
+  );
+  if (admission.kind === "resolution") {
+    const port = httpPortFrom(deps.baseEnv);
+    await deps.serveRecovery(admission.app, {
+      stateDir: admission.roots.stateDir,
+      port,
+      httpHost: isUnset(deps.baseEnv.WAITRON_HTTP_HOST)
+        ? DEFAULT_HTTP_HOST
+        : deps.baseEnv.WAITRON_HTTP_HOST,
+      log: deps.log,
+      landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
+    });
+    return;
+  }
+
+  const selected =
+    admission.roots.binding === null
+      ? deps
+      : {
+          ...deps,
+          stateDir: admission.roots.stateDir,
+          venueDir: admission.roots.venueDir,
+          baseEnv: {
+            ...deps.baseEnv,
+            WAITRON_STATE_DIR: admission.roots.stateDir,
+            WAITRON_VENUE_DIR: admission.roots.venueDir,
+          },
+        };
+  return admission.run(() => runAdmittedEntry(selected));
+}
+
+async function runAdmittedEntry(deps: EntryDeps): Promise<void> {
+  // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
   const logDir = deps.logDir ?? join(deps.stateDir, "logs");
@@ -520,6 +569,66 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   deps.installShutdownHandlers(server);
   deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, stayedUpClear));
+}
+
+export async function startServerOrFirstSetupResolution(
+  env: NodeJS.ProcessEnv,
+  base: NodeJS.ProcessEnv = {},
+  seams: {
+    startServer?: (
+      env: NodeJS.ProcessEnv,
+      base: NodeJS.ProcessEnv,
+    ) => Promise<{ close(): Promise<void> }>;
+    serveResolution?: (
+      app: Hono,
+      options: RecoveryServeOptions,
+    ) => Promise<{ close(): Promise<void> }>;
+    requestRestart?: () => void;
+  } = {},
+): Promise<{ close(): Promise<void> }> {
+  const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const log = createLogger(
+    (line) => process.stdout.write(line),
+    () => new Date(),
+  );
+  const admission = await resolveFirstSetupEntry(
+    { stateDir, venueDir },
+    env,
+    seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM")),
+    log,
+  );
+  if (admission.kind === "normal")
+    return admission.run(async () => {
+      if (admission.roots.binding === null) return (seams.startServer ?? startServer)(env, base);
+      const selectedBase = {
+        ...env,
+        WAITRON_STATE_DIR: admission.roots.stateDir,
+        WAITRON_VENUE_DIR: admission.roots.venueDir,
+      };
+      const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
+      return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
+    });
+  const port = httpPortFrom(env);
+  if (seams.serveResolution !== undefined)
+    return seams.serveResolution(admission.app, {
+      stateDir: admission.roots.stateDir,
+      port,
+      log,
+      httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
+    });
+  const listener = await serveRecovery(admission.app, {
+    stateDir: admission.roots.stateDir,
+    port,
+    log,
+    httpHost: isUnset(env.WAITRON_HTTP_HOST) ? DEFAULT_HTTP_HOST : env.WAITRON_HTTP_HOST,
+  });
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        listener.close((error) => (error ? reject(error) : resolve())),
+      ),
+  };
 }
 
 /**

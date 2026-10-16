@@ -44,10 +44,15 @@ every migration package's `drizzle/` folder beside the bundle (`scripts/copy-mig
 `WAITRON_MIGRATIONS_DIR` defaults to finding there. Running `dist/server.js` without that copy step
 fails loudly at boot with `migrations.set_missing`, not silently.
 
-Every boot failure exits non-zero, but not all of them reach stdout the same way. A port that will
+If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
+API before ordinary database opens or staged restore/reset work. It currently offers inspection,
+original-password recovery and an isolated replacement workspace. Publication-only Finish and the
+browser interface remain tracked under A679.
+
+Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and
 exits `1` directly. Bad config, an unloadable key ring, a mismatched deployment environment (see below), a
-failed migration, and a venue directory that cannot be opened instead **throw**, and `bin.ts` has no `try`/`catch` around `startServer` — Node prints the
+failed migration, and a venue directory that cannot be opened instead **throw**, and `bin.ts` has no `try`/`catch` around `startServerOrFirstSetupResolution` — Node prints the
 `AppError`'s stack to **stderr** as an unhandled rejection and exits non-zero, not as a JSON line on
 the stdout stream a log collector reads. (Catching those five in `bin.ts` and logging them
 structurally the same way would be a real improvement; it is not done here — check stderr for those,

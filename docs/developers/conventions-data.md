@@ -2426,6 +2426,14 @@ lock, not that every writer of the file takes it.
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
 | `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
 
+**First-setup entry, 2026-10-16:** `apps/server/src/first-setup-entry.ts` inspects an existing claim
+through a read-only SQLite connection before the ordinary entry path. Its admission callback holds
+the original anchor venue lock, then the selected target's lock when different, and rereads the
+selection and setup/database admission before staged work or normal boot. An ordinary unclaimed
+workspace keeps the locking path in the table above. `first-setup-resolution.boot.test.ts` removes
+the database or changes the selected workspace after discovery and checks that the callback refuses
+without creating a database. The same suite checks direct, supervised and already-recovery entry.
+
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
 
