@@ -28,8 +28,28 @@ beforeEach(() => {
   setLocale("en");
   history.replaceState(null, "", "/manage/opening-hours/view/year");
 });
-afterEach(() => {
+// The browser announces a scroll or a resize a frame late, so one left pending reaches the next
+// test, where it closes a day box open on a date out of view. Each is put back and awaited here.
+const announced = (type: "scroll" | "resize") =>
+  new Promise((resolve) => addEventListener(type, resolve, { once: true }));
+async function useViewport(width: number, height: number) {
+  const before = [innerWidth, innerHeight] as const;
+  const resize = async (w: number, h: number) => {
+    if (innerWidth === w && innerHeight === h) return;
+    const resized = announced("resize");
+    await page.viewport(w, h);
+    await resized;
+  };
+  await resize(width, height);
+  onTestFinished(() => resize(...before));
+}
+afterEach(async () => {
   vi.useRealTimers();
+  if (scrollX !== 0 || scrollY !== 0) {
+    const scrolled = announced("scroll");
+    scrollTo(0, 0);
+    await scrolled;
+  }
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
@@ -1013,9 +1033,7 @@ describe("Year view", () => {
   }
 
   it("a date opens its box over the real Year, from that date's month", async () => {
-    const before = [window.innerWidth, window.innerHeight] as const;
-    await page.viewport(1280, 800);
-    onTestFinished(() => page.viewport(...before));
+    await useViewport(1280, 800);
     const { el, view, months } = await yearMount("/manage/opening-hours/view/year/year/2026");
     const year = await shownYear(view);
     const button = yearDate(year, "2026-12-10");
@@ -1072,9 +1090,7 @@ describe("Year view", () => {
   });
 
   it("keeps a box near the bottom on screen when its month arrives", async () => {
-    const before = [window.innerWidth, window.innerHeight] as const;
-    await page.viewport(390, 640);
-    onTestFinished(() => page.viewport(...before));
+    await useViewport(390, 640);
     expect([window.innerWidth, window.innerHeight]).toEqual([390, 640]);
     const { el, view, held } = await heldMount(
       "/manage/opening-hours/view/year/year/2026",
@@ -1777,9 +1793,7 @@ describe("Month view", () => {
     data.currentSeasonId = "autumn";
   };
   it("a date opens its box over the real Month", async () => {
-    const before = [window.innerWidth, window.innerHeight] as const;
-    await page.viewport(1280, 800);
-    onTestFinished(() => page.viewport(...before));
+    await useViewport(1280, 800);
     const { el, view } = await monthMount(
       "/manage/opening-hours/view/month/month/2026-12",
       false,
@@ -1961,9 +1975,7 @@ describe("Month view", () => {
   });
 
   it("an open box follows a department the address changes to, placed again beside its date", async () => {
-    const before = [window.innerWidth, window.innerHeight] as const;
-    await page.viewport(390, 640);
-    onTestFinished(() => page.viewport(...before));
+    await useViewport(390, 640);
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     const month = await shown(view);
     const button = dateButton(month, "2026-12-31");
@@ -1988,9 +2000,7 @@ describe("Month view", () => {
   });
 
   it("the box near the bottom of the screen", async () => {
-    const before = [window.innerWidth, window.innerHeight] as const;
-    await page.viewport(390, 640);
-    onTestFinished(() => page.viewport(...before));
+    await useViewport(390, 640);
     expect([window.innerWidth, window.innerHeight]).toEqual([390, 640]);
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     const month = await shown(view);
@@ -2016,9 +2026,7 @@ describe("Month view", () => {
       );
 
     it("offers Year and Month, Year chosen, in the Year's toolbar row", async () => {
-      const before = [window.innerWidth, window.innerHeight] as const;
-      await page.viewport(1280, 800);
-      onTestFinished(() => page.viewport(...before));
+      await useViewport(1280, 800);
       expect(window.innerWidth).toBe(1280);
       const { el } = await monthMount("/manage/opening-hours/view/year");
       const year = () => el.shadowRoot!.querySelector("opening-hours-year");
@@ -2137,9 +2145,7 @@ describe("Month view", () => {
     });
 
     it("fits a phone's width", async () => {
-      const before = [window.innerWidth, window.innerHeight] as const;
-      await page.viewport(390, 800);
-      onTestFinished(() => page.viewport(...before));
+      await useViewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
       const month = await shown(view);
