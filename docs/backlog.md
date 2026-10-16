@@ -80,50 +80,51 @@ its first lines here and its whole text in its area's detail file under `docs/ba
 
 ## What to work on next
 
-Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were checked against the code
-(each spec's state is under _Reference → Specs still in the tree_). Each item is its own brainstorm →
-spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
+Ranked by the owner on 2026-10-16, for the time they are away (17 October to 2 November). Each item
+is its own brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
+Everything not listed here needs more spec work first.
 
-1. **Finish table service and paying a bill in parts** (_The till, devices and table service_,
-   lane B). All eighteen of the service plan's tasks are done, the last being Task 17, a table
-   that leaves without paying (#991).
-   What Task 16 (counter handover, #981) and Task 17 left open is in their Task 16 and Task 17
-   entries under that area.
-   **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09) (S3, S6, S10 cover Q27–Q29):** the owner decided Q28 without the asesor on 2026-10-01 and Task 17
-   is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
-   Q29, and printing the invoice before payment is Q27.
+1. **A773 — courses, groups and the pass** (_The till, devices and table service_). A773-1, the
+   table screen's unsent list, has a plan; A773-2, firing and the pass, is planned once A773-1
+   lands.
+2. **A504 — floor plans published for a future date, and one per service period** (_The till,
+   devices and table service_).
+3. **A682 — translations: nothing required, every missing name reported, all languages side by
+   side, with automatic translation** (_Menus and the catalogue_).
+4. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
+   (_Modules, data and code health_). Its revised design awaits agreement.
+5. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
+   protection and legal compliance_). Adviser agreement, build and verification remain open.
+6. **A651 and A652 — drop photos to upload them, tidy the image library and its picker, and frame
+   a photo for its thumbnails** (_Menus and the catalogue_).
+7. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
+   the dashboard shell_).
+8. **A681 — a light / dark / follow-device theme choice in the apps** (_Users, sign-in and the
+   dashboard shell_).
 
-2. **Design the fixed screens for each kind of device** (A182 part 1, under _The till,
-   devices and table service_, owner 2026-10-01). The counter redesign is A738–A740. The handheld,
-   kitchen screen and pass still need their own designs. A182 part 2 retired the screen designer in
-   [#1800](https://github.com/clintongormley/waitron/pull/1800); new work starts from the fixed screens.
+**Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
+come after the eight above:
 
-3. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
-   upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-   - installing or renewing the AEAT certificate after setup — today only the setup wizard can
-     set it, and nothing watches when it expires;
-   - upgrade testing with rows the product itself writes and a real older database —
-     owner-marked blocking before go-live;
-   - the bootable USB installer (B3), the last piece of "install without a terminal";
-   - the degraded-but-trading recovery spec.
-
-4. **The displays and the printers walked at the real box** (_The till, devices and table
-   service_; _Printers, the print agent and receipts_) — till, handheld and KDS through
-   [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
-   drawer pulse, the feed-before-cut. Since C107 (#974) every printout
-   is drawn as pictures, and none of them (the ruler page, the sample receipt, a receipt, a kitchen
-   ticket) has been photographed or recorded as printed. A real sale's slip, the duplicates, the
-   cash-settlement drawer job and the feed-before-cut are still unwalked.
-
-5. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
-   enrolled (_The till, devices and table service_); Logging Slice 2, the one-touch bug report
-   (_Alerts, logging and diagnostics_); the first real Bluetooth pairing at the box through the
-   dashboard (_Printers, the print agent and receipts_; the print agent's side, P2b, and the
-   dashboard's, P2c, are built); paying at the table from a handheld (Slice 2, under _Payments and
-   card readers_).
-
-Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
-under _Replication, failover and the cloud_. Everything else ranks beneath these.
+- **Finish table service and paying a bill in parts** (_The till, devices and table service_).
+  What Task 16 (counter handover, #981) and Task 17 (#991) left open is in their entries under that
+  area. **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)
+  (S3, S6, S10 cover Q27–Q29).**
+- **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
+  table service_). The counter redesign is A738–A740; the handheld, kitchen screen and pass still
+  need their own designs.
+- **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
+  upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
+  installing or renewing the AEAT certificate after setup; upgrade testing with rows the product
+  itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
+  installer (B3); the degraded-but-trading recovery spec.
+- **The displays and the printers walked at the real box** (_The till, devices and table service_;
+  _Printers, the print agent and receipts_) — till, handheld and KDS through
+  [ui-review.md](ui-review.md), and the first physical print since #327.
+- **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
+  enrolled; Logging Slice 2, the one-touch bug report; the first real Bluetooth pairing at the box
+  through the dashboard; paying at the table from a handheld (Slice 2).
+- Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud
+  primary, under _Replication, failover and the cloud_.
 
 ---
 
@@ -5846,7 +5847,7 @@ partial scope; the detail for a live thread is in its area.
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
-| 18  | Menu/recipes/allergens       | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu schedule (publishing landed, #677); customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked       |
+| 18  | Menu/recipes/allergens       | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
 | 20  | Procurement & inventory      | received purchase invoices (`@waitron/purchasing`, feeds modelo 303)                                                                                                                                                                                                                                                                                                                                                              | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred                                                                                           |
 
