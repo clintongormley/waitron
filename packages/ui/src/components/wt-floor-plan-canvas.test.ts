@@ -758,18 +758,17 @@ const centreOf = (node: Element) => {
 };
 
 /**
- * Where the handle's centre belongs on screen: `away` px right of and above `key`'s own top-right
- * corner, both turned with the table round its centre.
+ * Where the handle's centre belongs on screen: `away` px above the middle of `key`'s own top side,
+ * turned with the table round its centre.
  */
-function turnedCorner(el: WtFloorPlanCanvas, key: string, p: PlanPlacement, away: number) {
+function topCentre(el: WtFloorPlanCanvas, key: string, p: PlanPlacement, away: number) {
   const c = centreOf(button(el, key));
   const a = (p.rotation * Math.PI) / 180;
-  const x = (p.width * 12) / 2 + away;
   const y = -(p.height * 12) / 2 - away;
-  return { x: c.x + x * Math.cos(a) - y * Math.sin(a), y: c.y + x * Math.sin(a) + y * Math.cos(a) };
+  return { x: c.x - y * Math.sin(a), y: c.y + y * Math.cos(a) };
 }
 
-it("draws the handle at least a tap target square, off the table's top-right corner", async () => {
+it("draws the handle at least a tap target square, above the middle of the table's top side", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
     selected: "t1",
   });
@@ -779,17 +778,18 @@ it("draws the handle at least a tap target square, off the table's top-right cor
   const box = button(el, "t1").getBoundingClientRect();
   expect(handle.width).toBeGreaterThanOrEqual(50);
   expect(handle.height).toBeGreaterThanOrEqual(50);
-  const h = centreOf(handles(el)[0]!);
-  expect(h.x).toBeGreaterThan(box.right);
-  expect(h.y).toBeLessThan(box.top);
-  expect(Math.hypot(h.x - box.right, h.y - box.top)).toBeLessThanOrEqual(50);
+  // --wt-space-5 / 2 + --wt-space-1: 12 + 6.
+  expect(Math.abs(handle.left + handle.width / 2 - (box.left + box.width / 2))).toBeLessThanOrEqual(
+    1,
+  );
+  expect(Math.abs(handle.bottom - (box.top - 18))).toBeLessThanOrEqual(1);
   const icon = handles(el)[0]!.querySelector("wt-icon")!;
   await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
 });
 
-it.each([90, 30, 180])(
-  "draws the handle at the table's own top-right corner turned %i°",
+it.each([0, 30, 90, 180])(
+  "draws the handle above the middle of the table's own top side turned %i°",
   async (rotation) => {
     const p = place({ x: 10, y: 10, width: 8, height: 4, rotation });
     const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
@@ -797,10 +797,13 @@ it.each([90, 30, 180])(
     });
     host.style.setProperty("--wt-tap-min", "50px");
     host.style.setProperty("--wt-space-1", "6px");
-    const want = turnedCorner(el, "t1", p, 31);
+    // --wt-space-5 / 2 + --wt-space-1 + --wt-tap-min / 2: 12 + 6 + 25.
+    const want = topCentre(el, "t1", p, 43);
     const h = centreOf(handles(el)[0]!);
-    expect(Math.abs(h.x - want.x)).toBeLessThanOrEqual(2);
-    expect(Math.abs(h.y - want.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(h.x - want.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(h.y - want.y)).toBeLessThanOrEqual(1);
+    expect(handles(el)[0]!.offsetWidth).toBeGreaterThanOrEqual(50);
+    expect(handles(el)[0]!.offsetHeight).toBeGreaterThanOrEqual(50);
   },
 );
 
@@ -948,7 +951,7 @@ it("the handle stays at its corner while the table is dragged round", async () =
   pointer(handles(el)[0]!, "pointerdown", 1, h.x, h.y);
   pointer(window, "pointermove", 1, to.x, to.y);
   await el.updateComplete;
-  const want = turnedCorner(el, "t1", { ...p, rotation: 90 }, 31);
+  const want = topCentre(el, "t1", { ...p, rotation: 90 }, 43);
   const now = centreOf(handles(el)[0]!);
   expect(Math.abs(now.x - want.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(now.y - want.y)).toBeLessThanOrEqual(2);
@@ -2148,13 +2151,54 @@ it.each([
     });
     await settled(el);
     for (const corner of CORNERS) {
-      // Until Task 8 moves the turn arrow to the top side, it starts --wt-space-1 past the
-      // top-right corner and takes a press 10 px out there.
-      const out = corner === "top-right" ? 3 : 10;
-      expect(topmost(el, cornerPoint(el, p, corner, out)), corner).toBe(cornerArea(el, corner));
+      expect(topmost(el, cornerPoint(el, p, corner, 10)), corner).toBe(cornerArea(el, corner));
     }
     for (const side of sidesWithDots(el)) {
       expect(topmost(el, sidePoint(el, p, side!, 10)), side).toBe(dot(el, side!));
+    }
+  },
+);
+
+it.each([
+  [8, 8, 0],
+  [8, 8, 30],
+  [2, 2, 0],
+  [2, 2, 30],
+  [1, 1, 0],
+  [1, 1, 30],
+] as const)(
+  "the turn arrow of a selected %i × %i table turned %i° covers no hit area",
+  async (width, height, rotation) => {
+    const p = place({ x: 10, y: 10, width, height, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    await settled(el);
+    const arrow = handles(el)[0]!;
+    const half = arrow.offsetWidth / 2 - 1;
+    const c = centreOf(arrow);
+    const a = (rotation * Math.PI) / 180;
+    const samples: { x: number; y: number }[] = [];
+    for (let i = 0; i <= 8; i++) {
+      for (let j = 0; j <= 8; j++) {
+        const u = -half + (i * 2 * half) / 8;
+        const v = -half + (j * 2 * half) / 8;
+        samples.push({
+          x: c.x + u * Math.cos(a) - v * Math.sin(a),
+          y: c.y + u * Math.sin(a) + v * Math.cos(a),
+        });
+      }
+    }
+    for (const at of samples) {
+      expect(topmost(el, at)?.closest('[part~="rotate-handle"]')).toBe(arrow);
+    }
+    // The arrow is drawn on top of everything, so only with it out of the way does a sample show
+    // what it would otherwise cover.
+    arrow.style.pointerEvents = "none";
+    for (const at of samples) {
+      expect(
+        topmost(el, at)?.closest('[part~="resize-handle"], [part~="resize-corner-handle"]'),
+      ).toBeNull();
     }
   },
 );
@@ -2401,7 +2445,8 @@ it("draws room for a turned table at the grid's origin, so reveal brings all of 
   expect(box.top).toBeGreaterThanOrEqual(grid.top);
   expect(box.left).toBeGreaterThanOrEqual(view.left);
   expect(box.top).toBeGreaterThanOrEqual(view.top);
-  const want = turnedCorner(el, "t1", place({ rotation: 45 }), 26);
+  // At the shipped tokens: --wt-space-5 / 2 + --wt-space-1 + --wt-tap-min / 2, 12 + 4 + 22.
+  const want = topCentre(el, "t1", place({ rotation: 45 }), 38);
   const h = centreOf(handles(el)[0]!);
   expect(Math.abs(h.x - want.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(h.y - want.y)).toBeLessThanOrEqual(2);
@@ -3210,7 +3255,7 @@ it("keeps room round the grid's corner for the turn arrow, from the tokens", asy
   el.style.setProperty("--wt-tap-min", "68px");
   el.tables = [table("t1", "T1")];
   await el.updateComplete;
-  expect(offset(el, "t1")).toEqual({ left: 108, top: 108 });
+  expect(offset(el, "t1")).toEqual({ left: 96, top: 96 });
 });
 
 it.each(Array.from({ length: 24 }, (_, i) => i * 15))(

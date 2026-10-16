@@ -528,6 +528,19 @@ it("zooming out keeps the turn handle and resize targets at their token sizes", 
   }
 });
 
+it("zooming out keeps the turn handle its token gap above the middle of the table's top side", async () => {
+  const el = await canvas("T1");
+  el.style.setProperty("--wt-space-5", "28px");
+  el.style.setProperty("--wt-space-1", "6px");
+  wheel(el, 100);
+  await el.updateComplete;
+  const arrow = part(el, "rotate-handle").getBoundingClientRect();
+  const box = button(el).getBoundingClientRect();
+  // --wt-space-5 / 2 + --wt-space-1: 14 + 6.
+  expect(arrow.bottom).toBeCloseTo(box.top - 20, 0);
+  expect(arrow.left + arrow.width / 2).toBeCloseTo(box.left + box.width / 2, 0);
+});
+
 it("zoomed-out handles at the plan's corner remain inside the grid", async () => {
   const el = await canvas("T1");
   el.tables = [

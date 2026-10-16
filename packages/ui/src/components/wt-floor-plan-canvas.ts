@@ -254,8 +254,11 @@ export class WtFloorPlanCanvas extends LitElement {
 
       .rotate-handle {
         position: absolute;
-        left: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
-        bottom: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
+        left: 50%;
+        bottom: calc(
+          100% + (var(--wt-space-5) / 2 + var(--wt-space-1)) * var(--wt-plan-control-scale)
+        );
+        translate: -50% 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -519,12 +522,15 @@ export class WtFloorPlanCanvas extends LitElement {
     // Not while a drag holds the room, so nothing drawn moves under the pointer.
     if (changed.has("zoom") || (hold !== "drag" && (!this.hasUpdated || changed.has("tables")))) {
       const host = getComputedStyle(this);
-      // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
-      // either axis, so its reach past the table's turned box is the side times √2.
-      const reach =
-        (parseFloat(host.getPropertyValue("--wt-tap-min")) +
-          parseFloat(host.getPropertyValue("--wt-space-1"))) *
-        Math.SQRT2;
+      // The arrow's furthest corner from the middle of the table's top side, which is never outside
+      // the table's turned box, so a turn can point that distance along either axis.
+      const tap = parseFloat(host.getPropertyValue("--wt-tap-min"));
+      const reach = Math.hypot(
+        parseFloat(host.getPropertyValue("--wt-space-5")) / 2 +
+          parseFloat(host.getPropertyValue("--wt-space-1")) +
+          tap,
+        tap / 2,
+      );
       this.#margin = Math.ceil((reach * Math.max(1, 1 / this.zoom)) / GRID_SQUARE_PX);
     }
     // Tolerates float error in a corner computed to land exactly on the edge.
