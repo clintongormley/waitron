@@ -1,0 +1,326 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { commands, userEvent } from "vitest/browser";
+import { LitElement, css, html } from "lit";
+import type { LocalDate } from "../hours-types.js";
+import { addDays } from "../hours-rules.js";
+import { monthGrid } from "./calendar-grid.js";
+import { DayPicker, type DayPickerOptions, type DayRun } from "./day-picking.js";
+
+const DATES = monthGrid("2026-10");
+
+class DayPickingHost extends LitElement {
+  static override styles = css`
+    table {
+      user-select: none;
+      border-spacing: 4px;
+    }
+    button {
+      inline-size: 48px;
+      block-size: 48px;
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+    }
+  `;
+  chosen: LocalDate[] = [];
+  opened: [LocalDate, DayRun][] = [];
+  contextMenus: { prevented: boolean }[] = [];
+  allowPicking = true;
+  dragOnTouch = false;
+  picker!: DayPicker;
+
+  start() {
+    const options: DayPickerOptions = {
+      button: (date) =>
+        this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] > button`),
+      dates: () => DATES,
+      canPick: () => this.allowPicking,
+      dragOnTouch: this.dragOnTouch,
+      holdMs: 300,
+      choose: (date) => this.chosen.push(date),
+      picked: () => this.requestUpdate(),
+      open: (date, run) => this.opened.push([date, run]),
+    };
+    this.picker = new DayPicker(this, options);
+  }
+
+  override render() {
+    const weeks = Array.from({ length: DATES.length / 7 }, (_, week) =>
+      DATES.slice(week * 7, week * 7 + 7),
+    );
+    const handlers = this.picker.handlers;
+    return html`<table
+      @pointerdown=${handlers.pointerdown}
+      @click=${handlers.click}
+      @dblclick=${handlers.dblclick}
+      @keydown=${handlers.keydown}
+      @contextmenu=${(event: Event) => {
+        handlers.contextmenu(event as MouseEvent);
+        this.contextMenus.push({ prevented: event.defaultPrevented });
+      }}
+    >
+      <tr>
+        ${["M", "T", "W", "T", "F", "S", "S"].map((name) => html`<th>${name}</th>`)}
+      </tr>
+      ${weeks.map(
+        (week) =>
+          html`<tr>
+            ${week.map(
+              (date) =>
+                html`<td data-date=${date}>
+                  <button
+                    type="button"
+                    aria-pressed=${this.picker.isPicked(date) ? "true" : "false"}
+                    tabindex=${date === (this.picker.focusDate ?? "2026-10-01") ? 0 : -1}
+                  >
+                    ${Number(date.slice(8))}
+                  </button>
+                </td>`,
+            )}
+          </tr>`,
+      )}
+    </table>`;
+  }
+}
+customElements.define("day-picking-host", DayPickingHost);
+
+let page: HTMLElement | undefined;
+
+async function mount(options: { canPick?: boolean; dragOnTouch?: boolean } = {}) {
+  page = document.createElement("div");
+  page.style.blockSize = "4000px";
+  page.style.paddingBlockStart = "300px";
+  const host = document.createElement("day-picking-host") as DayPickingHost;
+  host.allowPicking = options.canPick ?? true;
+  host.dragOnTouch = options.dragOnTouch ?? false;
+  host.start();
+  page.append(host);
+  document.body.append(page);
+  window.scrollTo(0, 0);
+  await host.updateComplete;
+  return host;
+}
+
+afterEach(async () => {
+  await userEvent.keyboard("{/Shift}");
+  await commands.parkPointer();
+  page?.remove();
+  page = undefined;
+  window.scrollTo(0, 0);
+});
+
+const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}`;
+const sel = (n: number) => `day-picking-host td[data-date="${day(n)}"] > button`;
+const run = (from: number, to: number): DayRun => ({ from: day(from), to: day(to) });
+
+function button(host: DayPickingHost, n: number): HTMLButtonElement {
+  return host.renderRoot.querySelector<HTMLButtonElement>(`td[data-date="${day(n)}"] > button`)!;
+}
+
+function days(from: LocalDate, to: LocalDate): LocalDate[] {
+  const out: LocalDate[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) out.push(date);
+  return out;
+}
+
+/** The run the controller holds, checked against the buttons the host drew pressed. */
+async function expectRun(host: DayPickingHost, expected: DayRun | null) {
+  await host.updateComplete;
+  expect(host.picker.run).toEqual(expected);
+  const pressed = [
+    ...host.renderRoot.querySelectorAll<HTMLElement>('td > button[aria-pressed="true"]'),
+  ].map((b) => b.closest("td")!.dataset.date);
+  expect(pressed).toEqual(expected === null ? [] : days(expected.from, expected.to));
+}
+
+const focusedDate = (host: DayPickingHost) =>
+  (host.renderRoot as ShadowRoot).activeElement?.closest("td")?.dataset.date;
+
+describe("DayPicker", () => {
+  it("a click picks that one day and chooses it", async () => {
+    const host = await mount();
+    await userEvent.click(button(host, 20));
+    await expectRun(host, run(20, 20));
+    expect(host.chosen).toEqual([day(20)]);
+    host.picker.clear();
+    await expectRun(host, null);
+  });
+
+  it("a shift-click extends the run from its first-picked day, either way, without choosing", async () => {
+    const host = await mount();
+    await userEvent.click(button(host, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(button(host, 23));
+    await expectRun(host, run(20, 23));
+    await userEvent.click(button(host, 17));
+    await expectRun(host, run(17, 20));
+    expect(host.chosen).toEqual([day(20)]);
+  });
+
+  it("a mouse drag picks a run, follows the pointer back, and keeps the last day crossed", async () => {
+    const host = await mount();
+    await commands.mouseDrag([sel(20), sel(21), sel(22), sel(23)]);
+    await expectRun(host, run(20, 23));
+    expect(host.chosen).toEqual([]);
+
+    await commands.mouseDrag([sel(20), sel(23), sel(21)]);
+    await expectRun(host, run(20, 21));
+    expect(host.chosen).toEqual([]);
+
+    await commands.mouseDrag(["day-picking-host th:first-child", sel(23)]);
+    await expectRun(host, run(20, 21));
+    expect(host.chosen).toEqual([]);
+
+    await commands.mouseDrag([sel(20), sel(23), sel(20)]);
+    await expectRun(host, run(20, 20));
+    expect(host.chosen).toEqual([]);
+
+    const edge = button(host, 25).getBoundingClientRect();
+    const outside = document.createElement("div");
+    outside.id = "outside";
+    Object.assign(outside.style, {
+      position: "absolute",
+      insetBlockStart: `${edge.top}px`,
+      insetInlineStart: `${edge.right + 120}px`,
+      inlineSize: "40px",
+      blockSize: `${edge.height}px`,
+    });
+    page!.append(outside);
+    await commands.mouseDrag([sel(20), sel(25), "#outside"]);
+    await expectRun(host, run(20, 25));
+    expect(host.chosen).toEqual([]);
+  });
+
+  it("a finger that moves before the hold scrolls the page and picks nothing", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15), moveBy: { x: 0, y: -200 } });
+    expect(window.scrollY).toBeGreaterThan(0);
+    await expectRun(host, null);
+    expect(host.chosen).toEqual([]);
+    expect(host.opened).toEqual([]);
+
+    await userEvent.click(button(host, 9));
+    await expectRun(host, run(9, 9));
+    await commands.mouseDrag([sel(9), sel(11)]);
+    await expectRun(host, run(9, 11));
+  });
+
+  it("a long press with no move opens the pressed day", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15), holdMs: 400 });
+    expect(host.opened).toEqual([[day(15), run(15, 15)]]);
+    await expectRun(host, run(15, 15));
+    expect(host.chosen).toEqual([]);
+    // Headless Chromium sends no contextmenu for a DevTools touch, even held 1500 ms; a phone does,
+    // so one is dispatched as the phone would, after the real long press.
+    expect(host.contextMenus).toEqual([]);
+    button(host, 15).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, composed: true, cancelable: true }),
+    );
+    expect(host.contextMenus).toEqual([{ prevented: true }]);
+    await userEvent.click(button(host, 15), { button: "right" });
+    expect(host.contextMenus).toEqual([{ prevented: true }, { prevented: false }]);
+
+    await commands.touchGesture({ at: sel(16), holdMs: 400, moveBy: { x: 2, y: 0 } });
+    expect(host.opened).toEqual([
+      [day(15), run(15, 15)],
+      [day(16), run(16, 16)],
+    ]);
+    await expectRun(host, run(16, 16));
+  });
+
+  it("a long press then a drag picks a run without scrolling; a long press inside it opens the run", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    await expectRun(host, run(15, 17));
+    expect(window.scrollY).toBe(0);
+    expect(host.opened).toEqual([]);
+
+    await commands.touchGesture({ at: sel(16), holdMs: 400 });
+    expect(host.opened).toEqual([[day(16), run(15, 17)]]);
+    await expectRun(host, run(15, 17));
+    expect(host.chosen).toEqual([]);
+  });
+
+  it("a double-click opens the picked run when inside it, else that one day", async () => {
+    const host = await mount();
+    await commands.mouseDrag([sel(20), sel(23)]);
+    await expectRun(host, run(20, 23));
+    await userEvent.dblClick(button(host, 22));
+    expect(host.opened).toEqual([[day(22), run(20, 23)]]);
+    await expectRun(host, run(20, 23));
+
+    await userEvent.dblClick(button(host, 27));
+    expect(host.opened).toEqual([
+      [day(22), run(20, 23)],
+      [day(27), run(27, 27)],
+    ]);
+    await expectRun(host, run(27, 27));
+  });
+
+  it("keys move focus and pick, Shift extends, Enter opens and Space chooses", async () => {
+    const host = await mount();
+    button(host, 21).focus();
+    await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+    expect(focusedDate(host)).toBe(day(20));
+    await expectRun(host, run(20, 21));
+
+    await userEvent.keyboard("{ArrowRight}");
+    expect(focusedDate(host)).toBe(day(21));
+    await expectRun(host, run(21, 21));
+    expect(button(host, 21).tabIndex).toBe(0);
+
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+    expect(focusedDate(host)).toBe(day(23));
+    await expectRun(host, run(21, 23));
+
+    await userEvent.keyboard("{Enter}");
+    expect(host.opened).toEqual([[day(23), run(21, 23)]]);
+    expect(host.chosen).toEqual([]);
+
+    await userEvent.keyboard("{ }");
+    expect(host.chosen).toEqual([day(23)]);
+
+    button(host, 31).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(focusedDate(host)).toBe(day(31));
+  });
+
+  it("a click no Enter keydown preceded chooses and does not open", async () => {
+    const host = await mount();
+    button(host, 23).focus();
+    button(host, 23).click();
+    expect(host.chosen).toEqual([day(23)]);
+    expect(host.opened).toEqual([]);
+  });
+
+  it("when picking is off, only choose runs", async () => {
+    const host = await mount({ canPick: false });
+    await userEvent.click(button(host, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(button(host, 23));
+    await userEvent.keyboard("{/Shift}");
+    await expectRun(host, run(23, 23));
+
+    await commands.mouseDrag([sel(10), sel(13)]);
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    expect(host.picker.run === null || host.picker.run.from === host.picker.run.to).toBe(true);
+
+    await userEvent.dblClick(button(host, 22));
+    button(host, 22).focus();
+    await userEvent.keyboard("{Enter}");
+    await commands.touchGesture({ at: sel(15), holdMs: 400 });
+    expect(host.opened).toEqual([]);
+
+    expect(host.chosen.slice(0, 2)).toEqual([day(20), day(23)]);
+    expect(host.chosen).toContain(day(22));
+  });
+
+  it("with dragOnTouch, a touch drag with no hold picks a run and does not scroll", async () => {
+    const host = await mount({ dragOnTouch: true });
+    await commands.touchGesture({ at: sel(15), moveTo: sel(17) });
+    await expectRun(host, run(15, 17));
+    expect(window.scrollY).toBe(0);
+    expect(host.opened).toEqual([]);
+    expect(host.chosen).toEqual([]);
+  });
+});
