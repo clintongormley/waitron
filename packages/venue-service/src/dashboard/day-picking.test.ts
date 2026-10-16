@@ -149,6 +149,12 @@ async function expectRun(host: DayPickingHost, expected: DayRun | null) {
   expect(pressed).toEqual(expected === null ? [] : days(expected.from, expected.to));
 }
 
+/** A late scroll lands, and flings on, a few frames after a touch command returns. */
+async function settle() {
+  const end = performance.now() + 300;
+  while (performance.now() < end) await new Promise(requestAnimationFrame);
+}
+
 const focusedDate = (host: DayPickingHost) =>
   (host.renderRoot as ShadowRoot).activeElement?.closest("td")?.dataset.date;
 
@@ -255,11 +261,13 @@ describe("DayPicker", () => {
   it("a long press then a drag picks a run without scrolling; a long press inside it opens the run", async () => {
     const host = await mount();
     await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(1) });
+    await settle();
     expect(window.scrollY).toBe(0);
     await expectRun(host, run(1, 15));
 
     await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
     await expectRun(host, run(15, 17));
+    await settle();
     expect(window.scrollY).toBe(0);
     expect(host.opened).toEqual([]);
 
@@ -383,11 +391,13 @@ describe("DayPicker", () => {
   it("with dragOnTouch, a touch drag with no hold picks a run and does not scroll", async () => {
     const host = await mount({ dragOnTouch: true });
     await commands.touchGesture({ at: sel(15), moveTo: sel(1) });
+    await settle();
     expect(window.scrollY).toBe(0);
     await expectRun(host, run(1, 15));
 
     await commands.touchGesture({ at: sel(15), moveTo: sel(17) });
     await expectRun(host, run(15, 17));
+    await settle();
     expect(window.scrollY).toBe(0);
     expect(host.opened).toEqual([]);
     expect(host.chosen).toEqual([]);
