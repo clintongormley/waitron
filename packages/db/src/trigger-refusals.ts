@@ -75,3 +75,6 @@ export const BILL_REFUND_CHANGE_REFUSAL = "bill payment refund cannot make that 
 
 /** `bill_payment_refunds_no_delete`. */
 export const BILL_REFUND_DELETE_REFUSAL = "a bill payment refund is never deleted";
+
+export const TENDER_REFUND_CHANGE_REFUSAL = "tender refund cannot make that change";
+export const TENDER_REFUND_DELETE_REFUSAL = "a tender refund is never deleted";

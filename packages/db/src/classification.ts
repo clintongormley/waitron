@@ -65,6 +65,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "money given back from a bill payment before the invoice; only its outcome moves, under a trigger",
   ),
+  classify(
+    "tender_refunds",
+    "ledger",
+    "money returned after the invoice; request identity and terminal outcomes held by its transition triggers",
+  ),
   appendOnly(
     "unpaid_departures",
     "ledger",
