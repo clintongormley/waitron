@@ -86,6 +86,12 @@ describe("Stripe resolution ownership", () => {
         expect(
           phase === "before stamp" ? before.externalRef === null : /^pi_/.test(before.externalRef!),
         ).toBe(true);
+        expect(await provider(client).resolvePending(now)).toEqual({
+          nextDueAt: new Date(now.getTime() + 60_000),
+          forwarded: 0,
+          declined: 0,
+          incidentsRaised: 0,
+        });
         expect(
           await provider(client).resolveAbandonedAttempt(before.paymentRef, now, manager),
         ).toEqual({ outcome: "unknown", reason: "ambiguous" });
@@ -166,4 +172,67 @@ describe("Stripe resolution ownership", () => {
     expect(client.cancelledIntents).toEqual(["pi_owned"]);
     expect(await audits(paymentRef)).toEqual([{ person_id: manager.personId, outcome: "failed" }]);
   });
+
+  it.each(["manager", "sweep"] as const)(
+    "serializes automatic and manager checks with %s first",
+    async (firstKind) => {
+      const client = new FakeStripe();
+      const p = await params();
+      const paymentRef = randomUUID();
+      client.setIntent("pi_shared", { status: "requires_payment_method", amount: 1210 });
+      await withTransaction(suite.db, (tx) =>
+        insertAttempting(tx, { ...p, provider: "stripe", paymentRef, externalRef: "pi_shared" }),
+      );
+      const entered = barrier();
+      const release = barrier();
+      const retrieve = client.retrievePaymentIntent.bind(client);
+      let reads = 0;
+      const read = vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => {
+        if (++reads === 1) {
+          entered.resolve();
+          await release.promise;
+        }
+        return retrieve(id);
+      });
+      const first = (
+        firstKind === "manager"
+          ? provider(client).resolveAbandonedAttempt(paymentRef, now, manager)
+          : provider(client).resolvePending(now)
+      ).catch(() => undefined);
+      try {
+        expect(
+          await Promise.race([entered.promise.then(() => true), first.then(() => false)]),
+        ).toBe(true);
+        if (firstKind === "manager") {
+          expect(await provider(client).resolvePending(now)).toEqual({
+            nextDueAt: new Date(now.getTime() + 60_000),
+            forwarded: 0,
+            declined: 0,
+            incidentsRaised: 0,
+          });
+        } else {
+          expect(await provider(client).resolveAbandonedAttempt(paymentRef, now, manager)).toEqual({
+            outcome: "unknown",
+            reason: "ambiguous",
+          });
+          expect((await provider(client).resolvePending(now)).declined).toBe(0);
+        }
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(client.cancelledIntents).toEqual([]);
+      } finally {
+        release.resolve();
+        await first;
+      }
+      expect(await audits(paymentRef)).toEqual([
+        { person_id: firstKind === "manager" ? manager.personId : null, outcome: "failed" },
+      ]);
+      expect(client.cancelledIntents).toEqual(["pi_shared"]);
+      expect(await provider(client).resolvePending(now)).toEqual({
+        nextDueAt: null,
+        forwarded: 0,
+        declined: 0,
+        incidentsRaised: 0,
+      });
+    },
+  );
 });

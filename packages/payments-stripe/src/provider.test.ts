@@ -150,7 +150,9 @@ describe("StripeTerminalProvider.collect", () => {
     const fake = new FakeStripe();
     fake.stallNext();
     const result = await providerFor(fake).collect(await collectParams());
-    expect(result).toMatchObject({ state: "failed", failureReason: "reader_unavailable" });
+    expect(result).toMatchObject({ state: "attempting", settledAt: null });
+    expect(result.failureReason).toBeUndefined();
+    expect((await rowFor(result.paymentRef))?.externalRef).toMatch(/^pi_/);
   });
 
   it("identifies a reader connection error separately from a bank refusal", async () => {
@@ -160,23 +162,31 @@ describe("StripeTerminalProvider.collect", () => {
       failureCode: "connection_error",
     });
     const result = await providerFor(fake).collect(await collectParams());
-    expect(result).toMatchObject({ state: "failed", failureReason: "reader_unavailable" });
+    expect(result).toMatchObject({ state: "attempting", settledAt: null });
+    expect(result.failureReason).toBeUndefined();
+    expect((await rowFor(result.paymentRef))?.externalRef).toMatch(/^pi_/);
   });
 
   it.each(["createPaymentIntent", "processPaymentIntent", "readerOutcome"] as const)(
     "identifies an exception from %s as no answer rather than a bank refusal",
     async (method) => {
       const fake = new FakeStripe();
+      const created = vi.spyOn(fake, "createPaymentIntent");
       vi.spyOn(fake, method).mockRejectedValue(new Error("connection interrupted"));
       const result = await providerFor(fake).collect(await collectParams());
       expect(result).toMatchObject({
-        state: "failed",
-        failureReason: "reader_unavailable",
+        state: method === "createPaymentIntent" ? "failed" : "attempting",
         settledAt: null,
       });
       const row = await rowFor(result.paymentRef);
-      expect(row?.state).toBe("failed");
-      expect(row?.externalRef).toBeNull();
+      expect(row?.state).toBe(method === "createPaymentIntent" ? "failed" : "attempting");
+      if (method === "createPaymentIntent") {
+        expect(result.failureReason).toBe("reader_unavailable");
+        expect(row?.externalRef).toBeNull();
+      } else {
+        expect(result.failureReason).toBeUndefined();
+        expect(row?.externalRef).toBe((await created.mock.results[0]!.value).id);
+      }
     },
   );
 
@@ -187,14 +197,14 @@ describe("StripeTerminalProvider.collect", () => {
     await expect(providerFor(new FakeStripe()).collect(noReader)).rejects.toThrow(/readerRef/);
   });
 
-  it("times out: a stalled reader is cancelled and the payment fails", async () => {
+  it("keeps a stalled reader payment unknown after cancelling its action", async () => {
     const fake = new FakeStripe();
     fake.stallNext();
     const p = await collectParams();
     const result = await providerFor(fake).collect(p);
-    expect(result.state).toBe("failed");
+    expect(result.state).toBe("attempting");
     const row = await rowFor(result.paymentRef);
-    expect(row?.state).toBe("failed");
+    expect(row?.state).toBe("attempting");
   });
 
   it("network error before completion: attempting -> failed (the drive catch)", async () => {
@@ -215,20 +225,18 @@ describe("StripeTerminalProvider.collect", () => {
     expect(row?.externalRef).toBeNull();
   });
 
-  it("network error mid-poll: attempting -> failed (the drive catch covers the poll loop too)", async () => {
-    // The poll loop itself must be inside `drive`'s try, so this resolves the row to `failed`
-    // rather than throwing out of `collect`.
+  it("keeps a mid-poll network error unknown", async () => {
     const fake = new FakeStripe();
     fake.throwOnPollNext();
     const p = await collectParams();
     const result = await providerFor(fake).collect(p);
-    expect(result.state).toBe("failed");
+    expect(result.state).toBe("attempting");
     expect(result.settledAt).toBeNull();
     const row = await rowFor(result.paymentRef);
-    expect(row?.state).toBe("failed");
+    expect(row?.state).toBe("attempting");
   });
 
-  it("a timed-out collect still fails cleanly when cancelling the reader action is refused", async () => {
+  it("keeps a timed-out collect unknown when cancelling the reader action is refused", async () => {
     const cancels: string[] = [];
     const client: StripeClient = {
       createPaymentIntent: () => Promise.resolve({ id: "pi_stalled" }),
@@ -244,9 +252,9 @@ describe("StripeTerminalProvider.collect", () => {
     const p = await collectParams();
     const result = await providerFor(client).collect(p);
     expect(cancels).toEqual(["reader_1"]);
-    expect(result.state).toBe("failed");
+    expect(result.state).toBe("attempting");
     const row = await rowFor(result.paymentRef);
-    expect(row?.state).toBe("failed");
+    expect(row?.state).toBe("attempting");
   });
 
   it("a network error still fails cleanly when cancelling the reader action is refused", async () => {
@@ -489,7 +497,7 @@ describe("StripeTerminalProvider.forward", () => {
 });
 
 describe("StripeTerminalProvider.resolvePending", () => {
-  it("resolvePending is all-zeros (drive resolves stalls to failed inside collect)", async () => {
+  it("resolvePending is all-zeros when no row needs checking", async () => {
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db: suite.db,
