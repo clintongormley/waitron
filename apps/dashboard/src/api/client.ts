@@ -738,6 +738,7 @@ export interface Course {
   displayOrder: number;
   active: boolean;
   inUse?: boolean;
+  heldUntilFired: boolean;
 }
 
 export interface DeviceRow {
@@ -3229,11 +3230,18 @@ export class DashboardApi {
     );
   }
 
-  createCourse(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
+  createCourse(input: {
+    name: string;
+    displayOrder?: number;
+    heldUntilFired?: boolean;
+  }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/courses", "POST", input);
   }
 
-  updateCourse(id: string, patch: { name?: string; displayOrder?: number }): Promise<void> {
+  updateCourse(
+    id: string,
+    patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean },
+  ): Promise<void> {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
   }
 

@@ -57,8 +57,8 @@ const jamon: TillProduct = {
 const products: TillProduct[] = [cafe, jamon];
 
 const courses = [
-  { id: "entrantes", name: "Entrantes", displayOrder: 0 },
-  { id: "postres", name: "Postres", displayOrder: 1 },
+  { id: "entrantes", name: "Entrantes", displayOrder: 0, heldUntilFired: true },
+  { id: "postres", name: "Postres", displayOrder: 1, heldUntilFired: true },
 ];
 
 // Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
@@ -588,7 +588,12 @@ describe("till-table-order-screen", () => {
   it.each([[courses], [[]]])(
     "shows retained draft course wording and rank without offering it for new selection (%j)",
     async (activeCourses) => {
-      const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+      const course = {
+        id: "retired",
+        name: "Recorded dessert",
+        displayOrder: 3,
+        heldUntilFired: true,
+      };
       const draftStore = new WorkingOrderStore();
       draftStore.loadFrom("draft", [{ product: cafe, quantity: "1", courseId: course.id, course }]);
       const { el } = await mount({ courses: activeCourses, draftStore });
@@ -610,7 +615,12 @@ describe("till-table-order-screen", () => {
   );
 
   it("shows the authoritative course label of a fired line when all active courses are gone", async () => {
-    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const course = {
+      id: "retired",
+      name: "Recorded dessert",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     const { el } = await mount({
       courses: [],
       lines: [{ ...pendingLine, courseId: course.id, course, firedAt: "2026-10-10T20:00:00Z" }],
@@ -688,6 +698,7 @@ describe("till-table-order-screen", () => {
         id: "long",
         name: "Platos para compartir al centro de la mesa".padEnd(60, "x"),
         displayOrder: 2,
+        heldUntilFired: true,
       };
       const { el } = await mount({ courses: [...courses, long] });
       await resized(el);
@@ -909,9 +920,9 @@ describe("till-table-order-screen", () => {
   describe("the draft in sections, and its actions", () => {
     const serviceCourses = [
       // Listed out of display order, so a screen that keeps the list's order fails.
-      { id: "mains", name: "Mains", displayOrder: 2 },
-      { id: "drinks", name: "Drinks", displayOrder: 0 },
-      { id: "starters", name: "Starters", displayOrder: 1 },
+      { id: "mains", name: "Mains", displayOrder: 2, heldUntilFired: true },
+      { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+      { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: true },
     ];
     const dish = (id: string, name: string, courseId: string | null): TillProduct => ({
       ...cafe,

@@ -279,7 +279,12 @@ describe("toDraftLineInput", () => {
 describe("fromDraftLine", () => {
   it("keeps matching read course metadata locally and omits it from every save", () => {
     const input = toDraftLineInput(burgerLine());
-    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const course = {
+      id: "retired",
+      name: "Recorded dessert",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     const restored = fromDraftLine(
       { ...input, courseId: course.id, course, unavailable: false },
       new Map(),
@@ -503,7 +508,12 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
 
   it("keeps the recorded course section when an unavailable draft dish is offered again without leaking metadata into saves", () => {
     const input = { ...toDraftLineInput(burgerLine()), courseId: "retired" };
-    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const course = {
+      id: "retired",
+      name: "Recorded dessert",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     const missing = fromDraftLine(
       { ...saved(input, "2.000"), course, unavailable: true },
       new Map(),
@@ -531,7 +541,17 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
   it("does not adopt recorded metadata for another course when an unavailable dish returns", () => {
     const missing = kept({ ...toDraftLineInput(burgerLine()), courseId: "selected" });
     const rebuilt = rebuildReturned(
-      [{ ...missing, course: { id: "retired", name: "Recorded dessert", displayOrder: 3 } }],
+      [
+        {
+          ...missing,
+          course: {
+            id: "retired",
+            name: "Recorded dessert",
+            displayOrder: 3,
+            heldUntilFired: true,
+          },
+        },
+      ],
       offers,
       live(VERSION),
     ).get(0)!;

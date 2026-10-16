@@ -34,6 +34,7 @@ export async function readTillSetup(
     id: course.id,
     name: course.name,
     displayOrder: course.displayOrder,
+    heldUntilFired: course.heldUntilFired,
   }));
   let capabilities: CapabilityFlag[] = [];
   let inactivityTimeoutSeconds: number | null = null;

@@ -6,8 +6,8 @@ import { locations } from "./tenants.js";
 /**
  * A kitchen course. `display_order` is the firing sequence. On a counter order or a bill with no
  * party, the order's earliest course fires on send and later ones are held until fired; a line with
- * no course fires earliest. For a seated party the till's draft shows its lines in sections in this
- * order, and Send all holds one group per section.
+ * no course fires earliest. `held_until_fired` places a table's new line in a held group; courses
+ * that are not held, and lines without a course, go to Fire now.
  */
 export const kitchenCourses = table(
   "kitchen_courses",
@@ -17,6 +17,7 @@ export const kitchenCourses = table(
     name: label("name").notNull(),
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
+    heldUntilFired: flag("held_until_fired").notNull().default(true),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

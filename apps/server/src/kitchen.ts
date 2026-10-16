@@ -281,6 +281,7 @@ export interface Course {
   name: string;
   displayOrder: number;
   active: boolean;
+  heldUntilFired: boolean;
 }
 
 /**
@@ -327,7 +328,7 @@ export async function requireCourse(
 export async function createCourse(
   tx: Transaction,
   cfg: TillConfig,
-  input: { name: string; displayOrder?: number },
+  input: { name: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<{ id: string }> {
   try {
     const [row] = await tx
@@ -336,6 +337,7 @@ export async function createCourse(
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
+        heldUntilFired: input.heldUntilFired ?? true,
       })
       .returning({ id: kitchenCourses.id });
     return { id: row!.id };
@@ -355,6 +357,7 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
       name: kitchenCourses.name,
       displayOrder: kitchenCourses.displayOrder,
       active: kitchenCourses.active,
+      heldUntilFired: kitchenCourses.heldUntilFired,
     })
     .from(kitchenCourses)
     .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
@@ -398,15 +401,16 @@ export async function updateCourse(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  patch: { name?: string; displayOrder?: number },
+  patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<void> {
   if (Object.hasOwn(patch, "active")) {
     throw new AppError("management.request_invalid", { field: "active" });
   }
   await requireLiveCourse(tx, cfg, id);
-  const set: { name?: string; displayOrder?: number } = {};
+  const set: { name?: string; displayOrder?: number; heldUntilFired?: boolean } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
+  if (patch.heldUntilFired !== undefined) set.heldUntilFired = patch.heldUntilFired;
   if (Object.keys(set).length === 0) return;
 
   let updated: { id: string }[];

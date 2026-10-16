@@ -22,12 +22,26 @@ const STATIONS: Station[] = [
 ];
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
+  {
+    id: "c1",
+    name: "Entrantes",
+    displayOrder: 0,
+    active: true,
+    inUse: false,
+    heldUntilFired: true,
+  },
 ];
 
 const TWO_COURSES: Course[] = [
-  { id: "c1", name: "Entrantes", displayOrder: 0, active: true, inUse: false },
-  { id: "c2", name: "Postres", displayOrder: 1, active: true, inUse: false },
+  {
+    id: "c1",
+    name: "Entrantes",
+    displayOrder: 0,
+    active: true,
+    inUse: false,
+    heldUntilFired: true,
+  },
+  { id: "c2", name: "Postres", displayOrder: 1, active: true, inUse: false, heldUntilFired: true },
 ];
 
 function stubApi(

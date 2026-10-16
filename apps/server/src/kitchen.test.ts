@@ -519,6 +519,24 @@ async function seedVariant(parentId: string): Promise<string> {
 }
 
 describe("kitchen-course config", () => {
+  it("new courses are held until fired unless explicitly changed", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Mains" }));
+    expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toMatchObject([
+      { id, heldUntilFired: true },
+    ]);
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, id, { heldUntilFired: false }));
+    expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toMatchObject([
+      { id, heldUntilFired: false },
+    ]);
+    const starter = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Starters", heldUntilFired: false }),
+    );
+    expect(
+      (await asApp(cfg, (tx) => listCourses(tx, cfg))).find((c) => c.id === starter.id),
+    ).toMatchObject({ heldUntilFired: false });
+  });
+
   it("creates/lists/updates/deletes a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
@@ -529,7 +547,13 @@ describe("kitchen-course config", () => {
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Alpha", displayOrder: 0 }));
     const list = await asApp(cfg, (tx) => listCourses(tx, cfg));
     expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
-    expect(list[3]).toEqual({ id: a, name: "Principales", displayOrder: 1, active: true });
+    expect(list[3]).toEqual({
+      id: a,
+      name: "Principales",
+      displayOrder: 1,
+      active: true,
+      heldUntilFired: true,
+    });
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
     const productId = await seedProduct();
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
@@ -549,7 +573,13 @@ describe("kitchen-course config", () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
     const [only] = await asApp(cfg, (tx) => listCourses(tx, cfg));
-    expect(only).toEqual({ id, name: "Postres", displayOrder: 0, active: true });
+    expect(only).toEqual({
+      id,
+      name: "Postres",
+      displayOrder: 0,
+      active: true,
+      heldUntilFired: true,
+    });
   });
 
   it("createCourse and updateCourse surface a duplicate name as course.name_taken", async () => {
@@ -638,10 +668,10 @@ describe("moveCourse", () => {
     const [a, b, c, d] = await fourCourses(cfg);
     const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, a!, 2));
     expect(moved).toEqual([
-      { id: b, name: "B", displayOrder: 0, active: true },
-      { id: c, name: "C", displayOrder: 1, active: true },
-      { id: a, name: "A", displayOrder: 2, active: true },
-      { id: d, name: "D", displayOrder: 3, active: true },
+      { id: b, name: "B", displayOrder: 0, active: true, heldUntilFired: true },
+      { id: c, name: "C", displayOrder: 1, active: true, heldUntilFired: true },
+      { id: a, name: "A", displayOrder: 2, active: true, heldUntilFired: true },
+      { id: d, name: "D", displayOrder: 3, active: true, heldUntilFired: true },
     ]);
     expect(await storedOrders([b!, c!, a!, d!])).toEqual([0, 1, 2, 3]);
     expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toEqual(moved);

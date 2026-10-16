@@ -9,9 +9,9 @@ import {
 } from "./draft-groups.js";
 
 // Listed out of display order, so sections that follow the list rather than `displayOrder` fail.
-const drinks = { id: "drinks", name: "Drinks", displayOrder: 0 };
-const starters = { id: "starters", name: "Starters", displayOrder: 1 };
-const mains = { id: "mains", name: "Mains", displayOrder: 2 };
+const drinks = { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true };
+const starters = { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: true };
+const mains = { id: "mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
 const courses = [mains, drinks, starters];
 
 const entry = (courseId: string | null, quantity = "1", wholeUnits = true): DraftEntry => ({
@@ -54,7 +54,12 @@ describe("draftSections (pre-sorting the draft)", () => {
   });
 
   it("keeps a retained course section in historical order without replacing live labels", () => {
-    const retained = { id: "retired", name: "Dessert recorded", displayOrder: 3 };
+    const retained = {
+      id: "retired",
+      name: "Dessert recorded",
+      displayOrder: 3,
+      heldUntilFired: true,
+    };
     expect(
       draftSections(
         [
@@ -72,7 +77,7 @@ describe("draftSections (pre-sorting the draft)", () => {
   });
 
   it("keeps a reused name on a different course id in its own position", () => {
-    const retained = { id: "retired", name: mains.name, displayOrder: 3 };
+    const retained = { id: "retired", name: mains.name, displayOrder: 3, heldUntilFired: true };
     expect(
       draftSections([{ ...entry(retained.id), course: retained }, entry(mains.id)], [mains]),
     ).toEqual([

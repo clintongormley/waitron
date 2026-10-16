@@ -140,8 +140,8 @@ describe("till-table-order-screen: one view of the draft", () => {
       products: byCourse,
       menus: menuOf(byCourse),
       courses: [
-        { id: "drinks", name: "Drinks", displayOrder: 0 },
-        { id: "desserts", name: "Desserts", displayOrder: 1 },
+        { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+        { id: "desserts", name: "Desserts", displayOrder: 1, heldUntilFired: true },
       ],
     });
     await tap(el, "Beer");
@@ -211,8 +211,8 @@ describe("till-table-order-screen: a note being written while other lines move",
   };
   const byCourse = [{ ...flan, courseId: "desserts" }, cola, { ...beer, courseId: "drinks" }];
   const courses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0 },
-    { id: "desserts", name: "Desserts", displayOrder: 1 },
+    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+    { id: "desserts", name: "Desserts", displayOrder: 1, heldUntilFired: true },
   ];
 
   /** Flan, Cola, Beer, and Cola's note editor open, holding "no ice". */

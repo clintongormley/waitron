@@ -105,7 +105,7 @@ const lines: TabLine[] = [
   },
 ];
 
-const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
+const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, heldUntilFired: true }];
 
 const statuses: TableServiceStatus[] = [{ id: "s1", label: "Reservada", color: "#cc0000" }];
 

@@ -223,7 +223,7 @@ describe("permanent course deletion", () => {
         inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
       expect(await inTx(v, (tx) => listCourses(tx, v.cfg))).toEqual([
-        { id, name: "Live", displayOrder: 0, active: true },
+        { id, name: "Live", displayOrder: 0, active: true, heldUntilFired: true },
       ]);
     },
   );

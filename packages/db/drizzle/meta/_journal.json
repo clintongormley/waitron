@@ -1198,6 +1198,13 @@
       "when": 1792308206454,
       "tag": "0170_floor_reset_tables_taken_off",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "6",
+      "when": 1792367756050,
+      "tag": "0171_course_held_until_fired",
+      "breakpoints": true
     }
   ]
 }
