@@ -8,6 +8,13 @@ Google's "G" on the dashboard's Sign in with Google button, and npm packages bun
 server and web apps. The print-agent image, built by the same `deploy/Dockerfile`, has its own
 `/app/third-party/` with notices for its bundled npm packages and Python packages.
 
+## Nutrition icons
+
+The web apps register the shared allergen and diet icon paths from Erudus, Pictogrammers
+and Material Symbols. `nutrition-icons/README.md` records the pinned sources and adaptations;
+that directory carries Erudus's MIT notice and Pictogrammers' notice. The Apache 2.0 licence
+is in `licenses/Apache-2.0.txt`.
+
 ## Bundled npm packages
 
 Each server JavaScript bundle ships its own `/app/third-party/npm/server/<bundle>.js.NOTICES.txt`.
@@ -81,8 +88,9 @@ The dashboard, till and setup web apps, served from `/app/web/` in the image, ca
 adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons>), Copyright
 Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
 `apps/dashboard/src/icons.ts`, and the dropdown's `check` icon in `DROPDOWN_ICONS`
-(`packages/ui/src/components/wt-combobox.ts`), which all three apps register. Each of those two
-files says so beside the paths.
+(`packages/ui/src/components/wt-combobox.ts`), which all three apps register, and the `allergies`
+mark in `packages/ui/src/nutrition-icons.ts`, registered by the dashboard and till. The source
+notes beside these paths identify their licences.
 
 - `licenses/Apache-2.0.txt` is that licence.
 
