@@ -1,5 +1,11 @@
 # A10 — Clocking in and out: the working-time record staff actually use
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Date: 2026-10-12. Updated 2026-10-14 with the owner’s self-approval and automatic-clock-out rulings.
 Status: design agreed; A10-1 awaits the owner’s review before landing.
 

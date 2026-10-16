@@ -1,5 +1,11 @@
 # A10-5 Hours Screens Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **For agentic workers:** Use `superpowers:executing-plans`, implementing INLINE at the owner's authorised implementation setting. Read `superpowers:test-driven-development` before writing implementation or tests. The driver independently reviews this plan against the specs and lands the documentation before native execution. No new brainstorm, implementer dispatch or owner-response gate. This planning invocation writes this file only; the driver owns git, backlog links, campaign state and landing.
 
 **Goal:** Let you read your own hours on a venue till or handheld and in dashboard My Schedule, and let an authorised manager review everyone's days and outstanding attendance work in a pay period.

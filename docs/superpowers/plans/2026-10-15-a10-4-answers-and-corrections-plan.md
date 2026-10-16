@@ -1,5 +1,11 @@
 # A10-4 Answers and Corrections Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **For agentic workers:** After the parent's fresh-context review, use `superpowers:executing-plans` and implement inline, task by task. Read `superpowers:test-driven-development` before writing implementation or tests. The owner already authorises implementation, FULL finish and normal campaign landing; do not request another approval or dispatch implementers. This planning invocation writes this file only. The parent owns campaign state, git and landing.
 
 **Goal:** Let workers answer attendance questions, request fixes and answer manager proposals, with manager decisions through the existing till PIN step or the dashboard.

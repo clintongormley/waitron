@@ -1,5 +1,11 @@
 # A417 — the till's non-save buttons are drawn quiet while they wait
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Queue item A417 (lane B, moved from lane A 2026-10-10). Owner ruling (2026-10-08, "b", on A409 #1433):
 a button that is not a save is drawn `secondary` while it waits for a choice, a selection or a load,
 and its own variant once it can act, keeping its own variant while its own action is being sent

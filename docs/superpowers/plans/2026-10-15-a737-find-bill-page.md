@@ -1,5 +1,11 @@
 # A737 Part 1 — Find a bill page Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans, inline. Native implementation is already authorised; do not ask for confirmation or dispatch per-task agents. Steps use checkboxes. This authoring pass changes plans only and makes no commits.
 
 **Goal:** Land the Bills/Transactions page, server search/filter/sort/paging, historical receipt view, Reprint and printing in another language **before** implementing post-invoice Refund.

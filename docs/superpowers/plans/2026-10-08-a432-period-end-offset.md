@@ -1,5 +1,11 @@
 # A432: Period end offset implementation plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 ## Decisions
 
 1. Store `endOffsetMinutes` on each department period, default **0**, as a signed whole number

@@ -1,5 +1,11 @@
 # A10-2: Clocking on the till implementation plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **For the campaign driver:** Native inline execution is already chosen by RUNNER. Required implementation skill: **superpowers:executing-plans**. Execute the reviewed plan task by task with observed RED/GREEN tests and signed-off commits. No per-task agents or human-approval handoff. This planning invocation writes only this file; the separate fresh-context plan review is complete.
 
 **Goal:** Let an admitted, signed-in person record their own start, breaks and finish on a clock-enabled till or venue handheld.

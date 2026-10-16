@@ -93,12 +93,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    is built on it, so Q28 is asked to confirm; how Task 11's discount appears on the invoice is
    Q29, and printing the invoice before payment is Q27.
 
-2. **Build good screens for each kind of device, and retire canvases** (A182, under _The till,
-   devices and table service_, owner 2026-10-01). The till, handheld, kitchen screen and pass are
-   still built from stored canvases of tabs and cards, against the owner's 2026-09-20 decision for
-   well-designed built-in screens. Owner, 2026-10-08: delete canvases now, keeping today's default
-   layouts as fixed built-in screens, and redesign the screens afterwards; no new feature is built
-   as a canvas card.
+2. **Design the fixed screens for each kind of device** (A182 part 1, under _The till,
+   devices and table service_, owner 2026-10-01). The counter redesign is A738–A740. The handheld,
+   kitchen screen and pass still need their own designs. A182 part 2 removes the screen designer;
+   new work starts from the fixed screens.
 
 3. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
@@ -2098,10 +2096,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a way to add urgency to it too, so the kitchen sees it flagged. Nothing like it exists today.
   [Detail](backlog/kitchen.md#mark-a-new-dish-as-urgent)
 
-- **Show a device's own pass screen in a canvas card — OPEN (3d, P15).** — left open by the
-  product folders work. The ordinary embedded pass card still shows All stations; a device's Pass
-  tab shows the pass screen or pass monitor it chose.
-
 - **Keep pass screen Done marks through a `ticket_items` rebuild — OPEN (3d).** — left open by the
   product folders work. `pass_item_marks` cascades from `ticket_items`, so a rebuild empties those
   marks.
@@ -2252,7 +2246,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   include, allergens and their cereal and nut kinds exclude); one-row order lines with extras and
   the note as their own lines and every amount aligned; the line window is today's modifiers window
   plus allergens and the note, opened by ⓘ, long press or double click; product info the same way;
-  a Hold window; a custom item. After A182 part 2 (retire canvases, not yet queued) and A668's data
+  a Hold window; a custom item. After A668's data
   shape. **Added 2026-10-16 (owner):** the same clean-up on the table-order screen; the "last
   added" bar on the counter too, clear of the product buttons, its long press opening the line
   window; tapping an order in Held or Waiting shows its items; no empty "Modifiers" heading. How a
@@ -2413,11 +2407,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the picker does when its tables change under it (re-pick the first, or close) and fix it
   test-first. [Detail](backlog/till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
 
-- **Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
-  its screen** — OPEN (found 2026-09-25, review of PR #641). **Next action:** decide whether
+- **Five till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25, review of PR #641). **Next action:** decide whether
   discard, advance and mark-collected go through `#refreshAfterWrite` with their own "X succeeded,
-  but…" strings, and what login and retrieve show when their refresh fails. Give both a11y cases'
-  `getTill` a canvas and assert `till-counter-screen` exists before each scan.
+  but…" strings, and what login and retrieve show when their refresh fails.
   [Detail](backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
 
 - **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
@@ -2435,8 +2427,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 
 - Recorded, not blocking: a handheld's Order tab is tappable with no active table; the
-  boot-into-floor prefetch is unreached by any shipped canvas; the station screen's device-mode enrol
-  sub-view is unreachable; the default counter canvas has no prep-queue rail.
+  station screen's device-mode enrol sub-view is unreachable; Counter has no prep-queue rail.
 
 - **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
   result — leave it, or build the replay?** — a product decision to take before production. Leaving
@@ -2454,12 +2445,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   fit, until the next resize or other change refits the bar. Open, decided as built; left open by
   A395 (#1435).
 
-- **Three lines in `apps/till/src/widgets/tab-shell.ts` are pinned by no test** (deleting any one
-  leaves every test passing): the phone-width early return in `#release`, the return after re-adding
-  a step in `#fit`, and the unobserve of a replaced language chooser. Left open by A395 (#1435).
+- **Three lines in `apps/till/src/widgets/till-shell.ts` are pinned by no test** (deleting any one
+  left every test passing on the old shell): the phone-width early return in `#release`, the return after re-adding
+  a step in `#fit`, and the unobserve of a replaced language chooser. Left open by A395 (#1435). Re-run those controls against the extracted shell before relying on them.
 
 - **Three till top-bar cases run close to, and sometimes past, their 15 s limit locally.** The
-  "fits as a fresh bar does when …" cases in `apps/till/src/widgets/tab-shell.test.ts`; find what
+  "fits as a fresh bar does when …" cases in `apps/till/src/widgets/till-shell.test.ts`; find what
   makes them slow rather than raising the limit. Left open by A425.
   [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
@@ -2999,9 +2990,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A collect straight after Place order does not re-read the kitchen queue.** Left open by service
   Task 16 (#981). [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
-- **The waiting list is drawn only inside the held-orders card**, so a canvas without that card
-  shows no waiting list. Left open by service Task 16 (#981).
-
 - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the wrong
   total in the basket.** Reported by B16's review fixer from reading; no test shows it. Left open by
   service Task 16 (#981).
@@ -3169,17 +3157,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   against `main`, then fix or file it on its own.
   [Detail](backlog/till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
-- **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
-  Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list of
-  tabs, each tab a grid of cards, chosen per device profile. **Decided the same day: delete now**,
-  before the redesign. **Part 1 for the counter till is designed (2026-10-15): A738–A740**, which
-  wait on part 2. The separate Find a bill page is A737 Part 1
-  ([#1778](https://github.com/clintongormley/waitron/pull/1778)); its post-invoice Refund stays open
-  as A737 Part 2. **A182 part 2 has a retirement design and implementation plan (2026-10-16);
-  implementation remains open**. The documents have been reviewed, and the owner approved
-  the exact two schema-guard inventory deletions through the watcher on 2026-10-16.
-  [Design](superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md),
-  [plan](superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
+- **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
+  Counter design and implementation remain A738–A740; the handheld, kitchen screen and pass need
+  their own designs. A737 Part 2 retains the post-invoice Refund work. A182 part 2 removes the
+  screen designer without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268
@@ -3384,13 +3365,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `setLineModifiers` has to carry the product.
   [Detail](backlog/till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
 
-- **On a tab other than the counter, the pay card's Cash and Card could turn grey while an order is
-  being placed**, if a basket line becomes held mid-send: that tab's card grid gets
-  `.busy=${this.submitting}` (`apps/till/src/till-app.ts`, the second `till-card-grid` binding)
-  where the counter's gets `submitting || placing`, and A417 (#1496) greys them on
-  `payHeld && !busy`. Found by reading in #1496's review, not run; it needs a stored layout that
-  puts the pay card on another tab. Decide whether that tab's `busy` should include `placing`.
-
 - **Both of the modifier picker's LIST inputs carry a generated id as their `name`**
   (`extras-${list.id}`, `options-${list.id}`, `apps/till/src/widgets/modifier-picker.ts`), against
   `docs/developers/conventions-ui.md` and CLAUDE.md §3. The offered-list wire carries no stable
@@ -3407,10 +3381,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A435 step 5's 390 px captures show it with the real till app and icons. Reproduce it through
   a normal till boot before changing layout; the fixture's cause and the base version are
   unverified. The retained course label and active-only picker are visible in the same captures.
-
-- **The canvas Add and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
-  to show "A331 look canvas (copy)" whole** — seen and not changed. Left open by A331 batch 3b
-  (#1415).
 
 - **The station dialog widens or narrows with the chosen station's name, so its buttons shift a
   little as a station is picked** (it did so before this batch). Left open by A331 batch 5 (#1414).
@@ -3468,9 +3438,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 
 - **With the service closed, a wide till's menu area shows nothing, and the "Service area" picker
-  and the "Keep … open later" button go with it.** Seen once at 1280 wide. Read, not run: the sale
-  layout draws both inside the menu card, which draws nothing while the service or the area is
-  closed (`apps/till/src/widgets/card-grid.ts`, `#element` and `#cell`). Left open by A526.
+  and the "Keep … open later" button go with it.** Seen once at 1280 wide. Read, not run: the retired renderer hid controls with its menu card. Recheck the observation on fixed Counter
+  (`apps/till/src/screens/till-counter-screen.ts`); its controls and menu are separate now. Left open by A526.
 
 - **In Spanish at 390 wide, the counter's basket line showed no product name** in two screenshots
   of the Collect step (light and dark): the row with quantity, price and Note is there, the name
@@ -5937,12 +5906,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   repeats the first case under another name** (a test change, not a comment one). Found by #589
   (`packages/db` outside `src/schema`), not changed.
 
-- **One test title in `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes
-  PostgreSQL's error number 23001** — found by #588 while pruning comments. Both layouts database
-  suites create a manager session in `beforeAll`, while `useVenueDb` empties every data table after
-  each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's
-  first test can use that session; they pass today because only the first does.
-  [Detail](backlog/ci.md#one-test-title-in-packageslayoutssrccanvas-storedbtestts-line-144-still-quotes-postgresqls-error-number-23001)
+- **The printing error test overstates its import requirement, and profile-store setup keeps a
+  session across per-test resets.** Left open by #588; the canvas-store test itself is retired.
+  [Detail](backlog/ci.md#printing-error-test-wording-and-profile-store-session-setup)
 
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL (found
   2026-10-03 by #1139's review). **Next action:** the owner decides whether the rule covers every
@@ -6711,7 +6677,7 @@ partial scope; the detail for a live thread is in its area.
 | 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (_Payments and card readers_)                                                               |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
 | 6   | Locations                    | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |
-| 7   | Counter POS                  | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end                                                                                                                                                                                                                                                        | —                                                                                                                                                                             |
+| 7   | Counter POS                  | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, receipt configuration, receipt/drawer printing, cash-drawer authorization — operable end to end                                                                                                                                                                                                                                                        | —                                                                                                                                                                             |
 | 8   | Reporting                    | daily close, frozen _cierre Z_, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home                                                                                                                                                 | fiscal filing remainder parked (_Reporting — the fiscal remainder_)                                                                                                           |
 | 9   | Deployment                   | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272)                                                                                                                                                                                     | USB installer (B3); cloud standby live link + the Waitron Cloud boundary                                                                                                      |
 | 10  | Tabs / table service         | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324)                                                                                                                                                                                                                                                                                                             | core COMPLETE; owner-added extensions parked                                                                                                                                  |

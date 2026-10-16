@@ -188,16 +188,13 @@ Vitest 4.1.11 reads it.
   `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
   code change, for whoever next changes that package's code.
 
-## One test title in `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number 23001
+## Printing error test wording and profile-store session setup
 
-- Found by #588 (`packages/layouts`), not fixable in a comments-only change. One test title in
-  `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
-  23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
-  says the error construction typechecks "ONLY because" of one import — #588's review measured the
-  same claim false for printing and layouts. Both layouts database suites create a
-  manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
-  default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
-  use that session; they pass today because only the first does.
+Left open by #588: `packages/printing/src/errors.test.ts:5` says the error construction typechecks
+"ONLY because" of one import; #588's review measured that claim false. The remaining layouts
+profile-store suite creates a manager session in `beforeAll`, while `useVenueDb` resets data per
+test, so that session belongs only to its first case. The canvas-store suite and its old
+PostgreSQL-number title are retired with A182 part 2.
 
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 

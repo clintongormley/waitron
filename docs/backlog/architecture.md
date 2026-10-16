@@ -405,7 +405,7 @@ run to install the new trigger. Owner question Q5 of A483.
 **Names left behind by the tenant-column removal (#378, 2026-09-16):**
 
 - **These index and key names still read `tenant`, and the columns they name are gone:**
-  `canvases_tenant_name_key`, `print_agents_tenant_node_key`,
+  `print_agents_tenant_node_key`,
   `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
   `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
   `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,

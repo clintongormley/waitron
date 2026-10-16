@@ -1,5 +1,11 @@
 # Moving a dish to another station (slice 3c-3) Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

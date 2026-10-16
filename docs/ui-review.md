@@ -108,6 +108,10 @@ one line; the fix's detail belongs in its PR/commit, not here.
 
 ### General UI corrections — 2026-09-06
 
+2026-10-16: the canvas navigation described in this historical walk is retired by A182 part 2.
+Use the [fixed device screens](developers/design-system.md#fixed-device-screens) contract for
+current primary navigation; menu Home Page, receipt and floor-plan editing remain separate.
+
 Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
 
 - Keep the selected navigation tab in the URL so Back, Forward and refresh restore it. Includes

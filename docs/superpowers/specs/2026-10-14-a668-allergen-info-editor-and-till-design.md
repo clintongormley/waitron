@@ -1,5 +1,11 @@
 # A668 — Allergen information in the editor, at publishing and on the till
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Date: 2026-10-14. Status: approved by the owner, 2026-10-15, with four till answers given the same
 day after A738 (the counter screen) was designed: see _Owner answers on the till, 2026-10-15_.
 Companion spec: [A669 — an allergy at the table](2026-10-14-a669-allergy-at-the-table-design.md).

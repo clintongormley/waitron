@@ -1,5 +1,11 @@
 # Departments and zones: implementation plan (A261 step 2)
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **2026-10-11 supersession.** A435 step 6 supersedes hierarchy reactivation, retained current menus/settings, active-table-only impact and clearing a removed starting zone without replacement. Recorded historical facts remain. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

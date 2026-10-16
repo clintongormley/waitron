@@ -1991,6 +1991,10 @@ matches it by its own words (`FORM_FACTOR_REFUSAL`, `packages/db/src/trigger-ref
 Cost: the two layouts stores asked for the code alone, so a second refusing trigger on either path
 would have been reported as `canvas.in_use` or `device_profile.in_use`.
 
+2026-10-16: A182 part 2 retires the canvas store and its foreign key. The remaining profile store
+keeps the named form-factor trigger refusal and incoming RESTRICT refusal; it rethrows other
+foreign-key errors without attributing them to a canvas.
+
 ## One process per venue folder
 
 **The rule.** Opening a venue folder (`openVenueStore`, and so `openVenueDatabase`) holds
