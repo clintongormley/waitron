@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { expectChooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -285,9 +285,10 @@ describe("till-shell", () => {
       formFactor: "till",
       loadLocales: async () => [{ code: "es-ES", label: "Español" }],
     });
-    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
-    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
-    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+    await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
+      wide: { shown: ["Español"], name: "Español" },
+      phone: { shown: ["ES"], name: "ES Español" },
+    });
   });
 
   it("updates the chooser's active language when the till locale changes", async () => {

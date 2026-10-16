@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
-import { chooserFaces, cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import {
+  expectChooserFaces,
+  cleanupWidgets,
+  mountWidget,
+  servedMenus,
+} from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -553,9 +558,10 @@ describe("till-counter-screen", () => {
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
     setLocale("es-ES");
     const { el } = await mount();
-    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
-    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
-    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+    await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
+      wide: { shown: ["Español"], name: "Español" },
+      phone: { shown: ["ES"], name: "ES Español" },
+    });
   });
 
   it("draws no language chooser when embedded (the shell owns it)", async () => {

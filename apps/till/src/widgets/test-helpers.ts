@@ -107,33 +107,38 @@ export function formatViolations(violations: axe.Result[]): string {
     .join("\n\n");
 }
 
-/** The trigger's visible text and the name a screen reader hears, at one viewport width. */
+/** The trigger's drawn text and the name a screen reader hears, at one viewport width. */
 export interface ChooserFace {
   shown: string[];
-  name: string | null;
+  name: string;
 }
 
 /**
- * What a `wt-language-chooser` trigger shows at 1280 and at 390 wide, restoring the viewport after.
+ * Checks what a `wt-language-chooser` trigger draws and is named at 1280 and at 390 wide,
+ * restoring the viewport after.
  */
-export async function chooserFaces(
+export async function expectChooserFaces(
   chooser: Element,
-): Promise<{ wide: ChooserFace; phone: ChooserFace }> {
+  expected: { wide: ChooserFace; phone: ChooserFace },
+): Promise<void> {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const faceAt = async (w: number): Promise<ChooserFace> => {
+  const expectFaceAt = async (w: number, face: ChooserFace): Promise<void> => {
     await page.viewport(w, 844);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const trigger = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
-    return {
-      shown: [...trigger.querySelectorAll<HTMLElement>("[part]")]
+    expect(
+      [...trigger.querySelectorAll<HTMLElement>("[part]")]
         .filter((part) => getComputedStyle(part).display !== "none")
-        .map((part) => part.textContent!.trim()),
-      name: trigger.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
-    };
+        .map((part) => (part.querySelector(".code-text") ?? part).textContent!.trim()),
+    ).toEqual(face.shown);
+    await expect
+      .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
+      .toHaveAccessibleName(face.name);
   };
   try {
-    return { wide: await faceAt(1280), phone: await faceAt(390) };
+    await expectFaceAt(1280, expected.wide);
+    await expectFaceAt(390, expected.phone);
   } finally {
     await page.viewport(width, height);
   }

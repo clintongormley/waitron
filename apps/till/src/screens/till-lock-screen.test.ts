@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale, t } from "../i18n/t.js";
-import { chooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
@@ -315,9 +315,10 @@ describe("till-lock-screen", () => {
     setLocale("es-ES");
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
-    const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
-    expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
-    expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+    await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
+      wide: { shown: ["Español"], name: "Español" },
+      phone: { shown: ["ES"], name: "ES Español" },
+    });
   });
 
   it("keeps server status below the sign-in content, with the language chooser above both", async () => {

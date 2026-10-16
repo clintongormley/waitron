@@ -2729,11 +2729,11 @@ describe("page shell", () => {
   );
 
   it.each([
-    [1280, "English", "name"],
-    [390, "EN", "code"],
+    [1280, "English", "name", "English"],
+    [390, "EN", "code", "EN English"],
   ] as const)(
     "at %ipx the chooser shows %s, and its trigger is named in full for a screen reader",
-    async (width, shown, part) => {
+    async (width, shown, part, accessibleName) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       await page.viewport(width, 844);
       try {
@@ -2746,10 +2746,11 @@ describe("page shell", () => {
         const [visible, hidden] = part === "name" ? [name, code] : [code, name];
         expect(getComputedStyle(visible).display).not.toBe("none");
         expect(getComputedStyle(hidden).display).toBe("none");
-        expect(visible.textContent!.trim()).toBe(shown);
-        expect(trigger.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
-          "English",
-        );
+        const drawn = part === "name" ? name : code.querySelector<HTMLElement>(".code-text")!;
+        expect(drawn.textContent!.trim()).toBe(shown);
+        await expect
+          .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
+          .toHaveAccessibleName(accessibleName);
       } finally {
         await page.viewport(before.width, before.height);
       }

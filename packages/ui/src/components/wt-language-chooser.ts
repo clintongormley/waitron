@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import "./wt-button.js";
 
 export interface WtLocaleOption {
@@ -15,7 +15,8 @@ export interface WtLocaleOption {
  *
  * The trigger draws the full name (`part="name"`) and the short code (`part="code"`, hidden). An
  * app swaps them at phone width with its own `::part()` rules, because a primitive here may hold no
- * literal breakpoint and a media query cannot read a token.
+ * literal breakpoint and a media query cannot read a token. The trigger is named by what it draws:
+ * the full name, or the code followed by a visually hidden copy of the full name.
  *
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader
@@ -36,6 +37,10 @@ export class WtLanguageChooser extends LitElement {
 
       .code {
         display: none;
+      }
+
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
 
       /* In the top layer, so no positioned content later in the page can paint over it. A manual
@@ -287,18 +292,22 @@ export class WtLanguageChooser extends LitElement {
 
   override render() {
     const label = this.#label(this.active);
+    // The full name sits inside the code part as visually hidden text, so it is read only while the
+    // code is drawn and the drawn code stays in the name (WCAG 2.5.3).
     return html`
       <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
         <wt-button
           variant="secondary"
           data-test="lang-trigger"
-          aria-label=${label}
           aria-haspopup="menu"
           aria-expanded=${this.open}
           @click=${() => this.#toggle()}
         >
           <span class="name" part="name">${label}</span>
-          <span class="code" part="code" aria-hidden="true">${this.#shortCode(this.active)}</span>
+          <span class="code" part="code"
+            ><span class="code-text">${this.#shortCode(this.active)}</span
+            ><span class="visually-hidden"> ${label}</span></span
+          >
         </wt-button>
         ${
           this.open && this.locales
