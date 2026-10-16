@@ -16,7 +16,7 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
   let profile: DeviceProfile = {
     id: "clock-profile",
     name: "Counter",
-    canvasId: null,
+
     capabilities: [],
     formFactor,
     inactivityTimeoutSeconds: null,
@@ -38,13 +38,11 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
   const api = {
     listDeviceProfiles: vi.fn(async () => [profile]),
     getDeviceProfile: vi.fn(async () => profile),
-    updateDeviceProfile: vi.fn(
-      async (_id: string, _name: string, _canvas: string | null, capabilities: string[]) => {
-        profile = { ...profile, capabilities };
-        return profile;
-      },
-    ),
-    listCanvases: vi.fn(async () => []),
+    updateDeviceProfile: vi.fn(async (_id: string, _name: string, capabilities: string[]) => {
+      profile = { ...profile, capabilities };
+      return profile;
+    }),
+
     listPrinters: vi.fn(async () => []),
     listPagePrinters: async () => [],
     listStations: vi.fn(async () => []),

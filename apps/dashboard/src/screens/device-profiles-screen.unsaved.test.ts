@@ -12,7 +12,7 @@ registerIcons(DASHBOARD_ICONS);
 const profile: DeviceProfile = {
   id: "p1",
   name: "Counter",
-  canvasId: "c1",
+
   capabilities: ["show-station", "show-expo"],
   formFactor: "till",
   inactivityTimeoutSeconds: 300,
@@ -99,10 +99,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
     api: {
       listDeviceProfiles: async () => [loaded],
       getDeviceProfile: async () => loaded,
-      listCanvases: async () => [
-        { id: "c1", name: "Counter", definition: {} },
-        { id: "c2", name: "Bar", definition: {} },
-      ],
+
       listPrinters: async () => [printer, { ...printer, id: "r2", name: "Bar" }],
       listPagePrinters: async () => [],
       listStations: async () => [station],
@@ -171,7 +168,6 @@ it("W69 profile Cancel preserves the draft and focus until explicit Discard", as
 });
 for (const [id, initial, edited] of [
   ["profile-name", "Counter", "New counter"],
-  ["profile-canvas", "c1", "c2"],
   ["profile-inactivity", "5", "6"],
   ["profile-form-factor", "till", "phone-portrait"],
   ["profile-starting-zone", "z1", "z2"],
@@ -331,7 +327,6 @@ it("W69 an accepted profile save closes before a refused refresh", async () => {
     [
       "p1",
       "New counter",
-      "c1",
       ["show-station", "show-expo"],
       "till",
       300,
@@ -523,7 +518,7 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
         ...profile,
         id: "p2",
         name: "Submitted phone",
-        canvasId: null,
+
         capabilities: [],
         inactivityTimeoutSeconds: null,
         receiptPrinterIds: [],
@@ -552,7 +547,6 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
   expect(creates).toEqual([
     [
       "Submitted phone",
-      null,
       [],
       "till",
       null,
@@ -561,15 +555,7 @@ it("W69 a create accepted with newer input uses Update on its next save", async 
     ],
   ]);
   expect(updates).toEqual([
-    [
-      "p2",
-      "Newer phone",
-      null,
-      [],
-      "till",
-      null,
-      { receiptPrinterIds: [], paymentSlipPrinterIds: [] },
-    ],
+    ["p2", "Newer phone", [], "till", null, { receiptPrinterIds: [], paymentSlipPrinterIds: [] }],
   ]);
   expect(unload()).toBe(false);
 });
@@ -747,7 +733,7 @@ it("W100 a department chosen while a refused reader save is in flight is sent by
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   q(screen, "profile-save")!.click();
   await expect.poll(() => writes.length).toBe(2);
-  expect(writes[1]![7]).toMatchObject({
+  expect(writes[1]![6]).toMatchObject({
     departmentId: "d2",
     allowedZoneIds: null,
     startingZoneId: "z3",
@@ -759,7 +745,7 @@ it("W100 a department saved before a refused reader save is not sent again", asy
   const { screen } = await mountWithEquipment({
     updateDeviceProfile: async (...args) => {
       writes.push(args);
-      return { ...profile, ...(args[7] as Partial<DeviceProfile> | undefined) };
+      return { ...profile, ...(args[6] as Partial<DeviceProfile> | undefined) };
     },
     setProfileReaders: async (_id, list) => {
       readerSaves += 1;
@@ -773,10 +759,10 @@ it("W100 a department saved before a refused reader save is not sent again", asy
   await expect
     .poll(() => screen.shadowRoot!.textContent)
     .toContain(codeMessage("connection.failed"));
-  expect(writes[0]![7]).toMatchObject({ departmentId: "d2" });
+  expect(writes[0]![6]).toMatchObject({ departmentId: "d2" });
   await expect.poll(() => (q(screen, "profile-save") as HTMLButtonElement).disabled).toBe(false);
   q(screen, "profile-save")!.click();
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
   expect(writes).toHaveLength(2);
-  expect(writes[1]![7]).toBeUndefined();
+  expect(writes[1]![6]).toBeUndefined();
 });

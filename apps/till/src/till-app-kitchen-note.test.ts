@@ -8,7 +8,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { CapabilityFlag, FormFactor } from "./layout.js";
 import type {
   TableState,
   TableParty,
@@ -19,20 +19,6 @@ import type {
   TillProduct,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
-      ],
-    },
-  ],
-};
 
 const till = {
   locale: "en",
@@ -46,7 +32,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: "till",
   capabilities: ["print-receipt"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -228,10 +214,7 @@ function emit(source: Element, type: string, detail?: unknown) {
 }
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-const basket = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillBasket>("till-basket")!;
+const basket = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
 const heading = (el: TillApp) =>
   basket(el).shadowRoot!.querySelector<TillOrderKitchenNote>("till-order-kitchen-note")!;
 async function mounted(overrides: Record<string, unknown> = {}, retrieve = true) {
@@ -925,10 +908,15 @@ const tableHeading = (el: TillApp) =>
 async function mountedTable(
   overrides: Record<string, unknown> = {},
   initialParty: TableParty | null = tableParty(),
+  formFactor: FormFactor = "till",
 ) {
   const server = draftServer();
   const el = await mounted(
     {
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor }),
       getTablesState: vi.fn().mockResolvedValue([tableRow(initialParty)]),
       getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [], editSentLines: true }),
       getPartyBills: vi.fn().mockResolvedValue([]),
@@ -947,10 +935,14 @@ async function mountedTable(
     },
     false,
   );
-  emit(counter(el), "floor-refresh", {});
-  await flush(el);
+  if (formFactor === "till") {
+    emit(counter(el), "floor-refresh", {});
+    await flush(el);
+  }
   expect(api.getTablesState).toHaveBeenCalled();
-  emit(counter(el), "open-table", { tableId: "table-four", seated: true });
+  const source =
+    formFactor === "till" ? counter(el) : el.shadowRoot!.querySelector("till-floor-screen")!;
+  emit(source, "open-table", { tableId: "table-four", seated: true });
   await flush(el);
   expect(tableScreen(el)).not.toBeNull();
   expect(tableScreen(el).party?.id ?? null).toBe(initialParty?.id ?? null);
@@ -1365,23 +1357,12 @@ it("opens the Waiting note from its real row action and returns focus after Canc
     getTill: vi.fn().mockResolvedValue({
       ...till,
       capabilities: ["take-orders"],
-      canvas: {
-        ...canvas,
-        tabs: [
-          {
-            ...canvas.tabs[0]!,
-            cards: [
-              ...canvas.tabs[0]!.cards,
-              { type: "held-orders", colSpan: 12, rowSpan: 3, config: {} },
-            ],
-          },
-        ],
-      },
+      formFactor: "till",
     }),
     listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
     getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
   });
-  const grid = counter(el).shadowRoot!.querySelector("till-card-grid")!;
+  const grid = counter(el);
   const waiting = grid.shadowRoot!.querySelector("till-counter-waiting")!;
   const button = waiting.shadowRoot!.querySelector<HTMLElement>("[data-waiting-kitchen-note]");
   expect(button).not.toBeNull();
@@ -1835,3 +1816,67 @@ it("does not pay a basket replaced just after its dirty note was saved", async (
   expect(store.kitchenNote).toBe("Replacement instruction");
   expect(api.recordSale).not.toHaveBeenCalled();
 });
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "keeps a note-only round across %s Floor, Order and Back/Forward while an old read waits",
+  async (formFactor) => {
+    const { el, server } = await mountedTable(
+      {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor,
+          capabilities: ["print-receipt", "take-orders"],
+        }),
+      },
+      tableParty(),
+      formFactor,
+    );
+    const store = tableScreen(el).draftStore;
+    expect(store).toBeDefined();
+    await editTable(el, "Together");
+    expect(api.setKitchenNote).toHaveBeenCalledExactlyOnceWith(
+      { partyId: "party-table" },
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedNoteRevision: 2,
+        note: "Together",
+      },
+    );
+    const late = deferred<TableState[]>();
+    vi.mocked(api.getTablesState).mockReturnValueOnce(late.promise);
+    const primary = () =>
+      el
+        .shadowRoot!.querySelector("till-shell")!
+        .shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
+    await userEvent.click(primary()[0]!);
+    await flush(el);
+    expect(location.pathname).toBe("/tabs/floor");
+    await userEvent.click(primary()[1]!);
+    await flush(el);
+    expect(location.pathname).toBe("/tabs/order");
+    const back = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    expect(location.pathname).toBe("/tabs/floor");
+    const forward = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.forward();
+    await forward;
+    await flush(el);
+    late.resolve([tableRow(tableParty())]);
+    await flush(el);
+    expect(tableScreen(el).embedded).toBe(true);
+    expect(tableScreen(el).party?.id).toBe("party-table");
+    expect(tableScreen(el).party?.revision).toBe(4);
+    expect(tableScreen(el).kitchenNote).toBe("Together");
+    expect(tableScreen(el).kitchenNoteRevision).toBe(3);
+    expect(tableScreen(el).draftStore).toBe(store);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(api.setKitchenNote).toHaveBeenCalledTimes(1);
+  },
+);

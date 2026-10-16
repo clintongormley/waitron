@@ -276,7 +276,7 @@ both modes get the three default device profiles (`DEFAULT_DEVICE_PROFILES`,
 `packages/layouts/src/device-profile.ts`).
 
 Still open for the spec: whether a required lesson blocks every lesson after it or only those that
-depend on it; whether any of content languages, the canvas editor, rosters and working time,
+depend on it; whether any of content languages, rosters and working time,
 purchasing or Cloud services gets a lesson; whether a printer or staff should be required; how the
 tutorial is reopened (the Demo bar, A246, W36, is the obvious place); whether it spans the till as
 well as the dashboard; and how each required lesson's check is read without slowing the dashboard.

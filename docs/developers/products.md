@@ -642,8 +642,8 @@ tablet) uses the menu's Handheld display and every other device its Till display
 first" puts the shortcuts first and "Menu first" the structure; neither reorders anything inside a
 block. A divider naming the second block sits between them, and a block with nothing to show is
 left out with no divider. The display's column count is the most a grid shows: a grid shows fewer
-where a tile would be narrower than its minimum, so a phone held upright shows two or three. A
-canvas card that sets its own column count keeps it. In Colours mode a tile fills with its
+where a tile would be narrower than its minimum, so a phone held upright shows two or three.
+In Colours mode a tile fills with its
 colour (_Colour_, above); in Thumbnails mode it shows the product's or section's image instead, and
 a tile with no image falls back to its colour, else the plain tile. A shortcut whose target the
 till does not show keeps its place as an empty slot, so the shortcuts after it do not move; a

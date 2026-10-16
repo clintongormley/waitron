@@ -1,5 +1,11 @@
 # Form fields in the "filled" style, with the label inside the field (A178) — design
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > 2026-10-16: A668 replaces allergen presence/source declarations with explicit cereal and nut
 > kinds. The historical examples below describe the earlier shape; see
 > [A668's data contract](../specs/2026-10-14-a668-allergen-info-editor-and-till-design.md#what-it-stores).

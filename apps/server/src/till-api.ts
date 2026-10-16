@@ -45,13 +45,8 @@ import {
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import {
-  getCanvas,
-  getCanvasForFormFactor,
-  getDeviceProfile,
-  kindOfFormFactor,
-} from "@waitron/layouts";
-import type { CanvasDef, CapabilityFlag, NavigationScreen, ProfileAction } from "@waitron/layouts";
+import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
+import type { CapabilityFlag, NavigationScreen, ProfileAction } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
@@ -1405,7 +1400,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           name: course.name,
           displayOrder: course.displayOrder,
         }));
-        let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;
         let startingScreen: NavigationScreen | null = null;
@@ -1414,15 +1408,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           capabilities = device.capabilities;
           inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
           startingScreen = profile?.startingScreen ?? null;
-          let assigned: CanvasDef | undefined;
-          if (profile?.canvasId != null) {
-            assigned = (await getCanvas(tx, profile.canvasId))?.definition;
-          }
-          // A set `canvasId` always resolves (`device_profiles.canvas_id` is `onDelete: "restrict"`
-          // and foreign keys are on); the fallback covers a NULL `canvasId`.
-          canvas = assigned ?? (await getCanvasForFormFactor(tx, device.formFactor));
-        } else {
-          canvas = await getCanvasForFormFactor(tx, "till");
         }
         let defaultReaderProvider: TillReaderProvider | undefined;
         let defaultReaderId: string | undefined;
@@ -1457,7 +1442,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
           courses,
-          canvas,
+          formFactor: device?.formFactor ?? "till",
           capabilities,
           inactivityTimeoutSeconds,
           startingScreen,
@@ -1500,7 +1485,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ? [{ id: DEMO_READER_ID, name: "Demo card reader", provider: "simulator" }]
             : boot.activeReaders,
         tipsEnabled: deps.cfg.tipsEnabled,
-        canvas: boot.canvas,
+        formFactor: boot.formFactor,
         capabilities: boot.capabilities,
         inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
         ...(boot.startingScreen === null ? {} : { startingScreen: boot.startingScreen }),

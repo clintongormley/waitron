@@ -134,7 +134,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     .values({
       name: "Card till",
       formFactor: "till",
-      canvasId: null,
       capabilities: [...BASIC_ACTIONS, "integrated-card-payment", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });

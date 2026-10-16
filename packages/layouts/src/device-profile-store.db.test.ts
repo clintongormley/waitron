@@ -18,8 +18,6 @@ import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_CANVASES } from "./default-canvases.js";
-import { createCanvas, deleteCanvas } from "./canvas-store.js";
 import {
   createDeviceProfile,
   deleteDeviceProfile,
@@ -71,17 +69,6 @@ async function purgeProfiles(): Promise<void> {
   await suite.db.execute(sql`delete from device_profiles`);
 }
 
-async function seedCanvas(session: string, name: string): Promise<string> {
-  const { id } = await inTx((tx) =>
-    createCanvas(tx, {
-      managementSessionId: session,
-      name,
-      definition: DEFAULT_CANVASES["till"],
-    }),
-  );
-  return id;
-}
-
 /** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
   const [location] = await suite.db
@@ -125,7 +112,7 @@ describe("device-profile store against a real migrated database", () => {
           managementSessionId: managerSession,
           name: "Front counter",
           formFactor: "till",
-          canvasId: null,
+
           capabilities: ["open-cash-drawer", "integrated-card-payment", "open-cash-drawer"],
         }),
       );
@@ -134,7 +121,7 @@ describe("device-profile store against a real migrated database", () => {
         id: created.id,
         name: "Front counter",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
         inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
         startingScreen: null,
@@ -164,7 +151,7 @@ describe("device-profile store against a real migrated database", () => {
             managementSessionId: clockSession,
             name: `Clock ${formFactor}`,
             formFactor,
-            canvasId: null,
+
             capabilities: ["clock-in"],
           }),
         );
@@ -178,7 +165,7 @@ describe("device-profile store against a real migrated database", () => {
             managementSessionId: clockSession,
             name: "Clock kitchen",
             formFactor: "kds",
-            canvasId: null,
+
             capabilities: ["clock-in"],
           }),
         ),
@@ -200,7 +187,7 @@ describe("device-profile store against a real migrated database", () => {
       createDeviceProfile(tx, {
         managementSessionId: session,
         name: "Kitchen display",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
         formFactor: "kds",
       }),
@@ -208,7 +195,7 @@ describe("device-profile store against a real migrated database", () => {
     expect(created).toEqual({
       id: created.id,
       name: "Kitchen display",
-      canvasId: null,
+
       capabilities: ["act-as-kds"],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
@@ -235,7 +222,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Handheld",
         formFactor: "phone-portrait",
-        canvasId: null,
+
         capabilities: [],
         inactivityTimeoutSeconds: 300,
       }),
@@ -248,64 +235,12 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Kitchen",
         formFactor: "kds",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
         inactivityTimeoutSeconds: 600, // ignored — kds is exempt
       }),
     );
     expect(kds.inactivityTimeoutSeconds).toBeNull();
-  });
-
-  it("stores and returns a canvas reference that satisfies the FK", async () => {
-    await seedTenant(suite.db);
-    const session = await seedSession("manager");
-    const canvasId = await seedCanvas(session, "The canvas");
-    const created = await inTx((tx) =>
-      createDeviceProfile(tx, {
-        managementSessionId: session,
-        name: "Bound",
-        formFactor: "till",
-        canvasId,
-        capabilities: [],
-      }),
-    );
-    expect(created).toEqual({
-      id: created.id,
-      name: "Bound",
-      formFactor: "till",
-      canvasId,
-      capabilities: [],
-      inactivityTimeoutSeconds: null,
-      startingScreen: null,
-      receiptPrinterIds: [],
-      paymentSlipPrinterIds: [],
-      cashDrawerPrinterIds: [],
-      receiptPrinterDefaultId: null,
-      paymentSlipPrinterDefaultId: null,
-      cashDrawerPrinterDefaultId: null,
-      invoicePrinterIds: [],
-      invoicePrinterDefaultId: null,
-    });
-  });
-
-  it("translates a canvasId naming no canvas to device_profile.invalid {bad_canvas_ref}", async () => {
-    await seedTenant(suite.db);
-    const session = await seedSession("manager");
-    const error = await errorOf(() =>
-      inTx((tx) =>
-        createDeviceProfile(tx, {
-          managementSessionId: session,
-          name: "Ghost reference",
-          formFactor: "till",
-          canvasId: "00000000-0000-4000-8000-000000000000",
-          capabilities: [],
-        }),
-      ),
-    );
-    expect(typeof error).not.toBe("string"); // it threw an AppError, not a raw driver refusal
-    expect((error as AppError).code).toBe("device_profile.invalid");
-    expect((error as AppError).params).toEqual({ reason: "bad_canvas_ref" });
-    expect(await rowCount()).toBe(0); // the refused insert left nothing behind
   });
 
   it("lists a tenant's device profiles by name", async () => {
@@ -316,7 +251,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "P1",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -325,7 +260,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "P2",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
       }),
     );
@@ -341,16 +276,15 @@ describe("device-profile store against a real migrated database", () => {
     expect(missing).toBeUndefined();
   });
 
-  it("updates a profile's name, canvas and capabilities in place", async () => {
+  it("updates a profile's name and capabilities in place", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
-    const canvasId = await seedCanvas(session, "Target canvas");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
         name: "Original",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -360,7 +294,7 @@ describe("device-profile store against a real migrated database", () => {
         id: created.id,
         name: "Renamed",
         formFactor: "till",
-        canvasId,
+
         capabilities: ["integrated-card-payment"],
       }),
     );
@@ -368,7 +302,7 @@ describe("device-profile store against a real migrated database", () => {
       id: created.id,
       name: "Renamed",
       formFactor: "till",
-      canvasId,
+
       capabilities: ["integrated-card-payment"],
       inactivityTimeoutSeconds: null,
       startingScreen: null,
@@ -393,7 +327,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Doomed",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -410,7 +344,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Referenced",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -432,7 +366,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Held elsewhere",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -463,7 +397,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Only disabled",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -487,7 +421,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Only deleted",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -519,7 +453,7 @@ describe("device-profile store against a real migrated database", () => {
       managementSessionId: session,
       name: "Reused name",
       formFactor: "till" as const,
-      canvasId: null,
+
       capabilities: [],
     };
     const retired = await inTx((tx) => createDeviceProfile(tx, base));
@@ -538,7 +472,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Active holder",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -558,7 +492,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Mixed holders",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -579,7 +513,7 @@ describe("device-profile store against a real migrated database", () => {
       managementSessionId: session,
       name: "Gone",
       formFactor: "till" as const,
-      canvasId: null,
+
       capabilities: [],
     };
     const created = await inTx((tx) => createDeviceProfile(tx, base));
@@ -598,10 +532,9 @@ describe("device-profile store against a real migrated database", () => {
     expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([]);
   });
 
-  it("frees a retired profile's canvas and printer lists", async () => {
+  it("frees a retired profile's printer lists", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
-    const canvasId = await seedCanvas(session, "Held canvas");
     const [location] = await suite.db
       .insert(locations)
       .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
@@ -613,9 +546,9 @@ describe("device-profile store against a real migrated database", () => {
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        name: "Canvas and printers",
+        name: "Printers",
         formFactor: "till",
-        canvasId,
+
         capabilities: [],
         printerLists: {
           receiptPrinterIds: [printer!.id],
@@ -631,7 +564,6 @@ describe("device-profile store against a real migrated database", () => {
       .from(deviceProfilePrinters)
       .where(eq(deviceProfilePrinters.deviceProfileId, created.id));
     expect(listed).toEqual([]);
-    await inTx((tx) => deleteCanvas(tx, { managementSessionId: session, id: canvasId }));
   });
 
   it("translates a form-factor change on a profile an active device uses to device_profile.in_use", async () => {
@@ -642,7 +574,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Locked",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -654,7 +586,7 @@ describe("device-profile store against a real migrated database", () => {
           id: created.id,
           name: "Locked",
           formFactor: "phone-portrait",
-          canvasId: null,
+
           capabilities: [],
         }),
       ),
@@ -671,7 +603,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Guarded",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -688,7 +620,7 @@ describe("device-profile store against a real migrated database", () => {
             id: created.id,
             name: "Renamed",
             formFactor: "till",
-            canvasId: null,
+
             capabilities: [],
           }),
         ),
@@ -718,7 +650,7 @@ describe("device-profile store against a real migrated database", () => {
       managementSessionId: session,
       name: "Listed",
       formFactor: "till" as const,
-      canvasId: null,
+
       capabilities: [],
     };
     const created = await inTx((tx) =>
@@ -739,7 +671,7 @@ describe("device-profile store against a real migrated database", () => {
       id: created.id,
       name: "Listed",
       formFactor: "till",
-      canvasId: null,
+
       capabilities: [],
       inactivityTimeoutSeconds: null,
       startingScreen: null,
@@ -797,7 +729,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Invoices",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
         printerLists: {
           receiptPrinterIds: [bar!.id],
@@ -825,7 +757,7 @@ describe("device-profile store against a real migrated database", () => {
           id: "00000000-0000-4000-8000-000000000000",
           name: "Ghost",
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       ),
@@ -856,7 +788,7 @@ describe("device-profile store against a real migrated database", () => {
           managementSessionId: staffSession,
           name: "Nope",
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       ),
@@ -875,7 +807,7 @@ describe("device-profile store against a real migrated database", () => {
           managementSessionId: session,
           name: "Bad caps",
           formFactor: "till",
-          canvasId: null,
+
           capabilities: ["not-a-flag"],
         }),
       ),
@@ -894,7 +826,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Twin",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -904,7 +836,7 @@ describe("device-profile store against a real migrated database", () => {
           managementSessionId: session,
           name: "Twin",
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       ),
@@ -921,7 +853,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Keep",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -930,7 +862,7 @@ describe("device-profile store against a real migrated database", () => {
         managementSessionId: session,
         name: "Move",
         formFactor: "till",
-        canvasId: null,
+
         capabilities: [],
       }),
     );
@@ -941,7 +873,7 @@ describe("device-profile store against a real migrated database", () => {
           id: second.id,
           name: "Keep", // collides with the first profile's name
           formFactor: "till",
-          canvasId: null,
+
           capabilities: [],
         }),
       ),
@@ -963,7 +895,7 @@ describe("a profile's starting screen and shared-display actions", () => {
         managementSessionId: managerSession,
         name,
         formFactor: "till",
-        canvasId: null,
+
         capabilities,
         ...(startingScreen === undefined ? {} : { startingScreen }),
       }),
@@ -1025,7 +957,7 @@ describe("a profile's starting screen and shared-display actions", () => {
             id: created.id,
             name: "Pass",
             formFactor: "till",
-            canvasId: null,
+
             capabilities: ["show-expo", "show-schedule"],
             ...(startingScreen === undefined ? {} : { startingScreen }),
           }),
@@ -1051,7 +983,7 @@ describe("a profile's starting screen and shared-display actions", () => {
             id: created.id,
             name: "Pass",
             formFactor: "till",
-            canvasId: null,
+
             capabilities: ["take-orders"],
           }),
         ),
@@ -1077,7 +1009,7 @@ describe("a profile's starting screen and shared-display actions", () => {
             managementSessionId: managerSession,
             name: `Kitchen ${capabilities.join()}`,
             formFactor: "kds",
-            canvasId: null,
+
             capabilities,
           }),
         );
@@ -1097,7 +1029,7 @@ describe("a profile's starting screen and shared-display actions", () => {
             id: created.id,
             name: created.name,
             formFactor: "kds",
-            canvasId: null,
+
             capabilities: ["act-as-kds", "integrated-card-payment"],
           }),
         ),
@@ -1111,13 +1043,9 @@ describe("a profile's starting screen and shared-display actions", () => {
   });
 });
 
-/**
- * The keys out of and into device_profiles among core and identity's tables, which
- * `translateWriteError`'s doc relies on.
- */
 describe("what can refuse a write to device_profiles", () => {
   // Migrates core and identity only: a key from another module's set is not seen.
-  it("has ONE key out of device_profiles and ONE key into it that can refuse", async () => {
+  it("has no key out of device_profiles and ONE key into it that can refuse", async () => {
     const { rows } = await suite.db.execute<{
       child: string;
       column: string;
@@ -1152,12 +1080,6 @@ describe("what can refuse a write to device_profiles", () => {
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "CASCADE",
-      },
-      {
-        child: "device_profiles",
-        column: "canvas_id",
-        parent: "canvases",
-        on_delete: "RESTRICT",
       },
       {
         child: "devices",

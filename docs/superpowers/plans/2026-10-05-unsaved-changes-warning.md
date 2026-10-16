@@ -1,5 +1,11 @@
 # W69 implementation plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
 > the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
 > editor. References below describe the code when this document was written.

@@ -4,7 +4,12 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { TabDef } from "../layout.js";
+import type { FormFactor } from "../layout.js";
+import {
+  builtInScreensFor,
+  resolveBuiltInScreen,
+  type BuiltInScreen,
+} from "../built-in-screens.js";
 import type { TillClockState } from "../api/client.js";
 import type { TillClockAction } from "../state/clocking.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
@@ -49,7 +54,7 @@ const LEAVE_ORDER: readonly BarItem[] = [
 /** Properties whose change owes a step-back, so may let items come back to the bar. A change of
  * `transferCount` alone does not owe one. */
 const CONTENT_PROPERTIES: readonly PropertyKey[] = [
-  "tabs",
+  "formFactor",
   "affordances",
   "operatorName",
   "transferAvailable",
@@ -64,12 +69,12 @@ const CONTENT_PROPERTIES: readonly PropertyKey[] = [
 ];
 
 /**
- * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
+ * Presentational: `till-app` owns data, active screen state and the drill-in stack; the shell only emits
  * intent. While the `drill` slot has assigned nodes the body is `inert`, so nothing behind the overlay
  * is focusable or clickable.
  */
-@customElement("till-tab-shell")
-export class TillTabShell extends LitElement {
+@customElement("till-shell")
+export class TillShell extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -235,8 +240,8 @@ export class TillTabShell extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) tabs: TabDef[] = [];
-  @property() activeTabKey?: string;
+  @property() formFactor: FormFactor = "till";
+  @property() activeScreen?: BuiltInScreen;
   @property() operatorName = "";
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
@@ -247,7 +252,7 @@ export class TillTabShell extends LitElement {
   @property({ type: Boolean }) transferAvailable = false;
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
-  /** Suppresses the whole operator `<header>`: a kitchen display shows just its cards, no operator
+  /** Suppresses the whole operator `<header>`: a kitchen display shows its board, no operator
    * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
   /** The device is approved for more than one profile, so a signed-in person may switch it. */
@@ -360,7 +365,7 @@ export class TillTabShell extends LitElement {
   }
 
   /** Observes the host, not the header: its width comes from its container, so a fit does not
-   * resize it ("reports no ResizeObserver loop", tab-shell.test.ts). The chooser is observed
+   * resize it ("reports no ResizeObserver loop", till-shell.test.ts). The chooser is observed
    * because its label can change once its language list loads. */
   #observe(): void {
     if (this.#observer === undefined) {
@@ -647,18 +652,8 @@ export class TillTabShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #tabTitle(tab: TabDef): string {
-    // Only the standard key/title pairs are UI labels; a renamed tab remains the venue's text.
-    switch (`${tab.key}:${tab.title}`) {
-      case "counter:Counter":
-        return t("tab.counter");
-      case "floor:Floor":
-        return t("tab.floor");
-      case "order:Order":
-        return t("tab.order");
-      default:
-        return tab.title;
-    }
+  #screenTitle(screen: BuiltInScreen): string {
+    return screen === "kitchen" ? "" : t(`tab.${screen}`);
   }
 
   override render(): TemplateResult {
@@ -666,14 +661,12 @@ export class TillTabShell extends LitElement {
     const moved = this.#moved();
     this.#shown = moved;
     if (this.#menuOpen()) this.#held = moved;
-    // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
-    const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
-      ? this.activeTabKey
-      : this.tabs[0]?.key;
+    const screens = builtInScreensFor(this.formFactor);
+    const activeScreen = resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null);
     return html`
       <div class="shell">
         ${
-          this.kiosk
+          this.kiosk || this.formFactor === "kds"
             ? this.loadLocales !== undefined
               ? html`<div class="language-corner">${this.#chooser()}</div>`
               : nothing
@@ -681,16 +674,16 @@ export class TillTabShell extends LitElement {
                 <header class=${this.phone ? "head phone" : "head"}>
                   ${this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
                   <nav class="tabs" role="tablist">
-                    ${this.tabs.map(
-                      (tab) => html`
+                    ${screens.map(
+                      (screen) => html`
                         <button
                           type="button"
                           class="tab"
                           role="tab"
-                          aria-selected=${tab.key === activeKey ? "true" : "false"}
-                          @click=${() => this.#emit("tab-select", { key: tab.key })}
+                          aria-selected=${screen === activeScreen ? "true" : "false"}
+                          @click=${() => this.#emit("screen-select", { screen })}
                         >
-                          ${this.#tabTitle(tab)}
+                          ${this.#screenTitle(screen)}
                         </button>
                       `,
                     )}
@@ -719,6 +712,6 @@ export class TillTabShell extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "till-tab-shell": TillTabShell;
+    "till-shell": TillShell;
   }
 }

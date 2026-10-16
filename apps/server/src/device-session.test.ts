@@ -11,12 +11,11 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
-import { canvases, deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { DEFAULT_CANVASES } from "@waitron/layouts";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
@@ -133,17 +132,16 @@ const NO_BINDINGS = {
 } as const;
 
 /**
- * Insert a device profile for the capability checks. canvasId is optional.
+ * Insert a device profile for the capability checks.
  */
 async function seedDeviceProfile(
   name: string,
   formFactor: FormFactor,
   capabilities: CapabilityFlag[],
-  canvasId: string | null = null,
 ): Promise<string> {
   const [prof] = await suite.db
     .insert(deviceProfiles)
-    .values({ name, formFactor, canvasId, capabilities })
+    .values({ name, formFactor, capabilities })
     .returning({ id: deviceProfiles.id });
   return prof!.id;
 }
@@ -159,19 +157,10 @@ async function enrolTillDeviceFixture(): Promise<{
   deviceProfileId: string;
 }> {
   const { cfg } = await setupStation();
-  const [canvas] = await suite.db
-    .insert(canvases)
-    .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
-    .returning({ id: canvases.id });
-  const canvasId = canvas!.id;
-  // This fixture explicitly grants reader and drawer access. The device binds the canvas SOLELY
-  // through this profile.
-  const deviceProfileId = await seedDeviceProfile(
-    "Counter",
-    "till",
-    ["integrated-card-payment", "open-cash-drawer"],
-    canvasId,
-  );
+  const deviceProfileId = await seedDeviceProfile("Counter", "till", [
+    "integrated-card-payment",
+    "open-cash-drawer",
+  ]);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Counter till",
     profileId: deviceProfileId,
@@ -248,18 +237,13 @@ async function probeTry(cookieValue: string | null): Promise<DeviceBinding | nul
  * Enrol a handheld with a profile declaring no capabilities, so the capability
  * checks refuse integrated card payment and cash drawer access.
  */
-async function enrolHandheldWithCanvasFixture(): Promise<{
+async function enrolHandheldFixture(): Promise<{
   cfg: TillConfig;
   deviceId: string;
   token: string;
 }> {
   const { cfg } = await setupStation();
-  const [canvas] = await suite.db
-    .insert(canvases)
-    .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
-    .returning({ id: canvases.id });
-  const canvasId = canvas!.id;
-  const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
+  const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", []);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
@@ -430,7 +414,6 @@ describe("requireDevice (venue database)", () => {
 
   it("carries the device's assigned profile + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
     const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
-    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`.
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
@@ -608,7 +591,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
 describe("assertDeviceCapability (venue database)", () => {
   it("refuses a device whose assigned PROFILE LACKS the capability, naming the action", async () => {
     // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags.
-    const { deviceId, token } = await enrolHandheldWithCanvasFixture();
+    const { deviceId, token } = await enrolHandheldFixture();
     expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
       { ok: false, code: "device.forbidden_action", params: { action: "pay" } },
     );
@@ -652,7 +635,7 @@ describe("assertDeviceCapability (venue database)", () => {
   it("preserves the handheld firewall: a handheld (profile caps []) is still blocked from pay + drawer", async () => {
     // A handheld's capability-less profile carries neither flag, so pay and drawer are refused by
     // capability, not by device kind.
-    const { deviceId, token } = await enrolHandheldWithCanvasFixture();
+    const { deviceId, token } = await enrolHandheldFixture();
     expect(
       (await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
     ).toBe(false);

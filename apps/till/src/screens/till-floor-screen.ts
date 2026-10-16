@@ -887,10 +887,6 @@ export class TillFloorScreen extends LitElement {
     this.viewOverride = current === "map" ? "list" : "map";
   }
 
-  /**
-   * Both maps send a table id only (the canvas's `wt-open-table`, the new map's `wt-table-tap`). The
-   * table is looked up here, so a seated one resumes its party rather than being seated a second time.
-   */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
     const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;

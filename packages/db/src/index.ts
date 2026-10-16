@@ -157,7 +157,6 @@ export {
   purchaseRegime,
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
-export { canvases } from "./schema/canvases.js";
 export { deviceProfiles } from "./schema/device-profiles.js";
 export {
   deviceProfilePrinterRole,

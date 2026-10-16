@@ -1,15 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { TabDef } from "../layout.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import "./tab-shell.js";
-import type { ShellAffordance, TillTabShell } from "./tab-shell.js";
-
-const tabs: TabDef[] = [
-  { key: "counter", title: "Counter", columns: 12, cards: [] },
-  { key: "floor", title: "Floor", columns: 12, cards: [] },
-];
+import "./till-shell.js";
+import type { ShellAffordance, TillShell } from "./till-shell.js";
 
 const affordances: ShellAffordance[] = ["station", "expo", "schedule"];
 
@@ -20,9 +14,9 @@ const loadLocales = async () => [
 
 afterEach(cleanupWidgets);
 
-const full: Partial<TillTabShell> = {
-  tabs: [...tabs, { key: "order", title: "Order", columns: 12, cards: [] }],
-  activeTabKey: "counter",
+const full: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
   operatorName: "Ana",
   affordances: ["find-bill", ...affordances],
   transferAvailable: true,
@@ -41,7 +35,7 @@ async function atViewport(width: number, height: number, run: () => Promise<void
   }
 }
 
-describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (theme) => {
+describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) => {
   it.each(["en-GB", "es-ES"])(
     "the name menu in %s, closed and open in each clock state",
     async (locale) => {
@@ -51,10 +45,10 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
         await atViewport(1280, 844, async () => {
           for (const state of ["working", "on_break", "out", null] as const) {
             cleanupWidgets();
-            const { el, host } = await mountWidget<TillTabShell>(
-              "till-tab-shell",
+            const { el, host } = await mountWidget<TillShell>(
+              "till-shell",
               {
-                tabs,
+                formFactor: "till",
                 operatorName: "Ana",
                 clockAvailable: true,
                 clockState:
@@ -87,27 +81,39 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
     },
   );
   it("the tab bar + header chrome has no violations", async () => {
-    const { host } = await mountWidget<TillTabShell>(
-      "till-tab-shell",
-      { tabs, activeTabKey: "counter", operatorName: "Ana", affordances },
+    const { host } = await mountWidget<TillShell>(
+      "till-shell",
+      { formFactor: "till", activeScreen: "counter", operatorName: "Ana", affordances },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
   it("kiosk mode (header-less body) has no violations", async () => {
-    const { host } = await mountWidget<TillTabShell>(
-      "till-tab-shell",
-      { tabs, activeTabKey: "counter", operatorName: "Ana", affordances, kiosk: true },
+    const { host } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        formFactor: "till",
+        activeScreen: "counter",
+        operatorName: "Ana",
+        affordances,
+        kiosk: true,
+      },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
   it("the bar with its language chooser, closed and open, has no violations", async () => {
-    const { el, host } = await mountWidget<TillTabShell>(
-      "till-tab-shell",
-      { tabs, activeTabKey: "counter", operatorName: "Ana", affordances, loadLocales },
+    const { el, host } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        formFactor: "till",
+        activeScreen: "counter",
+        operatorName: "Ana",
+        affordances,
+        loadLocales,
+      },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -130,7 +136,7 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
           [600, 390],
         ] as const) {
           await atViewport(width, height, async () => {
-            const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
+            const { el, host } = await mountWidget<TillShell>("till-shell", full, theme);
             await expectNoA11yViolations(host);
             const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
             expect(menu.querySelector("wt-count-badge")).not.toBeNull();
@@ -152,7 +158,7 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
 
   it("the full bar with Find a bill in More, closed and open, has no violations", async () => {
     await atViewport(2560, 844, async () => {
-      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full, theme);
+      const { el, host } = await mountWidget<TillShell>("till-shell", full, theme);
       const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
       await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(1));
       expect(menu.querySelector("wt-button.find-bill")).not.toBeNull();
@@ -173,8 +179,8 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
       setLocale(locale);
       try {
         await atViewport(1280, 844, async () => {
-          const { el, host } = await mountWidget<TillTabShell>(
-            "till-tab-shell",
+          const { el, host } = await mountWidget<TillShell>(
+            "till-shell",
             { ...full, operatorName: "Ana Isabel García López" },
             theme,
           );
@@ -201,9 +207,9 @@ describe.each(["light", "dark"] as const)("till-tab-shell a11y (%s theme)", (the
   );
 
   it("kiosk mode with its language chooser has no violations", async () => {
-    const { host } = await mountWidget<TillTabShell>(
-      "till-tab-shell",
-      { tabs, activeTabKey: "counter", affordances, kiosk: true, loadLocales },
+    const { host } = await mountWidget<TillShell>(
+      "till-shell",
+      { formFactor: "till", activeScreen: "counter", affordances, kiosk: true, loadLocales },
       theme,
     );
     await expectNoA11yViolations(host);

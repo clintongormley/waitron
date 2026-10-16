@@ -1,5 +1,5 @@
 /**
- * LOCAL copies of `@waitron/layouts` shapes (`packages/layouts/src/canvas.ts`, `types.ts`), not
+ * LOCAL copies of `@waitron/layouts` shapes (`packages/layouts/src/device-types.ts`, `types.ts`, `theme.ts`), not
  * imported for the bundle reason `api/client.ts` states. Keep in sync with those files.
  */
 
@@ -52,51 +52,9 @@ export type CapabilityFlag =
   | "run-the-pass"
   | "clock-in";
 
-/** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/canvas.ts`). */
+/** A screen a profile may start on (`NAVIGATION_SCREENS` in `packages/layouts/src/device-types.ts`). */
 export type NavigationScreen = "show-station" | "show-expo" | "show-schedule";
-
-export type CardType =
-  | "product-grid"
-  | "basket"
-  | "total"
-  | "tender-pay"
-  | "held-orders"
-  | "prep-queue"
-  | "notifications"
-  | "floor-plan"
-  | "kds-board"
-  | "expo"
-  | "table-order";
-
-export interface CardInstance {
-  type: CardType;
-  colSpan: number;
-  rowSpan: number;
-  config: Record<string, unknown>;
-  visibleWhen?: string[];
-}
-
-export interface TabDef {
-  key: string;
-  title: string;
-  columns: number;
-  cards: CardInstance[];
-}
 
 export interface ThemeOverride {
   tokens: Record<string, string>;
 }
-
-export interface CanvasDef {
-  formFactor: FormFactor;
-  tabs: TabDef[];
-  theme?: ThemeOverride;
-}
-
-// Mirrors the capability axis of `CARD_CONTRACTS`
-// (`packages/layouts/src/card-contract.ts`). `tender-pay` still renders without its capability, because
-// it takes cash (`widgets/card-grid.ts`).
-export const CARD_REQUIRED_CAPABILITY: Partial<Record<CardType, CapabilityFlag>> = {
-  "tender-pay": "integrated-card-payment",
-  "kds-board": "act-as-kds",
-};

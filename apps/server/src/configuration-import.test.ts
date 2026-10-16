@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 2,
+  version: 3,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -107,8 +107,19 @@ describe("staged configuration import", () => {
         ),
       ) as Record<string, unknown>,
     ],
+    [
+      "pre-canvas-retirement export with an empty canvas list",
+      { version: 2, tables: { ...bundle.tables, canvases: [] } },
+    ],
+    [
+      "pre-canvas-retirement export with an authored canvas",
+      {
+        version: 2,
+        tables: { ...bundle.tables, canvases: [{ id: "old-canvas", definition: {} }] },
+      },
+    ],
     ["old version", { version: 1 }],
-    ["future version", { version: 3 }],
+    ["future version", { version: 4 }],
     [
       "retired drawer value",
       {

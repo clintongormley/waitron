@@ -15,7 +15,7 @@ itself:
 
 1. **Lock screen** — pick your name from the people the device's profile admits (`GET /api/staff`)
    and enter a PIN (`POST /api/session`).
-2. **Counter screen** — a layout-driven composition of the menu browser, basket, total and pay
+2. **Counter screen** — a fixed composition of the menu browser, basket, total and pay
    widgets, showing the menu offers of its profile's starting zone when the profile has a
    department, or else the venue's counter-default zone (`GET /api/default-service-zone/offers`).
    A person who signs in again with nobody else signed in between comes back to the zone they left,
@@ -123,9 +123,9 @@ cash, print the filed ticket with its Veri\*Factu QR.
 - **No offline.** The till needs the server reachable — no store-and-forward.
 - **No hardware.** Scales, receipt printers and cash drawers are not driven yet.
 - **No refunds, voids or corrections** UI.
-- **No layout or receipt editors.** The counter screen is layout-driven and each widget already
-  carries a `config` seam, but the editor that authors those layouts (and reads that per-widget
-  config) is a later slice.
+- **No screen designer.** The device's form factor selects fixed screens: Counter/Floor on a
+  till, Floor/Order on a handheld, and Kitchen on a kitchen display. Configure a menu's Device Home
+  Page, receipt settings and the floor plan in the dashboard; these remain separate features.
 - **7c prepare & collect** (kitchen states) — the remaining Counter POS slice — is not here. (7b park
   & retrieve HAS landed; see the note above.)
 - **The Vite page stays on loopback HTTP in development.** Its proxy matches the server transport:

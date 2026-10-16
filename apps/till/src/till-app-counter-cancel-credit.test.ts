@@ -10,27 +10,13 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
-import type { CanvasDef } from "./layout.js";
+import type { FormFactor } from "./layout.js";
 import type { CounterWaitingOrder, TillApi, ZoneOfferCatalogue } from "./api/client.js";
 
 // Cancel and credit on a counter order from the waiting list: invoiced when it was placed and not
 // paid. The dialog and the cancel route are the table's.
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 4, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
-        { type: "held-orders", colSpan: 8, rowSpan: 2, config: {} },
-      ],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -44,7 +30,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: [],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -166,9 +152,7 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const waitingList = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
+  counter(el).shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
 const rowOf = (el: TillApp, id: string) =>
   waitingList(el)?.shadowRoot!.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`) ?? null;
 const offered = (el: TillApp) =>

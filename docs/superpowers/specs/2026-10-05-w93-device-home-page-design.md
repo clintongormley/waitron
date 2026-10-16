@@ -1,5 +1,11 @@
 # W93 — One Device Home Page per menu, shown two ways (design)
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Status: design, 2026-10-05. Written from `main` 5597e0692, which holds W88 (#1209, the Structure
 tree) and W92 (#1250, product colours), the two items W93 builds on. The code is one pull request,
 branch `feat/device-home-page`. It changes storage, so lane B starts it only when no pull request of

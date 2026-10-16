@@ -359,6 +359,9 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
+  "core/0160_retire_canvases": {
+    refused: ["DROP TABLE `device_profiles`", "FOREIGN KEY constraint failed"],
+  },
   // Requires a venue reset: null zones fail the copy; a retained today's row refuses DROP.
   "core/0138_floor_retire_old_table_columns": {
     refused: ["NOT NULL constraint failed: __new_dining_tables.zone_id"],

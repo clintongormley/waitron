@@ -1,5 +1,11 @@
 # W94 — Search the current menu first, then the device's other menus (design)
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Status: design, 2026-10-06. Written from `main` 53c8f1e6d, which holds W93 (#1287, the Device Home
 Page). The code is one pull request, branch `feat/service-menu-search`. It adds no storage and no
 migration.

@@ -1,5 +1,3 @@
-// `apps/till/src/layout.ts` and the dashboard keep their own copies of these shapes.
-
 export const FORM_FACTORS = ["till", "phone-portrait", "tablet-landscape", "kds"] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
 
@@ -15,22 +13,7 @@ export function kindOfFormFactor(ff: FormFactor): DeviceKind {
   return kinds[ff];
 }
 
-export const CARD_TYPES = [
-  "product-grid",
-  "basket",
-  "total",
-  "tender-pay",
-  "held-orders",
-  "prep-queue",
-  "notifications",
-  "floor-plan",
-  "kds-board",
-  "expo",
-  "table-order",
-] as const;
-export type CardType = (typeof CARD_TYPES)[number];
-
-/** Carried by a device profile, not a canvas. Each flag is either a {@link ProfileAction}, which
+/** Carried by a device profile. Each flag is either a {@link ProfileAction}, which
  * the server checks on the routes the map in `apps/server/src/till-api.profile-actions.test.ts`
  * lists, or a {@link ProfileScreen}, which only decides what the till shows. */
 export const CAPABILITY_FLAGS = [
@@ -84,30 +67,3 @@ export const NAVIGATION_SCREENS = [
   "show-schedule",
 ] as const satisfies readonly ProfileScreen[];
 export type NavigationScreen = (typeof NAVIGATION_SCREENS)[number];
-
-export interface CardInstance {
-  type: CardType;
-  colSpan: number;
-  rowSpan: number;
-  config: Record<string, unknown>;
-  /** States that make this card render, a subset of its contract's `visibilityStates`. Absent or
-   * empty means always render. */
-  visibleWhen?: string[];
-}
-
-export interface TabDef {
-  key: string;
-  title: string;
-  columns: number;
-  cards: CardInstance[];
-}
-
-export interface ThemeOverride {
-  tokens: Record<string, string>;
-}
-
-export interface CanvasDef {
-  formFactor: FormFactor;
-  tabs: TabDef[];
-  theme?: ThemeOverride;
-}

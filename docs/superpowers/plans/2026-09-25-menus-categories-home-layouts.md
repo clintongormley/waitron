@@ -1,5 +1,11 @@
 # Menus, reusable sections and home layouts — Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > **2026-10-12, A493 supersession:** departments and zones share one list with protected
 > editors. The department page and its tabs, including the zone panel and receipt tab, are
 > retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency

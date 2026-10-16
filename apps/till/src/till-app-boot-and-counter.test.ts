@@ -1,3 +1,9 @@
+import {
+  transactionRow,
+  billOptions,
+  listPage,
+  resolvedDates,
+} from "../test/find-bill-fixtures.js";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
@@ -15,14 +21,13 @@ import { TillApp } from "./till-app.js";
 import { SessionActivity } from "./session-activity.js";
 import { ServerRouter } from "./api/server-router.js";
 import { TillApi as TillClient } from "./api/client.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
-import type { TillCardGrid } from "./widgets/card-grid.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { CapabilityFlag } from "./layout.js";
 import type {
   KitchenScreenKind,
   ProductCatalogue,
@@ -30,6 +35,7 @@ import type {
   ServiceZoneSummary,
   TillApi,
   TillProduct,
+  TableParty,
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -63,36 +69,6 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };
 
-const tillCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
-
-const kdsCanvas: CanvasDef = {
-  formFactor: "kds",
-  tabs: [
-    {
-      key: "kitchen",
-      title: "Kitchen",
-      columns: 24,
-      cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
-
 function kitchenScreen(kind: KitchenScreenKind, available = true): ResolvedKitchenScreen {
   return { kind, available, stations: [], zones: null };
 }
@@ -108,7 +84,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas: tillCanvas,
+  formFactor: "till",
   capabilities: ["print-receipt", "show-station", "show-expo", "show-schedule"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -256,8 +232,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
 const shell = (el: TillApp) =>
   el.shadowRoot!.querySelector<
-    HTMLElement & { activeTabKey?: string; loadLocales?: () => Promise<unknown> }
-  >("till-tab-shell");
+    HTMLElement & { activeScreen?: string; loadLocales?: () => Promise<unknown> }
+  >("till-shell");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
@@ -314,7 +290,9 @@ describe("till-app session activity", () => {
       const getDeviceStationScreen = vi.fn().mockRejectedValue({ code: "device.unauthorized" });
       const getDevicePassScreen = vi.fn().mockResolvedValue(board);
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: "kds", fireControl: "expo", capabilities }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "pass-device",
           name: "Pantalla Pase",
@@ -325,12 +303,13 @@ describe("till-app session activity", () => {
         getDevicePassScreen,
       });
       await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!.querySelector<
+      const screen = el.shadowRoot!.querySelector<
         HTMLElement & {
           deviceMode: boolean;
           initialDevicePass: unknown;
           runsPass: boolean;
           deviceName?: string;
+          fireControl: string;
         }
       >("till-expo-screen");
       expect(screen).not.toBeNull();
@@ -338,6 +317,7 @@ describe("till-app session activity", () => {
       expect(screen!.initialDevicePass).toBe(board);
       expect(screen!.runsPass).toBe(runsPass);
       expect(screen!.deviceName).toBe("Pantalla Pase");
+      expect(screen!.fireControl).toBe("expo");
       expect(getDevicePassScreen).toHaveBeenCalledTimes(1);
       expect(getDeviceStationScreen).not.toHaveBeenCalled();
     },
@@ -367,7 +347,7 @@ describe("till-app session activity", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "station-device",
         name: "Grill",
@@ -378,11 +358,7 @@ describe("till-app session activity", () => {
       getDevicePassScreen,
     });
     await flush(el);
-    expect(
-      el
-        .shadowRoot!.querySelector("till-card-grid")!
-        .shadowRoot!.querySelector("till-station-screen"),
-    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
     expect(getDevicePassScreen).not.toHaveBeenCalled();
   });
@@ -394,7 +370,7 @@ describe("till-app session activity", () => {
     "lets an enrolled station screen offer Move to station only with Take orders (%j)",
     async (capabilities, canMoveStation) => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "kds", capabilities }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "station-device",
           name: "Grill",
@@ -404,11 +380,9 @@ describe("till-app session activity", () => {
         getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
       });
       await flush(el);
-      const screen = el
-        .shadowRoot!.querySelector("till-card-grid")!
-        .shadowRoot!.querySelector<HTMLElement & { canMoveStation: boolean }>(
-          "till-station-screen",
-        )!;
+      const screen = el.shadowRoot!.querySelector<HTMLElement & { canMoveStation: boolean }>(
+        "till-station-screen",
+      )!;
       expect(screen.canMoveStation).toBe(canMoveStation);
     },
   );
@@ -417,7 +391,7 @@ describe("till-app session activity", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "station-device",
         name: "Grill",
@@ -445,9 +419,9 @@ describe("till-app session activity", () => {
       }),
     });
     await flush(el);
-    const screen = el
-      .shadowRoot!.querySelector("till-card-grid")!
-      .shadowRoot!.querySelector<HTMLElement & { deviceId?: string }>("till-station-screen")!;
+    const screen = el.shadowRoot!.querySelector<HTMLElement & { deviceId?: string }>(
+      "till-station-screen",
+    )!;
     expect(screen.deviceId).toBe("station-device");
   });
 
@@ -469,7 +443,7 @@ describe("till-app session activity", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
       getDeviceIdentity,
       getDevicePassScreen: vi.fn().mockResolvedValue({ orders: [], stations: [], zones: null }),
       getDeviceStationScreen: vi.fn().mockResolvedValue({
@@ -493,10 +467,10 @@ describe("till-app session activity", () => {
       }),
     });
     await flush(el);
-    emit(el.shadowRoot!.querySelector("till-card-grid")!, "enrolled");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "enrolled");
     await flush(el);
     expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
-    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = el;
     expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     expect(grid.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
   });
@@ -580,7 +554,7 @@ describe("till-app session activity", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale,
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds"],
         }),
         getDeviceIdentity,
@@ -589,7 +563,7 @@ describe("till-app session activity", () => {
         markDevicePassDone: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       await flush(el);
-      const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const grid = () => el.shadowRoot!;
       grid()
         .querySelector("till-expo-screen")!
         .shadowRoot!.querySelector<HTMLElement>('[data-done="ti-0"]')!
@@ -663,7 +637,7 @@ describe("till-app session activity", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale: "en-GB",
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds"],
         }),
         getDeviceIdentity,
@@ -671,7 +645,7 @@ describe("till-app session activity", () => {
         getDevicePassMonitor: vi.fn().mockResolvedValue(board),
       });
       await flush(el);
-      const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const grid = () => el.shadowRoot!;
       emit(grid().querySelector("till-expo-screen")!, "device-unauthorized");
       await flush(el);
       expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
@@ -698,14 +672,14 @@ describe("till-app session activity", () => {
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
-        canvas: kdsCanvas,
+        formFactor: "kds",
         capabilities: ["act-as-kds"],
       }),
       getDeviceIdentity,
       getDevicePassScreen: vi.fn().mockResolvedValue(board),
     });
     await flush(el);
-    const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+    const grid = () => el.shadowRoot!;
     emit(grid().querySelector("till-kitchen-screen-notice")!, "kitchen-screen-changed");
     await flush(el);
     expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
@@ -717,7 +691,7 @@ describe("till-app session activity", () => {
     "a re-boot overtaken by a newer one, whose till read %s last, changes nothing",
     async (outcome) => {
       const board = { orders: [], stations: [], zones: null };
-      const kds = { ...till, locale: "en-GB", canvas: kdsCanvas, capabilities: ["act-as-kds"] };
+      const kds = { ...till, locale: "en-GB", formFactor: "kds", capabilities: ["act-as-kds"] };
       const passIdentity = (available: boolean) => ({
         deviceId: "kd-1",
         name: "Pantalla Pase",
@@ -747,7 +721,7 @@ describe("till-app session activity", () => {
         getDevicePassScreen: vi.fn().mockResolvedValue(board),
       });
       await flush(el);
-      const grid = () => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const grid = () => el.shadowRoot!;
       const notice = () => grid().querySelector("till-kitchen-screen-notice")!;
       emit(notice(), "kitchen-screen-changed"); // its till read waits
       await flush(el);
@@ -790,14 +764,14 @@ describe("till-app session activity", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale: "en-GB",
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds"],
         }),
         getDeviceIdentity,
         getDevicePassScreen,
       });
       await flush(el);
-      const grid = () => el.shadowRoot!.querySelector("till-card-grid")?.shadowRoot;
+      const grid = () => el.shadowRoot!;
       emit(grid()!.querySelector("till-kitchen-screen-notice")!, "kitchen-screen-changed");
       await flush(el);
       emit(lock(el)!, "device-unauthorized"); // the newer re-boot, from the lock screen shown meanwhile
@@ -808,9 +782,7 @@ describe("till-app session activity", () => {
       await flush(el);
       expect(getDeviceIdentity).toHaveBeenCalledTimes(3);
       expect(getDevicePassScreen).toHaveBeenCalledTimes(last === "identity" ? 0 : 1);
-      expect(
-        el.shadowRoot!.querySelector<TillCardGrid>("till-card-grid")!.initialDevicePass,
-      ).toBeUndefined();
+      expect(privateState(el, "initialDevicePass")).toBeUndefined();
       expect(grid()!.querySelector("till-expo-screen")).toBeNull();
       expect(grid()!.querySelector(".kitchen-screen-message")).not.toBeNull();
     },
@@ -828,12 +800,12 @@ describe("till-app session activity", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale: "en-GB",
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds"],
         }),
         ...overrides,
       });
-    const grid = (el: TillApp) => el.shadowRoot!.querySelector("till-card-grid")?.shadowRoot;
+    const grid = (el: TillApp) => el.shadowRoot!;
 
     it("reads the identity again and shows the line instead of the join screen", async () => {
       setLocale("en-GB");
@@ -936,7 +908,7 @@ describe("till-app session activity", () => {
       api = stubApi({
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds", "run-the-pass"],
         }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -960,9 +932,7 @@ describe("till-app session activity", () => {
       initialDevicePassMonitor: unknown;
     };
     const monitor = (el: TillApp) =>
-      el
-        .shadowRoot!.querySelector("till-card-grid")!
-        .shadowRoot!.querySelector<MonitorScreen>("till-expo-screen");
+      el.shadowRoot!.querySelector<MonitorScreen>("till-expo-screen");
 
     it("boots straight into the monitor, read once from the pass monitor route", async () => {
       const { el, getDeviceStationScreen, getDevicePassScreen, getDevicePassMonitor } =
@@ -975,7 +945,7 @@ describe("till-app session activity", () => {
       expect(screen!.deviceName).toBe("Pared del pase");
       expect(screen!.initialDevicePassMonitor).toBe(board);
       expect(screen!.shadowRoot!.querySelector("[data-unavailable]")).not.toBeNull();
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const grid = el.shadowRoot!;
       expect(grid.querySelector(".kitchen-screen-message")).toBeNull();
       expect(grid.querySelector("till-station-screen")).toBeNull();
       expect(getDevicePassMonitor).toHaveBeenCalledTimes(1);
@@ -1010,9 +980,9 @@ describe("till-app session activity", () => {
           },
         ],
       });
-      emit(el.shadowRoot!.querySelector("till-card-grid")!, "enrolled");
+      emit(el.shadowRoot!.querySelector("till-shell")!, "enrolled");
       await flush(el);
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+      const grid = el.shadowRoot!;
       expect(grid.querySelector("till-station-screen")).not.toBeNull();
       expect(grid.querySelector("till-expo-screen")).toBeNull();
     });
@@ -1050,7 +1020,7 @@ describe("till-app session activity", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           locale,
-          canvas: kdsCanvas,
+          formFactor: "kds",
           capabilities: ["act-as-kds"],
         }),
         getDeviceIdentity: vi
@@ -1063,7 +1033,7 @@ describe("till-app session activity", () => {
       await flush(el);
       return { el, host, getDeviceStationScreen, getDevicePassScreen };
     };
-    const grid = (el: TillApp) => el.shadowRoot!.querySelector("till-card-grid")!.shadowRoot!;
+    const grid = (el: TillApp) => el.shadowRoot!;
 
     it.each([
       ["en-GB", en, guidance.en],
@@ -1482,7 +1452,7 @@ describe("till-app boot interrupted by removal from the page", () => {
       {
         getTill: vi
           .fn()
-          .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+          .mockResolvedValue({ ...till, formFactor: "kds", capabilities: ["act-as-kds"] }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "kds1",
           name: "Pass",
@@ -1970,18 +1940,7 @@ describe("till-app simplified-invoice limit", () => {
   const limitedTill = {
     ...till,
     simplifiedInvoiceLimit: "3.00",
-    canvas: {
-      ...tillCanvas,
-      tabs: [
-        {
-          ...tillCanvas.tabs[0]!,
-          cards: [
-            { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-            { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
-          ],
-        },
-      ],
-    } satisfies CanvasDef,
+    formFactor: "till",
   };
   /** The banner's words, with the no-break space a formatted amount carries read as a space. */
   const said = (el: TillApp) => banner(el)!.textContent!.replace(/\s/g, " ");
@@ -2053,18 +2012,7 @@ describe("till-app simplified-invoice limit", () => {
       const paying = {
         ...limitedTill,
         fullInvoices,
-        canvas: {
-          ...limitedTill.canvas,
-          tabs: [
-            {
-              ...limitedTill.canvas.tabs[0]!,
-              cards: [
-                ...limitedTill.canvas.tabs[0]!.cards,
-                { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-              ],
-            },
-          ],
-        } satisfies CanvasDef,
+        formFactor: "till",
       };
       const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(paying) });
       const c = await toCounter(el);
@@ -2314,44 +2262,40 @@ describe("till-app retrieving a held order", () => {
 });
 
 describe("till-app shell navigation", () => {
-  it("ignores a tab selection naming a tab the canvas does not have", async () => {
+  it("ignores a selection outside the fixed primary screens", async () => {
     const { el } = await mountApp();
     await toCounter(el);
     const path = location.pathname;
 
-    emit(shell(el)!, "tab-select", { key: "reports" });
+    emit(shell(el)!, "screen-select", { screen: "reports" });
     await flush(el);
 
-    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(shell(el)!.activeScreen).toBe("counter");
     expect(counter(el)).not.toBeNull();
     expect(location.pathname).toBe(path);
   });
 
-  it("renders the shell with no tab body for a canvas that authors no tabs", async () => {
+  it("renders fixed Counter without any authored tabs", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: { formFactor: "till", tabs: [] } }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till" }),
     });
     await toCounter(el);
 
     expect(shell(el)).not.toBeNull();
-    expect(counter(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
   });
 
-  it("does not open a destination as an overlay when the canvas authors it as a tab", async () => {
-    const withScheduleTab: CanvasDef = {
-      formFactor: "till",
-      tabs: [...tillCanvas.tabs, { key: "schedule", title: "Schedule", columns: 12, cards: [] }],
-    };
+  it("opens Schedule and Expo as overlays over the fixed primary screen", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: withScheduleTab }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till" }),
     });
     await toCounter(el);
 
     emit(shell(el)!, "show-schedule");
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-schedule-screen")).toBeNull();
-    expect(location.pathname).not.toContain("schedule");
+    expect(el.shadowRoot!.querySelector("till-schedule-screen")).not.toBeNull();
+    expect(location.pathname).toContain("schedule");
 
     emit(shell(el)!, "show-expo");
     await flush(el);
@@ -5616,3 +5560,608 @@ describe("own card payment and idle sign-out (A532)", () => {
     expect(privateState<string>(el, "operatorName")).toBe("");
   });
 });
+
+it.each([
+  ["till", "till-counter-screen"],
+  ["phone-portrait", "till-floor-screen"],
+  ["tablet-landscape", "till-floor-screen"],
+] as const)("boots fixed %s screens without canvas configuration", async (formFactor, screen) => {
+  const { el } = await mountApp({
+    getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+  });
+  await flush(el);
+  expect(lock(el)).not.toBeNull();
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector(screen)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull();
+});
+
+it.each([
+  ["till", "floor", "till-floor-screen"],
+  ["phone-portrait", "order", "till-table-order-screen"],
+  ["tablet-landscape", "order", "till-table-order-screen"],
+] as const)("navigates the fixed %s primary screen to %s", async (formFactor, destination, tag) => {
+  const { el } = await mountApp({
+    getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+    getDeviceIdentity: vi
+      .fn()
+      .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+  });
+  await toCounter(el);
+  const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
+  const buttons = fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab");
+  expect(buttons).toHaveLength(2);
+  await userEvent.click(buttons[1]!);
+  await flush(el);
+  const screen = el.shadowRoot!.querySelector(tag) as HTMLElement & { embedded: boolean };
+  expect(screen).not.toBeNull();
+  expect(screen.embedded).toBe(true);
+  expect(location.pathname).toBe(`/tabs/${destination}`);
+});
+
+it.each([
+  ["till", "order", "counter", "till-counter-screen"],
+  ["till", "retired-custom", "counter", "till-counter-screen"],
+  ["phone-portrait", "counter", "floor", "till-floor-screen"],
+  ["tablet-landscape", "kitchen", "floor", "till-floor-screen"],
+] as const)(
+  "replaces an unavailable %s URL screen %s with %s",
+  async (formFactor, stale, home, tag) => {
+    history.replaceState(null, "", `/tabs/${stale}`);
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    try {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+      });
+      await toCounter(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(`/tabs/${home}`);
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  },
+);
+
+it.each([false, true])("direct Kitchen mount requires act-as-kds (%s)", async (allowed) => {
+  const board = { stations: [] };
+  const getDeviceStationScreen = vi.fn().mockResolvedValue(board);
+  const { el } = await mountApp({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      formFactor: "kds",
+      capabilities: allowed ? ["act-as-kds"] : [],
+    }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "fixed-kds",
+      name: "Kitchen",
+      formFactor: "kds",
+      kitchenScreens: [kitchenScreen("station")],
+    }),
+    getDeviceStationScreen,
+  });
+  await flush(el);
+  expect(lock(el)).toBeNull();
+  const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
+  expect(fixedShell).not.toBeNull();
+  expect(fixedShell.shadowRoot!.querySelector("header")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
+  expect(el.shadowRoot!.querySelector("till-kitchen-screen-notice")).toBeNull();
+  expect(getDeviceStationScreen).toHaveBeenCalledTimes(1);
+});
+
+it("opens the profile starting screen in the sign-in history entry", async () => {
+  history.replaceState(null, "", "/");
+  const push = vi.spyOn(history, "pushState");
+  try {
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, formFactor: "till", startingScreen: "show-schedule" }),
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+    });
+    await toCounter(el);
+    expect(counter(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-schedule-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/tabs/counter/view/schedule");
+    expect(push).not.toHaveBeenCalled();
+  } finally {
+    push.mockRestore();
+  }
+});
+
+it.each([
+  [["take-cash"], false],
+  [["take-cash", "take-orders"], true],
+] as const)(
+  "fixed Floor lets today's plan change only with take-orders (%j)",
+  async (capabilities, can) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait", capabilities }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "floor-device", formFactor: "phone-portrait" }),
+    });
+    await toCounter(el);
+    const floor = el.shadowRoot!.querySelector<HTMLElement & { canChangeToday: boolean }>(
+      "till-floor-screen",
+    )!;
+    expect(floor).not.toBeNull();
+    expect(floor.canChangeToday).toBe(can);
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "fixed embedded Order on %s keeps its note, groups, stations, diet and receipt languages",
+  async (formFactor) => {
+    const receiptLanguages = ["es-ES", "ca-ES"];
+    const groups = [
+      {
+        id: "g-1",
+        position: 1,
+        state: "held",
+        firedAt: null,
+        remindAt: null,
+        lineIds: [],
+        summary: "",
+      },
+    ];
+    const stations = [
+      {
+        id: "bar",
+        name: "Bar",
+        displayOrder: 0,
+        isDefault: true,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "default",
+      },
+      {
+        id: "grill",
+        name: "Grill",
+        displayOrder: 1,
+        isDefault: false,
+        active: true,
+        open: true,
+        byHand: null,
+        sendsTo: null,
+        why: "open",
+      },
+    ];
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor, receiptLanguages }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "order-device", formFactor }),
+    });
+    await toCounter(el);
+    const party = {
+      id: "v-1",
+      revision: 3,
+      guestCount: 2,
+      state: "open",
+      name: null,
+      displayName: "Table 4",
+      mainBillId: "wo-1",
+      outstanding: "0.00",
+      billCount: 1,
+      tableIds: [],
+      unsentDrafts: [],
+      reminder: null,
+      kitchenNote: { scope: { partyId: "v-1" }, note: "No peanuts", revision: 4, ownerRevision: 3 },
+    } satisfies TableParty;
+    Object.assign(el, {
+      tabGroups: groups,
+      stations,
+      selectedDiet: "vegetarian",
+      orderParty: party,
+      activeTabId: "wo-1",
+    });
+    emit(shell(el)!, "screen-select", { screen: "order" });
+    await flush(el);
+    const order = el.shadowRoot!.querySelector<
+      HTMLElement & {
+        embedded: boolean;
+        canSettle: boolean;
+        groups: unknown;
+        stations: unknown;
+        selectedDiet: string;
+        receiptLanguages: string[];
+        kitchenNote: string | null;
+        kitchenNoteRevision: number;
+      }
+    >("till-table-order-screen")!;
+    expect(order).not.toBeNull();
+    expect(order.embedded).toBe(true);
+    expect(order.canSettle).toBe(true);
+    expect(order.selectedDiet).toBe("vegetarian");
+    expect(order.groups).toBe(groups);
+    expect(order.stations).toBe(stations);
+    expect(order.receiptLanguages).toBe(receiptLanguages);
+    expect(order.kitchenNote).toBe("No peanuts");
+    expect(order.kitchenNoteRevision).toBe(4);
+  },
+);
+
+const retirementLookScreens = [
+  { name: "till-order", formFactor: "till", screen: "floor", tag: "till-table-order-screen" },
+  { name: "counter", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "counter-long", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "counter-waiting", formFactor: "till", screen: "counter", tag: "till-counter-screen" },
+  { name: "till-floor", formFactor: "till", screen: "floor", tag: "till-floor-screen" },
+  { name: "phone-floor", formFactor: "phone-portrait", screen: "floor", tag: "till-floor-screen" },
+  {
+    name: "phone-order",
+    formFactor: "phone-portrait",
+    screen: "order",
+    tag: "till-table-order-screen",
+  },
+  {
+    name: "tablet-floor",
+    formFactor: "tablet-landscape",
+    screen: "floor",
+    tag: "till-floor-screen",
+  },
+  {
+    name: "tablet-order",
+    formFactor: "tablet-landscape",
+    screen: "order",
+    tag: "till-table-order-screen",
+  },
+  {
+    name: "kitchen-station",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-station-screen",
+    kind: "station",
+  },
+  {
+    name: "kitchen-pass",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-expo-screen",
+    kind: "pass",
+  },
+  {
+    name: "kitchen-monitor",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-expo-screen",
+    kind: "pass_monitor",
+  },
+  {
+    name: "kitchen-unselected",
+    formFactor: "kds",
+    screen: "kitchen",
+    tag: "till-kitchen-screen-notice",
+  },
+] as const;
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280] as const)
+      it.each(retirementLookScreens)(
+        `A182 LOOK primary $name (${locale}, ${theme}, ${width})`,
+        async (view) => {
+          const previousLocale = currentLocale();
+          try {
+            await page.viewport(width, 844);
+            const kind = "kind" in view ? view.kind : undefined;
+            const dish: TillProduct = {
+              ...cafe,
+              customerName: { en: "Coffee for the guest", es: "Café de la casa" },
+              kitchenName: "CAFÉ COCINA",
+            };
+            const api = stubApi({
+              getTill: vi.fn().mockResolvedValue({
+                ...till,
+                locale,
+                formFactor: view.formFactor,
+                capabilities: [
+                  ...till.capabilities,
+                  "act-as-kds",
+                  "take-cash",
+                  "take-orders",
+                  "hand-over-orders",
+                ],
+              }),
+              getDeviceIdentity: vi.fn().mockResolvedValue({
+                deviceId: "a182-look",
+                name: "Kitchen",
+                formFactor: view.formFactor,
+                kitchenScreens: kind === undefined ? [] : [kitchenScreen(kind)],
+              }),
+              listDefaultZoneOffers: vi
+                .fn()
+                .mockResolvedValue(
+                  zoneOffers({ menus: [defaultMenu], products: [dish] }, "zone-counter"),
+                ),
+              getFloorPlan: vi
+                .fn()
+                .mockResolvedValue({ zoneId: "look-zone", revision: 0, savedAt: null, tables: [] }),
+              listCounterWaiting: vi.fn().mockResolvedValue(
+                view.name === "counter-waiting"
+                  ? [
+                      {
+                        id: "waiting",
+                        orderNumber: 11,
+                        label: "Ana",
+                        status: "settled",
+                        openedAt: "2026-10-16T10:00:00Z",
+                        settledAt: "2026-10-16T10:01:00Z",
+                        collectedAt: null,
+                        total: "7.80",
+                        canHandOver: true,
+                        serviceMode: null,
+                        movableDishes: [],
+                      },
+                    ]
+                  : [],
+              ),
+              getDeviceStationScreen: vi.fn().mockResolvedValue({
+                stations: [
+                  {
+                    id: "st-1",
+                    name: "Cocina",
+                    available: true,
+                    today: {
+                      open: true,
+                      isDefault: true,
+                      byHand: null,
+                      sendsTo: null,
+                      why: "open",
+                    },
+                    queue: [],
+                    notices: [],
+                    printersDown: [],
+                  },
+                ],
+              }),
+              getDevicePassScreen: vi
+                .fn()
+                .mockResolvedValue({ orders: [], stations: [], zones: null }),
+              getDevicePassMonitor: vi
+                .fn()
+                .mockResolvedValue({ orders: [], stations: [], zones: null }),
+              listIncomingDepartmentTransfers: vi.fn(async () => ({
+                receiving: false,
+                count: 0,
+                requests: [],
+              })),
+              listDepartmentSentTransfers: vi.fn(async () => ({ requests: [] })),
+              readDepartmentTransferEvents: vi.fn(
+                (_reload: unknown, { signal }: { signal?: AbortSignal }) =>
+                  new Promise<void>((resolve) => {
+                    if (signal?.aborted) resolve();
+                    else signal?.addEventListener("abort", () => resolve(), { once: true });
+                  }),
+              ),
+            });
+            const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+            await flush(el);
+            if (view.formFactor !== "kds") {
+              expect(lock(el)).not.toBeNull();
+              emit(lock(el)!, "logged-in", {
+                personId: "p1",
+                displayName: "Ana",
+                permissions: ["sale.take_payment"],
+              });
+              await flush(el);
+              emit(shell(el)!, "screen-select", { screen: view.screen });
+              await flush(el);
+            }
+            Object.assign(el, {
+              zones: [
+                {
+                  id: "look-zone",
+                  name: "Terrace",
+                  displayOrder: 0,
+                  active: true,
+                  hasPlan: false,
+                  serviceMode: "table",
+                  closesAt: null,
+                  closed: false,
+                },
+              ],
+              tables: [
+                {
+                  id: "look-table",
+                  label: "Table 4",
+                  zoneId: "look-zone",
+                  state: "free",
+                  hasOpenTab: false,
+                  condition: "free",
+                  pendingDeliveries: 0,
+                  pendingToServe: 0,
+                  readyToServe: 0,
+                  enRoute: 0,
+                  timingBand: "fresh",
+                  status: null,
+                  nextReservation: null,
+                  today: null,
+                  party: null,
+                  signals: [],
+                },
+              ],
+            });
+            if (view.screen === "order" || view.name === "till-order")
+              Object.assign(el, {
+                orderParty: {
+                  id: "look-party",
+                  revision: 3,
+                  guestCount: 2,
+                  state: "open",
+                  name: null,
+                  displayName: "Table 4",
+                  mainBillId: "look-bill",
+                  outstanding: "0.00",
+                  billCount: 1,
+                  tableIds: ["look-table"],
+                  unsentDrafts: [],
+                  reminder: null,
+                  kitchenNote: {
+                    scope: { partyId: "look-party" },
+                    note: "No peanuts / Sin cacahuetes",
+                    revision: 4,
+                    ownerRevision: 3,
+                  },
+                },
+                ...(view.name === "till-order" ? { drill: { kind: "table-order" } } : {}),
+                activeTabId: "look-bill",
+                tableProducts: [dish],
+                tableMenus: servedMenus([defaultMenu], []),
+                tableService: {
+                  open: true,
+                  zoneOpen: true,
+                  periodName: null,
+                  keepOpen: null,
+                  zoneKeepOpen: null,
+                },
+              });
+            setLocale(locale);
+            await flush(el);
+            const screen = el.shadowRoot!.querySelector<
+              HTMLElement & { updateComplete: Promise<unknown> }
+            >(view.tag);
+            expect(screen).not.toBeNull();
+            await screen!.updateComplete;
+            if (view.name === "counter-long") {
+              for (let index = 0; index < 18; index++)
+                counter(el)!.store.addProduct(
+                  { ...dish, id: `dish-${index}`, name: `Café ${index + 1}` },
+                  "1",
+                );
+              await counter(el)!.updateComplete;
+              expect(counter(el)!.store.lines).toHaveLength(18);
+            }
+            if (view.name === "counter-waiting")
+              expect(screen!.shadowRoot!.querySelector("till-counter-waiting")).not.toBeNull();
+            if (view.formFactor === "kds")
+              expect(shell(el)!.shadowRoot!.querySelector("header")).toBeNull();
+            else expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
+            if (view.name === "kitchen-monitor")
+              expect((screen as unknown as { monitor: boolean }).monitor).toBe(true);
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            expect(window.innerWidth).toBe(width);
+            expect(host.getAttribute("data-theme")).toBe(theme);
+            const paint = getComputedStyle(host);
+            console.info(
+              "A182 LOOK",
+              JSON.stringify({
+                screen: view.name,
+                locale,
+                theme,
+                width: window.innerWidth,
+                background: paint.backgroundColor,
+                text: paint.getPropertyValue("--wt-color-text").trim(),
+              }),
+            );
+            expect(paint.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+            expect(paint.getPropertyValue("--wt-color-text").trim()).not.toBe("");
+            if (view.screen === "order" || view.name === "till-order")
+              expect((screen as unknown as { kitchenNote: string }).kitchenNote).toBe(
+                "No peanuts / Sin cacahuetes",
+              );
+            if (view.screen === "floor" && view.name !== "till-order")
+              expect(screen!.shadowRoot!.textContent).toContain("Table 4");
+            await page.screenshot({
+              path: `../__screenshots__/a182-primary/${view.name}-${locale}-${theme}-${width}.png`,
+            });
+            if (view.name === "counter-long") {
+              screen!.shadowRoot!.querySelector("till-tender-pay")!.scrollIntoView();
+              await page.screenshot({
+                path: `../__screenshots__/a182-primary/${view.name}-${locale}-${theme}-${width}-bottom.png`,
+              });
+            }
+          } finally {
+            setLocale(previousLocale);
+            await page.viewport(1280, 768);
+          }
+        },
+      );
+
+const retirementActionLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementActionLooks)(
+  "A182 LOOK Find bill receipt and Back $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      await page.viewport(width, 844);
+      const client = stubApi({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage()),
+        listTransactions: vi
+          .fn()
+          .mockResolvedValue({ ...listPage([transactionRow()]), dates: resolvedDates }),
+        getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+      });
+      const { el, host } = await mountWidget<TillApp>("till-app", { api: client }, theme);
+      await toCounter(el);
+      setLocale(locale);
+      await flush(el);
+      const menu =
+        shell(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          '[data-test="more-menu"]',
+        );
+      if (menu !== null) {
+        await menu.updateComplete;
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        await menu.updateComplete;
+      }
+      const find = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".find-bill")!;
+      expect(find).not.toBeNull();
+      await userEvent.click(find);
+      await flush(el);
+      const screen =
+        el.shadowRoot!.querySelector<
+          import("./screens/till-find-bill-screen.js").TillFindBillScreen
+        >("till-find-bill-screen")!;
+      expect(screen).not.toBeNull();
+      await screen.updateComplete;
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-find.png`,
+      });
+      emit(screen, "find-transaction-open", {
+        row: transactionRow({ saleId: "sale-filed", workingOrderId: "wo-filed" }),
+      });
+      await flush(el);
+      await ticket(el)!.updateComplete;
+      expect(ticket(el)!.result.invoiceNumber).toBe("F-0001");
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-receipt.png`,
+      });
+      const back = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-back-to-find-bill]")!;
+      expect(back).not.toBeNull();
+      await userEvent.click(back);
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(screen.active).toBe(true);
+      await page.screenshot({
+        path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-back.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

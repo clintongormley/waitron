@@ -63,15 +63,6 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                           embedded: true,
                           store,
                           selectedServiceZoneId: "counter",
-                          counterTab: {
-                            key: "counter",
-                            title: "Counter",
-                            columns: 4,
-                            cards: [
-                              { type: "product-grid", colSpan: 2, rowSpan: 2, config: {} },
-                              { type: "basket", colSpan: 2, rowSpan: 2, config: {} },
-                            ],
-                          },
                         },
                         theme,
                       )

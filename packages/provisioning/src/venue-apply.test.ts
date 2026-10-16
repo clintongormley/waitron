@@ -355,7 +355,6 @@ describe("applyVenue", () => {
     const profiles = await suite.db
       .select({
         name: deviceProfiles.name,
-        canvas_id: deviceProfiles.canvasId,
         capabilities: deviceProfiles.capabilities,
         inactivity_timeout_seconds: deviceProfiles.inactivityTimeoutSeconds,
       })
@@ -364,13 +363,11 @@ describe("applyVenue", () => {
     expect(profiles).toEqual([
       {
         name: "Cocina",
-        canvas_id: null,
         capabilities: ["act-as-kds", "prepare-orders", "take-orders", "hand-over-orders"],
         inactivity_timeout_seconds: null,
       },
       {
         name: "Mostrador",
-        canvas_id: null,
         capabilities: [
           "integrated-card-payment",
           "open-cash-drawer",
@@ -390,7 +387,6 @@ describe("applyVenue", () => {
       },
       {
         name: "Móvil",
-        canvas_id: null,
         capabilities: [
           "take-orders",
           "hand-keyed-card-payment",

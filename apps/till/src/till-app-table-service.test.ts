@@ -20,7 +20,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
   ProductCatalogue,
@@ -128,41 +128,9 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };
 
-const tillCanvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const tillFormFactor: FormFactor = "till";
 
-const phoneCanvas: CanvasDef = {
-  formFactor: "phone-portrait",
-  tabs: [
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 12,
-      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const phoneFormFactor: FormFactor = "phone-portrait";
 
 const till = {
   locale: "es-ES",
@@ -176,7 +144,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas: tillCanvas,
+  formFactor: tillFormFactor,
   capabilities: ["print-receipt"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -366,8 +334,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
 const shell = (el: TillApp) =>
-  el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell")!;
-const tabGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+  el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell")!;
+const tabGrid = (el: TillApp) => el;
 const floor = (el: TillApp) =>
   tabGrid(el)?.shadowRoot?.querySelector<TillFloorScreen>("till-floor-screen") ?? null;
 /** A till opens table-order as a drill (app shadow root); a handheld mounts it as a tab card. */
@@ -391,7 +359,7 @@ async function openFromFloor(el: TillApp, table: TableState): Promise<void> {
 
 async function toTableOrder(el: TillApp): Promise<TillTableOrderScreen> {
   await logIn(el);
-  emit(shell(el), "tab-select", { key: "floor" });
+  emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
   await openFromFloor(el, openTable);
   return tableOrder(el)!;
@@ -514,7 +482,7 @@ describe("till-app table ordering: the table's menus", () => {
       listZoneOffers: vi.fn().mockRejectedValue({ code: "service_zone.not_found" }),
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
 
     await openFromFloor(el, freeTable);
@@ -550,7 +518,7 @@ describe("till-app table ordering: the table's menus", () => {
       listZoneOffers,
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
 
     emit(floor(el)!, "open-table", { tableId: tableA.id, seated: true });
@@ -913,13 +881,13 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
   // screen can emit its actions while the app holds no tab (and no table) to apply them to.
   async function toEmptyOrderTab(): Promise<{ el: TillApp; screen: TillTableOrderScreen }> {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
     const screen = tableOrder(el)!;
     expect(screen.orderId).toBeUndefined();
@@ -1297,7 +1265,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       },
     ];
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
@@ -1308,7 +1276,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         .mockResolvedValue({ lines: [burgerLine], revision: 7, editSentLines: false }),
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     await openFromFloor(el, openTable);
     await flush(el);
@@ -1435,7 +1403,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
   it("shows a dismissed Cancel offer only once, even when a handheld's Order tab mounts again", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
@@ -1448,7 +1416,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     await openFromFloor(el, openTable);
     await flush(el);
@@ -1458,9 +1426,9 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(cancelDialog(el)).not.toBeNull();
     await closeCancel(el);
 
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
-    emit(shell(el), "tab-select", { key: "order" });
+    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
     await flush(el);
 
@@ -1693,7 +1661,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       let settle!: { reject: (reason: unknown) => void };
       let releaseOffers!: () => void;
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
@@ -1714,13 +1682,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
           ),
       });
       await logIn(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, openTable);
       await flush(el);
       emit(tableOrder(el)!, "change-line", change);
       await flush(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, otherTable);
 
@@ -1736,15 +1704,15 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
-    /** Sends a held change on table 2 from a device on `canvas`; the test settles its answer. */
-    async function changeOnCanvas(canvas: CanvasDef, overrides: Record<string, unknown> = {}) {
+    async function changeOnFormFactor(
+      formFactor: FormFactor,
+      overrides: Record<string, unknown> = {},
+    ) {
       let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
       let releaseOffers: () => void = () => undefined;
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: formFactor }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "h1", formFactor: formFactor }),
         getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve({
@@ -1765,7 +1733,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         ...overrides,
       });
       await logIn(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, openTable);
       await flush(el);
@@ -1780,8 +1748,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     }
 
     it("names the refusal that lands while a handheld shows its Floor tab, and keeps it when another table opens", async () => {
-      const { el, settle, release, reads } = await changeOnCanvas(phoneCanvas);
-      emit(shell(el), "tab-select", { key: "floor" });
+      const { el, settle, release, reads } = await changeOnFormFactor(phoneFormFactor);
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       const readsOnLeaving = reads();
 
@@ -1801,8 +1769,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("names the refusal that lands after a till closes the table's view by selecting another tab", async () => {
-      const { el, settle, reads } = await changeOnCanvas(tillCanvas);
-      emit(shell(el), "tab-select", { key: "counter" });
+      const { el, settle, reads } = await changeOnFormFactor(tillFormFactor);
+      emit(shell(el), "screen-select", { screen: "counter" });
       await flush(el);
       expect(tableOrder(el)).toBeNull();
       const readsOnLeaving = reads();
@@ -1815,8 +1783,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("treats a handheld's tap on the Order tab it is already on as staying on the order", async () => {
-      const { el, settle } = await changeOnCanvas(phoneCanvas);
-      emit(shell(el), "tab-select", { key: "order" });
+      const { el, settle } = await changeOnFormFactor(phoneFormFactor);
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
 
       settle().reject({ code: "ticket.already_started" });
@@ -1828,22 +1796,14 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("names the refusal that lands while a tablet opens another table from the same tab", async () => {
-      const tabletCanvas: CanvasDef = {
-        formFactor: "tablet-landscape",
-        tabs: [
-          {
-            key: "floor",
-            title: "Floor",
-            columns: 24,
-            cards: [
-              { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-              { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-            ],
-          },
-        ],
-      };
-      const { el, settle, release } = await changeOnCanvas(tabletCanvas);
-      await openFromFloor(el, otherTable);
+      const tabletFormFactor: FormFactor = "tablet-landscape";
+      const { el, settle, release } = await changeOnFormFactor(tabletFormFactor);
+      expect(tableOrder(el)).not.toBeNull();
+      emit(tableOrder(el)!, "open-table", {
+        tableId: otherTable.id,
+        seated: otherTable.hasOpenTab,
+      });
+      await flush(el);
 
       settle().reject({ code: "ticket.already_started" });
       await flush(el);
@@ -1972,7 +1932,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("names the refusal that lands after the operator logged out, and reads nothing again", async () => {
-      const { el, settle, reads } = await changeOnCanvas(tillCanvas);
+      const { el, settle, reads } = await changeOnFormFactor(tillFormFactor);
       emit(shell(el), "logout");
       await flush(el);
       expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
@@ -2006,17 +1966,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     };
     const noted: TabLine = { ...burgerLine, note: "no onions" };
 
-    /** Sends a held change on table 2 from a device on `canvas`. Once `saved()` is called, table 2
-     * reads back with the note at revision 8; table 3's menus are held until `release()`. */
-    async function changeHeld(canvas: CanvasDef, overrides: Record<string, unknown> = {}) {
+    async function changeHeld(formFactor: FormFactor, overrides: Record<string, unknown> = {}) {
       let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
       let releaseOffers: () => void = () => undefined;
       let isSaved = false;
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "h1", formFactor: canvas.formFactor }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: formFactor }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "h1", formFactor: formFactor }),
         getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
         getTabLines: vi.fn((orderId: string) =>
           Promise.resolve(
@@ -2039,7 +1995,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         ...overrides,
       });
       await logIn(el);
-      emit(shell(el), "tab-select", { key: "floor" });
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, openTable);
       await flush(el);
@@ -2055,10 +2011,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     }
 
     it("takes the saved revision and reads the order again after a handheld goes to its Floor tab and back", async () => {
-      const { el, settle, saved, reads } = await changeHeld(phoneCanvas);
-      emit(shell(el), "tab-select", { key: "floor" });
+      const { el, settle, saved, reads } = await changeHeld(phoneFormFactor);
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "tab-select", { key: "order" });
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
       const readsBack = reads();
 
@@ -2073,10 +2029,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("says the kitchen has started the line, and offers to cancel it, after a handheld goes to its Floor tab and back", async () => {
-      const { el, settle, reads } = await changeHeld(phoneCanvas);
-      emit(shell(el), "tab-select", { key: "floor" });
+      const { el, settle, reads } = await changeHeld(phoneFormFactor);
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "tab-select", { key: "order" });
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
       const readsBack = reads();
 
@@ -2097,7 +2053,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("takes the saved revision after a till goes back to the floor and opens the same table again", async () => {
-      const { el, settle, saved, release, reads } = await changeHeld(tillCanvas);
+      const { el, settle, saved, release, reads } = await changeHeld(tillFormFactor);
       emit(tableOrder(el)!, "back-to-floor");
       await flush(el);
       await openFromFloor(el, openTable);
@@ -2117,27 +2073,19 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("takes the saved revision when a tablet's open of another table fails and leaves the order on screen", async () => {
-      const tablet: CanvasDef = {
-        formFactor: "tablet-landscape",
-        tabs: [
-          {
-            key: "floor",
-            title: "Floor",
-            columns: 24,
-            cards: [
-              { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-              { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-            ],
-          },
-        ],
-      };
+      const tablet: FormFactor = "tablet-landscape";
       const { el, settle, saved, reads } = await changeHeld(tablet, {
         listZoneOffers: vi
           .fn()
           .mockResolvedValueOnce(burgerOffers)
           .mockRejectedValue(new Error("offers down")),
       });
-      await openFromFloor(el, otherTable);
+      expect(tableOrder(el)).not.toBeNull();
+      emit(tableOrder(el)!, "open-table", {
+        tableId: otherTable.id,
+        seated: otherTable.hasOpenTab,
+      });
+      await flush(el);
       await flush(el);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
       const readsBefore = reads();
@@ -2153,7 +2101,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("reads the order again at once when the change is saved while a till is reopening the same table", async () => {
-      const { el, settle, saved, release, reads } = await changeHeld(tillCanvas);
+      const { el, settle, saved, release, reads } = await changeHeld(tillFormFactor);
       emit(tableOrder(el)!, "back-to-floor");
       await flush(el);
       await openFromFloor(el, openTable);
@@ -2172,11 +2120,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
 
     it("names the refusal when a handheld goes back to the order while another table is still opening", async () => {
-      const { el, settle, release } = await changeHeld(phoneCanvas);
-      emit(shell(el), "tab-select", { key: "floor" });
+      const { el, settle, release } = await changeHeld(phoneFormFactor);
+      emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, otherTable);
-      emit(shell(el), "tab-select", { key: "order" });
+      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
 
@@ -2527,7 +2475,7 @@ describe("till-app table ordering: logout while a request is waiting for the ser
       ),
     });
     await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     await openFromFloor(el, { ...openTable, hasOpenTab: false });
     expect(api.seatTable).toHaveBeenCalledWith(openTable.id, null);
@@ -2541,7 +2489,7 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     await flush(el);
 
     expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-shell")).toBeNull();
     expect((el as unknown as { operatorName: string }).operatorName).toBe("");
   });
 
@@ -2559,10 +2507,10 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     await flush(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-shell")).toBeNull();
 
     await logIn(el);
-    expect(shell(el).activeTabKey).toBe("counter");
+    expect(shell(el).activeScreen).toBe("counter");
     expect(ticket(el)).toBeNull();
   });
 });

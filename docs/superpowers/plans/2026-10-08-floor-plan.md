@@ -1,5 +1,11 @@
 > 2026-10-16: A671 supersedes the editor side-panel arrangement, placement click targets and
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 > 2026-10-16, A747: the owner replaced empty joined-seat defaults with editable totals in the till and dashboard. The [current decision](../../backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747) supersedes the empty-default wording below.
 > new joined-table placement described below. The current contract is in
 > [design-system.md](../../developers/design-system.md#departments-and-zones).

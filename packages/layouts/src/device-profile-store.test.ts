@@ -47,17 +47,9 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  it("translates a foreign-key refusal to device_profile.invalid {bad_canvas_ref}", () => {
-    let thrown: unknown;
-    try {
-      translateWriteError({
-        cause: refusalError({ foreignKey: true }),
-      });
-    } catch (e) {
-      thrown = e;
-    }
-    expect(isAppError(thrown) && thrown.code).toBe("device_profile.invalid");
-    expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
+  it("re-throws a foreign-key refusal without an obsolete canvas attribution", () => {
+    const original = { cause: refusalError({ foreignKey: true }) };
+    expect(() => translateWriteError(original)).toThrow(original);
   });
 
   // The two foreign-key directions carry the same message and differ only in their code.

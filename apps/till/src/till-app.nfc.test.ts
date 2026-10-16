@@ -33,7 +33,7 @@ async function reader() {
 const notice = (el: TillApp) => el.shadowRoot!.querySelector<WtToast>("[data-nfc-notice]");
 
 async function signOut(el: TillApp) {
-  emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+  emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
 }
 
@@ -123,7 +123,7 @@ describe("NFC throughout the till", () => {
             release = () => resolve(offers);
           }),
       );
-      emit(el.shadowRoot!.querySelector("till-tab-shell")!, "open-profile");
+      emit(el.shadowRoot!.querySelector("till-shell")!, "open-profile");
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector("till-profile-dialog")).not.toBeNull(),
       );
@@ -744,7 +744,7 @@ describe("NFC throughout the till", () => {
   it("continues listening on the schedule screen", async () => {
     const { el, requests } = await mountEquipmentApp();
     await signIn(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-schedule");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "show-schedule");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-schedule-screen")).not.toBeNull(),
     );

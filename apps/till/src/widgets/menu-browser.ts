@@ -151,7 +151,7 @@ export class TillMenuBrowser extends LitElement {
         grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
       }
 
-      .grid[data-device="handheld"][data-columns-source="menu"] {
+      .grid[data-device="handheld"] {
         --home-tile-min: calc(var(--wt-tap-min) * 1.5);
       }
 
@@ -320,9 +320,6 @@ export class TillMenuBrowser extends LitElement {
   /** Whether it shows the menu's Handheld display rather than its Till one. */
   @property({ type: Boolean }) handheld = false;
 
-  /** A canvas card's own column count, which wins over the menu's display. */
-  @property({ type: Number }) columns?: number;
-
   /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
    * pay widget does not take the dish. */
   @property({ type: Boolean }) weighs = false;
@@ -475,8 +472,7 @@ export class TillMenuBrowser extends LitElement {
     return html`<div
       class="grid"
       data-device=${this.handheld ? "handheld" : "till"}
-      data-columns-source=${this.columns === undefined ? "menu" : "card"}
-      style=${`--columns: ${this.columns ?? display.columns};`}
+      style=${`--columns: ${display.columns};`}
     >
       ${content}
     </div>`;

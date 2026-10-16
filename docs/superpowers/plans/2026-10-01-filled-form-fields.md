@@ -1,5 +1,11 @@
 # Form fields in the "filled" style (A178) Implementation Plan
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 **2026-10-02 update:** A202 changed the number stepper's button placement and colours. Its earlier
 placement here is historical; the current contract is in `docs/developers/design-system.md`.
 

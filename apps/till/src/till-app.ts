@@ -187,13 +187,13 @@ import "./widgets/basket-refresh-dialog.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
-import "./widgets/tab-shell.js";
+import "./widgets/till-shell.js";
 import "./widgets/find-bill-dialog.js";
 import "./widgets/equipment-dialog.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
-import "./widgets/card-grid.js";
+
 import type { StringKey } from "./i18n/strings.js";
 import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
@@ -274,8 +274,18 @@ import type {
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
 import { kindOfFormFactor } from "./layout.js";
-import { type KitchenScreenNotice, kitchenDisplayScreen } from "./kitchen-screen-notice.js";
-import type { CanvasDef, CapabilityFlag, DeviceKind, NavigationScreen, TabDef } from "./layout.js";
+import {
+  type KitchenScreenNotice,
+  kitchenDisplayScreen,
+  kitchenScreenSwitchedText,
+} from "./kitchen-screen-notice.js";
+import {
+  builtInScreensFor,
+  homeScreenFor,
+  resolveBuiltInScreen,
+  type BuiltInScreen,
+} from "./built-in-screens.js";
+import type { FormFactor, CapabilityFlag, DeviceKind, NavigationScreen } from "./layout.js";
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
@@ -289,7 +299,7 @@ import {
   repriceRebuilt,
   withUnavailable,
 } from "./state/menu-refresh.js";
-import type { ShellAffordance } from "./widgets/tab-shell.js";
+import type { ShellAffordance } from "./widgets/till-shell.js";
 import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
@@ -317,12 +327,8 @@ import { setContentLanguages } from "@waitron/ui";
 
 export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
-/**
- * `"lock"` (or a boot failure) renders the lock screen; every other value renders the canvas tab shell.
- */
 type Screen = "lock" | "counter" | "floor" | "station";
 
-/** An overlay over the active canvas tab. Sale context remains local; regular destinations have URLs. */
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
 type RefreshList = "held" | "station" | "waiting";
@@ -1185,7 +1191,31 @@ export class TillApp extends LitElement {
         flex: none;
       }
 
-      till-tab-shell {
+      .kitchen-screen {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-6);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-lg);
+        color: var(--wt-color-text);
+      }
+      .kitchen-screen p {
+        margin: 0;
+      }
+      .switched {
+        margin: var(--wt-space-4) var(--wt-space-4) 0;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      till-shell {
         min-height: 0;
       }
 
@@ -1547,9 +1577,7 @@ export class TillApp extends LitElement {
   #currentTransferTabId(): string | undefined {
     if (this.#tableCatalogueActive()) return this.activeTabId;
     const tab = this.#activeTab();
-    const counterVisible =
-      this.drill === undefined &&
-      (tab?.key === "counter" || tab?.cards.some((card) => card.type === "basket"));
+    const counterVisible = this.drill === undefined && tab === "counter";
     return counterVisible && this.stage === "order" && this.#store.persisted
       ? this.#store.id
       : undefined;
@@ -1862,8 +1890,7 @@ export class TillApp extends LitElement {
   }
 
   @state() private screen: Screen = "lock";
-  /** The shell's active tab; undefined only before boot resolves a canvas, or after a boot failure. */
-  @state() private activeTabKey?: string;
+  @state() private activeTabKey?: BuiltInScreen;
   /** The drill-in stacked over the shell's active tab, or undefined when the tab body is on top. */
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
@@ -2366,13 +2393,7 @@ export class TillApp extends LitElement {
     filedLanguage?: string;
     transaction?: boolean;
   } | null = null;
-  /**
-   * The server resolves a canvas for every boot, so this is `undefined` only after a boot failure, where
-   * {@link render} shows the lock screen rather than an empty shell.
-   */
-  @state() private canvas?: CanvasDef;
-  /** The card grid hides a card whose required capability is absent, except `tender-pay`, which also
-   * takes cash. */
+  @state() private formFactor?: FormFactor;
   @state() private capabilities: CapabilityFlag[] = [];
   /** The non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: CounterError;
@@ -2603,13 +2624,18 @@ export class TillApp extends LitElement {
     });
   }
 
-  #requestedTab(): string | undefined {
+  #requestedTab(): BuiltInScreen | undefined {
     const requested = this.#url.read("till-tab");
-    return this.canvas?.tabs.find((tab) => tab.key === requested)?.key ?? this.canvas?.tabs[0]?.key;
+    return this.formFactor === undefined
+      ? undefined
+      : resolveBuiltInScreen(this.formFactor, requested);
   }
 
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
-    this.activeTabKey = key;
+    this.activeTabKey =
+      this.formFactor === undefined
+        ? undefined
+        : resolveBuiltInScreen(this.formFactor, key ?? null);
     if (key !== undefined)
       this.#writeUrl(
         {
@@ -2633,8 +2659,6 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** A canvas tab of the screen's name is selected; otherwise the screen opens through `#pushDrill`,
-   * which opens only one `#affordances` offers. */
   #openStartingScreen(): void {
     const screen = this.#startingScreen;
     if (screen === null) return;
@@ -2644,11 +2668,7 @@ export class TillApp extends LitElement {
       "show-schedule": "schedule",
     } as const satisfies Record<NavigationScreen, TillDestination>;
     const destination = destinations[screen];
-    if (this.canvas?.tabs.some((tab) => tab.key === destination)) {
-      if (this.capabilities.includes(screen)) this.#onTabSelect(destination, false, true);
-      return;
-    }
-    this.#pushDrill({ kind: destination });
+    this.#pushDrill({ kind: destination }, true);
   }
 
   #restoreDestination(): void {
@@ -2708,7 +2728,7 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
-    if (changed.has("canvas") || changed.has("capabilities"))
+    if (changed.has("formFactor") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
@@ -3792,13 +3812,19 @@ export class TillApp extends LitElement {
       this.#pendingNfc = undefined;
       if (code !== undefined) void this.#pickUpNfc(code);
     });
-    const firstTab = this.canvas?.tabs[0];
+    const firstTab = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
-    // History may change while login data loads and the lock screen still owns the page. A switched
-    // profile starts on its own canvas's first tab, whatever tab the address names.
-    this.#setActiveTab(switched ? this.canvas?.tabs[0]?.key : this.#requestedTab(), true, true);
+    this.#setActiveTab(
+      switched
+        ? this.formFactor === undefined
+          ? undefined
+          : homeScreenFor(this.formFactor)
+        : this.#requestedTab(),
+      true,
+      true,
+    );
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
@@ -4086,9 +4112,7 @@ export class TillApp extends LitElement {
   }
 
   #tableCatalogueActive(): boolean {
-    return (
-      this.drill?.kind === "table-order" || this.#activeTab()?.key === this.#tableOrderTabKey()
-    );
+    return this.drill?.kind === "table-order" || this.#activeTab() === this.#tableOrderTabKey();
   }
 
   #selectTableMenu(id: string): void {
@@ -6975,7 +6999,7 @@ export class TillApp extends LitElement {
   #applyProfileSetup(till: TillInfo): void {
     this.#clockingAvailable = till.clockingAvailable === true;
     this.#clockAccessLost = false;
-    this.canvas = till.canvas;
+    this.formFactor = till.formFactor;
     this.capabilities = till.capabilities;
     this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
     this.#startingScreen = till.startingScreen ?? null;
@@ -7251,11 +7275,9 @@ export class TillApp extends LitElement {
     this.collectFlow = undefined;
     this.errorKey = undefined;
     this.cardOutcome = undefined;
-    // The home tab is the canvas's first tab. After settling a tab the floor is stale, so a floor home
-    // refreshes it.
-    const home = this.canvas?.tabs[0];
-    this.#setActiveTab(home?.key, true);
-    if (home?.key === "counter") void this.#loadStations();
+    const home = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
+    this.#setActiveTab(home, true);
+    if (home === "counter") void this.#loadStations();
     this.#popDrill();
     if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
   }
@@ -7309,29 +7331,21 @@ export class TillApp extends LitElement {
   }
 
   #showsCounterLists(): boolean {
-    return (
-      this.canvas?.tabs.some(
-        (tab) =>
-          tab.key === "counter" ||
-          tab.cards.some((card) => card.type === "held-orders" || card.type === "prep-queue"),
-      ) === true
-    );
+    return this.formFactor === "till";
   }
 
-  /** Station and expo cards fetch their own data and table-order loads on the open-table drill, so only
-   * the floor cards need app-loaded data. */
-  #tabNeedsFloorData(tab: TabDef): boolean {
-    return tab.cards.some((card) => card.type === "floor-plan");
+  #tabNeedsFloorData(screen: BuiltInScreen): boolean {
+    return screen === "floor";
   }
 
-  /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
-   * overlay; history restores a permitted regular destination over the tab. The first floor visit
-   * loads zones and statuses too; later visits refresh occupancy and zone closures. `replace` puts the
-   * tab in the current history entry rather than a new one. */
   #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
     if (!this.#inShell()) return;
-    const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);
-    if (tab === undefined) return;
+    if (
+      this.formFactor === undefined ||
+      !builtInScreensFor(this.formFactor).some((screen) => screen === key)
+    )
+      return;
+    const tab = resolveBuiltInScreen(this.formFactor, key);
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     this.#setActiveTab(key, replace, fromHistory);
@@ -7533,8 +7547,6 @@ export class TillApp extends LitElement {
           false,
         );
         this.tableSelectedCatalogueId = "";
-        // Both are said: a canvas showing the floor and the order together keeps the previous
-        // table's order on screen, so the failed open needs saying even beside a late change.
         const late = this.#lateChangeShown();
         this.errorKey =
           late === undefined ? "table.error" : { lateChange: late, also: "table.error" };
@@ -7633,8 +7645,6 @@ export class TillApp extends LitElement {
       if (left() || session !== this.#operatorSession) return;
     }
     if (left()) return;
-    // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
-    // in over the floor tab.
     if (this.#inShell()) {
       const orderTabKey = this.#tableOrderTabKey();
       if (orderTabKey !== undefined)
@@ -10391,9 +10401,11 @@ export class TillApp extends LitElement {
     this.partyBills = [];
   }
 
-  /** A till's drill goes back to the floor; a card mount selects the canvas's floor tab. */
   #returnToFloor(): void {
-    const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
+    const floorTab =
+      this.formFactor !== undefined && builtInScreensFor(this.formFactor).includes("floor")
+        ? "floor"
+        : undefined;
     if (this.drill?.kind === "table-order" || floorTab === undefined) {
       this.#onBackToFloor();
     } else {
@@ -11122,14 +11134,14 @@ export class TillApp extends LitElement {
   }
 
   #inShell(): boolean {
-    return this.canvas !== undefined && this.#shellActive();
+    return this.formFactor !== undefined && this.#shellActive();
   }
 
   /** Records the same `nav` trail as {@link #setScreen}. */
-  #pushDrill(drill: Drill): void {
+  #pushDrill(drill: Drill, replace = false): void {
     if (isTillDestination(drill.kind)) {
       if (!this.#allowsDestination(drill.kind)) return;
-      this.#writeUrl({ "till-view": drill.kind, "till-station": null });
+      this.#writeUrl({ "till-view": drill.kind, "till-station": null }, replace);
     }
     this.#dismissStationChoices();
     diag.record("info", "nav", { screen: drill.kind });
@@ -11164,18 +11176,17 @@ export class TillApp extends LitElement {
     void this.#refreshReceiptPrint();
   }
 
-  /** A canvas with no counter tab shows its first tab instead. */
   #onBackToCounter(): void {
     if (!this.#inShell()) return;
     const fromFindBill = this.drill?.kind === "find-bill";
     this.errorKey = undefined;
-    this.#setActiveTab("counter");
+    this.#setActiveTab(this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor));
     void this.#loadStations();
     this.#popDrill();
     if (fromFindBill)
       void this.updateComplete.then(() => {
         this.shadowRoot
-          ?.querySelector("till-tab-shell")
+          ?.querySelector("till-shell")
           ?.shadowRoot?.querySelector("[data-test=more-menu]")
           ?.shadowRoot?.querySelector("button")
           ?.focus();
@@ -11209,7 +11220,10 @@ export class TillApp extends LitElement {
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
-    this.#setActiveTab(this.canvas?.tabs[0]?.key, true);
+    this.#setActiveTab(
+      this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor),
+      true,
+    );
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
@@ -11281,21 +11295,22 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** Falls back to the first tab, so a stale key never leaves the shell without a body. */
-  #activeTab(): TabDef | undefined {
-    return this.canvas?.tabs.find((tab) => tab.key === this.activeTabKey) ?? this.canvas?.tabs[0];
+  #activeTab(): BuiltInScreen | undefined {
+    return this.formFactor === undefined
+      ? undefined
+      : resolveBuiltInScreen(this.formFactor, this.activeTabKey ?? null);
   }
 
-  #tableOrderTabKey(): string | undefined {
-    return this.canvas?.tabs.find((tab) => tab.cards.some((card) => card.type === "table-order"))
-      ?.key;
+  #tableOrderTabKey(): "order" | undefined {
+    return this.formFactor !== undefined && builtInScreensFor(this.formFactor).includes("order")
+      ? "order"
+      : undefined;
   }
 
   #affordances(): ShellAffordance[] {
-    const tabKeys = new Set(this.canvas?.tabs.map((tab) => tab.key) ?? []);
     return [
-      ...(["station", "expo", "schedule"] as const).filter(
-        (screen) => !tabKeys.has(screen) && this.capabilities.includes(`show-${screen}`),
+      ...(["station", "expo", "schedule"] as const).filter((screen) =>
+        this.capabilities.includes(`show-${screen}`),
       ),
       "find-bill",
     ];
@@ -11310,8 +11325,8 @@ export class TillApp extends LitElement {
     return this.stage === "order" ? this.counterLines : null;
   }
 
-  #tabBody(tab: TabDef): TemplateResult {
-    if (tab.key === "counter") {
+  #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
+    if (tab === "counter") {
       // `embedded`: the shell owns the header.
       return html`<till-counter-screen
         embedded
@@ -11339,7 +11354,6 @@ export class TillApp extends LitElement {
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading}
         .payHeld=${this.#payHeld()}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
-        .counterTab=${tab}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .canMoveStation=${this.capabilities.includes("take-orders")}
@@ -11358,85 +11372,113 @@ export class TillApp extends LitElement {
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
-    const tableTab = tab.key === this.#tableOrderTabKey();
-    const draft = tableTab ? this.#tableDraft() : undefined;
-    return html`<till-card-grid
-      .tab=${tab}
-      .store=${this.#store}
-      .storedLines=${this.#basketStoredLines()}
-      .makeAtStations=${tableTab ? [] : this.stations}
-      .stations=${this.stations}
-      .orderInFlight=${this.#counterOrderInFlight()}
-      .capabilities=${this.capabilities}
-      .products=${tableTab ? this.tableProducts : this.products}
-      .heldOrders=${this.heldOrders}
-      .counterWaiting=${this.counterWaiting}
-      .stationQueue=${this.stationQueue}
-      .defaultStationId=${this.#defaultStationId()}
-      .busy=${this.submitting || this.invoiceRecipientReading}
-      .payHeld=${this.#payHeld()}
-      .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
-      .orderFlow=${this.#basketFlow()}
-      .stage=${this.stage}
-      .cardProvider=${this.#cardReader()}
-      .takesCash=${this.#takesCash()}
-      .canMoveStation=${this.capabilities.includes("take-orders")}
-      .canEditKitchenNote=${this.capabilities.includes("take-orders")}
-      .tipsEnabled=${this.tipsEnabled}
-      .cardOutcome=${this.cardOutcome}
-      .cardAttemptsOver=${this.cardAttemptsOver}
-      .activeReaders=${this.#payReaders()}
-      .defaultReaderId=${this.#payDefaultReaderId()}
-      .receiptLanguages=${this.receiptLanguages}
-      .fullInvoices=${this.fullInvoices}
-      .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
+    if (tab === "floor")
+      return html`<till-floor-screen
+        embedded
+        .zones=${this.zones}
+        .tables=${this.tables}
+        .tablesReadAt=${this.tablesReadAt}
+        .api=${this.api}
+        .canExitToCounter=${false}
+        .canOpenStation=${this.#allowsDestination("station")}
+        .canChangeToday=${this.capabilities.includes("take-orders")}
+      ></till-floor-screen>`;
+    if (tab === "order") return this.#embeddedOrderBody();
+    return this.#kitchenBody();
+  }
+
+  #embeddedOrderBody(): TemplateResult {
+    const draft = this.#tableDraft();
+    return html`<till-table-order-screen
       .api=${this.api}
-      .fireControl=${this.fireControl}
-      .zones=${this.zones}
-      .tables=${this.tables}
-      .tablesReadAt=${this.tablesReadAt}
-      .bumpMode=${this.bumpMode}
-      .deviceMode=${this.deviceMode}
-      .initialDeviceStation=${this.initialDeviceStation}
-      .deviceId=${this.deviceId}
-      .deviceName=${this.deviceName}
-      .initialDevicePass=${this.initialDevicePass}
-      .initialDevicePassMonitor=${this.initialDevicePassMonitor}
-      .kitchenScreenNotice=${this.kitchenScreenNotice}
-      .kitchenScreenSwitched=${this.kitchenScreenSwitched}
-      .menus=${tableTab ? this.tableMenus : this.menus}
-      .zoneId=${tableTab ? (this.#tableZoneId ?? "") : this.counterServiceZoneId}
-      .service=${tableTab ? this.tableService : this.counterService}
-      .departmentName=${tableTab ? this.tableDepartmentName : this.counterDepartmentName}
-      .zoneName=${tableTab ? (this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? "") : (this.counterServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? "")}
-      .selectedMenuId=${tableTab ? this.tableSelectedCatalogueId : this.selectedCatalogueId}
-      .selectedDiet=${this.selectedDiet}
-      .statuses=${this.statuses}
-      .courses=${this.courses}
-      .tabLines=${this.tabLines}
-      .tabGroups=${this.tabGroups}
+      .zoneId=${this.#tableZoneId ?? ""}
+      embedded
+      .lines=${this.tabLines}
+      .groups=${this.tabGroups}
       .currentOrders=${this.currentOrders}
       .currentOrdersUnread=${this.currentOrdersUnread}
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
-      .tabRevision=${this.tabRevision}
+      .revision=${this.tabRevision}
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
+      .products=${this.tableProducts}
+      .menus=${this.tableMenus}
+      .service=${this.tableService}
+      .departmentName=${this.tableDepartmentName}
+      .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
+      .selectedMenuId=${this.tableSelectedCatalogueId}
+      .selectedDiet=${this.selectedDiet}
+      .statuses=${this.statuses}
+      .courses=${this.courses}
+      .stations=${this.stations}
+      .fireControl=${this.fireControl}
+      .tables=${this.tables}
+      .zones=${this.zones}
       .orderId=${this.activeTabId}
       .draftStore=${draft}
-      .otherDrafts=${draft === undefined ? [] : this.#otherDrafts(draft)}
+      .otherDrafts=${this.#otherDrafts(draft)}
       .takeOversAnswered=${this.takeOversAnswered}
       .party=${this.orderParty}
-      .partyBills=${this.partyBills}
+      .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
+      .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
+      .bills=${this.partyBills}
+      .receiptLanguages=${this.receiptLanguages}
+      .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
+      .busy=${this.submitting || this.invoiceRecipientReading}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
-      .canOpenStation=${this.#allowsDestination("station")}
-    ></till-card-grid>`;
+      .takesCash=${this.#takesCash()}
+    ></till-table-order-screen>`;
+  }
+
+  #kitchenBody(): TemplateResult | typeof nothing {
+    if (!this.capabilities.includes("act-as-kds")) return nothing;
+    return html`${this.kitchenScreenSwitched === undefined ? nothing : html`<p class="switched" role="status" data-screen-switched>${kitchenScreenSwitchedText(this.kitchenScreenSwitched)}</p>`}${this.#kitchenBoard()}`;
+  }
+
+  #kitchenBoard(): TemplateResult {
+    if (this.kitchenScreenNotice !== undefined)
+      return html`<till-kitchen-screen-notice
+        class="kitchen-screen"
+        role="status"
+        .api=${this.api}
+        .notice=${this.kitchenScreenNotice}
+      ></till-kitchen-screen-notice>`;
+    if (this.initialDevicePassMonitor)
+      return html`<till-expo-screen
+        embedded
+        monitor
+        .api=${this.api}
+        .deviceMode=${this.deviceMode}
+        .deviceName=${this.deviceName}
+        .initialDevicePassMonitor=${this.initialDevicePassMonitor}
+      ></till-expo-screen>`;
+    return this.initialDevicePass
+      ? html`<till-expo-screen
+          embedded
+          .api=${this.api}
+          .fireControl=${this.fireControl}
+          .runsPass=${this.capabilities.includes("run-the-pass")}
+          .deviceMode=${this.deviceMode}
+          .deviceName=${this.deviceName}
+          .initialDevicePass=${this.initialDevicePass}
+        ></till-expo-screen>`
+      : html`<till-station-screen
+          embedded
+          .api=${this.api}
+          .bumpMode=${this.bumpMode}
+          .fireControl=${this.fireControl}
+          .deviceMode=${this.deviceMode}
+          .initialDeviceStation=${this.initialDeviceStation}
+          .deviceId=${this.deviceId}
+          .canMoveStation=${this.capabilities.includes("take-orders")}
+        ></till-station-screen>`;
   }
 
   #activeTabBody(): TemplateResult | typeof nothing {
@@ -11646,7 +11688,7 @@ export class TillApp extends LitElement {
   }
 
   override render() {
-    const shellCanvas = this.#inShell() ? this.canvas : undefined;
+    const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const errorMessage = this.errorKey
       ? errorText(this.errorKey, this.#tableCatalogueActive() ? this.tableMenus : this.menus)
       : nothing;
@@ -12115,12 +12157,12 @@ export class TillApp extends LitElement {
                     ></till-clock-in-screen>`
                   : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
                     // screen also shows after a boot failure, rather than an empty shell.
-                    shellCanvas !== undefined
+                    shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),
-                        html`<till-tab-shell
-                          .tabs=${shellCanvas.tabs}
-                          .activeTabKey=${this.activeTabKey}
+                        html`<till-shell
+                          .formFactor=${shellFormFactor}
+                          .activeScreen=${this.activeTabKey}
                           .operatorName=${this.operatorName}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
@@ -12136,11 +12178,15 @@ export class TillApp extends LitElement {
                           }}
                           .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
                           .loadLocales=${this.#loadLocales}
-                          @tab-select=${(e: CustomEvent<{ key: string }>) => {
-                            if (!this.canvas?.tabs.some((tab) => tab.key === e.detail.key)) return;
-                            if (e.detail.key === this.activeTabKey && this.drill === undefined)
+                          @screen-select=${(e: CustomEvent<{ screen: BuiltInScreen }>) => {
+                            if (
+                              this.formFactor === undefined ||
+                              !builtInScreensFor(this.formFactor).includes(e.detail.screen)
+                            )
                               return;
-                            this.#requestLeave(() => this.#onTabSelect(e.detail.key));
+                            if (e.detail.screen === this.activeTabKey && this.drill === undefined)
+                              return;
+                            this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}
                         >
                           ${
@@ -12167,7 +12213,7 @@ export class TillApp extends LitElement {
                           }
                           ${this.#activeTabBody()}
                           ${this.#findBillBody()}${this.#drillBody() /* the drill overlay, when one is open */}
-                        </till-tab-shell>`,
+                        </till-shell>`,
                       )
                     : keyed(
                         `${currentLocale()}:${this.#operatorSession}`,

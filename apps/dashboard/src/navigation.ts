@@ -33,7 +33,6 @@ export const dashboardPath: UrlPathConfig = {
     },
     printers: { view: "view", printer: "printer" },
     "floor-plan": { zone: "zone" },
-    "canvas-editor": { canvas: "canvas", "canvas-tab": "tab" },
   },
   // A Calendar view a module adds names its own address words, which no list here can know.
   keepUnlisted: ["opening-hours"],

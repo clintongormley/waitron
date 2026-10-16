@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { chooserFaces, cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
-import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { ServiceZoneSummary, TillApi, TillProduct, TillZoneMenu } from "../api/client.js";
@@ -22,18 +22,6 @@ const cafe: TillProduct = {
 };
 
 const products: TillProduct[] = [cafe];
-
-const counterTab: TabDef = {
-  key: "counter",
-  title: "Counter",
-  columns: 12,
-  cards: [
-    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-    { type: "total", colSpan: 4, rowSpan: 1, config: {} },
-    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-  ],
-};
 
 /** Two counter zones, with Deli counter listed second. */
 const deliSecond: ServiceZoneSummary[] = [
@@ -61,33 +49,41 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
       [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
       [],
     ),
-    counterTab,
     operatorName: "Ana",
     ...over,
   });
 
-const cardGrid = (el: TillCounterScreen) =>
-  el.shadowRoot!.querySelector<
-    HTMLElement & {
-      updateComplete: Promise<unknown>;
-      tab?: TabDef;
-      store: unknown;
-      products: TillProduct[];
-      menus: unknown;
-      selectedMenuId: string;
-      selectedDiet: unknown;
-      handheld: boolean;
-      heldOrders: unknown;
-      tables: unknown;
-      stationQueue: unknown;
-      defaultStationId?: string;
-      cardProvider: string;
-      tipsEnabled: boolean;
-      cardOutcome?: string;
-      cardAttemptsOver: number;
-      canMoveStation: boolean;
-    }
-  >("till-card-grid");
+const body = (el: TillCounterScreen) => el;
+const tender = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-tender-pay")!;
+const menuBrowser = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-menu-browser")!;
+const waitingList = (el: TillCounterScreen) =>
+  el.shadowRoot!.querySelector("till-counter-waiting")!;
+const heldList = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-held-orders")!;
+const heldOrder = {
+  id: "held",
+  orderNumber: 1,
+  label: "Ana",
+  itemCount: 1,
+  total: "1.50",
+  outstanding: "1.50",
+  hasPayments: false,
+  partyId: null,
+  openedAt: "2026-10-16T10:00:00.000Z",
+  signals: [],
+};
+const waitingOrder = {
+  id: "waiting",
+  orderNumber: 2,
+  label: "Luis",
+  status: "settled" as const,
+  openedAt: "2026-10-16T10:00:00.000Z",
+  settledAt: "2026-10-16T10:01:00.000Z",
+  collectedAt: null,
+  total: "1.50",
+  canHandOver: true,
+  serviceMode: null,
+  movableDishes: [],
+};
 
 /** The text the dropdown's closed box shows, which is the chosen zone's name. */
 async function shownText(select: WtCombobox): Promise<string> {
@@ -118,7 +114,7 @@ describe("closed zone ordering", () => {
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
         "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
       );
-      const cards = cardGrid(el)!;
+      const cards = body(el)!;
       await cards.updateComplete;
       expect(cards.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
@@ -263,10 +259,9 @@ describe("till-counter-screen", () => {
     expect(spy.mock.calls[0]![0].detail).toEqual({ zoneId: "downstairs" });
   });
 
-  // A counter tab must ALWAYS yield the four sale-critical cards.
-  it("renders the counter tab's sale-critical cards (product-grid/basket/total/tender-pay) via the card grid", async () => {
+  it("renders the fixed menu, basket, total and tender controls", async () => {
     const { el } = await mount();
-    const grid = cardGrid(el)!;
+    const grid = body(el)!;
     expect(grid).not.toBeNull();
     await grid.updateComplete;
     expect(grid.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
@@ -275,49 +270,27 @@ describe("till-counter-screen", () => {
     expect(grid.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
   });
 
-  it("threads the counter tab through to the card grid", async () => {
+  it("renders its fixed sale body without an authored layout", async () => {
     const { el } = await mount();
-    expect(cardGrid(el)!.tab).toBe(counterTab);
+    expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
   });
 
-  it("renders the grid body and NONE of the legacy region containers (region model removed)", async () => {
+  it("renders the fixed sale body without legacy region containers", async () => {
     const { el } = await mount();
-    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".sale-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector(".region-main")).toBeNull();
     expect(el.shadowRoot!.querySelector(".region-aside")).toBeNull();
     expect(el.shadowRoot!.querySelector(".grid-body")).not.toBeNull();
   });
 
-  it("threads the default station's queue (and station id) through to the card grid", async () => {
-    const stationQueue = [
-      {
-        kitchenNote: null,
-        orderId: "wo-1",
-        orderNumber: 5,
-        label: "Mesa 4",
-        queuedAt: "2026-08-17T10:00:00.000Z",
-        status: "settled" as const,
-        thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-        items: [
-          {
-            id: "ti-1",
-            workingOrderLineId: "wol-1",
-            state: "queued" as const,
-            name: "Paella",
-            quantity: "2.000",
-            course: null,
-            firedAt: "2026-08-17T10:00:00.000Z",
-          },
-        ],
-      },
-    ];
-    const { el } = await mount({ stationQueue, defaultStationId: "st-1" });
-    const grid = cardGrid(el)!;
-    expect(grid.stationQueue).toBe(stationQueue);
-    expect(grid.defaultStationId).toBe("st-1");
+  it("keeps the non-default prep-queue rail out of fixed Counter", async () => {
+    const { el } = await mount({ defaultStationId: "st-1" });
+    expect(el.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
   });
 
-  it("threads the held-orders list through to the card grid", async () => {
+  it("passes held orders to the rendered list", async () => {
     const heldOrders = [
       {
         id: "wo-1",
@@ -333,55 +306,62 @@ describe("till-counter-screen", () => {
       },
     ];
     const { el } = await mount({ heldOrders });
-    expect(cardGrid(el)!.heldOrders).toBe(heldOrders);
+    expect(heldList(el).orders).toBe(heldOrders);
   });
 
-  it("threads the floor's tables through to the card grid, for a held order's Move to table", async () => {
+  it("passes the floor tables to held orders for Move to table", async () => {
     const tables = [{ id: "t9", label: "Mesa 9" }];
-    const { el } = await mount({ tables } as never);
-    expect(cardGrid(el)!.tables).toBe(tables);
+    const { el } = await mount({ tables, heldOrders: [heldOrder] } as never);
+    expect(heldList(el).tables).toBe(tables);
   });
 
-  it("passes the SAME store instance to the card grid (which coordinates the cards through it)", async () => {
+  it("coordinates menu, basket, total and payment through the same store", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mount({ store });
-    expect(cardGrid(el)!.store).toBe(store);
+    for (const tag of ["till-menu-browser", "till-basket", "till-total", "till-tender-pay"])
+      expect(
+        (el.shadowRoot!.querySelector(tag) as HTMLElement & { store: WorkingOrderStore }).store,
+      ).toBe(store);
   });
 
-  it("threads cardProvider, tipsEnabled and cardOutcome through to the card grid (Task 9)", async () => {
+  it("passes provider, tips and card outcome to payment controls", async () => {
     const { el } = await mount({
       cardProvider: "stripe_on_device",
       tipsEnabled: true,
       cardOutcome: "declined",
     });
-    const grid = cardGrid(el)!;
+    const grid = tender(el);
     expect(grid.cardProvider).toBe("stripe_on_device");
     expect(grid.tipsEnabled).toBe(true);
     expect(grid.cardOutcome).toBe("declined");
   });
 
-  it("threads cardAttemptsOver through to the card grid", async () => {
+  it("passes the attempt count to payment controls", async () => {
     const { el } = await mount({ cardAttemptsOver: 3 });
-    expect(cardGrid(el)!.cardAttemptsOver).toBe(3);
+    expect(tender(el).cardAttemptsOver).toBe(3);
   });
 
-  it("threads canMoveStation through to the card grid, off by default", async () => {
-    expect(cardGrid((await mount({ canMoveStation: true })).el)!.canMoveStation).toBe(true);
-    expect(cardGrid((await mount()).el)!.canMoveStation).toBe(false);
+  it("passes canMoveStation to Waiting, off by default", async () => {
+    expect(
+      waitingList((await mount({ canMoveStation: true, counterWaiting: [waitingOrder] })).el)
+        .canMoveStation,
+    ).toBe(true);
+    expect(waitingList((await mount({ counterWaiting: [waitingOrder] })).el).canMoveStation).toBe(
+      false,
+    );
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
     const { el } = await mount();
-    const grid = cardGrid(el)!;
+    const grid = tender(el);
     expect(grid.cardProvider).toBe("none");
     expect(grid.tipsEnabled).toBe(false);
     expect(grid.cardOutcome).toBeUndefined();
   });
 
-  it("passes the products through to the card grid", async () => {
+  it("passes the shown products to the menu browser", async () => {
     const { el } = await mount();
-    // With no menu selected and no diet lens, the visible set is the whole product list (same ref).
-    expect(cardGrid(el)!.products).toBe(products);
+    expect(menuBrowser(el).products).toEqual(products);
   });
 
   const veganDish: TillProduct = {
@@ -408,22 +388,22 @@ describe("till-counter-screen", () => {
     const { el } = await mount({ products: [veganDish, meatDish] });
     const filter = el.shadowRoot!.querySelector("till-diet-filter")!;
     expect(filter).not.toBeNull();
-    // Both dishes are handed to the grid before any lens.
+    // Both dishes are shown before a lens is selected.
     expect(
-      cardGrid(el)!
+      menuBrowser(el)
         .products.map((p) => p.id)
         .sort(),
     ).toEqual(["meat", "vegan"]);
     filter.shadowRoot!.querySelector<HTMLElement>('[data-test="diet-filter-vegan"]')!.click();
     await el.updateComplete;
-    await cardGrid(el)!.updateComplete;
-    const browser = cardGrid(el)!.shadowRoot!.querySelector<
-      HTMLElement & { products: TillProduct[] }
-    >("till-menu-browser")!;
+    await body(el)!.updateComplete;
+    const browser = body(el)!.shadowRoot!.querySelector<HTMLElement & { products: TillProduct[] }>(
+      "till-menu-browser",
+    )!;
     expect(browser.products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
-  it("hands the card grid the menus, the selected menu, the diet lens and the form factor", async () => {
+  it("passes menus, selected menu, diet lens and device kind to their rendered controls", async () => {
     const menus: TillZoneMenu[] = servedMenus(
       [{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }],
       [],
@@ -434,10 +414,11 @@ describe("till-counter-screen", () => {
       selectedDiet: "vegan",
       handheld: true,
     });
-    expect(cardGrid(el)!.menus).toBe(menus);
-    expect(cardGrid(el)!.selectedMenuId).toBe("lunch");
-    expect(cardGrid(el)!.selectedDiet).toBe("vegan");
-    expect(cardGrid(el)!.handheld).toBe(true);
+    expect(menuBrowser(el).menus).toBe(menus);
+    expect(menuBrowser(el).menu!.id).toBe("lunch");
+    expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
+    expect(menuBrowser(el).products).toEqual([]);
+    expect(menuBrowser(el).handheld).toBe(true);
   });
 
   it("shows the logged-in operator name in the header", async () => {
@@ -534,7 +515,7 @@ describe("till-counter-screen", () => {
       t("allergens.open"),
     );
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".sale-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
   });
 
@@ -628,3 +609,88 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 });
+
+it("lets a held-order retrieve event reach the fixed Counter host", async () => {
+  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
+    store: new WorkingOrderStore(),
+    heldOrders: [{ ...heldOrder, id: "wo-2" }],
+  });
+  let captured: CustomEvent<{ id: string }> | undefined;
+  el.addEventListener(
+    "retrieve-order",
+    (event) => (captured = event as CustomEvent<{ id: string }>),
+  );
+  el.shadowRoot!.querySelector("till-held-orders")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button.retrieve")!
+    .click();
+  expect(captured?.composed).toBe(true);
+  expect(captured?.bubbles).toBe(true);
+  expect(captured?.detail).toEqual({ id: "wo-2" });
+});
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK fixed Counter actions $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      for (const state of ["cash", "card", "collect", "pay-rest", "busy"] as const) {
+        const store = new WorkingOrderStore();
+        store.addProduct(cafe, "2");
+        const { el, host } = await mountWidget<TillCounterScreen>(
+          "till-counter-screen",
+          {
+            store,
+            products,
+            menus: servedMenus(
+              [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
+              [],
+            ),
+            service: {
+              open: true,
+              zoneOpen: true,
+              periodName: null,
+              keepOpen: null,
+              zoneKeepOpen: null,
+            },
+            takesCash: true,
+            stage: state === "collect" ? "collect" : "order",
+            payRest: state === "pay-rest" ? "1.50" : null,
+            busy: state === "busy",
+          },
+          theme,
+        );
+        const pay = tender(el);
+        await pay.updateComplete;
+        if (state === "cash" || state === "card") {
+          const button = pay.shadowRoot!.querySelector<HTMLElement>(
+            state === "cash" ? ".pay" : ".pay-card",
+          )!;
+          expect(button).not.toBeNull();
+          await userEvent.click(button);
+          await pay.updateComplete;
+          expect(pay.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+        }
+        if (state === "busy") expect(pay.busy).toBe(true);
+        if (state === "pay-rest")
+          expect(el.shadowRoot!.querySelector("[data-pay-rest]")).not.toBeNull();
+        expect(window.innerWidth).toBe(width);
+        expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+        pay.scrollIntoView();
+        await page.screenshot({
+          path: `__screenshots__/a182-actions/${state}-${locale}-${theme}-${width}.png`,
+        });
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

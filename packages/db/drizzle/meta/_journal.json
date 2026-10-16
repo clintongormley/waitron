@@ -1121,6 +1121,20 @@
       "when": 1792097805142,
       "tag": "0159_furry_beyonder",
       "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "6",
+      "when": 1792150106472,
+      "tag": "0160_retire_canvases",
+      "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "6",
+      "when": 1792150155859,
+      "tag": "0161_restore_profile_form_factor_lock",
+      "breakpoints": true
     }
   ]
 }

@@ -12,18 +12,15 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { canvases } from "./canvases.js";
 
 /**
- * The values MUST equal `FORM_FACTORS` in `packages/layouts/src/canvas.ts`; @waitron/layouts owns
+ * The values MUST equal `FORM_FACTORS` in `packages/layouts/src/device-types.ts`; @waitron/layouts owns
  * the type, this declaration is the storage.
  */
 export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
 
 /**
  * A reusable device profile: the binding bundle a device resolves against. Not location-scoped.
- *
- * `canvas_id` NULL means the form-factor default canvas.
  *
  * `retired_at` set means RETIRED: deleted while only disabled devices held it, which the
  * `devices.device_profile_id` key would refuse. The database does not stop an active device
@@ -39,14 +36,11 @@ export const deviceProfiles = table(
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
-    /* v8 ignore start */
-    canvasId: id("canvas_id").references(() => canvases.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     capabilities: json("capabilities").notNull().default([]),
     // Auto-logout idle timeout in seconds; NULL = never. `validateInactivityTimeout`
     // (@waitron/layouts) forces NULL for a kds profile on write; the database does not.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
-    // NULL = the canvas's first view. No CHECK: one would make drizzle-kit rebuild this table. The
+    // NULL = the fixed home screen. No CHECK: one would make drizzle-kit rebuild this table. The
     // store (`validateStartingScreen`, @waitron/layouts) refuses a screen the profile does not show.
     startingScreen: label("starting_screen"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

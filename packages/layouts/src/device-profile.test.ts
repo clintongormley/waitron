@@ -10,7 +10,7 @@ import {
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,
 } from "./device-profile.js";
-import { FORM_FACTORS, CAPABILITY_FLAGS } from "./canvas.js";
+import { FORM_FACTORS, CAPABILITY_FLAGS } from "./device-types.js";
 
 describe("validateCapabilities", () => {
   it("accepts a valid flag array unchanged", () => {
@@ -134,7 +134,7 @@ describe("profileAllows", () => {
 describe("validateStartingScreen", () => {
   const caps = ["take-orders", "show-expo", "show-schedule"] as const;
 
-  it("accepts null, meaning the canvas's own first view", () => {
+  it("accepts null for the fixed home screen", () => {
     expect(validateStartingScreen(null, caps)).toBeNull();
   });
 

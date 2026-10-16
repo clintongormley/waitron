@@ -363,8 +363,7 @@ block's name ("Full menu" or "Shortcuts") in `--wt-font-size-sm` and `--wt-color
 between two 1px `--wt-color-border` lines, as that block's heading. A block with nothing to show is
 not drawn, and then there is no divider. Every grid has up to the menu's column count of tracks,
 fewer where a tile would be narrower than its minimum (`HOME_GRID_COLUMNS`). Handheld tiles use
-`--wt-tap-min * 1.5` when they follow the menu’s column setting; till tiles and canvas cards
-with their own column count keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
+`--wt-tap-min * 1.5`; till tiles keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
 offer 2–3 columns and till settings 4–10. The handheld grid and its preview show three columns at
 360px and 390px. The handheld preview uses `--wt-space-4` side insets to fit inside the dashboard's
 own phone-width padding; narrower grids keep the same reading order. In Colours
@@ -919,8 +918,8 @@ this and are not yet migrated. `wt-spinner` on its own is for a region that is l
 A third form is a `wt-spinner decorative` beside a status text that itself announces the state
 (`role="status"`), as the Bluetooth pairing row in Add a printer does.
 
-Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
-canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
+Use `wt-data-table` for sortable administrative collections such as people, devices and printers.
+Define columns and cell content in the consuming screen so domain actions stay outside the
 primitive. Always supply `aria-label`; use its loading, empty and error properties instead of
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
@@ -1792,7 +1791,7 @@ different things at different scales: hamburger opens the whole app's navigation
 kebab opens a small menu of actions for one specific item (used once per row/card). Giving the
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
 or the nav toggle looking like just another row's overflow menu. The till's top-bar More menu is a
-hamburger (`apps/till/src/widgets/tab-shell.ts`, registered in `apps/till/src/till-app.ts`): it
+hamburger (`apps/till/src/widgets/till-shell.ts`, registered in `apps/till/src/till-app.ts`): it
 holds the screen's own navigation and tools, not one item's actions. Kebab stays for one row's or
 one card's actions.
 
@@ -2234,8 +2233,7 @@ written per screen (one stated exception, the till's profile dialog, is in the b
   latest suggestion read does not say the service is on, or while a run is being sent or
   translated, and keeps its own variant while its own press is being sent.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
-  field checks, the sign-in screens, and the canvas editor's Delete on a canvas's last tab
-  (canvases are being retired, A182). Nothing guards it across screens.
+  field checks and the sign-in screens. Nothing guards it across screens.
 
 These forms follow the rule
 ([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,
@@ -2257,8 +2255,7 @@ and nothing guards it across screens:
   form;
 - batch 3b: the print agent's Edit dialog; a printer page's name and connection editors; the
   calibration wizard; the Bluetooth printer Pair dialog; the Edit device dialog; the device profile
-  editor, new and existing; the card reader's Rename dialog; the bill attestation's Record; the
-  canvas editor;
+  editor, new and existing; the card reader's Rename dialog; the bill attestation's Record;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
 - Opening hours: the season painter, the special-day painter, the period dialog and the season dialog.
@@ -2332,7 +2329,6 @@ These open already savable:
 - the device pairing dialog's Pair: its settings step opens holding the name the device asked
   with, and pressing Pair approves the device;
 - each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
-- the canvas Duplicate dialog, holding `<name> (copy)`;
 - the floor plan editor's Add tables dialog, holding one table, four seats and the zone's name as
   the prefix: pressing Save is the add (`apps/dashboard/src/screens/floor-plan-add-tables.ts`);
 - the routing cell editor on an inherited cell: Save pins the inherited choice as the cell's own
@@ -2343,9 +2339,7 @@ These open already savable:
   option, or by Edit on an option with no refusal, it opens quiet;
 - the translations dialog while Translate all suggestions are filled in: they are drafts nobody
   typed, so Save opens ready, and closing over suggestions nobody has edited asks nothing, because
-  the draft scope compares only a person's own edits (`personalSubmission`, `apps/dashboard/src/widgets/content-translations-dialog.ts`);
-- a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
-  as changed from the start.
+  the draft scope compares only a person's own edits (`personalSubmission`, `apps/dashboard/src/widgets/content-translations-dialog.ts`).
 
 Stripe's Connect and its add-reader Save, and SumUp's Connect, Pair and Try again, are provider operations. Their actions keep
 their existing validation and retry behavior. See the
@@ -4034,9 +4028,8 @@ underlined link back to it, inside a `nav` landmark with its own name. The page'
 one `h1`, at the list page's heading size and outside the landmark, so no other heading repeats it;
 the page's tabs come under it. A one-word name longer than the screen breaks inside the `h1`. A
 short fact about the item sits in brackets after the `h1`, on its line where there is room, in
-normal muted text. A click on the parent link with a modifier key is left to the browser. The menu and canvas
-editors draw this pattern. The canvas editor's parent link uses the same unsaved-changes check as
-Cancel; a modified click keeps the browser's link handling. The printer page still names the printer
+normal muted text. A click on the parent link with a modifier key is left to the browser. The menu
+editor draws this pattern. The printer page still names the printer
 after "All printers ›" inside its `nav`; A405 plans to turn its details into a modal instead.
 
 The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
@@ -4283,14 +4276,14 @@ the selected tab's lists do not hold opens nothing and is dropped from the addre
 Back stop; closing the editor, with Cancel or a save, drops it the same way. Changing tab drops it
 too and, like any tab change, adds a Back stop.
 
-Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
-zones and saved canvas tabs extend those paths, such as `/manage/floor-plan/zone/<id>`.
+Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for the till's fixed primary
+screens. Nested views and zones extend those paths, such as `/manage/floor-plan/zone/<id>`.
 Till Schedule, Kitchen, Pass and Allergens use `/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station`, `expo` and `allergens`. The operator Kitchen picker adds `/station/<id>`;
-embedded station cards keep their selection local to the enclosing tab. Restore these destinations
+an embedded station keeps its selection local to its screen. Restore these destinations
 only after login and device validation. A kitchen display opens the one kitchen screen its device
-chose and cannot open operator destinations from a path. Unsaved canvas tabs stay out of both URL writes and history,
-including when you reselect them; saved tabs become destinations after persistence.
+chose and cannot open operator destinations from a path. A primary key outside the device's fixed
+choices returns to its home screen by replacing the current history entry.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
 an automatic return home after payment replaces the current entry. The till holds the menu choice in
 memory for the tab, retained through new and parked orders. At a counter where nobody has picked
@@ -4305,7 +4298,7 @@ profile's, or else the venue's counter default) and that zone's default menu, or
 belongs in neither the path nor browser history.
 
 Dietary filters (vegan, vegetarian, no meat and no fish) follow the same login boundary. The till app
-owns the selection and passes it to counter and table-order screens, including embedded cards.
+owns the selection and passes it to counter and table-order screens, including embedded Order.
 Screen changes, menu changes, payment and new or parked orders retain the selection. Tapping the
 selected filter clears it everywhere; a new login starts with no dietary filter. Changing a filter
 never alters basket contents or browser history. Browser storage being blocked must not stop filtering.
@@ -4316,14 +4309,14 @@ static assets keep their own responses; setup continues to use its existing root
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
 header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
-there on its own when nobody is signed in; in the till's tab-shell bar, before the operator's name
+there on its own when nobody is signed in; in the till's shell bar, before the operator's name
 while that is on the bar, and before the More menu when the bar has one, as in the counter screen's
 own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right on its own, above the
 content.
 
-The till's tab-shell bar is one row at every width. On a phone (40rem wide or less) it holds the
+The till's shell bar is one row at every width. On a phone (40rem wide or less) it holds the
 tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
 its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
 Find a bill stays in More at every width and opens the Bills and Transactions page. Its Back
@@ -4338,7 +4331,7 @@ Inside More the items keep the bar's order, with Find a bill first. The tabs and
 chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
 when the screen grows wider, the content other than the transfer count changes, or the language
 changes, but they stay in an open More menu until it closes. While Transfers is in More, the
-menu's button carries its pending count. Cases: `apps/till/src/widgets/tab-shell.test.ts` and the
+menu's button carries its pending count. Cases: `apps/till/src/widgets/till-shell.test.ts` and the
 A737 cases in `apps/till/src/till-app.test.ts`.
 
 After a box update, while the box serves it, a till with nobody signed in and nothing open reloads by itself; otherwise the
@@ -4363,15 +4356,37 @@ Floor, table Order, Expo, Station, Counter, Schedule and Allergens screens add n
 their own; Schedule and Allergens also drop their card's border there. Cases:
 `apps/till/src/screens/device-screens.phone-margin.test.ts`.
 
+### Fixed device screens
+
+You configure what a device may do through its profile. Its form factor determines its primary
+screens; there is no saved screen layout or screen editor.
+
+| Device | Primary screens | Home |
+| --- | --- | --- |
+| Till | Counter, Floor | Counter |
+| Phone or tablet handheld | Floor, Order | Floor |
+| Kitchen display | Kitchen | Kitchen |
+
+`builtInScreensFor` in `apps/till/src/built-in-screens.ts` owns these choices. `till-shell` renders
+the header; `TillApp` mounts Counter, Floor, Order and Kitchen directly. Opening a table on a till
+opens Order over Floor. On a handheld it selects the primary Order screen. A kitchen display needs
+`act-as-kds` before any station, pass, pass-monitor or selection notice is mounted. Profile screen
+preferences and restored URLs retain their capability checks.
+
+A menu's Device Home Page, receipt configuration, tenant themes and the floor-plan editor remain
+independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
+device's `formFactor`. Configuration exports use format 3; an older export is refused as outdated,
+including one with an empty canvas list. No earlier canvas settings are carried over.
+Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
+and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.
+
 ### Counter basket and payment space
 
-On the standard counter canvas, the menu sits beside a basket that scrolls within its own card.
-Menu and dietary controls stay in the menu side. Total and payment controls take the space their
-contents need underneath the basket. Held orders follow the products within that side's scroll area. The counter
-uses this arrangement when its first four cards are Product grid, Basket, Total and Tender/pay,
-with the menu and basket filling one row and the total and payment cards matching the basket's
-width; only Held orders with the menu's width may follow. Other arrangements keep their configured row spans.
-At phone width the cards stack in their configured order and the page scrolls. Basket rows wrap
+On Counter, the menu sits beside a basket that scrolls within its own card. Menu and dietary
+controls stay on the menu side. Total and payment controls take the space their contents need
+underneath the basket. Held and waiting orders follow the products within the menu side's scroll
+area, including when only waiting orders exist. At phone width, menu, basket, total, payment and
+held/waiting lists stack in that order and the page scrolls. Basket rows wrap
 controls that do not fit beside the dish name. When full invoices are on, Full invoice and Hold
 share a row in both payment modes; while they are off the payment card draws no Full invoice, and
 Hold sits alone in the first of the row's two columns. When Place is offered, it fills the row above

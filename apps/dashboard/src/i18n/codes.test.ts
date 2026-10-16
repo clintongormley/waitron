@@ -98,7 +98,7 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
 it("has a sentence for each in-use delete code (device-profile follow-ons)", () => {
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
-  for (const code of ["canvas.in_use", "device_profile.in_use"]) {
+  for (const code of ["device_profile.in_use"]) {
     expect(codeMessage(code, "es")).not.toBe(code);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "en")).not.toBe(code);

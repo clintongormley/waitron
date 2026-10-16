@@ -124,7 +124,7 @@ const products = [
   { ...product("pinkgone", "Pink gone", false), color: "#edabab" },
 ];
 
-async function mount(theme: Theme, props: Partial<TillMenuBrowser> = { columns: 3 }) {
+async function mount(theme: Theme, props: Partial<TillMenuBrowser> = {}) {
   return mountWidget<TillMenuBrowser>(
     "till-menu-browser",
     { menu, products, store: new WorkingOrderStore(), ...props },
@@ -177,7 +177,6 @@ const brunchOffered = [product("porridge", "Porridge")];
 
 async function mountServed(theme: Theme, others: TillZoneMenu[], otherProducts: TillProduct[]) {
   return mount(theme, {
-    columns: 3,
     menus: [menu, ...others],
     servedProducts: [...products, ...otherProducts],
   });
@@ -247,7 +246,6 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
   it("home with a plain and a painted section the diet filter empties, greyed between products, has no violations", async () => {
     const hidden = ["p-cola", "p-cana", "p-burger", "p-cafe"];
     const { el, host } = await mount(theme, {
-      columns: 3,
       products: products.filter((each) => !hidden.includes(each.id)),
       unfilteredProducts: products,
       menu: {
@@ -351,7 +349,6 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
 
   it("Menu first, with the divider naming the shortcuts, has no violations", async () => {
     const { el, host } = await mount(theme, {
-      columns: 3,
       menu: { ...menu, home: { ...menu.home, till: { ...menu.home.till, order: "menu_first" } } },
     });
     expect(el.shadowRoot!.querySelector("h2.divider")!.textContent!.trim()).toBe("Shortcuts");
@@ -369,7 +366,6 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
       members: [member("cola")],
     };
     const { el, host } = await mount(theme, {
-      columns: 3,
       menu: {
         ...menu,
         structure: { members: [member("photo"), pictured, member("cana")] },

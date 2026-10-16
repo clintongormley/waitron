@@ -135,7 +135,7 @@ it.each([{ enabled: false }, { action: false }])(
     await signIn(f.el);
     await working(f.el);
     f.el
-      .shadowRoot!.querySelector("till-tab-shell")!
+      .shadowRoot!.querySelector("till-shell")!
       .dispatchEvent(new CustomEvent("my-hours", { bubbles: true, composed: true }));
     await f.el.updateComplete;
     expect(screen(f.el)).toBeNull();

@@ -6,7 +6,6 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type {
-  Canvas,
   DeviceProfile,
   DashboardApi,
   PersonRole,
@@ -25,11 +24,6 @@ import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
 
-const canvases: Canvas[] = [
-  { id: "c1", name: "Counter till", definition: {} },
-  { id: "c2", name: "Kitchen board", definition: {} },
-];
-
 const EVERY_ROLE: PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 
 /** Where and for whom a profile with nothing narrowed serves: every zone, every role. */
@@ -44,7 +38,7 @@ const profiles: DeviceProfile[] = [
   {
     id: "p1",
     name: "Front counter",
-    canvasId: "c1",
+
     capabilities: ["integrated-card-payment", "open-cash-drawer"],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
@@ -63,7 +57,7 @@ const profiles: DeviceProfile[] = [
   {
     id: "p2",
     name: "Kitchen",
-    canvasId: null,
+
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,
@@ -119,7 +113,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     copyDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
-    listCanvases: vi.fn().mockResolvedValue(canvases),
+
     listPrinters: vi.fn().mockResolvedValue([]),
     listPagePrinters: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
@@ -171,31 +165,21 @@ async function expectSaveQuiet(el: DeviceProfilesScreen) {
   expect([button.variant, button.disabled]).toEqual(["secondary", true]);
 }
 
-function selectCanvas(el: DeviceProfilesScreen, value: string) {
-  void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-canvas]")!, value);
-}
-
 function selectFormFactor(el: DeviceProfilesScreen, value: string) {
   void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-form-factor]")!, value);
 }
 
 describe("device-profiles-screen list mode", () => {
-  it("loads and lists device profiles with their referenced canvas name and capability summary", async () => {
+  it("loads and lists device profiles with their capability summary", async () => {
     const api = stubApi();
     const el = await mount(api);
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
-    expect(api.listCanvases).toHaveBeenCalledTimes(1);
     expect(el.shadowRoot!.querySelector("[data-test=profile-name-p1]")!.textContent).toContain(
       "Front counter",
-    );
-    // The canvas reference resolves to the canvas NAME, not its id.
-    expect(el.shadowRoot!.querySelector("[data-test=profile-canvas-p1]")!.textContent).toContain(
-      "Counter till",
     );
     // Two capabilities are summarised on the row (shipped locale is es-ES).
     const caps = el.shadowRoot!.querySelector("[data-test=profile-caps-p1]")!.textContent!;
     expect(caps).toContain("tarjeta");
-    // A null canvas reference and empty capabilities render their neutral fallbacks, not a throw.
     expect(el.shadowRoot!.querySelector("[data-test=profile-row-p2]")).toBeTruthy();
   });
 
@@ -253,7 +237,7 @@ describe("device-profiles-screen list mode", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy();
   });
 
-  it("Duplicate creates a copy from the same canvas + capabilities under a '(copy)' name", async () => {
+  it("Duplicate creates a copy from the same capabilities under a '(copy)' name", async () => {
     const api = stubApi();
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
@@ -263,7 +247,7 @@ describe("device-profiles-screen list mode", () => {
     expect(api.copyDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Front counter (copia)",
-      "c1",
+
       ["integrated-card-payment", "open-cash-drawer"],
       "till",
       null,
@@ -287,7 +271,6 @@ describe("device-profiles-screen editor form", () => {
     expect(form.getAttribute("data-editing-id")).toBeNull();
     change(el, "profile-name", "Kitchen tablet");
     await el.updateComplete;
-    selectCanvas(el, "c2");
     await el.updateComplete;
     selectFormFactor(el, "tablet-landscape");
     await el.updateComplete;
@@ -297,7 +280,7 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Kitchen tablet",
-      "c2",
+
       ["act-as-kds"],
       "tablet-landscape",
       null,
@@ -322,7 +305,7 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Waiter",
-      null,
+
       ["print-receipt"],
       "phone-portrait",
       null,
@@ -348,7 +331,7 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Waiter",
-      null,
+
       ["show-schedule"],
       "phone-portrait",
       null,
@@ -374,7 +357,7 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Waiter",
-      null,
+
       ["take-cash"],
       "phone-portrait",
       null,
@@ -394,7 +377,7 @@ describe("device-profiles-screen editor form", () => {
     await flush(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Counter",
-      null,
+
       [],
       "till",
       null,
@@ -452,7 +435,6 @@ describe("device-profiles-screen editor form", () => {
     expect(api.getDeviceProfile).toHaveBeenCalledWith("p1");
     const form = el.shadowRoot!.querySelector("[data-test=editor-form]")!;
     expect(form.getAttribute("data-editing-id")).toBe("p1");
-    // The name + canvas + capability switches reflect the loaded profile.
     const name = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
       "[data-test=profile-name]",
     )!;
@@ -484,7 +466,7 @@ describe("device-profiles-screen editor form", () => {
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Kitchen counter",
-      "c1",
+
       [],
       "kds",
       null,
@@ -504,28 +486,8 @@ describe("device-profiles-screen editor form", () => {
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Front counter",
-      "c1",
-      ["open-cash-drawer"],
-      "till",
-      null,
-      NO_PRINTERS,
-    );
-  });
 
-  it("Edit → clearing the canvas dropdown saves canvasId null (form-factor default)", async () => {
-    const api = stubApi();
-    const el = await mount(api);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
-    await flush(el);
-    selectCanvas(el, "");
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
-    await flush(el);
-    expect(api.updateDeviceProfile).toHaveBeenCalledWith(
-      "p1",
-      "Front counter",
-      null,
-      ["integrated-card-payment", "open-cash-drawer"],
+      ["open-cash-drawer"],
       "till",
       null,
       NO_PRINTERS,
@@ -548,7 +510,7 @@ describe("device-profiles-screen editor form", () => {
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Front counter",
-      "c1",
+
       ["integrated-card-payment", "open-cash-drawer"],
       "phone-portrait",
       300,
@@ -570,7 +532,7 @@ describe("device-profiles-screen editor form", () => {
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Kitchen counter",
-      "c1",
+
       [],
       "kds",
       null,
@@ -696,15 +658,6 @@ it("refreshes displayed profiles when their data changes elsewhere", async () =>
 });
 
 describe("device-profiles-screen remaining edges", () => {
-  it("labels a profile whose canvas is no longer in the set as an unknown canvas", async () => {
-    const orphan: DeviceProfile = { ...profiles[0]!, id: "p3", canvasId: "c-gone" };
-    const el = await mount(stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([orphan]) }));
-
-    expect(el.shadowRoot!.querySelector("[data-test=profile-canvas-p3]")!.textContent).toBe(
-      `${t("device_profiles.canvas_label")}: ${t("device_profiles.canvas_unknown")}`,
-    );
-  });
-
   it.each([
     ["blank", "  "],
     ["non-numeric", "soon"],
@@ -729,7 +682,7 @@ describe("device-profiles-screen remaining edges", () => {
       expect(api.updateDeviceProfile).toHaveBeenCalledWith(
         "p1",
         "Front counter",
-        "c1",
+
         ["integrated-card-payment", "open-cash-drawer"],
         "phone-portrait",
         null,
@@ -764,7 +717,7 @@ describe("device-profiles-screen remaining edges", () => {
       expect(api.updateDeviceProfile).toHaveBeenCalledWith(
         "p1",
         "Front counter",
-        "c1",
+
         ["integrated-card-payment", "open-cash-drawer"],
         "phone-portrait",
         120,
@@ -805,23 +758,11 @@ describe("device-profiles-screen fields", () => {
   const box = (el: DeviceProfilesScreen, selector: string) =>
     el.shadowRoot!.querySelector(`wt-combobox${selector}`) as Combobox | null;
 
-  it("picks the canvas and form factor from labelled dropdowns showing the profile's own", async () => {
+  it("picks the form factor from a labelled dropdown showing the profile's own", async () => {
     const api = stubApi();
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
     await flush(el);
-
-    const canvas = box(el, "[data-test=profile-canvas]")!;
-    expect(canvas.name).toBe("canvasId");
-    expect(canvas.label).toBe(t("device_profiles.canvas_label"));
-    expect(canvas.search).toBe("auto");
-    expect(canvas.placeholder).toBe(t("device_profiles.canvas_default"));
-    expect(canvas.options).toEqual([
-      { value: "", label: t("device_profiles.canvas_default") },
-      { value: "c1", label: "Counter till" },
-      { value: "c2", label: "Kitchen board" },
-    ]);
-    expect(canvas.value).toBe("c1");
 
     const formFactor = box(el, "[data-test=profile-form-factor]")!;
     expect(formFactor.name).toBe("formFactor");
@@ -835,7 +776,6 @@ describe("device-profiles-screen fields", () => {
     ]);
     expect(formFactor.value).toBe("till");
 
-    await chooseOption(canvas, "c2");
     await chooseOption(formFactor, "tablet-landscape");
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
@@ -843,7 +783,7 @@ describe("device-profiles-screen fields", () => {
     expect(api.updateDeviceProfile).toHaveBeenCalledWith(
       "p1",
       "Front counter",
-      "c2",
+
       ["integrated-card-payment", "open-cash-drawer"],
       "tablet-landscape",
       null,
@@ -966,7 +906,7 @@ describe("device-profiles-screen printer lists", () => {
   }
 
   function savedLists(api: DashboardApi) {
-    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
+    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![5];
   }
 
   it("shows each list's printers switched on, in the profile's order", async () => {
@@ -1139,7 +1079,7 @@ describe("device-profiles-screen printer lists", () => {
     await save(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
       "Caja",
-      null,
+
       [],
       "till",
       null,
@@ -1155,7 +1095,7 @@ describe("device-profiles-screen printer lists", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![5]).toEqual({
       receiptPrinterIds: ["pr2", "pr1"],
       paymentSlipPrinterIds: ["pr3"],
     });
@@ -1316,7 +1256,7 @@ describe("device-profiles-screen kitchen screens", () => {
     toggle(el, "profile-pass-monitor-zone-z1", false);
     await flush(el);
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: ["z2"] } },
     });
   });
@@ -1327,7 +1267,7 @@ describe("device-profiles-screen kitchen screens", () => {
     toggle(el, "profile-pass-screen", true);
     await flush(el);
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1", "s2"], zoneIds: null },
         pass: { stationIds: null, zoneIds: null },
@@ -1343,7 +1283,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     expect(sw(el, "profile-pass-monitor-zone-z2")).toBeNull();
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: null, zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: null },
@@ -1357,7 +1297,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     expect(sw(el, "profile-station-screen-every-station")).toBeNull();
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] } },
     });
   });
@@ -1366,7 +1306,7 @@ describe("device-profiles-screen kitchen screens", () => {
     const { api, el } = await edit(kitchen, stored);
     rename(el);
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toHaveLength(7);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toHaveLength(6);
   });
 
   it("opened before the kitchen screens' first live read arrives, still saves from what the profile stores", async () => {
@@ -1379,7 +1319,7 @@ describe("device-profiles-screen kitchen screens", () => {
     toggle(el, "profile-station-screen-station-s2", true);
     await flush(el);
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1", "s2"], zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: ["z2", "z4"] },
@@ -1406,7 +1346,7 @@ describe("device-profiles-screen kitchen screens", () => {
     toggle(el, "cap-show-expo", false);
     await flush(el);
     await save(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
       ...ORDERING,
       kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: null } },
     });
@@ -1428,7 +1368,7 @@ describe("device-profiles-screen kitchen screens", () => {
     toggle(el, "profile-station-screen-station-s3", false);
     await flush(el);
     await save(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
       kitchenScreens: { station: { stationIds: ["s1"], zoneIds: null } },
     });
   });
@@ -1623,7 +1563,7 @@ describe("device-profiles-screen kitchen screens", () => {
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]).toEqual([
       "p2",
       "Renamed",
-      null,
+
       [],
       "kds",
       null,
@@ -1643,7 +1583,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p2");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1"], zoneIds: null },
         pass: { stationIds: [], zoneIds: null },
@@ -1664,14 +1604,14 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toMatchObject({
       kitchenScreens: {
         station: { stationIds: [], zoneIds: null },
         pass: { stationIds: null, zoneIds: [] },
       },
     });
     expect(
-      vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]!.kitchenScreens!.pass_monitor,
+      vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]!.kitchenScreens!.pass_monitor,
     ).toEqual({ stationIds: [], zoneIds: null });
   });
 
@@ -1685,7 +1625,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toMatchObject({
       kitchenScreens: { pass_monitor: { stationIds: ["s2"], zoneIds: ["z1"] } },
     });
   });
@@ -1729,7 +1669,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     return { api, el };
   }
 
-  const extras = (api: DashboardApi) => vi.mocked(api.updateDeviceProfile).mock.calls[0]![7];
+  const extras = (api: DashboardApi) => vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
 
   it("keeps a stored zone switched off since when a save changes only the name", async () => {
     const { api, el } = await openEdit({
@@ -1863,7 +1803,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(q(el, "profile-starting-zone")!.required).toBe(true);
     expect(options(el, "profile-starting-zone")).toEqual(["z1", "z2"]);
     await save(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual(ORDERING);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual(ORDERING);
   });
 
   it("asks for a department when the venue has several, beside the field and at the bottom, and sends nothing until one is chosen", async () => {
@@ -1890,7 +1830,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(bottom(el)).toBeNull();
     expect(saveButton(el).hasAttribute("disabled")).toBe(false);
     await save(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
       departmentId: "d2",
       allowedZoneIds: null,
       startingZoneId: "z3",
@@ -2021,7 +1961,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(q(el, "profile-roles")).toBeNull();
     expect(q(el, "profile-starting-screen")).toBeNull();
     await save(el);
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![3]).toEqual([
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![2]).toEqual([
       "act-as-kds",
       "take-orders",
       "prepare-orders",
@@ -2224,7 +2164,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     q(el, "duplicate-p1")!.click();
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
       departmentId: "d1",
       allowedZoneIds: ["z1"],
       startingZoneId: "z1",
@@ -2253,7 +2193,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       q(el, "duplicate-p1")!.click();
       await flush(el);
       expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toBeUndefined();
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toBeUndefined();
     },
   );
 
@@ -2347,7 +2287,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     q(el, "duplicate-p1")!.click();
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
       departmentId: "d1",
       allowedZoneIds: ["z2"],
       startingZoneId: "z2",
@@ -2449,7 +2389,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
   }
 
   function savedExtras(api: DashboardApi) {
-    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![7];
+    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
   }
 
   it("offers each list's own printers as its default, None first, and shows the stored default", async () => {
@@ -2665,7 +2605,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       await flush(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
       await flush(el);
-      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toMatchObject({
         invoicePrinterIds: ["pg3", "pr2"],
         invoicePrinterDefaultId: "pg3",
       });
@@ -3071,7 +3011,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     });
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toMatchObject({
       cashDrawerPrinterIds: ["pr1"],
     });
   });
@@ -3168,7 +3108,7 @@ for (const locale of ["en", "es"]) {
         expect(api.updateDeviceProfile).toHaveBeenCalledWith(
           "p1",
           "Front counter",
-          "c1",
+
           ["integrated-card-payment", "open-cash-drawer"],
           "phone-portrait",
           150,
@@ -3411,7 +3351,7 @@ it("service deletion empty zone bound survives native unrelated save and actual 
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await vi.waitFor(() => expect(api.updateDeviceProfile).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toBeUndefined();
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toBeUndefined();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=duplicate-p2]")).not.toBeNull(),
     );
@@ -3420,7 +3360,7 @@ it("service deletion empty zone bound survives native unrelated save and actual 
     expect(writes[0]![0]).toBe("/management-api/device-profiles/p2/copy");
     expect(writes[0]![1]).toEqual({
       name: "Kitchen (copy)",
-      canvasId: null,
+
       capabilities: [],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
@@ -3533,4 +3473,28 @@ it("scope opening keeps a newer zone snapshot after the held profile read", asyn
   } finally {
     setLocale(before);
   }
+});
+
+describe("A182 canvas retirement", () => {
+  it("loads profiles and edits their name without reading or selecting a canvas", async () => {
+    const listCanvases = vi.fn(async () => []);
+    const api = Object.assign(stubApi(), { listCanvases });
+    const el = await mount(api);
+    expect(listCanvases).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=profile-canvas]")).toBeNull();
+    rename(el, "Fixed counter");
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await vi.waitFor(() => expect(api.updateDeviceProfile).toHaveBeenCalled());
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]!.slice(0, 6)).toEqual([
+      "p1",
+      "Fixed counter",
+      ["integrated-card-payment", "open-cash-drawer"],
+      "till",
+      null,
+      NO_PRINTERS,
+    ]);
+  });
 });

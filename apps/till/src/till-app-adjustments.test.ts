@@ -15,7 +15,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   AdjustmentCommand,
   AdjustmentPreview,
@@ -134,23 +134,7 @@ const mistake: AdjustmentReason = {
   noteRequired: true,
 };
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
-    },
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 24,
-      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -164,7 +148,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["print-receipt"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -284,11 +268,8 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
-const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
-const floor = (el: TillApp) =>
-  el
-    .shadowRoot!.querySelector<HTMLElement>("till-card-grid")!
-    .shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
+const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
+const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
@@ -305,7 +286,7 @@ async function openMesa4(el: TillApp): Promise<TillTableOrderScreen> {
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-  emit(shell(el), "tab-select", { key: "floor" });
+  emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
   emit(floor(el), "open-table", { tableId: "t4", seated: true });
   await flush(el);

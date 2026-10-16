@@ -1488,6 +1488,18 @@ writes one at top level — and its descriptor's `requires` must name it. Cost: 
 graph was derived from `REFERENCES` alone and missed two edges made by triggers ON another module's
 tables, caught by hand in review.
 
+### Retiring configuration tables also retires their export format
+
+A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
+includes that table key, even when it has no rows. With the format left unchanged, the real setup
+route refused both empty and populated canvas lists as `setup.request_invalid` on `tables`.
+Format 3 now refuses those older files as `setup.configuration_outdated`, before replacing staged
+files. Current exports still round-trip; future formats keep their version refusal. The cases in
+`apps/server/src/configuration-import.test.ts` cover both old canvas lists and retained staging
+files; `configuration-transfer.test.ts` retains the receipt-choice round-trip and pins format 3.
+No old settings are converted. Cost: the whole-branch run-it review found the generic refusal
+while checking this reset-only release.
+
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
 A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
@@ -1983,13 +1995,17 @@ naming no parent reports the same words under 787 (both driven in
 words on one layer, and it would also accept a trigger that raised exactly those words (none does
 today).
 
-The layouts stores (`packages/layouts/src/canvas-store.ts`, `device-profile-store.ts`) had asked for
-1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
+The former canvas store (`canvas-store.ts`) and the profile store
+(`packages/layouts/src/device-profile-store.ts`) had asked for 1811 alone. They gave the right answer only because one trigger sat on the device-profile path,
 `device_profile_form_factor_locked`, whose meaning matched `device_profile.in_use`. That store now
 matches it by its own words (`FORM_FACTOR_REFUSAL`, `packages/db/src/trigger-refusals.ts`).
 
 Cost: the two layouts stores asked for the code alone, so a second refusing trigger on either path
 would have been reported as `canvas.in_use` or `device_profile.in_use`.
+
+2026-10-16: A182 part 2 retires the canvas store and its foreign key. The remaining profile store
+keeps the named form-factor trigger refusal and incoming RESTRICT refusal; it rethrows other
+foreign-key errors without attributing them to a canvas.
 
 ## One process per venue folder
 

@@ -11527,3 +11527,33 @@ it.each(
     expect(getComputedStyle(icon).color).toBe(getComputedStyle(button).color);
   },
 );
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK retained menu Home page $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      const el = await mount(api(), HOME_PATH, theme);
+      await expect.poll(() => q(el, 'wt-slider[name="home-columns"]')).not.toBeNull();
+      await expect.poll(() => q(el, "dashboard-device-home-preview")).not.toBeNull();
+      expect(window.innerWidth).toBe(width);
+      await page.screenshot({
+        path: `__screenshots__/a182-menu-home/${locale}-${theme}-${width}.png`,
+      });
+      q(el, "dashboard-device-home-preview")!.scrollIntoView();
+      await page.screenshot({
+        path: `__screenshots__/a182-menu-home/${locale}-${theme}-${width}-bottom.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

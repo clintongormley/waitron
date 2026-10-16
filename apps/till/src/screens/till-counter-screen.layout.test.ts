@@ -2,7 +2,6 @@ import { afterEach, expect, it, describe } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TabDef } from "../layout.js";
 import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -11,8 +10,8 @@ import {
   expectNoA11yViolations,
 } from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
-import "../widgets/tab-shell.js";
-import type { TillTabShell } from "../widgets/tab-shell.js";
+import "../widgets/till-shell.js";
+import type { TillShell } from "../widgets/till-shell.js";
 import indexHtml from "../../index.html?raw";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
@@ -31,19 +30,6 @@ afterEach(async () => {
   pageStyle = undefined;
   await page.viewport(...DEFAULT_FRAME);
 });
-
-/** The till's default Counter tab (`packages/layouts/src/default-canvases.ts`). */
-const counterTab: TabDef = {
-  key: "counter",
-  title: "Counter",
-  columns: 12,
-  cards: [
-    { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-    { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-    { type: "total", colSpan: 4, rowSpan: 1, config: {} },
-    { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-  ],
-};
 
 function product(key: string, name: string, unitPrice: string): TillProduct {
   return {
@@ -108,7 +94,6 @@ async function mountCounter(width: number, height: number, croquetas = "15"): Pr
   pageStyle.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
   document.head.append(pageStyle);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
-    counterTab,
     store,
     products: [cafe, croquetasDish],
     menus,
@@ -116,11 +101,7 @@ async function mountCounter(width: number, height: number, croquetas = "15"): Pr
     makeAtStations: stations,
     operatorName: "Ana",
   });
-  const grid = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-    "till-card-grid",
-  )!;
-  await grid.updateComplete;
-  return grid;
+  return el;
 }
 
 function inShadow(host: Element | null | undefined, selector: string): HTMLElement {
@@ -263,8 +244,7 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
       "keeps total and payment controls visible while a long basket scrolls at %i × %i",
       async (width, height) => {
         const grid = await mountCounter(width, height);
-        const screen = grid.getRootNode() as ShadowRoot;
-        const counter = screen.host as TillCounterScreen;
+        const counter = grid as TillCounterScreen;
         setLocale(locale);
         counter.embedded = true;
         counter.serviceZones = [
@@ -288,13 +268,13 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
           { ...cafe, diet: { vegan: "yes", vegetarian: "yes", contains: [] } },
           croquetasDish,
         ];
-        const { el: shell, host } = await mountWidget<TillTabShell>(
-          "till-tab-shell",
+        const { el: shell, host } = await mountWidget<TillShell>(
+          "till-shell",
           {
-            tabs: [counterTab, { ...counterTab, key: "floor", title: "Floor", cards: [] }],
+            formFactor: "till",
             transferAvailable: true,
             canSwitchProfile: true,
-            activeTabKey: "counter",
+            activeScreen: "counter",
             operatorName: "Administradora",
             affordances: ["station", "expo", "schedule", "find-bill"],
           },
@@ -343,51 +323,10 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
   });
 });
 
-it.each([
-  {
-    name: "reordered cards",
-    cards: [counterTab.cards[1]!, counterTab.cards[0]!, counterTab.cards[2]!, counterTab.cards[3]!],
-  },
-  {
-    name: "payment before total",
-    cards: [counterTab.cards[0]!, counterTab.cards[1]!, counterTab.cards[3]!, counterTab.cards[2]!],
-  },
-  {
-    name: "a menu narrower than its configured row",
-    cards: [{ ...counterTab.cards[0]!, colSpan: 7 }, ...counterTab.cards.slice(1)],
-  },
-  {
-    name: "a wider total",
-    cards: counterTab.cards.map((card) => (card.type === "total" ? { ...card, colSpan: 5 } : card)),
-  },
-  {
-    name: "a wider payment card",
-    cards: counterTab.cards.map((card) =>
-      card.type === "tender-pay" ? { ...card, colSpan: 5 } : card,
-    ),
-  },
-  { name: "an extra total card", cards: [...counterTab.cards, counterTab.cards[2]!] },
-])("preserves configured row spans for $name", async ({ cards }) => {
+it("keeps a usable basket and payment controls when many orders are held", async () => {
   const grid = await mountCounter(1280, 800);
-  const screen = (grid.getRootNode() as ShadowRoot).host as TillCounterScreen;
-  screen.counterTab = { ...counterTab, cards };
-  await screen.updateComplete;
-  await (grid as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  const basket = grid.shadowRoot!.querySelector("till-basket")!;
-  expect(getComputedStyle(basket.parentElement!).gridRowStart).toBe("span 4");
-});
-
-it("keeps a usable basket and payment controls when the default canvas has many held orders", async () => {
-  const grid = await mountCounter(1280, 800);
-  const counter = (grid.getRootNode() as ShadowRoot).host as TillCounterScreen;
+  const counter = grid as TillCounterScreen;
   counter.embedded = true;
-  counter.counterTab = {
-    ...counterTab,
-    cards: [
-      ...counterTab.cards,
-      { type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] },
-    ],
-  };
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
     id: `held-${i}`,
     orderNumber: i + 1,
@@ -400,9 +339,9 @@ it("keeps a usable basket and payment controls when the default canvas has many 
     openedAt: "2026-10-08T12:00:00.000Z",
     signals: [],
   }));
-  const { el: shell, host } = await mountWidget<TillTabShell>("till-tab-shell", {
-    tabs: [counterTab],
-    activeTabKey: "counter",
+  const { el: shell, host } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "till",
+    activeScreen: "counter",
     operatorName: "Ana",
   });
   host.style.height = "752px";
@@ -512,7 +451,6 @@ it.each([390, 1280])("shows the full Spanish service-area label at %i px", async
   setLocale("es-ES");
   await page.viewport(width, 844);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
-    counterTab,
     store: new WorkingOrderStore(),
     embedded: true,
     serviceZones: [

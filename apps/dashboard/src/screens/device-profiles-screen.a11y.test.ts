@@ -5,7 +5,6 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type {
-  Canvas,
   DeviceProfile,
   DashboardApi,
   PersonSummary,
@@ -15,16 +14,15 @@ import type {
 } from "../api/client.js";
 
 /**
- * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`, `listCanvases`,
+ * Scanned in LIST and EDITOR mode. The `api` stub must resolve `listDeviceProfiles`,
  * `listPrinters` and `getDeviceProfile`, or a stray rejection pollutes the run.
  */
-const canvases: Canvas[] = [{ id: "c1", name: "Counter till", definition: {} }];
 
 const profiles: DeviceProfile[] = [
   {
     id: "p1",
     name: "Front counter",
-    canvasId: "c1",
+
     capabilities: ["integrated-card-payment"],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
@@ -107,7 +105,7 @@ function stubApi(
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
-    listCanvases: vi.fn().mockResolvedValue(canvases),
+
     listStations: vi.fn().mockResolvedValue([]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
@@ -536,3 +534,48 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await expectNoA11yViolations(host);
   });
 });
+
+const retirementLooks = (["en-GB", "es-ES"] as const).flatMap((locale) =>
+  (["light", "dark"] as const).flatMap((theme) =>
+    [390, 1280].map((width) => ({ locale, theme, width })),
+  ),
+);
+it.each(retirementLooks)(
+  "A182 LOOK profile editor $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api: stubApi() },
+        theme,
+      );
+      host.style.height = "900px";
+      host.style.overflow = "auto";
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!);
+      await flush(el);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=profile-save]"))
+        .not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=profile-name]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[name=canvasId]")).toBeNull();
+      expect(window.innerWidth).toBe(width);
+      expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+      await page.screenshot({
+        fullPage: false,
+        path: `__screenshots__/a182-profile/${locale}-${theme}-${width}.png`,
+      });
+      host.scrollTop = host.scrollHeight;
+      await page.screenshot({
+        fullPage: false,
+        path: `__screenshots__/a182-profile/${locale}-${theme}-${width}-bottom.png`,
+      });
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 768);
+    }
+  },
+);

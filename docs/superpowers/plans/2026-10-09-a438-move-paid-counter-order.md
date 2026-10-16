@@ -1,5 +1,11 @@
 # A438 — "Move to station" on a paid counter order waiting for hand-over
 
+2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
+with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
+interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and
+floor-plan editing remain separate.
+
+
 Owner, 2026-10-09, during the A366 slice 4 decisions: "we will need some way of manually moving an
 order from one station to another". Backlog entry it closes: "Move to station on a paid counter
 order" (`docs/backlog.md`, till area; no detail file).

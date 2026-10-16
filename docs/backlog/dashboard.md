@@ -43,8 +43,7 @@ reading unless marked run:
   a person cannot reopen it that fast; not tested.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
-- Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
-  "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
+- Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null` fallbacks in the printers, payments,
   kitchen, backup, devices, profile, extra-list and option-list files, and a
   handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
@@ -503,9 +502,6 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
    `kitchen-screen.ts`, `service-status-screen.ts`.
-6. **The two editors** — `canvas-editor-screen.ts`. The receipt one is done: C116 rebuilt it as the Receipts page
-   (2026-10-01), which #1592 replaced with the department Edit receipt dialog,
-   `department-receipt-dialog.ts`.
 7. **Workforce** — `my-schedule-screen.ts`, `planned-actual-screen.ts`,
    `approvals-screen.ts`.
 8. **Venue operations and bookings** — `packages/venue-service/src/dashboard/` and

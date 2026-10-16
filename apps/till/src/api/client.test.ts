@@ -485,17 +485,7 @@ describe("TillApi", () => {
       fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,
-      canvas: {
-        formFactor: "till",
-        tabs: [
-          {
-            key: "counter",
-            title: "Counter",
-            columns: 12,
-            cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } }],
-          },
-        ],
-      },
+      formFactor: "till",
       capabilities: [],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));
@@ -512,8 +502,8 @@ describe("TillApi", () => {
     expect(init.body).toBeUndefined();
     expect(init.headers).toBeUndefined();
     expect(r).toEqual(info);
-    // The canvas survives the round-trip typed.
-    expect(r.canvas.tabs[0].key).toBe("counter");
+    expect(r.formFactor).toBe("till");
+    expect(r).not.toHaveProperty("canvas");
     expect(r).not.toHaveProperty("receipt");
     expect(r).not.toHaveProperty("venueAddress");
   });

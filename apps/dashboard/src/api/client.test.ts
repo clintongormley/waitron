@@ -2097,7 +2097,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const stored = {
       id: "p9",
       name: "Counter",
-      canvasId: "c1",
+
       capabilities: ["open-cash-drawer"],
       formFactor: "till",
       inactivityTimeoutSeconds: 300,
@@ -2105,7 +2105,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300, {
+      await api.createDeviceProfile("Counter", ["open-cash-drawer"], "till", 300, {
         receiptPrinterIds: ["pr2", "pr1"],
         paymentSlipPrinterIds: ["pr3"],
       }),
@@ -2116,7 +2116,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         name: "Counter",
-        canvasId: "c1",
+
         capabilities: ["open-cash-drawer"],
         formFactor: "till",
         inactivityTimeoutSeconds: 300,
@@ -2130,7 +2130,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const stored = {
       id: "p1",
       name: "Kitchen",
-      canvasId: null,
+
       capabilities: ["act-as-kds"],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
@@ -2138,7 +2138,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null, {
+      await api.updateDeviceProfile("p1", "Kitchen", ["act-as-kds"], "kds", null, {
         receiptPrinterIds: [],
         paymentSlipPrinterIds: ["pr1"],
       }),
@@ -2149,7 +2149,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         name: "Kitchen",
-        canvasId: null,
+
         capabilities: ["act-as-kds"],
         formFactor: "kds",
         inactivityTimeoutSeconds: null,
@@ -2165,7 +2165,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const printers = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
     await api.createDeviceProfile(
       "Terrace",
-      null,
+
       ["take-orders"],
       "phone-portrait",
       null,
@@ -2179,7 +2179,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         startingScreen: "show-schedule",
       },
     );
-    await api.updateDeviceProfile("p1", "Terrace", null, [], "phone-portrait", null, printers, {
+    await api.updateDeviceProfile("p1", "Terrace", [], "phone-portrait", null, printers, {
       startingScreen: null,
     });
     const bodies = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).map(([, init]) =>
@@ -2188,7 +2188,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     expect(bodies).toEqual([
       {
         name: "Terrace",
-        canvasId: null,
+
         capabilities: ["take-orders"],
         formFactor: "phone-portrait",
         inactivityTimeoutSeconds: null,
@@ -2203,7 +2203,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       },
       {
         name: "Terrace",
-        canvasId: null,
+
         capabilities: [],
         formFactor: "phone-portrait",
         inactivityTimeoutSeconds: null,
@@ -2313,69 +2313,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       .mockResolvedValue(jsonResponse({ error: { code: "locale.unsupported" } }, false, 422));
     const api = new DashboardApi("", fetchImpl);
     await expect(api.putLocale("xx-XX")).rejects.toMatchObject({ code: "locale.unsupported" });
-  });
-});
-
-describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
-  it("getCanvas GETs the canvas by id", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      jsonResponse({
-        id: "c1",
-        name: "Till",
-        definition: { formFactor: "till", tabs: [] },
-      }),
-    );
-    const api = new DashboardApi("", fetchImpl);
-    const c = await api.getCanvas("c1");
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/canvases/c1",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-    expect(c.id).toBe("c1");
-  });
-  it("createCanvas POSTs name+definition and returns the id", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "c9" }, true, 201));
-    const api = new DashboardApi("", fetchImpl);
-    const def = { formFactor: "till", tabs: [] };
-    const r = await api.createCanvas("New", def);
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/canvases",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ name: "New", definition: def }),
-      }),
-    );
-    expect(r.id).toBe("c9");
-  });
-  it("updateCanvas PUTs and resolves void on 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.updateCanvas("c1", "N", { formFactor: "till", tabs: [] }),
-    ).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/canvases/c1",
-      expect.objectContaining({ method: "PUT" }),
-    );
-  });
-  it("deleteCanvas DELETEs and resolves void on 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.deleteCanvas("c1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/canvases/c1",
-      expect.objectContaining({ method: "DELETE" }),
-    );
-  });
-  it("rejects with the server code on a non-2xx", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "canvas.name_taken" } }, false, 409));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.createCanvas("Dup", {})).rejects.toEqual({
-      code: "canvas.name_taken",
-      status: 409,
-    });
   });
 });
 

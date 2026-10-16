@@ -57,7 +57,7 @@ their full text.
   section the server held shows its lines greyed with no fire button (`#fireAction` in
   `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
   offline-consent toggle cannot appear; `ReaderOption.online` is never set outside tests;
-  `card-grid.ts` passes a `.canExitToCounter=${false}` that `embedded` already makes irrelevant;
+  the fixed handheld mount and table screen still need their redundant exit configuration audited;
   the tab shell and the supervisor dialog emit events not named `wt-*` (CLAUDE.md §3; not checked
   whether the rule reaches till widgets).
 
@@ -67,7 +67,7 @@ their full text.
   the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
   `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
   Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
-  screen's own tests; the floor screen's only mount (`widgets/card-grid.ts`) passes `embedded` and
+  screen's own tests; its fixed mount passes `embedded` and
   `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
   test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
   so a device cookie revoked mid-session raises nothing until the next connect. The screens' `css`
@@ -131,10 +131,11 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
-## Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render its screen
+<a id="five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen"></a>
 
-**Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
-its screen — OPEN (found 2026-09-25, review of PR #641).**
+## Five till handlers still leave a failed list refresh unhandled
+
+**Five till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
 
 - `#onLoggedIn` awaits `#refreshHeldOrders()` and then `#refreshStationQueue()` outside any `try`,
   and the `logged-in` listener in `render` calls it with `void`, so a failed held-list read at login
@@ -147,16 +148,10 @@ its screen — OPEN (found 2026-09-25, review of PR #641).**
   the discard handler leaves uncaught. All four refresh on both paths, after a success and after a
   failure. Retrieve differs in that it writes nothing, so an "X succeeded, but…" message does not
   fit it.
-- The two older cases in `apps/till/src/till-app.a11y.test.ts` titled "…on the composed counter
-  screen…" (about lines 128 and 142) do not render the screen their titles name. Their `getTill`
-  returns no `canvas`, and the till enters its shell only when it has one (`#inShell`,
-  `apps/till/src/till-app.ts`), so in both themes they scan the lock screen (found with a temporary
-  assertion on menus Task 9's branch; not re-run on `main`).
 
 **Next action:** decide whether discard, advance and mark-collected go through `#refreshAfterWrite`
 with their own "X succeeded, but…" strings, and what login and retrieve show when their refresh
-fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
-scan.
+fails.
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
@@ -198,6 +193,9 @@ screen is designed.
   - **Open, decided as built:** a change in the pending-transfer count alone never brings items
     back onto the bar, so when the count shrinks or goes away, items can stay in More although they
     would now fit, until the next resize or other change refits the bar.
+  - The header implementation and suites now live in `widgets/till-shell.ts` and
+    `widgets/till-shell.test.ts`. The measurements and deletion controls below refer to their
+    earlier source; re-run each control against the extracted shell before relying on it.
   - **Open: the timing-variation header tests spend most of their time waiting for frames.** The "fits as a fresh bar does when
     …" cases in `apps/till/src/widgets/tab-shell.test.ts` (added by #1435) took 7.9–15.7 s on the
     owner's Mac on 2026-10-10 while other lanes ran, and the "name grows, then the transfer count
@@ -814,8 +812,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
     does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
     says, so B16 left it.
-  - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
-    card shows no waiting list.
   - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the
     wrong total in the basket.** The waiting row shows what collecting charges (the invoice net
     of its credit notes, `readIssuedSales` in `apps/server/src/sale-due.ts`), but Pay loads the
@@ -1072,67 +1068,12 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 ## Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01)
 
-- **Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01).**
-  The owner decided on 2026-09-20 to ship well-designed built-in screens instead of a screen
-  designer that venues drag and resize; customisation beyond that, if it is ever needed, means
-  screens written in code that plug in
-  ([service design §11](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md)).
-  Nothing has carried that out. Every device's screen is still built from a CANVAS: a stored list
-  of tabs, each tab a grid of cards, chosen per device profile. Ranked second under _What to work on next_ (owner,
-  2026-10-01). What exists today:
-  - A default canvas per form factor, in code (`packages/layouts/src/default-canvases.ts`): the
-    till gets a Counter tab (product grid, basket, total, pay, held orders) and a Floor tab; a phone
-    or tablet handheld gets Floor and Order; a kitchen screen gets one Kitchen tab. The card types
-    are `CARD_TYPES` (`packages/layouts/src/canvas.ts`).
-  - Stored canvases in the `canvases` table (`packages/db/src/schema/canvases.ts`); a device
-    profile may name one (`device_profiles.canvas_id`), and otherwise gets its form factor's
-    default. The till's start-up answer carries the chosen canvas (`apps/server/src/till-api.ts`),
-    the till shows its tabs only once it has one (`apps/till/src/till-app.ts`), and it draws each
-    tab's cards in `apps/till/src/widgets/card-grid.ts`.
-  - The dashboard's canvas editor (`apps/dashboard/src/screens/canvas-editor-screen.ts` and
-    `canvas-editor/`), the canvas picker on the device profiles screen, the
-    `/management-api/canvases` routes, the `listCanvases` and `getCanvas` live queries, and the
-    `canvas.*` error codes (`packages/layouts/src/errors.ts`).
-  - A canvas may carry a theme override (`CanvasDef.theme`); a grep of `apps/` for `.theme` finds
-    nothing that reads it.
-
-  One fault already traced to canvases: the till draws each tab's name straight from the canvas's
-  stored `title` (`apps/till/src/widgets/tab-shell.ts`), and the defaults store English titles,
-  which is why "Counter", "Floor" and "Order" stay in English in Spanish (one of the screen faults
-  in the entry above).
-  **2026-10-08:** A379 translates the standard key/title pairs at render time while preserving
-  renamed and custom titles.
-
-  The work, each part its own brainstorm, spec and plan:
-  1. **Design the screens for each kind of device** — the till at the counter, the handheld (phone
-     and tablet), the kitchen screen and the pass — starting from the till screens that already
-     exist (`apps/till/src/screens/`) and [ui-review.md](../ui-review.md)'s walk of the three displays.
-     Decide what each one shows, how it fits narrow and wide screens (a responsive grid inside a
-     screen is fine, §11), and what a venue may still choose per device, such as its kitchen
-     station — set on the device profile, not drawn in an editor. _(2026-10-06: W93 took the home
-     layout out of the profile: a menu's Device Home Page has one display per kind of device, and
-     the device's form factor picks it.)_
-  2. **Retire canvases** once those screens replace them: the till's canvas tabs and card grid, the
-     `canvases` table and `device_profiles.canvas_id`, the canvas code in `packages/layouts`, the
-     dashboard's editor, its navigation entry and the profile screen's picker, the routes, the live
-     queries, the error codes and their translations. No data is carried over (§3's pre-live rule).
-     Trace every consumer before deleting; the tests that build a canvas for the till go too.
-     **2026-10-16: retirement design and plan reviewed; implementation remains open.** The owner
-     approved the exact two schema-guard inventory deletions through the watcher that day. [Retirement design](../superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md),
-     [implementation plan](../superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
-
-  **Separate, and staying** (§11): a menu's Device Home Page and its Handheld and Till displays
-  (how its shortcuts are arranged), receipt
-  configuration, and the floor-plan editor.
-
-  **Owner, 2026-10-08:** "delete the canvases functionality. we provide prebuilt screens with
-  configuration settings." **Decided the same day: delete now**, before the redesign. Today's
-  default canvases (`packages/layouts/src/default-canvases.ts`) become the fixed built-in screens
-  for each kind of device, and part 2 below runs first; part 1's redesign follows, starting from
-  those fixed screens rather than from canvases.
-
-  **Until this lands, build no new feature as a canvas card or card setting** — put it in the
-  screen itself. Slice 3d already kept its kitchen-group choice off the `expo` card (its P15).
+- **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
+  Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
+  Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
+  Counter's owner-approved redesign remains A738–A740. The handheld, kitchen screen and pass need
+  their own designs. Menu Device Home Page, receipt configuration and the floor-plan editor stay
+  separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
 
@@ -1399,7 +1340,6 @@ as "no longer on this menu". A shortcut whose target a newly read version lacks 
 with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
 shortcut disappears.
 
-
 ## The owner decided a split check gets no Void; the server now allows one
 
 **The owner decided a split check gets no Void; the server now allows one.** Since table-actions
@@ -1609,6 +1549,17 @@ A working order's number comes from one counter per node that starts at 1 and on
 (`allocateOrderNumber`, `packages/db/src/allocate-order-number.ts`). It does not restart each
 business day: staff search for orders by number, so a number must stay unique.
 
+### Fixed screens instead of a screen designer (A182)
+
+Owner, 2026-09-20: ship screens written in code rather than a designer venues drag and resize
+([service design §11](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#11-screen-reuse-and-deferred-work)).
+Owner, 2026-10-08: "delete the canvases functionality. we provide prebuilt screens with
+configuration settings." Delete the designer before redesigning its default workflows. Menu
+Device Home Page and its Handheld/Till displays, receipt configuration and the floor-plan editor
+remain separate. A182 part 2 implements the retirement; part 1's redesign remains open.
+[Retirement design](../superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md) and
+[plan](../superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
+
 ### Joined-table seat suggestions (owner, 2026-10-16; A747)
 
 When you join tables, the Seats field starts with their total so you can accept it or change it.
@@ -1619,7 +1570,6 @@ stay within 1–999; if any contributing count is unknown, the field stays empty
 suggestion keeps your value when the table selection changes. Accepting a suggestion leaves no
 unsaved draft. The existing server refusal before the till opens Seats remains A666's decision.
 
-
 ### Touch gestures in the floor plan editor (owner, 2026-10-14; A673)
 
 On a touch screen, tap a table to select it before dragging it. A finger on an unselected table
@@ -1627,7 +1577,6 @@ moves the view, so you can pan a crowded plan without moving a table. Two finger
 A mouse can drag a table straight away. The implementation uses the same `Gestures` helper as
 the till's floor map. The current contract is in
 [design-system.md](../developers/design-system.md).
-
 
 ### A671. The floor plan editor's side panel: less text, nothing jumps
 
@@ -1642,7 +1591,6 @@ Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selec
 [a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
 handles belong to A672. The current contract is in
 [design-system.md](../developers/design-system.md#departments-and-zones).
-
 
 
 - **A guest count typed in the Guests or Split a table window, or a party name typed in the Name
@@ -1896,6 +1844,10 @@ post-invoice Refund action remains Part 2. The approved page contract is:
   table keeps loading everything.
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
+
+2026-10-16: A182 part 2 replaces the authored screens described in this design's source snapshot
+with [fixed device screens](../developers/design-system.md#fixed-device-screens). Start A738–A740
+from those mounts; the earlier canvas paths below remain part of the original design record.
 
 Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
 boards are in [mockups/a737-a740-till-counter-redesign/](mockups/a737-a740-till-counter-redesign/):

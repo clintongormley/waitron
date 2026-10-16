@@ -7,7 +7,7 @@ import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import type { ThemeOverride } from "./canvas.js";
+import type { ThemeOverride } from "./theme.js";
 import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });

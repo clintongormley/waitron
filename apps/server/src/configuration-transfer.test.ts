@@ -195,7 +195,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 2,
+  version: 3,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -2270,6 +2270,9 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     new Date("2026-10-04T12:00:00Z"),
     versions,
   );
+  expect(transferred.tables).not.toHaveProperty("canvases");
+  for (const profile of transferred.tables.device_profiles!)
+    expect(profile).not.toHaveProperty("canvas_id");
   await applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -4002,7 +4005,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
   },
 );
 
-it("transfers department receipt choices and explicit or inherited zone choices in format 2", async () => {
+it("transfers department receipt choices and explicit or inherited zone choices in format 3", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -4042,7 +4045,7 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(2);
+  expect(exported.version).toBe(3);
   expect(exported.venue.location).not.toHaveProperty("receiptPrintMode");
   expect(exported.venue.location).not.toHaveProperty("drawerOpenPolicy");
   const decoded = decodeConfigurationBundle(

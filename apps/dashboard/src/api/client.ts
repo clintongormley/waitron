@@ -766,12 +766,6 @@ export interface RoleEquipment {
   resolved: { id: string; name: string; available: boolean } | null;
 }
 
-export interface Canvas {
-  id: string;
-  name: string;
-  definition: unknown;
-}
-
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
 /** One person's own rule on a profile: `admitted` false keeps them out whatever their role. */
@@ -790,11 +784,10 @@ export interface ProfileServiceScope {
 export interface DeviceProfile extends ProfileServiceScope {
   id: string;
   name: string;
-  canvasId: string | null;
   capabilities: string[];
   formFactor: FormFactor;
   inactivityTimeoutSeconds: number | null;
-  /** `null` opens the till on its canvas's first tab. */
+  /** `null` selects the fixed home screen. */
   startingScreen: string | null;
   receiptPrinterIds: string[];
   paymentSlipPrinterIds: string[];
@@ -3310,27 +3303,6 @@ export class DashboardApi {
     );
   }
 
-  listCanvases(): Promise<Canvas[]> {
-    return this.#request<{ canvases: Canvas[] }>("/management-api/canvases", "GET").then(
-      (r) => r.canvases,
-    );
-  }
-
-  getCanvas(id: string): Promise<Canvas> {
-    return this.#request<Canvas>(`/management-api/canvases/${id}`, "GET");
-  }
-  createCanvas(name: string, definition: unknown): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/canvases", "POST", { name, definition });
-  }
-  updateCanvas(id: string, name: string, definition: unknown): Promise<void> {
-    return this.#request<void>(`/management-api/canvases/${id}`, "PUT", { name, definition });
-  }
-  deleteCanvas(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/canvases/${id}`, "DELETE");
-  }
-
-  // ── Device profiles ──────────────────────────────────────────────────────────────────────────────
-
   listDeviceProfiles(): Promise<DeviceProfile[]> {
     return this.#request<{ deviceProfiles: DeviceProfile[] }>(
       "/management-api/device-profiles",
@@ -3352,7 +3324,6 @@ export class DashboardApi {
 
   createDeviceProfile(
     name: string,
-    canvasId: string | null,
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
@@ -3362,7 +3333,6 @@ export class DashboardApi {
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
-      canvasId,
       capabilities,
       formFactor,
       inactivityTimeoutSeconds,
@@ -3374,22 +3344,15 @@ export class DashboardApi {
 
   copyDeviceProfile(
     sourceId: string,
-    ...[
-      name,
-      canvasId,
-      capabilities,
-      formFactor,
-      inactivityTimeoutSeconds,
-      printerLists,
-      extras,
-    ]: Parameters<DashboardApi["createDeviceProfile"]>
+    ...[name, capabilities, formFactor, inactivityTimeoutSeconds, printerLists, extras]: Parameters<
+      DashboardApi["createDeviceProfile"]
+    >
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(
       `/management-api/device-profiles/${encodeURIComponent(sourceId)}/copy`,
       "POST",
       {
         name,
-        canvasId,
         capabilities,
         formFactor,
         inactivityTimeoutSeconds,
@@ -3403,7 +3366,6 @@ export class DashboardApi {
   updateDeviceProfile(
     id: string,
     name: string,
-    canvasId: string | null,
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
@@ -3416,7 +3378,6 @@ export class DashboardApi {
       "PUT",
       {
         name,
-        canvasId,
         capabilities,
         formFactor,
         inactivityTimeoutSeconds,

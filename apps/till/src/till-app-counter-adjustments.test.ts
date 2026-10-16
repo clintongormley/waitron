@@ -9,7 +9,7 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   AdjustmentPreview,
   AdjustmentReason,
@@ -24,20 +24,7 @@ import type {
 // Give away, Discount and Cancel on a stored counter order, through the app: the dialog is the
 // table's, and after an answer the basket is loaded again from the server (B11c).
 
-const canvas: CanvasDef = {
-  formFactor: "till",
-  tabs: [
-    {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [
-        { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-        { type: "basket", colSpan: 4, rowSpan: 6, config: {} },
-      ],
-    },
-  ],
-};
+const formFactor: FormFactor = "till";
 
 const till = {
   locale: "en",
@@ -51,7 +38,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  canvas,
+  formFactor: formFactor,
   capabilities: ["print-receipt"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
@@ -246,10 +233,7 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
-const basket = (el: TillApp) =>
-  counter(el)
-    .shadowRoot!.querySelector("till-card-grid")!
-    .shadowRoot!.querySelector<TillBasket>("till-basket")!;
+const basket = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
 const inBasket = (el: TillApp, selector: string) =>
   basket(el).shadowRoot!.querySelector<HTMLElement>(selector);
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
@@ -385,18 +369,15 @@ describe("till-app: counter station choice", () => {
 
   it("does not show a delayed Make at dialog after switching to the Floor tab", async () => {
     const read = deferred<typeof stations>();
-    const floorCanvas: CanvasDef = {
-      ...canvas,
-      tabs: [...canvas.tabs, { key: "floor", title: "Floor", columns: 12, cards: [] }],
-    };
+    const floorFormFactor: FormFactor = "till";
     const el = await retrieved({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: floorCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: floorFormFactor }),
       listStations: vi.fn().mockResolvedValue(stations),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     inBasket(el, '[data-make-at="1"]')!.click();
     await flush(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     read.resolve(stations);
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
@@ -404,21 +385,18 @@ describe("till-app: counter station choice", () => {
 
   it("does not show a delayed counter Move dialog after switching to the Floor tab", async () => {
     const read = deferred<typeof stations>();
-    const floorCanvas: CanvasDef = {
-      ...canvas,
-      tabs: [...canvas.tabs, { key: "floor", title: "Floor", columns: 12, cards: [] }],
-    };
+    const floorFormFactor: FormFactor = "till";
     const lines = listing(4);
     lines.lines[0] = { ...lines.lines[0]!, movable: true, stationId: "bar" };
     const el = await retrieved({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: floorCanvas }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: floorFormFactor }),
       listStations: vi.fn().mockResolvedValue(stations),
       getTabLines: vi.fn().mockResolvedValue(lines),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     inBasket(el, '[data-move-station="0"]')!.click();
     await flush(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
     read.resolve(stations);
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();

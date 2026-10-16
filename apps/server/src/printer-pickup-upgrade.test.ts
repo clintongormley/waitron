@@ -18,6 +18,12 @@ const journal = JSON.parse(
 };
 const index = journal.entries.findIndex((entry) => entry.tag === "0149_steep_deathbird");
 if (index < 0) throw new Error("pick-up migration is missing");
+const retirementIndex = journal.entries.findIndex((entry) =>
+  entry.tag.endsWith("_retire_canvases"),
+);
+if (retirementIndex <= index)
+  throw new Error("canvas retirement must follow the pick-up migration");
+let targetFolder: string | undefined;
 let previousFolder: string | undefined;
 afterAll(() => {
   if (previousFolder) rmSync(previousFolder, { recursive: true, force: true });
@@ -25,6 +31,15 @@ afterAll(() => {
 try {
   previousFolder = mkdtempSync(join(tmpdir(), "waitron-pickup-upgrade-"));
   cpSync(core.migrationsFolder, previousFolder, { recursive: true });
+  targetFolder = join(previousFolder, "before-canvas-retirement");
+  cpSync(core.migrationsFolder, targetFolder, { recursive: true });
+  writeFileSync(
+    join(targetFolder, "meta/_journal.json"),
+    JSON.stringify({
+      ...journal,
+      entries: journal.entries.slice(0, retirementIndex),
+    }),
+  );
   writeFileSync(
     join(previousFolder, "meta/_journal.json"),
     JSON.stringify({ ...journal, entries: journal.entries.slice(0, index) }),
@@ -39,11 +54,15 @@ const suite = useVenueDb({
   ),
 });
 
-it("upgrades populated printers without changing their settings, holder or device choices", async () => {
+it("upgrades populated printers through the pre-canvas-retirement schema without changing settings, holder or device choices", async () => {
   await seedTenant(suite.db);
   const [location] = await suite.db
     .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
+    .values({
+      name: "Bar",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+    })
     .returning({ id: locations.id });
   const profileId = randomUUID();
   const deviceId = randomUUID();
@@ -70,7 +89,7 @@ it("upgrades populated printers without changing their settings, holder or devic
   const beforeHolders = suite.db.all(sql`select * from printer_holders order by printer_id`);
   const beforeDevices = suite.db.all(sql`select * from devices order by id`);
   await installChangeFeed(suite.db, [{ table: "printers", type: "printer" }]);
-  await runMigrations(suite.db, core);
+  await runMigrations(suite.db, { ...core, migrationsFolder: targetFolder! });
   const after = suite.db.all<Record<string, unknown>>(sql`select * from printers order by id`);
   expect(
     after.map(({ pickup_roles, ...row }) => {

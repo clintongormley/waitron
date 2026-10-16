@@ -18,7 +18,6 @@ const cases = [360, 390].flatMap((width) =>
         tiles,
         theme,
         handheld: true,
-        cardColumns: undefined as number | undefined,
         wantedTracks: columns,
       })),
     ),
@@ -32,7 +31,6 @@ cases.push(
     tiles: "colours" as const,
     theme,
     handheld: false,
-    cardColumns: undefined,
     wantedTracks: 4,
   })),
 );
@@ -40,18 +38,17 @@ cases.push(
 cases.push(
   ...[360, 390].map((width) => ({
     width,
-    columns: 3,
+    columns: 6,
     tiles: "colours" as const,
     theme: "light" as const,
-    handheld: true,
-    cardColumns: 6,
+    handheld: false,
     wantedTracks: 2,
   })),
 );
 
 it.each(cases)(
-  "fits $wantedTracks columns at $width px ($tiles, $theme, handheld=$handheld, cardColumns=$cardColumns)",
-  async ({ width, columns, tiles, theme, handheld, cardColumns, wantedTracks }) => {
+  "fits $wantedTracks columns at $width px ($tiles, $theme, handheld=$handheld)",
+  async ({ width, columns, tiles, theme, handheld, wantedTracks }) => {
     const locale = currentLocale();
     setLocale("es-ES");
     try {
@@ -122,7 +119,6 @@ it.each(cases)(
           menu,
           products,
           handheld,
-          columns: cardColumns,
           store: new WorkingOrderStore(),
         },
         theme,
@@ -142,7 +138,7 @@ it.each(cases)(
       expect(grid.querySelectorAll("img")).toHaveLength(tiles === "thumbnails" ? 3 : 0);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
         const box = tile.getBoundingClientRect();
-        expect(box.width).toBeGreaterThanOrEqual(handheld && cardColumns === undefined ? 44 : 104);
+        expect(box.width).toBeGreaterThanOrEqual(handheld ? 44 : 104);
         expect(box.height).toBeGreaterThanOrEqual(44);
         for (const content of tile.querySelectorAll<HTMLElement>(
           ".name, .price, .kind, wt-icon, img",

@@ -490,24 +490,20 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("unwraps the canvas and device-profile list envelopes, and addresses one profile by id", async () => {
-    const canvases = [{ id: "cv-1", name: "Bar grid", definition: {} }];
+  it("unwraps the device-profile list envelope, and addresses one profile by id", async () => {
     const profile = { id: "dp-1", name: "Bar till" };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ canvases }))
       .mockResolvedValueOnce(jsonResponse({ deviceProfiles: [profile] }))
       .mockResolvedValueOnce(jsonResponse(profile))
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
 
-    await expect(api.listCanvases()).resolves.toEqual(canvases);
     await expect(api.listDeviceProfiles()).resolves.toEqual([profile]);
     await expect(api.getDeviceProfile("dp-1")).resolves.toEqual(profile);
     await expect(api.deleteDeviceProfile("dp-1")).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/canvases", "GET", undefined],
       ["/management-api/device-profiles", "GET", undefined],
       ["/management-api/device-profiles/dp-1", "GET", undefined],
       ["/management-api/device-profiles/dp-1", "DELETE", undefined],
@@ -1539,4 +1535,52 @@ it("requests an office printer's test page and reads its outcome passively", asy
     new Headers(init.headers).get("x-waitron-live"),
   );
   expect(live).toEqual([null, "1", "1"]);
+});
+
+it("A182 profile requests omit canvas selection and preserve the surviving argument order", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "p1" }));
+  const api = new DashboardApi("", fetchImpl);
+  const lists = { receiptPrinterIds: ["receipt"], paymentSlipPrinterIds: ["slip"] };
+  const extras = { startingScreen: "show-station" as const };
+  await api.createDeviceProfile("Counter", ["show-station"], "till", 120, lists, extras);
+  await api.copyDeviceProfile("p1", "Copy", ["show-station"], "till", 240, lists, extras);
+  await api.updateDeviceProfile("p1", "Renamed", ["show-station"], "till", 360, lists, extras);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/device-profiles",
+      "POST",
+      {
+        name: "Counter",
+        capabilities: ["show-station"],
+        formFactor: "till",
+        inactivityTimeoutSeconds: 120,
+        ...lists,
+        ...extras,
+      },
+    ],
+    [
+      "/management-api/device-profiles/p1/copy",
+      "POST",
+      {
+        name: "Copy",
+        capabilities: ["show-station"],
+        formFactor: "till",
+        inactivityTimeoutSeconds: 240,
+        ...lists,
+        ...extras,
+      },
+    ],
+    [
+      "/management-api/device-profiles/p1",
+      "PUT",
+      {
+        name: "Renamed",
+        capabilities: ["show-station"],
+        formFactor: "till",
+        inactivityTimeoutSeconds: 360,
+        ...lists,
+        ...extras,
+      },
+    ],
+  ]);
 });

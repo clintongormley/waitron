@@ -1,7 +1,7 @@
 import { nowIso, tenantThemes } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import type { ThemeOverride } from "./canvas.js";
+import type { ThemeOverride } from "./theme.js";
 import { validateThemeOverride } from "./theme.js";
 
 /**

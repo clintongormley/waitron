@@ -1,6 +1,8 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { ThemeOverride } from "./canvas.js";
+export interface ThemeOverride {
+  tokens: Record<string, string>;
+}
 
 /**
  * An allowlist, so a theme can never set an arbitrary CSS custom property. Each name must be

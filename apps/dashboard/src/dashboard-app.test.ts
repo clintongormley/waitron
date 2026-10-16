@@ -159,7 +159,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAgents: vi.fn().mockResolvedValue([]),
     listPrinters: vi.fn().mockResolvedValue([]),
     listRecentJobs: vi.fn().mockResolvedValue([]),
-    listCanvases: vi.fn().mockResolvedValue([]),
+
     getRecentLogs: vi.fn().mockResolvedValue({ lines: [] }),
     getVerbosity: vi.fn().mockResolvedValue({ level: "info", revertsAt: null }),
     setVerbosity: vi.fn().mockResolvedValue(undefined),
@@ -325,7 +325,6 @@ const NAV_SCREENS = [
   "venue-settings",
   "devices",
   "printers",
-  "canvas-editor",
   "diagnostics",
   "backup",
   "cloud",
@@ -359,7 +358,6 @@ const SCREEN_TAGS = [
   "dashboard-purchases-screen",
   "dashboard-devices-screen",
   "dashboard-printers-screen",
-  "dashboard-canvas-editor-screen",
   "dashboard-diagnostics-screen",
   "dashboard-email-screen",
 ] as const;
@@ -1983,18 +1981,6 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(screenPrinters(el)).toBeTruthy();
     expect(mountedScreens(el)).toEqual(["dashboard-printers-screen"]);
-    expect(countH1(el)).toBe(1);
-  });
-
-  it("navigates to the canvas-editor screen", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-    await flush(el);
-    expect(navCanvasEditor(el)).toBeTruthy();
-    navCanvasEditor(el)!.click();
-    await flush(el);
-    expect(screenCanvasEditor(el)).toBeTruthy();
-    expect(mountedScreens(el)).toEqual(["dashboard-canvas-editor-screen"]);
     expect(countH1(el)).toBe(1);
   });
 
@@ -7723,40 +7709,6 @@ describe("inline translation application leave paths", () => {
   );
 });
 
-it("lets the canvas parent link use the editor's own Cancel handler inside the shell", async () => {
-  history.replaceState(null, "", "/manage/canvas-editor");
-  const canvas = {
-    id: "c1",
-    name: "Counter",
-    definition: {
-      formFactor: "till",
-      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
-    },
-  };
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-    api: stubApi({ listCanvases: async () => [canvas], getCanvas: async () => canvas }),
-  });
-  await flush(el);
-  const screen = el.shadowRoot!.querySelector("dashboard-canvas-editor-screen")!;
-  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=edit-c1]")).not.toBeNull();
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("nav a")).not.toBeNull();
-  const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("nav a")!;
-  let reachedEditor = false;
-  link.addEventListener(
-    "click",
-    () => {
-      reachedEditor = true;
-    },
-    { once: true },
-  );
-  link.click();
-  expect(reachedEditor).toBe(true);
-  await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
-    .not.toBeNull();
-});
-
 describe("department list links inside dashboard capture", () => {
   async function listInDashboard() {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -8301,4 +8253,14 @@ describe("mounted public department dialogs", () => {
     expect(history.length).toBe(length);
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   });
+});
+
+it("A182 old canvas URL falls back to the role home without a canvas navigation entry", async () => {
+  history.replaceState(null, "", "/manage/canvas-editor");
+  const api = stubApi();
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  expect(navCanvasEditor(el)).toBeNull();
+  expect(screenCanvasEditor(el)).toBeNull();
+  expect(mountedScreens(el)).toEqual(["dashboard-overview-screen"]);
 });

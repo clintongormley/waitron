@@ -48,7 +48,7 @@ import type { TillEquipmentDialog } from "./widgets/equipment-dialog.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
-import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   CounterWaitingOrder,
   DeadEndAnswer,
@@ -230,35 +230,7 @@ const till = {
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
   tipsEnabled: false,
-  // Mirrors the server's default `till` canvas (`packages/layouts/src/default-canvases.ts`), plus a
-  // `prep-queue` card gated `visibleWhen: ["has-items"]` so the mode-dependent station-queue assertions
-  // below hold: Mode P never refreshes the queue (empty ⇒ the gate hides the card), Modes I/T populate
-  // it. `receipt` is deliberately omitted so the ticket receipt defaults to {}; the `receipt` suite
-  // supplies it.
-  canvas: {
-    formFactor: "till",
-    tabs: [
-      {
-        key: "counter",
-        title: "Counter",
-        columns: 12,
-        cards: [
-          { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
-          { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-          { type: "total", colSpan: 4, rowSpan: 1, config: {} },
-          { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-          { type: "held-orders", colSpan: 8, rowSpan: 2, config: {}, visibleWhen: ["has-parked"] },
-          { type: "prep-queue", colSpan: 8, rowSpan: 3, config: {}, visibleWhen: ["has-items"] },
-        ],
-      },
-      {
-        key: "floor",
-        title: "Floor",
-        columns: 24,
-        cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-      },
-    ],
-  } satisfies CanvasDef,
+  formFactor: "till",
   capabilities: [
     "print-receipt",
     "show-station",
@@ -276,23 +248,7 @@ const till = {
   simplifiedInvoiceLimit: "3000.00" as string | null,
 };
 
-const phoneCanvasDef: CanvasDef = {
-  formFactor: "phone-portrait",
-  tabs: [
-    {
-      key: "floor",
-      title: "Floor",
-      columns: 12,
-      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-    {
-      key: "order",
-      title: "Order",
-      columns: 12,
-      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-    },
-  ],
-};
+const phoneFormFactor: FormFactor = "phone-portrait";
 
 const stationScreen: ResolvedKitchenScreen = {
   kind: "station",
@@ -301,17 +257,7 @@ const stationScreen: ResolvedKitchenScreen = {
   zones: null,
 };
 
-const kdsCanvasDef: CanvasDef = {
-  formFactor: "kds",
-  tabs: [
-    {
-      key: "kitchen",
-      title: "Kitchen",
-      columns: 24,
-      cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
-    },
-  ],
-};
+const kdsFormFactor: FormFactor = "kds";
 
 const placedResult = {
   id: "wo-1",
@@ -609,19 +555,16 @@ const overrideDialog = (el: TillApp) =>
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 const shell = (el: TillApp) =>
-  el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
-/** The card grid mounted directly as a non-counter TAB's body — the floor/order/kitchen tabs
- * render through it. (The counter tab's body is the counter screen, whose OWN grid `counterGrid` reaches;
- * this one is only present when a non-counter tab is active, so it is unambiguous.) */
-const activeTabGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
-const selectTab = (el: TillApp, key: string): void => emit(shell(el)!, "tab-select", { key });
-/** The floor screen — on the shell it renders inside the active `floor` tab's card grid (a `floor-plan`
- * card), so pierce that grid's shadow root. `null` off the floor tab. */
+  el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
+
+const activeTabGrid = (el: TillApp) => counter(el) ?? el;
+const selectTab = (el: TillApp, key: string): void =>
+  emit(shell(el)!, "screen-select", { screen: key });
+
 const floor = (el: TillApp) =>
   (activeTabGrid(el)?.shadowRoot?.querySelector("till-floor-screen") as TillFloorScreen | null) ??
   null;
-/** The station screen — a till reaches it as a `drill` overlay (app shadow); a KDS canvas mounts it as
- * its `kitchen` tab's `kds-board` card (inside the active tab's card grid). Look in both. */
+
 const station = (el: TillApp) =>
   (el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen") ??
     (activeTabGrid(el)?.shadowRoot?.querySelector(
@@ -631,24 +574,19 @@ const station = (el: TillApp) =>
 const enrolScreen = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-enrol-screen");
 const chooser = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { list?: unknown }>("till-device-chooser");
-/** The table-order screen — a TILL opens it as a `drill` (app shadow); a handheld/tablet whose canvas
- * authors an `order` tab mounts it as that tab's card (inside the active tab's card grid). Look in both. */
+
 const tableOrder = (el: TillApp) =>
   (el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
     (activeTabGrid(el)?.shadowRoot?.querySelector(
       "till-table-order-screen",
     ) as TillTableOrderScreen | null) ??
     null) as TillTableOrderScreen | null;
-/** The card grid the embedded counter screen delegates its sale body to — the sale cards render
- * inside ITS shadow root, so the pay/queue helpers pierce through it. */
-const counterGrid = (el: TillApp) =>
-  counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
+const counterBody = (el: TillApp) => counter(el);
 const tenderPay = (el: TillApp) =>
-  counterGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-/** The station-queue card inside the card grid, or `null` when the `prep-queue` card is hidden (its
- * `has-items` gate — Mode P never populates the queue, so it stays hidden). */
+  counterBody(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+
 const stationQueueWidget = (el: TillApp) =>
-  counterGrid(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
+  counterBody(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -1904,7 +1842,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
-        canvas: kdsCanvasDef,
+        formFactor: kdsFormFactor,
         capabilities: ["act-as-kds"],
       }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -1934,7 +1872,6 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.getDeviceStationScreen).toHaveBeenCalled();
     // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
-    // onto the kitchen tab, whose kds-board card mounts the station screen.
     expect(lock(el)).toBeNull();
     const s = station(el);
     expect(s).not.toBeNull();
@@ -1951,7 +1888,7 @@ describe("till-app", () => {
       }),
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: kdsCanvasDef,
+        formFactor: kdsFormFactor,
         capabilities: ["act-as-kds"],
       }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -1986,9 +1923,7 @@ describe("till-app", () => {
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
-      // A handheld boots the phone canvas (floor + order tabs); its first tab is `floor`, so login lands
-      // the waiter there.
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -2018,7 +1953,6 @@ describe("till-app", () => {
     expect(f).not.toBeNull();
     expect(f!.tables).toEqual([freeTable]);
     expect(f!.zones).toEqual([floorZone]);
-    // This phone layout has no Counter tab and no held-orders or prep-queue card, so no counter list loads.
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
@@ -2027,7 +1961,7 @@ describe("till-app", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
     async function toHandheldFloor(capabilities = till.capabilities): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor, capabilities }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -2067,9 +2001,6 @@ describe("till-app", () => {
       emit(floor(el)!, "open-table", { tableId: openTable.id, seated: openTable.hasOpenTab });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
-      // A stray back-to-counter bubbling up from the table-order subtree must not reach the counter POS.
-      // On the shell it sets the active tab to `counter`, but the phone canvas authors NO counter tab, so
-      // the shell falls back to its first tab (`floor`) — never the counter.
       emit(tableOrder(el)!, "back-to-counter");
       await flush(el);
       expect(counter(el)).toBeNull();
@@ -2077,37 +2008,17 @@ describe("till-app", () => {
     });
   });
 
-  describe("a handheld whose device profile gives it the counter", () => {
-    const floorTab = phoneCanvasDef.tabs[0]!;
-    const orderTab = phoneCanvasDef.tabs[1]!;
-    const saleCards: CanvasDef["tabs"][number]["cards"] = [
-      { type: "product-grid", colSpan: 12, rowSpan: 4, config: {} },
-      { type: "basket", colSpan: 12, rowSpan: 2, config: {} },
-      { type: "total", colSpan: 12, rowSpan: 1, config: {} },
-      { type: "tender-pay", colSpan: 12, rowSpan: 2, config: {} },
-    ];
-    const withCounterTab: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [floorTab, { key: "counter", title: "Counter", columns: 12, cards: saleCards }],
-    };
-    const withFloorCard = (type: "held-orders" | "prep-queue"): CanvasDef => ({
-      formFactor: "phone-portrait",
-      tabs: [
-        { ...floorTab, cards: [...floorTab.cards, { type, colSpan: 12, rowSpan: 2, config: {} }] },
-        orderTab,
-      ],
-    });
-    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
-    const withSaleTab: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [floorTab, { key: "sale", title: "Sale", columns: 12, cards: saleCards }],
-    };
+  describe("fixed selling screens and profile controls", () => {
+    const withCounterTab: FormFactor = "phone-portrait";
+    const withFloorCard: FormFactor = "till";
+
+    const withSaleTab: FormFactor = "phone-portrait";
     const readers = [
       { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
     ];
 
-    async function toHandheld(
-      canvas: CanvasDef,
+    async function toFixedCounter(
+      _formFactor: FormFactor,
       tillOverrides: Record<string, unknown> = {},
       overrides: Record<string, unknown> = {},
     ): Promise<TillApp> {
@@ -2116,10 +2027,8 @@ describe("till-app", () => {
           serviceMode: tillOverrides.orderFlow ?? "prepay",
           receiptPrintMode: tillOverrides.receiptPrintMode ?? "auto",
         },
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas, ...tillOverrides }),
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till", ...tillOverrides }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "till" }),
         ...overrides,
       });
       await flush(el);
@@ -2153,9 +2062,10 @@ describe("till-app", () => {
       };
     };
 
-    async function counterHome(el: TillApp): Promise<{ regions: string[]; columns: string[] }> {
-      const browser =
-        counterGrid(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    async function menuHome(
+      screen: HTMLElement,
+    ): Promise<{ regions: string[]; columns: string[] }> {
+      const browser = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
       await browser.updateComplete;
       const shadow = browser.shadowRoot!;
       return {
@@ -2169,10 +2079,21 @@ describe("till-app", () => {
     }
 
     it("shows the menu's handheld display, not the till's", async () => {
-      const el = await toHandheld(withCounterTab, {}, displayedMenus());
-      selectTab(el, "counter");
+      const { el } = await mountApp({
+        ...displayedMenus(),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        getTablesState: vi.fn().mockResolvedValue([openTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+      });
+      await toCounter(el);
+      emit(floor(el)!, "open-table", { tableId: openTable.id, seated: true });
       await flush(el);
-      expect(await counterHome(el)).toEqual({
+      expect(tableOrder(el)).not.toBeNull();
+      expect(await menuHome(tableOrder(el)!)).toEqual({
         regions: ["search", "structure", "shortcuts"],
         columns: ["4", "4"],
       });
@@ -2183,14 +2104,14 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
-      expect(await counterHome(el)).toEqual({
+      expect(await menuHome(counter(el)!)).toEqual({
         regions: ["search", "shortcuts", "structure"],
         columns: ["8", "8"],
       });
     });
 
-    it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
-      const el = await toHandheld(
+    it("loads the counter's lists at login and shows held orders on fixed Counter", async () => {
+      const el = await toFixedCounter(
         withCounterTab,
         {},
         { listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) },
@@ -2203,11 +2124,10 @@ describe("till-app", () => {
     });
 
     it.each(["held-orders", "prep-queue"] as const)(
-      "loads the counter's lists at login when its canvas has a %s card, and the card shows them",
+      "loads the counter's %s list at login and displays its rows",
       async (type) => {
-        // Not prepay, which never reads the station queue, so the prep-queue card has rows to show.
-        const el = await toHandheld(
-          withFloorCard(type),
+        const el = await toFixedCounter(
+          withFloorCard,
           { orderFlow: "ticket_then_pay" },
           {
             listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
@@ -2219,9 +2139,8 @@ describe("till-app", () => {
         expect(currentApi.listCounterWaiting).toHaveBeenCalled();
         const grid = activeTabGrid(el)!.shadowRoot!;
         if (type === "prep-queue") {
-          expect(grid.querySelector<TillStationQueue>("till-station-queue")!.groups).toEqual([
-            stationGroup,
-          ]);
+          expect(counter(el)!.stationQueue).toEqual([stationGroup]);
+          expect(grid.querySelector("till-station-queue")).toBeNull();
         } else {
           expect(
             grid.querySelector<HTMLElement & { orders: unknown }>("till-held-orders")!.orders,
@@ -2239,17 +2158,27 @@ describe("till-app", () => {
     it.each([
       {
         tab: "counter",
-        canvas: withCounterTab,
+        formFactor: withCounterTab,
         capabilities: withReader,
         offered: "stripe_terminal",
       },
-      { tab: "counter", canvas: withCounterTab, capabilities: ["print-receipt"], offered: "none" },
-      { tab: "sale", canvas: withSaleTab, capabilities: withReader, offered: "stripe_terminal" },
-      { tab: "sale", canvas: withSaleTab, capabilities: ["print-receipt"], offered: "none" },
+      {
+        tab: "counter",
+        formFactor: withCounterTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
+      {
+        tab: "sale",
+        formFactor: withSaleTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      { tab: "sale", formFactor: withSaleTab, capabilities: ["print-receipt"], offered: "none" },
     ])(
       "on its $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
-      async ({ tab, canvas, capabilities, offered }) => {
-        const el = await toHandheld(canvas, {
+      async ({ tab, formFactor, capabilities, offered }) => {
+        const el = await toFixedCounter(formFactor, {
           capabilities,
           cardProvider: "stripe_terminal",
           activeReaders: readers,
@@ -2262,7 +2191,7 @@ describe("till-app", () => {
     );
 
     it("says the handheld is not set up for the reader when the server refuses it the reader", async () => {
-      const el = await toHandheld(
+      const el = await toFixedCounter(
         withCounterTab,
         {
           capabilities: withReader,
@@ -2291,7 +2220,7 @@ describe("till-app", () => {
     });
 
     it("says the profile does not allow it when the server refuses the sale for want of a profile action", async () => {
-      const el = await toHandheld(
+      const el = await toFixedCounter(
         withCounterTab,
         {
           capabilities: withReader,
@@ -2325,7 +2254,7 @@ describe("till-app", () => {
       const pay = vi
         .fn()
         .mockRejectedValue({ code: "device.forbidden_action", status: 403, action: "pay" });
-      const el = await toHandheld(
+      const el = await toFixedCounter(
         withSaleTab,
         {
           capabilities: [...withReader, "take-cash"],
@@ -2368,11 +2297,10 @@ describe("till-app", () => {
       /** Logs in on `device` with the counter's lists in view, reading the station queue (not prepay). */
       async function logIn(
         device: "till" | "handheld",
-        card: "held-orders" | "prep-queue",
         overrides: Record<string, unknown>,
       ): Promise<TillApp> {
         if (device === "handheld")
-          return toHandheld(withFloorCard(card), { orderFlow: "ticket_then_pay" }, overrides);
+          return toFixedCounter(withFloorCard, { orderFlow: "ticket_then_pay" }, overrides);
         const { el } = await mountApp({
           zonePolicy: { serviceMode: "ticket_then_pay" },
           getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
@@ -2387,7 +2315,7 @@ describe("till-app", () => {
       it.each(["till", "handheld"] as const)(
         "on a %s, a failed read of the held orders still loads the other lists and the roster, and says which failed",
         async (device) => {
-          const el = await logIn(device, "held-orders", {
+          const el = await logIn(device, {
             listWorkingOrders: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
           });
           await flush(el);
@@ -2406,7 +2334,7 @@ describe("till-app", () => {
       it.each(["till", "handheld"] as const)(
         "on a %s, a failed read of the kitchen queue still loads the waiting orders and the roster, and says which failed",
         async (device) => {
-          const el = await logIn(device, "prep-queue", {
+          const el = await logIn(device, {
             getStationQueue: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
           });
           await flush(el);
@@ -2423,7 +2351,7 @@ describe("till-app", () => {
       );
 
       it("says the station list failed on a first read while leaving other counter lists available", async () => {
-        const el = await logIn("till", "prep-queue", {
+        const el = await logIn("till", {
           listStations: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
         });
         await flush(el);
@@ -2440,22 +2368,9 @@ describe("till-app", () => {
   });
 
   describe("a till whose device profile decides whether it is offered the card reader", () => {
-    const floorTab = phoneCanvasDef.tabs[0]!;
-    const saleCards: CanvasDef["tabs"][number]["cards"] = [
-      { type: "product-grid", colSpan: 12, rowSpan: 4, config: {} },
-      { type: "basket", colSpan: 12, rowSpan: 2, config: {} },
-      { type: "total", colSpan: 12, rowSpan: 1, config: {} },
-      { type: "tender-pay", colSpan: 12, rowSpan: 2, config: {} },
-    ];
-    const tillCounterTab: CanvasDef = {
-      formFactor: "till",
-      tabs: [floorTab, { key: "counter", title: "Counter", columns: 12, cards: saleCards }],
-    };
-    /** Sale cards on a tab not keyed `counter`, which the card grid renders without the counter screen. */
-    const tillSaleTab: CanvasDef = {
-      formFactor: "till",
-      tabs: [floorTab, { key: "sale", title: "Sale", columns: 12, cards: saleCards }],
-    };
+    const tillCounterTab: FormFactor = "till";
+
+    const tillSaleTab: FormFactor = "till";
     const readers = [
       { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
     ];
@@ -2465,11 +2380,11 @@ describe("till-app", () => {
         ? tenderPay(el)
         : activeTabGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
 
-    async function toTill(canvas: CanvasDef, capabilities: string[]): Promise<TillApp> {
+    async function toTill(formFactor: FormFactor, capabilities: string[]): Promise<TillApp> {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          canvas,
+          formFactor: formFactor,
           capabilities,
           cardProvider: "stripe_terminal",
           activeReaders: readers,
@@ -2486,17 +2401,27 @@ describe("till-app", () => {
     it.each([
       {
         tab: "counter",
-        canvas: tillCounterTab,
+        formFactor: tillCounterTab,
         capabilities: withReader,
         offered: "stripe_terminal",
       },
-      { tab: "counter", canvas: tillCounterTab, capabilities: ["print-receipt"], offered: "none" },
-      { tab: "sale", canvas: tillSaleTab, capabilities: withReader, offered: "stripe_terminal" },
-      { tab: "sale", canvas: tillSaleTab, capabilities: ["print-receipt"], offered: "none" },
+      {
+        tab: "counter",
+        formFactor: tillCounterTab,
+        capabilities: ["print-receipt"],
+        offered: "none",
+      },
+      {
+        tab: "sale",
+        formFactor: tillSaleTab,
+        capabilities: withReader,
+        offered: "stripe_terminal",
+      },
+      { tab: "sale", formFactor: tillSaleTab, capabilities: ["print-receipt"], offered: "none" },
     ])(
       "on its $tab tab, gives the pay card the reader $offered when its profile's capabilities are $capabilities",
-      async ({ tab, canvas, capabilities, offered }) => {
-        const el = await toTill(canvas, capabilities);
+      async ({ tab, formFactor, capabilities, offered }) => {
+        const el = await toTill(formFactor, capabilities);
         selectTab(el, tab);
         await flush(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
@@ -2518,7 +2443,7 @@ describe("till-app", () => {
 
     it("leaves a logged-out handheld on the lock screen", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -2537,7 +2462,7 @@ describe("till-app", () => {
 
   describe("a navigation event that arrives on the lock screen", () => {
     const handheld = () => ({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -2676,14 +2601,14 @@ describe("till-app", () => {
         const floorReads = vi.mocked(currentApi.getTablesState).mock.calls.length;
         const outgoing = shell(el)!;
         emit(outgoing, "logout");
-        emit(outgoing, "tab-select", { key: other });
+        emit(outgoing, "screen-select", { screen: other });
         await flush(el);
         await flush(el);
         expect(lock(el)).not.toBeNull();
         expect(location.pathname).toBe(`/tabs/${home}`);
         expect(currentApi.getTablesState).toHaveBeenCalledTimes(floorReads);
         await signIn(el);
-        expect(shell(el)!.activeTabKey).toBe(home);
+        expect(shell(el)!.activeScreen).toBe(home);
       });
     });
 
@@ -3023,7 +2948,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockRejectedValueOnce({ code: "device.unauthorized" })
@@ -3059,7 +2984,7 @@ describe("till-app", () => {
     expect(enrolScreen(el)).toBeNull();
     expect(lock(el)).toBeNull();
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
-    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = el;
     expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     // Proof it RE-BOOTED rather than merely flipping a state: the identity probe ran a second time.
     expect(currentApi.getDeviceIdentity).toHaveBeenCalledTimes(2);
@@ -3072,7 +2997,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValueOnce({
@@ -3119,7 +3044,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValueOnce({
@@ -5597,7 +5522,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: phoneCanvasDef,
+        formFactor: phoneFormFactor,
         capabilities: ["open-cash-drawer", "print-receipt", "take-cash"],
       }),
       getDeviceIdentity: vi
@@ -6369,9 +6294,9 @@ describe("till-app", () => {
   }
 
   const basketText = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!.textContent!;
+    counterBody(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!.textContent!;
   const totalText = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
+    counterBody(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
 
   it("shows a retrieved pick no list offers any more, marked, and counts it in the total", async () => {
     // Nothing offers `p-milk` now, so the pick cannot be re-sent, but the unedited order is paid
@@ -7410,7 +7335,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1", notOffered: true }]);
-    const basket = counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
     expect(basket.querySelector(".line")!.textContent).toContain(t("basket.not_offered"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
@@ -7690,10 +7615,9 @@ describe("till-app", () => {
   it("session activity: a handheld + 300s boot configures the controller; logout stops it", async () => {
     const sa = fakeSessionActivity();
     const api = stubApi({
-      // A handheld device (phone canvas) whose profile carries a 300s inactivity auto-logout.
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: phoneCanvasDef, inactivityTimeoutSeconds: 300 }),
+        .mockResolvedValue({ ...till, formFactor: phoneFormFactor, inactivityTimeoutSeconds: 300 }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "h1",
         name: "Phone 1",
@@ -7741,7 +7665,7 @@ describe("till-app", () => {
     const api = stubApi({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "kds1",
         name: "Pass",
@@ -7839,7 +7763,7 @@ describe("till-app", () => {
       listMyAbsences: vi.fn().mockResolvedValue([]),
     };
 
-    it("opens at sign-in, over the canvas's first tab", async () => {
+    it("opens at sign-in, over the fixed home screen", async () => {
       const { el } = await mountApp({
         ...rosterApi,
         getTill: vi.fn().mockResolvedValue({ ...till, startingScreen: "show-schedule" }),
@@ -7863,43 +7787,42 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
     });
 
-    it("selects the canvas's tab of that name when the canvas has the screen as a tab", async () => {
-      const withScheduleTab = {
-        ...till.canvas,
-        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
-      };
+    it("opens Schedule over fixed Counter at sign-in", async () => {
+      const withScheduleTab = { formFactor: "till" as const };
       const { el } = await mountApp({
         ...rosterApi,
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          canvas: withScheduleTab,
+          formFactor: withScheduleTab.formFactor,
           startingScreen: "show-schedule",
         }),
       });
       await toCounter(el);
-      expect(shell(el)!.activeTabKey).toBe("schedule");
-      expect(schedule(el)).toBeNull();
+      expect(shell(el)!.activeScreen).toBe("counter");
+      expect(schedule(el)).not.toBeNull();
     });
 
-    it("selects a starting tab in place of the sign-in's history entry, so Back does not return to the first tab", async () => {
-      const withScheduleTab = {
-        ...till.canvas,
-        tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
-      };
+    it("opens the starting view in the sign-in history entry", async () => {
+      const withScheduleTab = { formFactor: "till" as const };
       history.replaceState(null, "", "/");
       const { el } = await mountApp({
         ...rosterApi,
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          canvas: withScheduleTab,
+          formFactor: withScheduleTab.formFactor,
           startingScreen: "show-schedule",
         }),
       });
       await flush(el);
-      const entries = history.length;
-      await toCounter(el);
-      expect(shell(el)!.activeTabKey).toBe("schedule");
-      expect(history.length).toBe(entries);
+      const push = vi.spyOn(history, "pushState");
+      try {
+        await toCounter(el);
+        expect(shell(el)!.activeScreen).toBe("counter");
+        expect(schedule(el)).not.toBeNull();
+        expect(push).not.toHaveBeenCalled();
+      } finally {
+        push.mockRestore();
+      }
     });
 
     it("opens again for the next person after a logout", async () => {
@@ -8655,28 +8578,9 @@ describe("till-app", () => {
       });
 
       it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
-        // A handheld may settle at `POST /api/sales` for cash OR a manual card tender, so the pay
-        // section SHOWS with both tenders. Opening a table SWITCHES to the phone canvas's order tab, mounting the
-        // table-order screen as that tab's card.
-        const phoneCanvas: CanvasDef = {
-          formFactor: "phone-portrait",
-          tabs: [
-            {
-              key: "floor",
-              title: "Floor",
-              columns: 12,
-              cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-            },
-            {
-              key: "order",
-              title: "Order",
-              columns: 12,
-              cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-            },
-          ],
-        };
+        const phoneFormFactor: FormFactor = "phone-portrait";
         const { el } = await mountApp({
-          getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
           getDeviceIdentity: vi
             .fn()
             .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -10652,7 +10556,6 @@ describe("till-app", () => {
       const c = await toCounter(el);
       expect(tenderPay(el).mode).toBe("prepay");
       expect(tenderPay(el).stage).toBe("order");
-      // Mode P never fetches the queue, so the counter tab's has-items-gated prep-queue card stays hidden.
       expect(stationQueueWidget(el)).toBeNull();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(c.products).toEqual([
@@ -10665,17 +10568,16 @@ describe("till-app", () => {
       ]);
     });
 
-    it("boots into ticket-then-pay: tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
+    it("boots into ticket-then-pay with its order stage and queue read, without a prep rail", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
       expect(tenderPay(el).stage).toBe("order");
-      expect(stationQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
       // Resolves the default station once, then reads its queue on entering the counter.
       expect(currentApi.listStations).toHaveBeenCalledOnce();
       expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
@@ -10685,22 +10587,21 @@ describe("till-app", () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
-        // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
       expect(tenderPay(el).mode).toBe("ticket_then_pay");
-      expect(stationQueueWidget(el)).not.toBeNull();
+      expect(stationQueueWidget(el)).toBeNull();
     });
 
-    it("renders the station queue from fetched data, not just an empty placeholder", async () => {
+    it("retains the fetched station data without drawing a prep rail", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
       await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
     });
 
     it("no default station configured leaves the counter queue empty rather than throwing", async () => {
@@ -10711,7 +10612,6 @@ describe("till-app", () => {
       });
       await toCounter(el);
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
-      // No default station ⇒ the queue is never fetched ⇒ empty ⇒ the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -11045,7 +10945,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ getTransactionReceipt });
       await toCounter(el);
       const show = async () => {
-        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
           .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
           .click();
         await el.updateComplete;
@@ -11088,7 +10988,7 @@ describe("till-app", () => {
       const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
       const { el } = await mountApp({ getTransactionReceipt, getReceiptPrintStatus });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11122,7 +11022,7 @@ describe("till-app", () => {
         .mockResolvedValueOnce({ ...saleResult, invoiceType: "F1" });
       const { el } = await mountApp({ getTransactionReceipt });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11150,7 +11050,7 @@ describe("till-app", () => {
       const waiting = vi.fn().mockResolvedValue([]);
       const { el } = await mountApp({ listCounterWaiting: waiting });
       await toCounter(el);
-      const shell = el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
+      const shell = el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
       shell.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
       await el.updateComplete;
       const dialog = await selectDebt(el);
@@ -11198,7 +11098,7 @@ describe("till-app", () => {
           getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
         });
         await toCounter(el);
-        el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
           .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
           .click();
         await el.updateComplete;
@@ -11238,7 +11138,7 @@ describe("till-app", () => {
         ),
       });
       await toCounter(el);
-      el.shadowRoot!.querySelector("till-tab-shell")!
+      el.shadowRoot!.querySelector("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11284,7 +11184,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
       });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11315,7 +11215,7 @@ describe("till-app", () => {
         }),
       });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11346,7 +11246,7 @@ describe("till-app", () => {
         }),
       });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11370,7 +11270,7 @@ describe("till-app", () => {
     async function findBillPayRefused(refusal: unknown) {
       const { el } = await mountApp({ collectOrder: vi.fn().mockRejectedValue(refusal) });
       await toCounter(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -11732,7 +11632,7 @@ describe("till-app", () => {
           .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
 
       emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-2", to: "preparing" });
       await flush(el);
@@ -11740,7 +11640,6 @@ describe("till-app", () => {
       expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      // The refresh returned an EMPTY queue (the item advanced off), so the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -11776,7 +11675,7 @@ describe("till-app", () => {
           .mockResolvedValue({ items: [], notices: [] }),
       });
       const c = await toCounter(el);
-      expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
 
       emit(c, "mark-collected", { orderId: "wo-1" });
       await flush(el);
@@ -11788,7 +11687,6 @@ describe("till-app", () => {
       );
       // once on entering the counter, once after the handover — so the collected order drops off the queue.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
-      // The refresh returned an EMPTY queue (the order handed over), so the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
     });
 
@@ -12105,71 +12003,52 @@ describe("till-app", () => {
     });
   });
 
-  describe("layout canvas (SP-B1)", () => {
-    // A `till` canvas whose `counter` tab is what #boot reads and #tabBody threads to the counter screen.
-    // Only the fields the assertion checks (key/columns) matter; the rest complete a valid CanvasDef.
-    const counterCanvas: CanvasDef = {
-      formFactor: "till",
-      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
-    };
-
-    it("threads the canvas's counter tab into the counter screen", async () => {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
-      });
+  describe("fixed Counter", () => {
+    it("opens its selling controls without a configurable renderer", async () => {
+      const { el } = await mountApp();
       await toCounter(el);
       const c = counter(el)!;
-      expect(c.counterTab).toMatchObject({ key: "counter", columns: 12 });
+      expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+      expect(c.shadowRoot!.querySelector("till-basket")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-total")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
     });
   });
 
-  describe("canvas tab shell (SP-B2.1)", () => {
-    // A `till` canvas with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
-    // capability, so it renders the card grid under the empty `capabilities` list).
-    const shellCanvas: CanvasDef = {
-      formFactor: "till",
-      tabs: [
-        { key: "counter", title: "Counter", columns: 12, cards: [] },
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 12,
-          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
+  describe("fixed primary shell", () => {
+    const shellFormFactor: FormFactor = "till";
     const shell = (el: TillApp) =>
-      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+      el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
 
     it("restores the URL tab through PIN login and refresh", async () => {
       const url = new URL(location.href);
       url.pathname = "/tabs/floor";
       history.replaceState(null, "", url);
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await flush(el);
       expect(shell(el)).toBeNull();
       await toCounter(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       expect(currentApi.getTablesState).toHaveBeenCalled();
       el.remove();
       const { el: refreshed } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(refreshed);
-      expect(shell(refreshed)!.activeTabKey).toBe("floor");
+      expect(shell(refreshed)!.activeScreen).toBe("floor");
     });
 
     it("records tabs and restores their data on browser Back and Forward", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(el);
-      emit(shell(el)!, "tab-select", { key: "floor" });
+      emit(shell(el)!, "screen-select", { screen: "floor" });
       await flush(el);
       expect(location.pathname).toMatch(/^\/tabs\/floor(?:\/|$)/);
-      emit(shell(el)!, "tab-select", { key: "counter" });
+      emit(shell(el)!, "screen-select", { screen: "counter" });
       await flush(el);
       const back = new Promise<void>((resolve) =>
         window.addEventListener("popstate", () => resolve(), { once: true }),
@@ -12177,14 +12056,14 @@ describe("till-app", () => {
       history.back();
       await back;
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       const forward = new Promise<void>((resolve) =>
         window.addEventListener("popstate", () => resolve(), { once: true }),
       );
       history.forward();
       await forward;
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(shell(el)!.activeScreen).toBe("counter");
     });
 
     it("uses the latest history destination when the login product load finishes", async () => {
@@ -12192,7 +12071,7 @@ describe("till-app", () => {
       history.replaceState(null, "", "/tabs/floor");
       history.pushState(null, "", "/tabs/counter");
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         listProducts: vi.fn(
           () =>
             new Promise<Awaited<ReturnType<TillApi["listProducts"]>>>((done) => {
@@ -12210,7 +12089,7 @@ describe("till-app", () => {
       expect(location.pathname).toBe("/tabs/floor");
       resolve({ menus: [], products: [] });
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       expect(location.pathname).toBe("/tabs/floor");
       expect(currentApi.getTablesState).toHaveBeenCalled();
     });
@@ -12220,7 +12099,7 @@ describe("till-app", () => {
       history.replaceState(null, "", "/tabs/floor");
       history.pushState(null, "", "/tabs/order");
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12240,30 +12119,30 @@ describe("till-app", () => {
       await back;
       resolve([]);
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       expect(location.pathname).toBe("/tabs/floor");
     });
 
-    it("replaces an unavailable URL tab with the canvas default", async () => {
+    it("replaces an unavailable URL tab with the fixed home screen", async () => {
       const url = new URL(location.href);
       url.pathname = "/tabs/removed";
       history.replaceState(null, "", url);
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(el);
-      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(shell(el)!.activeScreen).toBe("counter");
       expect(location.pathname).toMatch(/^\/tabs\/counter(?:\/|$)/);
     });
 
-    it("renders the tab shell with the counter tab active when a canvas is present", async () => {
+    it("renders the tab shell with Counter selected on a till", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(el);
       const s = shell(el)!;
       expect(s).not.toBeNull();
-      expect(s.activeTabKey).toBe("counter");
+      expect(s.activeScreen).toBe("counter");
       // The counter tab's body is the counter screen, mounted EMBEDDED — the shell owns the header, so
       // the screen suppresses its own (no duplicate chrome).
       expect(counter(el)).not.toBeNull();
@@ -12272,40 +12151,21 @@ describe("till-app", () => {
 
     it("switches the active tab body on tab-select", async () => {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(el);
-      emit(shell(el)!, "tab-select", { key: "floor" });
+      emit(shell(el)!, "screen-select", { screen: "floor" });
       await el.updateComplete;
-      // Floor tab → the card grid (its floor-plan card); the counter body is gone.
-      expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
+      expect(el).not.toBeNull();
       expect(counter(el)).toBeNull();
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
     });
 
-    it("a HANDHELD with a canvas renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
-      // A `handheld` phone with a canvas is a SHELL device, and the waiter lands on the FLOOR tab (the
-      // phone canvas's first tab).
-      const phoneCanvas: CanvasDef = {
-        formFactor: "phone-portrait",
-        tabs: [
-          {
-            key: "floor",
-            title: "Floor",
-            columns: 12,
-            cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-          },
-          {
-            key: "order",
-            title: "Order",
-            columns: 12,
-            cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-          },
-        ],
-      };
+    it("a handheld renders the shell with Floor selected", async () => {
+      const phoneFormFactor: FormFactor = "phone-portrait";
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12322,61 +12182,33 @@ describe("till-app", () => {
       // (nested in the grid's OWN shadow root, so pierce it — `floor(el)` only reaches the app's root).
       const s = shell(el)!;
       expect(s).not.toBeNull();
-      expect(s.activeTabKey).toBe("floor");
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      expect(s.activeScreen).toBe("floor");
+      const grid = el;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
       expect(counter(el)).toBeNull();
     });
   });
 
-  describe("canvas shell for handheld + kds (SP-B2.2)", () => {
+  describe("fixed shell for handheld and KDS", () => {
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { kiosk?: boolean; affordances?: unknown[] }>(
-        "till-tab-shell",
+        "till-shell",
       );
 
-    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order` card).
-    const phoneCanvas: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 12,
-          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-        {
-          key: "order",
-          title: "Order",
-          columns: 12,
-          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
+    const phoneFormFactor: FormFactor = "phone-portrait";
 
-    // A KDS canvas: one `kitchen` tab carrying the `kds-board` card, whose embedded station screen the
-    // grid gates on the `act-as-kds` capability the canvas grants. A kds display runs the shell in KIOSK
-    // mode (the operator header suppressed — a display has no logged-in operator).
-    const kdsCanvas: CanvasDef = {
-      formFactor: "kds",
-      tabs: [
-        {
-          key: "kitchen",
-          title: "Kitchen",
-          columns: 24,
-          cards: [{ type: "kds-board", colSpan: 24, rowSpan: 12, config: {} }],
-        },
-      ],
-    };
+    const kdsFormFactor: FormFactor = "kds";
 
     it("renders the tab shell for a handheld whose profile has no screen switches, with only Find a bill in its full header", async () => {
       // A handheld stays on `lock` until the waiter PIN-logs-in (then lands on this layout's first tab, `floor`);
       // the shell activates only on that authenticated surface, so boot THEN login before asserting.
       const { el } = await mountApp({
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, canvas: phoneCanvas, capabilities: ["print-receipt"] }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: phoneFormFactor,
+          capabilities: ["print-receipt"],
+        }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12402,7 +12234,7 @@ describe("till-app", () => {
       const { el } = await mountApp({
         getTill: vi
           .fn()
-          .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+          .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "dev-1",
           formFactor: "kds",
@@ -12432,23 +12264,16 @@ describe("till-app", () => {
       expect(s).not.toBeNull();
       // KDS = kiosk: the operator header is suppressed (a display never logs in).
       expect(s.kiosk).toBe(true);
-      // The kitchen tab's kds-board card mounts the embedded station screen through the grid — nested in
-      // the grid's OWN shadow root (gated on the `act-as-kds` capability the canvas grants), so pierce it.
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      const grid = el;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
 
-    // Capabilities at the RENDER axis come from the device PROFILE (the `/api/till` `capabilities`
-    // sibling, threaded through `this.capabilities`), NOT from the canvas. Same KDS canvas both times —
-    // only the profile's capability set differs:
-    //  - a device with NO profile boots the form-factor default canvas with `capabilities: []`, so the
-    //    `kds-board` card (which needs `act-as-kds`) is HIDDEN — its embedded station screen never mounts;
-    //  - a device whose profile grants `act-as-kds` renders it.
     it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds (§5.3)", async () => {
-      // No-profile device: same KDS canvas, but `capabilities: []` (a device with no device profile).
       const hidden = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: [] }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: [] }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "dev-1",
           formFactor: "kds",
@@ -12474,7 +12299,7 @@ describe("till-app", () => {
         }),
       });
       await flush(hidden.el);
-      const hiddenGrid = hidden.el.shadowRoot!.querySelector("till-card-grid")!;
+      const hiddenGrid = hidden.el;
       expect(hiddenGrid).not.toBeNull();
       // The kds-board card is hidden (its required `act-as-kds` is absent), so no station screen mounts.
       expect(hiddenGrid.shadowRoot!.querySelector("till-station-screen")).toBeNull();
@@ -12484,7 +12309,7 @@ describe("till-app", () => {
       const shown = await mountApp({
         getTill: vi
           .fn()
-          .mockResolvedValue({ ...till, canvas: kdsCanvas, capabilities: ["act-as-kds"] }),
+          .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
         getDeviceIdentity: vi.fn().mockResolvedValue({
           deviceId: "dev-1",
           formFactor: "kds",
@@ -12510,43 +12335,20 @@ describe("till-app", () => {
         }),
       });
       await flush(shown.el);
-      const shownGrid = shown.el.shadowRoot!.querySelector("till-card-grid")!;
+      const shownGrid = shown.el;
       expect(shownGrid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
   });
 
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
-    // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
-    // card). Because the canvas AUTHORS a tab whose cards mount a `table-order` card, opening a table on
-    // a handheld SWITCHES to that Order tab rather than pushing a drill-in — the tab bar owns the
-    // navigation, so there is no drill and no second Back. A till (no `order` tab) keeps the drill
-    // push/pop, asserted by the sibling "drill-in stack" describe.
-    const phoneCanvas: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 12,
-          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-        {
-          key: "order",
-          title: "Order",
-          columns: 12,
-          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
+    const phoneFormFactor: FormFactor = "phone-portrait";
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const shell = (el: TillApp) =>
-      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+      el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
 
-    /** Boots a handheld with the phone canvas and logs the waiter in — landing on the FLOOR tab (the
-     * phone canvas's first tab). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12562,17 +12364,14 @@ describe("till-app", () => {
 
     it("switches a handheld to the Order tab (card mount) when a table is opened, not a drill-in", async () => {
       const el = await toHandheldFloor();
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false });
       await flush(el);
       const s = shell(el)!;
-      // Switched to the Order tab — the card mount, not a drill.
-      expect(s.activeTabKey).toBe("order");
+      expect(s.activeScreen).toBe("order");
       // NO drill-in: the tab bar owns the navigation.
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).toBeNull();
-      // The table-order screen mounts as the Order tab's card, nested in the card grid's OWN shadow root
-      // (a card mount, not the app-root drill), so pierce the grid to find it.
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      const grid = el;
       expect(grid).not.toBeNull();
       expect(grid.shadowRoot!.querySelector("till-table-order-screen")).not.toBeNull();
     });
@@ -12596,7 +12395,7 @@ describe("till-app", () => {
       let occupied = false;
       const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12609,29 +12408,25 @@ describe("till-app", () => {
       await flush(el);
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("order");
+      expect(shell(el)!.activeScreen).toBe("order");
       const before = getTablesState.mock.calls.length;
       const pushHistory = vi.spyOn(history, "pushState");
       occupied = true; // the tab is now open — the floor read-model would show t1 occupied
-      emit(shell(el)!, "tab-select", { key: "floor" }); // the REAL return: tap the Floor tab
+      emit(shell(el)!, "screen-select", { screen: "floor" }); // the REAL return: tap the Floor tab
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       // The Floor-tab return RE-READ occupancy (a fresh `getTablesState`), not merely switched tabs.
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
       expect(pushHistory).toHaveBeenCalledTimes(1);
       // The Floor tab re-read occupancy (tables-only refresh): t1 now renders the SECOND fetch (occupied),
       // not the stale free one — so a re-tap resumes the open tab instead of seating the table again.
-      const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+      const grid = el;
       const floorScreen = grid.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
       expect(floorScreen).not.toBeNull();
       expect(floorScreen!.tables).toEqual([occupiedT1]);
     });
 
     it("lands a handheld on its home (floor) tab after a new sale, refreshing the stale floor — not a phantom counter tab", async () => {
-      // This phone layout has NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
-      // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
-      // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
-      // return must re-read occupancy — a re-tap must resume nothing.
       const occupiedT1: TableState = {
         ...freeTable,
         state: "open-tab",
@@ -12642,7 +12437,7 @@ describe("till-app", () => {
       let occupied = false;
       const getTablesState = vi.fn(async () => (occupied ? [occupiedT1] : [freeTable]));
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
           .fn()
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -12655,14 +12450,14 @@ describe("till-app", () => {
       await flush(el);
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // → Order tab card
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("order");
+      expect(shell(el)!.activeScreen).toBe("order");
       const before = getTablesState.mock.calls.length;
       const pushHistory = vi.spyOn(history, "pushState");
       occupied = true; // the tab has been settled server-side; the floor read-model would now reflect it
       emit(shell(el)!, "new-sale"); // the ticket view's "New sale" after settling the tab
       await flush(el);
       // Lands on the device's HOME tab (floor), NOT a phantom `"counter"` this layout lacks.
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       // AND re-read occupancy (a fresh getTablesState), so the just-closed table is no longer stale.
       expect(getTablesState.mock.calls.length).toBeGreaterThan(before);
       expect(pushHistory).not.toHaveBeenCalled();
@@ -12670,46 +12465,22 @@ describe("till-app", () => {
   });
 
   describe("drill-in stack (SP-B2.1)", () => {
-    // A `till` canvas: a `counter` tab carrying the real sale cards (so the sale-path guard drives the
-    // grid, not an empty tab) + a `floor` tab (a `floor-plan` card). Station/Expo/Schedule are NOT tabs,
-    // so the shell offers them as affordance buttons; the shell's Allergens button is always present.
-    const shellCanvas: CanvasDef = {
-      formFactor: "till",
-      tabs: [
-        {
-          key: "counter",
-          title: "Counter",
-          columns: 12,
-          cards: [
-            { type: "product-grid", colSpan: 8, rowSpan: 6, config: { columns: 4 } },
-            { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
-            { type: "total", colSpan: 4, rowSpan: 1, config: {} },
-            { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
-          ],
-        },
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 12,
-          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-        },
-      ],
-    };
+    const shellFormFactor: FormFactor = "till";
     const shell = (el: TillApp) =>
-      el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
+      el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
     const drill = (el: TillApp) => el.shadowRoot!.querySelector('[slot="drill"]');
-    const grid = (el: TillApp) => el.shadowRoot!.querySelector("till-card-grid");
+    const grid = (el: TillApp) => el;
 
     /** Boots the shell, logs in (lands on the counter tab), and switches to the floor tab — the surface
      * a table is opened from. `getTablesState` returns `freeTable` so the floor has a table to open. */
     async function toShellFloor(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await toCounter(el);
-      emit(shell(el)!, "tab-select", { key: "floor" });
+      emit(shell(el)!, "screen-select", { screen: "floor" });
       await el.updateComplete;
       return el;
     }
@@ -12717,7 +12488,7 @@ describe("till-app", () => {
     /** Boots the shell and logs in — leaving the app on the counter tab (no drill open). */
     async function toShellCounter(): Promise<TillApp> {
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
       });
       await toCounter(el);
       return el;
@@ -12739,11 +12510,10 @@ describe("till-app", () => {
       await flush(el);
       emit(tableOrder(el)!, "back-to-floor");
       await el.updateComplete;
-      // Drill gone; the underlying floor tab's card grid is back on top.
       expect(drill(el)).toBeNull();
       expect(tableOrder(el)).toBeNull();
       expect(grid(el)).not.toBeNull();
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
     });
 
     it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
@@ -12759,7 +12529,7 @@ describe("till-app", () => {
       };
       const afterRound: TableState = { ...occupiedT1, tabLineCount: 2, tabTotal: "6.00" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         // FIRST floor load (tab-select): table free. SECOND load (seating re-reads the floor): now
         // occupied. THIRD load (the back-to-floor refresh): the round sent meanwhile shows.
         getTablesState: vi
@@ -12770,7 +12540,7 @@ describe("till-app", () => {
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await toCounter(el);
-      emit(shell(el)!, "tab-select", { key: "floor" }); // first floor load → freeTable
+      emit(shell(el)!, "screen-select", { screen: "floor" }); // first floor load → freeTable
       await flush(el);
       emit(shell(el)!, "open-table", { tableId: freeTable.id, seated: false }); // drill in
       await flush(el);
@@ -12888,17 +12658,14 @@ describe("till-app", () => {
       expect(drill(el)).toBeNull();
       expect(schedule(el)).toBeNull();
       expect(counter(el)).not.toBeNull();
-      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(shell(el)!.activeScreen).toBe("counter");
     });
 
-    it("completes a sale through the shell + grid counter and lands on the ticket drill-in (sale-path guard)", async () => {
+    it("completes a sale through fixed Counter and lands on the ticket drill-in (sale-path guard)", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
-      // The counter tab renders through the card grid (its cards include tender-pay); the store is
-      // the app's own working order. The card grid lives in the counter screen's shadow root.
-      const cardGrid = c.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
-      expect(cardGrid).not.toBeNull();
-      expect(cardGrid!.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+      expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
+      expect(c.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -12924,7 +12691,7 @@ describe("till-app", () => {
       expect(drill(el)).toBeNull();
       expect(ticket(el)).toBeNull();
       expect(counter(el)).not.toBeNull();
-      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(shell(el)!.activeScreen).toBe("counter");
       expect(counter(el)!.store.lines.length).toBe(0);
     });
 
@@ -12935,13 +12702,13 @@ describe("till-app", () => {
       // and reached the card.
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
         listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await toCounter(el);
-      emit(shell(el)!, "tab-select", { key: "floor" });
+      emit(shell(el)!, "screen-select", { screen: "floor" });
       await flush(el); // await the ASYNC floor load, not just the synchronous tab switch
       const g = grid(el)!;
       expect(g).not.toBeNull();
@@ -12983,7 +12750,7 @@ describe("till-app", () => {
       emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
       await flush(el);
       expect(app.drill).toBeUndefined();
-      expect(shell(el)!.activeTabKey).toBe("counter");
+      expect(shell(el)!.activeScreen).toBe("counter");
       expect(schedule(el)).toBeNull();
       expect(counter(el)).not.toBeNull();
     });
@@ -12996,11 +12763,11 @@ describe("till-app", () => {
       await el.updateComplete;
       expect(schedule(el)).not.toBeNull();
       expect(drill(el)).not.toBeNull();
-      emit(shell(el)!, "tab-select", { key: "floor" });
+      emit(shell(el)!, "screen-select", { screen: "floor" });
       await flush(el);
       expect(drill(el)).toBeNull();
       expect(schedule(el)).toBeNull();
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       expect(grid(el)).not.toBeNull();
     });
   });
@@ -13403,7 +13170,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "dev-1",
         formFactor: "kds",
@@ -13469,18 +13236,16 @@ describe("till-app", () => {
       .fn()
       .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
 
-    /** The menu switcher the counter screen renders above the card grid. */
     const switcher = (el: TillApp) =>
       counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
     /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
     const switcherButtons = (el: TillApp) => [
       ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
     ];
-    /** The product names the counter GRID is currently showing (its `wt-button.tile` labels) — the
-     * product-grid card lives inside the counter's card grid shadow root. */
+
     const gridNames = (el: TillApp) =>
       [
-        ...counterGrid(el)!
+        ...counterBody(el)!
           .shadowRoot!.querySelector("till-menu-browser")!
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
@@ -13940,7 +13705,7 @@ describe("remembered dietary filters", () => {
       .getAttribute("aria-pressed");
   const names = (el: TillApp) =>
     [
-      ...counterGrid(el)!
+      ...counterBody(el)!
         .shadowRoot!.querySelector("till-menu-browser")!
         .shadowRoot!.querySelectorAll(".name"),
     ].map((n) => n.textContent);
@@ -14092,7 +13857,7 @@ describe("persistent till destinations", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
     });
     await toCounter(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-expo");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "show-expo");
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-expo-screen")!.runsPass).toBe(runsPass);
   });
@@ -14113,7 +13878,7 @@ describe("persistent till destinations", () => {
   ])("restores %s with Back, Forward, login and refresh", async (event, view, selector) => {
     const { el } = await mountApp();
     await toCounter(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, event);
+    emit(el.shadowRoot!.querySelector("till-shell")!, event);
     await flush(el);
     expect(el.shadowRoot!.querySelector(selector)).not.toBeNull();
     expect(location.pathname).toContain(`/tabs/counter/view/${view}`);
@@ -14150,7 +13915,7 @@ describe("persistent till destinations", () => {
         }),
       });
       await toCounter(el);
-      emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-station");
+      emit(el.shadowRoot!.querySelector("till-shell")!, "show-station");
       await flush(el);
       expect(station(el)!.canMoveStation).toBe(allowed);
     },
@@ -14162,7 +13927,7 @@ describe("persistent till destinations", () => {
       listStations: vi.fn().mockResolvedValue([defaultStation, second]),
     });
     await toCounter(el);
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-station");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "show-station");
     await flush(el);
     station(el)!.shadowRoot!.querySelector<HTMLElement>('[data-station="st-bar"]')!.click();
     await flush(el);
@@ -14231,10 +13996,10 @@ describe("persistent till destinations", () => {
     resolve({ menus: [], products: [] });
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
-    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     await traverse("forward", el);
-    expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-shell")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-schedule-screen")).toBeNull();
   });
 
@@ -14251,7 +14016,7 @@ describe("persistent till destinations", () => {
     const { el } = await mountApp({
       getTill: vi
         .fn()
-        .mockResolvedValue({ ...till, canvas: kdsCanvasDef, capabilities: ["act-as-kds"] }),
+        .mockResolvedValue({ ...till, formFactor: kdsFormFactor, capabilities: ["act-as-kds"] }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "kds", kitchenScreens: [stationScreen] }),
@@ -14287,9 +14052,11 @@ it.each(["station", "expo", "schedule"])(
   async (view) => {
     history.replaceState(null, "", `/tabs/floor/view/${view}`);
     const { el } = await mountApp({
-      getTill: vi
-        .fn()
-        .mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities: ["print-receipt"] }),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: phoneFormFactor,
+        capabilities: ["print-receipt"],
+      }),
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
@@ -14318,11 +14085,11 @@ describe("the device profile decides which screens a device offers", () => {
   async function signIn(
     device: "till" | "handheld",
     capabilities: CapabilityFlag[],
-    canvas: CanvasDef = till.canvas,
+    formFactor: FormFactor = "till",
     overrides: Record<string, unknown> = {},
   ): Promise<TillApp> {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas, capabilities }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor, capabilities }),
       ...(device === "handheld" ? { getDeviceIdentity: handheld() } : {}),
       ...overrides,
     });
@@ -14331,7 +14098,7 @@ describe("the device profile decides which screens a device offers", () => {
   }
 
   it("gives a handheld whose profile has the switches the Station, Pass and Schedule buttons", async () => {
-    const el = await signIn("handheld", switches, phoneCanvasDef);
+    const el = await signIn("handheld", switches, phoneFormFactor);
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
     expect(affordances(el)).toEqual(["station", "expo", "schedule", "find-bill"]);
     for (const name of ["station", "expo", "schedule", "find-bill"])
@@ -14357,7 +14124,7 @@ describe("the device profile decides which screens a device offers", () => {
     "restores the %s destination on a handheld whose profile has its switch",
     async (view) => {
       history.replaceState(null, "", `/tabs/floor/view/${view}`);
-      const el = await signIn("handheld", switches, phoneCanvasDef);
+      const el = await signIn("handheld", switches, phoneFormFactor);
       expect(location.pathname).toContain(`/tabs/floor/view/${view}`);
       expect(el.shadowRoot!.querySelector('[slot="drill"]')).not.toBeNull();
     },
@@ -14374,7 +14141,7 @@ describe("the device profile decides which screens a device offers", () => {
   );
 
   it("lets a handheld's floor open a station view when its profile has the Station switch", async () => {
-    const el = await signIn("handheld", ["show-station"], phoneCanvasDef, {
+    const el = await signIn("handheld", ["show-station"], phoneFormFactor, {
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
     });
@@ -14382,7 +14149,7 @@ describe("the device profile decides which screens a device offers", () => {
   });
 
   it("gives a till's floor no way into a station view when its profile lacks the Station switch", async () => {
-    const el = await signIn("till", ["print-receipt"], till.canvas, {
+    const el = await signIn("till", ["print-receipt"], "till", {
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
     });
@@ -14391,24 +14158,24 @@ describe("the device profile decides which screens a device offers", () => {
     expect(floor(el)!.canOpenStation).toBe(false);
   });
 
-  it("does not load the counter's lists at login on a till whose canvas shows none of them", async () => {
-    await signIn("till", switches, phoneCanvasDef);
+  it("does not load Counter lists at login with a handheld form factor", async () => {
+    await signIn("till", switches, phoneFormFactor);
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
     expect(currentApi.getStationQueue).not.toHaveBeenCalled();
     expect(currentApi.listCounterWaiting).not.toHaveBeenCalled();
   });
 
-  it("gives the Schedule screen its roster when the profile has the Schedule switch and the layout shows no counter list", async () => {
-    const el = await signIn("handheld", ["show-schedule"], phoneCanvasDef);
+  it("gives Schedule its roster on a handheld with the Schedule switch", async () => {
+    const el = await signIn("handheld", ["show-schedule"], phoneFormFactor);
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
     emit(shell(el)!, "show-schedule");
     await flush(el);
     expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
   });
 
-  it("holds a till whose layout's first tab is the floor on the lock screen until the floor loads", async () => {
+  it("holds a handheld on the lock screen until Floor loads", async () => {
     let resolve!: (value: TableState[]) => void;
-    const el = await signIn("till", switches, phoneCanvasDef, {
+    const el = await signIn("till", switches, phoneFormFactor, {
       getTablesState: vi.fn(
         () =>
           new Promise<TableState[]>((done) => {
@@ -14419,19 +14186,15 @@ describe("the device profile decides which screens a device offers", () => {
     expect(shell(el)).toBeNull();
     resolve([freeTable]);
     await flush(el);
-    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(shell(el)!.activeScreen).toBe("floor");
     expect(floor(el)!.tables).toEqual([freeTable]);
   });
 
-  it("opens a handheld whose layout's first tab is the counter without waiting for the floor", async () => {
-    const counterFirst: CanvasDef = {
-      formFactor: "phone-portrait",
-      tabs: [till.canvas.tabs[0]!, phoneCanvasDef.tabs[0]!],
-    };
-    const el = await signIn("handheld", ["print-receipt"], counterFirst, {
+  it("opens fixed Till Counter without waiting for Floor", async () => {
+    const el = await signIn("till", ["print-receipt"], "till", {
       getTablesState: vi.fn(() => new Promise<TableState[]>(() => undefined)),
     });
-    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(shell(el)!.activeScreen).toBe("counter");
     expect(counter(el)).not.toBeNull();
   });
 
@@ -14522,7 +14285,9 @@ describe("the device profile decides which screens a device offers", () => {
       const sa = fakeSessionActivity();
       let resolve!: (value: TableState[]) => void;
       currentApi = stubApi({
-        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef, capabilities: [] }),
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, formFactor: phoneFormFactor, capabilities: [] }),
         getTablesState: vi.fn(() => new Promise<TableState[]>((done) => (resolve = done))),
       });
       const { el } = await mountWidget<TillApp>("till-app", {
@@ -14550,7 +14315,7 @@ describe("the device profile decides which screens a device offers", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
-      expect(shell(el)!.activeTabKey).toBe("floor");
+      expect(shell(el)!.activeScreen).toBe("floor");
       expect(currentApi.getTablesState).toHaveBeenCalledOnce();
       emit(shell(el)!, "logout");
       await flush(el);
@@ -15179,7 +14944,7 @@ describe("a failed list refresh after a successful write", () => {
     await tick(el, 5000);
 
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).toBeNull();
-    expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+    expect(counter(el)!.stationQueue).toEqual([stationGroup]);
   });
 
   it.each([
@@ -15529,7 +15294,7 @@ describe("a failed list refresh after a successful write", () => {
       const listCounterWaiting = unansweredAfterLogin<unknown[]>([]);
       const { el } = await mountApp({ listCounterWaiting });
       await toCounterFake(el);
-      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
         .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
         .click();
       await el.updateComplete;
@@ -15744,7 +15509,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     party: luisParty,
   };
   const heldList = (el: TillApp) =>
-    counterGrid(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
+    counterBody(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
       "till-held-orders",
     )!;
   const toast = (el: TillApp) =>
@@ -16287,25 +16052,20 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(c.store.id).toBe("wo-1");
   });
 
-  it("holds the pay controls on a tab other than the counter while the basket's order holds a payment", async () => {
+  it("holds fixed Counter pay controls while the basket's order holds a payment", async () => {
     const pending: HeldOrderSummary = { ...heldSummary, hasPayments: true };
-    const salesTab = {
-      key: "sales",
-      title: "Sales",
-      columns: 12,
-      cards: [{ type: "tender-pay" as const, colSpan: 4, rowSpan: 2, config: {} }],
-    };
+
     const { el, c } = await counterWith({
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: { ...till.canvas, tabs: [...till.canvas.tabs, salesTab] },
+        formFactor: "till",
       }),
       listWorkingOrders: vi.fn().mockResolvedValue([pending]),
     });
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
 
-    selectTab(el, "sales");
+    selectTab(el, "counter");
     await flush(el);
 
     expect(
@@ -16374,7 +16134,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   const waitingList = (el: TillApp) =>
-    counterGrid(el)?.shadowRoot?.querySelector<TillCounterWaiting>("till-counter-waiting") ?? null;
+    counterBody(el)?.shadowRoot?.querySelector<TillCounterWaiting>("till-counter-waiting") ?? null;
   const rowOf = (el: TillApp, id: string) =>
     waitingList(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`);
   const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
@@ -16428,7 +16188,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const { el } = await counterWaiting();
     expect(currentApi.listCounterWaiting).toHaveBeenCalled();
     expect(waitingList(el)).toBeNull();
-    expect(counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
+    expect(counterBody(el)!.shadowRoot!.querySelector("till-held-orders")).toBeNull();
   });
 
   it("offers Pay on a till that pays at ordering, and collects the order there in its own mode until the next sale", async () => {
@@ -18968,11 +18728,10 @@ describe("switching the device's profile from the header", () => {
   });
 
   it("a switch reads the till's setup again and starts again from the zone's default menu, still signed in", async () => {
-    const switchedTabs = till.canvas.tabs.map((tab) => ({ ...tab, title: `${tab.title} (bar)` }));
     const getTill = vi
       .fn()
       .mockResolvedValueOnce(till)
-      .mockResolvedValue({ ...till, canvas: { ...till.canvas, tabs: switchedTabs } });
+      .mockResolvedValue({ ...till, formFactor: "till" });
     const { el } = await openProfile({ listProducts: twoMenus, getTill });
     emit(counter(el)!, "menu-selected", { id: "cat-drinks" });
     await flush(el);
@@ -18986,7 +18745,8 @@ describe("switching the device's profile from the header", () => {
     expect(currentApi.switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
     expect(profileDialog(el)).toBeNull();
     expect(getTill).toHaveBeenCalledTimes(2);
-    expect((shell(el) as HTMLElement & { tabs: { title: string }[] }).tabs).toEqual(switchedTabs);
+    expect((shell(el) as HTMLElement & { formFactor: string }).formFactor).toBe("till");
+    expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
     expect(vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length).toBe(zoneReads + 1);
     expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
     expect(counter(el)).not.toBeNull();
@@ -19016,7 +18776,7 @@ describe("switching the device's profile from the header", () => {
     expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
   });
 
-  it("a switch to a profile with no starting screen lands on the canvas's first tab", async () => {
+  it("a switch to a profile with no starting screen lands on its fixed home", async () => {
     const { el } = await openProfile();
     emit(counter(el)!, "show-expo");
     await flush(el);
@@ -19059,23 +18819,20 @@ describe("switching the device's profile from the header", () => {
     }
   });
 
-  it("a switch to a profile with no starting screen lands on the first tab, though the tab left is also on the new canvas", async () => {
-    const withScheduleTab = {
-      ...till.canvas,
-      tabs: [...till.canvas.tabs, { key: "schedule", title: "Horario", columns: 24, cards: [] }],
-    };
+  it("a switch to a profile with no starting screen lands on its fixed home even when the screen left is also supported", async () => {
+    const withScheduleTab = { formFactor: "till" as const };
     const { el } = await openProfile({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: withScheduleTab }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: withScheduleTab.formFactor }),
     });
-    emit(shell(el)!, "tab-select", { key: "schedule" });
+    emit(shell(el)!, "show-schedule");
     await flush(el);
-    expect(shell(el)!.activeTabKey).toBe("schedule");
+    expect(schedule(el)).not.toBeNull();
 
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
     await flush(el);
 
-    expect(shell(el)!.activeTabKey).toBe(withScheduleTab.tabs[0]!.key);
+    expect(shell(el)!.activeScreen).toBe("counter");
   });
 
   it("a switch starts at the new profile's starting zone, not the zone the same person left", async () => {
@@ -19457,7 +19214,7 @@ describe("W69 till shell leave routes", () => {
       } else {
         expect(location.href).not.toBe(href);
         expect(pushes).toHaveBeenCalledOnce();
-        if (route === "tab") expect(shell(el)!.activeTabKey).toBe("floor");
+        if (route === "tab") expect(shell(el)!.activeScreen).toBe("floor");
         else expect(el.shadowRoot!.querySelector(`till-${route}-screen`)).not.toBeNull();
       }
       const unload = new Event("beforeunload", { cancelable: true });
@@ -19487,7 +19244,7 @@ describe("W69 till shell leave routes", () => {
     selectTab(el, "floor");
     await flush(el);
     expect(schedule(el)).toBeNull();
-    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(shell(el)!.activeScreen).toBe("floor");
     expect(question(el).open).toBe(false);
   });
 
@@ -19528,7 +19285,7 @@ describe("W69 till shell leave routes", () => {
             window.dispatchEvent(unload);
             expect(unload.defaultPrevented).toBe(true);
           } else {
-            await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+            await expect.poll(() => shell(el)!.activeScreen).toBe("floor");
             expect(schedule(el)).toBeNull();
             expect(location.href).toBe(destination);
             expect(history.state).toMatchObject({ external: "legacy", unrelated: 7 });
@@ -19592,7 +19349,7 @@ describe("W69 till shell leave routes", () => {
     expect(schedule(el)).toBe(owner);
     await answer(el, "discard");
     await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
-    expect(shell(el)!.activeTabKey).toBe("counter");
+    expect(shell(el)!.activeScreen).toBe("counter");
     expect(pushes).toHaveBeenCalledOnce();
   });
   it("counter tab changes and logout retain the same basket without a form warning", async () => {
@@ -19651,11 +19408,11 @@ describe("W69 till shell leave routes", () => {
     const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;
     selectTab(el, "floor");
     await flush(el);
-    expect(shell(el)!.activeTabKey).toBe("floor");
+    expect(shell(el)!.activeScreen).toBe("floor");
     expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
     expect(question(el).open).toBe(false);
   });
-  it("a tab absent from the canvas does not discard or ask about the current request", async () => {
+  it("an unsupported primary screen does not discard or ask about the current request", async () => {
     const { el, owner, href } = await editedSchedule();
     selectTab(el, "missing-tab");
     await flush(el);
@@ -19708,7 +19465,7 @@ describe("W69 till shell leave routes", () => {
             await userEvent.click(tab);
             await answer(el, "discard");
             await expect.poll(() => schedule(el)).toBeNull();
-            expect(shell(el)!.activeTabKey).toBe("floor");
+            expect(shell(el)!.activeScreen).toBe("floor");
             expect(currentApi.requestAbsence).not.toHaveBeenCalled();
           } finally {
             await page.viewport(size.width, size.height);
@@ -19881,7 +19638,7 @@ describe("W69 held move basket protection", () => {
               theme,
             );
             c.store.label = "Local lunch";
-            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
             async function pick() {
               await held.updateComplete;
               await userEvent.click(
@@ -20242,7 +19999,7 @@ describe("basket native replacement warning", () => {
             c.store.addProduct(jamon, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
-            const held = counterGrid(el)!.shadowRoot!.querySelector("till-held-orders")!;
+            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
             await held.updateComplete;
             const retrieve = held
               .shadowRoot!.querySelector(".retrieve")!
@@ -20315,7 +20072,7 @@ it("retained basket traverses indexed and unindexed history without a discard wa
   expect(counter(el)!.store.id).toBe(id);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await traverse("forward");
-  await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
+  await expect.poll(() => shell(el)!.activeScreen).toBe("floor");
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   const accepted = location.href;
   history.pushState({ external: "retained" }, "", accepted);
@@ -20628,7 +20385,7 @@ describe("till-app: a box update while a kitchen display's dish move still waits
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        canvas: kdsCanvasDef,
+        formFactor: kdsFormFactor,
         capabilities: ["act-as-kds", "take-orders"],
       }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
@@ -21300,9 +21057,9 @@ describe("A737 Find a bill page", () => {
     expect(ticket(el)?.originalReceiptAvailable).toBe(false);
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
   });
-  it("a canvas with an Order tab leaves Find a bill when its selected party bill opens", async () => {
+  it("a handheld leaves Find a bill when its selected party bill opens", async () => {
     const { el, view } = await open({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvasDef }),
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
       getFindBill: vi
@@ -21313,7 +21070,7 @@ describe("A737 Find a bill page", () => {
     });
     emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-7" }) });
     await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-7"));
-    expect(shell(el)!.activeTabKey).toBe("order");
+    expect(shell(el)!.activeScreen).toBe("order");
     expect(pageOf(el)).toBeNull();
   });
 });

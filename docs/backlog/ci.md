@@ -3,6 +3,31 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## The upgrade walk's total time limit can expire while phases still advance
+
+On 2026-10-16, A182-2's normal push at local commit
+`6edd7909e40c4ddc53e6c4ff78c52dc40522f4c2` ran the unchanged hook with
+`VITEST_MAX_WORKERS=2`. Formatting and lint passed. The root coverage suite passed 6,736 cases
+and failed only the migration walk, after 331.59 seconds overall. The failure printed:
+
+```text
+Still running after 174044 ms, past the 174000 ms deadline.
+Stalled in phase core/0159_furry_beyonder: migrate after 423 ms.
+```
+
+The report includes completed phases through `workforce/0009_real_lockheed`; the current phase
+had run for less than a second when the whole-walk deadline fired. The retained process snapshot
+reports load averages of 51.78, 59.12 and 52.28, with 52% free memory. This observation does not
+measure how much of the elapsed time came from CPU scheduling or filesystem work.
+
+The branch's `migration-upgrade-budget.mjs` and `step-watch.mjs` match main byte for byte. The
+budget came from `fb6a474b830ceb51ce96babd133a6a635e5f725d` (#1541); this branch adds only the
+owner-approved canvas-retirement reset entry to the walk. The push was rejected before upload.
+The complete hook output and process snapshot are retained in Lane G's local A182-2 receipts as
+`q3-push-hook.log` and `q3-hook-failure-snapshot-163641.txt`.
+
+2026-10-16: A751 (#1805, `39d07827e18658c671bfd3e9661dde065fc973c9`) replaced this wall-time deadline with a processor-time budget and a separate no-progress limit. See [the measured limits](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time). The receipt above records the earlier failure.
+
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -188,16 +213,13 @@ Vitest 4.1.11 reads it.
   `packages/fiscal-verifactu/src/schema` keep the ignore pairs with no reason; removing a pair is a
   code change, for whoever next changes that package's code.
 
-## One test title in `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number 23001
+## Printing error test wording and profile-store session setup
 
-- Found by #588 (`packages/layouts`), not fixable in a comments-only change. One test title in
-  `packages/layouts/src/canvas-store.db.test.ts` (line 144) still quotes PostgreSQL's error number
-  23001; the stores match SQLite's. `packages/printing/src/errors.test.ts:5`
-  says the error construction typechecks "ONLY because" of one import — #588's review measured the
-  same claim false for printing and layouts. Both layouts database suites create a
-  manager session in `beforeAll`, while `useVenueDb` empties every data table after each test by
-  default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a suite's first test can
-  use that session; they pass today because only the first does.
+Left open by #588: `packages/printing/src/errors.test.ts:5` says the error construction typechecks
+"ONLY because" of one import; #588's review measured that claim false. The remaining layouts
+profile-store suite creates a manager session in `beforeAll`, while `useVenueDb` resets data per
+test, so that session belongs only to its first case. The canvas-store suite and its old
+PostgreSQL-number title are retired with A182 part 2.
 
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 

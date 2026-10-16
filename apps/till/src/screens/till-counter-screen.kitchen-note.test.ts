@@ -13,14 +13,8 @@ it("offers the whole-order kitchen note above an empty counter basket", async ()
   try {
     const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
       store: new WorkingOrderStore(),
-      counterTab: {
-        key: "counter",
-        title: "Counter",
-        columns: 12,
-        cards: [{ type: "basket", colSpan: 12, rowSpan: 1, config: {} }],
-      },
     });
-    const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+    const grid = el;
     await grid.updateComplete;
     const basket = grid.shadowRoot!.querySelector("till-basket")!;
     await basket.updateComplete;
@@ -51,14 +45,8 @@ it("follows the basket scope and closes on same-id reload without changing a dis
   ]);
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store,
-    counterTab: {
-      key: "counter",
-      title: "Counter",
-      columns: 12,
-      cards: [{ type: "basket", colSpan: 12, rowSpan: 1, config: {} }],
-    },
   });
-  const grid = el.shadowRoot!.querySelector("till-card-grid")!;
+  const grid = el;
   await grid.updateComplete;
   const basket = grid.shadowRoot!.querySelector("till-basket")!;
   await basket.updateComplete;

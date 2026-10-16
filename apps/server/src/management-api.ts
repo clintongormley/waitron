@@ -73,19 +73,14 @@ import {
 import type { IssuedAccountAction } from "@waitron/identity";
 import {
   FORM_FACTORS,
-  createCanvas,
   createDeviceProfile,
-  deleteCanvas,
   deleteDeviceProfile,
   emptyPrinterLists,
-  getCanvas,
   getDeviceProfileWithPrinters,
   getTenantTheme,
-  listCanvases,
   listDeviceProfiles,
   putTenantTheme,
   readProfilePrinterLists,
-  updateCanvas,
   updateDeviceProfile,
   type DeviceProfileRow,
   type ProfilePrinterLists,
@@ -276,10 +271,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "receipt.invalid": 400,
   "image.invalid_file": 422,
-  "canvas.not_found": 404,
-  "canvas.name_taken": 409,
-  "canvas.in_use": 409,
-  "canvas.invalid": 400,
   "theme.invalid": 400,
   "shared.invalid_id": 400,
   "status.not_found": 404,
@@ -364,11 +355,6 @@ function requireProductId(id: string): string {
 
 function requireCourseId(id: string): string {
   if (!isUuid(id)) throw new AppError("course.not_found", { courseId: id });
-  return id;
-}
-
-function requireCanvasId(id: string): string {
-  if (!isUuid(id)) throw new AppError("canvas.not_found", {});
   return id;
 }
 
@@ -580,10 +566,6 @@ function parseProfileSettings(body: ProfileBody) {
   return {
     name: body.name,
     capabilities: body.capabilities,
-    canvasId:
-      body.canvasId === undefined || body.canvasId === null
-        ? null
-        : requireBodyUuid(body.canvasId, "canvasId"),
     inactivityTimeoutSeconds: parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds),
     formFactor: requireEnum(body.formFactor, "formFactor", FORM_FACTORS),
   };
@@ -592,7 +574,6 @@ function parseProfileSettings(body: ProfileBody) {
 type ProfileBody = {
   name?: unknown;
   formFactor?: unknown;
-  canvasId?: unknown;
   capabilities?: unknown;
   inactivityTimeoutSeconds?: unknown;
   startingScreen?: unknown;
@@ -1290,105 +1271,6 @@ export function mountManagementApi(
     }),
   );
 
-  // ── Canvases and theme ──
-  // The layouts READ functions do not authorize, so each read route carries its own gate; the write
-  // functions authorize themselves.
-  app.get("/management-api/canvases", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const canvases = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        return listCanvases(tx);
-      });
-      return c.json({ canvases });
-    }),
-  );
-
-  app.get("/management-api/canvases/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireCanvasId(c.req.param("id"));
-      const canvas = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        return getCanvas(tx, id);
-      });
-      if (canvas === undefined) throw new AppError("canvas.not_found", {});
-      return c.json(canvas);
-    }),
-  );
-
-  app.post("/management-api/canvases", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      if (!("definition" in body)) {
-        throw new AppError("management.request_invalid", { field: "definition" });
-      }
-      const { name, definition } = body;
-      const result = await withTransaction(deps.db, async (tx) => {
-        return createCanvas(tx, {
-          managementSessionId: sessionId,
-          name,
-          definition,
-        });
-      });
-      return c.json(result, 201);
-    }),
-  );
-
-  app.put("/management-api/canvases/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireCanvasId(c.req.param("id"));
-      const body = await readJsonBody<{ name?: unknown; definition?: unknown }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.name !== "string") {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      if (!("definition" in body)) {
-        throw new AppError("management.request_invalid", { field: "definition" });
-      }
-      const { name, definition } = body;
-      await withTransaction(deps.db, async (tx) => {
-        await updateCanvas(tx, {
-          managementSessionId: sessionId,
-          id,
-          name,
-          definition,
-        });
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/canvases/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireCanvasId(c.req.param("id"));
-      await withTransaction(deps.db, async (tx) => {
-        await deleteCanvas(tx, {
-          managementSessionId: sessionId,
-          id,
-        });
-      });
-      return c.body(null, 204);
-    }),
-  );
-
   app.get("/management-api/theme", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1422,7 +1304,7 @@ export function mountManagementApi(
   );
 
   // ── Device profiles ──
-  // Gated like the canvases: each read route carries its own gate, the write functions authorize
+  // Each read route carries its own gate; the write functions authorize
   // themselves.
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
@@ -1475,7 +1357,7 @@ export function mountManagementApi(
       const sourceId =
         sourcePathId === undefined ? undefined : requireDeviceProfileId(sourcePathId);
       const body = await readJsonBody<ProfileBody>(c);
-      const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
+      const { name, capabilities, formFactor, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
       const lists = parsePrinterLists(body);
       const kitchenScreens = parseProfileKitchenScreens(body.kitchenScreens);
@@ -1495,7 +1377,6 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           name,
           formFactor,
-          canvasId,
           capabilities,
           inactivityTimeoutSeconds,
           startingScreen: body.startingScreen,
@@ -1524,7 +1405,7 @@ export function mountManagementApi(
   app.post("/management-api/device-profiles", (c) => createProfile(c));
   app.post("/management-api/device-profiles/:id/copy", (c) => createProfile(c, c.req.param("id")));
 
-  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
+  // An omitted `inactivityTimeoutSeconds` stores null. These stay as
   // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
   // set, the person exceptions, and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
@@ -1532,7 +1413,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
       const body = await readJsonBody<ProfileBody>(c);
-      const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
+      const { name, capabilities, formFactor, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
       const lists = parsePrinterLists(body);
       const kitchenScreens = parseProfileKitchenScreens(body.kitchenScreens);
@@ -1549,7 +1430,6 @@ export function mountManagementApi(
           id,
           name,
           formFactor,
-          canvasId,
           capabilities,
           inactivityTimeoutSeconds,
           startingScreen: body.startingScreen,

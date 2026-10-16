@@ -1,20 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { TabDef } from "../layout.js";
 import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
-import "./tab-shell.js";
-import type { TillTabShell } from "./tab-shell.js";
+import "./till-shell.js";
+import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
-const tabs: TabDef[] = [
-  { key: "counter", title: "Counter", columns: 12, cards: [] },
-  { key: "floor", title: "Floor", columns: 12, cards: [] },
-];
-
-describe("till-tab-shell", () => {
+describe("till-shell", () => {
   it.each([
     ["working", ["Start break", "Clock out", "My hours", "Fix my hours", "Log out"]],
     ["on_break", ["End break", "Clock out", "My hours", "Fix my hours", "Log out"]],
@@ -26,8 +20,8 @@ describe("till-tab-shell", () => {
     setLocale("en-GB");
     await page.viewport(1280, 844);
     try {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-        tabs,
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
         operatorName: "Ana",
         clockAvailable: true,
         clockState: {
@@ -83,8 +77,8 @@ describe("till-tab-shell", () => {
     setLocale("en-GB");
     await page.viewport(390, 844);
     try {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-        tabs,
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
         operatorName: "Ana",
         clockAvailable: true,
         clockState: {
@@ -114,8 +108,8 @@ describe("till-tab-shell", () => {
   it.each([null, "another-venue"])(
     "unknown or another-location clock state offers Retry or an explanation and disables clock writes (%s)",
     async (activeLocation) => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-        tabs,
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
         operatorName: "Ana",
         clockAvailable: true,
         clockError: "Could not read the clock",
@@ -143,10 +137,10 @@ describe("till-tab-shell", () => {
       else expect(el.shadowRoot!.textContent).toContain(t("clock.other_location"));
     },
   );
-  it("renders one tab button per profile tab and marks the active one", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "floor",
+  it("renders the fixed primary buttons and marks the active one", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "floor",
     });
     const buttons = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
     expect(buttons.length).toBe(2);
@@ -154,8 +148,8 @@ describe("till-tab-shell", () => {
     expect(active.textContent).toContain("Floor");
   });
 
-  it("marks the first tab active when activeTabKey is unset or unknown, and tabs are type=button", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs }); // no activeTabKey
+  it("marks the home screen active when activeScreen is unset or unknown, and tabs are type=button", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" }); // no activeScreen
     const active = el.shadowRoot!.querySelectorAll<HTMLElement>('.tab[aria-selected="true"]');
     expect(active.length).toBe(1);
     expect(active[0]!.textContent).toContain("Counter");
@@ -163,24 +157,24 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector<HTMLButtonElement>(".tab")!.type).toBe("button");
   });
 
-  it("emits tab-select when a tab is tapped", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+  it("emits screen-select when a tab is tapped", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
     });
     let key: string | undefined;
     el.addEventListener(
-      "tab-select",
-      (e) => (key = (e as CustomEvent<{ key: string }>).detail.key),
+      "screen-select",
+      (e) => (key = (e as CustomEvent<{ screen: string }>).detail.screen),
     );
     el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")[1]!.click();
     expect(key).toBe("floor");
   });
 
   it("emits show-station only when the station affordance is present", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
       affordances: ["station"],
     });
     let fired = false;
@@ -190,8 +184,8 @@ describe("till-tab-shell", () => {
   });
 
   it("offers Find a bill from the header when the operator can collect a debt", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
       affordances: ["find-bill"],
     });
     const seen: string[] = [];
@@ -201,9 +195,9 @@ describe("till-tab-shell", () => {
   });
 
   it("omits an affordance button that is not in affordances", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
       affordances: ["station"],
     });
     expect(el.shadowRoot!.querySelector(".station")).not.toBeNull();
@@ -212,9 +206,9 @@ describe("till-tab-shell", () => {
   });
 
   it("emits show-expo, show-schedule, open-allergens and logout from the header chrome", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
       affordances: ["expo", "schedule"],
     });
     const fired: string[] = [];
@@ -229,7 +223,7 @@ describe("till-tab-shell", () => {
   });
 
   it("offers Equipment beside Allergens, emitting open-equipment", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
+    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" });
     const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
     expect(equipment.textContent).toContain(t("equipment.open"));
     expect(equipment.previousElementSibling).toBe(
@@ -242,7 +236,7 @@ describe("till-tab-shell", () => {
   });
 
   it("offers Profile before Equipment only when the device can switch profile, emitting open-profile", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
+    const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" });
     expect(el.shadowRoot!.querySelector("wt-button.profile")).toBeNull();
     el.canSwitchProfile = true;
     await el.updateComplete;
@@ -256,9 +250,9 @@ describe("till-tab-shell", () => {
   });
 
   it("shows the operator name in the header", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
       operatorName: "Ana",
     });
     expect(el.shadowRoot!.querySelector<HTMLElement>(".operator")!.textContent).toContain("Ana");
@@ -269,9 +263,9 @@ describe("till-tab-shell", () => {
     const height = window.innerHeight;
     await page.viewport(1280, 844);
     try {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-        tabs,
-        activeTabKey: "floor",
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
+        activeScreen: "floor",
         operatorName: "Ana",
         loadLocales: async () => [{ code: "es-ES", label: "Español" }],
       });
@@ -287,8 +281,8 @@ describe("till-tab-shell", () => {
 
   it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {
     setLocale("es-ES");
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
       loadLocales: async () => [{ code: "es-ES", label: "Español" }],
     });
     const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
@@ -299,8 +293,8 @@ describe("till-tab-shell", () => {
   it("updates the chooser's active language when the till locale changes", async () => {
     setLocale("es-ES");
     try {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-        tabs,
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
         loadLocales: async () => [],
       });
       setLocale("en-GB");
@@ -314,9 +308,9 @@ describe("till-tab-shell", () => {
   });
 
   it("lets one composed chooser selection reach its parent", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
       loadLocales: async () => [
         { code: "en-GB", label: "English" },
         { code: "es-ES", label: "Español" },
@@ -338,17 +332,17 @@ describe("till-tab-shell", () => {
   });
 
   it("omits the language chooser when loadLocales is not supplied (no throw-on-open surface)", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
     });
     expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
   });
 
   it("makes the body inert while a drill-in is slotted", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
     });
     expect(el.shadowRoot!.querySelector<HTMLElement>("main.body")!.hasAttribute("inert")).toBe(
       false,
@@ -367,8 +361,8 @@ describe("till-tab-shell", () => {
   });
 
   it("keeps a drill-in over a long tab after the tab is scrolled", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs,
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
       loadLocales: async () => [{ code: "en-GB", label: "English" }],
     });
     const content = document.createElement("div");
@@ -395,9 +389,9 @@ describe("till-tab-shell", () => {
   });
 
   it("suppresses the whole operator header in kiosk mode, rendering only the body", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs: [{ key: "kitchen", title: "Kitchen", columns: 24, cards: [] }],
-      activeTabKey: "kitchen",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "kds",
+      activeScreen: "kitchen",
       operatorName: "Ana",
       affordances: [],
       kiosk: true,
@@ -408,30 +402,23 @@ describe("till-tab-shell", () => {
     expect(el.shadowRoot!.querySelector("slot:not([name])")).not.toBeNull(); // body slot stays
   });
 
-  const sixTabs: TabDef[] = [
-    ...tabs,
-    { key: "takeaway", title: "Takeaway", columns: 12, cards: [] },
-    { key: "terrace", title: "Terrace", columns: 12, cards: [] },
-    { key: "bar", title: "Bar", columns: 12, cards: [] },
-    { key: "deliveries", title: "Deliveries", columns: 12, cards: [] },
-  ];
-
   it.each([
-    ["en-GB", "two tabs", tabs],
-    ["es-ES", "two tabs", tabs],
-    ["en-GB", "six tabs", sixTabs],
+    ["en-GB", "till"],
+    ["es-ES", "till"],
+    ["en-GB", "phone-portrait"],
+    ["es-ES", "tablet-landscape"],
   ] as const)(
     "fits the header, every button on screen, at phone width in %s with %s",
-    async (locale, _label, shellTabs) => {
+    async (locale, formFactor) => {
       const before = currentLocale();
       setLocale(locale);
       const width = window.innerWidth;
       const height = window.innerHeight;
       await page.viewport(390, 844);
       try {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-          tabs: [...shellTabs],
-          activeTabKey: "counter",
+        const { el } = await mountWidget<TillShell>("till-shell", {
+          formFactor,
+          activeScreen: formFactor === "till" ? "counter" : "floor",
           operatorName: "Ana Fernández",
           affordances: ["find-bill", "station", "expo", "schedule"],
           loadLocales: async () => [{ code: locale, label: locale }],
@@ -449,7 +436,7 @@ describe("till-tab-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(10 + shellTabs.length);
+        expect(controls.length).toBe(12);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
           .map((c) => {
@@ -477,16 +464,16 @@ describe("till-tab-shell", () => {
   );
 
   it("renders the full header when not in kiosk mode (default)", async () => {
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs: [{ key: "counter", title: "Counter", columns: 12, cards: [] }],
-      activeTabKey: "counter",
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
     });
     expect(el.shadowRoot!.querySelector("header")).not.toBeNull();
   });
 });
 
 it("keeps the language chooser on a kitchen display, at the top right on its own, above the body", async () => {
-  const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+  const { el } = await mountWidget<TillShell>("till-shell", {
     kiosk: true,
     loadLocales: async () => [{ code: "en-GB", label: "English" }],
   });
@@ -502,37 +489,28 @@ it("keeps the language chooser on a kitchen display, at the top right on its own
   expect(own.left).toBeGreaterThan(shell.left + shell.width / 2);
 });
 
-it("translates standard tabs on a language switch and retains custom titles", async () => {
-  const original = currentLocale();
-  try {
-    setLocale("en-GB");
-    const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
-      tabs: [
-        ...tabs,
-        { key: "order", title: "Order", columns: 4, cards: [] },
-        { key: "custom", title: "Counter", columns: 4, cards: [] },
-        { key: "floor-renamed", title: "Patio", columns: 4, cards: [] },
-      ],
-    });
-    const labels = () =>
-      [...el.shadowRoot!.querySelectorAll(".tab")].map((e) => e.textContent!.trim());
-    expect(labels()).toEqual(["Counter", "Floor", "Order", "Counter", "Patio"]);
-    setLocale("es-ES");
-    await el.updateComplete;
-    expect(labels()).toEqual(["Mostrador", "Sala", "Pedido", "Counter", "Patio"]);
-    el.tabs = [{ key: "counter", title: "Barra principal", columns: 12, cards: [] }];
-    await el.updateComplete;
-    expect(labels()).toEqual(["Barra principal"]);
-  } finally {
-    setLocale(original);
-  }
-});
+it.each(["till", "phone-portrait", "tablet-landscape"] as const)(
+  "translates fixed primary screens for %s on a language switch",
+  async (formFactor) => {
+    const original = currentLocale();
+    try {
+      setLocale("en-GB");
+      const { el } = await mountWidget<TillShell>("till-shell", { formFactor });
+      const labels = () =>
+        [...el.shadowRoot!.querySelectorAll(".tab")].map((e) => e.textContent!.trim());
+      expect(labels()).toEqual(formFactor === "till" ? ["Counter", "Floor"] : ["Floor", "Order"]);
+      setLocale("es-ES");
+      await el.updateComplete;
+      expect(labels()).toEqual(formFactor === "till" ? ["Mostrador", "Sala"] : ["Sala", "Pedido"]);
+    } finally {
+      setLocale(original);
+    }
+  },
+);
 
-const threeTabs: TabDef[] = [...tabs, { key: "order", title: "Order", columns: 12, cards: [] }];
-
-const full: Partial<TillTabShell> = {
-  tabs: threeTabs,
-  activeTabKey: "counter",
+const full: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
   operatorName: "Ana Fernández",
   affordances: ["find-bill", "station", "expo", "schedule"],
   transferAvailable: true,
@@ -573,9 +551,9 @@ async function atViewport(width: number, run: () => Promise<void>, height = 844)
   }
 }
 
-const menuOf = (el: TillTabShell) =>
+const menuOf = (el: TillShell) =>
   el.shadowRoot!.querySelector('header wt-row-actions[data-test="more-menu"]');
-const triggerOf = (el: TillTabShell) =>
+const triggerOf = (el: TillShell) =>
   menuOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
 
 function deepActive(): Element | null {
@@ -584,7 +562,7 @@ function deepActive(): Element | null {
   return active;
 }
 
-describe("till-tab-shell at phone width", () => {
+describe("till-shell at phone width", () => {
   it.each(["en-GB", "es-ES"] as const)(
     "keeps the header to one row at most 64 px tall in %s",
     async (locale) => {
@@ -592,7 +570,7 @@ describe("till-tab-shell at phone width", () => {
       setLocale(locale);
       try {
         await atViewport(390, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el } = await mountWidget<TillShell>("till-shell", full);
           await frame();
           const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
           expect(header.height).toBeLessThanOrEqual(64);
@@ -603,7 +581,7 @@ describe("till-tab-shell at phone width", () => {
           ]
             .map((c) => c.getBoundingClientRect())
             .filter((r) => r.width > 0 && r.height > 0);
-          expect(visible.length).toBe(threeTabs.length + 2);
+          expect(visible.length).toBe(4);
           for (const r of visible) {
             expect(r.top).toBeGreaterThanOrEqual(header.top);
             expect(r.bottom).toBeLessThanOrEqual(header.bottom);
@@ -617,7 +595,7 @@ describe("till-tab-shell at phone width", () => {
 
   it("puts every action button, the operator's name and the transfer count in one menu, by touch", async () => {
     await atViewport(390, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       const menu = menuOf(el)!;
       expect(menu).not.toBeNull();
       expect(menu.getAttribute("icon")).toBe("hamburger");
@@ -665,19 +643,19 @@ describe("till-tab-shell at phone width", () => {
       expect(fired).toEqual(menuActions.map(([, type]) => type));
 
       const keys: string[] = [];
-      el.addEventListener("tab-select", (e) =>
-        keys.push((e as CustomEvent<{ key: string }>).detail.key),
+      el.addEventListener("screen-select", (e) =>
+        keys.push((e as CustomEvent<{ screen: string }>).detail.screen),
       );
       for (const tab of el.shadowRoot!.querySelectorAll<HTMLElement>(".tab")) {
         await userEvent.click(tab);
       }
-      expect(keys).toEqual(["counter", "floor", "order"]);
+      expect(keys).toEqual(["counter", "floor"]);
     });
   });
 
   it("reaches every action by keyboard", async () => {
     await atViewport(390, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       const fired: string[] = [];
       for (const [, type] of menuActions) el.addEventListener(type, () => fired.push(type));
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
@@ -705,7 +683,7 @@ describe("till-tab-shell at phone width", () => {
     setLocale("en-GB");
     try {
       await atViewport(390, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         const badge = menuOf(el)!.querySelector<HTMLElement>('wt-count-badge[slot="badge"]')!;
         expect(badge.getAttribute("tone")).toBe("warning");
         expect(badge.shadowRoot!.textContent).toContain("2");
@@ -737,7 +715,7 @@ describe("till-tab-shell at phone width", () => {
     setLocale("es-ES");
     try {
       await atViewport(390, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await (menuOf(el) as LitElement).updateComplete;
         expect(triggerOf(el).getAttribute("aria-label")).toBe("Más, traspasos pendientes: 2");
         el.transferCount = 1;
@@ -763,7 +741,7 @@ describe("till-tab-shell at phone width", () => {
         await atViewport(
           600,
           async () => {
-            const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+            const { el } = await mountWidget<TillShell>("till-shell", full);
             await userEvent.click(triggerOf(el));
             await vi.waitFor(() =>
               expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"),
@@ -797,7 +775,7 @@ describe("till-tab-shell at phone width", () => {
 
   it("announces the transfer count while the menu is closed, from one status region outside it", async () => {
     await atViewport(390, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       const statuses = () => [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="status"]')];
       expect(statuses()).toHaveLength(1);
       const status = statuses()[0]!;
@@ -822,7 +800,7 @@ describe("till-tab-shell at phone width", () => {
 
   it("draws the wide header with Find a bill in More and every other button in priority order", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       expect(
         el
           .shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!
@@ -859,7 +837,7 @@ describe("till-tab-shell at phone width", () => {
 
   it("switches layout as the screen narrows and widens, keeping the one language chooser", async () => {
     await atViewport(390, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
@@ -874,7 +852,7 @@ describe("till-tab-shell at phone width", () => {
   });
 });
 
-describe("till-tab-shell above phone width", () => {
+describe("till-shell above phone width", () => {
   /** The order in which the bar's items leave for More, first to leave first: each item's key and
    * the selector of its button. */
   const leaveOrder = [
@@ -888,20 +866,20 @@ describe("till-tab-shell above phone width", () => {
     ["operator", ".logout"],
   ] as const;
 
-  const settle = async (el: TillTabShell) => {
+  const settle = async (el: TillShell) => {
     await frame();
     await frame();
     await el.updateComplete;
   };
 
-  const inMore = (el: TillTabShell): string[] => {
+  const inMore = (el: TillShell): string[] => {
     const menu = menuOf(el);
     return menu === null
       ? []
       : leaveOrder.filter(([, selector]) => menu.querySelector(selector) !== null).map(([k]) => k);
   };
 
-  const popoverOpen = (el: TillTabShell) =>
+  const popoverOpen = (el: TillShell) =>
     menuOf(el)!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
 
   const withLocale = async (locale: string, run: () => Promise<void>) => {
@@ -914,7 +892,7 @@ describe("till-tab-shell above phone width", () => {
     }
   };
 
-  function expectOneRow(el: TillTabShell): void {
+  function expectOneRow(el: TillShell): void {
     const header = el.shadowRoot!.querySelector("header")!;
     const box = header.getBoundingClientRect();
     const parts = [
@@ -938,7 +916,7 @@ describe("till-tab-shell above phone width", () => {
   }
 
   /** Each action is in the header once, on the bar or inside one of its menus, and emits its event. */
-  async function expectEachActionOnce(el: TillTabShell): Promise<void> {
+  async function expectEachActionOnce(el: TillShell): Promise<void> {
     const header = el.shadowRoot!.querySelector("header")!;
     const fired: string[] = [];
     for (const [, type] of menuActions) el.addEventListener(type, () => fired.push(type));
@@ -973,7 +951,7 @@ describe("till-tab-shell above phone width", () => {
       it(`keeps the bar to one row at ${width} wide in ${locale}, every action reachable once`, async () => {
         await withLocale(locale, () =>
           atViewport(width, async () => {
-            const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+            const { el } = await mountWidget<TillShell>("till-shell", full);
             await settle(el);
             expectOneRow(el);
             await expectEachActionOnce(el);
@@ -988,7 +966,7 @@ describe("till-tab-shell above phone width", () => {
     async (locale) => {
       await withLocale(locale, () =>
         atViewport(1600, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
           let before: string[] = [];
           const seen = new Set<number>();
@@ -1011,9 +989,9 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
-  const demoCounter: Partial<TillTabShell> = {
-    tabs,
-    activeTabKey: "counter",
+  const demoCounter: Partial<TillShell> = {
+    formFactor: "till",
+    activeScreen: "counter",
     operatorName: "Ana",
     affordances: ["find-bill", "station", "expo", "schedule"],
     transferAvailable: true,
@@ -1037,11 +1015,11 @@ describe("till-tab-shell above phone width", () => {
    * name hidden and those items in More. Measured in the running browser, because how wide the text
    * draws differs between platforms. */
   async function serviceWidths(
-    shell: Partial<TillTabShell>,
+    shell: Partial<TillShell>,
   ): Promise<{ below: string[]; fits: number; tight: number }> {
     let result = { below: [] as string[], fits: 0, tight: 0 };
     await atViewport(ROOMY_WIDTH, async () => {
-      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+      const { el, host } = await mountWidget<TillShell>("till-shell", shell);
       await settle(el);
       await settle(el);
       expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
@@ -1096,7 +1074,7 @@ describe("till-tab-shell above phone width", () => {
             [tight, [...below, "station"]],
           ] as const) {
             await atViewport(width, async () => {
-              const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", shell);
+              const { el, host } = await mountWidget<TillShell>("till-shell", shell);
               await settle(el);
               if (width <= 640) {
                 expect(el.shadowRoot!.querySelector("header.phone"), `${width}`).not.toBeNull();
@@ -1159,7 +1137,7 @@ describe("till-tab-shell above phone width", () => {
     async (locale, short, title) => {
       await withLocale(locale, () =>
         atViewport(ROOMY_WIDTH, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
           expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
@@ -1182,7 +1160,7 @@ describe("till-tab-shell above phone width", () => {
       await withLocale(locale, async () => {
         expect(t("action.logout")).toBe(headerName);
         await atViewport(ROOMY_WIDTH, async () => {
-          const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el, host } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
           expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
           const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
@@ -1195,7 +1173,7 @@ describe("till-tab-shell above phone width", () => {
           host.remove();
         });
         await atViewport(390, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
           const inMenu = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
           expect(inMenu.textContent!.trim()).toBe(label);
@@ -1213,7 +1191,7 @@ describe("till-tab-shell above phone width", () => {
       const { fits, tight } = await serviceWidths(demoCounter);
       console.info(`The demo counter's Spanish bar keeps Pass and Kitchen from ${fits} px.`);
       await atViewport(800, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", demoCounter);
+        const { el } = await mountWidget<TillShell>("till-shell", demoCounter);
         await settle(el);
         expect(el.shadowRoot!.querySelector("header.phone")).toBeNull();
         const moved = inMore(el);
@@ -1230,7 +1208,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("keeps More in the bar's order, showing only the items that left", async () => {
     await atViewport(1024, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
       const menu = menuOf(el)!;
       const order = [...menu.children]
@@ -1276,7 +1254,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("puts every item back on the bar, and the name, once the screen is wide enough", async () => {
     await atViewport(700, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
       expect(menuOf(el)).not.toBeNull();
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
@@ -1291,7 +1269,7 @@ describe("till-tab-shell above phone width", () => {
   it("refits when the operator's name grows", async () => {
     await withLocale("en-GB", () =>
       atViewport(1280, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const was = inMore(el).length;
         el.operatorName = "María de los Ángeles Fernández-Villaverde y Castro";
@@ -1305,14 +1283,14 @@ describe("till-tab-shell above phone width", () => {
 
   it("refits when actions are added, and gives them back when they go", async () => {
     await atViewport(1280, async () => {
-      const few: Partial<TillTabShell> = {
+      const few: Partial<TillShell> = {
         ...full,
         affordances: [],
         canSwitchProfile: false,
         transferAvailable: false,
         transferCount: undefined,
       };
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", few);
+      const { el } = await mountWidget<TillShell>("till-shell", few);
       await settle(el);
       expect(menuOf(el)).toBeNull();
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
@@ -1332,7 +1310,7 @@ describe("till-tab-shell above phone width", () => {
   it("refits when the language changes", async () => {
     await withLocale("en-GB", () =>
       atViewport(1280, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         expectOneRow(el);
         setLocale("es-ES");
@@ -1346,14 +1324,14 @@ describe("till-tab-shell above phone width", () => {
     );
   });
 
-  const statuses = (el: TillTabShell) => [
+  const statuses = (el: TillShell) => [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="status"]'),
   ];
 
   it("keeps the visible count as the status while the transfers are on the bar", async () => {
     await withLocale("en-GB", () =>
       atViewport(ROOMY_WIDTH, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
         const [status, ...rest] = statuses(el);
@@ -1371,7 +1349,7 @@ describe("till-tab-shell above phone width", () => {
   it("badges More and announces from one region outside it once the transfers have left", async () => {
     await withLocale("en-GB", () =>
       atViewport(700, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const menu = menuOf(el)!;
         expect(menu.querySelector("[data-open-transfers]")).not.toBeNull();
@@ -1393,7 +1371,7 @@ describe("till-tab-shell above phone width", () => {
   it("keeps an open More open, and the same status region, when the transfer count changes while the transfers are in More", async () => {
     await withLocale("en-GB", () =>
       atViewport(1024, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const menu = menuOf(el)!;
         expect(menu.querySelector("[data-open-transfers]")).not.toBeNull();
@@ -1416,7 +1394,7 @@ describe("till-tab-shell above phone width", () => {
   it("waits for an open More to close before giving items back to a wider bar", async () => {
     await withLocale("en-GB", () =>
       atViewport(1024, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const menu = menuOf(el)!;
         await userEvent.click(triggerOf(el));
@@ -1439,7 +1417,7 @@ describe("till-tab-shell above phone width", () => {
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
       atViewport(900, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
+        const { el } = await mountWidget<TillShell>("till-shell", {
           ...full,
           canSwitchProfile: false,
         });
@@ -1473,7 +1451,7 @@ describe("till-tab-shell above phone width", () => {
   it("keeps an open More, and everything in it, when the screen widens out of phone width", async () => {
     await withLocale("en-GB", () =>
       atViewport(390, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const menu = menuOf(el)!;
         const everything = leaveOrder.map(([k]) => k);
@@ -1490,7 +1468,7 @@ describe("till-tab-shell above phone width", () => {
         expectOneRow(el);
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el: fresh } = await mountWidget<TillShell>("till-shell", full);
         await settle(fresh);
         expect(inMore(fresh).length).toBeLessThan(everything.length);
         expect(inMore(el)).toEqual(inMore(fresh));
@@ -1502,7 +1480,7 @@ describe("till-tab-shell above phone width", () => {
   it("refits when the shell redraws between More closing and its toggle event", async () => {
     await withLocale("en-GB", () =>
       atViewport(390, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         await userEvent.click(triggerOf(el));
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
@@ -1513,7 +1491,7 @@ describe("till-tab-shell above phone width", () => {
         el.addEventListener("click", () => el.requestUpdate(), { once: true });
         await userEvent.click(menuOf(el)!.querySelector<HTMLElement>(".allergens")!);
         await settle(el);
-        const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el: fresh } = await mountWidget<TillShell>("till-shell", full);
         await settle(fresh);
         expect(inMore(fresh).length).toBeLessThan(leaveOrder.length);
         expect(inMore(el)).toEqual(inMore(fresh));
@@ -1526,7 +1504,7 @@ describe("till-tab-shell above phone width", () => {
   it("keeps an open More, gaining what is left, when the screen narrows into phone width", async () => {
     await withLocale("en-GB", () =>
       atViewport(1024, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const menu = menuOf(el)!;
         expect(inMore(el).length).toBeLessThan(leaveOrder.length);
@@ -1545,7 +1523,7 @@ describe("till-tab-shell above phone width", () => {
   it("keeps everything in More when an open More that held a redraw closes at phone width, and refits once wider", async () => {
     await withLocale("en-GB", () =>
       atViewport(1024, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+        const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const fitted = inMore(el);
         expect(fitted.length).toBeLessThan(leaveOrder.length);
@@ -1571,7 +1549,7 @@ describe("till-tab-shell above phone width", () => {
   it("leaves kiosk mode cleanly while a fit begun in kiosk mode is still under way", async () => {
     await withLocale("en-GB", () =>
       atViewport(ROOMY_WIDTH, async () => {
-        const { el } = await mountWidget<TillTabShell>("till-tab-shell", { ...full, kiosk: true });
+        const { el } = await mountWidget<TillShell>("till-shell", { ...full, kiosk: true });
         await settle(el);
         const rejections: unknown[] = [];
         const record = (event: PromiseRejectionEvent) => rejections.push(event.reason);
@@ -1602,7 +1580,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("keeps fitting after it is taken off the page and put back", async () => {
     await atViewport(ROOMY_WIDTH, async () => {
-      const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el, host } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
       expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
       el.remove();
@@ -1649,7 +1627,7 @@ describe("till-tab-shell above phone width", () => {
     async (_how, start, first, second, from, to) => {
       await withLocale("en-GB", () =>
         atViewport(1280, async () => {
-          const { el: fresh } = await mountWidget<TillTabShell>("till-tab-shell", {
+          const { el: fresh } = await mountWidget<TillShell>("till-shell", {
             ...full,
             ...start,
             ...first,
@@ -1658,7 +1636,7 @@ describe("till-tab-shell above phone width", () => {
           await settle(fresh);
           const want = inMore(fresh);
           fresh.remove();
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", { ...full, ...start });
+          const { el } = await mountWidget<TillShell>("till-shell", { ...full, ...start });
           await settle(el);
           const differs: string[] = [];
           // Each pass starts the second fit one microtask later than the last, so some pass cuts
@@ -1683,7 +1661,7 @@ describe("till-tab-shell above phone width", () => {
 
   it("reports no ResizeObserver loop while the screen narrows and widens across the phone width", async () => {
     await atViewport(1280, async () => {
-      const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+      const { el } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
       const errors: string[] = [];
       const record = (event: ErrorEvent) => errors.push(event.message);
@@ -1700,4 +1678,50 @@ describe("till-tab-shell above phone width", () => {
       }
     });
   });
+});
+
+it.each([
+  ["till", ["Counter", "Floor"], "counter", "floor"],
+  ["phone-portrait", ["Floor", "Order"], "floor", "order"],
+  ["tablet-landscape", ["Floor", "Order"], "floor", "order"],
+] as const)(
+  "fixed primary screens for %s work without an authored tab list",
+  async (formFactor, labels, _home, second) => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<TillShell>("till-shell", { formFactor });
+      const buttons = () => [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")];
+      expect(buttons().map((button) => button.textContent!.trim())).toEqual(labels);
+      expect(
+        buttons()
+          .filter((button) => button.getAttribute("aria-selected") === "true")
+          .map((button) => button.textContent!.trim()),
+      ).toEqual([labels[0]]);
+      const selected: unknown[] = [];
+      el.addEventListener("screen-select", (event) => selected.push((event as CustomEvent).detail));
+      await userEvent.click(buttons()[1]!);
+      expect(selected).toEqual([{ screen: second }]);
+      Object.assign(el, { activeScreen: second });
+      await el.updateComplete;
+      expect(buttons()[1]!.getAttribute("aria-selected")).toBe("true");
+      Object.assign(el, { activeScreen: "retired-custom-screen" });
+      await el.updateComplete;
+      expect(buttons()[0]!.getAttribute("aria-selected")).toBe("true");
+    } finally {
+      setLocale(locale);
+    }
+  },
+);
+
+it("the KDS form factor keeps operator controls out and retains its language chooser", async () => {
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "kds",
+    operatorName: "Ana",
+    loadLocales: async () => [{ code: "en-GB", label: "English" }],
+  });
+  expect(el.shadowRoot!.querySelector("header")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".tab")).toBeNull();
+  expect(el.shadowRoot!.querySelector(".logout")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
 });
