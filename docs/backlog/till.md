@@ -2005,6 +2005,15 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   and no cause. Two suspects, neither confirmed: the Demo card reader chosen, which deliberately
   ignores the toggle; or the draft restore putting `simulationOutcome` back to "captured". Reproduce
   in a browser test first.
+  **Reproduction check, 2026-10-16:** on baseline `6dcffc9d3`, eight real-Chromium
+  counter probes clicked Decline then Card, with the pre-payment station check held until
+  explicitly released. English and Spanish, light and dark, at 390 and 1280 px all kept the
+  selection, sent `simulationOutcome: "declined"`, displayed the refusal and retained the
+  basket. These probes used a payment API fake that returned the requested outcome; they did
+  not run against the Santet installation. The existing real-database case
+  `runs a simulated decline through payment handling without filing a sale` in
+  `till-sale-integrated.db.test.ts` also passed. No product fix is established. Next: obtain
+  the exact Santet screen, reader choice and steps, then reproduce that path.
 - **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
   data and nothing on the till says the decision is made on the dashboard). It came from A247
   (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry

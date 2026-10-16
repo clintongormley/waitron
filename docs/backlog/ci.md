@@ -367,3 +367,30 @@ script reports the same `attempt N of 3 failed or stalled: npm install` line whe
 or the version check failed, so stderr alone may not distinguish them. On recurrence, retain
 separate statuses and timings for both commands before assigning the cause. The controlled
 short-limit measurement is in [the CI guide](../developers/ci-and-gates.md#give-a-healthy-version-check-its-normal-allowance).
+
+## The simulator suite lost its worker to the venue watchdog
+
+On 2026-10-16, an A739a investigation at `6dcffc9d3` ran:
+
+```sh
+pnpm --filter @waitron/payments exec vitest run src/simulator.test.ts
+```
+
+On Node v26.11.1 and Vitest 4.1.11, the run reported 15 passing cases out of 22,
+then one unhandled worker-exit error and exit 1. Its stderr logged
+`provisioning.database_holder_frozen`, with `lockedAt` at
+`2026-10-16T15:09:44.978Z`, `lastTickAt` at `2026-08-31T07:20:36.594Z`, and a stack
+ending in a database insert. The complete log remains in Lane F's local
+`receipts/a739a/provider-20261016.log`.
+
+The focused ordinary capture, immediate decline and pretend-reader decline cases passed
+(3 cases). The expiry case, run alone with
+`-t 'expires an abandoned pretend reader' --reporter=verbose`, also passed (1 case).
+Neither result repairs or explains the full run's worker loss.
+
+The expiry case uses unrestricted `vi.useFakeTimers()` at
+`packages/payments/src/simulator.test.ts:199`. The heartbeat writer and watchdog both read
+`process.hrtime.bigint()` in `packages/store/src/venue-liveness.ts`; the watchdog runs in a
+separate worker. A fake clock crossing that boundary is a hypothesis, not a measured cause.
+Next: retain per-case timing and heartbeat values around that boundary, reproduce the full-run
+exit, then fix the responsible side without weakening the expiry assertion or watchdog.

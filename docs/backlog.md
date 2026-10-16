@@ -2230,7 +2230,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   then Cash or Card. Paying part of a counter order is new and follows the bill payments design
   (one receipt when the bill is fully paid). The simulator asks Declined/Approved at Card; Decline
   not declining is reproduced and fixed; the Demo card reader goes; no receipt screen after paying.
-  After A738. [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+  The reported ignored Decline still needs the exact Santet screen and steps; the 2026-10-16
+  counter browser probes did not reproduce it. After A738.
+  [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A740 — zones on a device (owner, 2026-10-15; open).** A zone's menus, prices and trading name
   come from its department; what differs per zone is how it is paid, collection numbers, receipt
@@ -5697,6 +5699,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **The simulator suite lost its worker to the venue watchdog during A739a investigation
+  (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
+  `provisioning.database_holder_frozen` after 15 passing cases; the isolated expiry case passed.
+  Find the cause before treating a retry as a repair.
+  [Detail](backlog/ci.md#the-simulator-suite-lost-its-worker-to-the-venue-watchdog)
 
 - **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
   in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
