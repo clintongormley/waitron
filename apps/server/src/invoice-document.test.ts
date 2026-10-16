@@ -918,10 +918,12 @@ describe("A4 department-only decoration", () => {
 });
 
 describe("the guests a full invoice prints", () => {
-  /** A paid full invoice for one Burger, on a bill whose party was seated with `guests`. */
-  async function paidFullInvoice(guests: number): Promise<string> {
+  /** A paid full invoice for one Burger, on a bill whose party was seated with `guests`, or with no count. */
+  async function paidFullInvoice(guests: number | null): Promise<string> {
     const { partyId, billId } = await billWith(venue, [{ name: "Burger" }]);
-    await suite.db.update(parties).set({ guestCount: guests }).where(eq(parties.id, partyId));
+    if (guests !== null) {
+      await suite.db.update(parties).set({ guestCount: guests }).where(eq(parties.id, partyId));
+    }
     const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     await setOrderInvoiceChoice(suite.db, venue.backend, venue.cfg, billId, {
       revision: order!.revision,
@@ -959,6 +961,11 @@ describe("the guests a full invoice prints", () => {
   it("reads the guests of the bill's party", async () => {
     const document = await read(venue.backend, await paidFullInvoice(4));
     expect(document.guests).toBe(4);
+  });
+
+  it("reads no guests for a party seated with no count", async () => {
+    const document = await read(venue.backend, await paidFullInvoice(null));
+    expect(document).not.toHaveProperty("guests");
   });
 
   it("reads no guests for a sale with no bill", async () => {
