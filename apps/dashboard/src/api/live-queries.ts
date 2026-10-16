@@ -511,6 +511,7 @@ export const QUERY_DEPENDENCIES = {
     "location_day_cutover_changes",
   ],
   getReceiptLanguage: ["locations"],
+  getVenueDefaults: ["locations", "catalogue_settings"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],
   listIngredients: ["ingredients"],
   listStatuses: ["table_service_statuses"],

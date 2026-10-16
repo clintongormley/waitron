@@ -466,6 +466,25 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads and saves the venue defaults through one route, sending only the changed fields", async () => {
+    const answer = {
+      receiptLanguage: "es-ES",
+      receiptLanguageChoices: ["es-ES", "ca-ES"],
+      fixedReceiptLanguage: null,
+      defaultProductVatClass: "zero" as const,
+    };
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getVenueDefaults()).resolves.toEqual(answer);
+    await expect(api.putVenueDefaults({ defaultProductVatClass: "zero" })).resolves.toEqual(answer);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/venue-defaults", "GET", undefined],
+      ["/management-api/venue-defaults", "PUT", { defaultProductVatClass: "zero" }],
+    ]);
+  });
+
   it("keeps background POST previews active unless the preview explicitly requests passive activity", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),

@@ -12,17 +12,12 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import {
-  VAT_CLASSES,
-  vatRateOn,
-  localToday,
-  type VatClass,
-} from "@waitron/catalogue/src/vat-rates.js";
+import { VAT_CLASSES, type VatClass } from "@waitron/catalogue/src/vat-rates.js";
 import type { CatalogueSettings, DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { vatClassName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
+import { vatClassLabel } from "./venue-defaults-panel.js";
 
 @customElement("dashboard-catalogue-settings-panel")
 export class CatalogueSettingsPanel extends LitElement {
@@ -195,7 +190,7 @@ export class CatalogueSettingsPanel extends LitElement {
                 search="never"
                 label=${t("catalogue_settings.default_vat")}
                 hint=${t("catalogue_settings.hint")}
-                .options=${VAT_CLASSES.map((value) => ({ value, label: `${vatClassName(value)} (${vatRateOn(value, localToday()).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)` }))}
+                .options=${VAT_CLASSES.map((value) => ({ value, label: vatClassLabel(value) }))}
                 .value=${this.draft}
                 error=${this.fieldError}
                 ?disabled=${this.submitting}
