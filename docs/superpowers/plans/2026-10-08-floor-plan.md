@@ -1,4 +1,6 @@
 > 2026-10-16: A671 supersedes the editor side-panel arrangement, placement click targets and
+
+> 2026-10-16, A747: the owner replaced empty joined-seat defaults with editable totals in the till and dashboard. The [current decision](../../backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747) supersedes the empty-default wording below.
 > new joined-table placement described below. The current contract is in
 > [design-system.md](../../developers/design-system.md#departments-and-zones).
 

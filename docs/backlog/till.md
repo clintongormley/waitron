@@ -1437,6 +1437,17 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+### Joined-table seat suggestions (owner, 2026-10-16; A747)
+
+When you join tables, the Seats field starts with their total so you can accept it or change it.
+The till uses today's seats and counts an existing group once, using its displayed total.
+When a split leaves tables joined, the suggestion adds the remaining tables' individual seats,
+as listed in the split window. The dashboard adds the selected tables' saved seats. Suggestions
+stay within 1–999; if any contributing count is unknown, the field stays empty. Editing the
+suggestion keeps your value when the table selection changes. Accepting a suggestion leaves no
+unsaved draft. The existing server refusal before the till opens Seats remains A666's decision.
+
+
 ### Touch gestures in the floor plan editor (owner, 2026-10-14; A673)
 
 On a touch screen, tap a table to select it before dragging it. A finger on an unselected table

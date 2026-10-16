@@ -83,6 +83,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
   @state() private checked = false;
   @state() private noRoom = false;
 
+  #seatsEdited = false;
   readonly #id = {};
   #scope?: DraftScope<JoinedForm>;
 
@@ -115,6 +116,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     if (this.form !== null) return;
     this.checked = false;
     this.noRoom = false;
+    this.#seatsEdited = false;
     this.form = { name: "", seats: "", parts: [] };
   }
 
@@ -141,7 +143,25 @@ export class FloorPlanAddJoinedTable extends LitElement {
   #edit(patch: Partial<JoinedForm>): void {
     if (this.form === null) return;
     this.noRoom = false;
+    if (patch.seats !== undefined) this.#seatsEdited = true;
     this.form = { ...this.form, ...patch };
+    if (patch.parts !== undefined && !this.#seatsEdited) {
+      const counts = this.#parts(this.form).map(
+        (key) => this.draft.tables.find((table) => table.key === key)!.seats,
+      );
+      this.form.seats =
+        counts.length === 0 || counts.some((count) => count === null)
+          ? ""
+          : String(
+              Math.max(
+                1,
+                Math.min(
+                  MAX_SEATS,
+                  counts.reduce<number>((sum, count) => sum + count!, 0),
+                ),
+              ),
+            );
+    }
     this.#scope?.changed();
   }
 

@@ -189,7 +189,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog).not.toBeNull();
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBeNull();
+    expect(dialog.seats).toBe(9);
     expect(dialog.heading).toBe("Seats for 1+2");
     expect(refreshes.count).toBe(0);
     expect(refusal(el)).toBeNull();
@@ -268,7 +268,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       bills: "separate",
     });
     await settle(el);
-    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")!.seats).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")!.seats).toBe(8);
 
     send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
       seats: 6,
@@ -284,7 +284,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     );
   });
 
-  it("a seated table dropped on a merge of two asks for seats again, empty", async () => {
+  it("a seated table dropped on a merge of two suggests their combined seats", async () => {
     const R = party("R", 5, ["t3"]);
     const api = stubApi();
     api.joinTables.mockRejectedValueOnce(seatsRefusal);
@@ -301,7 +301,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBeNull();
+    expect(dialog.seats).toBe(10);
     expect(dialog.heading).toBe("Seats for 1+2+3");
   });
 

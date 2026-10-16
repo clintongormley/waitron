@@ -153,13 +153,13 @@ it("opens with nothing chosen and Split quiet and disabled", async () => {
   expect([action(el).variant, action(el).disabled]).toEqual(["primary", false]);
 });
 
-it("asks Long table's seats, empty and required, only while two or more would stay", async () => {
+it("suggests Long table's remaining seats, required only while two or more would stay", async () => {
   const el = await mount();
   await choose(el, ["c5"]);
   const seats = seatsField(el)!;
   expect(seats).not.toBeNull();
   expect(seats.required).toBe(true);
-  expect(seats.value).toBe("");
+  expect(seats.value).toBe("8");
   expect([seats.min, seats.max]).toEqual([1, 999]);
   expect(seats.label).toBe("Seats for Long table");
   await choose(el, ["c5", "c4"]);
@@ -195,6 +195,7 @@ it("explains a Split with no seats beside Seats", async () => {
   const el = await mount();
   const seen = captured(el);
   await choose(el, ["c5"]);
+  await typeSeats(el, "");
   await press(el);
   expect(seen.confirmed).toEqual([]);
   expect(seatsField(el)!.error).toBe("Enter 1 to 999");
@@ -431,6 +432,7 @@ describe("on a group", () => {
     const seats = seatsField(el)!;
     expect(seats.required).toBe(true);
     expect(seats.label).toBe("Seats for what stays");
+    await typeSeats(el, "");
     await press(el);
     expect(seats.error).toBe("Enter 1 to 999");
     await typeSeats(el, "10");
@@ -445,6 +447,7 @@ describe("on a group", () => {
     const seats = seatsField(el)!;
     expect(seats.required).toBe(true);
     expect(seats.label).toBe("Seats for what stays");
+    await typeSeats(el, "");
     await press(el);
     expect(seen.confirmed).toEqual([]);
     await typeSeats(el, "10");
@@ -597,4 +600,38 @@ describe("today's names", () => {
     await choose(el, ["c3", "c5"]);
     expect(text(el)).toContain("Guests move to Window");
   });
+});
+
+it("A747 prefills the tables staying joined and follows selection until edited", async () => {
+  const el = await mount();
+  await choose(el, ["c5"]);
+  expect(seatsField(el)!.value).toBe("8");
+  await choose(el, ["c4"]);
+  expect(seatsField(el)!.value).toBe("6");
+  await typeSeats(el, "5");
+  await choose(el, ["c5"]);
+  expect(seatsField(el)!.value).toBe("5");
+  const seen = captured(el);
+  await press(el);
+  expect(seen.confirmed).toEqual([{ partIds: ["c5"], seats: 5 }]);
+});
+
+it.each([
+  { a: null, b: 6, want: "" },
+  { a: 700, b: 600, want: "999" },
+  { a: 0, b: 0, want: "1" },
+])("A747 remaining seats $a plus $b suggest $want", async ({ a, b, want }) => {
+  const el = await mount({
+    parts: [part("c3", "Counter 3", a), part("c4", "Counter 4", b), part("c5", "Counter 5", 4)],
+  });
+  await choose(el, ["c5"]);
+  expect(seatsField(el)!.value).toBe(want);
+  const seen = captured(el);
+  await press(el);
+  if (want === "") {
+    expect(seen.confirmed).toEqual([]);
+    expect(seatsField(el)!.error).toBe("Enter 1 to 999");
+  } else {
+    expect(seen.confirmed).toEqual([{ partIds: ["c5"], seats: Number(want) }]);
+  }
 });

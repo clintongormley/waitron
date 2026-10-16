@@ -102,3 +102,11 @@ it("the − and + buttons are changes like typing", async () => {
   field.shadowRoot!.querySelector<HTMLButtonElement>("[data-step='-1']")!.click();
   expect(await actionState(el)).toEqual(quiet);
 });
+
+it("A747 accepts an unchanged prefilled Join count", async () => {
+  const el = await mount({ seats: 8, action: "join" });
+  const sent = confirmations(el);
+  expect(await actionState(el)).toEqual(ready);
+  await userEvent.click(page.elementLocator(actionButton(el).shadowRoot!.querySelector("button")!));
+  expect(sent).toEqual([{ seats: 8 }]);
+});

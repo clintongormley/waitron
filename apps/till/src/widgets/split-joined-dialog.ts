@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { totalSeats } from "../state/floor-map.js";
 import { shownName, splitsGroup } from "../state/floor-today.js";
 
 export interface SplitJoinedDetail {
@@ -81,7 +82,8 @@ export class TillSplitJoinedDialog extends LitElement {
   @state() private active = true;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
-  #baseline: Draft = { chosen: [], seats: "" };
+  #baseline?: Draft;
+  #seatsEdited = false;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
@@ -93,7 +95,11 @@ export class TillSplitJoinedDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("refusal")) this.refusalDismissed = false;
-    if (!this.isConnected || !this.active || this.#scope) return;
+    if (!this.isConnected || !this.active) return;
+    if (!this.#seatsEdited)
+      this.seats = String(totalSeats(this.#left().map((part) => part.today?.seats ?? null)) ?? "");
+    if (this.#scope) return;
+    this.#baseline ??= { chosen: [], seats: this.seats };
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
       id: this,
       current: () => ({ chosen: this.#chosen(), seats: this.seats }),
@@ -167,6 +173,8 @@ export class TillSplitJoinedDialog extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !this.active || this.busy) return;
     this.chosen = [...event.detail.values];
+    if (!this.#seatsEdited)
+      this.seats = String(totalSeats(this.#left().map((part) => part.today?.seats ?? null)) ?? "");
     if (this.#shownRefusal()?.field === "partIds") this.refusalDismissed = true;
     this.#scope?.changed();
   }
@@ -174,6 +182,7 @@ export class TillSplitJoinedDialog extends LitElement {
   #onSeats(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active || this.busy) return;
+    this.#seatsEdited = true;
     this.seats = event.detail.value;
     if (this.refusal?.field === "seats") this.refusalDismissed = true;
     this.#scope?.changed();

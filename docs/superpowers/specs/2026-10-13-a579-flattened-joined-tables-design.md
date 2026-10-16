@@ -1,5 +1,7 @@
 # A579: a joined table pushed into a group, Reset table, and out-of-date floor changes
 
+> 2026-10-16, A747: the owner replaced empty joined-seat defaults with editable totals in the till and dashboard. The [current decision](../../backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747) supersedes the empty-default wording below.
+
 A short design asked for by the owner before a plan (campaign queue, A579). It follows on from the
 joined-tables design, [2026-10-12-a503-joined-tables-design.md](2026-10-12-a503-joined-tables-design.md),
 and replaces parts of it (listed under "What this replaces"). Points marked **Default** are the

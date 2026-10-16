@@ -189,7 +189,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog).not.toBeNull();
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBeNull();
+    expect(dialog.seats).toBe(8);
     expect(dialog.heading).toBe("Seats for 1+2");
     expect(drawnAt(el, "t2")).toBe(4);
     expect(refusal(el)).toBeNull();
@@ -217,7 +217,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(refreshes.count).toBe(1);
   });
 
-  it("a third table dropped on a merge asks for seats again, empty", async () => {
+  it("a third table dropped on a merge suggests its seats plus the group total", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
     const el = await mount(
@@ -232,7 +232,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     await settle(el);
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBeNull();
+    expect(dialog.seats).toBe(10);
     expect(dialog.heading).toBe("Seats for 1+2+3");
   });
 
@@ -970,5 +970,44 @@ describe("till-floor-screen: today's names", () => {
     );
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("Window");
+  });
+});
+
+describe("A747 joined seats defaults", () => {
+  it.each([
+    { moving: 3, target: 5, want: 8 },
+    { moving: 700, target: 600, want: 999 },
+    { moving: null, target: 5, want: null },
+  ])("prefills $moving plus $target as $want", async ({ moving, target, want }) => {
+    const api = stubApi();
+    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
+    const el = await mount(
+      [planned("t1", 2, { seats: target }), planned("t2", 20, { seats: moving })],
+      api,
+    );
+    await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+    await settle(el);
+    const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+    expect(dialog.seats).toBe(want);
+    await dialog.updateComplete;
+    const field = dialog.shadowRoot!.querySelector("wt-number-stepper")!;
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector("input")!.value).toBe(want === null ? "" : String(want));
+  });
+
+  it("counts an existing group once using its current seats", async () => {
+    const api = stubApi();
+    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
+    const el = await mount(
+      [
+        planned("t1", 2, { seats: 2, joinId: "j1", joinSeats: 9 }),
+        planned("t2", 4, { seats: 4, joinId: "j1", joinSeats: 9 }),
+        planned("t3", 20, { seats: 3 }),
+      ],
+      api,
+    );
+    await drop(el, { tableId: "t3", x: 7, y: 3, targetId: "t2" });
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")!.seats).toBe(12);
   });
 });

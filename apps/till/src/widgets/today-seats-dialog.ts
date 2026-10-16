@@ -92,7 +92,9 @@ export class TillTodaySeatsDialog extends LitElement {
   }
 
   #actionState() {
-    return saveActionState(this.#scope);
+    return saveActionState(this.#scope, {
+      savableAtOpen: this.action === "join" && seatsFrom(this.value) !== null,
+    });
   }
 
   #invalid(): boolean {

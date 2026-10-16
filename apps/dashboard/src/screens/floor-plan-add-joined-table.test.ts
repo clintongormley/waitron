@@ -332,3 +332,47 @@ it("A671: a full plan keeps the joined-table form and its values open until a pl
   expect(changes[0]!.tables.at(-1)!.placement).not.toBeNull();
   expect(dialog(el).open).toBe(false);
 });
+
+it("A747 prefills the selected tables total and saves it unchanged", async () => {
+  const el = await openAdd();
+  const { changes } = listen(el);
+  await choose(el, ["c3", "c4"]);
+  expect(field(el, "seats").value).toBe("8");
+  await choose(el, ["c3", "c4", "c5"]);
+  expect(field(el, "seats").value).toBe("12");
+  await set(el, "table-name", "Together");
+  await pressAdd(el);
+  expect(changes[0]!.tables.find((table) => table.key === "new:1")!.seats).toBe(12);
+});
+
+it("A747 keeps a manually edited total when the parts change", async () => {
+  const el = await openAdd();
+  await choose(el, ["c3", "c4"]);
+  expect(field(el, "seats").value).toBe("8");
+  await set(el, "seats", "7");
+  await choose(el, ["c3", "c4", "c5"]);
+  expect(field(el, "seats").value).toBe("7");
+});
+
+it.each([
+  { a: 700, b: 600, want: "999" },
+  { a: 0, b: 0, want: "1" },
+  { a: null, b: 6, want: "" },
+])("A747 defaults $a plus $b as $want", async ({ a, b, want }) => {
+  const el = await openAdd({ draft: { tables: [table("a", "A", a), table("b", "B", b)] } });
+  await choose(el, ["a", "b"]);
+  expect(field(el, "seats").value).toBe(want);
+});
+
+it("A747 reopening after a manually edited add suggests totals again", async () => {
+  const el = await openAdd();
+  await choose(el, ["c3", "c4"]);
+  await set(el, "seats", "7");
+  await set(el, "table-name", "Together");
+  await pressAdd(el);
+  expect(dialog(el).open).toBe(false);
+  el.show();
+  await el.updateComplete;
+  await choose(el, ["c3", "c4"]);
+  expect(field(el, "seats").value).toBe("8");
+});

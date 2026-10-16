@@ -80,7 +80,13 @@ import {
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import { drawnGroupKey, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
+import {
+  drawnGroupKey,
+  listedTables,
+  mapTables,
+  seatsFor,
+  totalSeats,
+} from "../state/floor-map.js";
 import type {
   FloorAnswer,
   FloorZone,
@@ -1130,7 +1136,7 @@ export class TillFloorScreen extends LitElement {
       if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
       this.askingSeats = {
         heading: action.heading,
-        seats: null,
+        seats: this.#joinSeats(merge.moving, merge.target),
         action: "join",
         resend: (chosen) => void this.#join(api, action, room, bills, chosen),
       };
@@ -1161,12 +1167,21 @@ export class TillFloorScreen extends LitElement {
         if (seats !== undefined || !asksSeats(refused)) return false;
         this.askingSeats = {
           heading: action.heading,
-          seats: null,
+          seats: this.#joinSeats(action.tableId, action.targetId),
           action: "join",
           resend: (chosen) => void this.#merge(api, action, revision, chosen),
         };
         return true;
       },
+    );
+  }
+
+  #joinSeats(movingId: string, targetId: string): number | null {
+    return totalSeats(
+      [movingId, targetId].map((id) => {
+        const table = this.tables.find((each) => each.id === id);
+        return table === undefined ? null : seatsFor(table);
+      }),
     );
   }
 

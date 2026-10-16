@@ -10,12 +10,14 @@ import type { TillTodaySeatsDialog, TodaySeatsDetail } from "./today-seats-dialo
 class TodaySeatsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   seats: number | null = 6;
+  action: "join" | "save" = "save";
   closes = 0;
   submitted: TodaySeatsDetail[] = [];
   override render() {
     return html`<till-today-seats-dialog
         heading="Seats for 4+5"
         .seats=${this.seats}
+        .action=${this.action}
         @today-seats-cancel=${() => this.closes++}
         @today-seats-confirm=${(event: CustomEvent<TodaySeatsDetail>) =>
           this.submitted.push(event.detail)}
@@ -31,8 +33,8 @@ class TodaySeatsLeaveApp extends LitElement {
 customElements.define("today-seats-leave-test-app", TodaySeatsLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount() {
-  const { el: app } = await mountWidget<TodaySeatsLeaveApp>("today-seats-leave-test-app", {});
+async function mount(props: Partial<TodaySeatsLeaveApp> = {}) {
+  const { el: app } = await mountWidget<TodaySeatsLeaveApp>("today-seats-leave-test-app", props);
   const form = app.shadowRoot!.querySelector("till-today-seats-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -139,4 +141,18 @@ it("retained departed controls cannot confirm, cancel or replace the number", as
       .value,
   ).toBe("9");
   expect(unload()).toBe(true);
+});
+
+it("A747 accepts the suggested Join count without leaving an unsaved draft", async () => {
+  const { app, form } = await mount({ seats: 8, action: "join" });
+  expect(unload()).toBe(false);
+  const button =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-seats-action]")!;
+  await button.updateComplete;
+  await userEvent.click(page.elementLocator(button.shadowRoot!.querySelector("button")!));
+  expect(app.submitted).toEqual([{ seats: 8 }]);
+  expect(unload()).toBe(false);
+  cancel(form);
+  await expect.poll(() => app.closes).toBe(1);
+  expect((await question(app)).open).toBe(false);
 });

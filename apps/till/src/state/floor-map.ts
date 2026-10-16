@@ -204,3 +204,14 @@ export function seatsFor(table: TableState): number | null {
   if (table.today === null) return null;
   return table.today.joinSeats ?? table.today.seats;
 }
+
+export function totalSeats(counts: readonly (number | null)[]): number | null {
+  if (counts.length === 0 || counts.some((count) => count === null)) return null;
+  return Math.max(
+    1,
+    Math.min(
+      999,
+      counts.reduce<number>((sum, count) => sum + count!, 0),
+    ),
+  );
+}

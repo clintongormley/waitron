@@ -1,5 +1,7 @@
 # Floor plans: the saved plan, today's plan and the till's map
 
+> 2026-10-16, A747: the owner replaced empty joined-seat defaults with editable totals in the till and dashboard. The [current decision](../../backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747) supersedes the empty-default wording below.
+
 > **2026-10-11 supersession.** A435 step 6 adds permanent hierarchy Delete. This floor design still governs individual-table Undo, master/today release and location-wide labels. See the
 > [step 6 reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 
