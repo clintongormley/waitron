@@ -520,3 +520,26 @@ describe("a receipt-language change while orders are open", () => {
     expect(dishLines(party.tabId)).toEqual(before);
   });
 });
+
+describe("PUT /management-api/venue-defaults while orders are open", () => {
+  const vatClass = () =>
+    rows<{ default_product_vat_class: string }>(
+      sql`select default_product_vat_class from catalogue_settings where id = 1`,
+    )[0]?.default_product_vat_class ?? "general";
+
+  it("refuses a changed receipt language and writes neither it nor the VAT class beside it", async () => {
+    reset();
+    await seatedWith(venue, "Paella");
+    const before = vatClass();
+    expect(before).not.toBe("zero");
+
+    const answer = await send(settings, manager, "PUT", "/management-api/venue-defaults", {
+      receiptLanguage: "gl-ES",
+      defaultProductVatClass: "zero",
+    });
+
+    expect(answer).toEqual(refusedFor(1));
+    expect(language()).toEqual(["es-ES"]);
+    expect(vatClass()).toBe(before);
+  });
+});
