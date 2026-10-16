@@ -2133,7 +2133,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
   screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands.
+  firing and the pass, is planned from the spec once A773-1 lands. The owner has requested
+  answers to [six illustrated choices](backlog/mockups/a773-1-open-points/README.md) before
+  the affected A773-1 tasks continue; the plan's defaults are not approved.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
   [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](backlog/mockups/a773-courses-and-groups/)
