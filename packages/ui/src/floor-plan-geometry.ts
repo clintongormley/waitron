@@ -126,29 +126,19 @@ function sizeChange(size: number, squares: number): number {
   return Math.min(SIZE_MAX, Math.max(SIZE_MIN, size + squares)) - size;
 }
 
-/** Each growth this many squares or fewer, most squares first; a shrink is never cut. */
-function candidates(width: number, height: number): [number, number][] {
-  const steps = (squares: number) =>
-    squares > 0 ? Array.from({ length: squares + 1 }, (_, i) => squares - i) : [squares];
-  // Built with more width first; the sort is stable, so a tie keeps that order.
-  return steps(width)
-    .flatMap((w) => steps(height).map((h): [number, number] => [w, h]))
-    .sort((a, b) => b[0] + b[1] - (a[0] + a[1]));
-}
-
 /**
- * `p` with its `across` side (left or right) moved `width` squares outwards and its `down` side
- * (top or bottom) `height` squares, as `resizeFrom` and `resizeFromCorner` promise.
+ * `p` with its `acrossSide` (left or right) moved `acrossBy` squares outwards and its `downSide`
+ * (top or bottom) `downBy` squares, as `resizeFrom` and `resizeFromCorner` promise.
  */
 function resizeSides(
   p: PlanPlacement,
-  across: "left" | "right",
-  width: number,
-  down: "top" | "bottom",
-  height: number,
+  acrossSide: "left" | "right",
+  acrossBy: number,
+  downSide: "top" | "bottom",
+  downBy: number,
 ): PlanPlacement {
-  const outAcross = outward(across, p.rotation);
-  const outDown = outward(down, p.rotation);
+  const outAcross = outward(acrossSide, p.rotation);
+  const outDown = outward(downSide, p.rotation);
   const start = rotatedRect(p);
   const placed = (w: number, h: number, round: (squares: number) => number) => ({
     ...p,
@@ -157,19 +147,28 @@ function resizeSides(
     x: p.x + round((outAcross.x * w) / 2 + (outDown.x * h) / 2 - w / 2),
     y: p.y + round((outAcross.y * w) / 2 + (outDown.y * h) / 2 - h / 2),
   });
-  const options = candidates(sizeChange(p.width, width), sizeChange(p.height, height));
-  // The last option grows neither side, so nothing refuses it.
-  const [w, h] = options.pop()!;
-  for (const [growW, growH] of options) {
-    const q = placed(growW, growH, roundShift);
-    const ideal = rotatedRect(placed(growW, growH, (squares) => squares));
-    const crosses =
-      ideal.x < Math.min(0, start.x) - EPSILON || ideal.y < Math.min(0, start.y) - EPSILON;
-    if (!crosses && q.x <= GRID_MAX && q.y <= GRID_MAX) return stepInside(q, p);
+  const held = (q: PlanPlacement) =>
+    stepInside({ ...q, x: Math.min(GRID_MAX, q.x), y: Math.min(GRID_MAX, q.y) }, p);
+  const widthBy = sizeChange(p.width, acrossBy);
+  const heightBy = sizeChange(p.height, downBy);
+  const shrinkW = Math.min(0, widthBy);
+  const shrinkH = Math.min(0, heightBy);
+  const growW = widthBy - shrinkW;
+  const growH = heightBy - shrinkH;
+  // Most squares added first; of as many, more width first. A shrink is never cut.
+  for (let total = growW + growH; total > 0; total--) {
+    for (let w = Math.min(growW, total); w >= Math.max(0, total - growH); w--) {
+      const h = total - w;
+      const ideal = rotatedRect(placed(w + shrinkW, h + shrinkH, (squares) => squares));
+      const crosses =
+        ideal.x < Math.min(0, start.x) - EPSILON || ideal.y < Math.min(0, start.y) - EPSILON;
+      // Only the growth's own shift is held to the 999 limit; a shrink's is held to 999 below.
+      const grown = placed(w, h, roundShift);
+      if (!crosses && grown.x <= GRID_MAX && grown.y <= GRID_MAX)
+        return held(placed(w + shrinkW, h + shrinkH, roundShift));
+    }
   }
-  if (w === 0 && h === 0) return p;
-  const q = placed(w, h, roundShift);
-  return stepInside({ ...q, x: Math.min(GRID_MAX, q.x), y: Math.min(GRID_MAX, q.y) }, p);
+  return shrinkW === 0 && shrinkH === 0 ? p : held(placed(shrinkW, shrinkH, roundShift));
 }
 
 /**
@@ -189,19 +188,20 @@ export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): P
 
 /**
  * `p` with the two sides that meet at `corner` moved outwards (inwards when negative): the left or
- * right side `across` squares and the top or bottom side `down`, keeping the opposite corner's x and
- * y each within half a square of where it is drawn, with `resizeFrom`'s edge, size and 999 rules.
- * Where the edge leaves no room for the whole growth, the table takes the growth with the most
- * squares that fits, a tie keeping more width; a side that shrinks always shrinks.
+ * right side `acrossBy` squares and the top or bottom side `downBy`, keeping the opposite corner's
+ * x and y each within half a square of where it is drawn, with `resizeFrom`'s edge, size and 999
+ * rules. Where the edge leaves no room for the whole growth, the table takes the growth with the
+ * most squares that fits, a tie keeping more width. A side that shrinks always shrinks, and x and y
+ * past 999 from its shift are held to 999 without refusing the other side's growth.
  */
 export function resizeFromCorner(
   p: PlanPlacement,
   corner: PlanCorner,
-  across: number,
-  down: number,
+  acrossBy: number,
+  downBy: number,
 ): PlanPlacement {
   const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
-  return resizeSides(p, horizontal, across, vertical, down);
+  return resizeSides(p, horizontal, acrossBy, vertical, downBy);
 }
 
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null {

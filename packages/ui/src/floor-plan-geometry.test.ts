@@ -498,7 +498,7 @@ describe("floor plan geometry", () => {
       }
     });
 
-    it("undoes a corner resize with the opposite one away from the edge", () => {
+    it("undoes a corner resize with its reverse away from the edge", () => {
       for (let r = 0; r < 360; r += 15) {
         const p = table(20, 20, 8, 4, r);
         for (const corner of corners) {
@@ -537,6 +537,11 @@ describe("floor plan geometry", () => {
       expect(resizeFromCorner(table(0, 0, 8, 4), "top-left", -2, -1)).toEqual(table(2, 1, 6, 3));
     });
 
+    it("grows one side at the edge while the side beside it shrinks", () => {
+      expect(resizeFromCorner(table(0, 5, 8, 4), "top-left", -1, 2)).toEqual(table(1, 3, 7, 6));
+      expect(resizeFromCorner(table(5, 0, 8, 4), "top-left", 2, -1)).toEqual(table(3, 1, 10, 3));
+    });
+
     it("takes the growth that adds the most squares, not the most width", () => {
       // Turned 30° at (3, 3), 10 × 5 fits (3 squares more, 2 of them width), but 9 × 7 adds 4.
       const p = table(3, 3, 8, 4, 30);
@@ -555,6 +560,9 @@ describe("floor plan geometry", () => {
       const p = table(999, 10, 8, 4, 90);
       expect(resizeFromCorner(p, "top-left", 0, 1)).toEqual(p);
       expect(resizeFromCorner(p, "bottom-right", 0, -1)).toEqual(table(999, 11, 8, 3, 90));
+      // Shrinking the left side would put x at 1000, so x stays 999; the top still grows.
+      const q = table(999, 10, 8, 4);
+      expect(resizeFromCorner(q, "top-left", -1, 1)).toEqual(table(999, 9, 7, 5));
     });
   });
 
