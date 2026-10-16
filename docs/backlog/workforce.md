@@ -55,16 +55,9 @@ A585-4.
 
 ## A710. Readable initials in short staffing blocks
 
-At the minimum whole-day scale, a quarter-hour block measures 5px high. Shrinking its initials to
-fit produced 2.4px text in A710's review probe. A taller grid kept normal 12px text and passed the
-short-label checks, but failed both painters' existing “still showing the whole day” tests.
-They require `scrollHeight <= clientHeight + 1`; the scrolling proposal measured 1773 against 635.
-All 372 other cases in that run passed, and neither existing assertion was changed.
-
-Choose whether to keep the whole-day overview and read short blocks through their menu or tooltip,
-or allow vertical scrolling so every quarter-hour holds normal-size initials. Keep the overview
-until that choice is made. The relevant tests are in `staffing-season-painter.test.ts` and
-`staffing-special-day-painter.test.ts`, under `packages/staffing/src/dashboard/`.
+A later zoom/readability design remains open for short blocks. Keep the whole-day overview without
+vertical scrolling. Read a short block's full name through its tooltip or block menu, as the owner
+decided on 2026-10-16. No new zoom or scrolling design is agreed.
 
 ## A711. Shared staffing painter code
 
@@ -152,6 +145,12 @@ can ask contributing modules for that count, or deliberately keep the confirmati
 The completed rota retirement does not depend on that choice.
 
 ## Decisions and deliberate limits
+
+### Whole-day staffing overview (A710, owner 2026-10-16)
+
+Keep both staffing painters at the whole-day scale without vertical scrolling. Short blocks use
+their tooltip and block menu for the full name. The two existing “still showing the whole day”
+tests stay unchanged; a later zoom/readability design remains open above.
 
 ### Named staffing guide bands (A724, owner 2026-10-15)
 
