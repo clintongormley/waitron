@@ -551,6 +551,9 @@ declare module "@waitron/shared" {
     "tender.refund_unavailable": { tenderId: string };
     "tender.refund_in_progress": { tenderId: string };
     "tender.refund_not_found": { refundId: string };
+    "tender.refund_not_stuck": { refundId: string };
+    "tender.refund_outcome_unconfirmed": { refundId: string };
+    "tender.attestation_contradicted": { refundId: string; evidence: "never_sent" };
     /**
      * A refund of an item payment asked for less than the whole of it: an item payment is given
      * back whole, which frees its lines. `applied` and `tip` are that whole.

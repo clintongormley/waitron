@@ -17,6 +17,7 @@ import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js"
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { raiseTenderRefundConflict } from "./bill-refund-alerts.js";
 import { refundOutcome, type RefundEvidence } from "./bill-refunds.js";
+import { attestationColumns, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import "./errors.js";
@@ -131,66 +132,127 @@ async function recordOutcome(
   signal: AbortSignal,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
-  return withTransaction(deps.db, async (tx) => {
-    signal.throwIfAborted();
-    const refund = await read(tx, id);
-    const outcome = refundOutcome(evidence);
-    const providerRef =
-      evidence.kind === "answer" && evidence.answer.kind === "outcome"
-        ? evidence.answer.providerRefundRef
-        : evidence.kind === "lookup" && evidence.lookup.kind === "match"
-          ? evidence.lookup.providerRefundRef
-          : null;
-    if (refund.state !== "pending") {
-      if (outcome !== "pending" && outcome !== refund.state)
-        await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
-      return refund;
-    }
-    if (
-      providerRef !== null &&
-      ((refund.providerRefundRef !== null && refund.providerRefundRef !== providerRef) ||
-        (await excludedRefs(tx, refund)).includes(providerRef))
-    ) {
-      await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
-      return refund;
-    }
-    const now = deps.clock.now().instant.toISOString();
-    const [saved] = await tx
-      .update(tenderRefunds)
-      .set({
-        state: outcome,
-        ...(outcome === "pending" ? {} : { nextRetryAt: null }),
-        ...(providerRef === null
-          ? {}
-          : { providerRefundRef: providerRef, providerStatus: outcome }),
-        ...(outcome === "completed" ? { completedAt: now } : {}),
-        ...(outcome === "failed" ? { failedAt: now } : {}),
-      })
-      .where(eq(tenderRefunds.id, id))
-      .returning();
-    if (outcome === "completed")
-      await recordRefund(tx, {
-        provider: refund.provider!,
-        paymentRef: refund.providerPaymentRef!,
-        amount: amount(refund),
-        authorizedBy: refund.authorizedBy,
-        ...(providerRef === null ? {} : { providerRefundRef: providerRef }),
-      });
-    if (outcome !== "pending")
-      await deps.attendance?.(tx, {
-        source: "refund",
-        key: refund.id,
-        personId: refund.requestedBy,
-        locationId: refund.locationId,
-        kind: "payment",
-        at: refund.createdAt,
-        offsetMinutes: 0,
-        outcome: outcome === "completed" ? "qualified" : "refused",
-      });
-    signal.throwIfAborted();
-    return saved!;
-  });
+  return withTransaction(deps.db, (tx) => recordOutcomeIn(tx, deps, id, evidence, signal));
 }
+async function recordOutcomeIn(
+  tx: Transaction,
+  deps: TenderRefundDeps,
+  id: string,
+  evidence: RefundEvidence,
+  signal: AbortSignal,
+  attestation?: Attestation,
+): Promise<RefundRow> {
+  signal.throwIfAborted();
+  const refund = await read(tx, id);
+  const outcome = refundOutcome(evidence);
+  const providerRef =
+    evidence.kind === "answer" && evidence.answer.kind === "outcome"
+      ? evidence.answer.providerRefundRef
+      : evidence.kind === "lookup" && evidence.lookup.kind === "match"
+        ? evidence.lookup.providerRefundRef
+        : null;
+  if (refund.state !== "pending") {
+    if (outcome !== "pending" && outcome !== refund.state)
+      await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
+    return refund;
+  }
+  if (
+    providerRef !== null &&
+    ((refund.providerRefundRef !== null && refund.providerRefundRef !== providerRef) ||
+      (await excludedRefs(tx, refund)).includes(providerRef))
+  ) {
+    await raiseTenderRefundConflict(tx, refund, providerRef, deps.clock.now().instant);
+    return refund;
+  }
+  const now = deps.clock.now().instant.toISOString();
+  const [saved] = await tx
+    .update(tenderRefunds)
+    .set({
+      state: outcome,
+      ...attestationColumns(attestation),
+      ...(outcome === "pending" ? {} : { nextRetryAt: null }),
+      ...(providerRef === null ? {} : { providerRefundRef: providerRef, providerStatus: outcome }),
+      ...(outcome === "completed" ? { completedAt: now } : {}),
+      ...(outcome === "failed" ? { failedAt: now } : {}),
+    })
+    .where(eq(tenderRefunds.id, id))
+    .returning();
+  if (outcome === "completed")
+    await recordRefund(tx, {
+      provider: refund.provider!,
+      paymentRef: refund.providerPaymentRef!,
+      amount: amount(refund),
+      authorizedBy: attestation?.attestedBy ?? refund.authorizedBy,
+      ...(providerRef === null ? {} : { providerRefundRef: providerRef }),
+    });
+  if (outcome !== "pending")
+    await deps.attendance?.(tx, {
+      source: "refund",
+      key: refund.id,
+      personId: refund.requestedBy,
+      locationId: refund.locationId,
+      kind: "payment",
+      at: refund.createdAt,
+      offsetMinutes: 0,
+      outcome: outcome === "completed" ? "qualified" : "refused",
+    });
+  signal.throwIfAborted();
+  return saved!;
+}
+
+export async function readStuckTenderRefund(
+  tx: Transaction,
+  db: Database,
+  id: string,
+  locationId?: string,
+): Promise<RefundRow> {
+  const refund = await read(tx, id);
+  if (locationId !== undefined && refund.locationId !== locationId)
+    throw new AppError("tender.refund_not_found", { refundId: id });
+  if (
+    refund.state !== "pending" ||
+    refund.method !== "card" ||
+    refund.manual ||
+    tenderRefundIsLive(db, id) ||
+    resolversOf(db).stopping
+  )
+    throw new AppError("tender.refund_not_stuck", { refundId: id });
+  return refund;
+}
+
+export async function attestTenderRefundIn(
+  tx: Transaction,
+  deps: TenderRefundDeps,
+  refundId: string,
+  outcome: "completed" | "failed",
+  attestation: Attestation,
+) {
+  const refund = await readStuckTenderRefund(tx, deps.db, refundId);
+  if (outcome === "completed" && refund.sentAt === null)
+    throw new AppError("tender.attestation_contradicted", { refundId, evidence: "never_sent" });
+  return toTenderRefundView(
+    await recordOutcomeIn(
+      tx,
+      deps,
+      refundId,
+      { kind: "attested", outcome },
+      new AbortController().signal,
+      attestation,
+    ),
+  );
+}
+
+export function attestTenderRefund(
+  deps: TenderRefundDeps,
+  refundId: string,
+  outcome: "completed" | "failed",
+  attestation: Attestation,
+) {
+  return withTransaction(deps.db, (tx) =>
+    attestTenderRefundIn(tx, deps, refundId, outcome, attestation),
+  );
+}
+
 async function lookup(
   deps: TenderRefundDeps,
   provider: PaymentProvider,

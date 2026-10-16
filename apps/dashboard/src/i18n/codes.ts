@@ -1180,6 +1180,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That refund no longer exists. Refresh the list.",
     es: "Esa devolución ya no existe. Actualiza la lista.",
   },
+  "tender.refund_not_found": {
+    en: "That refund could not be found. Refresh the list.",
+    es: "No se ha encontrado esa devolución. Actualiza la lista.",
+  },
+  "tender.refund_not_stuck": {
+    en: "This refund is no longer waiting, or it is being checked right now. Refresh the list.",
+    es: "Esta devolución ya no está pendiente, o se está comprobando ahora mismo. Actualiza la lista.",
+  },
+  "tender.refund_outcome_unconfirmed": {
+    en: "The provider has not confirmed this refund's outcome. It stays pending and the original invoice is unchanged. Record an outcome only after the provider confirms it.",
+    es: "El proveedor no ha confirmado el resultado de esta devolución. Sigue pendiente y la factura original no cambia. Registra un resultado solo cuando el proveedor lo confirme.",
+  },
+  "tender.attestation_contradicted": {
+    en: "Waitron's records show this refund was never sent, so it cannot be recorded as completed.",
+    es: "Los registros de Waitron muestran que esta devolución nunca se envió, así que no se puede registrar como completada.",
+  },
   "bill.refund_not_stuck": {
     en: "This refund is no longer waiting, or it is being checked right now. Refresh the list.",
     es: "Esta devolución ya no está pendiente, o se está comprobando ahora mismo. Actualiza la lista.",

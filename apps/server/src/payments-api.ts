@@ -14,6 +14,7 @@ import {
   nowIso,
   withTransaction,
   workingOrders,
+  tenderRefunds,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -71,6 +72,14 @@ import {
   paymentAttemptIsLive,
   payWorkingOrderIntegratedOrchestration,
 } from "./till-sale.js";
+import {
+  attestTenderRefundIn,
+  readStuckTenderRefund,
+  claimTenderRefund,
+  resolveClaimedTenderRefund,
+  tenderRefundIsLive,
+} from "./tender-refund-sends.js";
+import { toTenderRefundView } from "./tender-refunds.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js";
 import {
@@ -140,6 +149,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
   "bill.payment_not_found": 404,
+  "tender.refund_not_found": 404,
+  "tender.refund_not_stuck": 409,
+  "tender.refund_outcome_unconfirmed": 409,
+  "tender.attestation_contradicted": 409,
   "bill.refund_not_found": 404,
   "bill.refund_not_stuck": 409,
   "bill.refund_outcome_unconfirmed": 409,
@@ -1309,6 +1322,65 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const refund = await attestCardRefund(refundDeps, id, outcome, {
         attestedBy: personId,
         note,
+      });
+      return c.json({ outcome: refund.state });
+    }),
+  );
+  app.get("/management-api/payments/tender-refunds", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select()
+          .from(tenderRefunds)
+          .where(
+            and(
+              eq(tenderRefunds.locationId, deps.cfg.locationId),
+              eq(tenderRefunds.state, "pending"),
+              eq(tenderRefunds.method, "card"),
+              eq(tenderRefunds.manual, false),
+            ),
+          )
+          .orderBy(tenderRefunds.createdAt, sql`${tenderRefunds}.rowid`),
+      );
+      return c.json(
+        rows.filter((row) => !tenderRefundIsLive(deps.db, row.id)).map(toTenderRefundView),
+      );
+    }),
+  );
+  app.post("/management-api/payments/tender-refunds/:id/resolve", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "TenderRefundId").toLowerCase();
+      let release: (() => void) | undefined;
+      try {
+        await gated(sessionId, async (tx) => {
+          await readStuckTenderRefund(tx, deps.db, id, deps.cfg.locationId);
+          release = claimTenderRefund(deps.db, id);
+        });
+        const held = release!;
+        release = undefined;
+        const refund = await resolveClaimedTenderRefund(refundDeps, id, "manager", held);
+        if (refund.state === "pending")
+          throw new AppError("tender.refund_outcome_unconfirmed", { refundId: id });
+        return c.json({ outcome: refund.state });
+      } catch (error) {
+        release?.();
+        throw error;
+      }
+    }),
+  );
+  app.post("/management-api/payments/tender-refunds/:id/attest", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "TenderRefundId").toLowerCase();
+      const { outcome, note, pin } = parseAttestation(
+        await readJsonBody<Record<string, unknown>>(c),
+        ["completed", "failed"] as const,
+      );
+      const refund = await pinGated(sessionId, pin, async (tx, personId) => {
+        await readStuckTenderRefund(tx, deps.db, id, deps.cfg.locationId);
+        return attestTenderRefundIn(tx, refundDeps, id, outcome, { attestedBy: personId, note });
       });
       return c.json({ outcome: refund.state });
     }),

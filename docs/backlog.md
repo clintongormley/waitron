@@ -1978,7 +1978,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   then logs unresolved ids and leaves pending attempts for restart recovery.
   Till APIs now expose scoped refundable-money reads, creation, status and same-attempt retry;
   their reads remain available to admitted staff who need a PIN approval to refund.
-  Manager recovery routes, reporting, screens and acknowledgments remain to be built.
+  Management APIs now list unresolved connected returns for this location and resolve them from
+  provider evidence; a manager can record a provider-confirmed outcome with their own PIN and note.
+  Reporting, screens and acknowledgments remain to be built.
   Add Refund to the transaction receipt for returning a correct charge, without changing its
   invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),

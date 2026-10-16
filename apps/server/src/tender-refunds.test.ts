@@ -1648,7 +1648,7 @@ describe("settled-tender refund recovery loop lifetime", () => {
   });
   it("drains a lookup's actual late evidence on stop, after its response deadline", async () => {
     const { provider, refund } = await pending();
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     const control = new AbortController();
     let enter!: () => void;
     const entered = new Promise<void>((resolve) => {
@@ -1789,7 +1789,7 @@ describe("settled-tender refund bounded shutdown", () => {
             providerStatus: "succeeded",
           };
         });
-      vi.useFakeTimers();
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       if (waitingOn === "send" || waitingOn === "snapshot") {
         command = refundSettledTender(deps, cfg, t.saleId, request(t), operator());
         await entered;

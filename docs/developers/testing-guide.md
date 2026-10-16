@@ -297,6 +297,21 @@ stamp's own clock is guarded by the cases under "a holder whose test fakes the c
 whatever opens it, and weaker than their name: they fake the clock only the way
 `vi.useFakeTimers()` does with its default options, and only after `@waitron/store` has loaded.
 
+## A database test keeps the watchdog's monotonic clock real
+
+When you fake time beside an open venue store, name only the timer APIs your test needs. For a
+refund response deadline, use `vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })`.
+The venue watchdog runs in a separate worker and compares its real monotonic clock with the
+heartbeat's `process.hrtime.bigint()`; faking that clock makes the heartbeat look stale.
+
+Measured 2026-10-16 on Node v26.11.1, macOS and Vitest 4.1.11 in an installed disposable checkout:
+a `useVenueDb` case enabled default fake timers and awaited a real
+`node:timers/promises.setTimeout(2500)`. Its monotonic reading changed from `3990547045443291`
+to `0`; the watchdog logged `venue.holder_frozen` and killed the worker before a test completed.
+The same case faking only Date, setTimeout and clearTimeout passed, with the monotonic reading
+continuing above its starting value. The two timer setups in
+`apps/server/src/tender-refunds.test.ts` now keep the real clock; their earlier assertions remain.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is

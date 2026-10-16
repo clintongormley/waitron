@@ -698,3 +698,18 @@ it("words each Translate all code in both languages", () => {
     "Se ha alcanzado el límite de traducción de este mes.",
   );
 });
+
+it("explains each manager refusal for a post-invoice refund in both languages", () => {
+  for (const code of [
+    "tender.refund_not_found",
+    "tender.refund_not_stuck",
+    "tender.refund_outcome_unconfirmed",
+    "tender.attestation_contradicted",
+  ]) {
+    for (const language of ["en", "es"] as const) {
+      const message = codeMessage(code, language);
+      expect(message, code).not.toBe(codeMessage("test.unmapped_code", language));
+      expect(message.length, code).toBeGreaterThan(15);
+    }
+  }
+});
