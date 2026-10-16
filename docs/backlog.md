@@ -5754,7 +5754,8 @@ the tree. What remains, largest first:
 - **The simulator suite lost its worker to the venue watchdog during A739a investigation
   (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
   `provisioning.database_holder_frozen` after 15 passing cases; the isolated expiry case passed.
-  Find the cause before treating a retry as a repair.
+  A faked clock reaching the watchdog's stamp reproduces the logged `lastTickAt` to within 0.1 s
+  and is fixed on A769; the unchanged suite did not fail in 17 runs. Close it if it does not recur.
   [Detail](backlog/ci.md#the-simulator-suite-lost-its-worker-to-the-venue-watchdog)
 
 - **Audit the other product-editor pointer tests for opening-section races.**

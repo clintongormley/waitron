@@ -70,7 +70,7 @@ const holderFiles = (directory: string) =>
 
 /** Well under {@link IN_PROCESS_TIMEOUT_MS}, so a wait that never ends fails as itself. */
 const UNTIL_MS = 2000;
-/** The sum of a test's waits: at most two {@link until}s and a 200 ms sleep, with room. */
+/** The sum of a test's waits: at most two {@link until}s and 1.4 s of sleeps, with room. */
 const IN_PROCESS_TIMEOUT_MS = 10_000;
 
 async function until<T>(

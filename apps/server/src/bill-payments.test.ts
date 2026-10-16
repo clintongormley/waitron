@@ -104,7 +104,7 @@ import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
-// The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
+// Synchronous work runs from case to case; let the venue watchdog tick between them.
 afterEach(() => yieldTurn());
 
 const LOCALE = "es-ES";

@@ -271,7 +271,8 @@ finished the other files and exited 1.
 A test that fakes the clock made a healthy worker look frozen too, until the stamp stopped reading
 the faked clock. Under Vitest 4.1.11, `vi.useFakeTimers()` with its default options replaces
 `process.hrtime` as well as the timers. The stamp is a real interval, so when it fired while a test
-had the clock faked it stored the fake reading, near zero, and the watchdog thread, comparing it
+had the clock faked it stored the fake reading — the time the fake clock had moved since the test faked it, near zero
+unless the test moved it — and the watchdog thread, comparing it
 with its own real clock, saw a silence about as long as the machine had been up. A folder first
 taken while the clock was faked got its stamp on a fake interval, which did not fire while the
 test's fake clock stood still.
@@ -292,8 +293,9 @@ suite that opens a venue folder another way — calling `openVenueDatabase` or `
 itself, as many suites across `packages/`, `apps/` and `scripts/` do
 (`grep -rlE 'openVenue(Database|Store)\(' --include='*.test.ts'`) — gets no yield from it. The
 stamp's own clock is guarded by the cases under "a holder whose test fakes the clock" in
-`packages/store/src/venue-liveness.test.ts`, for any holder, and weaker than their name: they fake
-the clock only the way `vi.useFakeTimers()` does with its default options.
+`packages/store/src/venue-liveness.test.ts`, for a folder taken through `lockVenueDirectory`
+whatever opens it, and weaker than their name: they fake the clock only the way
+`vi.useFakeTimers()` does with its default options, and only after `@waitron/store` has loaded.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 

@@ -465,11 +465,10 @@ The focused ordinary capture, immediate decline and pretend-reader decline cases
 Neither result repairs or explains the full run's worker loss.
 
 The expiry case uses unrestricted `vi.useFakeTimers()` at
-`packages/payments/src/simulator.test.ts:199`. The heartbeat writer and watchdog both read
-`process.hrtime.bigint()` in `packages/store/src/venue-liveness.ts`; the watchdog runs in a
-separate worker. A fake clock crossing that boundary is a hypothesis, not a measured cause.
-Next: retain per-case timing and heartbeat values around that boundary, reproduce the full-run
-exit, then fix the responsible side without weakening the expiry assertion or watchdog.
+`packages/payments/src/simulator.test.ts:199`. The watchdog's stamp read `process.hrtime.bigint()` on the main
+thread; the watchdog thread reads its own real clock. Next: if a full run on a commit that has the
+captured clock loses its worker again, retain per-case timing and the stamp's value, and reproduce
+before changing anything; otherwise close this entry.
 
 On 2026-10-16 (A769, branch `fix/a769-venue-service-shard-hang`, on top of `1df3f5557`) the
 unchanged suite passed 22 of 22 in each of 17 runs without the fix below, so the failure did not

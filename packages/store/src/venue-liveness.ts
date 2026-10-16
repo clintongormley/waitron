@@ -41,7 +41,7 @@ const PRODUCTION_TIMINGS: Timings = {
 
 let timings = PRODUCTION_TIMINGS;
 
-// Taken at load: a test that fakes the clock (Vitest's `vi.useFakeTimers()` replaces `process.hrtime`
+// Taken at load: a test that fakes the clock (Vitest's `vi.useFakeTimers()`, by default, replaces `process.hrtime`
 // and the timers) must not stamp a fake time, or leave the stamp to a timer only its fake clock runs.
 const monotonicNow = process.hrtime.bigint.bind(process.hrtime);
 const realSetInterval = globalThis.setInterval;
