@@ -561,6 +561,14 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       throw invalid(field("note"));
     }
     if (noMerge !== undefined && typeof noMerge !== "boolean") throw invalid(field("noMerge"));
+    const slot = entry.slot === undefined ? 0 : entry.slot;
+    if (typeof slot !== "number" || !Number.isInteger(slot) || slot < 0) {
+      throw invalid(field("slot"));
+    }
+    const joinGroupId = optionalId(entry.joinGroupId, field("joinGroupId"));
+    const afterGroupId = optionalId(entry.afterGroupId, field("afterGroupId"));
+    if (joinGroupId !== null && slot !== 0) throw invalid(field("slot"));
+    if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
     return {
       menuItemId,
       variantId: optionalId(entry.variantId, field("variantId")),

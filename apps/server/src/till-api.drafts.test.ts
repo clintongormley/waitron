@@ -171,6 +171,26 @@ describe("GET /api/parties/:id/drafts", () => {
 });
 
 describe("PUT /api/parties/:id/drafts", () => {
+  it.each([
+    [{ slot: null }, "lines.0.slot"],
+    [{ slot: -1 }, "lines.0.slot"],
+    [{ joinGroupId: "held" }, "lines.0.joinGroupId"],
+    [{ slot: 1, joinGroupId: "aaaaaaaa-0000-4000-8000-000000000001" }, "lines.0.slot"],
+    [{ afterGroupId: "aaaaaaaa-0000-4000-8000-000000000001" }, "lines.0.afterGroupId"],
+  ] as const)("refuses malformed placement %j as 400 naming %s", async (place, field) => {
+    const party = await seated();
+    const draft = await newDraft(ana, party.partyId, [dish("Pulpo")]);
+    const before = await snapshot();
+    const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: [{ ...dish("Caña"), ...place }],
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual(refusal("management.request_invalid", { field }));
+    expect(await snapshot()).toEqual(before);
+  });
+
   it("keeps a chosen station through re-minting and keeps identical dishes at different stations apart", async () => {
     const party = await seated();
     const [bar] = await inTx(venue, (tx) =>

@@ -679,6 +679,108 @@ describe("saving a draft", () => {
   });
 });
 
+describe("draft placement input", () => {
+  it.each([null, -1, 0.5, "1", true, [], {}, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses slot %j before replacing a draft",
+    async (slot) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const draft = await save(v, partyId, ALEX, null, 0, [item(v, "fish")]);
+      await refusedWritingNothing(
+        () => save(v, partyId, ALEX, draft.id, draft.revision, [{ ...item(v, "beer"), slot }]),
+        { code: "management.request_invalid", params: { field: "lines.0.slot" } },
+      );
+    },
+  );
+
+  describe.each(["joinGroupId", "afterGroupId"] as const)("%s", (field) => {
+    it.each(["not-a-uuid", "", 1, true, [], {}])(
+      "refuses %j before replacing a draft",
+      async (value) => {
+        const v = await setupVenue();
+        const { partyId } = await seated(v);
+        const draft = await save(v, partyId, ALEX, null, 0, [item(v, "fish")]);
+        await refusedWritingNothing(
+          () =>
+            save(v, partyId, ALEX, draft.id, draft.revision, [
+              { ...item(v, "beer"), slot: field === "afterGroupId" ? 1 : 0, [field]: value },
+            ]),
+          { code: "management.request_invalid", params: { field: `lines.0.${field}` } },
+        );
+      },
+    );
+  });
+
+  it("refuses a join in a new-group slot", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    await refusedWritingNothing(
+      () =>
+        save(v, partyId, ALEX, null, 0, [
+          { ...item(v, "beer"), slot: 1, joinGroupId: randomUUID() },
+        ]),
+      { code: "management.request_invalid", params: { field: "lines.0.slot" } },
+    );
+  });
+
+  it.each([undefined, 0])(
+    "refuses an after-group id without a new-group slot (%j)",
+    async (slot) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      await refusedWritingNothing(
+        () =>
+          save(v, partyId, ALEX, null, 0, [
+            { ...item(v, "beer"), slot, afterGroupId: randomUUID() },
+          ]),
+        { code: "management.request_invalid", params: { field: "lines.0.afterGroupId" } },
+      );
+    },
+  );
+
+  it.each(["join", "after"] as const)("accepts a held group's UUID for %s", async (kind) => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const groupId = randomUUID();
+    await db
+      .insert(orderGroups)
+      .values({ id: groupId, partyId, position: 1, state: "held", submittedBy: ALEX });
+    const place =
+      kind === "join"
+        ? { slot: 0, joinGroupId: groupId.toUpperCase() }
+        : { slot: 2, afterGroupId: groupId.toUpperCase() };
+    const draft = await save(v, partyId, ALEX, null, 0, [{ ...item(v, "beer"), ...place }]);
+    expect(orders(draft)).toEqual([
+      { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
+    ]);
+    expect(await draftsOf(v, partyId)).toEqual([draft]);
+  });
+
+  it("names the second line's bad placement and keeps the first unsaved", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    await refusedWritingNothing(
+      () => save(v, partyId, ALEX, null, 0, [item(v, "beer"), { ...item(v, "fish"), slot: -1 }]),
+      { code: "management.request_invalid", params: { field: "lines.1.slot" } },
+    );
+  });
+
+  it.each([
+    {},
+    { slot: 0 },
+    { slot: 0, joinGroupId: null, afterGroupId: null },
+    { slot: 1, joinGroupId: null, afterGroupId: null },
+  ])("still saves ordinary lines with placement %j", async (place) => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [{ ...item(v, "beer"), ...place }]);
+    expect(orders(draft)).toEqual([
+      { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
+    ]);
+    expect(await draftsOf(v, partyId)).toEqual([draft]);
+  });
+});
+
 describe("a refused save writes nothing", () => {
   const cases: [string, (v: Venue) => unknown, string, string][] = [
     ["lines that are not a list", () => "beer", "management.request_invalid", "lines"],
