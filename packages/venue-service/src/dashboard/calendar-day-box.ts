@@ -107,9 +107,9 @@ export class CalendarDayBox extends LitElement {
 
   /** Opens below `anchor`, or above it when only there it fits, kept on screen; called again after
    *  the content changes, it places the box again without moving focus. While open, on each
-   *  window resize and each scroll the window or a shadow root above `anchor` sees, it places
-   *  itself again, or closes when no part of `anchor` is left inside the window and every box that
-   *  clips it. */
+   *  window resize and each scroll of the page or of a box `anchor` is drawn inside, slots
+   *  included, it places itself again, or closes when no part of `anchor` is left inside the window
+   *  and inside every such ancestor whose overflow is not visible, in the directions it limits. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
@@ -151,8 +151,6 @@ export class CalendarDayBox extends LitElement {
 
   readonly #onResize = this.#onScroll;
 
-  /** Whether any of the anchor is inside the window and inside every box that clips it, up the
-   *  flattened tree across shadow roots and slots. */
   #anchorInView(): boolean {
     const date = this.#anchor!.getBoundingClientRect();
     let top = Math.max(date.top, 0);
