@@ -353,10 +353,11 @@ describe("receipt language", () => {
   const SPAIN_RECEIPT = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
   const CATALONIA = getCountryPack("ES")!.administrativeAreas.find(({ code }) => code === "08")!;
   const PATH = "/management-api/receipt-language";
+  const WRITE_PATH = "/management-api/venue-defaults";
 
   const read = (cookie = venue.managerCookie) => app().request(PATH, { headers: { cookie } });
   const write = (body: unknown, cookie = venue.managerCookie) =>
-    app().request(PATH, {
+    app().request(WRITE_PATH, {
       method: "PUT",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -394,6 +395,17 @@ describe("receipt language", () => {
     });
   });
 
+  it("no longer serves a write: the venue-defaults route saves the receipt language", async () => {
+    const response = await app().request(PATH, {
+      method: "PUT",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: JSON.stringify({ language: "gl-ES" }),
+    });
+    expect(response.status).toBe(404);
+    expect(await stored()).toEqual(["es-ES"]);
+    expect((await read()).status).toBe(200);
+  });
+
   it("answers no fixed language for Madrid", async () => {
     expect(await (await read()).json()).toEqual({
       language: "es-ES",
@@ -404,7 +416,7 @@ describe("receipt language", () => {
 
   it("refuses another language in Barcelona, naming the fixed one, and leaves the row alone", async () => {
     await at("Barcelona", ["ca-ES"], async () => {
-      const response = await write({ language: "gl-ES" });
+      const response = await write({ receiptLanguage: "gl-ES" });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: {
@@ -418,7 +430,9 @@ describe("receipt language", () => {
 
   it("saves Galician for Madrid as the location's one language", async () => {
     try {
-      expect((await write({ language: "gl-ES" })).status).toBe(204);
+      const saved = await write({ receiptLanguage: "gl-ES" });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).receiptLanguage).toBe("gl-ES");
       expect((await (await read()).json()).language).toBe("gl-ES");
       expect(await stored()).toEqual(["gl-ES"]);
     } finally {
@@ -430,19 +444,18 @@ describe("receipt language", () => {
 
   it("writes one language over a two-language row", async () => {
     await at("Madrid", ["es-ES", "ca-ES"], async () => {
-      expect((await write({ language: "es-ES" })).status).toBe(204);
+      const saved = await write({ receiptLanguage: "es-ES" });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).receiptLanguage).toBe("es-ES");
       expect(await stored()).toEqual(["es-ES"]);
     });
   });
 
   it.each([
-    ["a language the pack does not offer", { language: "en-GB" }],
-    ["an empty language", { language: "" }],
-    ["a number", { language: 12 }],
-    ["a list", { language: ["gl-ES"] }],
-    ["a body without the field", {}],
-    ["a bare string", "gl-ES"],
-    ["null", null],
+    ["a language the pack does not offer", { receiptLanguage: "en-GB" }],
+    ["an empty language", { receiptLanguage: "" }],
+    ["a number", { receiptLanguage: 12 }],
+    ["a list", { receiptLanguage: ["gl-ES"] }],
   ])("refuses %s without writing", async (_label, body) => {
     const response = await write(body);
     expect(response.status).toBe(400);
@@ -454,7 +467,7 @@ describe("receipt language", () => {
 
   it("refuses English in Barcelona as a language the pack does not offer", async () => {
     await at("Barcelona", ["ca-ES"], async () => {
-      const response = await write({ language: "en-GB" });
+      const response = await write({ receiptLanguage: "en-GB" });
       expect(response.status).toBe(400);
       expect((await response.json()).error.code).toBe("management.request_invalid");
     });
@@ -467,11 +480,13 @@ describe("receipt language", () => {
         choices: SPAIN_RECEIPT,
         fixed: { locale: "ca-ES", reason: CATALONIA.fixedReceiptLocale!.reason },
       });
-      const refused = await write({ language: "gl-ES" });
+      const refused = await write({ receiptLanguage: "gl-ES" });
       expect(refused.status).toBe(400);
       expect((await refused.json()).error.code).toBe("receipt.language_fixed");
       expect(await stored()).toEqual(["es-ES"]);
-      expect((await write({ language: "ca-ES" })).status).toBe(204);
+      const saved = await write({ receiptLanguage: "ca-ES" });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).receiptLanguage).toBe("ca-ES");
       expect(await stored()).toEqual(["ca-ES"]);
     });
   });
@@ -502,34 +517,37 @@ describe("receipt language", () => {
       () => {},
     );
     const answers = [];
-    for (const init of [
-      { headers: { cookie: venue.managerCookie } } as RequestInit,
-      {
-        method: "PUT",
-        headers: { cookie: venue.managerCookie, "content-type": "application/json" },
-        body: JSON.stringify({ language: "es-ES" }),
-      },
-    ]) {
+    for (const [path, init] of [
+      [PATH, { headers: { cookie: venue.managerCookie } }],
+      [
+        WRITE_PATH,
+        {
+          method: "PUT",
+          headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+          body: JSON.stringify({ receiptLanguage: "es-ES" }),
+        },
+      ],
+    ] as const) {
       opened = 0;
-      const response = await counted.request(PATH, init);
+      const response = await counted.request(path, init);
       answers.push([response.status, opened]);
     }
     expect(answers).toEqual([
       [200, 1],
-      [204, 1],
+      [200, 1],
     ]);
   });
 
   it("requires a session and configuration permission for reads and writes", async () => {
     expect((await app().request(PATH)).status).toBe(401);
     expect((await read(venue.staffCookie)).status).toBe(403);
-    const anonymous = await app().request(PATH, {
+    const anonymous = await app().request(WRITE_PATH, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ language: "gl-ES" }),
+      body: JSON.stringify({ receiptLanguage: "gl-ES" }),
     });
     expect(anonymous.status).toBe(401);
-    expect((await write({ language: "gl-ES" }, venue.staffCookie)).status).toBe(403);
+    expect((await write({ receiptLanguage: "gl-ES" }, venue.staffCookie)).status).toBe(403);
     expect(await stored()).toEqual(["es-ES"]);
   });
 
@@ -537,10 +555,10 @@ describe("receipt language", () => {
     const missing = app("no-such-location");
     const answers = [
       await missing.request(PATH, { headers: { cookie: venue.managerCookie } }),
-      await missing.request(PATH, {
+      await missing.request(WRITE_PATH, {
         method: "PUT",
         headers: { cookie: venue.managerCookie, "content-type": "application/json" },
-        body: JSON.stringify({ language: "gl-ES" }),
+        body: JSON.stringify({ receiptLanguage: "gl-ES" }),
       }),
     ];
     for (const response of answers) {
@@ -683,6 +701,7 @@ describe("venue defaults", () => {
     ["defaultProductVatClass", null, "product.invalid"],
     ["defaultProductVatClass", [], "product.invalid"],
     ["defaultProductVatClass", 10, "product.invalid"],
+    ["defaultProductVatClass", ["reduced"], "product.invalid"],
     ["defaultProductVatClass", "unknown", "product.invalid"],
   ])("refuses %s of %j as %s without writing", async (field, value, code) => {
     const response = await write({ [field]: value });

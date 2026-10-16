@@ -27,7 +27,6 @@ import {
   catalogueExists,
   readCatalogueSettings,
   saveCatalogueDefaultColor,
-  saveCatalogueSettings,
   readContentLanguages,
   listTranslationGapReport,
   writeContentLanguages,
@@ -806,17 +805,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(await gated(c, sessionId, (tx) => readCatalogueSettings(tx)));
-    }),
-  );
-  app.put("/management-api/catalogue-settings", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ defaultProductVatClass?: unknown }>(c);
-      return c.json(
-        await gated(c, sessionId, (tx) =>
-          saveCatalogueSettings(tx, { defaultProductVatClass: body.defaultProductVatClass }),
-        ),
-      );
     }),
   );
   app.put("/management-api/catalogue-settings/default-color", (c) =>

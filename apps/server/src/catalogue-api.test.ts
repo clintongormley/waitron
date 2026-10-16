@@ -22,6 +22,9 @@ import {
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountLocationSettingsApi } from "./location-settings-api.js";
+import { ALL_MODULES } from "./modules.js";
+import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -628,6 +631,21 @@ function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageR
       venueCfg: venueCfg(),
       venueLocale,
       ...(contentLanguageRules === undefined ? {} : { contentLanguageRules }),
+    },
+    noopLog,
+  );
+  return app;
+}
+
+/** The catalogue routes beside the venue-defaults route, which saves the new-product VAT class. */
+function mountWithVenueDefaults(): Hono {
+  const app = mountApp();
+  mountLocationSettingsApi(
+    app,
+    {
+      db: suite.db,
+      cfg: { locationId },
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     noopLog,
   );
@@ -6460,14 +6478,27 @@ it("keeps a shared snapshot's revision with its data when a write commits before
 });
 
 describe("catalogue settings routes", () => {
-  it("saves and reloads the venue's new-product VAT class", async () => {
+  it("no longer serves a VAT-default write, and still serves the read and the colour write", async () => {
     const app = mountApp();
+    const retired = await send(app, "PUT", "/management-api/catalogue-settings", {
+      body: { defaultProductVatClass: "reduced" },
+    });
+    expect(retired.status).toBe(404);
+    const colour = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {
+      body: { color: null },
+    });
+    expect(colour.status).toBe(200);
+    expect((await send(app, "GET", "/management-api/catalogue-settings")).status).toBe(200);
+  });
+
+  it("saves and reloads the venue's new-product VAT class", async () => {
+    const app = mountWithVenueDefaults();
     for (const defaultProductVatClass of ["general", "reduced", "super_reduced", "zero"]) {
-      const saved = await send(app, "PUT", "/management-api/catalogue-settings", {
+      const saved = await send(app, "PUT", "/management-api/venue-defaults", {
         body: { defaultProductVatClass },
       });
       expect(saved.status).toBe(200);
-      expect(await saved.json()).toEqual({ defaultProductVatClass, defaultColor: null });
+      expect((await saved.json()).defaultProductVatClass).toBe(defaultProductVatClass);
       const loaded = await send(app, "GET", "/management-api/catalogue-settings");
       expect(loaded.status).toBe(200);
       expect(await loaded.json()).toEqual({ defaultProductVatClass, defaultColor: null });
@@ -6475,9 +6506,11 @@ describe("catalogue settings routes", () => {
   });
 
   it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
-    const app = mountApp();
+    const app = mountWithVenueDefaults();
     const body = method === "PUT" ? { defaultProductVatClass: "reduced" } : undefined;
-    const anonymous = await send(app, method, "/management-api/catalogue-settings", {
+    const path =
+      method === "PUT" ? "/management-api/venue-defaults" : "/management-api/catalogue-settings";
+    const anonymous = await send(app, method, path, {
       cookie: null,
       body,
     });
@@ -6485,7 +6518,7 @@ describe("catalogue settings routes", () => {
     expect(await anonymous.json()).toMatchObject({
       error: { code: "management_session.required" },
     });
-    const staff = await send(app, method, "/management-api/catalogue-settings", {
+    const staff = await send(app, method, path, {
       cookie: staffCookie,
       body,
     });
@@ -6493,23 +6526,9 @@ describe("catalogue settings routes", () => {
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
 
-  it.each([undefined, null, [], ["reduced"], 10, "unknown"])(
-    "refuses an invalid default %j",
-    async (defaultProductVatClass) => {
-      const app = mountApp();
-      const response = await send(app, "PUT", "/management-api/catalogue-settings", {
-        body: { defaultProductVatClass },
-      });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "product.invalid", params: { field: "defaultProductVatClass" } },
-      });
-    },
-  );
-
   it("saves, reloads and clears the venue default colour", async () => {
-    const app = mountApp();
-    await send(app, "PUT", "/management-api/catalogue-settings", {
+    const app = mountWithVenueDefaults();
+    await send(app, "PUT", "/management-api/venue-defaults", {
       body: { defaultProductVatClass: "reduced" },
     });
     const saved = await send(app, "PUT", "/management-api/catalogue-settings/default-color", {

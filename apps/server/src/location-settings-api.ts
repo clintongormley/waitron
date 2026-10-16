@@ -74,15 +74,6 @@ async function storedLanguages(tx: Transaction, locationId: string): Promise<str
   return stored;
 }
 
-function requestedLanguage(body: unknown): string {
-  const language =
-    typeof body === "object" && body !== null && "language" in body ? body.language : undefined;
-  if (typeof language !== "string") {
-    throw new AppError("management.request_invalid", { field: "receiptLanguage" });
-  }
-  return language;
-}
-
 /** Saves `language` as the location's one receipt language, under the pack's and the region's rules. */
 async function writeReceiptLanguage(
   tx: Transaction,
@@ -315,16 +306,6 @@ export function mountLocationSettingsApi(
         return { language, choices: rules.choices, fixed: rules.fixed ?? null };
       });
       return c.json(answer);
-    }),
-  );
-  app.put("/management-api/receipt-language", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<unknown>(c);
-      await gated(sessionId, (tx) =>
-        writeReceiptLanguage(tx, deps.cfg.locationId, requestedLanguage(body)),
-      );
-      return c.body(null, 204);
     }),
   );
   app.get("/management-api/venue-defaults", (c) =>
