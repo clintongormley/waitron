@@ -1,5 +1,9 @@
 # A668 slice 3: Products list and publishing warnings implementation plan
 
+> Owner wording approved 2026-10-16: Products “Not reviewed” is «Sin revisar», and the
+> publish warning “Allergens not yet reviewed” is «Alérgenos sin revisar». This replaces the
+> provisional copy below; the implementation already uses these exact strings.
+
 > **For agentic workers:** Use `superpowers:executing-plans`, task by task, inline. The owner authorizes unattended execution without a plan approval prompt. Routine work stays with the driver; no subagents. This is an implementation slice, not a plan-only queue item.
 
 **Goal:** Show variants' effective allergen states in Products and warn, with product links, before immediate or scheduled menu publication without blocking it.
