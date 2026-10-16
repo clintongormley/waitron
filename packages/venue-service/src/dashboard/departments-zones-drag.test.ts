@@ -189,14 +189,14 @@ it("keyboard navigation wraps in both directions and ignores unrelated keys and 
     [...table.shadowRoot!.querySelectorAll('[part~="drop-into"]')].map(
       (cell) => cell.closest("tr")!.dataset.rowKey,
     );
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(6).fill("department:d4"));
   key(grip, "ArrowDown");
-  expect(marked()).toEqual(Array(5).fill("department:d2"));
+  expect(marked()).toEqual(Array(6).fill("department:d2"));
   key(grip, "ArrowUp");
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(6).fill("department:d4"));
   key(grip, "a");
   key(table.shadowRoot!.querySelector('[data-test="zone-grip-z2"]')!, "ArrowDown");
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(6).fill("department:d4"));
   key(grip, " ");
   await expect
     .poll(() => writes)
