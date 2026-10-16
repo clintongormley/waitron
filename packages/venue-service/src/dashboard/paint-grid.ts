@@ -4,7 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { styleMap } from "lit/directives/style-map.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "./strings.js";
-import { periodColourStyles } from "./period-colour-styles.js";
+import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import {
   ColumnStroke,
   CopyChooser,
@@ -84,13 +84,7 @@ export class PaintGrid extends LitElement {
       }
       .closed,
       .all-closed {
-        --period-fill: repeating-linear-gradient(
-          135deg,
-          var(--wt-color-surface),
-          var(--wt-color-surface) var(--wt-space-1),
-          var(--wt-color-border) var(--wt-space-1),
-          var(--wt-color-border) var(--wt-space-2)
-        );
+        --period-fill: ${closedHatch};
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-border);
       }

@@ -22,3 +22,12 @@ export const periodColourStyles = css`
       .join("\n"),
   )}
 `;
+
+/** The stripes that draw closed time, in the painter's grid and the Month's bars alike. */
+export const closedHatch = css`repeating-linear-gradient(
+  135deg,
+  var(--wt-color-surface),
+  var(--wt-color-surface) var(--wt-space-1),
+  var(--wt-color-border) var(--wt-space-1),
+  var(--wt-color-border) var(--wt-space-2)
+)`;

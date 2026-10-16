@@ -13,6 +13,7 @@ import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { monthNames, type MonthNames } from "./opening-hours-day.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import "./season-chips.js";
+import { closedHatch } from "./period-colour-styles.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
@@ -212,13 +213,7 @@ export class OpeningHoursMonthView extends LitElement {
         inset-block: 0;
       }
       .gap {
-        background: repeating-linear-gradient(
-          135deg,
-          var(--wt-color-surface),
-          var(--wt-color-surface) var(--wt-space-1),
-          var(--wt-color-border) var(--wt-space-1),
-          var(--wt-color-border) var(--wt-space-2)
-        );
+        background: ${closedHatch};
       }
       .segment[data-colour="red"] {
         background: var(--wt-color-palette-red);
