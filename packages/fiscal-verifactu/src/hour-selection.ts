@@ -1,0 +1,320 @@
+import { WAITRON_ID_SISTEMA } from "./software.js";
+import {
+  readOperationAuthority,
+  type OperationAuthority,
+  type OperationBinding,
+  type ModuleOperationHost,
+} from "@waitron/module";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
+import { canSelectHour, type HourClockDecision } from "./hour-clock.js";
+import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
+import {
+  decodeHourIdentity,
+  encodeHourIdentity,
+  isHourAllocatedSeries,
+  isHourIdentity,
+} from "./hour-identity.js";
+
+export interface HourSelectionFacts {
+  readonly scope: HourScope;
+  readonly bases: readonly { readonly code: string; readonly purpose: string }[];
+  readonly contextKey: string;
+  readonly clock: HourClockDecision;
+  readonly history: readonly HourHistorySource[];
+}
+export type HourSelectionStore = NonNullable<ModuleOperationHost["withPreparationState"]>;
+type Answer = "no" | "yes" | "unknown";
+interface SelectionRequest {
+  binding: OperationBinding;
+  authority: OperationAuthority;
+  answer: Answer;
+  confirmation?: object;
+}
+interface EntryBase {
+  softwareId: string;
+  binding: OperationBinding;
+  scope: HourScope;
+  bases: HourSelectionFacts["bases"];
+  contextKey: string;
+  answer: Answer;
+}
+interface Intent extends EntryBase {
+  references: readonly string[];
+  kind: "intent";
+  identity: string;
+  issuedAt: string;
+}
+interface Wait extends EntryBase {
+  kind: "wait";
+  targetMs: number;
+}
+type Entry = Intent | Wait;
+const HOUR_MS = 3_600_000;
+const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
+const END_MS = EPOCH_MS + 32 ** 4 * HOUR_MS;
+function refuse(reason: string): never {
+  throw new AppError("sif.allocation_invalid", { reason });
+}
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function text(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function validBinding(value: unknown): value is OperationBinding {
+  return (
+    record(value) &&
+    ["module", "action", "eventId", "sourceId", "targetNodeId"].every((key) => text(value[key]))
+  );
+}
+function ordered(bases: HourSelectionFacts["bases"]) {
+  return bases
+    .map(({ code, purpose }) => ({ code, purpose }))
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+}
+function validBases(value: unknown): value is HourSelectionFacts["bases"] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (base) => record(base) && typeof base.code === "string" && typeof base.purpose === "string",
+    ) &&
+    isHourAllocatedSeries(
+      value.map((base) => ({ code: `${base.code}-0000`, purpose: base.purpose })),
+      "0000",
+      value,
+    )
+  );
+}
+function validScope(value: unknown): value is HourScope {
+  return (
+    record(value) &&
+    text(value.taxpayerNif) &&
+    (value.environment === "production" || value.environment === "preproduction")
+  );
+}
+function parseState(value: unknown): Entry[] {
+  if (value === null) return [];
+  if (!record(value) || value.version !== 1 || !Array.isArray(value.entries))
+    return refuse("history_invalid");
+  const keys = new Set<string>();
+  for (const entry of value.entries) {
+    if (
+      !record(entry) ||
+      !validBinding(entry.binding) ||
+      !validScope(entry.scope) ||
+      !validBases(entry.bases) ||
+      !text(entry.contextKey) ||
+      !text(entry.softwareId) ||
+      !["no", "yes", "unknown"].includes(entry.answer as string)
+    )
+      return refuse("history_invalid");
+    if (entry.kind === "intent") {
+      if (
+        !Array.isArray(entry.references) ||
+        !entry.references.every(text) ||
+        !isHourIdentity(entry.identity) ||
+        typeof entry.issuedAt !== "string" ||
+        !Number.isFinite(Date.parse(entry.issuedAt)) ||
+        Date.parse(entry.issuedAt) < EPOCH_MS ||
+        Date.parse(entry.issuedAt) >= END_MS ||
+        encodeHourIdentity(Date.parse(entry.issuedAt)) !== entry.identity
+      )
+        return refuse("history_invalid");
+    } else if (entry.kind === "wait") {
+      if (
+        entry.answer === "no" ||
+        !Number.isSafeInteger(entry.targetMs) ||
+        (entry.targetMs as number) < EPOCH_MS ||
+        (entry.targetMs as number) > END_MS ||
+        (entry.targetMs as number) % HOUR_MS !== 0
+      )
+        return refuse("history_invalid");
+    } else return refuse("history_invalid");
+    const key = JSON.stringify([entry.binding.module, entry.binding.eventId, entry.kind]);
+    if (keys.has(key)) return refuse("history_invalid");
+    keys.add(key);
+  }
+  return structuredClone(value.entries) as Entry[];
+}
+function fingerprint(entry: EntryBase): string {
+  return JSON.stringify([
+    entry.binding.module,
+    entry.binding.action,
+    entry.binding.eventId,
+    entry.binding.sourceId,
+    entry.binding.targetNodeId,
+    entry.scope.taxpayerNif,
+    entry.scope.environment,
+    ordered(entry.bases),
+    entry.contextKey,
+    entry.softwareId,
+    entry.answer,
+  ]);
+}
+function material(intent: Intent) {
+  return { status: "selected" as const, ...structuredClone(intent) };
+}
+
+export function createHourSelection(options: {
+  withState: HourSelectionStore;
+  read(binding: OperationBinding): Promise<HourSelectionFacts>;
+  monotonicNow(): number;
+}) {
+  // Monotonic readings are process-local; persisted waits carry only their original UTC target.
+  const timers = new Map<string, { start: number; duration: number }>();
+  const perform = async (supplied: SelectionRequest, persist: boolean) => {
+    const request = { ...supplied, binding: { ...supplied.binding } };
+    const authorize = () => {
+      if (
+        request.binding.module !== "fiscal-verifactu" ||
+        !["setup", "restore", "re-register", "promote"].includes(request.binding.action) ||
+        readOperationAuthority(request.authority, request.binding) === undefined
+      )
+        refuse("reauthentication_required");
+    };
+    authorize();
+    if (!["no", "yes", "unknown"].includes(request.answer)) refuse("event_mismatch");
+    return options.withState(request.binding, async (state) => {
+      authorize();
+      const fresh = await options.read({ ...request.binding });
+      authorize();
+      if (!validScope(fresh.scope) || !validBases(fresh.bases) || !text(fresh.contextKey))
+        return refuse("event_mismatch");
+      if (fresh.history.length === 0) return refuse("history_invalid");
+      const facts = {
+        ...fresh,
+        scope: { ...fresh.scope },
+        bases: ordered(fresh.bases),
+        history: structuredClone(fresh.history),
+      };
+      if (!Array.isArray(state.history)) return refuse("history_invalid");
+      const retained = new Map<string, Entry>();
+      for (const value of [state.value, ...state.history]) {
+        for (const entry of parseState(value)) {
+          const key = JSON.stringify([entry.binding.module, entry.binding.eventId, entry.kind]);
+          const prior = retained.get(key);
+          const detail = (value: Entry) =>
+            JSON.stringify([
+              fingerprint(value),
+              value.kind === "intent"
+                ? [value.identity, value.issuedAt, [...value.references].sort()]
+                : value.targetMs,
+            ]);
+          if (prior !== undefined && detail(prior) !== detail(entry))
+            return refuse("history_invalid");
+          retained.set(key, entry);
+        }
+      }
+      const entries = [...retained.values()];
+      const base: EntryBase = {
+        softwareId: WAITRON_ID_SISTEMA,
+        binding: request.binding,
+        scope: facts.scope,
+        bases: facts.bases,
+        contextKey: facts.contextKey,
+        answer: request.answer,
+      };
+      const sameEvent = entries.filter(
+        (entry) =>
+          entry.binding.module === request.binding.module &&
+          entry.binding.eventId === request.binding.eventId,
+      );
+      if (sameEvent.some((entry) => fingerprint(entry) !== fingerprint(base)))
+        return refuse("event_mismatch");
+      const intent = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
+      let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
+      const permitted = canSelectHour(facts.clock, request.confirmation);
+      if (!permitted) {
+        if (wait !== undefined && intent === undefined)
+          return {
+            status: "waiting" as const,
+            targetMs: wait.targetMs,
+            remainingMs: null,
+            requiresClockConfirmation: true,
+          };
+        return refuse("clock_unconfirmed");
+      }
+      const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
+      const history = projectHourHistory({
+        scope: facts.scope,
+        sources: [
+          ...facts.history,
+          {
+            reference: "retained-intents",
+            complete: true,
+            records: entries
+              .filter((entry): entry is Intent => entry.kind === "intent" && entry !== intent)
+              .map((entry) => ({
+                ...entry.scope,
+                reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
+                kind: "intent",
+                softwareId: entry.softwareId,
+                nodeId: entry.binding.targetNodeId,
+                identity: entry.identity,
+                recordedAtMs: Date.parse(entry.issuedAt),
+              })),
+          },
+        ],
+      });
+      if (history.contradictions.length > 0) return refuse("history_invalid");
+      const currentHour = decodeHourIdentity(encodeHourIdentity(now));
+      const selectedHour = intent === undefined ? currentHour : decodeHourIdentity(intent.identity);
+      if (
+        (history.greatestSpentHour !== null && selectedHour <= history.greatestSpentHour) ||
+        (history.recordedTimeFloorMs !== null && now < history.recordedTimeFloorMs) ||
+        (intent !== undefined && now < Date.parse(intent.issuedAt))
+      )
+        return refuse("hour_not_later");
+      if (intent !== undefined) return material(intent);
+      const write = async (entry: Entry) => {
+        authorize();
+        await state.replace({ version: 1, entries: structuredClone([...entries, entry]) });
+        authorize();
+        entries.push(entry);
+      };
+      if (request.answer !== "no") {
+        if (wait === undefined) {
+          wait = { ...base, kind: "wait", targetMs: (Math.floor(now / HOUR_MS) + 1) * HOUR_MS };
+          if (persist) await write(wait);
+        }
+        const timerKey = fingerprint(wait);
+        const monotonic = options.monotonicNow();
+        if (!Number.isFinite(monotonic) || monotonic < 0) return refuse("clock_unconfirmed");
+        let timer = timers.get(timerKey);
+        if (timer === undefined) {
+          timer = { start: monotonic, duration: Math.max(0, wait.targetMs - now) };
+          timers.set(timerKey, timer);
+        }
+        if (monotonic < timer.start) return refuse("clock_unconfirmed");
+        const remainingMs = Math.max(
+          0,
+          timer.duration - (monotonic - timer.start),
+          wait.targetMs - now,
+        );
+        if (remainingMs > 0)
+          return {
+            status: "waiting" as const,
+            targetMs: wait.targetMs,
+            remainingMs,
+            requiresClockConfirmation: false,
+          };
+      }
+      const selected: Intent = {
+        ...base,
+        kind: "intent",
+        references: [...history.references],
+        identity: encodeHourIdentity(now),
+        issuedAt: new Date(now).toISOString(),
+      };
+      if (!persist) return { ...material(selected), status: "preview" as const };
+      await write(selected);
+      return material(selected);
+    });
+  };
+  return {
+    select: (request: SelectionRequest) => perform(request, true),
+    preview: (request: Omit<SelectionRequest, "answer">) =>
+      perform({ ...request, answer: "no" }, false),
+  };
+}

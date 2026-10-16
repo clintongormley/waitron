@@ -421,7 +421,21 @@ export function mountSetupFirstFiscalApi(
             if (state.status !== "claimed") throw new AppError("setup.attempt_conflict", {});
             const { module, seat, context } = selected(body.module);
             boundedPublic(body.proposal);
-            const request = seat.request(context, seat.candidates(context, body.proposal));
+            // Pure input validation precedes reconfirmation; durable preparation consumes it first.
+            let reconfirmed = false;
+            const confirm = async () => {
+              if (reconfirmed) return;
+              await host.owner.consumeReconfirmation(
+                owner,
+                text(body.reconfirmation),
+                "block-use",
+                hold,
+              );
+              reconfirmed = true;
+            };
+            const request = await host.withPreparationAuthorization(confirm, async () =>
+              seat.request(context, await seat.candidates(context, body.proposal)),
+            );
             await host.assertFreshAssignment(
               {
                 ...state,
@@ -434,12 +448,7 @@ export function mountSetupFirstFiscalApi(
               },
               module,
             );
-            await host.owner.consumeReconfirmation(
-              owner,
-              text(body.reconfirmation),
-              "block-use",
-              hold,
-            );
+            await confirm();
             state = await host.store.update(
               owner.attemptId,
               state.revision,

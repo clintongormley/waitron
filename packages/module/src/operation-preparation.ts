@@ -10,6 +10,14 @@ import {
 } from "./operation-input.js";
 
 export interface ModuleOperationHost {
+  withPreparationState?<T>(
+    binding: OperationBinding,
+    run: (state: {
+      readonly value: unknown;
+      readonly history: readonly unknown[];
+      replace(value: unknown): Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T>;
   readonly environment: Readonly<Record<string, string | undefined>>;
   readRetiredSetup?(module: string): Promise<
     readonly {

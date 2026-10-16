@@ -269,6 +269,21 @@ provisioning entry with two source revisions, then run the artifacts with change
 and file times. These are component checks; source-mode setup, complete image/CLI qualification,
 durable selection and the wizard/recovery paths remain later tasks.
 
+**Hour-plan Task 3 checkpoint, 2026-10-16:** the module now enumerates series, SIF identities,
+activation receipts and dormant reservations without active/node/software filters, using the
+owner's exact read-only permission relayed at approximately 17:50. A real-store fixture with a
+higher revoked identity and retired series on another node reproduced the earlier reader gap.
+The new projector and selector check all supplied scope-matching history and recorded times;
+new intents are saved before return, while exact retries retain their hour. Waits preserve their UTC
+target and use process-local monotonic elapsed time; restart requires a fresh accepted clock comparison.
+The generic host retains opaque revision values at the original anchor and reuses the setup hold.
+Selection checks every retained revision, so replaying an older module value cannot hide a newer
+spent hour. Durable preparation consumes the request’s password reconfirmation before writing;
+pure invalid candidate input keeps its existing validation response.
+Focused route tests use a test module with the real selector and host store. The production fiscal
+contribution, every setup/recovery mode and retirement/publication journeys still need Tasks 4–10;
+these component checks do not establish their readiness.
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the

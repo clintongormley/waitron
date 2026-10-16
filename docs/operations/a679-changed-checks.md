@@ -54,3 +54,24 @@ The shared-throttle case in `apps/server/src/first-setup-selection.route.test.ts
 unchanged. In the retained failing run, the next request succeeded after an earlier 429;
 the throttle's first delay can expire between real HTTPS requests. Socket timers remain real,
 and the suite's existing mock teardown restores the clock.
+
+
+## Hour-plan Task 3 — 2026-10-16
+
+No existing assertion, fiscal fixture, golden suite or root guard changed. The existing
+`module-operation-host.test.ts` gains one new opaque-store case; its earlier checks stay intact.
+New hour-history/reader/selection, durable-store and real generic-route cases cover the new policy.
+The route cases configure a test fiscal contribution with the real selector and host capability;
+the production contribution switches in Task 4.
+
+The owner separately approved four new SELECT-only enumerations in Lane E questions.md
+(2026-10-16, watcher relay approximately 17:50), after the retained real-store completeness failure.
+They select only the named fields from invoice_series, registro_sif, fiscal_allocations and
+fiscal_reservations, sequentially and without WHERE predicates. Existing SQL and protected
+writers remain unchanged. The deployment stamp is obtained through its existing database reader
+and supplied to the transaction reader; no type cast or additional new SQL statement was added.
+
+The generic candidate route now awaits preparation and gives durable writes a lazy password-grant
+check. Existing pure validation still runs before consuming the grant; a new route test requires
+an invalid reconfirmation to leave no hour ledger. Another new test restores an older module value
+and requires the selector to retain the newer spent hour from host revisions.

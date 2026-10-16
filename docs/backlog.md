@@ -330,7 +330,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
-  by the Node bundler. Durable history/selection and setup/recovery integration remain open.
+  by the Node bundler. History enumeration, durable selection and the shared host store have focused
+  local checks; the real fiscal setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.

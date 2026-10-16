@@ -1,3 +1,4 @@
+import { projectHourHistory } from "./hour-history.js";
 import "./errors.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -284,6 +285,26 @@ function createInitialSetup(
   const contribution: InitialSetupContribution = {
     retainedAssignments(evidence) {
       if (!record(evidence)) refuse();
+      if (evidence.format === "waitron-hour-history") {
+        const history = projectHourHistory(evidence);
+        if (history.contradictions.length > 0) refuse("history_invalid");
+        return {
+          keys: [],
+          positions:
+            history.greatestSpentHour === null
+              ? []
+              : [
+                  {
+                    namespace: JSON.stringify([
+                      history.scope.taxpayerNif,
+                      history.scope.environment,
+                      "hour",
+                    ]),
+                    position: history.greatestSpentHour,
+                  },
+                ],
+        };
+      }
       const value =
         evidence.format === "waitron-paper-register"
           ? evidence

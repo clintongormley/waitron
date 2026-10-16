@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createModulePreparationState } from "./module-preparation-state.js";
 import { writeModuleConfig } from "./module-config.js";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
@@ -19,6 +21,8 @@ import {
   readFirstSetupRetirements,
   firstSetupAnchorFor,
   createFirstSetupResolutionStore,
+  type FirstSetupCoordinator,
+  type FirstSetupHold,
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
@@ -36,11 +40,15 @@ export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
   evidence?: {
     read: ModuleOperationHost["readPublicEvidence"];
+    withPreparationState?: ModuleOperationHost["withPreparationState"];
     readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
+    ...(evidence?.withPreparationState === undefined
+      ? {}
+      : { withPreparationState: evidence.withPreparationState }),
     ...(evidence?.readRetiredSetup === undefined
       ? {}
       : { readRetiredSetup: evidence.readRetiredSetup }),
@@ -68,7 +76,14 @@ export function createFirstSetupModuleHost(options: {
       invalidate(attemptId: string): void;
     };
   } = {};
-  const coordinator = createFirstSetupCoordinator();
+  const sharedCoordinator = createFirstSetupCoordinator();
+  const holds = new AsyncLocalStorage<FirstSetupHold>();
+  const replacementAuthority = new AsyncLocalStorage<() => Promise<void>>();
+  const coordinator: FirstSetupCoordinator = {
+    run: (body) => sharedCoordinator.run((hold) => holds.run(hold, () => body(hold))),
+    held: (hold, body) => sharedCoordinator.held(hold, () => holds.run(hold, body)),
+  };
+  const preparation: { current?: ReturnType<typeof createModulePreparationState> } = {};
   const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> = async (name) => {
     const retired = await readFirstSetupRetirements(options);
     if (retired.length === 0) return [];
@@ -102,6 +117,10 @@ export function createFirstSetupModuleHost(options: {
   const host = createModuleOperationHost(options.environment, {
     read: async (binding) => evidence.current?.read(binding),
     readRetiredSetup,
+    withPreparationState: (binding, run) => {
+      if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
+      return preparation.current.withState(binding, run, holds.getStore());
+    },
   });
   const modules = configureModuleOperations(options.modules, host);
   const store = createFirstSetupStore({ ...options, coordinator });
@@ -154,6 +173,32 @@ export function createFirstSetupModuleHost(options: {
           request: null,
         })),
       };
+    },
+  });
+  preparation.current = createModulePreparationState({
+    ...options,
+    coordinator,
+    withVenueExclusion: (body) => resolution.withVenueExclusion(body),
+    authorizeReplacement: async () => {
+      const authorize = replacementAuthority.getStore();
+      if (authorize === undefined) throw new AppError("setup.owner_required", {});
+      await authorize();
+    },
+    authorize: async (binding) => {
+      const state = await store.read();
+      const module = state?.frozen.modules.find((entry) => entry.module === binding.module);
+      const installed = modules.find((entry) => entry.name === binding.module);
+      if (
+        state === null ||
+        !["claimed", "consumption-intent"].includes(state.status) ||
+        binding.action !== "setup" ||
+        binding.sourceId !== state.frozen.sourceId ||
+        binding.targetNodeId !== state.frozen.nodeId ||
+        module === undefined ||
+        binding.eventId !== module.eventId ||
+        module.version !== installed?.version
+      )
+        throw new AppError("setup.attempt_conflict", {});
     },
   });
   const legacyEvidence = createFirstFiscalEvidence({
@@ -240,6 +285,12 @@ export function createFirstSetupModuleHost(options: {
   };
   evidence.current = configuredEvidence;
   return {
+    withPreparationAuthorization<T>(
+      authorize: () => Promise<void>,
+      run: () => Promise<T>,
+    ): Promise<T> {
+      return replacementAuthority.run(authorize, run);
+    },
     coordinator,
     store,
     owner,

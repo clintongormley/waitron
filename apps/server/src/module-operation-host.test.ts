@@ -209,3 +209,36 @@ it.each(["restore", "promote", "reserve", "establish"])(
     }
   },
 );
+
+it("exposes the configured opaque preparation store to a module without interpreting its value", async () => {
+  let retained: unknown = null;
+  const host = createModuleOperationHost(
+    {},
+    {
+      read: async () => undefined,
+      withPreparationState: async (_binding, run) =>
+        run({
+          get history() {
+            return retained === null ? [] : [retained];
+          },
+          get value() {
+            return retained;
+          },
+          async replace(value) {
+            retained = value;
+          },
+        }),
+    },
+  );
+  const binding = {
+    module: "example",
+    action: "setup",
+    eventId: "event",
+    sourceId: "source",
+    targetNodeId: "node",
+  };
+  await host.withPreparationState!(binding, async (state) => {
+    await state.replace({ public: "opaque" });
+  });
+  expect(retained).toEqual({ public: "opaque" });
+});
