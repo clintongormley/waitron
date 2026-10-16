@@ -4840,10 +4840,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
   re-reads the list for nothing (found by reading, #1681's review). Next: drop `persons` from that
   query's list, keeping it on `staff-role-delete-impact`, which joins it for holders' names.
-- **A706. A prep station's column in the staffing painters draws no opening hours behind it.**
-  venue-service has no per-weekday station hours read: `stationServiceTimes`
-  (`packages/venue-service/src/station-service-times.ts`) works per date, at most 42 days. Left open
-  by A585-4.
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
