@@ -8,6 +8,9 @@ import { openVenueDatabase, type Database, type VenueDatabase } from "../client.
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier } from "./identifiers.js";
 
+// Captured at load so a suite's `vi.useFakeTimers()` cannot replace it and stall the hook below.
+const realSetTimeout = globalThis.setTimeout;
+
 /** Setup budget for opening the files and applying the migration sets. */
 const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
@@ -190,6 +193,9 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
   afterEach(async () => {
     if (resetPerTest && db !== undefined && resetPlan !== undefined)
       await applyReset(db, resetPlan);
+    // A file of synchronous database work otherwise gives the loop no timer turn, so the venue
+    // watchdog (`@waitron/store`'s venue-liveness) would read this worker as frozen.
+    await new Promise((resolve) => realSetTimeout(resolve, 0));
   });
 
   // Guarded independently and in order: the files are closed before the directory holding them is
