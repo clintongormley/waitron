@@ -201,6 +201,15 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     getLocales: vi.fn().mockResolvedValue({ locales: [], venueDefault: "es-ES" }),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -778,6 +787,7 @@ describe("an open table's order", () => {
     today: null,
     signals: [],
     party: {
+      kitchenNote: { scope: { partyId: "party-a" }, note: null, revision: 0, ownerRevision: 1 },
       id: "party-a",
       revision: 1,
       guestCount: 2,

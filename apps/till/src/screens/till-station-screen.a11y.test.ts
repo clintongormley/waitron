@@ -43,6 +43,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 // fire button, all in a single mount.
 const groups: StationQueueGroup[] = [
   {
+    kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
     label: "Mesa 4",
@@ -80,6 +81,7 @@ const groups: StationQueueGroup[] = [
     ],
   },
   {
+    kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,
     label: null,

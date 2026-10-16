@@ -8,6 +8,7 @@ import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "party" }, note: null, revision: 0, ownerRevision: 0 },
   id: "party",
   revision: 0,
   guestCount: 2,

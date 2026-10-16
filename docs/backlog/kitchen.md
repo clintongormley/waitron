@@ -184,7 +184,25 @@ list does not exist.
    colours, which still marks those other stations use. One shared component, also used by periods
    (A719) and seasons (A721); category colours keep their dialog.
 
+## Whole-order note correction volume
+
+A743 retains the existing per-dish correction path and the plan's explicit per-item station
+acknowledgement. A three-dish note edit produced three slips and three notices in the review probe;
+`apps/server/src/order-kitchen-note.corrections.test.ts` now exercises that case. The paper's heading
+names the kitchen-note change or removal, rather than a generic dish change.
+
+Before changing that delivery, decide whether you want one paper summary per printer, and whether
+cooks should still acknowledge each dish. The current implementation is the default from A743's
+[plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md), not a separate owner decision
+about grouping these corrections.
+
 ## Decisions and deliberate limits
+
+- **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
+  instruction above a counter order or a table party's dishes, alongside each dish's own note.
+  It appears on kitchen paper and station/pass screens; later edits and removals use acknowledged
+  kitchen notices. The shared order-heading region also belongs to A669's table allergy information.
+  Implementation choices and checks: [plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
 
 - **Routes has no Expand/Collapse control, and closing a category closes everything inside it
   (A726, owner 2026-10-15, replacing A656's one Expand/Collapse button).** A closed category shows

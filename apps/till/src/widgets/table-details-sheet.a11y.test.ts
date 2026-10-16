@@ -46,6 +46,7 @@ const everything = table({
     { kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" },
   ],
   party: {
+    kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
     id: "p1",
     revision: 1,
     guestCount: 4,

@@ -1802,6 +1802,7 @@ describe("getHeldOrder", () => {
       orderNumber: 1,
       label: "Mesa 7",
       revision: 0,
+      kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
       lines: [
         {
           productId: cafeId,

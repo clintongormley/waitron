@@ -372,6 +372,20 @@
       "when": 1792009734699,
       "tag": "0052_mute_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1792100650715,
+      "tag": "0053_order_kitchen_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1792106418853,
+      "tag": "0054_kitchen_note_changes",
+      "breakpoints": true
     }
   ]
 }

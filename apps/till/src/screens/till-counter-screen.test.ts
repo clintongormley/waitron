@@ -291,6 +291,7 @@ describe("till-counter-screen", () => {
   it("threads the default station's queue (and station id) through to the card grid", async () => {
     const stationQueue = [
       {
+        kitchenNote: null,
         orderId: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",

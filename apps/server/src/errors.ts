@@ -404,6 +404,7 @@ declare module "@waitron/shared" {
      * party id in a route is not a UUID. One code for all, as `tab.not_open` is.
      */
     "party.not_open": { partyId: string };
+    "party.not_found": { partyId: string };
     /**
      * A command carried a party revision another write has since moved past, so it was prepared
      * from a stale copy of the party; or it named a party it read at a table or on a bill where that

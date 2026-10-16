@@ -2,6 +2,28 @@ import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
 import { codeMessage } from "./codes.js";
 
+it.each([
+  [
+    "party.not_found",
+    "The table order could not be found.",
+    "No se ha encontrado el pedido de la mesa.",
+  ],
+  ["kitchen_note.invalid", "Check the note for the kitchen.", "Revisa la nota para cocina."],
+  [
+    "kitchen_note.too_long",
+    "Use no more than 2,000 characters.",
+    "Usa un máximo de 2000 caracteres.",
+  ],
+  [
+    "kitchen_note.out_of_date",
+    "This note changed on another device. Read it again before editing.",
+    "Esta nota ha cambiado en otro dispositivo. Vuelve a leerla antes de editarla.",
+  ],
+])("explains %s in English and Spanish", (code, english, spanish) => {
+  expect(codeMessage(code, "en-GB")).toBe(english);
+  expect(codeMessage(code, "es-ES")).toBe(spanish);
+});
+
 it.each(["constructor", "toString", "__proto__"])(
   "falls back to the English refusal message for inherited locale key %s",
   (locale) => {

@@ -45,6 +45,7 @@ describe.each(["light", "dark"] as const)("till-join-with-dialog a11y (%s theme)
             state: "open-tab",
             condition: "held",
             party: {
+              kitchenNote: { scope: { partyId: "P" }, note: null, revision: 0, ownerRevision: 1 },
               id: "P",
               revision: 1,
               guestCount: 2,

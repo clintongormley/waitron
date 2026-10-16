@@ -84,6 +84,8 @@ export class TillCounterWaiting extends LitElement {
   /** The device's profile allows `take-orders`, which the move route requires. */
   @property({ type: Boolean }) canMoveStation = false;
 
+  @property({ type: Boolean }) canEditKitchenNote = false;
+
   #emit(type: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -105,6 +107,17 @@ export class TillCounterWaiting extends LitElement {
           <span class="meta">${formatMoney(order.total, currentLocale())}</span>
         </div>
         <div class="controls">
+          ${
+            this.canEditKitchenNote && order.collectedAt === null
+              ? html`<wt-button
+                  data-waiting-kitchen-note
+                  variant="secondary"
+                  aria-label=${`${t("kitchen_note.title")} ${scope}`}
+                  @click=${() => this.#emit("edit-waiting-kitchen-note", { id: order.id })}
+                  >${t("kitchen_note.title")}</wt-button
+                >`
+              : nothing
+          }
           ${
             pay
               ? html`<wt-button

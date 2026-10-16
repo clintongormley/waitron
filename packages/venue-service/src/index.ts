@@ -97,3 +97,5 @@ export { readSeasons } from "./seasons.js";
 export type { Season } from "./season-rules.js";
 export { readDepartmentSeasonWeeks } from "./season-weeks.js";
 export { readCalendarMonthPlan } from "./opening-hours-calendar.js";
+
+export * from "./order-kitchen-notes.js";

@@ -175,6 +175,7 @@ export class TillCardGrid extends LitElement {
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
   @property({ type: Boolean }) canMoveStation = false;
+  @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -464,6 +465,7 @@ export class TillCardGrid extends LitElement {
           ></till-held-orders
           ><till-counter-waiting
             .orders=${this.counterWaiting}
+            .canEditKitchenNote=${this.canEditKitchenNote}
             .canMoveStation=${this.canMoveStation}
           ></till-counter-waiting>`;
       case "prep-queue":
@@ -531,6 +533,8 @@ export class TillCardGrid extends LitElement {
           .otherDrafts=${this.otherDrafts}
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.party}
+          .kitchenNote=${this.party?.kitchenNote.note ?? null}
+          .kitchenNoteRevision=${this.party?.kitchenNote.revision ?? 0}
           .bills=${this.partyBills}
           .receiptLanguages=${this.receiptLanguages}
           .fullInvoices=${this.fullInvoices}

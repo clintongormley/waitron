@@ -71,6 +71,12 @@ const zone: FloorZone = {
 
 function partyOf(over: Partial<TableParty> = {}): TableParty {
   return {
+    kitchenNote: {
+      scope: { partyId: over.id ?? "v1" },
+      note: null,
+      revision: 0,
+      ownerRevision: over.revision ?? 3,
+    },
     id: "v1",
     revision: 3,
     guestCount: 4,
@@ -1939,9 +1945,19 @@ describe("till-app: a partly paid order at the counter", () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
       listWorkingOrders: vi.fn().mockResolvedValue([held()]),
-      retrieveWorkingOrder: vi
-        .fn()
-        .mockResolvedValue({ id: "wo-1", orderNumber: 5, label: "Ana", revision: 3, lines: [] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Ana",
+        revision: 3,
+        lines: [],
+      }),
       getBillBalance: vi.fn().mockResolvedValue(counterBalance),
       previewBillPayment: vi.fn().mockResolvedValue(cash("70.00", "0.00")),
       ...overrides,

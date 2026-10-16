@@ -1763,6 +1763,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     }[];
     expect(groups1).toEqual([
       {
+        kitchenNote: null,
         orderId: workingOrderId,
         orderNumber: expect.any(Number),
         label: "Mesa 9",

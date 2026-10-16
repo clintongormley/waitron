@@ -16,6 +16,7 @@ import {
 import { VENUE_SERVICE } from "./modules.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import { moveDraftsToParty } from "./order-drafts.js";
+import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   groupArrivingDishes,
   moveGroupsToParty,
@@ -241,6 +242,7 @@ export async function combineParties(
   const partyOf = (partyId: string) => mains.find((party) => party.id === partyId)!;
   const fromMain = partyOf(from).mainBillId;
   const intoMain = partyOf(into).mainBillId;
+  await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await moveGroupsToParty(tx, from, into);
   await moveDraftsToParty(
     tx,
@@ -353,6 +355,7 @@ export async function splitTable(
       operatorId: options.operatorId,
       tableId,
     });
+    await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
     let mainBillId: string | null = null;
     if (billId === null) {
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");

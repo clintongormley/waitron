@@ -99,6 +99,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
       state: "open-tab",
       condition: "held",
       party: {
+        kitchenNote: { scope: { partyId: "v7" }, note: null, revision: 0, ownerRevision: 9 },
         id: "v7",
         revision: 9,
         guestCount: 2,

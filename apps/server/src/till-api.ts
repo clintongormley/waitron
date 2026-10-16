@@ -221,6 +221,7 @@ import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
+import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
@@ -454,6 +455,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
+  "kitchen_note.out_of_date": 409,
   "order.payment_in_flight": 409,
   "device.profile_changed": 409,
   "working_order.not_placed": 409,
@@ -563,6 +565,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.transfer_modifier_line": 400,
   "tab.split_held_line": 400,
   "party.not_open": 409,
+  "party.not_found": 404,
   "party.out_of_date": 409,
   "party.bill_outstanding": 409,
   "unpaid_departure.nothing_outstanding": 409,
@@ -1242,6 +1245,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
   mountStationTodayApi(app, deps, log, run, pinThrottle);
+  mountOrderKitchenNoteApi(app, deps, log, run);
   mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
   mountFloorTodayApi(app, deps, log, run);
@@ -1854,6 +1858,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } & LineExtras)[];
         zoneId?: string;
         label?: string;
+        kitchenNote?: string | null;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -1875,6 +1880,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           lines: body.lines,
           zoneId,
           label: body.label,
+          kitchenNote: body.kitchenNote,
           operatorId: personId,
         },
         deps.attendance === undefined
@@ -2748,8 +2754,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ guestCount?: unknown; withTableIds?: unknown }>(c);
+      const body = await readJsonBody<{
+        guestCount?: unknown;
+        withTableIds?: unknown;
+        kitchenNote?: unknown;
+      }>(c);
       const guestCount = requireGuestCount(body.guestCount);
+      const initialNote = body.kitchenNote;
+      if (initialNote !== undefined && initialNote !== null && typeof initialNote !== "string")
+        throw new AppError("kitchen_note.invalid", { field: "note" });
       const withTableIds = requireOtherTables(body.withTableIds, id);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
@@ -2759,6 +2772,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           ...withTableIds.map((tableId) => ({ tableId })),
         ]);
         const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        const kitchenNote =
+          initialNote === undefined
+            ? undefined
+            : await VENUE_SERVICE.writeKitchenNote(tx, { partyId: seated.partyId }, 0, initialNote);
         for (const otherId of withTableIds) {
           if ((await holderOf(tx, otherId)) === seated.partyId) continue;
           await joinTables(tx, sendCfg, seated.partyId, otherId, {
@@ -2771,8 +2788,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }
         // After the writes, so a seat's and a join's own refusals answer first, as on the join route.
         await refuseTakenOff(tx, [id, ...withTableIds]);
-        if (withTableIds.length === 0) return seated;
-        return { ...seated, revision: await partyRevision(tx, seated.partyId) };
+        const revision =
+          withTableIds.length === 0 ? seated.revision : await partyRevision(tx, seated.partyId);
+        return {
+          ...seated,
+          revision,
+          ...(kitchenNote === undefined
+            ? {}
+            : {
+                kitchenNote: {
+                  ...kitchenNote,
+                  scope: { partyId: seated.partyId },
+                  ownerRevision: revision,
+                },
+              }),
+        };
       });
       return c.json(result);
     }),

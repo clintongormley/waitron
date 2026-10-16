@@ -160,6 +160,14 @@ export class TillStationQueue extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      .kitchen-note {
+        margin: 0;
+        padding: var(--wt-space-2);
+        color: var(--wt-color-text);
+        background: var(--wt-color-surface);
+        overflow-wrap: anywhere;
+      }
+
       .ticket-head {
         display: flex;
         align-items: baseline;
@@ -818,7 +826,11 @@ export class TillStationQueue extends LitElement {
   }
 
   #notice(notice: KitchenNotice): TemplateResult {
-    const kind = t(`station.notice.${notice.kind}` as const);
+    const change = notice.orderNoteChange;
+    const kind =
+      change === undefined
+        ? t(`station.notice.${notice.kind}` as const)
+        : t(change.after === null ? "kitchen_note.removed" : "kitchen_note.changed");
     const sign = notice.direction === null ? "" : notice.direction === "added" ? "+" : "\u2212";
     const line = `${sign}${dishLine(notice, notice.lineName)}`;
     const acknowledge = t("station.notice.acknowledge");
@@ -849,6 +861,14 @@ export class TillStationQueue extends LitElement {
           notice.wasStarted
             ? html`<span class="notice-started">${t("station.notice.started")}</span>`
             : nothing
+        }
+        ${
+          change === undefined
+            ? nothing
+            : html`
+                ${change.before === null ? nothing : html`<span class="notice-note">${t("kitchen_note.before")}: ${change.before}</span>`}
+                ${change.after === null ? nothing : html`<span class="notice-note">${t("kitchen_note.after")}: ${change.after}</span>`}
+              `
         }
         ${notice.note ? html`<span class="notice-note">${notice.note}</span>` : nothing}
         ${moved === null ? nothing : html`<span class="notice-moved">${moved}</span>`}
@@ -893,6 +913,7 @@ export class TillStationQueue extends LitElement {
             ${group.label ? html`<span class="label">${group.label}</span>` : nothing}
             <span class="age">${this.#elapsedMinutes(group.queuedAt)} ${t("station.min")}</span>
           </div>
+          ${this.#kitchenNote(group)}
           ${
             group.printProblem
               ? html`<p class="print-problem" data-print-problem>${t("station.print_problem")}</p>`
@@ -1048,11 +1069,19 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** The age accent is the WRAPPER's own left border, so it never overwrites the inner `.line`'s
-   *  kitchen-state colour. */
+  #kitchenNote(group: StationQueueGroup): TemplateResult | typeof nothing {
+    return group.kitchenNote
+      ? html`<p class="kitchen-note" data-kitchen-note>
+          ${t("kitchen_note.heading")}: ${group.kitchenNote}
+        </p>`
+      : nothing;
+  }
+
   #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const band = this.#band(group);
-    return html`<div class="cell ${this.#accentClasses(band)}">${this.#cell(group, item)}</div>`;
+    return html`<div class="cell ${this.#accentClasses(band)}">
+      ${this.#kitchenNote(group)}${this.#cell(group, item)}
+    </div>`;
   }
 
   #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {

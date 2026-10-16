@@ -275,6 +275,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     ...over,
   });
   const luis: TableParty = {
+    kitchenNote: { scope: { partyId: "v7" }, note: null, revision: 0, ownerRevision: 9 },
     id: "v7",
     revision: 9,
     guestCount: 2,

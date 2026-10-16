@@ -42,10 +42,16 @@ import {
   type TransferSnapshot,
 } from "./state/department-transfer-monitor.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
+import {
+  TillApi,
+  isNetworkFailure,
+  type MadeHereItem,
+  type KitchenNoteSnapshot,
+} from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { trimQuantity } from "./widgets/dish-format.js";
+import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
@@ -1723,7 +1729,7 @@ export class TillApp extends LitElement {
 
   readonly #basketOwner = {};
   #basketScope?: DraftScope<string>;
-  #basketBaseline = JSON.stringify([null, []]);
+  #basketBaseline = JSON.stringify([null, [], null]);
   #basketGeneration = 0;
   #basketObserved?: string;
 
@@ -1746,6 +1752,7 @@ export class TillApp extends LitElement {
           .map((answer) => JSON.stringify([answer.listId, answer.labelId]))
           .sort(),
       ]),
+      store.kitchenNote,
     ]);
   }
 
@@ -2091,7 +2098,7 @@ export class TillApp extends LitElement {
         // A refused table read must keep the draft; the accepted replacement performs its reset.
         restore: () => undefined,
       });
-      this.#partylessScope.commit(JSON.stringify([JSON.stringify([null, []]), []]));
+      this.#partylessScope.commit(JSON.stringify([JSON.stringify([null, [], null]), []]));
       this.#partylessObserved = this.#partylessPayload();
     }
     const payload = this.#partylessPayload();
@@ -4549,6 +4556,7 @@ export class TillApp extends LitElement {
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     const payload = this.#basketPayload();
@@ -4563,17 +4571,31 @@ export class TillApp extends LitElement {
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
-      if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (
+        !(await this.#syncIfDirty(id, lines, label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
       if (session !== this.#operatorSession) return;
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        language !== undefined
-          ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
-          : invoice
-            ? await this.api.recordSale(lines, tender, id, undefined, invoice)
-            : await this.api.recordSale(lines, tender, id);
+        this.#store.kitchenNote !== null
+          ? await this.api.recordSale(
+              lines,
+              tender,
+              id,
+              undefined,
+              invoice,
+              language,
+              this.#store.kitchenNote,
+            )
+          : language !== undefined
+            ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
+            : invoice
+              ? await this.api.recordSale(lines, tender, id, undefined, invoice)
+              : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -4660,6 +4682,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     this.#cancelledDemoReaderOrders.delete(id);
     const demoAttemptId = this.activeReaders.some(
       (reader) => reader.id === detail.readerId && reader.provider === "simulator",
@@ -4680,7 +4703,11 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     let paid = false;
     try {
-      if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (
+        !(await this.#syncIfDirty(id, lines, label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
       if (session !== this.#operatorSession) return;
       if (this.#cancelledDemoReaderOrders.has(id)) return;
       reachedFiscal = true;
@@ -4691,6 +4718,7 @@ export class TillApp extends LitElement {
           this.api.pay({
             id,
             lines,
+            ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
@@ -4711,7 +4739,13 @@ export class TillApp extends LitElement {
         this.#showTicket(id);
         paid = true;
       } else {
-        if (!this.#cancelledDemoReaderOrders.has(id)) this.cardOutcome = out.outcome;
+        if (!this.#store.persisted) await this.#adoptCreatedCounterNote(id, basketVisit, session);
+        if (
+          session === this.#operatorSession &&
+          this.#store.id === id &&
+          !this.#cancelledDemoReaderOrders.has(id)
+        )
+          this.cardOutcome = out.outcome;
       }
     } catch (error) {
       // The terminal may already have captured before the fiscal record was refused (`finalizeCapture`,
@@ -4739,6 +4773,8 @@ export class TillApp extends LitElement {
                 : isPaymentInFlight(error)
                   ? "sale.payment_in_flight"
                   : counterError(error, "sale.error");
+      if (reachedFiscal && isNetworkFailure(error) && !this.#store.persisted)
+        await this.#adoptCreatedCounterNote(id, basketVisit, session, false);
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       if (this.#demoAttempt?.attemptId === demoAttemptId) this.#demoAttempt = undefined;
@@ -4928,6 +4964,485 @@ export class TillApp extends LitElement {
     void this.#askCounterDeadEnds("pay").then(resolve);
   }
 
+  async #adoptCreatedCounterNote(
+    id: string,
+    generation: number,
+    session: number,
+    confirmed = true,
+  ): Promise<boolean> {
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      generation === this.#store.loadGeneration &&
+      id === this.#store.id;
+    if (!current()) return false;
+    if (confirmed) this.#store.markPersisted();
+    try {
+      const note = await this.api.getKitchenNote({ workingOrderId: id });
+      if (!current()) return false;
+      if (note.ownerRevision !== this.#store.revision) {
+        const read = await this.#loadHeldOrder(id, () => !current());
+        if (read !== undefined) {
+          this.#commitBasket(this.#basketPayload());
+          this.errorKey = read ? "held.changed_elsewhere" : "held.reread_failed";
+        }
+        return false;
+      }
+      this.#store.markPersisted();
+      this.#store.acceptKitchenNote(note);
+      return true;
+    } catch {
+      if (confirmed && current()) this.errorKey = "table.reread_failed";
+      return false;
+    }
+  }
+
+  #partyKitchenNoteSave?: {
+    partyId: string;
+    visit: number;
+    session: number;
+    pending: boolean;
+    result: Promise<boolean>;
+  };
+  #partyKitchenNoteAttempt?: {
+    partyId: string;
+    visit: number;
+    session: number;
+    revision: number;
+    note: string | null;
+    ownerRevision: number;
+    submissionId: string;
+  };
+
+  #startPartyKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const partyId = this.orderParty?.id;
+    if (
+      !partyId ||
+      detail.scopeKey !== `party:${partyId}` ||
+      (editor && detail.visit !== editor.visit)
+    )
+      return Promise.resolve(false);
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const prior = this.#partyKitchenNoteSave;
+    if (
+      prior?.partyId === partyId &&
+      prior.visit === visit &&
+      prior.session === session &&
+      prior.pending
+    )
+      return prior.result;
+    const write = {
+      partyId,
+      visit,
+      session,
+      pending: true,
+      result: this.#savePartyKitchenNote(detail, editor),
+    };
+    this.#partyKitchenNoteSave = write;
+    void write.result.then(() => {
+      write.pending = false;
+    });
+    return write.result;
+  }
+
+  async #savePartyKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const party = this.orderParty;
+    if (!party) return false;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      visit === this.#orderVisit &&
+      this.orderParty?.id === party.id;
+    const prior = this.#partyKitchenNoteAttempt;
+    const attempt =
+      prior?.partyId === party.id &&
+      prior.visit === visit &&
+      prior.session === session &&
+      prior.revision === detail.revision &&
+      prior.note === detail.note
+        ? prior
+        : {
+            partyId: party.id,
+            visit,
+            session,
+            revision: detail.revision,
+            note: detail.note,
+            ownerRevision: Math.max(party.revision, party.kitchenNote.ownerRevision),
+            submissionId: crypto.randomUUID(),
+          };
+    this.#partyKitchenNoteAttempt = attempt;
+    if (editor) editor.refusal = "";
+    try {
+      const snapshot = await this.api.setKitchenNote(
+        { partyId: party.id },
+        {
+          submissionId: attempt.submissionId,
+          expectedPartyRevision: attempt.ownerRevision,
+          expectedNoteRevision: detail.revision,
+          note: detail.note,
+        },
+      );
+      if (!current()) return false;
+      if (this.orderParty!.kitchenNote.revision <= snapshot.revision)
+        this.orderParty = {
+          ...this.orderParty!,
+          revision: Math.max(snapshot.ownerRevision, this.orderParty!.revision),
+          kitchenNote: snapshot,
+        };
+      this.#partyKitchenNoteAttempt = undefined;
+      editor?.closeEditor();
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      const code = (error as { code?: string }).code;
+      if (["kitchen_note.out_of_date", "party.out_of_date"].includes(code ?? "")) {
+        try {
+          const snapshot = await this.api.getKitchenNote({ partyId: party.id });
+          if (!current()) return false;
+          this.orderParty = {
+            ...this.orderParty!,
+            revision: Math.max(snapshot.ownerRevision, this.orderParty!.revision),
+            kitchenNote: snapshot,
+          };
+          this.#partyKitchenNoteAttempt = undefined;
+          editor?.closeEditor();
+          this.errorKey = "held.changed_elsewhere";
+        } catch {
+          if (current() && editor) editor.refusal = codeMessage(code!);
+        }
+      } else if (editor) editor.refusal = codeMessage(code ?? "server.internal");
+      return false;
+    }
+  }
+
+  async #flushPartyKitchenNote(): Promise<boolean> {
+    const write = this.#partyKitchenNoteSave;
+    if (
+      !write ||
+      write.partyId !== this.orderParty?.id ||
+      write.visit !== this.#orderVisit ||
+      write.session !== this.#operatorSession
+    )
+      return true;
+    const saved = await write.result;
+    return (
+      saved &&
+      write.partyId === this.orderParty?.id &&
+      write.visit === this.#orderVisit &&
+      write.session === this.#operatorSession
+    );
+  }
+
+  #waitingNoteRead = 0;
+  @state() private waitingNote: {
+    id: string;
+    snapshot: KitchenNoteSnapshot;
+    session: number;
+    visit: number;
+    pending: boolean;
+    returnFocus?: HTMLElement;
+    attempt?: { note: string | null; submissionId: string };
+  } | null = null;
+
+  async #openWaitingKitchenNote(event: CustomEvent<{ id: string }>): Promise<void> {
+    event.stopPropagation();
+    const { id } = event.detail;
+    if (
+      !this.#inShell() ||
+      !this.counterWaiting.some((row) => row.id === id && row.collectedAt === null)
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = ++this.#waitingNoteRead;
+    const view = {
+      orderVisit: this.#orderVisit,
+      generation: this.#store.loadGeneration,
+      tab: this.activeTabKey,
+      drill: this.drill,
+      sends: this.#counterSends,
+    };
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      visit === this.#waitingNoteRead &&
+      view.orderVisit === this.#orderVisit &&
+      view.generation === this.#store.loadGeneration &&
+      view.tab === this.activeTabKey &&
+      view.drill === this.drill &&
+      view.sends === this.#counterSends;
+    const waiting = event
+      .composedPath()
+      .find(
+        (node): node is HTMLElement =>
+          node instanceof HTMLElement && node.localName === "till-counter-waiting",
+      );
+    const returnFocus =
+      waiting?.shadowRoot?.querySelector<HTMLElement>(
+        `[data-waiting-order="${CSS.escape(id)}"] [data-waiting-kitchen-note]`,
+      ) ?? undefined;
+    try {
+      const snapshot = await this.api.getKitchenNote({ workingOrderId: id });
+      if (!current()) return;
+      this.waitingNote = { id, snapshot, session, visit, pending: false, returnFocus };
+      await this.updateComplete;
+      if (!current()) {
+        if (this.waitingNote?.visit === visit) this.waitingNote = null;
+        return;
+      }
+      this.shadowRoot!.querySelector<TillOrderKitchenNote>("[data-waiting-note]")?.openEditor();
+    } catch (error) {
+      if (current()) this.errorKey = counterError(error, "table.error");
+    }
+  }
+
+  async #saveWaitingKitchenNote(event: CustomEvent<SaveKitchenNoteDetail>): Promise<void> {
+    event.stopPropagation();
+    const open = this.waitingNote;
+    if (
+      !open ||
+      open.pending ||
+      open.session !== this.#operatorSession ||
+      event.detail.visit !== open.visit
+    )
+      return;
+    const editor = event.currentTarget as TillOrderKitchenNote;
+    const { note } = event.detail;
+    const attempt =
+      open.attempt?.note === note ? open.attempt : { note, submissionId: crypto.randomUUID() };
+    open.attempt = attempt;
+    open.pending = true;
+    const current = () =>
+      this.isConnected && this.waitingNote === open && open.session === this.#operatorSession;
+    const snapshot = open.snapshot;
+    try {
+      await this.api.setKitchenNote(snapshot.scope, {
+        note,
+        submissionId: attempt.submissionId,
+        expectedNoteRevision: snapshot.revision,
+        ...("partyId" in snapshot.scope
+          ? { expectedPartyRevision: snapshot.ownerRevision }
+          : { expectedOrderRevision: snapshot.ownerRevision, partyId: null }),
+      });
+      if (!current()) return;
+      editor.closeEditor();
+      this.waitingNote = null;
+      void this.#refreshWaiting();
+    } catch (error) {
+      if (!current()) return;
+      const code = (error as { code?: string }).code;
+      if (
+        ["kitchen_note.out_of_date", "working_order.out_of_date", "party.out_of_date"].includes(
+          code ?? "",
+        )
+      ) {
+        editor.closeEditor();
+        this.waitingNote = null;
+        this.errorKey = "held.changed_elsewhere";
+      } else editor.refusal = codeMessage(code ?? "server.internal");
+    } finally {
+      open.pending = false;
+    }
+  }
+
+  #renderWaitingKitchenNote() {
+    const open = this.waitingNote;
+    if (!open || open.session !== this.#operatorSession) return nothing;
+    const scope = open.snapshot.scope;
+    return html`<till-order-kitchen-note
+      data-waiting-note
+      .hideHeading=${true}
+      .scopeKey=${"partyId" in scope ? `party:${scope.partyId}` : `order:${scope.workingOrderId}`}
+      .note=${open.snapshot.note}
+      .revision=${open.snapshot.revision}
+      .visit=${open.visit}
+      @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => void this.#saveWaitingKitchenNote(event)}
+      @close-kitchen-note=${() => {
+        if (this.waitingNote !== open) return;
+        this.waitingNote = null;
+        void this.updateComplete.then(() => {
+          if (open.session === this.#operatorSession && open.returnFocus?.isConnected)
+            open.returnFocus.focus();
+        });
+      }}
+    ></till-order-kitchen-note>`;
+  }
+
+  #counterKitchenNoteAttempt?: {
+    generation: number;
+    session: number;
+    key: string;
+    note: string | null;
+    revision: number;
+    ownerRevision: number;
+    submissionId: string;
+  };
+
+  #counterKitchenNoteSave?: {
+    generation: number;
+    session: number;
+    pending: boolean;
+    result: Promise<boolean>;
+  };
+
+  #onCounterKitchenNote(event: CustomEvent<SaveKitchenNoteDetail>): void {
+    event.stopPropagation();
+    const editor = event
+      .composedPath()
+      .find(
+        (node) => node instanceof HTMLElement && node.localName === "till-order-kitchen-note",
+      ) as TillOrderKitchenNote | undefined;
+    const table = event
+      .composedPath()
+      .some((node) => node instanceof HTMLElement && node.localName === "till-table-order-screen");
+    if (table) void this.#startPartyKitchenNote(event.detail, editor);
+    else void this.#startCounterKitchenNote(event.detail, editor);
+  }
+
+  #startCounterKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const generation = this.#store.loadGeneration;
+    const session = this.#operatorSession;
+    const previous = this.#counterKitchenNoteSave;
+    if (previous?.generation === generation && previous.session === session && previous.pending)
+      return previous.result;
+    const write = {
+      generation,
+      session,
+      pending: true,
+      result: this.#saveCounterKitchenNote(detail, editor),
+    };
+    this.#counterKitchenNoteSave = write;
+    void write.result.then(() => {
+      write.pending = false;
+    });
+    return write.result;
+  }
+
+  async #saveCounterKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const store = this.#store;
+    if (
+      !store.persisted ||
+      detail.scopeKey !== store.kitchenNoteScopeKey ||
+      detail.visit !== store.loadGeneration ||
+      store.sending ||
+      store.editsLocked
+    )
+      return false;
+    if (editor?.busy) return false;
+    const generation = store.loadGeneration;
+    const session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      generation === store.loadGeneration &&
+      detail.scopeKey === store.kitchenNoteScopeKey;
+    const prior = this.#counterKitchenNoteAttempt;
+    const attempt =
+      prior?.generation === generation &&
+      prior.session === session &&
+      prior.key === detail.scopeKey &&
+      prior.note === detail.note &&
+      prior.revision === detail.revision
+        ? prior
+        : {
+            generation,
+            session,
+            key: detail.scopeKey,
+            note: detail.note,
+            revision: detail.revision,
+            ownerRevision: detail.scopeKey.startsWith("party:")
+              ? store.kitchenNoteOwnerRevision
+              : store.revision,
+            submissionId: crypto.randomUUID(),
+          };
+    this.#counterKitchenNoteAttempt = attempt;
+    const party = detail.scopeKey.startsWith("party:");
+    const scope = party ? { partyId: detail.scopeKey.slice(6) } : { workingOrderId: store.id };
+    if (editor) {
+      editor.refusal = "";
+    }
+    try {
+      const saved = await this.api.setKitchenNote(scope, {
+        submissionId: attempt.submissionId,
+        expectedNoteRevision: detail.revision,
+        note: detail.note,
+        ...(party
+          ? { expectedPartyRevision: attempt.ownerRevision }
+          : { expectedOrderRevision: attempt.ownerRevision, partyId: null }),
+      });
+      if (!current()) return false;
+      store.acceptKitchenNote(saved);
+      this.#counterKitchenNoteAttempt = undefined;
+      if (!store.dirty) this.#commitBasket(this.#basketPayload());
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      const code = (error as { code?: string }).code;
+      if (
+        ["kitchen_note.out_of_date", "working_order.out_of_date", "party.out_of_date"].includes(
+          code ?? "",
+        )
+      ) {
+        try {
+          const latest = await this.api.getKitchenNote(scope);
+          if (!current()) return false;
+          if ("workingOrderId" in latest.scope && latest.ownerRevision !== store.revision) {
+            if ((await this.#loadHeldOrder(store.id, () => !current())) === undefined) return false;
+            this.#commitBasket(this.#basketPayload());
+          } else store.acceptKitchenNote(latest);
+          editor?.closeEditor();
+          this.errorKey = "held.changed_elsewhere";
+          this.#counterKitchenNoteAttempt = undefined;
+        } catch {
+          if (current() && editor) editor.refusal = codeMessage(code!);
+        }
+      } else if (editor) editor.refusal = codeMessage(code ?? "server.internal");
+      return false;
+    }
+  }
+
+  async #flushCounterKitchenNote(): Promise<boolean> {
+    const noteSave = this.#counterKitchenNoteSave;
+    const generation = this.#store.loadGeneration;
+    const noteSession = this.#operatorSession;
+    if (noteSave?.generation === generation && noteSave.session === noteSession) {
+      if (
+        !(await noteSave.result) ||
+        generation !== this.#store.loadGeneration ||
+        noteSession !== this.#operatorSession
+      )
+        return false;
+    }
+    if (this.#store.persisted && this.#store.kitchenNoteDirty) {
+      if (
+        !(await this.#startCounterKitchenNote({
+          scopeKey: this.#store.kitchenNoteScopeKey,
+          revision: this.#store.kitchenNoteRevision,
+          visit: generation,
+          note: this.#store.kitchenNote,
+        }))
+      )
+        return false;
+      if (generation !== this.#store.loadGeneration || noteSession !== this.#operatorSession)
+        return false;
+    }
+    return true;
+  }
+
   /**
    * Saves an edited retrieved order before a pay or place. A fresh basket has no server row, and an
    * unedited one has nothing to save.
@@ -4936,6 +5451,7 @@ export class TillApp extends LitElement {
    * backlog follow-up (docs/backlog.md, "A re-sent "place" on an already-placed order answers 409").
    */
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
+    if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
     const payload = this.#basketPayload();
@@ -4975,6 +5491,7 @@ export class TillApp extends LitElement {
     this.#counterSends++;
     const session = this.#operatorSession;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
@@ -4989,11 +5506,20 @@ export class TillApp extends LitElement {
       const label = this.#store.label;
       const payload = this.#basketPayload();
       if (this.#store.persisted) {
-        if (!(await this.#syncIfDirty(id, lines, label))) return;
+        if (
+          !(await this.#syncIfDirty(id, lines, label)) ||
+          basketVisit !== this.#store.loadGeneration
+        )
+          return;
       } else {
-        await this.api.parkOrder({ id, lines, label });
+        await this.api.parkOrder({
+          id,
+          lines,
+          label,
+          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+        });
         if (session !== this.#operatorSession) return;
-        this.#store.markPersisted();
+        if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
         this.#commitBasket(payload);
       }
       if (this.invoiceChoice?.orderId === id) {
@@ -5505,6 +6031,7 @@ export class TillApp extends LitElement {
     // Read the id and map the lines BEFORE the await: a successful clear() re-mints the id, so the
     // values sent must be captured against the basket as it stands now.
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
@@ -5514,6 +6041,7 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     try {
       if (this.#store.persisted) {
+        if (!(await this.#flushCounterKitchenNote()) || session !== this.#operatorSession) return;
         if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
           const saved = await this.api.setWorkingOrderLabel(id, {
             label,
@@ -5521,9 +6049,18 @@ export class TillApp extends LitElement {
           });
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
-        } else if (!(await this.#syncIfDirty(id, lines, label ?? this.#store.label))) return;
+        } else if (
+          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label)) ||
+          basketVisit !== this.#store.loadGeneration
+        )
+          return;
       } else {
-        await this.api.parkOrder({ id, lines, label });
+        await this.api.parkOrder({
+          id,
+          lines,
+          label,
+          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+        });
       }
       if (session !== this.#operatorSession) return;
       try {
@@ -5711,7 +6248,13 @@ export class TillApp extends LitElement {
     if (droppedAProduct) this.errorKey = "held.product_gone";
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
-    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision, {
+      ...order.kitchenNote,
+      scopeKey:
+        "partyId" in order.kitchenNote.scope
+          ? `party:${order.kitchenNote.scope.partyId}`
+          : `order:${order.kitchenNote.scope.workingOrderId}`,
+    });
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
@@ -6879,12 +7422,24 @@ export class TillApp extends LitElement {
     if (json === this.#tablesJson) return;
     this.#tablesJson = json;
     this.tables = tables;
+    const party = this.orderParty;
+    const latest = tables.find((row) => row.id === this.activeTableId)?.party;
+    if (
+      party &&
+      latest?.id === party.id &&
+      latest.revision >= party.revision &&
+      latest.kitchenNote.revision >= party.kitchenNote.revision
+    )
+      this.orderParty = { ...party, kitchenNote: latest.kitchenNote };
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
    * ({@link billToOpen}). */
   async #onOpenTable(event: Event, left: () => boolean = () => false): Promise<void> {
-    if (this.#partylessScope?.isDirty()) {
+    const detail = (event as CustomEvent<{ tableId: string; seated: boolean }>).detail;
+    const seatingDraft =
+      !detail.seated && detail.tableId === this.activeTableId && this.orderParty === null;
+    if (!seatingDraft && this.#partylessScope?.isDirty()) {
       await this.leave.coordinator.request({
         scopes: [this.#partylessOwner],
         reason: "navigation",
@@ -6905,6 +7460,14 @@ export class TillApp extends LitElement {
         withTableIds?: string[];
       }>
     ).detail;
+    const unassigned =
+      !seated && tableId === this.activeTableId && this.orderParty === null
+        ? this.#partylessDraft
+        : undefined;
+    const unlock = unassigned?.lockEdits();
+    const carried = unassigned
+      ? { note: unassigned.kitchenNote, lines: unassigned.lines.slice() }
+      : undefined;
     const offerRequest = ++this.#tableOfferRequest;
     this.#orderVisit++;
     this.#moveStationOpening = null;
@@ -6924,8 +7487,10 @@ export class TillApp extends LitElement {
         offerRequest,
         withTableIds,
         left,
+        carried,
       );
     } finally {
+      unlock?.();
       this.#tableOpensPending--;
     }
   }
@@ -6938,6 +7503,7 @@ export class TillApp extends LitElement {
     offerRequest: number,
     withTableIds?: string[],
     left: () => boolean = () => false,
+    carried?: { note: string | null; lines: OrderLine[] },
   ): Promise<void> {
     const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
@@ -7018,10 +7584,16 @@ export class TillApp extends LitElement {
       this.#showDraft(opened);
     } else {
       try {
-        const { tabId, partyId, revision } =
+        const note = carried?.note;
+        const seated =
           withTableIds === undefined
-            ? await this.api.seatTable(tableId, guestCount)
-            : await this.api.seatAtTables(tableId, guestCount, withTableIds);
+            ? note
+              ? await this.api.seatTable(tableId, guestCount, note)
+              : await this.api.seatTable(tableId, guestCount)
+            : note
+              ? await this.api.seatAtTables(tableId, guestCount, withTableIds, note)
+              : await this.api.seatAtTables(tableId, guestCount, withTableIds);
+        const { tabId, partyId, revision } = seated;
         // A table opened after this one has made its own table the active one, so this answer
         // would put this table's order beside that table.
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
@@ -7040,8 +7612,18 @@ export class TillApp extends LitElement {
           tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
           unsentDrafts: [],
           reminder: null,
+          kitchenNote: seated.kitchenNote ?? {
+            scope: { partyId },
+            note: null,
+            revision: 0,
+            ownerRevision: revision,
+          },
         };
-        this.#showDraft(await this.#openDraft(false, session));
+        const opened = await this.#openDraft(false, session);
+        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+        if (carried && opened?.sync && carried.lines.length > 0)
+          opened.sync.store.loadFrom(opened.sync.store.id, carried.lines);
+        this.#showDraft(opened);
       } catch (error) {
         this.errorKey = tableWriteError(error);
         await this.#refreshFloor();
@@ -7535,7 +8117,7 @@ export class TillApp extends LitElement {
     ).detail;
     const tabId = this.activeTabId;
     const tableId = this.activeTableId;
-    const party = this.orderParty;
+    let party = this.orderParty;
     if (tabId === undefined || store?.sending === true) return;
     if (sent?.some((line) => line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
@@ -7556,8 +8138,17 @@ export class TillApp extends LitElement {
     const live = () => session === this.#operatorSession;
     // The draft is shut to edits until the answer, so what is sent is what the screen shows.
     store.sending = true;
+    const visit = this.#orderVisit;
     let followUp: DraftFollowUp;
     try {
+      if (
+        !(await this.#flushPartyKitchenNote()) ||
+        visit !== this.#orderVisit ||
+        !live() ||
+        this.orderParty?.id !== partyId
+      )
+        return;
+      party = this.orderParty;
       followUp = await this.#submitDraft(
         tabId,
         party,
@@ -7810,9 +8401,17 @@ export class TillApp extends LitElement {
   async #onGroupCommand(send: (party: TableParty) => Promise<unknown>): Promise<void> {
     if (this.groupCommandBusy) return;
     this.groupCommandBusy = true;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
     try {
       this.errorKey = undefined;
       if (await this.#refuseWithGroupsUnread()) return;
+      if (
+        !(await this.#flushPartyKitchenNote()) ||
+        visit !== this.#orderVisit ||
+        session !== this.#operatorSession
+      )
+        return;
       const party = this.orderParty;
       if (party === null) {
         this.errorKey = "table.error";
@@ -7979,7 +8578,16 @@ export class TillApp extends LitElement {
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
     this.errorKey = undefined;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
     try {
+      if (
+        !(await this.#flushPartyKitchenNote()) ||
+        visit !== this.#orderVisit ||
+        session !== this.#operatorSession ||
+        tabId !== this.activeTabId
+      )
+        return;
       await this.api.sendLines(tabId, lineNos);
     } catch (error) {
       await this.#onReleaseRefusal(error);
@@ -9973,7 +10581,16 @@ export class TillApp extends LitElement {
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
     try {
+      if (
+        !(await this.#flushPartyKitchenNote()) ||
+        visit !== this.#orderVisit ||
+        session !== this.#operatorSession ||
+        id !== this.activeTabId
+      )
+        return;
       // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
       this.result = presented
         ? await this.api.collectOrder(id, tender)
@@ -10005,6 +10622,14 @@ export class TillApp extends LitElement {
    * balance last read and reads it again. */
   async #onBillPay(event: Event): Promise<void> {
     const { way, lines, amount } = (event as CustomEvent<BillPayDetail>).detail;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    if (
+      !(await this.#flushPartyKitchenNote()) ||
+      visit !== this.#orderVisit ||
+      session !== this.#operatorSession
+    )
+      return;
     await this.#openBillPaying(way, lines, amount);
   }
 
@@ -10030,9 +10655,14 @@ export class TillApp extends LitElement {
     if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
     this.#counterSends++;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const session = this.#operatorSession;
     try {
-      if (!(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label))) return;
+      if (
+        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
     } catch (error) {
       if (!this.#hasLeftCounterOrder(id, session))
         this.errorKey = counterError(error, "sale.error");
@@ -10713,6 +11343,7 @@ export class TillApp extends LitElement {
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .canMoveStation=${this.capabilities.includes("take-orders")}
+        .canEditKitchenNote=${this.capabilities.includes("take-orders")}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .cardAttemptsOver=${this.cardAttemptsOver}
@@ -10750,6 +11381,7 @@ export class TillApp extends LitElement {
       .cardProvider=${this.#cardReader()}
       .takesCash=${this.#takesCash()}
       .canMoveStation=${this.capabilities.includes("take-orders")}
+      .canEditKitchenNote=${this.capabilities.includes("take-orders")}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
       .cardAttemptsOver=${this.cardAttemptsOver}
@@ -10851,6 +11483,8 @@ export class TillApp extends LitElement {
           .otherDrafts=${this.#otherDrafts(draft)}
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.orderParty}
+          .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
+          .kitchenNoteRevision=${this.orderParty?.kitchenNote.revision ?? 0}
           .bills=${this.partyBills}
           .receiptLanguages=${this.receiptLanguages}
           .fullInvoices=${this.fullInvoices}
@@ -10942,6 +11576,7 @@ export class TillApp extends LitElement {
           slot="drill"
           .api=${this.api}
           .canMoveStation=${this.capabilities.includes("take-orders")}
+          .canEditKitchenNote=${this.capabilities.includes("take-orders")}
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}
@@ -11017,7 +11652,7 @@ export class TillApp extends LitElement {
       : nothing;
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
-      ${this.#renderAttendanceEditors()}
+      ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
@@ -11033,6 +11668,25 @@ export class TillApp extends LitElement {
         @clock-in=${() => void this.#onClockAction(new CustomEvent("clock-action", { detail: { action: "in" } }))}
         @cancel-clock-in=${() => void this.#cancelClockIn()}
         @retry-clock-read=${() => void this.#clocking?.refresh()}
+        @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => void this.#onCounterKitchenNote(event)}
+        @close-kitchen-note=${(event: CustomEvent<{ scopeKey: string; visit: number }>) => {
+          event.stopPropagation();
+          if (
+            event
+              .composedPath()
+              .some(
+                (node) =>
+                  node instanceof HTMLElement && node.localName === "till-table-order-screen",
+              )
+          ) {
+            if (this.#partyKitchenNoteSave?.visit === this.#orderVisit)
+              this.#partyKitchenNoteSave = undefined;
+          } else if (
+            event.detail.scopeKey === this.#store.kitchenNoteScopeKey &&
+            event.detail.visit === this.#store.loadGeneration
+          )
+            this.#counterKitchenNoteSave = undefined;
+        }}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
         @choose-invoice=${() => this.#askInvoiceRecipientForOrder()}
         @choose-receipt-language=${() => {
@@ -11046,6 +11700,7 @@ export class TillApp extends LitElement {
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
         @hand-over-order=${(event: Event) => void this.#onHandOverOrder(event)}
+        @edit-waiting-kitchen-note=${(event: CustomEvent<{ id: string }>) => void this.#openWaitingKitchenNote(event)}
         @pay-waiting-order=${(event: Event) => this.#replaceBasket(() => this.#onPayWaitingOrder(event))}
         @cancel-credit-waiting-order=${(event: Event) => this.#onCancelCreditWaitingOrder(event)}
         @move-waiting-order=${(event: Event) => void this.#onMoveWaitingOrder(event)}

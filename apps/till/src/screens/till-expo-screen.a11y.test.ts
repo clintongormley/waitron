@@ -19,6 +19,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 // `fire_control = 'expo'` — each of the three per-course levers.
 const queue: ExpoOrder[] = [
   {
+    kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
     tableLabel: "Mesa 4",
@@ -108,6 +109,7 @@ const queue: ExpoOrder[] = [
     ],
   },
   {
+    kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,
     openedMinutes: 12, // no table label (bare walk-up)
@@ -168,6 +170,7 @@ function section(
 // A seated party's bill: the lines with no group, a group to mark ready, one to send away, and a held
 // one ("held, not released", with Fire under `expo`).
 const partyOrder: ExpoOrder = {
+  kitchenNote: null,
   orderId: "wo-p",
   orderNumber: 9,
   tableLabel: "Mesa 7",

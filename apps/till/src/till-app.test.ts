@@ -173,6 +173,7 @@ const openTable: TableState = {
   today: null,
   signals: [],
   party: {
+    kitchenNote: { scope: { partyId: "v-2" }, note: null, revision: 0, ownerRevision: 3 },
     id: "v-2",
     revision: 3,
     guestCount: 2,
@@ -460,6 +461,15 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    setWorkingOrderLabel: vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    })),
+    getKitchenNote: vi.fn(async (scope: { workingOrderId: string } | { partyId: string }) => ({
+      scope,
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
     getTill: vi.fn().mockResolvedValue(till),
     findBillOptions: vi.fn().mockResolvedValue(billOptions),
     listBills: vi.fn().mockResolvedValue(listPage()),
@@ -497,6 +507,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
       label: "Mesa 4",
@@ -1116,6 +1127,12 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValue([defaultStation, { ...defaultStation, id: "kitchen" }]),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
@@ -1221,6 +1238,12 @@ describe("till-app", () => {
             { ...defaultStation, id: "kitchen" },
           ]),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          kitchenNote: {
+            scope: { workingOrderId: "wo-1" },
+            note: null,
+            revision: 0,
+            ownerRevision: 3,
+          },
           id: "wo-1",
           orderNumber: 5,
           label: "Mesa 4",
@@ -4113,6 +4136,7 @@ describe("till-app", () => {
     it("keeps each order's own language: a held order keeps its choice and the next sale starts on the location's", async () => {
       const { el, c } = await counterWith({
         retrieveWorkingOrder: vi.fn(async (id: string) => ({
+          kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 1 },
           id,
           orderNumber: 5,
           label: null,
@@ -4191,6 +4215,12 @@ describe("till-app", () => {
         {
           setOrderReceiptLanguage,
           retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            kitchenNote: {
+              scope: { workingOrderId: "wo-1" },
+              note: null,
+              revision: 0,
+              ownerRevision: 3,
+            },
             id: "wo-1",
             orderNumber: 5,
             label: null,
@@ -4235,6 +4265,12 @@ describe("till-app", () => {
       const { el, c } = await counterWith(
         {
           retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            kitchenNote: {
+              scope: { workingOrderId: "wo-1" },
+              note: null,
+              revision: 0,
+              ownerRevision: 3,
+            },
             id: "wo-1",
             orderNumber: 5,
             label: null,
@@ -4272,6 +4308,12 @@ describe("till-app", () => {
 
     it("reads the order again when its language was saved from a copy changed elsewhere", async () => {
       const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -4290,6 +4332,12 @@ describe("till-app", () => {
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
       retrieveWorkingOrder.mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 5,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -6045,6 +6093,12 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
@@ -6052,6 +6106,12 @@ describe("till-app", () => {
         lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
       })
       .mockResolvedValueOnce({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 4,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
@@ -6086,6 +6146,12 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -6116,6 +6182,12 @@ describe("till-app", () => {
     const { el } = await mountApp({
       updateWorkingOrder,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-stable" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-stable",
         orderNumber: 8,
         label: null,
@@ -6204,6 +6276,12 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-customised" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-customised",
         orderNumber: 9,
         label: "Takeaway",
@@ -6268,6 +6346,12 @@ describe("till-app", () => {
   /** A retrieved order whose one café line (×2) carries `heldMilk` (×2 per dish). */
   function milkOrder(product: TillProduct = cafe) {
     return {
+      kitchenNote: {
+        scope: { workingOrderId: "wo-customised" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
       id: "wo-customised",
       orderNumber: 9,
       label: "Takeaway",
@@ -6414,12 +6498,29 @@ describe("till-app", () => {
     const retrieveWorkingOrder = vi
       .fn()
       .mockResolvedValueOnce({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-both" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-both",
         orderNumber: 12,
         label: null,
         lines: [answered, { productId: "ghost", quantity: "1.000" }],
       })
-      .mockResolvedValueOnce({ id: "wo-one", orderNumber: 13, label: null, lines: [answered] });
+      .mockResolvedValueOnce({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-one" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
+        id: "wo-one",
+        orderNumber: 13,
+        label: null,
+        lines: [answered],
+      });
     const { el } = await mountApp({
       listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
       retrieveWorkingOrder,
@@ -6447,6 +6548,12 @@ describe("till-app", () => {
     };
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-answered" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-answered",
         orderNumber: 10,
         label: null,
@@ -6517,6 +6624,12 @@ describe("till-app", () => {
   /** A retrieved order whose one line froze `answer` against a dish offering `puntoList`. */
   function answeredOrder(answer: Record<string, unknown>) {
     return {
+      kitchenNote: {
+        scope: { workingOrderId: "wo-answered" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
       id: "wo-answered",
       orderNumber: 11,
       label: "Mesa 2",
@@ -7209,6 +7322,12 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-happy" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-happy",
         orderNumber: 8,
         label: null,
@@ -7266,6 +7385,12 @@ describe("till-app", () => {
         offers: [],
       }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-seasonal" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-seasonal",
         orderNumber: 9,
         label: null,
@@ -7294,6 +7419,12 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe, jamon] }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -7319,6 +7450,12 @@ describe("till-app", () => {
   it("retrieve-order: drops a line whose product no longer resolves and shows a non-fatal held.product_gone", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",
@@ -15584,6 +15721,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     label: "Ana",
   };
   const luisParty = {
+    kitchenNote: { scope: { partyId: "v7" }, note: null, revision: 0, ownerRevision: 9 },
     id: "v7",
     revision: 9,
     guestCount: 2,
@@ -16016,6 +16154,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   it("empties the basket when the order moved is the one retrieved into it", async () => {
     const { el, c } = await counterWith({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-12" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "wo-12",
         orderNumber: 12,
         label: "Ana",
@@ -16249,6 +16393,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   const pressPay = (el: TillApp, id: string) =>
     rowOf(el, id)!.querySelector<HTMLElement>("[data-waiting-pay]")!.click();
   const placedRead = (id: string) => ({
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 2 },
     id,
     orderNumber: 12,
     label: null,
@@ -16853,6 +16998,12 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
 
   it("Pay opens the counter's collect stage on THAT order, with its lines, and collects it by its id", async () => {
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      kitchenNote: {
+        scope: { workingOrderId: "wo-sent" },
+        note: null,
+        revision: 0,
+        ownerRevision: 2,
+      },
       id: "wo-sent",
       orderNumber: 12,
       label: null,
@@ -19809,6 +19960,22 @@ describe("basket unsaved replacement", () => {
     q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
     await expect.poll(() => q.open).toBe(false);
   }
+  it("protects a note-only counter basket from unload and replacement, including a revert", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    expect(unloadCancelled()).toBe(false);
+    c.store.kitchenNote = "Train at 14:30";
+    expect(c.store.lines).toHaveLength(0);
+    expect(unloadCancelled()).toBe(true);
+    c.store.kitchenNote = null;
+    expect(unloadCancelled()).toBe(false);
+    c.store.kitchenNote = "Serve together";
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await expect.poll(() => question(el).open).toBe(true);
+    await answer(el, "keep");
+    expect(c.store.kitchenNote).toBe("Serve together");
+    expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
+  });
   it("registers memory-only lines and label for unload, including reverts", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
@@ -20790,6 +20957,12 @@ describe("A737 Find a bill page", () => {
   });
   it("an edited basket can stay or discard before a fresh held order replaces it", async () => {
     const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      kitchenNote: {
+        scope: { workingOrderId: "bill-1" },
+        note: null,
+        revision: 0,
+        ownerRevision: 3,
+      },
       id: "bill-1",
       orderNumber: 42,
       label: "Held",
@@ -20837,6 +21010,12 @@ describe("A737 Find a bill page", () => {
     const { el, counter, view } = await open({
       getFindBill: vi.fn().mockResolvedValue(billRow()),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "bill-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
         id: "bill-1",
         orderNumber: 42,
         label: "Partial",
@@ -20925,6 +21104,12 @@ describe("A737 Find a bill page", () => {
   });
   it("a placed uninvoiced counter order opens the existing collection stage", async () => {
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      kitchenNote: {
+        scope: { workingOrderId: "bill-placed" },
+        note: null,
+        revision: 0,
+        ownerRevision: 2,
+      },
       id: "bill-placed",
       orderNumber: 14,
       revision: 2,
@@ -21027,6 +21212,12 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(cafe, "1");
     const id = counter.store.id;
     finish({
+      kitchenNote: {
+        scope: { workingOrderId: "bill-placed" },
+        note: null,
+        revision: 0,
+        ownerRevision: 2,
+      },
       id: "bill-placed",
       orderNumber: 14,
       revision: 2,

@@ -60,6 +60,12 @@ export function refusesPositionalOptions(): void {
 }
 
 export function acceptsNamedOptions(): void {
+  void record(tx, cfg, "order", items, "changed", {
+    orderNoteChange: { before: null, after: "Together" },
+  });
+  void seat(tx, cfg, "order", items, "changed", {
+    orderNoteChange: { before: "Together", after: null },
+  });
   void record(tx, cfg, "order", items, "changed", { cancelledExtra: "Queso" });
   void seat(tx, cfg, "order", items, "rerouted", { reroutedTo: "Grill" });
 }

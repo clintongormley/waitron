@@ -48,6 +48,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
 
 function party(id: string, tableIds: string[]): TableParty {
   return {
+    kitchenNote: { scope: { partyId: id }, note: null, revision: 0, ownerRevision: 1 },
     id,
     revision: 1,
     guestCount: 2,

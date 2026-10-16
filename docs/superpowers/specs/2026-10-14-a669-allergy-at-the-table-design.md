@@ -4,6 +4,11 @@ Date: 2026-10-14. Status: approved by the owner, 2026-10-15.
 Companion spec: [A668 — allergen information in the editor, at publishing and on the till](2026-10-14-a668-allergen-info-editor-and-till-design.md),
 which this builds on (the allergen shape with kinds, the icons, the info window).
 
+2026-10-16 implementation pointer: A743 adds the shared order-heading region through
+`apps/till/src/widgets/order-kitchen-note.ts`, used above the counter basket and table dishes.
+Reuse that region for the allergy information; keep its structured data separate from the free-text
+kitchen note. [A743 plan](../plans/2026-10-15-a743-whole-order-kitchen-note.md).
+
 ## Why
 
 Nothing in Waitron lets a waiter record that a guest has an allergy, and nothing tells the kitchen

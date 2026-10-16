@@ -10,6 +10,7 @@ import type { PartyBill, TabLine, TableParty } from "../api/client.js";
 // 11, part B; B11d).
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
   id: "v1",
   revision: 4,
   guestCount: 2,

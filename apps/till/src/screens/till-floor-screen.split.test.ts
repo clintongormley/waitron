@@ -505,6 +505,7 @@ const seatedAt = (tables: TableState[], ...ids: string[]) =>
           condition: "held" as const,
           state: "open-tab" as const,
           party: {
+            kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
             id: "p1",
             revision: 1,
             guestCount: 4,

@@ -350,6 +350,7 @@ describe("pay, then order dessert", () => {
     expect(floor).toMatchObject({ state: "open-tab", hasOpenTab: false });
     expect(floor.tabTotal).toBeUndefined();
     expect(floor.party).toEqual({
+      kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { partyId } },
       id: partyId,
       revision: 0,
       guestCount: 2,

@@ -8,6 +8,12 @@
  */
 import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { partyTablesName, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import type { KitchenNoteChange } from "@waitron/module";
+
+interface KitchenNoteHeading {
+  text: string;
+  locale: string;
+}
 
 /** One fired line. Modifiers and cross-references print beneath the item. */
 export interface KitchenTicketItem {
@@ -45,6 +51,7 @@ export interface OtherStationItem {
  * `party`, the order number prints as a MOVED slip's order line does; without, it prints alone.
  */
 export type KitchenTicket = {
+  kitchenNote?: KitchenNoteHeading;
   reprint?: boolean;
   mark?: "HOLD" | "FIRE";
   from?: { stationName: string; locale: string };
@@ -139,6 +146,22 @@ function itemLine(item: KitchenTicketItem): string {
 function sanitizeNote(note: string): string {
   // eslint-disable-next-line no-control-regex -- deliberately matching C0 controls + DEL to strip them
   return note.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
+}
+
+function cleanOrderNote(note: string): string {
+  // eslint-disable-next-line no-control-regex -- strip C0, C1 and DEL before rendering printer data
+  return note.replace(/[\x00-\x1f\x7f-\x9f]+/g, " ").trim();
+}
+
+function emitKitchenNote(
+  b: ReturnType<typeof esc>,
+  note: KitchenNoteHeading | undefined,
+  columns: number,
+): void {
+  if (note === undefined) return;
+  const prefix = ticketLanguage(note.locale) === "es" ? "Para cocina: " : "For the kitchen: ";
+  for (const line of wrapText(prepareText(prefix + cleanOrderNote(note.text)), columns))
+    b.line(line);
 }
 
 /**
@@ -241,6 +264,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   b.line(hhmm(ticket.firedAt));
   if (ticket.from !== undefined)
     text(`${kitchenWords(ticket.from.locale).from} ${ticket.from.stationName}`);
+  emitKitchenNote(b, ticket.kitchenNote, columns);
   if (onlyGroup !== undefined) b.line(`GROUP ${onlyGroup}`);
 
   if (ticket.scope === "station") emitList(ticket.items);
@@ -300,6 +324,7 @@ export function joinKitchenTickets(first: Uint8Array, second: Uint8Array): Uint8
  * English.
  */
 export type CorrectionSlip = {
+  kitchenNote?: KitchenNoteHeading;
   stationName: string;
   tableLabel: string | null;
   orderNumber: string;
@@ -311,6 +336,7 @@ export type CorrectionSlip = {
   | { kind: "HOLD CANCELLED" }
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
+  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
 );
 
 const KITCHEN_WORDS = {
@@ -350,6 +376,16 @@ function kitchenWords(locale: string) {
 }
 
 function slipHeader(slip: CorrectionSlip): string {
+  if (slip.kind === "ORDER NOTE CHANGED") {
+    const removed = slip.orderNoteChange.after === null;
+    return ticketLanguage(slip.locale) === "es"
+      ? removed
+        ? "NOTA PARA COCINA ELIMINADA"
+        : "NOTA PARA COCINA CAMBIADA"
+      : removed
+        ? "KITCHEN NOTE REMOVED"
+        : "KITCHEN NOTE CHANGED";
+  }
   if (slip.kind === "TO STATION")
     return `${kitchenWords(slip.locale).movedTo} ${slip.toStation.toLocaleUpperCase(slip.locale)}`;
   if (slip.kind !== "EXTRA CANCELLED") return slip.kind;
@@ -373,6 +409,14 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
   if (slip.tableLabel !== null) text(slip.tableLabel);
   text(slip.orderNumber);
   b.line(hhmm(new Date(slip.at)));
+  if (slip.kind === "ORDER NOTE CHANGED") {
+    const spanish = ticketLanguage(slip.locale) === "es";
+    const { before, after } = slip.orderNoteChange;
+    if (after === null)
+      text(spanish ? "Nota para cocina eliminada" : "Note for the kitchen removed");
+    else emitKitchenNote(b, { text: after, locale: slip.locale }, columns);
+    if (before !== null) text(`${spanish ? "Antes" : "Was"}: ${cleanOrderNote(before)}`);
+  } else emitKitchenNote(b, slip.kitchenNote, columns);
   if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   emitItem(b, slip.item, columns, sign);
@@ -397,6 +441,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
  * group under `GROUP n`. Both words stay English, as on every kitchen paper.
  */
 export interface MovedSlip {
+  kitchenNote?: KitchenNoteHeading;
   stationName: string;
   fromNumber: string;
   toNumber?: string;
@@ -442,6 +487,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   labelled(words.from, slip.fromText);
   labelled(words.to, slip.toText);
   b.line(hhmm(new Date(slip.at)));
+  emitKitchenNote(b, slip.kitchenNote, columns);
   emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items));
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {

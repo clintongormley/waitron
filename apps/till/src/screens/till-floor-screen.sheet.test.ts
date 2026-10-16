@@ -20,6 +20,7 @@ const zone: FloorZone = {
 
 function party(id: string, revision: number, tableIds: string[]): TableParty {
   return {
+    kitchenNote: { scope: { partyId: id }, note: null, revision: 0, ownerRevision: revision },
     id,
     revision,
     guestCount: 2,

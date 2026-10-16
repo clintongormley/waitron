@@ -38,6 +38,12 @@ function today(over: Partial<TableToday> = {}): TableToday {
 
 function party(over: Partial<TableParty> = {}): TableParty {
   return {
+    kitchenNote: {
+      scope: { partyId: over.id ?? "p1" },
+      note: null,
+      revision: 0,
+      ownerRevision: over.revision ?? 1,
+    },
     id: "p1",
     revision: 1,
     guestCount: null,

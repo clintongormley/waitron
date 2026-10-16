@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { KitchenNoteChange } from "@waitron/module";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { businessDayStart, readLocationClock } from "@waitron/reporting";
 import {
@@ -22,6 +23,7 @@ export type KitchenNoticeKind = (typeof kitchenNoticeKind.enumValues)[number];
 export type KitchenNoticeDirection = (typeof KITCHEN_NOTICE_DIRECTIONS)[number];
 
 export interface KitchenNotice {
+  orderNoteChange?: KitchenNoteChange;
   id: string;
   stationId: string;
   workingOrderId: string;
@@ -50,6 +52,7 @@ export interface KitchenNoticeItem {
 }
 
 export interface KitchenNoticeOptions {
+  orderNoteChange?: KitchenNoteChange;
   movedTo?: string | null;
   direction?: KitchenNoticeDirection | null;
   cancelledExtra?: string | null;
@@ -92,7 +95,18 @@ export async function recordKitchenNotices(
     cancelledExtra = null,
     reroutedTo = null,
     fromNumber = null,
+    orderNoteChange,
   } = options;
+  if (
+    orderNoteChange !== undefined &&
+    (kind !== "changed" ||
+      direction !== null ||
+      cancelledExtra !== null ||
+      movedTo !== null ||
+      reroutedTo !== null ||
+      fromNumber !== null)
+  )
+    throw new AppError("kitchen_notice.invalid", { field: "orderNoteChange" });
   if (
     direction !== null &&
     (kind !== "changed" || !KITCHEN_NOTICE_DIRECTIONS.includes(direction))
@@ -185,6 +199,7 @@ export async function recordKitchenNotices(
         movedTo,
         direction,
         cancelledExtra,
+        orderNoteChange,
         reroutedTo,
         createdAt,
       };
@@ -232,6 +247,7 @@ export async function listStationsNotices(
       movedTo: kitchenNotices.movedTo,
       direction: kitchenNotices.direction,
       cancelledExtra: kitchenNotices.cancelledExtra,
+      orderNoteChange: kitchenNotices.orderNoteChange,
       reroutedTo: kitchenNotices.reroutedTo,
       createdAt: kitchenNotices.createdAt,
       newest:
@@ -256,8 +272,12 @@ export async function listStationsNotices(
     .where(lte(ranked.newest, NOTICE_LIMIT))
     .orderBy(desc(ranked.newest));
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rank is not part of a notice
-  for (const { newest, ...row } of rows) {
-    byStation.get(row.stationId)!.push({ ...row, quantity: thousandthsToDecimal(row.quantity) });
+  for (const { newest, orderNoteChange, ...row } of rows) {
+    byStation.get(row.stationId)!.push({
+      ...row,
+      quantity: thousandthsToDecimal(row.quantity),
+      ...(orderNoteChange === null ? {} : { orderNoteChange }),
+    });
   }
   return byStation;
 }

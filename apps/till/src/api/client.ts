@@ -1158,6 +1158,14 @@ export interface HeldExtra {
   listId: string | null;
 }
 
+export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
+export interface KitchenNoteSnapshot {
+  scope: KitchenNoteScope;
+  note: string | null;
+  revision: number;
+  ownerRevision: number;
+}
+
 /**
  * `GET /api/working-orders/:id` — a retrieved parked order: its stored inputs and commercial snapshots,
  * enough to rebuild its basket even when a line's live offer is no longer available. `quantity` is a
@@ -1165,6 +1173,7 @@ export interface HeldExtra {
  */
 export interface HeldOrder {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
   /** What a save of this copy sends back, so a save from a copy since changed is refused. */
@@ -1384,6 +1393,7 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rer
  * copied as it stood when the notice was recorded.
  */
 export interface KitchenNotice {
+  orderNoteChange?: { before: string | null; after: string | null };
   id: string;
   stationId: string;
   workingOrderId: string;
@@ -1427,6 +1437,7 @@ export interface StationQueue {
  * group's ordering key and the age-colouring anchor.
  */
 export interface StationQueueGroup {
+  kitchenNote: string | null;
   orderId: string;
   orderNumber: number;
   label: string | null;
@@ -1699,6 +1710,7 @@ export interface ExpoGroup {
  * (via {@link ExpoCourse.away} and {@link ExpoGroup.away}).
  */
 export interface ExpoOrder {
+  kitchenNote: string | null;
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
@@ -1819,6 +1831,7 @@ export interface FloorZone {
  */
 export interface TableParty {
   id: string;
+  kitchenNote: KitchenNoteSnapshot;
   revision: number;
   guestCount: number | null;
   state: "open" | "closed";
@@ -2014,6 +2027,7 @@ export interface TableServiceStatus {
 
 /** `POST /api/tables/:id/seat` success — the new party, its tab and the tab's order number. */
 export interface SeatResult {
+  kitchenNote?: KitchenNoteSnapshot;
   partyId: string;
   tabId: string;
   revision: number;
@@ -2580,6 +2594,7 @@ export class TillApi {
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
     },
     receiptLanguage?: string,
+    kitchenNote?: string | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2588,6 +2603,7 @@ export class TillApi {
       zoneId: zoneId ?? this.#serviceZoneId,
       ...invoice,
       receiptLanguage,
+      kitchenNote,
     });
   }
 
@@ -2610,6 +2626,7 @@ export class TillApi {
     readerId?: string;
     demoAttemptId?: string;
     receiptLanguage?: string;
+    kitchenNote?: string | null;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -2775,7 +2792,13 @@ export class TillApi {
    * Park a working order to pay later → `POST /api/working-orders`. `id` is client-minted so a
    * lost-response retry is idempotent against the primary key; `lines` carry no price.
    */
-  parkOrder(req: { id: string; lines: SaleLine[]; zoneId?: string; label?: string }): Promise<{
+  parkOrder(req: {
+    id: string;
+    lines: SaleLine[];
+    zoneId?: string;
+    label?: string;
+    kitchenNote?: string | null;
+  }): Promise<{
     id: string;
     orderNumber: number;
   }> {
@@ -2783,6 +2806,32 @@ export class TillApi {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });
+  }
+
+  getKitchenNote(scope: KitchenNoteScope, options: ReadOptions = {}): Promise<KitchenNoteSnapshot> {
+    const path =
+      "partyId" in scope
+        ? `/api/parties/${scope.partyId}`
+        : `/api/working-orders/${scope.workingOrderId}`;
+    return this.#request(`${path}/kitchen-note`, "GET", undefined, options.signal);
+  }
+
+  setKitchenNote(
+    scope: KitchenNoteScope,
+    request: {
+      submissionId: string;
+      expectedNoteRevision: number;
+      note: string | null;
+      expectedPartyRevision?: number;
+      expectedOrderRevision?: number;
+      partyId?: null;
+    },
+  ): Promise<KitchenNoteSnapshot> {
+    const path =
+      "partyId" in scope
+        ? `/api/parties/${scope.partyId}`
+        : `/api/working-orders/${scope.workingOrderId}`;
+    return this.#request(`${path}/kitchen-note`, "PUT", request);
   }
 
   setOrderInvoiceChoice(
@@ -3369,8 +3418,15 @@ export class TillApi {
    * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_clearing` surface as a
    * rejected `{ code }`.
    */
-  seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
-    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
+  seatTable(
+    tableId: string,
+    guestCount: number | null,
+    kitchenNote?: string | null,
+  ): Promise<SeatResult> {
+    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
+      guestCount,
+      ...(kitchenNote === undefined ? {} : { kitchenNote }),
+    });
   }
 
   /** Seat a party at `tableId` and, in the same request, at each of `withTableIds`. */
@@ -3378,10 +3434,12 @@ export class TillApi {
     tableId: string,
     guestCount: number | null,
     withTableIds: readonly string[],
+    kitchenNote?: string | null,
   ): Promise<SeatResult> {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
       guestCount,
       withTableIds,
+      ...(kitchenNote === undefined ? {} : { kitchenNote }),
     });
   }
 

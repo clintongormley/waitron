@@ -158,6 +158,12 @@ export class TillExpoScreen extends LitElement {
         background: var(--wt-color-surface);
       }
 
+      .kitchen-note {
+        margin: 0;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-text);
+      }
+
       .order-head {
         display: flex;
         align-items: baseline;
@@ -871,6 +877,7 @@ export class TillExpoScreen extends LitElement {
         ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}
         <span class="age">${order.openedMinutes} ${t("station.min")}</span>
       </div>
+      ${order.kitchenNote ? html`<p class="kitchen-note" data-kitchen-note>${t("kitchen_note.heading")}: ${order.kitchenNote}</p>` : nothing}
       ${
         order.party === undefined
           ? this.#visibleCourses(order).map((course) => this.#courseSection(order, course))

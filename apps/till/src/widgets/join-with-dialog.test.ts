@@ -32,6 +32,7 @@ function table(id: string, over: Partial<TableState> = {}): TableState {
 }
 
 const ana: TableParty = {
+  kitchenNote: { scope: { partyId: "P" }, note: null, revision: 0, ownerRevision: 1 },
   id: "P",
   revision: 1,
   guestCount: 2,

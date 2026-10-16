@@ -291,3 +291,34 @@ describe("till-counter-waiting", () => {
     });
   });
 });
+
+describe("whole-order kitchen note from Waiting", () => {
+  it.each([paid, sent])(
+    "lets staff edit the note of a $status order before handover",
+    async (order) => {
+      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+        orders: [order],
+        canEditKitchenNote: true,
+      });
+      const action = rowOf(el, order.id).querySelector<HTMLElement>("[data-waiting-kitchen-note]");
+      expect(action).not.toBeNull();
+      const details: unknown[] = [];
+      el.addEventListener("edit-waiting-kitchen-note", (event) =>
+        details.push((event as CustomEvent).detail),
+      );
+      action!.click();
+      expect(details).toEqual([{ id: order.id }]);
+    },
+  );
+
+  it("offers no note action without ordering access or after handover", async () => {
+    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      orders: [paid, handedOver],
+    });
+    expect(el.shadowRoot!.querySelector("[data-waiting-kitchen-note]")).toBeNull();
+    el.canEditKitchenNote = true;
+    await el.updateComplete;
+    expect(rowOf(el, paid.id).querySelector("[data-waiting-kitchen-note]")).not.toBeNull();
+    expect(rowOf(el, handedOver.id).querySelector("[data-waiting-kitchen-note]")).toBeNull();
+  });
+});

@@ -11,6 +11,7 @@ class PartyNameHost extends LitElement {
   override render() {
     return html`<till-table-order-screen
         .party=${{
+          kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 3 },
           id: "v1",
           revision: 3,
           guestCount: 3,

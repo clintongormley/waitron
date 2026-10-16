@@ -178,6 +178,7 @@ export interface TillTender {
  * pay a parked order, the till sends that order's own id.
  */
 export interface TillSaleRequest {
+  kitchenNote?: string | null;
   /** A line MAY carry `options`, `extras` and per-line `LineExtras` (NON-FISCAL, never threaded into
    *  a sale/fiscal projection). The server validates them against the dish's own definitions. */
   lines: ({
@@ -476,6 +477,7 @@ export async function readBillTenderLines(
  */
 export interface PayWorkingOrderRequest {
   id: string;
+  kitchenNote?: string | null;
   /** The walk-up basket; IGNORED for a retrieved order. Carries the same per-line fields as
    *  `TillSaleRequest.lines`. */
   lines: ({
@@ -535,6 +537,7 @@ async function storeSentReceiptLanguage(
  */
 export interface IntegratedPayRequest {
   id: string;
+  kitchenNote?: string | null;
   invoiceType?: unknown;
   recipient?: unknown;
   /** The walk-up basket; IGNORED for a retrieved/placed order. Carries the same per-line fields as
@@ -678,6 +681,7 @@ async function runPayWorkingOrder(
           throw new AppError("sale.empty_basket", {});
         }
         order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+          kitchenNote: req.kitchenNote,
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
           receiptLocale: req.receiptLanguage,
@@ -1184,6 +1188,7 @@ async function payIntegrated(
     const order: GrossOrder =
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+            kitchenNote: req.kitchenNote,
             zoneId: req.zoneId,
             receiptLocale: req.receiptLanguage,
             creditedTo: operatorId,
@@ -2166,6 +2171,7 @@ async function runTillSale(
       id: req.workingOrderId ?? randomUUID(),
       lines: req.lines,
       tender: req.tender,
+      kitchenNote: req.kitchenNote,
       invoiceType: req.invoiceType,
       recipient: req.recipient,
       deliveryTableId: req.deliveryTableId,

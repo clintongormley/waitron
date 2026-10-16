@@ -64,6 +64,100 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransac
 const ONE = thousandthsToDecimal(1000);
 const TWO = thousandthsToDecimal(2000);
 
+describe("whole-order instruction changes", () => {
+  it("keeps the frozen before/after instruction separate from the dish's own note", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const change = { before: "All together", after: "Dessert later" };
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          {
+            workingOrderLineId: order.burgerLineId,
+            stationId: v.grill,
+            quantity: TWO,
+            wasStarted: true,
+          },
+        ],
+        "changed",
+        { orderNoteChange: change },
+      ),
+    );
+    change.after = "Mutated caller text";
+    const [notice] = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notice).toMatchObject({
+      kind: "changed",
+      note: "no onions",
+      lineName: "BRGR",
+      quantity: TWO,
+      wasStarted: true,
+      orderNoteChange: { before: "All together", after: "Dessert later" },
+    });
+    await inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, notice!.id));
+    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+  });
+
+  it("retains an explicit removal and omits the payload on other changed notices", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    const items = [
+      {
+        workingOrderLineId: order.burgerLineId,
+        stationId: v.grill,
+        quantity: ONE,
+        wasStarted: false,
+      },
+    ];
+    await inTx((tx) =>
+      recordKitchenNotices(tx, v.cfg, order.orderId, items, "changed", {
+        orderNoteChange: { before: "Together", after: null },
+      }),
+    );
+    await inTx((tx) =>
+      recordKitchenNotices(tx, v.cfg, order.orderId, items, "changed", { direction: "added" }),
+    );
+    const notices = await inTx((tx) => listStationNotices(tx, v.cfg, v.grill));
+    expect(notices[0]).toHaveProperty("orderNoteChange", { before: "Together", after: null });
+    expect(notices[1]).not.toHaveProperty("orderNoteChange");
+  });
+
+  it.each([
+    { kind: "void" as const, options: {} },
+    { kind: "changed" as const, options: { direction: "added" as const } },
+    { kind: "changed" as const, options: { cancelledExtra: "Gherkins" } },
+    { kind: "changed" as const, options: { movedTo: "Table 2" } },
+  ])("refuses an instruction change mixed with $kind/$options", async ({ kind, options }) => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await expect(
+      inTx((tx) =>
+        recordKitchenNotices(
+          tx,
+          v.cfg,
+          order.orderId,
+          [
+            {
+              workingOrderLineId: order.burgerLineId,
+              stationId: v.grill,
+              quantity: ONE,
+              wasStarted: false,
+            },
+          ],
+          kind,
+          { ...options, orderNoteChange: { before: null, after: "Together" } },
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "kitchen_notice.invalid",
+      params: { field: "orderNoteChange" },
+    });
+    expect(await suite.db.select().from(kitchenNotices)).toEqual([]);
+  });
+});
+
 /** A cutover `minutes` from now on a UTC venue, written `HH:MM:SS`. */
 function cutoverFromNow(minutes: number): string {
   return `${new Date(Date.now() + minutes * 60_000).toISOString().slice(11, 16)}:00`;

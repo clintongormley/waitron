@@ -54,6 +54,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 
 const cocinaQueue: StationQueueGroup[] = [
   {
+    kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
     label: "Mesa 4",
@@ -76,6 +77,7 @@ const cocinaQueue: StationQueueGroup[] = [
 
 const barraQueue: StationQueueGroup[] = [
   {
+    kitchenNote: null,
     orderId: "wo-2",
     orderNumber: 6,
     label: null,
@@ -868,6 +870,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   it("device mode hides the kitchen-fire button on a held course (no device fire route, §3d)", async () => {
     const heldCourseQueue: StationQueueGroup[] = [
       {
+        kitchenNote: null,
         orderId: "wo-h",
         orderNumber: 9,
         label: null,
@@ -1014,6 +1017,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     // screen advances every fired item whose legitimate next step is `to` — never the session verb.
     const twoLine: StationQueueGroup[] = [
       {
+        kitchenNote: null,
         orderId: "wo-1",
         orderNumber: 5,
         label: null,
@@ -1130,6 +1134,7 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
   const firedAt = "2026-08-17T10:00:00.000Z";
   const mixed: StationQueueGroup[] = [
     {
+      kitchenNote: null,
       orderId: "wo-1",
       orderNumber: 5,
       label: null,

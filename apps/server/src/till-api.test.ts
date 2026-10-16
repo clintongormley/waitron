@@ -2566,7 +2566,12 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const after = await (
       await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
     ).json();
-    expect(after).toEqual({ ...before, label: "Ana", revision: 1 });
+    expect(after).toEqual({
+      ...before,
+      label: "Ana",
+      revision: 1,
+      kitchenNote: { ...before.kitchenNote, ownerRevision: 1 },
+    });
     expect(
       (
         await suite.db.execute(

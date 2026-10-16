@@ -524,7 +524,19 @@ export interface ResolvedKitchenScreen {
   readonly zones: readonly ScreenSlot[] | null;
 }
 
+export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
+export interface KitchenNote {
+  note: string | null;
+  revision: number;
+}
+export type KitchenNoteSnapshot = KitchenNote & { scope: KitchenNoteScope; ownerRevision: number };
+export interface KitchenNoteChange {
+  before: string | null;
+  after: string | null;
+}
+
 export interface StationNotice {
+  orderNoteChange?: KitchenNoteChange;
   id: string;
   stationId: string;
   workingOrderId: string;
@@ -1153,6 +1165,7 @@ export interface VenueServiceContribution {
     }[],
     kind: "recalled" | "void" | "changed" | "moved" | "rerouted",
     options?: {
+      orderNoteChange?: KitchenNoteChange;
       movedTo?: string | null;
       direction?: "added" | "removed" | null;
       cancelledExtra?: string | null;
@@ -1185,6 +1198,17 @@ export interface VenueServiceContribution {
   readClearingWorkflow(tx: Transaction): Promise<boolean>;
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
+  kitchenNoteKey(scope: KitchenNoteScope): string;
+  readKitchenNotes(
+    tx: Transaction,
+    scopes: readonly KitchenNoteScope[],
+  ): Promise<ReadonlyMap<string, KitchenNote>>;
+  writeKitchenNote(
+    tx: Transaction,
+    scope: KitchenNoteScope,
+    expectedRevision: number,
+    note: string | null,
+  ): Promise<KitchenNote>;
   /** Whether held groups print in advance, marked HOLD. */
   readPrintHeldWork(tx: Transaction): Promise<boolean>;
   /** The venue's MOVED slips choice, which a prep station left as the venue follows. */

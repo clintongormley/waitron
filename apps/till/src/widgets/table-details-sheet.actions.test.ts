@@ -26,6 +26,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
 }
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
   id: "p1",
   revision: 1,
   guestCount: 2,

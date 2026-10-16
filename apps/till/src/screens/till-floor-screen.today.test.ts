@@ -564,6 +564,7 @@ describe("till-floor-screen: the room's revision on today's plan", () => {
 
 describe("till-floor-screen: today's names", () => {
   const party = (displayName: string, tableIds: string[]): TableParty => ({
+    kitchenNote: { scope: { partyId: "p1" }, note: null, revision: 0, ownerRevision: 1 },
     id: "p1",
     revision: 1,
     guestCount: null,

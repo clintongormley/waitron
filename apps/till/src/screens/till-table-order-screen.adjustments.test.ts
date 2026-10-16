@@ -14,6 +14,7 @@ const olivesWithPizza = () =>
   t("table.extra_of").replace("{extra}", "Olives").replace("{dish}", "Pizza");
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
   id: "v1",
   revision: 4,
   guestCount: 3,

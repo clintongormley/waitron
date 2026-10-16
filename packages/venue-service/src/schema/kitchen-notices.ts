@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { KitchenNoteChange } from "@waitron/module";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import {
   enumCheck,
@@ -46,6 +47,7 @@ export const kitchenNotices = table(
     direction: kitchenNoticeDirection("direction"),
     /** On a `changed` notice, the extra taken off the dish, as its kitchen paper printed it. */
     cancelledExtra: label("cancelled_extra"),
+    orderNoteChange: json<KitchenNoteChange>("order_note_change"),
     /** On a `rerouted` notice, the station the work now belongs to, by name as it was then. */
     reroutedTo: label("rerouted_to"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),

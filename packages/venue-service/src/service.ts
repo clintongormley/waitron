@@ -38,6 +38,7 @@ import {
 } from "./routing-store.js";
 import { stationDestinations, closeStationForToday, openStationForToday } from "./station-times.js";
 import type { VenueServiceContribution } from "@waitron/module";
+import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 import {
   assertPeriodEndOffsets,
   resolveDefaultMenu,
@@ -106,6 +107,9 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  kitchenNoteKey,
+  readKitchenNotes,
+  writeKitchenNote,
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
   assertPeriodEndOffsets,

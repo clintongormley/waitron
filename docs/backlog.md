@@ -1842,19 +1842,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Today a note
-  belongs to one line (`orders.note`, `packages/db/src/schema/orders.ts`); nothing holds a note
-  for the order ("all together, they have a train at 14:30"). Add one: a row at the top of the order
-  on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at
-  the top of every kitchen ticket the order sends and shown on the kitchen screens. A change after
-  sending reaches the kitchen as the other corrections do (kitchen notices). Needs a migration. A669's
-  table allergy note belongs in the same place, so whichever lands second reuses it. Drawn on
-  [board 1](backlog/mockups/a737-a740-till-counter-redesign/1-counter-screen.png).
-
 - **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
   station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
   colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+
+- **Consider consolidating paper for a whole-order kitchen-note change.** The current correction
+  path produces one slip and one acknowledged notice for each affected dish at its station.
+  Decide whether paper should instead summarise the affected work once per printer, and whether
+  acknowledgement should remain per dish. [Detail](backlog/kitchen.md#whole-order-note-correction-volume).
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
   moved to Prep stations' Times tab, and Prep stations is offered only to someone with
@@ -5596,6 +5592,11 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **Retain failure screenshots for long browser test names.** A failed waiting-list refresh case
+  in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
+  fixture checks. Bound the generated screenshot filename and keep the complete test name in
+  its metadata; verify with a deliberately failing case whose generated name is long.
 
 - **A pnpm setup retry does not identify which command failed.** A746 removes the test fixture's
   blanket one-second version deadline, with a controlled slow-check regression. The original

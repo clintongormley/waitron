@@ -19,6 +19,7 @@ const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const text = (node: Element | null) => (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 
 const party: TableParty = {
+  kitchenNote: { scope: { partyId: "v1" }, note: null, revision: 0, ownerRevision: 4 },
   id: "v1",
   revision: 4,
   guestCount: 3,
