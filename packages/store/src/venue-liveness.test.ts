@@ -12,7 +12,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readVenueHolder, VENUE_HOLDER_FILE, VENUE_HOLDER_STALE_MS } from "./venue-holder.js";
 import {
   HOLDER_HEARTBEAT_MS,
@@ -321,6 +321,77 @@ describe("the watchdog thread", () => {
       },
     );
   }
+});
+
+describe("a holder whose test fakes the clock", () => {
+  const realSetTimeout = setTimeout;
+  const realSleep = (ms: number) => new Promise((resolve) => realSetTimeout(resolve, ms));
+  const JUDGEMENT = "capture((stack) => kill(stack, lastTickAt));";
+
+  /** The real watchdog thread, posting each frozen judgement instead of killing this process. */
+  const judgements = (): string[] => {
+    const judged: string[] = [];
+    setWatchdogWorkerFactory((source, options) => {
+      if (!source.includes(JUDGEMENT)) throw new Error("the watchdog's judgement line moved");
+      const worker = new Worker(
+        source.replace(JUDGEMENT, "parentPort.postMessage(lastTickAt);"),
+        options,
+      );
+      worker.on("message", (lastTickAt: string) => judged.push(lastTickAt));
+      return worker;
+    });
+    return judged;
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it(
+    "is judged frozen when its main thread really stops turning",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ tickMs: 20, killMs: 300 });
+      const judged = judgements();
+      await lock(tempDir());
+      const until = performance.now() + 500;
+      while (performance.now() < until) {
+        // Busy: no timer of this thread can run.
+      }
+      await realSleep(200);
+      expect(judged).toHaveLength(1);
+    },
+  );
+
+  it(
+    "is not judged frozen when its stamp fires while the clock is faked",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ tickMs: 20, killMs: 1000 });
+      const judged = judgements();
+      await lock(tempDir());
+      vi.useFakeTimers();
+      await realSleep(300);
+      vi.useRealTimers();
+      await realSleep(100);
+      expect(judged).toEqual([]);
+    },
+  );
+
+  it(
+    "keeps stamping when the folder is first taken while the clock is faked",
+    { timeout: IN_PROCESS_TIMEOUT_MS },
+    async () => {
+      setVenueLivenessTimings({ tickMs: 20, killMs: 1000 });
+      const judged = judgements();
+      vi.useFakeTimers();
+      await lock(tempDir());
+      await realSleep(1300);
+      vi.useRealTimers();
+      await realSleep(100);
+      expect(judged).toEqual([]);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------------------------
