@@ -874,25 +874,20 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }
 
-  /** A described option is named by its label alone, so the description is read once, as the
-   * description, rather than run into the name. */
-  private renderOptionText(option: ComboboxOption, rowId: string) {
+  private renderOptionText(option: ComboboxOption) {
     const text = this.trimmedSearch ? closedText(option) : option.label;
     if (!option.description) {
       return html`<span class="option-label">${text}</span>`;
     }
     return html`<span class="option-text"
-      ><span class="option-label" id=${`${rowId}-label`}>${text}</span
-      ><span class="option-description" id=${`${rowId}-description`}
-        >${option.description}</span
-      ></span
+      ><span class="option-label">${text}</span
+      ><span class="option-description">${option.description}</span></span
     >`;
   }
 
   private renderOption(option: ComboboxOption, index: number) {
     const selected = this.isSelected(option);
     const rowId = `${this.listboxId}-${index}`;
-    const described = Boolean(option.description);
     // A search lists matches from every level, each shown by its full closed text, so none is indented.
     const depth = this.trimmedSearch ? 0 : (option.depth ?? 0);
     return html`
@@ -903,8 +898,6 @@ export class WtCombobox extends LitElement {
         role="option"
         aria-selected=${selected}
         aria-disabled=${option.disabled ? "true" : nothing}
-        aria-labelledby=${described ? `${rowId}-label` : nothing}
-        aria-describedby=${described ? `${rowId}-description` : nothing}
         @click=${(event: MouseEvent) => {
           this.activeIndex = index;
           this.activateOption(option, event);
@@ -920,7 +913,7 @@ export class WtCombobox extends LitElement {
             ? html`<wt-icon class="icon" name=${option.icon} aria-hidden="true"></wt-icon>`
             : nothing
         }
-        ${this.renderOptionText(option, rowId)}
+        ${this.renderOptionText(option)}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`

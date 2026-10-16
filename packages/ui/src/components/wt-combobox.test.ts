@@ -1802,19 +1802,19 @@ test("an option's description is a second line under its label, inside the row, 
   expect(staff!.lastElementChild).toBe(staff!.querySelector('wt-icon[name="check"]'));
 });
 
-test("a screen reader names a described option by its label and reads the description with it", async () => {
+test("a screen reader names a described option by both its lines, so it hears the description with the row", async () => {
   const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', DESCRIBED);
   await userEvent.click(fieldParts(el).trigger);
   const [, staff, plain] = optionRows(el);
-  await expect.element(page.elementLocator(staff!)).toHaveAccessibleName("Staff only");
   await expect
     .element(page.elementLocator(staff!))
-    .toHaveAccessibleDescription("Only staff can order it on its own.");
+    .toHaveAccessibleName("Staff only Only staff can order it on its own.");
+  await expect.element(page.elementLocator(staff!)).toHaveAccessibleDescription("");
   await expect.element(page.elementLocator(plain!)).toHaveAccessibleName("Plain");
   await expect.element(page.elementLocator(plain!)).toHaveAccessibleDescription("");
 });
 
-test("after filtering, the active row is still named by its own label and described by its own line", async () => {
+test("after filtering, the active row is still named by its own two lines", async () => {
   const el = await mountWith('<wt-combobox label="Ordering" search="always"></wt-combobox>', [
     ...DESCRIBED,
     { value: "meal", label: "Staff meal", description: "Given to staff at no charge." },
@@ -1829,10 +1829,10 @@ test("after filtering, the active row is still named by its own label and descri
   ]);
   const active = el.shadowRoot!.getElementById(search.getAttribute("aria-activedescendant")!)!;
   expect(active).toBe(optionRows(el)[1]);
-  await expect.element(page.elementLocator(active)).toHaveAccessibleName("Staff meal");
   await expect
     .element(page.elementLocator(active))
-    .toHaveAccessibleDescription("Given to staff at no charge.");
+    .toHaveAccessibleName("Staff meal Given to staff at no charge.");
+  await expect.element(page.elementLocator(active)).toHaveAccessibleDescription("");
 });
 
 test("an option without a description, or with an empty one, draws its label alone, with no second line and no labelledby or describedby", async () => {
@@ -2009,7 +2009,7 @@ test("a disabled action row sends no action", async () => {
   expect(actions).not.toHaveBeenCalled();
 });
 
-test("a search finds a disabled option and shows it with its description, named by its label", async () => {
+test("a search finds a disabled option and shows it with its description, named by both its lines", async () => {
   const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
   await userEvent.click(fieldParts(el).trigger);
   await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "wi");
@@ -2017,8 +2017,8 @@ test("a search finds a disabled option and shows it with its description, named 
   expect(rows).toHaveLength(1);
   expect(rows[0]!.getAttribute("aria-disabled")).toBe("true");
   expect(el.shadowRoot!.querySelector(".empty")).toBeNull();
-  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleName("Wine");
-  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleDescription("Has variants.");
+  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleName("Wine Has variants.");
+  await expect.element(page.elementLocator(rows[0]!)).toHaveAccessibleDescription("");
 });
 
 test("type-ahead on a closed list without a search box steps over a disabled option", async () => {
