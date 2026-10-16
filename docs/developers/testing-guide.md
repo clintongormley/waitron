@@ -223,10 +223,12 @@ possible mechanism, not a diagnosis of those runs, and the hang was not reproduc
 ### A retained database fixture can keep the watchdog from taking a timer turn
 
 If your suite keeps its database across cases with `resetPerTest: false`, awaited synchronous
-queries can run from one case into the next without letting timers run. Give the event loop a
-turn between cases with an `afterEach` hook that awaits `setImmediate` from
-`node:timers/promises`. You keep the same rows and assertions while letting the venue watchdog
-record its next tick.
+queries can run from one case into the next without letting timers run. Since A769, `useVenueDb`
+gives every suite that turn after each case (the next section), whatever `resetPerTest` says; the
+`afterEach` hook awaiting `setImmediate` from `node:timers/promises` that three `apps/server`
+suites added before then (`bill-payments.test.ts`, `bill-payments.signed-in.test.ts`,
+`till-money.write-session.test.ts`) is now needed only by a suite that opens its venue folder
+without `useVenueDb`.
 
 Measured 2026-10-08 on Node v26.7.0, macOS, Vitest 4.1.11: a disposable copy of
 `apps/server/src/bill-payments.test.ts`, with `setVenueLivenessTimings` set to a 10-second kill
@@ -263,7 +265,7 @@ with or without the kill.
 Measured 2026-10-16 on Node v26.11.1, macOS, Vitest 4.1.11: a 50 ms probe interval in the worker
 running `routes.test.ts` saw one 20,939 ms stretch with no timer turn — the whole file of 196
 tests. With the `afterEach` yield in `useVenueDb`, the same worker's longest gap was 1,262 ms.
-Reproduced locally with `WATCHDOG_KILL_MS` cut to 5 s (reverted afterwards): the
+Reproduced locally before the yield, with `WATCHDOG_KILL_MS` cut to 5 s (reverted afterwards): the
 log printed the frozen line, then `Error: [vitest-pool]: Worker forks emitted error … Worker exited
 unexpectedly`; the progress reporter went on listing `routes.test.ts` as running, and Vitest
 finished the other files and exited 1.
