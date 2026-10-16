@@ -1368,7 +1368,7 @@ jobs:
           retention-days: 1
 
       - name: Snapshot the runner after a failed shard
-        if: failure()
+        if: failure() || cancelled()
         run: |
           {
             date -u +%FT%T.%3NZ
@@ -1379,7 +1379,7 @@ jobs:
           } > "$RUNNER_TEMP/shard-diagnostics/after.txt" 2>&1 || true
 
       - name: Keep the failed shard's start-up record
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: venue-service-diagnostics-${{ matrix.shard }}

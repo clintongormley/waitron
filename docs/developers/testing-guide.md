@@ -238,6 +238,42 @@ unchanged production watchdog's bound is 120 seconds; these accelerated local pr
 measure Linux shard duration. CI run `37674514404`, attempts 1 and 2, each logged
 `venue.holder_frozen` inside that rollback comparison before the worker exit.
 
+### A file of synchronous database work gets no timer turn unless `useVenueDb` yields one
+
+An `await` on a `node:sqlite` query is satisfied by synchronous work, and Vitest gives the event
+loop no timer turn between one test and the next. A file made of such tests can therefore run from
+its first test to its last without any interval firing — including the venue watchdog's stamp
+(`packages/store/src/venue-liveness.ts`). Once the file outlasts `WATCHDOG_KILL_MS` (120 s on 2026-10-16),
+the watchdog kills the worker as frozen. `useVenueDb` now awaits one real `setTimeout(…, 0)` in its
+`afterEach`, after any reset, so every test in a suite that uses it ends with a timer turn. The
+`setTimeout` is captured when the module loads, so a suite that calls `vi.useFakeTimers()` and
+leaves them on cannot replace it and stall the hook.
+
+The incident. `main` run 38932759150, job `test-venue-service (1)` (job 117080878600, runner region
+eastus2), was cancelled at its 10-minute limit at 16:47:08Z with `src/routes.test.ts` and
+`src/routing.test.ts` still running. Its log at 16:44:02.087Z shows
+`{"code":"provisioning.database_holder_frozen","kind":"script","pid":2757,"lockedAt":"2026-10-16T16:41:59.557Z","lastTickAt":"2026-10-16T16:41:59.566Z","stack":null,...}`:
+the watchdog killed the Vitest worker running `routes.test.ts`, whose stamp interval had not fired
+after the folder was opened. That runner was slow throughout: `pnpm install` took 54.5 s and the
+pnpm self-install 13 s, against 3.1 s and 1 s on run 38921822907's passing shard 1 (centralus),
+where `routes.test.ts` took 21.0 s in all; on the slow runner it took 33 s to reach its first
+database open. Inference, not measured: at that speed the shard would have passed its time limit
+with or without the kill.
+
+Measured 2026-10-16 on Node v26.11.1, macOS, Vitest 4.1.11: a 50 ms probe interval in the worker
+running `routes.test.ts` saw one 20,939 ms stretch with no timer turn — the whole file of 196
+tests. With the `afterEach` yield in `useVenueDb`, the same worker's longest gap was 1,262 ms.
+Reproduced locally with `WATCHDOG_KILL_MS` cut to 5 s (reverted afterwards): the
+log printed the frozen line, then `Error: [vitest-pool]: Worker forks emitted error … Worker exited
+unexpectedly`; the progress reporter went on listing `routes.test.ts` as running, and Vitest
+finished the other files and exited 1.
+
+Guard: the cases "a timer turn after each test" and "the timer turn under fake timers" in
+`packages/db/src/testing/venue-db.test.ts`, weaker than the rule: they cover `useVenueDb` alone. A
+suite that opens a venue folder another way — calling `openVenueDatabase` or `openVenueStore`
+itself, as some suites in `packages/db`, `packages/store`, `packages/migrations` and `apps/server`
+do — gets no yield from it.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is

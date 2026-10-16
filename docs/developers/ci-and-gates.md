@@ -2118,9 +2118,17 @@ What the job does:
   `$RUNNER_TEMP/shard-diagnostics/shard.log`. The job log hides one kind of line, the api channel's
   `Triggering command`, one per browser command, so a passing shard's log grows by about 230 lines
   rather than about a thousand.
-- When the shard fails, a step adds `after.txt` (memory, `/dev/shm`, every large process, the end
-  of `dmesg`), and the folder is kept for 14 days as the artifact
+- When the shard fails or is cancelled at its time limit (both steps are
+  `if: failure() || cancelled()`), a step adds `after.txt` (memory, `/dev/shm`, every large
+  process, the end of `dmesg`), and the folder is kept for 14 days as the artifact
   `venue-service-diagnostics-<shard>`. A passing shard keeps nothing.
+
+`failure()` alone is false after a time-limit cancel. On `main` run 38932759150, job
+`test-venue-service (1)` (job 117080878600) was cancelled at its 10-minute limit, and its two
+`if: failure()` steps did not run while the `if: always()` blob upload did. Probe run 38951332497
+(throwaway PR #1813, closed): a job with `timeout-minutes: 1` whose step slept 300 s was cancelled
+at its limit; afterwards a step with `if: failure()` was skipped, and steps with `if: cancelled()`
+and `if: always() && steps.<id>.outcome != 'success'` ran.
 
 **Reading a record.** Vitest 4.1.11 starts its connection timer when it creates the session
 (`BrowserSessions.createSession` in `vitest/dist/chunks/cli-api.*.js`), and the session succeeds
@@ -2169,8 +2177,9 @@ The first forced-failure probe set the limit on the command line and passed: Vit
 Guard: the cases under "the venue-service shards' browser start-up record" in
 `scripts/ci-workflow.test.mjs`, weaker than their name: they read `ci.yml` as TEXT and never run a
 shard, so a Vitest or Playwright upgrade that renames a debug channel would leave the record silent
-while the cases pass. They never read the snapshot step or what the job log's `grep -v` hides, and
-a step an `if:` switches off still passes. The channel names above were read from Vitest 4.1.11 and
+while the cases pass. They read the snapshot step's and the upload step's `if:` lines as text, not
+what GitHub decides from them, and never read the snapshot step's commands or what the job log's
+`grep -v` hides; a sampler or shard step an `if:` switches off still passes. The channel names above were read from Vitest 4.1.11 and
 Playwright 1.63.0.
 
 ## `prettier --check` on an ignored path prints the same line as a clean one

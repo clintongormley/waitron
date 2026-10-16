@@ -194,7 +194,7 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     if (resetPerTest && db !== undefined && resetPlan !== undefined)
       await applyReset(db, resetPlan);
     // A file of synchronous database work otherwise gives the loop no timer turn, so the venue
-    // watchdog (`@waitron/store`'s venue-liveness) would read this worker as frozen.
+    // watchdog kills this worker as frozen once the file outlasts `WATCHDOG_KILL_MS`.
     await new Promise((resolve) => realSetTimeout(resolve, 0));
   });
 
