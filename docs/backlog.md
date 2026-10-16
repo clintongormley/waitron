@@ -3584,12 +3584,16 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   text (left open by A662).** The plan chose a ghost `wt-button`;
   [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
 
-- **The Edit receipt `<dialog>` element's content is taller than the element itself (left open by
-  A662).** Measured 2026-10-16: scroll height 984 px against 850 px at 1280 × 900, and 984 against
-  794 at 390 × 844. Its `overflow-y` is hidden, so Tab and the mouse wheel never moved it, but a
-  script's `scrollIntoView({ block: "start" })` on the preview lifted the footer and left a gap
-  under it. Hiding a form field shrinks the excess; the image library's wide modal, measured at
-  1280, has none. Not checked whether it predates A662's switch to `wt-modal`.
+- **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
+  by A662; predates it).** Each `wt-input`/`wt-textarea` hint (`p.hint`, visually hidden) is
+  positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
+  hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
+  Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
+  plain dialog of 16 hinted fields 953/864, the same fields without hints none. A
+  `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
+  the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
+  removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
+  hint.
 
 - **Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes
   (left open by A662).** With Veri\*Factu always offering a default description, the Departments
