@@ -205,7 +205,7 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   moves from 2 to 3.5, where at (10, 5) it gives (8, 7) and moves from 12 to 11.5; a 10 × 1 turned
   45° at (0, 10), its right side grown 4, gives (0, 11) and its drawn left moves from 1.11 to 1.70,
   where at (20, 10) it gives (19, 11) and moves from 21.11 to 20.70.
-  Today that table could not grow those sides at all (the reproduction above).
+  Today the 8 × 4 could not grow its down-facing side at all (the reproduction above).
 - **At the edge, growth is not reversible square for square.** Away from the edge a growth and its
   reverse put the table back (today's `roundShift` promise, kept). At the edge they need not, and
   one growth of n squares need not equal n growths of one: the 8 × 4 turned 90° at (0, 5) numbers
