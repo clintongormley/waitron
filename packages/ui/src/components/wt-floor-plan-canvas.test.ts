@@ -3020,6 +3020,46 @@ it("a turn that makes a corner table poke out steps it in by what poked out, as 
   expect(t2Moved).toEqual(Array(13).fill(false));
 });
 
+it("a table dropped at the plan's corner and turned 15° by its arrow right away shows no scroll bars, and nothing else moves", async () => {
+  // A plan that fits the box before the drop and after it.
+  const el = await canvas([table("t1", "T1", { x: 4, y: 8 }), table("t2", "T2", { x: 9 })], {
+    selected: "t1",
+  });
+  applyChanges(el);
+  await settled(el);
+  expect(overflows(el)).toBe(false);
+  await release(el, dragBy(el, "t1", -60, -108));
+  await settled(el);
+  expect(el.tables[0]!.placement).toMatchObject({ x: 0, y: 0, rotation: 0 });
+  const v = viewportOf(el);
+  const scroll = { left: v.scrollLeft, top: v.scrollTop };
+  const t2 = at(button(el, "t2"));
+  expect(overflows(el)).toBe(false);
+  const seen = rotates(el);
+  const frames: { overflowed: boolean; scrolled: boolean; t2Moved: boolean }[] = [];
+  const look = async () => {
+    await frame();
+    await el.updateComplete;
+    const now = at(button(el, "t2"));
+    frames.push({
+      overflowed: overflows(el),
+      scrolled: v.scrollLeft !== scroll.left || v.scrollTop !== scroll.top,
+      t2Moved: now.left !== t2.left || now.top !== t2.top,
+    });
+  };
+  const c = centreOf(button(el, "t1"));
+  const h = centreOf(handles(el)[0]!);
+  pointer(handles(el)[0]!, "pointerdown", 1, h.x, h.y);
+  await look();
+  const to = roundFrom(c, h, 15);
+  pointer(window, "pointermove", 1, to.x, to.y);
+  for (let f = 0; f < 3; f++) await look();
+  await release(el, to);
+  for (let f = 0; f < 10; f++) await look();
+  expect(frames).toEqual(Array(14).fill({ overflowed: false, scrolled: false, t2Moved: false }));
+  expect(seen).toEqual([{ key: "t1", rotation: 15, x: 1, y: 1 }]);
+});
+
 it("a turn on and back within one press steps a corner table in and puts it back, and sends nothing", async () => {
   const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 9 })], { selected: "t1" });
   await settled(el);
