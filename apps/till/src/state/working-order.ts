@@ -19,6 +19,7 @@ import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
+import type { Place, placeFor } from "./draft-place.js";
 
 /**
  * One extras pick on a basket line. `name` and `price` are the client's copy of what the offer
@@ -58,6 +59,7 @@ export interface LineSelection {
 }
 
 export interface OrderLine {
+  place?: Place;
   workingOrderLineId?: string;
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
@@ -182,6 +184,7 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
 }
 
 export class WorkingOrderStore {
+  protected placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
   readonly #lines: OrderLine[] = [];
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
   /** The idempotency key park and pay send, so a retried request settles the order once. */
@@ -454,13 +457,16 @@ export class WorkingOrderStore {
     if (this.#refusesEdits) return;
     if (this.#refusesSelection(product)) return;
     const line = newLine(product, quantity, selection);
-    const into = mergeTarget(this.#lines, line);
+    const placement = this.placer?.(product.courseId ?? null);
+    if (placement !== undefined) line.place = { ...placement.place };
+    const into = placement?.shift === undefined ? mergeTarget(this.#lines, line) : undefined;
     const merged =
       into === undefined
         ? undefined
         : { ...into, quantity: addDecimal(decimal(into.quantity), decimal(quantity)) };
     if (this.#passesLimit(into === undefined ? ZERO : lineGross(into), lineGross(merged ?? line)))
       return;
+    if (placement?.shift !== undefined) this.#shiftSlots(placement.shift.from);
     if (into === undefined) this.#lines.push(line);
     else into.quantity = merged!.quantity;
     this.#lastAdded = into ?? line;
@@ -542,8 +548,56 @@ export class WorkingOrderStore {
     if (courseId === undefined) delete line.courseId;
     else line.courseId = courseId;
     if (course !== undefined) line.course = course;
+    const placement = this.placer?.(courseId ?? line.product.courseId ?? null, index);
+    if (placement !== undefined) {
+      if (placement.shift !== undefined) this.#shiftSlots(placement.shift.from);
+      line.place = { ...placement.place };
+    }
     this.#markDirty();
     this.emit("changed");
+  }
+
+  setLinePlaces(indexes: readonly number[], place: Place, shift?: { from: number }): void {
+    if (this.#refusesEdits) return;
+    const lines = indexes.flatMap((index) => this.#lines[index] ?? []);
+    if (lines.length === 0) return;
+    if (shift !== undefined) this.#shiftSlots(shift.from);
+    for (const line of lines) line.place = { ...place };
+    this.#changedLines();
+  }
+
+  insertSlotAfter(slot: number | null): number {
+    const next = (slot ?? 0) + 1;
+    if (this.#refusesEdits) return next;
+    this.#shiftSlots(next);
+    this.#changedLines();
+    return next;
+  }
+
+  moveSlot(from: number, to: number): void {
+    if (this.#refusesEdits || from === to) return;
+    if (!this.#lines.some((line) => line.place?.kind === "new" && line.place.slot === from)) return;
+    const destination = this.#lines.find(
+      (line) => line.place?.kind === "new" && line.place.slot === to,
+    )?.place;
+    for (const line of this.#lines) {
+      const place = line.place;
+      if (place?.kind !== "new") continue;
+      const slot = place.slot;
+      if (slot === from) {
+        line.place = { ...(destination?.kind === "new" ? destination : place), slot: to };
+      } else if (from < to && slot > from && slot <= to) line.place = { ...place, slot: slot - 1 };
+      else if (from > to && slot >= to && slot < from) line.place = { ...place, slot: slot + 1 };
+    }
+    this.#changedLines();
+  }
+
+  #shiftSlots(from: number): void {
+    for (const line of this.#lines) {
+      if (line.place?.kind === "new" && line.place.slot >= from) {
+        line.place = { ...line.place, slot: line.place.slot + 1 };
+      }
+    }
   }
 
   setLineMakeAt(index: number, stationId: string | undefined): void {

@@ -9,6 +9,7 @@ import { lineBlock } from "./menu-refresh.js";
 import { draftSections } from "./draft-groups.js";
 import { productAsVariant } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
+import type { Place } from "./draft-place.js";
 import {
   menuOfferToTillProduct,
   type DraftLine,
@@ -216,6 +217,54 @@ const saved = (input: DraftLineInput, quantity: string): DraftLine => ({
 });
 
 describe("toDraftLineInput", () => {
+  it.each([
+    [{ kind: "fire" }, { slot: 0, joinGroupId: null, afterGroupId: null }],
+    [
+      { kind: "new", slot: 3 },
+      { slot: 3, joinGroupId: null, afterGroupId: null },
+    ],
+    [
+      { kind: "new", slot: 2, afterGroupId: "g1" },
+      { slot: 2, joinGroupId: null, afterGroupId: "g1" },
+    ],
+    [
+      { kind: "join", groupId: "g2" },
+      { slot: 0, joinGroupId: "g2", afterGroupId: null },
+    ],
+  ] satisfies [Place, Pick<DraftLineInput, "slot" | "joinGroupId" | "afterGroupId">][])(
+    "round-trips the %j place through a saved draft",
+    (place, wire) => {
+      const line: OrderLine = { ...burgerLine(), place };
+      const input = toDraftLineInput(line);
+      expect(input).toMatchObject(wire);
+      const restored = fromDraftLine({ ...saved(input, "2.000"), ...wire }, offers);
+      expect(restored.place ?? { kind: "fire" }).toEqual(place);
+      expect(toDraftLineInput(restored)).toEqual(input);
+    },
+  );
+
+  it("keeps identical dishes in different places separate in the till's merge key", () => {
+    const line = burgerLine();
+    expect(orderLineMergeKey({ ...line, place: { kind: "new", slot: 1 } })).not.toBe(
+      orderLineMergeKey(line),
+    );
+    expect(orderLineMergeKey({ ...line, place: { kind: "join", groupId: "g2" } })).not.toBe(
+      orderLineMergeKey({ ...line, place: { kind: "join", groupId: "g3" } }),
+    );
+    expect(
+      orderLineMergeKey({ ...line, place: { kind: "new", slot: 1, afterGroupId: "g2" } }),
+    ).not.toBe(orderLineMergeKey({ ...line, place: { kind: "new", slot: 1, afterGroupId: "g3" } }));
+    expect(orderLineMergeKey({ ...line, place: { kind: "fire" } })).toBe(orderLineMergeKey(line));
+  });
+
+  it("keeps an unavailable dish's place when its offer returns", () => {
+    const input = { ...toDraftLineInput(burgerLine()), slot: 2, afterGroupId: "g3" };
+    const missing = fromDraftLine(saved(input, "2.000"), new Map());
+    const returned = rebuildReturned([missing], offers, new Map([["dinner", VERSION]])).get(0)!;
+    expect(returned.place).toEqual({ kind: "new", slot: 2, afterGroupId: "g3" });
+    expect(toDraftLineInput(returned)).toEqual(input);
+  });
+
   it("gives an unplaced line explicit Fire-now wire defaults", () => {
     expect(toDraftLineInput(burgerLine())).toMatchObject({
       slot: 0,

@@ -85,6 +85,155 @@ describe("WorkingOrderStore", () => {
     expect(changes).toBe(0);
   });
 
+  it("moves selected lines together, shifts later slots and emits one change", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: cafe, quantity: "1", place: { kind: "fire" } },
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 4 } },
+    ]);
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.setLinePlaces([0, 2], { kind: "new", slot: 2, afterGroupId: "g1" }, { from: 2 });
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2, afterGroupId: "g1" },
+      { kind: "new", slot: 3, afterGroupId: "g3" },
+      { kind: "new", slot: 2, afterGroupId: "g1" },
+    ]);
+    expect(store.dirty).toBe(true);
+    expect(changes).toBe(1);
+  });
+
+  it("inserts a slot after Fire now, or an existing slot, keeping group anchors", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g3" } },
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 2 } },
+      { product: cafe, quantity: "1", place: { kind: "join", groupId: "g3" } },
+    ]);
+    let changes = 0;
+    store.subscribe(() => changes++);
+    expect(store.insertSlotAfter(null)).toBe(1);
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2, afterGroupId: "g3" },
+      { kind: "new", slot: 3 },
+      { kind: "join", groupId: "g3" },
+    ]);
+    expect(changes).toBe(1);
+    expect(store.insertSlotAfter(2)).toBe(3);
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2, afterGroupId: "g3" },
+      { kind: "new", slot: 4 },
+      { kind: "join", groupId: "g3" },
+    ]);
+    expect(changes).toBe(2);
+  });
+
+  it.each([
+    [1, 3, [3, 1, 2]],
+    [3, 1, [2, 3, 1]],
+  ])("moves slot %s to %s without merging or changing line order", (from, to, slots) => {
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "draft",
+      [1, 2, 3].map((slot) => ({
+        product: cafe,
+        quantity: "1",
+        place: { kind: "new" as const, slot, afterGroupId: "g3" },
+      })),
+    );
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.moveSlot(from as number, to as number);
+    expect(store.lines.map((line) => line.place)).toEqual(
+      (slots as number[]).map((slot) => ({
+        kind: "new",
+        slot,
+        afterGroupId: "g3",
+      })),
+    );
+    expect(store.lines.map((line) => line.quantity)).toEqual(["1", "1", "1"]);
+    expect(changes).toBe(1);
+  });
+
+  it("keeps a split line's place and moves one split without moving its siblings", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [{ product: cafe, quantity: "3", place: { kind: "new", slot: 2 } }]);
+    store.splitLine(0);
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 2 },
+    ]);
+    store.setLinePlaces([1], { kind: "fire" });
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "fire" },
+      { kind: "new", slot: 2 },
+    ]);
+    expect(store.lines.map((line) => ({ quantity: line.quantity, noMerge: line.noMerge }))).toEqual(
+      [
+        { quantity: "1", noMerge: true },
+        { quantity: "1", noMerge: true },
+        { quantity: "1", noMerge: true },
+      ],
+    );
+  });
+
+  it.each([
+    [
+      1,
+      2,
+      [
+        { kind: "new", slot: 2, afterGroupId: "g3" },
+        { kind: "new", slot: 1, afterGroupId: "g3" },
+      ],
+    ],
+    [
+      2,
+      1,
+      [
+        { kind: "new", slot: 2, afterGroupId: "g1" },
+        { kind: "new", slot: 1, afterGroupId: "g1" },
+      ],
+    ],
+  ])("moves slot %s to %s at the destination's held-group anchor", (from, to, places) => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 2, afterGroupId: "g3" } },
+    ]);
+    store.moveSlot(from as number, to as number);
+    expect(store.lines.map((line) => line.place)).toEqual(places);
+  });
+
+  it("keeps placement edits out while sending", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [{ product: cafe, quantity: "1", place: { kind: "new", slot: 1 } }]);
+    store.sending = true;
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.setLinePlaces([0], { kind: "fire" });
+    store.insertSlotAfter(null);
+    store.moveSlot(1, 2);
+    expect(store.lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+    expect(store.dirty).toBe(false);
+    expect(changes).toBe(0);
+  });
+
+  it("can move an anchored slot to a group after all held groups", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 1, afterGroupId: "g1" } },
+      { product: cafe, quantity: "1", place: { kind: "new", slot: 2 } },
+    ]);
+    store.moveSlot(1, 2);
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+    ]);
+  });
+
   it.each(["addProduct", "addMerging"] as const)(
     "period selection refuses %s after the picker opened",
     (method) => {

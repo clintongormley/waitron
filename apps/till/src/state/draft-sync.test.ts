@@ -3,6 +3,7 @@ import { draftServer, type DraftServer } from "../widgets/test-helpers.js";
 import {
   DRAFT_SAVE_DELAY_MS,
   DraftSync,
+  DraftStore,
   SUBMIT_RETRIES,
   SUBMIT_RETRY_PAUSE_MS,
   pause,
@@ -10,6 +11,8 @@ import {
 } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
 import type { Draft, DraftLine, TillProduct } from "../api/client.js";
+import type { Place } from "./draft-place.js";
+import { fromDraftLine } from "./draft-lines.js";
 
 const dish = (id: string, name: string): TillProduct => ({
   id,
@@ -565,6 +568,158 @@ describe("DraftSync: after a submission", () => {
 });
 
 describe("DraftSync: a party's draft store", () => {
+  it.each([
+    { slot: 2, joinGroupId: null, afterGroupId: null },
+    { slot: 0, joinGroupId: "g3", afterGroupId: null },
+    { slot: 1, joinGroupId: null, afterGroupId: "g3" },
+  ])(
+    "takes a save's changed placement %j instead of keeping a different arrangement",
+    async (wire) => {
+      const draft = new DraftSync({
+        api: server,
+        partyId: "v1",
+        personId: "p1",
+        rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
+        onRefused: (code) => refused.push(code),
+        requestLimitMs: LIMIT,
+      });
+      await draft.load();
+      draft.store.placer = () => ({ place: { kind: "new", slot: 1 } });
+      draft.store.addProduct(steak, "1");
+      server.saveDraft.mockImplementationOnce(async (party, input) => {
+        const result = server.save(party, input);
+        return { ...result, lines: result.lines.map((line) => ({ ...line, ...wire })) };
+      });
+      expect(await draft.flush()).toBe("saved");
+      expect(draft.store.lines[0]!.place).toEqual(
+        wire.joinGroupId === null
+          ? {
+              kind: "new",
+              slot: wire.slot,
+              ...(wire.afterGroupId === null ? {} : { afterGroupId: wire.afterGroupId }),
+            }
+          : { kind: "join", groupId: "g3" },
+      );
+      expect(refused).toEqual([]);
+      draft.drop();
+    },
+  );
+
+  it("keeps line identity when the saved arrangement matches", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.placer = () => ({ place: { kind: "new", slot: 2, afterGroupId: "g3" } });
+    draft.store.addProduct(steak, "1");
+    const line = draft.store.lines[0];
+    expect(await draft.flush()).toBe("saved");
+    expect(draft.store.lines[0]).toBe(line);
+    expect(server.drafts[0]!.lines[0]).toMatchObject({
+      slot: 2,
+      joinGroupId: null,
+      afterGroupId: "g3",
+    });
+    draft.drop();
+  });
+
+  it("does not shift another line when an addition exceeds the order limit", () => {
+    const store = new DraftStore();
+    store.addProduct(beer, "1");
+    store.lines[0]!.place = { kind: "new", slot: 1 };
+    store.simplifiedInvoiceLimit = "3.00";
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.markPersisted();
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.addProduct(steak, "1");
+    expect(store.lines.map((line) => ({ product: line.product.id, place: line.place }))).toEqual([
+      { product: "beer", place: { kind: "new", slot: 1 } },
+    ]);
+    expect(changed).not.toHaveBeenCalled();
+    expect(store.dirty).toBe(false);
+  });
+
+  it("shifts other groups when changing a line's course inserts an earlier slot", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [
+      { product: steak, quantity: "1", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+    ]);
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.setLineCourse(1, "mains");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+    ]);
+  });
+
+  it("places additions by their effective course and merges only matching places", () => {
+    const store = new DraftStore();
+    let place: Place = { kind: "new", slot: 1 };
+    const courses: (string | null)[] = [];
+    store.placer = (courseId) => {
+      courses.push(courseId);
+      return { place };
+    };
+    store.addProduct({ ...steak, courseId: "mains" }, "1");
+    store.addProduct({ ...steak, courseId: "mains" }, "2");
+    place = { kind: "fire" };
+    store.addProduct({ ...steak, courseId: "mains" }, "1");
+    expect(store.lines.map((line) => ({ quantity: line.quantity, place: line.place }))).toEqual([
+      { quantity: "3", place: { kind: "new", slot: 1 } },
+      { quantity: "1", place: { kind: "fire" } },
+    ]);
+    expect(courses).toEqual(["mains", "mains", "mains"]);
+  });
+
+  it("shifts existing slots before adding a line without merging into the displaced slot", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [{ product: steak, quantity: "1", place: { kind: "new", slot: 1 } }]);
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.placer = () => ({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
+    store.addMerging(steak, "1");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+    ]);
+    expect(store.lines.map((line) => line.quantity)).toEqual(["1", "1"]);
+    expect(changed).toHaveBeenCalledOnce();
+  });
+
+  it("re-places only the changed course, excluding that line from the placement context", () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [
+      { product: { ...steak, courseId: "mains" }, quantity: "1", place: { kind: "new", slot: 1 } },
+      { product: beer, quantity: "1", place: { kind: "fire" } },
+    ]);
+    const calls: unknown[] = [];
+    store.placer = (courseId, exceptIndex) => {
+      calls.push([courseId, exceptIndex]);
+      return { place: { kind: "join", groupId: "g3" } };
+    };
+    const changed = vi.fn();
+    store.subscribe(changed);
+    store.setLineCourse(0, "desserts");
+    expect(store.lines.map((line) => line.place)).toEqual([
+      { kind: "join", groupId: "g3" },
+      { kind: "fire" },
+    ]);
+    expect(calls).toEqual([["desserts", 0]]);
+    expect(changed).toHaveBeenCalledOnce();
+    store.setLineCourse(0, undefined);
+    expect(calls).toEqual([
+      ["desserts", 0],
+      ["mains", 0],
+    ]);
+    expect(store.lines[0]!.courseId).toBeUndefined();
+  });
+
+  it("leaves an unseated store's additions unplaced", () => {
+    const store = new DraftStore();
+    store.addProduct(steak, "1");
+    expect(store.lines[0]).not.toHaveProperty("place");
+  });
+
   it("adds a tap into the line ordering the same thing", () => {
     const draft = sync();
     draft.store.addProduct(beer, "1");

@@ -9,6 +9,7 @@ import {
 } from "../api/client.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import { WorkingOrderStore, type LineSelection, type OrderLine } from "./working-order.js";
+import type { placeFor } from "./draft-place.js";
 
 /** How long after a person's last edit their draft is saved. */
 export const DRAFT_SAVE_DELAY_MS = 400;
@@ -23,6 +24,8 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
 
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
+  declare placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
+
   override addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     this.addMerging(product, quantity, selection);
   }
@@ -149,6 +152,9 @@ function lineKey(input: DraftLineInput): string {
     input.courseId,
     input.makeAt ?? null,
     input.noMerge,
+    input.slot,
+    input.joinGroupId,
+    input.afterGroupId,
     input.options.map((answer) => `${answer.listId} ${answer.labelId}`).sort(),
     input.extras
       .flatMap(({ listId, picks }) =>

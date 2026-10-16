@@ -40,9 +40,9 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
     courseId: line.courseId ?? null,
     ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
-    slot: 0,
-    joinGroupId: null,
-    afterGroupId: null,
+    slot: line.place?.kind === "new" ? line.place.slot : 0,
+    joinGroupId: line.place?.kind === "join" ? line.place.groupId : null,
+    afterGroupId: line.place?.kind === "new" ? (line.place.afterGroupId ?? null) : null,
   };
 }
 
@@ -91,6 +91,17 @@ export function fromDraftLine(
   const snapshots = line.options.flatMap((answer) => snapshotOf(offer, answer));
   return {
     product,
+    ...(line.joinGroupId !== null
+      ? { place: { kind: "join" as const, groupId: line.joinGroupId } }
+      : line.slot > 0
+        ? {
+            place: {
+              kind: "new" as const,
+              slot: line.slot,
+              ...(line.afterGroupId === null ? {} : { afterGroupId: line.afterGroupId }),
+            },
+          }
+        : {}),
     quantity:
       offer === undefined ? trimQuantity(line.quantity) : displayQuantity(product, line.quantity),
     ...(offer === undefined ? { notOffered: true as const, blocked: "removed" as const } : {}),
