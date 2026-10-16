@@ -447,3 +447,224 @@ it("a freshly confirmed committed unsigned promotion returns the exact result wi
   expect(replay).toEqual(first);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
+
+function retiredSetup(prefix: "S" | "P", floor: number) {
+  const f = fixture();
+  const scope = f.facts.history.scope;
+  const history = {
+    format: "waitron-paper-register",
+    version: 2,
+    integrity: "owner-declared",
+    registerId: "retired-register",
+    scope,
+    mode: "checkpoint",
+    originals: [],
+    revisions: [],
+    checkpoint: {
+      version: 2,
+      kind: "declared-burn-checkpoint",
+      checkpointId: "retired-42",
+      scope,
+      sHighWater: prefix === "S" ? floor : 0,
+      pHighWater: prefix === "P" ? floor : 0,
+      current: f.facts.current,
+      completeHistoryUnavailable: true,
+      burnAllPrior: true,
+      createdAt: time,
+    },
+  };
+  return {
+    context: {
+      attemptId: "old-setup",
+      binding: {
+        module: "fiscal-verifactu",
+        action: "setup",
+        eventId: "old-setup-event",
+        sourceId: "first-setup:old-setup",
+        targetNodeId: "old-setup-node",
+      },
+      administratorId: "old-admin",
+      country: "ES",
+      taxId: scope.taxpayerNif,
+      environment: scope.environment,
+      recipientVenueId: "first-setup:old-setup",
+      bases,
+    },
+    input: undefined,
+    publicEvidence: [{ knownHistory: history }],
+  };
+}
+it.each(
+  ["reserve", "establish", "promote"].flatMap((action) =>
+    [41, 42, 43].map((serial) => [action, serial] as const),
+  ),
+)("configured unsigned %s checks serial %s against retired public P42", async (action, serial) => {
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  {
+    const f = fixture(serial);
+    const p = consumption(f);
+    if (action === "promote") await prepare(f, "establish");
+    const binding = action === "promote" ? p.binding : { ...f.binding, action };
+    const input =
+      action === "promote" ? { ...p.input, reservationEventId: f.binding.eventId } : f.input;
+    const current = action === "promote" ? p.facts : { ...f.facts, binding };
+    const preparation = FISCAL_OPERATIONS.configure!({
+      environment: {},
+      readPublicEvidence: async () => ({ trust: null, current }),
+      readRetiredSetup: async () => [retiredSetup("P", 42)],
+    });
+    const run = () =>
+      withOperationAuthority(binding, action === "promote" ? p.operator : "manager", (authority) =>
+        preparation.prepare({ binding, authority, input }, (op) =>
+          withTransaction<unknown>(suite.db, (tx) =>
+            action === "reserve"
+              ? ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op)
+              : action === "establish"
+                ? ALLOCATED_FISCAL_STANDBY.establish!(
+                    tx,
+                    target,
+                    { version: 1, evidence: f.input },
+                    op,
+                  )
+                : activatePreparedModuleAllocation(tx, target, op),
+          ),
+        ),
+      );
+    if (serial <= 42) {
+      await expect(run()).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "reservation_mismatch" },
+      });
+      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      if (action !== "promote")
+        expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+    } else {
+      const result = await run();
+      if (action === "reserve")
+        expect(result).toEqual({ state: { version: 1, evidence: f.input } });
+      else if (action === "promote")
+        expect((result as { series: { code: string }[] }).series.map((s) => s.code)).toEqual([
+          "A-P000043",
+          "FF-P000043",
+          "R-P000043",
+        ]);
+    }
+  }
+});
+
+it.each(["eventId", "targetNodeId"] as const)(
+  "a fresh P43 allocation cannot reuse the retired setup %s",
+  async (field) => {
+    const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+    const f = fixture(),
+      retired = retiredSetup("P", 42);
+    retired.context.binding[field] = f.binding[field];
+    const preparation = FISCAL_OPERATIONS.configure!({
+      environment: {},
+      readPublicEvidence: async () => ({ trust: null, current: f.facts }),
+      readRetiredSetup: async () => [retired],
+    });
+    await expect(
+      withOperationAuthority(f.binding, "manager", (authority) =>
+        preparation.prepare({ binding: f.binding, authority, input: f.input }, (op) =>
+          withTransaction(suite.db, (tx) =>
+            ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op),
+          ),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_mismatch" },
+    });
+    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+  },
+);
+
+it("retirement checks preserve the domain refusal for a malformed signed block", async () => {
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const f = fixture();
+  const preparation = FISCAL_OPERATIONS.configure!({
+    environment: {},
+    readPublicEvidence: async () => undefined,
+    readRetiredSetup: async () => [retiredSetup("P", 42)],
+  });
+  await expect(
+    withOperationAuthority(f.binding, "manager", (authority) =>
+      preparation.prepare(
+        {
+          binding: f.binding,
+          authority,
+          input: {
+            block: { payload: { allocations: [null] } },
+            reservation: { payload: { allocationId: "x" } },
+          },
+        },
+        async () => "must refuse",
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "outside_confirmation_missing" },
+  });
+});
+
+it("retirement reads preserve the input that began preparation across caller mutation", async () => {
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const f = fixture(),
+    current = structuredClone(f.facts);
+  let reached!: () => void, release!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const preparation = FISCAL_OPERATIONS.configure!({
+    environment: {},
+    readPublicEvidence: async () => ({ trust: null, current }),
+    readRetiredSetup: async () => {
+      reached();
+      await waiting;
+      return [retiredSetup("P", 42)];
+    },
+  });
+  const result = await withOperationAuthority(f.binding, "manager", async (authority) => {
+    const pending = preparation.prepare({ binding: f.binding, authority, input: f.input }, (op) =>
+      withTransaction(suite.db, (tx) => ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op)),
+    );
+    await reading;
+    Object.assign(f.input, fixture(41).input);
+    release();
+    return pending;
+  });
+  expect(result).toEqual({ state: { version: 1, evidence: current.input } });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
+
+it.each(["symbol", "non-enumerable", "function"])(
+  "the asynchronous retirement snapshot cannot discard an input's forbidden %s field",
+  async (which) => {
+    const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+    const f = fixture(),
+      current = structuredClone(f.facts);
+    Object.defineProperty(f.input, which === "symbol" ? Symbol("injected") : "injected", {
+      value: which === "function" ? () => true : true,
+      enumerable: which !== "non-enumerable",
+    });
+    const preparation = FISCAL_OPERATIONS.configure!({
+      environment: {},
+      readPublicEvidence: async () => ({ trust: null, current }),
+      readRetiredSetup: async () => [retiredSetup("P", 42)],
+    });
+    await expect(
+      withOperationAuthority(f.binding, "manager", (authority) =>
+        preparation.prepare({ binding: f.binding, authority, input: f.input }, (op) =>
+          withTransaction(suite.db, (tx) =>
+            ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op),
+          ),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+  },
+);

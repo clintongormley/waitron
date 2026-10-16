@@ -1,4 +1,5 @@
 import type { OperationBinding } from "./operation-authority.js";
+import type { InitialSetupContext } from "./initial-setup.js";
 import type { WaitronModule } from "./module.js";
 import { AppError } from "@waitron/shared";
 import {
@@ -10,6 +11,13 @@ import {
 
 export interface ModuleOperationHost {
   readonly environment: Readonly<Record<string, string | undefined>>;
+  readRetiredSetup?(module: string): Promise<
+    readonly {
+      readonly context: InitialSetupContext;
+      readonly input: unknown;
+      readonly publicEvidence: readonly unknown[];
+    }[]
+  >;
   readPublicEvidence(
     binding: OperationBinding,
   ): Promise<{ trust: unknown; current: unknown } | undefined>;

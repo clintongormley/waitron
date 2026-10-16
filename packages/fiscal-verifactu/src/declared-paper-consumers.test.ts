@@ -345,3 +345,77 @@ it.each(["setup", "restore"])(
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   },
 );
+
+it.each(
+  ["reserve", "establish"].flatMap((action) => [40, 43].map((serial) => [action, serial] as const)),
+)("configured signed %s excludes retired public P42 for serial %s", async (action, serial) => {
+  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  await registerPrimary();
+  const root = await mkdtemp(join(tmpdir(), "retired-signed-standby-"));
+  try {
+    const f = allocationFixture({
+      node: target,
+      primary,
+      bases,
+      identity: `P${String(serial).padStart(6, "0")}`,
+    });
+    const req = f.request(action),
+      custodianPath = join(root, "trust.json"),
+      confirmationPath = join(root, "current.json");
+    await writeFile(custodianPath, JSON.stringify(f.custodian));
+    await writeFile(confirmationPath, JSON.stringify(req.confirmation));
+    const preparation = FISCAL_OPERATIONS.configure!({
+      environment: {
+        WAITRON_FISCAL_CUSTODIAN_FILE: custodianPath,
+        WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: f.custodian.fingerprint,
+        WAITRON_FISCAL_CONFIRMATION_FILE: confirmationPath,
+      },
+      readPublicEvidence: async () => undefined,
+      readRetiredSetup: async () => [
+        {
+          context: {
+            attemptId: "retired",
+            binding: {
+              module: "fiscal-verifactu",
+              action: "setup",
+              eventId: "retired-event",
+              sourceId: "first-setup:retired",
+              targetNodeId: "retired-node",
+            },
+            administratorId: "retired-admin",
+            country: "ES",
+            taxId: "89890001K",
+            environment: "preproduction",
+            recipientVenueId: "first-setup:retired",
+            bases,
+          },
+          input: undefined,
+          publicEvidence: [{ knownHistory: checkpoint("P") }],
+        },
+      ],
+    });
+    const run = () =>
+      withOperationAuthority(req.binding, req.operatorId, (authority) =>
+        preparation.prepare({ binding: req.binding, authority, input: req.input }, (op) =>
+          withTransaction<unknown>(suite.db, (tx) =>
+            action === "reserve"
+              ? ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op)
+              : ALLOCATED_FISCAL_STANDBY.establish!(tx, target, f.state, op),
+          ),
+        ),
+      );
+    if (serial === 40) {
+      await expect(run()).rejects.toMatchObject(refusal);
+      expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
+    } else {
+      const result = await run();
+      if (action === "reserve") expect(result).toEqual({ state: f.state });
+      else
+        expect((await suite.db.select().from(fiscalReservations))[0]?.installationIdentity).toBe(
+          "P000043",
+        );
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

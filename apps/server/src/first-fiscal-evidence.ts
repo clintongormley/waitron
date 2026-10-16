@@ -84,6 +84,53 @@ export function firstSetupModuleContext(
     request: module.request,
   };
 }
+function parsePublicEvidenceFile(value: unknown): PublicEvidenceFile {
+  if (
+    !exact(value, ["version", "modules", "history"]) ||
+    value.version !== 1 ||
+    !record(value.modules) ||
+    !Array.isArray(value.history)
+  )
+    refuse();
+  for (const [name, enrolled] of Object.entries(value.modules)) {
+    if (
+      !/^[a-z][a-z0-9-]*$/.test(name) ||
+      !exact(enrolled, ["attemptId", "publicKey", "comparison", "trust"]) ||
+      typeof enrolled.attemptId !== "string"
+    )
+      refuse();
+  }
+  for (const entry of value.history) {
+    if (
+      !exact(entry, ["attemptId", "revision", "ownerGeneration", "module", "current"]) ||
+      typeof entry.attemptId !== "string" ||
+      typeof entry.module !== "string" ||
+      !Number.isSafeInteger(entry.revision) ||
+      !Number.isSafeInteger(entry.ownerGeneration)
+    )
+      refuse();
+  }
+  return value as unknown as PublicEvidenceFile;
+}
+
+export function readFirstFiscalEvidenceSnapshot(
+  module: string,
+  originals: readonly { name: string; bytes: Uint8Array | null }[],
+): unknown[] {
+  const bytes = originals.find(
+    (entry) => entry.name === "state/module-operation-public.json",
+  )?.bytes;
+  if (bytes == null) return [];
+  try {
+    if (bytes.length > 64 * 1024) throw new AppError("setup.attempt_invalid", {});
+    return parsePublicEvidenceFile(JSON.parse(Buffer.from(bytes).toString("utf8")))
+      .history.filter((entry) => entry.module === module)
+      .map((entry) => entry.current);
+  } catch {
+    throw new AppError("setup.attempt_invalid", {});
+  }
+}
+
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
   const path = join(options.stateDir, "module-operation-public.json");
   const grants = new Map<
@@ -119,33 +166,7 @@ export function createFirstFiscalEvidence(options: EvidenceOptions) {
   };
   const readFile = async (): Promise<PublicEvidenceFile | null> => {
     const value = await readDurableHostJson(path, 64 * 1024);
-    if (value === null) return null;
-    if (
-      !exact(value, ["version", "modules", "history"]) ||
-      value.version !== 1 ||
-      !record(value.modules) ||
-      !Array.isArray(value.history)
-    )
-      refuse();
-    for (const [name, enrolled] of Object.entries(value.modules)) {
-      if (
-        !/^[a-z][a-z0-9-]*$/.test(name) ||
-        !exact(enrolled, ["attemptId", "publicKey", "comparison", "trust"]) ||
-        typeof enrolled.attemptId !== "string"
-      )
-        refuse();
-    }
-    for (const entry of value.history) {
-      if (
-        !exact(entry, ["attemptId", "revision", "ownerGeneration", "module", "current"]) ||
-        typeof entry.attemptId !== "string" ||
-        typeof entry.module !== "string" ||
-        !Number.isSafeInteger(entry.revision) ||
-        !Number.isSafeInteger(entry.ownerGeneration)
-      )
-        refuse();
-    }
-    return value as unknown as PublicEvidenceFile;
+    return value === null ? null : parsePublicEvidenceFile(value);
   };
   const enrolledTrust = (state: FirstSetupState, name: string, entry: Enrolled | undefined) => {
     if (entry === undefined || entry.attemptId !== state.frozen.attemptId) refuse();

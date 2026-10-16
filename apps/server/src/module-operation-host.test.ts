@@ -183,3 +183,29 @@ it("binds configured outside evidence and invalidates every live confirmation af
     await f.dispose();
   }
 });
+
+it.each(["restore", "promote", "reserve", "establish"])(
+  "the first-setup evidence host leaves ordinary %s to its configured outside source",
+  async (action) => {
+    const { declaredFirstFiscalFixture } = await import("../test/declared-first-fiscal.js");
+    const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
+    const f = await declaredFirstFiscalFixture();
+    try {
+      const host = createFirstSetupModuleHost({
+        stateDir: f.stateDir,
+        venueDir: f.venueDir,
+        modules: f.modules,
+        environment: {},
+      });
+      expect(
+        await host.evidence.read({ ...f.context.binding, action, sourceId: "normal-operation" }),
+      ).toBeUndefined();
+      await expect(host.evidence.read(f.context.binding)).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "outside_confirmation_missing" },
+      });
+    } finally {
+      await f.dispose();
+    }
+  },
+);

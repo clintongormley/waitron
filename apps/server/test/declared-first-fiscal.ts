@@ -23,7 +23,12 @@ import { firstSetupModuleContext } from "../src/first-fiscal-evidence.js";
 import { request, PASSWORD, MODULE } from "./first-fiscal.js";
 export const publicDigest = (value: unknown) =>
   createHash("sha256").update(declaredHistoryBytes(value)).digest("hex");
-export async function declaredFirstFiscalFixture() {
+export async function declaredFirstFiscalFixture(options?: {
+  extendHistory(
+    history: DeclaredRegisterHistory,
+    context: import("@waitron/module").InitialSetupContext,
+  ): DeclaredRegisterHistory;
+}) {
   const root = await mkdtemp(join(tmpdir(), "declared-delivery-"));
   try {
     const stateDir = join(root, "state"),
@@ -97,7 +102,7 @@ export async function declaredFirstFiscalFixture() {
       softwareId: "W1",
       environment: context.environment,
     };
-    const history: DeclaredRegisterHistory = {
+    let history: DeclaredRegisterHistory = {
       format: "waitron-paper-register",
       version: 2,
       integrity: "owner-declared",
@@ -119,6 +124,7 @@ export async function declaredFirstFiscalFixture() {
         },
       ],
     };
+    history = options?.extendHistory(history, context) ?? history;
     const input = {
       allocation: {
         ...allocation,

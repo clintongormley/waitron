@@ -21,6 +21,11 @@ export interface InitialSetupImport {
 }
 
 export interface InitialSetupContribution {
+  retainedAssignments?(evidence: unknown): {
+    readonly keys: readonly string[];
+    readonly positions: readonly { namespace: string; position: number }[];
+  };
+
   assignmentPositions?(
     context: InitialSetupContext,
     input?: unknown,

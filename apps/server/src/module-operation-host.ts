@@ -16,19 +16,34 @@ import {
   createFirstSetupStore,
   planVenue,
   venueFiscalSelection,
-  readRetiredFirstSetupStates,
+  readFirstSetupRetirements,
+  firstSetupAnchorFor,
+  createFirstSetupResolutionStore,
 } from "@waitron/provisioning";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
-import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
+import {
+  createFirstFiscalDelivery,
+  readFirstFiscalDeliverySnapshot,
+} from "./first-fiscal-delivery.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
-import { firstSetupModuleContext, createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
+import {
+  firstSetupModuleContext,
+  createFirstFiscalEvidence,
+  readFirstFiscalEvidenceSnapshot,
+} from "./first-fiscal-evidence.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
-  evidence?: { read: ModuleOperationHost["readPublicEvidence"] },
+  evidence?: {
+    read: ModuleOperationHost["readPublicEvidence"];
+    readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
+  },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
+    ...(evidence?.readRetiredSetup === undefined
+      ? {}
+      : { readRetiredSetup: evidence.readRetiredSetup }),
     readPublicEvidence: async (binding: OperationBinding) => evidence?.read(binding),
   });
 }
@@ -53,11 +68,42 @@ export function createFirstSetupModuleHost(options: {
       invalidate(attemptId: string): void;
     };
   } = {};
+  const coordinator = createFirstSetupCoordinator();
+  const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> = async (name) => {
+    const retired = await readFirstSetupRetirements(options);
+    if (retired.length === 0) return [];
+    const anchor = await firstSetupAnchorFor(options);
+    const archive = createFirstSetupResolutionStore({ ...anchor, coordinator });
+    const result: Awaited<ReturnType<typeof readRetiredSetup>>[number][] = [];
+    for (const { state, record } of retired) {
+      const originals = await archive.readOriginals(record.resolutionId);
+      const publicEvidence = readFirstFiscalEvidenceSnapshot(name, originals);
+      for (const original of originals) {
+        if (!original.name.startsWith("outside-file:") || original.bytes === null) continue;
+        try {
+          publicEvidence.push(JSON.parse(original.bytes.toString("utf8")) as unknown);
+        } catch {
+          throw new AppError("setup.attempt_invalid", {});
+        }
+      }
+      const document = await readFirstFiscalDeliverySnapshot(name, state, originals);
+      if (document !== undefined) publicEvidence.push(document);
+      for (const attempt of [state, ...state.previous]) {
+        if (!attempt.frozen.modules.some((entry) => entry.module === name)) continue;
+        result.push({
+          context: firstSetupModuleContext(attempt, name),
+          input: attempt.inputs[name],
+          publicEvidence,
+        });
+      }
+    }
+    return result;
+  };
   const host = createModuleOperationHost(options.environment, {
     read: async (binding) => evidence.current?.read(binding),
+    readRetiredSetup,
   });
   const modules = configureModuleOperations(options.modules, host);
-  const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...options, coordinator });
   const retained = modules.flatMap((module) => {
     const sources = module.provisioning?.initialSetup?.resolutionEvidence?.();
@@ -140,16 +186,35 @@ export function createFirstSetupModuleHost(options: {
     const context = firstSetupModuleContext(state, name);
     const candidates = new Set(seat.assignmentKeys?.(context, input) ?? []);
     const positions = seat.assignmentPositions?.(context, input) ?? [];
-    const retired = await readRetiredFirstSetupStates(options);
+    const retired = await readRetiredSetup(name);
+    const retainedFacts = retired.flatMap((entry) =>
+      entry.publicEvidence
+        .map((value) => seat.retainedAssignments?.(value))
+        .filter((value) => value !== undefined),
+    );
+    for (const facts of retainedFacts) {
+      if (
+        facts.keys.some((key) => candidates.has(key)) ||
+        facts.positions.some((floor) =>
+          positions.some(
+            (value) => value.namespace === floor.namespace && value.position <= floor.position,
+          ),
+        )
+      )
+        throw new AppError("setup.attempt_conflict", {});
+    }
     for (const old of [
-      ...state.previous,
-      ...retired.flatMap((entry) => [entry, ...entry.previous]),
+      ...state.previous
+        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === name))
+        .map((attempt) => ({
+          context: firstSetupModuleContext(attempt, name),
+          input: attempt.inputs[name],
+        })),
+      ...retired,
     ]) {
-      if (!old.frozen.modules.some((entry) => entry.module === name)) continue;
-      const context = firstSetupModuleContext(old, name);
-      for (const key of seat.assignmentKeys?.(context, old.inputs[name]) ?? [])
+      for (const key of seat.assignmentKeys?.(old.context, old.input) ?? [])
         if (candidates.has(key)) throw new AppError("setup.attempt_conflict", {});
-      for (const floor of seat.assignmentPositions?.(context, old.inputs[name]) ?? [])
+      for (const floor of seat.assignmentPositions?.(old.context, old.input) ?? [])
         if (
           positions.some(
             (value) => value.namespace === floor.namespace && value.position <= floor.position,

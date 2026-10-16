@@ -116,6 +116,102 @@ function input(value: unknown, kept: boolean): FirstFiscalDeliveryInput | FirstF
     refuse();
   return value as unknown as FirstFiscalDeliveryInput | FirstFiscalKeptInput;
 }
+function readDeliveryManifest(module: string, v: unknown): Manifest | null {
+  if (!name(module)) refuse();
+  if (v === null) return null;
+  if (
+    !exact(v, [
+      "version",
+      "id",
+      "module",
+      "attemptId",
+      "revision",
+      "ownerGeneration",
+      "frozenDigest",
+      "stage",
+      "inputDigest",
+      "historyDigest",
+      "documentDigest",
+      "publicDigest",
+      "length",
+      "chunks",
+    ]) ||
+    v.version !== 1 ||
+    v.module !== module ||
+    typeof v.id !== "string" ||
+    !/^[a-f0-9-]{36}$/.test(v.id) ||
+    typeof v.attemptId !== "string" ||
+    ![v.revision, v.ownerGeneration, v.length, v.chunks].every(
+      (x) => typeof x === "number" && Number.isSafeInteger(x) && x > 0,
+    ) ||
+    ![v.frozenDigest, v.inputDigest, v.historyDigest, v.documentDigest, v.publicDigest].every(
+      hex,
+    ) ||
+    Number(v.length) > MAX ||
+    v.chunks !== Math.ceil(Number(v.length) / CHUNK)
+  )
+    invalid();
+  return v as unknown as Manifest;
+}
+async function readDeliveryPublic(m: Manifest, read: (name: string) => Promise<unknown>) {
+  const parts: Buffer[] = [];
+  for (let i = 0; i < m.chunks; i++) {
+    const chunk = await read(`${m.id}-${i}.json`);
+    if (!exact(chunk, ["data"]) || typeof chunk.data !== "string" || chunk.data.length > 44000)
+      invalid();
+    const bytes = Buffer.from(chunk.data, "base64");
+    if (
+      bytes.toString("base64") !== chunk.data ||
+      bytes.length !== (i === m.chunks - 1 ? m.length - i * CHUNK : CHUNK)
+    )
+      invalid();
+    parts.push(bytes);
+  }
+  const bytes = Buffer.concat(parts);
+  if (bytes.length !== m.length || hash(bytes) !== m.publicDigest) invalid();
+  try {
+    return JSON.parse(bytes.toString("utf8")) as unknown;
+  } catch {
+    return invalid();
+  }
+}
+
+export async function readFirstFiscalDeliverySnapshot(
+  module: string,
+  state: FirstSetupState,
+  originals: readonly { name: string; bytes: Uint8Array | null }[],
+): Promise<unknown | undefined> {
+  const read = async (name: string) => {
+    const bytes = originals.find(
+      (entry) => entry.name === `state/first-fiscal-documents/${name}`,
+    )?.bytes;
+    if (bytes == null) return null;
+    if (bytes.length > 48000) invalid();
+    try {
+      return JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown;
+    } catch {
+      return invalid();
+    }
+  };
+  const manifest = readDeliveryManifest(module, await read(`${module}.json`));
+  if (manifest === null) {
+    if (
+      originals.some(
+        (entry) => entry.name.startsWith("state/first-fiscal-documents/") && entry.bytes !== null,
+      )
+    )
+      invalid();
+    return undefined;
+  }
+  if (
+    manifest.attemptId !== state.frozen.attemptId ||
+    manifest.frozenDigest !== firstSetupFrozenDigest(state) ||
+    manifest.inputDigest !== firstFiscalPublicDigest(state.inputs[module])
+  )
+    invalid();
+  return readDeliveryPublic(manifest, read);
+}
+
 export function createFirstFiscalDelivery(options: Options) {
   const root = join(options.stateDir, "first-fiscal-documents");
   const grants = new Map<string, { manifest: Manifest; expires: number; bootId: string }>();
@@ -141,66 +237,10 @@ export function createFirstFiscalDelivery(options: Options) {
       refuse();
     return contribution;
   };
-  const readManifest = async (module: string): Promise<Manifest | null> => {
-    if (!name(module)) refuse();
-    const v = await readDurableHostJson(join(root, `${module}.json`), 8192);
-    if (v === null) return null;
-    if (
-      !exact(v, [
-        "version",
-        "id",
-        "module",
-        "attemptId",
-        "revision",
-        "ownerGeneration",
-        "frozenDigest",
-        "stage",
-        "inputDigest",
-        "historyDigest",
-        "documentDigest",
-        "publicDigest",
-        "length",
-        "chunks",
-      ]) ||
-      v.version !== 1 ||
-      v.module !== module ||
-      typeof v.id !== "string" ||
-      !/^[a-f0-9-]{36}$/.test(v.id) ||
-      typeof v.attemptId !== "string" ||
-      ![v.revision, v.ownerGeneration, v.length, v.chunks].every(
-        (x) => typeof x === "number" && Number.isSafeInteger(x) && x > 0,
-      ) ||
-      ![v.frozenDigest, v.inputDigest, v.historyDigest, v.documentDigest, v.publicDigest].every(
-        hex,
-      ) ||
-      Number(v.length) > MAX ||
-      v.chunks !== Math.ceil(Number(v.length) / CHUNK)
-    )
-      invalid();
-    return v as unknown as Manifest;
-  };
-  const readPublic = async (m: Manifest) => {
-    const parts: Buffer[] = [];
-    for (let i = 0; i < m.chunks; i++) {
-      const chunk = await readDurableHostJson(join(root, `${m.id}-${i}.json`), 48000);
-      if (!exact(chunk, ["data"]) || typeof chunk.data !== "string" || chunk.data.length > 44000)
-        invalid();
-      const bytes = Buffer.from(chunk.data, "base64");
-      if (
-        bytes.toString("base64") !== chunk.data ||
-        bytes.length !== (i === m.chunks - 1 ? m.length - i * CHUNK : CHUNK)
-      )
-        invalid();
-      parts.push(bytes);
-    }
-    const bytes = Buffer.concat(parts);
-    if (bytes.length !== m.length || hash(bytes) !== m.publicDigest) invalid();
-    try {
-      return JSON.parse(bytes.toString("utf8")) as unknown;
-    } catch {
-      return invalid();
-    }
-  };
+  const readManifest = async (module: string) =>
+    readDeliveryManifest(module, await readDurableHostJson(join(root, `${module}.json`), 8192));
+  const readPublic = (m: Manifest) =>
+    readDeliveryPublic(m, (name) => readDurableHostJson(join(root, name), 48000));
   const matches = (
     m: Manifest,
     state: FirstSetupState,

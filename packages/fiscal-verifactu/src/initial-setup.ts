@@ -29,7 +29,7 @@ import {
   readDeclaredPaperConfirmation,
   type DeclaredPaperEvidence,
 } from "./declared-paper-evidence.js";
-import { projectDeclaredHistory } from "./paper-register-history.js";
+import { parseDeclaredHistory, projectDeclaredHistory } from "./paper-register-history.js";
 import {
   createInitialCloudRequest,
   readInitialCloudRequest,
@@ -39,6 +39,7 @@ import {
   confirmInitialCloudSetup,
   readInitialCloudConfirmation,
 } from "./initial-cloud-setup.js";
+import type { KnownRegisterEvidence } from "./paper-register-protocol.js";
 import type { ReceiptTrust } from "./cloud-evidence.js";
 import { isAllocatedSeries } from "./allocation-identity.js";
 
@@ -281,6 +282,64 @@ function createInitialSetup(
     return { scope, allocations, operationId };
   };
   const contribution: InitialSetupContribution = {
+    retainedAssignments(evidence) {
+      if (!record(evidence)) refuse();
+      const value =
+        evidence.format === "waitron-paper-register"
+          ? evidence
+          : (evidence.knownHistory ?? evidence.history);
+      if (value === undefined) return { keys: [], positions: [] };
+      const history = parseDeclaredHistory(value);
+      const knownKeys = [
+        "scope",
+        "sHighWater",
+        "pHighWater",
+        "sBurnFloor",
+        "pBurnFloor",
+        "currentHead",
+        "retainedHeads",
+        "originals",
+        "retiredBindings",
+      ];
+      if (
+        evidence.known !== undefined &&
+        (!record(evidence.known) ||
+          !exact(
+            evidence.known,
+            Object.hasOwn(evidence.known, "history") ? [...knownKeys, "history"] : knownKeys,
+          ))
+      )
+        refuse();
+      const projection = projectDeclaredHistory(
+        history,
+        (evidence.known as KnownRegisterEvidence | undefined) ?? {
+          scope: history.scope,
+          sHighWater: 0,
+          pHighWater: 0,
+          sBurnFloor: 0,
+          pBurnFloor: 0,
+          currentHead: null,
+          retainedHeads: [],
+          originals: [],
+          retiredBindings: [],
+        },
+      );
+      const scope = [
+        history.scope.taxpayerNif,
+        history.scope.softwareId,
+        history.scope.environment,
+      ];
+      return {
+        keys: projection.occupied.flatMap(({ allocation }) => [
+          JSON.stringify([...scope, "allocation", allocation.allocationId]),
+          JSON.stringify([...scope, "installation", allocation.installationIdentity]),
+        ]),
+        positions: [
+          { namespace: JSON.stringify([...scope, "S"]), position: projection.sHighWater },
+          { namespace: JSON.stringify([...scope, "P"]), position: projection.pHighWater },
+        ],
+      };
+    },
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
     configure(host) {
       const paths = (names: readonly string[]) =>

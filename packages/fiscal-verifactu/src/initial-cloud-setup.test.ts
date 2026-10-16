@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deployment, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { withOperationAuthority } from "@waitron/module";
@@ -19,6 +19,7 @@ import { readCloudAllocationReport } from "./cloud-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { InitialSetupContext } from "@waitron/module";
+import { allocationFixture } from "../test/allocation-fixture.js";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import { createInitialCloudRequest, prepareInitialCloudSetup } from "./initial-cloud-setup.js";
 
@@ -291,6 +292,41 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const seat = FISCAL_INITIAL_SETUP.configure!(host);
     return { ...f, root, host, current, seat };
   }
+  it("retired C evidence uses independent configured issuer trust while a fresh paper P allocation remains available", async () => {
+    const f = await setup();
+    const target = { nodeId: TENANT_A.nodeId2, locationId: locationId(TENANT_A.locationId) };
+    await suite.db
+      .insert(invoiceSeries)
+      .values(scope.bases.map((base) => ({ ...base, nodeId: target.nodeId })));
+    const paper = allocationFixture({
+      node: target,
+      bases: scope.bases,
+      identity: "P000043",
+      environment: "production",
+    });
+    const request = paper.request("restore");
+    const preparation = FISCAL_OPERATIONS.configure!({
+      ...f.host,
+      readPublicEvidence: async () => ({ trust: paper.custodian, current: request.confirmation }),
+      readRetiredSetup: async () => [{ context: f.held, input: f.input, publicEvidence: [] }],
+    });
+    const result = await withOperationAuthority(request.binding, request.operatorId, (authority) =>
+      preparation.prepare(
+        { binding: request.binding, authority, input: request.input },
+        (operation) =>
+          withTransaction(suite.db, (tx) =>
+            activatePreparedModuleAllocation(tx, target, operation),
+          ),
+      ),
+    );
+    expect(result.series.map((entry) => entry.code)).toEqual([
+      "A-P000043",
+      "B-P000043",
+      "FF-P000043",
+      "R-P000043",
+    ]);
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  });
   it("retirement retains the Cloud operation and the verified C installation independently of paper names", async () => {
     const f = await setup();
     expect(f.seat.assignmentKeys!(f.held)).toEqual([
