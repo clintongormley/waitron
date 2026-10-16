@@ -88,7 +88,11 @@ customElements.define("day-picking-host", DayPickingHost);
 
 let page: HTMLElement | undefined;
 
-async function mount(options: { canPick?: boolean; dragOnTouch?: boolean } = {}) {
+/** With `inScrollBox`, the host sits in a scrolling box inside another element's shadow root, as
+ * the dashboard's `.main` does, so its scroll events never reach `window`. */
+async function mount(
+  options: { canPick?: boolean; dragOnTouch?: boolean; inScrollBox?: boolean } = {},
+) {
   page = document.createElement("div");
   page.style.blockSize = "4000px";
   page.style.paddingBlockStart = "300px";
@@ -96,7 +100,17 @@ async function mount(options: { canPick?: boolean; dragOnTouch?: boolean } = {})
   host.allowPicking = options.canPick ?? true;
   host.dragOnTouch = options.dragOnTouch ?? false;
   host.start();
-  page.append(host);
+  if (options.inScrollBox) {
+    const shell = document.createElement("div");
+    const box = document.createElement("div");
+    box.id = "scroll-box";
+    Object.assign(box.style, { blockSize: "450px", overflowY: "auto" });
+    const filler = document.createElement("div");
+    filler.style.blockSize = "800px";
+    box.append(host, filler);
+    shell.attachShadow({ mode: "open" }).append(box);
+    page.append(shell);
+  } else page.append(host);
   document.body.append(page);
   window.scrollTo(0, 0);
   await host.updateComplete;
@@ -202,7 +216,8 @@ describe("DayPicker", () => {
   it("a finger that moves before the hold scrolls the page and picks nothing", async () => {
     const host = await mount();
     await commands.touchGesture({ at: sel(15), moveBy: { x: 0, y: -200 } });
-    expect(window.scrollY).toBeGreaterThan(0);
+    // The scroll can still be landing, and flinging on, after the command returns.
+    await expect.poll(() => window.scrollY).toBeGreaterThan(0);
     await expectRun(host, null);
     expect(host.chosen).toEqual([]);
     expect(host.opened).toEqual([]);
@@ -252,6 +267,15 @@ describe("DayPicker", () => {
     expect(host.opened).toEqual([[day(16), run(15, 17)]]);
     await expectRun(host, run(15, 17));
     expect(host.chosen).toEqual([]);
+  });
+
+  it("a drag stays right when a scrolling box inside a shadow root scrolls mid-drag", async () => {
+    const host = await mount({ inScrollBox: true });
+    const box = host.parentElement!;
+    await commands.mouseDrag([sel(12), sel(13), sel(20)], { wheel: { after: 1, deltaY: 100 } });
+    expect(box.scrollTop).toBe(100);
+    expect(window.scrollY).toBe(0);
+    await expectRun(host, run(12, 20));
   });
 
   it("a double-click opens the picked run when inside it, else that one day", async () => {

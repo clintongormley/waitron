@@ -37,9 +37,8 @@ interface Gesture {
   date: LocalDate;
   /** The last day the pointer was over; a point between buttons keeps it. */
   last: LocalDate;
-  /** The drawn days' rectangles; null until read, and again after any scroll. */
-  boxes: { date: LocalDate; box: DOMRect }[] | null;
-  scrolled: () => void;
+  /** The drawn days' rectangles, and where the grid was when they were read; null until read. */
+  boxes: { left: number; top: number; days: { date: LocalDate; box: DOMRect }[] } | null;
   trigger: HTMLElement;
   x: number;
   y: number;
@@ -146,13 +145,19 @@ export class DayPicker implements ReactiveController {
     return button === null ? null : { date, button };
   }
 
-  /** Every drawn day's rectangle, read again only after a scroll has moved them. */
+  /** Every drawn day's rectangle, read again whenever the grid has moved. */
   #boxes(gesture: Gesture): { date: LocalDate; box: DOMRect }[] {
-    gesture.boxes ??= this.#options.dates().flatMap((date) => {
-      const button = this.#options.button(date);
-      return button === null ? [] : [{ date, box: button.getBoundingClientRect() }];
-    });
-    return gesture.boxes;
+    // A scroll can come from any ancestor, including one inside a shadow root whose scroll events
+    // never reach window, so the grid's own position is what tells the rectangles are stale.
+    const { left, top } = gesture.grid.getBoundingClientRect();
+    if (gesture.boxes?.left !== left || gesture.boxes.top !== top) {
+      const days = this.#options.dates().flatMap((date) => {
+        const button = this.#options.button(date);
+        return button === null ? [] : [{ date, box: button.getBoundingClientRect() }];
+      });
+      gesture.boxes = { left, top, days };
+    }
+    return gesture.boxes.days;
   }
 
   #dateAt(gesture: Gesture, x: number, y: number): LocalDate | null {
@@ -189,9 +194,6 @@ export class DayPicker implements ReactiveController {
       date,
       last: date,
       boxes: null,
-      scrolled: () => {
-        gesture.boxes = null;
-      },
       trigger,
       x: event.clientX,
       y: event.clientY,
@@ -209,7 +211,6 @@ export class DayPicker implements ReactiveController {
     if (this.#lastPointerTouch)
       gesture.grid.addEventListener("touchmove", gesture.stopScroll, { passive: false });
     for (const type of POINTER_EVENTS) window.addEventListener(type, this.#pointer);
-    window.addEventListener("scroll", gesture.scrolled, { capture: true, passive: true });
   }
 
   #hold(gesture: Gesture): void {
@@ -273,7 +274,6 @@ export class DayPicker implements ReactiveController {
     releasePointer(gesture.grid, gesture.pointerId);
     gesture.grid.removeEventListener("touchmove", gesture.stopScroll);
     for (const type of POINTER_EVENTS) window.removeEventListener(type, this.#pointer);
-    window.removeEventListener("scroll", gesture.scrolled, { capture: true });
   }
 
   #click(event: MouseEvent): void {
