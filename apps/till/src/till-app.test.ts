@@ -14171,14 +14171,14 @@ describe("the device profile decides which screens a device offers", () => {
     expect(floor(el)!.canOpenStation).toBe(false);
   });
 
-  it("does not load the counter's lists at login on a till whose canvas shows none of them", async () => {
+  it("does not load Counter lists at login with a handheld form factor", async () => {
     await signIn("till", switches, phoneFormFactor);
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
     expect(currentApi.getStationQueue).not.toHaveBeenCalled();
     expect(currentApi.listCounterWaiting).not.toHaveBeenCalled();
   });
 
-  it("gives the Schedule screen its roster when the profile has the Schedule switch and the layout shows no counter list", async () => {
+  it("gives Schedule its roster on a handheld with the Schedule switch", async () => {
     const el = await signIn("handheld", ["show-schedule"], phoneFormFactor);
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
     emit(shell(el)!, "show-schedule");
@@ -14186,7 +14186,7 @@ describe("the device profile decides which screens a device offers", () => {
     expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
   });
 
-  it("holds a till whose layout's first tab is the floor on the lock screen until the floor loads", async () => {
+  it("holds a handheld on the lock screen until Floor loads", async () => {
     let resolve!: (value: TableState[]) => void;
     const el = await signIn("till", switches, phoneFormFactor, {
       getTablesState: vi.fn(
@@ -18789,7 +18789,7 @@ describe("switching the device's profile from the header", () => {
     expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
   });
 
-  it("a switch to a profile with no starting screen lands on the canvas's first tab", async () => {
+  it("a switch to a profile with no starting screen lands on its fixed home", async () => {
     const { el } = await openProfile();
     emit(counter(el)!, "show-expo");
     await flush(el);
@@ -18832,7 +18832,7 @@ describe("switching the device's profile from the header", () => {
     }
   });
 
-  it("a switch to a profile with no starting screen lands on the first tab, though the tab left is also on the new canvas", async () => {
+  it("a switch to a profile with no starting screen lands on its fixed home even when the screen left is also supported", async () => {
     const withScheduleTab = { formFactor: "till" as const };
     const { el } = await openProfile({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: withScheduleTab.formFactor }),
@@ -19425,7 +19425,7 @@ describe("W69 till shell leave routes", () => {
     expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
     expect(question(el).open).toBe(false);
   });
-  it("a tab absent from the canvas does not discard or ask about the current request", async () => {
+  it("an unsupported primary screen does not discard or ask about the current request", async () => {
     const { el, owner, href } = await editedSchedule();
     selectTab(el, "missing-tab");
     await flush(el);
@@ -21070,7 +21070,7 @@ describe("A737 Find a bill page", () => {
     expect(ticket(el)?.originalReceiptAvailable).toBe(false);
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
   });
-  it("a canvas with an Order tab leaves Find a bill when its selected party bill opens", async () => {
+  it("a handheld leaves Find a bill when its selected party bill opens", async () => {
     const { el, view } = await open({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getTablesState: vi.fn().mockResolvedValue([openTable]),

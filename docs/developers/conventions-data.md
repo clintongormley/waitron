@@ -1488,6 +1488,18 @@ writes one at top level — and its descriptor's `requires` must name it. Cost: 
 graph was derived from `REFERENCES` alone and missed two edges made by triggers ON another module's
 tables, caught by hand in review.
 
+### Retiring configuration tables also retires their export format
+
+A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
+includes that table key, even when it has no rows. With the format left unchanged, the real setup
+route refused both empty and populated canvas lists as `setup.request_invalid` on `tables`.
+Format 3 now refuses those older files as `setup.configuration_outdated`, before replacing staged
+files. Current exports still round-trip; future formats keep their version refusal. The cases in
+`apps/server/src/configuration-import.test.ts` cover both old canvas lists and retained staging
+files; `configuration-transfer.test.ts` retains the receipt-choice round-trip and pins format 3.
+No old settings are converted. Cost: the whole-branch run-it review found the generic refusal
+while checking this reset-only release.
+
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
 A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new

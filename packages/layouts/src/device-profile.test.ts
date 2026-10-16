@@ -134,7 +134,7 @@ describe("profileAllows", () => {
 describe("validateStartingScreen", () => {
   const caps = ["take-orders", "show-expo", "show-schedule"] as const;
 
-  it("accepts null, meaning the canvas's own first view", () => {
+  it("accepts null for the fixed home screen", () => {
     expect(validateStartingScreen(null, caps)).toBeNull();
   });
 
