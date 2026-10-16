@@ -550,6 +550,7 @@ declare module "@waitron/shared" {
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
     "tender.refund_in_progress": { tenderId: string };
+    "tender.refund_not_found": { refundId: string };
     /**
      * A refund of an item payment asked for less than the whole of it: an item payment is given
      * back whole, which frees its lines. `applied` and `tip` are that whole.
@@ -608,6 +609,13 @@ declare module "@waitron/shared" {
       workingOrderId: string;
       amount: string;
       errorCode: string;
+    };
+    "payment.tender_refund_outcome_conflict": {
+      refundId: string;
+      saleId: string;
+      tenderId: string;
+      amount: string;
+      providerRefundRef: string | null;
     };
     /**
      * An incident: the card provider shows a bill refund made that Waitron had already recorded as

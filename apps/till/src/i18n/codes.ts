@@ -469,6 +469,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
     es: "Este pago no se puede devolver aquí. Vuelve a cargar la transacción y revisa sus pagos",
   },
+  "tender.refund_not_found": {
+    en: "That refund could not be found",
+    es: "No se ha encontrado esa devolución",
+  },
   "tender.refund_in_progress": {
     en: "A refund of this payment is still pending. Check that refund before starting another",
     es: "Una devolución de este pago sigue pendiente. Revisa esa devolución antes de iniciar otra",

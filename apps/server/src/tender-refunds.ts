@@ -10,6 +10,11 @@ import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import type { TenderRefundRequest, TenderRefundView } from "./tender-refund-types.js";
+import {
+  claimTenderRefund,
+  resolveClaimedTenderRefund,
+  resumeTenderRefund,
+} from "./tender-refund-sends.js";
 import "./errors.js";
 
 export type TenderRefundDeps = BillRefundDeps;
@@ -56,6 +61,7 @@ export async function beginSettledTenderRefund(
   saleId: string,
   request: TenderRefundRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  claimConnected?: (id: string) => void,
 ): Promise<TenderRefundView> {
   return withTenderRefundAuthorization(
     deps.db,
@@ -88,7 +94,12 @@ export async function beginSettledTenderRefund(
           });
         } else {
           const provider = await deps.refundProviderFor?.(capture.provider);
-          if (provider?.provider !== capture.provider || provider.sendRefund === undefined)
+          if (
+            provider?.provider !== capture.provider ||
+            provider.sendRefund === undefined ||
+            (!provider.capabilities.partialRefund &&
+              refund.appliedAmount + refund.tipAmount !== capture.amount)
+          )
             throw new AppError("tender.refund_unavailable", { tenderId: refund.tenderId });
         }
       }
@@ -116,7 +127,32 @@ export async function beginSettledTenderRefund(
         offsetMinutes: 0,
         outcome: refund.state === "completed" ? "qualified" : "pending",
       });
+      if (refund.state === "pending") claimConnected?.(refund.id);
       return toTenderRefundView(refund);
     },
   );
+}
+
+export async function refundSettledTender(
+  deps: TenderRefundDeps,
+  cfg: DeviceRequestConfig,
+  saleId: string,
+  request: TenderRefundRequest,
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
+): Promise<TenderRefundView> {
+  let release: (() => void) | undefined;
+  try {
+    const refund = await beginSettledTenderRefund(deps, cfg, saleId, request, operator, (id) => {
+      release = claimTenderRefund(deps.db, id);
+    });
+    if (release !== undefined) {
+      const held = release;
+      release = undefined;
+      return resolveClaimedTenderRefund(deps, refund.id, "retry", held);
+    }
+    return refund.state === "pending" ? resumeTenderRefund(deps, refund.id, "retry") : refund;
+  } catch (error) {
+    release?.();
+    throw error;
+  }
 }

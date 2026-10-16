@@ -219,6 +219,10 @@ export const ALERT_MESSAGES: Readonly<
     en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,
     es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Contacta con soporte.${MORE_ES}`,
   },
+  "payment.tender_refund_outcome_conflict": {
+    en: `The card provider's evidence for a refund of {amount:money} conflicts with a refund already recorded here. Check the payment and refund in the provider's own dashboard before resolving it.${MORE_EN}`,
+    es: `La información del proveedor sobre una devolución de {amount:money} contradice una devolución ya registrada aquí. Comprueba el pago y la devolución en el panel del proveedor antes de resolverla.${MORE_ES}`,
+  },
   "payment.refund_outcome_conflict": {
     en: `The card provider shows a refund of {amount:money} as made, which Waitron had already recorded as not made. Waitron has changed nothing: the money went back to the payer, so check the bill's payments against the provider's own dashboard.${MORE_EN}`,
     es: `El proveedor de pagos muestra como hecha una devolución de {amount:money} que Waitron ya había registrado como no hecha. Waitron no ha cambiado nada: el dinero se devolvió al cliente, así que revisa los pagos de la cuenta en el panel del proveedor.${MORE_ES}`,
