@@ -226,7 +226,20 @@ async function fixture(realEntry = false, withoutBookings = false) {
               }),
           ...extra,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(
+          action === "finish"
+            ? {
+                register: {
+                  kind: "current-master",
+                  status: "Consumed",
+                  custodian: "Elena",
+                  reference: f.statement.delivery.historyDigest,
+                  consultedAt: "2026-10-16T00:00:00.000Z",
+                },
+                ...(body as object),
+              }
+            : body,
+        ),
       } as RequestInit);
     const inspect = () => host.resolution.inspectFirstSetupResolution();
     const snapshot = async () => {
@@ -322,6 +335,40 @@ it("HTTPS Finish publishes the exact committed setup after fresh document confir
     await f.dispose();
   }
 });
+
+it.each([
+  undefined,
+  null,
+  { kind: "no-current-master", confirmed: true },
+  {
+    kind: "current-master",
+    status: "Not consumed",
+    custodian: "Elena",
+    reference: "a".repeat(64),
+    consultedAt: "2026-10-16T00:00:00.000Z",
+  },
+])(
+  "HTTPS Finish rejects an invalid register answer %j before opening a database",
+  async (register) => {
+    const f = await fixture();
+    try {
+      const owner = await f.recover();
+      const response = await f.post(
+        "finish",
+        { ...(await f.snapshot()), publication, register },
+        owner,
+      );
+      expect(response.status).toBe(register === undefined ? 400 : 409);
+      expect(await response.json()).toMatchObject({
+        error: { code: register === undefined ? "setup.request_invalid" : "setup.attempt_invalid" },
+      });
+      expect(f.counts()).toEqual({ activations: 1, publications: 0, opens: 0, restart: 0 });
+      expect((await f.host.store.read())?.status).toBe("committed");
+    } finally {
+      await f.dispose();
+    }
+  },
+);
 
 it("Finish rejects missing ownership, stale inspection, foreign origins and private extra fields before opening the database", async () => {
   const f = await fixture();

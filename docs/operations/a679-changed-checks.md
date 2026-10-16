@@ -27,3 +27,10 @@ Earlier changes to non-fiscal workspace checks are recorded in the lane's 2026-1
 at selection installation. A separate case retains the original refusal after selection for changed
 local directory evidence. The replacement plan's Task 8 distinguishes current outside sources from
 the immutable retirement archive. No fiscal hash or filing assertion changes are covered by this inventory.
+
+The Finish fixtures now supply a consumed-current-register answer, including its consulted person
+and public history reference, separately from publication inputs. You can inspect these additions
+in `first-fiscal-declared-publication.test.ts` and `first-setup-finish.route.test.ts`. Their existing
+assertions stay unchanged. New cases check the audit records, original bytes, interrupted writes
+and refusal before a database opens. The request addition follows the replacement plan's Task 8
+and its retained `RegisterAnswer` shape; it does not replace fresh outside confirmation.

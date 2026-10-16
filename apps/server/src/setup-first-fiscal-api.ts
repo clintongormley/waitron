@@ -6,6 +6,7 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
+import { assertFinishRegister } from "./first-setup-finish-audit.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
@@ -727,7 +728,14 @@ export function mountFirstSetupResolutionApi(
                 }
                 return c.json({ accepted: true });
               }
-              exact(body, ["inspectionId", "revision", "ownerGeneration", "publication"]);
+              exact(body, [
+                "inspectionId",
+                "revision",
+                "ownerGeneration",
+                "publication",
+                "register",
+              ]);
+              assertFinishRegister(body.register);
               const inspected = await host.resolution.inspectFirstSetupResolution();
               if (
                 body.inspectionId !== inspected.inspectionId ||
@@ -737,7 +745,7 @@ export function mountFirstSetupResolutionApi(
                 throw new AppError("setup.attempt_conflict", {});
               const publication = object(body.publication);
               await options.withPublication!((deps) =>
-                finishFirstFiscalSetup(host, deps, owner, publication, hold),
+                finishFirstFiscalSetup(host, deps, owner, publication, hold, body.register),
               );
               setTimeout(() => options.requestRestart?.(), 0);
               return c.json({ provisioned: true, restarting: true });
