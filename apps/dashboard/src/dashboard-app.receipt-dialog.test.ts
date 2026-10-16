@@ -167,7 +167,7 @@ it.each([true, false])(
     expect(editor.subject).toEqual({ id: "bar", name: "Bar" });
     expect(!!editor.shadowRoot!.querySelector("[name=operationDescription]")).toBe(required);
     expect(deep(app.shadowRoot!, "dashboard-receipts-screen")).toBeNull();
-    expect(editor.shadowRoot!.querySelector("wt-dialog")!.description).toBe("Bar");
+    expect(editor.shadowRoot!.querySelector("wt-modal")!.description).toBe("Bar");
   },
 );
 it("successful receipt save closes the hosted dialog and updates the department host", async () => {
@@ -181,7 +181,7 @@ it("successful receipt save closes the hosted dialog and updates the department 
   ) as DepartmentReceiptDialog;
   await expect.poll(() => editor.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
   await editReceipt(editor, "email", "bar@example.com");
-  const dialog = editor.shadowRoot!.querySelector("wt-dialog")!;
+  const dialog = editor.shadowRoot!.querySelector("wt-modal")!;
   const toggle = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
     "wt-switch[name=printTradingName]",
   )!;
