@@ -772,10 +772,10 @@ it("dragging the handle turns the table in 15° steps", async () => {
   await turnBy(270);
   await turnBy(0);
   expect(seen).toEqual([
-    { key: "t1", rotation: 90 },
-    { key: "t1", rotation: 180 },
-    { key: "t1", rotation: 45 },
-    { key: "t1", rotation: 270 },
+    { key: "t1", rotation: 90, x: 10, y: 10 },
+    { key: "t1", rotation: 180, x: 10, y: 10 },
+    { key: "t1", rotation: 45, x: 10, y: 10 },
+    { key: "t1", rotation: 270, x: 10, y: 10 },
   ]);
 });
 
@@ -798,7 +798,7 @@ it("the handle turns from the table's own angle, not from straight up", async ()
   pointer(handles(el)[0]!, "pointerdown", 1, hx, hy);
   pointer(window, "pointermove", 1, to.x, to.y);
   await release(el, to);
-  expect(seen).toEqual([{ key: "t1", rotation: 180 }]);
+  expect(seen).toEqual([{ key: "t1", rotation: 180, x: 10, y: 10 }]);
 });
 
 it("the handle turns by how far the pointer goes round, wherever it was pressed", async () => {
@@ -810,7 +810,7 @@ it("the handle turns by how far the pointer goes round, wherever it was pressed"
   pointer(handles(el)[0]!, "pointerdown", 1, cx + 80, cy);
   pointer(window, "pointermove", 1, cx, cy + 80);
   await release(el, { x: cx, y: cy + 80 });
-  expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
+  expect(seen).toEqual([{ key: "t1", rotation: 90, x: 10, y: 10 }]);
 });
 
 it("a real drag of the handle turns the table and keeps the selection", async () => {
@@ -822,7 +822,7 @@ it("a real drag of the handle turns the table and keeps the selection", async ()
   const h = centreOf(handles(el)[0]!);
   const to = roundFrom({ x: 240, y: 240 }, { x: h.x - grid.left, y: h.y - grid.top }, 90);
   await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), { targetPosition: to });
-  expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
+  expect(seen).toEqual([{ key: "t1", rotation: 90, x: 10, y: 10 }]);
   expect(selections).toEqual([]);
 });
 
@@ -995,9 +995,9 @@ it("the arrow keys on the handle turn by 15° and wrap", async () => {
   handles(el)[0]!.focus();
   await userEvent.keyboard("{ArrowRight}");
   expect(seen).toEqual([
-    { key: "t1", rotation: 15 },
-    { key: "t1", rotation: 345 },
-    { key: "t1", rotation: 0 },
+    { key: "t1", rotation: 15, x: 10, y: 10 },
+    { key: "t1", rotation: 345, x: 10, y: 10 },
+    { key: "t1", rotation: 0, x: 10, y: 10 },
   ]);
   expect(moved).toEqual([]);
 });
@@ -1776,7 +1776,7 @@ it("each event bubbles out of a shadow root", async () => {
   await userEvent.keyboard("{ArrowRight}");
   await release(el, dragDot(el, "bottom", 0, 12));
   expect(moved.map((e) => e.detail)).toEqual([{ key: "t1", x: 11, y: 10 }]);
-  expect(turned.map((e) => e.detail)).toEqual([{ key: "t1", rotation: 15 }]);
+  expect(turned.map((e) => e.detail)).toEqual([{ key: "t1", rotation: 15, x: 10, y: 10 }]);
   expect(sized.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 8, height: 9 }]);
   for (const e of [...moved, ...turned, ...sized]) {
     expect(e.bubbles).toBe(true);
@@ -2018,7 +2018,7 @@ it("the handle of a turned table at the origin turns it round its own centre", a
   pointer(handles(el)[0]!, "pointerdown", 1, cx + 80, cy);
   pointer(window, "pointermove", 1, cx, cy + 80);
   await release(el, { x: cx, y: cy + 80 });
-  expect(seen).toEqual([{ key: "t1", rotation: 135 }]);
+  expect(seen).toEqual([{ key: "t1", rotation: 135, x: 0, y: 0 }]);
 });
 
 it("centres a turned table's refused reason under it at the origin", async () => {
@@ -2129,8 +2129,8 @@ function applyChanges(el: WtFloorPlanCanvas): void {
     change(key, { x, y });
   });
   el.addEventListener("wt-table-rotate", (e) => {
-    const { key, rotation } = (e as CustomEvent<TableRotate>).detail;
-    change(key, { rotation });
+    const { key, rotation, x, y } = (e as CustomEvent<TableRotate>).detail;
+    change(key, { rotation, x, y });
   });
 }
 
@@ -2428,6 +2428,204 @@ it("in a scrolled plan, a turn back of a big corner table by its key gives back 
   expect(el.tables[0]!.placement.rotation).toBe(30);
   expect(onScreen(el).t2).toEqual(screen.t2);
   expect(offset(el, "t2")).toEqual({ left: grid.left - 12, top: grid.top - 12 });
+});
+
+const frame = () => new Promise(requestAnimationFrame);
+
+/** Where the plan's (0, 0) is on screen, from unturned table `key` placed at (x, y). */
+function planCorner(el: WtFloorPlanCanvas, key: string, x: number, y: number) {
+  const box = button(el, key).getBoundingClientRect();
+  return { x: box.left - x * 12, y: box.top - y * 12 };
+}
+
+const overflows = (el: WtFloorPlanCanvas) => {
+  const v = viewportOf(el);
+  return v.scrollWidth > v.clientWidth || v.scrollHeight > v.clientHeight;
+};
+
+const at = (node: Element) => {
+  const box = node.getBoundingClientRect();
+  return { left: box.left, top: box.top };
+};
+
+/** Presses `key`'s turn arrow and moves the pointer round the table's centre to each of `turns`,
+ *  without releasing it; `each` runs a frame after every move. */
+async function turnArrow(
+  el: WtFloorPlanCanvas,
+  key: string,
+  turns: number[],
+  each: () => void = () => {},
+) {
+  const c = centreOf(button(el, key));
+  const h = centreOf(handles(el)[0]!);
+  pointer(handles(el)[0]!, "pointerdown", 1, h.x, h.y);
+  let to = h;
+  for (const turn of turns) {
+    to = roundFrom(c, h, turn);
+    pointer(window, "pointermove", 1, to.x, to.y);
+    await frame();
+    await el.updateComplete;
+    each();
+  }
+  return to;
+}
+
+it("a turn that makes a corner table poke out steps it in by what poked out, as it turns, and nothing else moves", async () => {
+  const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 9 })], { selected: "t1" });
+  applyChanges(el);
+  await settled(el);
+  const corner = planCorner(el, "t1", 0, 0);
+  const t2 = at(button(el, "t2"));
+  const seen = rotates(el);
+  const overflowed: boolean[] = [];
+  const t2Moved: boolean[] = [];
+  const look = () => {
+    overflowed.push(overflows(el));
+    const now = at(button(el, "t2"));
+    t2Moved.push(now.left !== t2.left || now.top !== t2.top);
+  };
+  const to = await turnArrow(el, "t1", [15], look);
+  for (let f = 0; f < 2; f++) {
+    await frame();
+    look();
+  }
+  const c = centreOf(button(el, "t1"));
+  expect(c.x).toBeCloseTo(corner.x + 5 * 12, 1);
+  expect(c.y).toBeCloseTo(corner.y + 5 * 12, 1);
+  expect(button(el, "t1").style.transform).toBe("rotate(15deg)");
+  expect(seen).toEqual([]);
+  await release(el, to);
+  for (let f = 0; f < 10; f++) {
+    await frame();
+    look();
+  }
+  expect(seen).toEqual([{ key: "t1", rotation: 15, x: 1, y: 1 }]);
+  expect(overflowed).toEqual(Array(13).fill(false));
+  expect(t2Moved).toEqual(Array(13).fill(false));
+});
+
+it("a turn on and back within one press steps a corner table in and puts it back, and sends nothing", async () => {
+  const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 9 })], { selected: "t1" });
+  await settled(el);
+  const corner = planCorner(el, "t1", 0, 0);
+  const seen = rotates(el);
+  const centres: { x: number; y: number }[] = [];
+  const to = await turnArrow(el, "t1", [15, 30, 0], () => {
+    const c = centreOf(button(el, "t1"));
+    centres.push({ x: Math.round(c.x - corner.x), y: Math.round(c.y - corner.y) });
+  });
+  expect(centres).toEqual([
+    { x: 60, y: 60 },
+    { x: 72, y: 72 },
+    { x: 48, y: 48 },
+  ]);
+  await release(el, to);
+  expect(seen).toEqual([]);
+});
+
+it("the right arrow on the turn arrow of a table near the corner steps it in, and nothing else moves", async () => {
+  const el = await canvas(
+    [table("t1", "T1", { x: 1, y: 1, rotation: 15 }), table("t2", "T2", { x: 9 })],
+    { selected: "t1" },
+  );
+  applyChanges(el);
+  await settled(el);
+  const t2 = at(button(el, "t2"));
+  const seen = rotates(el);
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await settled(el);
+  await settled(el);
+  expect(seen).toEqual([{ key: "t1", rotation: 30, x: 2, y: 2 }]);
+  expect(el.tables[0]!.placement).toMatchObject({ rotation: 30, x: 2, y: 2 });
+  expect(at(button(el, "t2"))).toEqual(t2);
+  expect(overflows(el)).toBe(false);
+});
+
+it("a key turn that steps in a big table that arrived poking out moves no other table", async () => {
+  const el = await canvas(
+    [table("t1", "T1", { width: 60, height: 60, rotation: 15 }), table("t2", "T2", { x: 70 })],
+    { selected: "t1" },
+  );
+  applyChanges(el);
+  await settled(el);
+  const t2 = at(button(el, "t2"));
+  handles(el)[0]!.focus({ preventScroll: true });
+  await userEvent.keyboard("{ArrowRight}");
+  await settled(el);
+  await settled(el);
+  expect(el.tables[0]!.placement).toMatchObject({ rotation: 30, x: 5, y: 5 });
+  expect(at(button(el, "t2"))).toEqual(t2);
+});
+
+it("a long table at the corner turned to 90° by one drag is drawn and sent where it no longer pokes out", async () => {
+  const el = await canvas([table("t1", "T1", { width: 20, height: 4 })], { selected: "t1" });
+  await settled(el);
+  const corner = planCorner(el, "t1", 0, 0);
+  const seen = rotates(el);
+  const to = await turnArrow(el, "t1", [90]);
+  const c = centreOf(button(el, "t1"));
+  expect(c.x).toBeCloseTo(corner.x + 10 * 12, 1);
+  expect(c.y).toBeCloseTo(corner.y + 10 * 12, 1);
+  await release(el, to);
+  expect(seen).toEqual([{ key: "t1", rotation: 90, x: 0, y: 8 }]);
+});
+
+it("a turn of a table that arrived poking out, to less far out, does not step it", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 30 })], { selected: "t1" });
+  const seen = rotates(el);
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowLeft}");
+  expect(seen).toEqual([{ key: "t1", rotation: 15, x: 0, y: 0 }]);
+});
+
+it("a turn steps a corner table in over another table", async () => {
+  const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 8 })], { selected: "t1" });
+  applyChanges(el);
+  const seen = rotates(el);
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await settled(el);
+  expect(seen).toEqual([{ key: "t1", rotation: 15, x: 1, y: 1 }]);
+  const t1 = button(el, "t1").getBoundingClientRect();
+  expect(t1.right).toBeGreaterThan(button(el, "t2").getBoundingClientRect().left);
+});
+
+it("one full turn by key walks a corner table away from the edge", async () => {
+  const el = await canvas([table("t1", "T1")], { selected: "t1" });
+  applyChanges(el);
+  for (let press = 0; press < 24; press++) {
+    handles(el)[0]!.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await settled(el);
+  }
+  expect(el.tables[0]!.placement).toMatchObject({ rotation: 0, x: 2, y: 2 });
+});
+
+it("Shift+ArrowDown on a turned table near the corner moves no other table", async () => {
+  const el = await canvas(
+    [table("t1", "T1", { x: 2, y: 2, rotation: 30 }), table("t2", "T2", { x: 20 })],
+    { selected: "t1" },
+  );
+  const sized: TableResize[] = [];
+  el.addEventListener("wt-table-resize", (e) => {
+    const { key, ...box } = (e as CustomEvent<TableResize>).detail;
+    sized.push({ key, ...box });
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, ...box } } : t,
+      );
+    });
+  });
+  await settled(el);
+  const t2 = at(button(el, "t2"));
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
+  await settled(el);
+  await settled(el);
+  expect(sized).toHaveLength(1);
+  expect(at(button(el, "t2"))).toEqual(t2);
+  expect(overflows(el)).toBe(false);
 });
 
 it("names the rotate handle with a table name holding replacement patterns", async () => {

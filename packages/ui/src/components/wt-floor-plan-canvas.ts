@@ -62,9 +62,12 @@ export interface TableMove {
   y: number;
 }
 
+/** `x` and `y`: where the table is after the turn, stepped in where the turn made it poke out. */
 export interface TableRotate {
   key: string;
   rotation: number;
+  x: number;
+  y: number;
 }
 
 export interface TableResize {
@@ -360,8 +363,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #ignoreGridClick = false;
 
-  /** Squares drawn left of and above the plan's (0, 0): `#margin`, plus a turned table's overhang
-   *  past it, so its corners can be scrolled to. */
+  /** Squares drawn left of and above the plan's (0, 0): `#margin`, plus the overhang of a turned
+   *  table that arrives poking out past it, so its corners can be scrolled to. */
   #origin = { x: 0, y: 0 };
 
   /** Squares the grid is drawn, before `bottomInset`. */
@@ -816,9 +819,12 @@ export class WtFloorPlanCanvas extends LitElement {
     if (step === 0) return;
     e.preventDefault();
     e.stopPropagation();
-    const rotation = snapRotation(t.placement.rotation + step);
-    this.#keyHold({ key: t.key, placement: { ...t.placement, rotation } });
-    this.#rotate(t.key, rotation);
+    const placement = stepInside(
+      { ...t.placement, rotation: snapRotation(t.placement.rotation + step) },
+      t.placement,
+    );
+    this.#keyHold({ key: t.key, placement });
+    this.#rotate(t.key, placement);
   }
 
   readonly #onViewPointerDown = (e: PointerEvent): void => {
@@ -941,7 +947,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const turn = angleAround(drag.centreX, drag.centreY, e.clientX, e.clientY) - drag.startAngle;
     const rotation = snapRotation(p.rotation + turn);
     if (rotation !== now.rotation) {
-      this.draft = { key: drag.table.key, placement: { ...p, rotation } };
+      this.draft = { key: drag.table.key, placement: stepInside({ ...p, rotation }, p) };
     }
   };
 
@@ -960,7 +966,7 @@ export class WtFloorPlanCanvas extends LitElement {
     // the pressed button instead, which stops it.
     this.#ignoreGridClick = true;
     setTimeout(() => (this.#ignoreGridClick = false));
-    if (turned) this.#rotate(drag.table.key, to.rotation);
+    if (turned) this.#rotate(drag.table.key, to);
     if (moved) this.#move(drag.table.key, to.x, to.y);
     if (resized)
       this.#resize({ key: drag.table.key, x: to.x, y: to.y, width: to.width, height: to.height });
@@ -999,8 +1005,8 @@ export class WtFloorPlanCanvas extends LitElement {
     );
   }
 
-  #rotate(key: string, rotation: number): void {
-    const detail: TableRotate = { key, rotation };
+  #rotate(key: string, { rotation, x, y }: PlanPlacement): void {
+    const detail: TableRotate = { key, rotation, x, y };
     this.dispatchEvent(
       new CustomEvent("wt-table-rotate", { detail, bubbles: true, composed: true }),
     );

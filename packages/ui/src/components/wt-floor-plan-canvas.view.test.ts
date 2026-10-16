@@ -1,7 +1,7 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
-import type { PlanCanvasTable, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
+import type { PlanCanvasTable, TableRotate, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
@@ -208,7 +208,7 @@ it("at twice the zoom a turn still follows the table's visible centre", async ()
   pointer(part(el, "rotate-handle"), "pointerdown", 1, at.x, at.y - 100);
   pointer(window, "pointermove", 1, at.x + 100, at.y);
   pointer(window, "pointerup", 1, at.x + 100, at.y);
-  expect(turns).toEqual([{ key: "T1", rotation: 90 }]);
+  expect(turns).toEqual([{ key: "T1", rotation: 90, x: 10, y: 10 }]);
 });
 
 it("Ctrl+wheel zooms around the pointer and plain wheel pans", async () => {
@@ -548,10 +548,10 @@ it("a keyboard turn at twice zoom gives back only the corner margin already scro
     table("T2", 70, 0),
   ];
   el.addEventListener("wt-table-rotate", (event) => {
-    const { key, rotation } = (event as CustomEvent<{ key: string; rotation: number }>).detail;
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
     queueMicrotask(() => {
       el.tables = el.tables.map((t) =>
-        t.key === key ? { ...t, placement: { ...t.placement, rotation } } : t,
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
       );
     });
   });
@@ -637,3 +637,105 @@ it("a fractional-width refusal remains centred after zoom without rounding its l
   const box = button(el).getBoundingClientRect();
   expect(text.left + text.width / 2).toBeCloseTo(box.left + box.width / 2);
 });
+
+const pokingOut: PlanCanvasTable = {
+  ...table("Corner", 0, 0),
+  placement: { ...table("Corner", 0, 0).placement, rotation: 45 },
+};
+
+/** `T1` at (20, 10) in a box `style`, at zoom 1 or doubled, pressed with a mouse and moved two
+ *  squares right and down without release; returns the pointer. */
+async function draggingIn(style: string, zoom: number) {
+  const el = (await mount(
+    `<wt-floor-plan-canvas style="${style}"></wt-floor-plan-canvas>`,
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("T1", 20, 10)];
+  await settled(el);
+  await settled(el);
+  if (zoom === 2) await doubled(el);
+  await settled(el);
+  const viewport = part(el, "viewport");
+  const grid = part(el, "grid").getBoundingClientRect();
+  const before = {
+    grid: { width: grid.width, height: grid.height },
+    scroll: { width: viewport.scrollWidth, height: viewport.scrollHeight },
+  };
+  const from = centre(button(el));
+  const to = { x: from.x + 24 * zoom, y: from.y + 24 * zoom };
+  pointer(button(el), "pointerdown", 1, from.x, from.y, "mouse");
+  pointer(window, "pointermove", 1, to.x, to.y, "mouse");
+  await settled(el);
+  return { el, to, before };
+}
+
+const offsetOf = (el: WtFloorPlanCanvas, node: Element) => {
+  const grid = part(el, "grid").getBoundingClientRect();
+  const box = node.getBoundingClientRect();
+  return { left: box.left - grid.left, top: box.top - grid.top };
+};
+
+it.each([1, 2])(
+  "at zoom %i, a table that pokes out set by the parent during a drag grows the room, scrolled away under the pointer, and an undo gives it back",
+  async (zoom) => {
+    const { el, to, before } = await draggingIn("width: 600px; height: 360px", zoom);
+    const viewport = part(el, "viewport");
+    const room = offsetOf(el, button(el));
+    const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+    const under = centre(button(el));
+    el.tables = [table("T1", 20, 10), pokingOut];
+    await settled(el);
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual({
+      left: room.left + 24 * zoom,
+      top: room.top + 24 * zoom,
+    });
+    expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+      left: scroll.left + 24 * zoom,
+      top: scroll.top + 24 * zoom,
+    });
+    expect(centre(button(el))).toEqual(under);
+    const corner = el.shadowRoot!.querySelector('[data-key="Corner"]')!.getBoundingClientRect();
+    const now = part(el, "grid").getBoundingClientRect();
+    expect(corner.left).toBeGreaterThanOrEqual(now.left);
+    expect(corner.top).toBeGreaterThanOrEqual(now.top);
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    await settled(el);
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    await settled(el);
+    const back = part(el, "grid").getBoundingClientRect();
+    expect({ width: back.width, height: back.height }).toEqual(before.grid);
+    expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }).toEqual(before.scroll);
+  },
+);
+
+it.each([1, 2])(
+  "at zoom %i, a table that pokes out set by the parent during a drag grows a box that takes its height from the plan once, and steadily",
+  async (zoom) => {
+    const errors: string[] = [];
+    const onError = (e: ErrorEvent) => errors.push(e.message);
+    window.addEventListener("error", onError);
+    onTestFinished(() => window.removeEventListener("error", onError));
+    const { el, to } = await draggingIn("width: 600px", zoom);
+    const start = part(el, "grid").getBoundingClientRect().height;
+    const under = centre(button(el));
+    el.tables = [table("T1", 20, 10), pokingOut];
+    const heights: number[] = [];
+    for (let frame = 0; frame < 6; frame++) {
+      await settled(el);
+      heights.push(part(el, "grid").getBoundingClientRect().height);
+    }
+    // With no height of its own the box cannot scroll the room away, so the table drops below the
+    // pointer by the room.
+    expect(centre(button(el)).y).toBeCloseTo(under.y + 24 * zoom, 1);
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    for (let frame = 0; frame < 4; frame++) {
+      await settled(el);
+      heights.push(part(el, "grid").getBoundingClientRect().height);
+    }
+    expect(heights.at(-1)).toBe(start + 24 * zoom);
+    expect(Math.max(...heights)).toBe(start + 24 * zoom);
+    expect(Math.min(...heights)).toBe(start + 24 * zoom);
+    expect(errors).toEqual([]);
+  },
+);

@@ -153,18 +153,23 @@ function resizeSides(
   const heightBy = sizeChange(p.height, downBy);
   const shrinkW = Math.min(0, widthBy);
   const shrinkH = Math.min(0, heightBy);
-  const growW = widthBy - shrinkW;
-  const growH = heightBy - shrinkH;
+  const crosses = (w: number, h: number) => {
+    const ideal = rotatedRect(placed(w + shrinkW, h + shrinkH, (squares) => squares));
+    return ideal.x < Math.min(0, start.x) - EPSILON || ideal.y < Math.min(0, start.y) - EPSILON;
+  };
+  // A growing side never moves the drawn left or top inwards, so a growth that crosses on its own
+  // still crosses with any growth of the other side added.
+  let growW = widthBy - shrinkW;
+  while (growW > 0 && crosses(growW, 0)) growW--;
+  let growH = heightBy - shrinkH;
+  while (growH > 0 && crosses(0, growH)) growH--;
   // Most squares added first; of as many, more width first. A shrink is never cut.
   for (let total = growW + growH; total > 0; total--) {
     for (let w = Math.min(growW, total); w >= Math.max(0, total - growH); w--) {
       const h = total - w;
-      const ideal = rotatedRect(placed(w + shrinkW, h + shrinkH, (squares) => squares));
-      const crosses =
-        ideal.x < Math.min(0, start.x) - EPSILON || ideal.y < Math.min(0, start.y) - EPSILON;
-      // Only the growth's own shift is held to the 999 limit; a shrink's is held to 999 below.
+      // A growth whose own shift takes x or y past 999 is refused; a shrink's is held to 999 below.
       const grown = placed(w, h, roundShift);
-      if (!crosses && grown.x <= GRID_MAX && grown.y <= GRID_MAX)
+      if (!crosses(w, h) && grown.x <= GRID_MAX && grown.y <= GRID_MAX)
         return held(placed(w + shrinkW, h + shrinkH, roundShift));
     }
   }
