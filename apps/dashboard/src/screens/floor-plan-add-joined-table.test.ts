@@ -363,3 +363,16 @@ it.each([
   await choose(el, ["a", "b"]);
   expect(field(el, "seats").value).toBe(want);
 });
+
+it("A747 reopening after a manually edited add suggests totals again", async () => {
+  const el = await openAdd();
+  await choose(el, ["c3", "c4"]);
+  await set(el, "seats", "7");
+  await set(el, "table-name", "Together");
+  await pressAdd(el);
+  expect(dialog(el).open).toBe(false);
+  el.show();
+  await el.updateComplete;
+  await choose(el, ["c3", "c4"]);
+  expect(field(el, "seats").value).toBe("8");
+});

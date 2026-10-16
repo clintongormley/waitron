@@ -112,7 +112,6 @@ export class TillSplitJoinedDialog extends LitElement {
       restore: (value) => {
         this.chosen = [...value.chosen];
         this.seats = value.seats;
-        this.#seatsEdited = false;
       },
     });
     this.#leave = coordinator;
