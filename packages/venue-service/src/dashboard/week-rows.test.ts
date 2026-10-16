@@ -104,6 +104,7 @@ describe("weekRows", () => {
     const terrace = rowsOn("2026-12-02", "rest")[1]!;
     expect(terrace.blocks.length).toBe(3);
     expect(terrace.blocks.every((b) => b.faded && b.text === "")).toBe(true);
+    expect(terrace.blocks[1]!.label).toBe("Terrace · Lunch 13:00–16:00");
     expect(terrace.words).toBe("as Restaurant");
     expect(terrace.strong).toBe(false);
   });
@@ -154,6 +155,9 @@ describe("weekRows", () => {
     )[1]!;
     const closed = late.blocks.filter((b) => b.kind === "closed");
     expect(closed.map((b) => [b.text, b.end])).toEqual([["Closed 22:00–23:00", 1020]]);
+    expect(
+      late.blocks.filter((b) => b.periodId === "dinner").map((b) => [b.faded, b.text]),
+    ).toEqual([[false, "Dinner 20:00–22:00"]]);
 
     const whole = rowsOn(
       "2026-12-02",

@@ -76,13 +76,7 @@ export function departmentRows(
   names: MonthNames,
 ): DayBoxRow[] {
   const list = (ranges: readonly ServiceRange[]) =>
-    ranges.map((range) =>
-      format("month.range", {
-        name: names.period(range.periodId).name,
-        start: range.startsAt,
-        end: range.endsAt,
-      }).trim(),
-    );
+    ranges.map((range) => serviceRangeText(range, names));
   const closed = (pieces: readonly ClosedRange[]) =>
     pieces.map(({ startsAt, endsAt }) =>
       format("day.closed_range", { start: startsAt, end: endsAt }),
@@ -104,4 +98,13 @@ export function departmentRows(
       return { ...row, text, strong: true };
     }),
   ];
+}
+
+/** A range in words, "Dinner 20:00–23:00". */
+export function serviceRangeText(range: ServiceRange, names: MonthNames): string {
+  return format("month.range", {
+    name: names.period(range.periodId).name,
+    start: range.startsAt,
+    end: range.endsAt,
+  }).trim();
 }

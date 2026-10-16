@@ -1,10 +1,9 @@
 import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import type { ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours } from "../zone-own-hours.js";
 import { format } from "./hours-view.js";
-import { departmentRows, type MonthNames } from "./opening-hours-day.js";
+import { departmentRows, serviceRangeText, type MonthNames } from "./opening-hours-day.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
@@ -63,12 +62,6 @@ export interface WeekRow {
 export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[] {
   const known = day.departments.some((d) => d.departmentId === chosen);
   const place = placeOnDay(day);
-  const rangeText = (range: ServiceRange) =>
-    format("month.range", {
-      name: names.period(range.periodId).name,
-      start: range.startsAt,
-      end: range.endsAt,
-    }).trim();
   const label = (name: string, text: string) => format("week.block_label", { name, text });
   return day.departments
     .filter((read) => !known || read.departmentId === chosen)
@@ -81,7 +74,7 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
         zone: false,
         strong: true,
         blocks: read.ranges.map((range) => {
-          const text = rangeText(range);
+          const text = serviceRangeText(range, names);
           return {
             kind: "open",
             periodId: range.periodId,
@@ -99,7 +92,7 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
         const zoneName = names.name(zone.zoneId);
         const own = zoneOwnHours(read.ranges, zone.closed, day);
         const open = own.ranges.map((piece): WeekBlock => {
-          const text = rangeText(piece);
+          const text = serviceRangeText(piece, names);
           const faded = read.ranges.some(
             (range) =>
               range.periodId === piece.periodId &&
