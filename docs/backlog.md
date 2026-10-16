@@ -497,22 +497,19 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
-- **How long, and in what form, an old taxpayer's database must be kept.** Not checked. Left open
-  by A496; `deploy/README.md` → _Moving to a new tax ID_ says so.
-
-- **The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
-  AEAT.** Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
-  only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
-  Left open by A496.
-
-- **A change of country cannot import a configuration.** Setup refuses an export whose country
-  differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across countries
-  needs its own design. Left open by A496.
-
-- **The dashboard shows the configuration export card where the export route is not served**, so
-  its download fails there: on a demo box, and on a box whose settings name no onboarding intent,
-  such as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
-  intent is preparation or live (`apps/server/src/boot.ts`). Left open by A496.
+- **Loose ends left by A496 (moving to a new tax ID).**
+  - How long, and in what form, an old taxpayer's database must be kept. Not checked;
+    `deploy/README.md` → _Moving to a new tax ID_ says so.
+  - The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
+    AEAT. Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
+    only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
+  - A change of country cannot import a configuration. Setup refuses an export whose country
+    differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
+    countries needs its own design.
+  - The dashboard shows the configuration export card where the export route is not served, so its
+    download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
+    as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
+    intent is preparation or live (`apps/server/src/boot.ts`).
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an
@@ -520,50 +517,38 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   text about live filing, test titles and gaps, and a non-`wt-*` event name.
   [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
 
-- **The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
-  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes;** the wizard shows one
-  sentence for all three, as the command line does. Left open by SQLite slice 2 Task 9c (#646,
-  "Restore from my bucket" in the setup wizard).
-
-- **The first, unconfirmed attempt downloads the whole copy only to show whose it is,** and the
-  confirmed attempt downloads it again; the HTTP request stays open for the whole download. Left
-  open by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
-
-- **Walked in the browser test harness against a stubbed server, not yet on a running box.** Left
-  open by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup wizard).
-
-- **After an archive restore or a Cloud restore the final screen does not show the device steps the
-  bucket rebuild's shows** (`rebuilt` is set only on the bucket path,
-  `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
-  machine's addresses after an archive restore too. Left open by SQLite slice 2 Task 9c (#646,
-  "Restore from my bucket" in the setup wizard).
-
-- **After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
-  peers are stopped" confirmation again.** Left open by SQLite slice 2 Task 9c (#646, "Restore from
-  my bucket" in the setup wizard).
+- **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
+  wizard).**
+  - The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
+    (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows
+    one sentence for all three, as the command line does.
+  - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
+    confirmed attempt downloads it again; the HTTP request stays open for the whole download.
+  - Walked in the browser test harness against a stubbed server, not yet on a running box.
+  - After an archive restore or a Cloud restore the final screen does not show the device steps the
+    bucket rebuild's shows (`rebuilt` is set only on the bucket path,
+    `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
+    machine's addresses after an archive restore too.
+  - After a refused Cloud restore the owner has to tick the Cloud screen's "old server and
+    surviving peers are stopped" confirmation again.
 
 - **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
   are still to measure. [Detail](backlog/box.md#box-image-constraints-b3)
-  **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
+
+- **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
   run. [Detail](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 
 - **A Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live**
   (whether this is wanted is not recorded; it sits among the wizard's constraints). The location
-  name is not on the list leaving Demo clears (`#onPatch`, `apps/setup/src/setup-app.ts`). There the
-  location-name field starts filled in but takes its hint, which the filled value hides, and no "?",
-  because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
+  name is not on the list leaving Demo clears (`#onPatch`, `apps/setup/src/setup-app.ts`).
   [Detail](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2)
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
   the option is still there and the flow still runs, so an operator can still spend a box on it.
   Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
-
-- **Live production recovery and continuous complete-server recovery remain open.** The restore
-  choice now includes guided Cloud recovery of a verified test-venue snapshot. The replacement shows
-  the pairing code and approved capture time, then requires an explicit local restore.
 
 - **Open owner call — setup always stores a language on the account.** If the browser sends no
   language, or one Waitron does not ship, the account gets the venue's language saved as though
@@ -577,41 +562,27 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   arrive. Give them operator words, grouped, or keep the table names.
   [Detail](backlog/setup.md#the-configuration-preview-names-what-it-will-copy-by-database-table)
 
-- **The Review screen scrolls sideways at 390px** when a value is long (a 56-character email made
-  it 530px wide in English, 537px in Spanish): its `auto 1fr` columns never narrow below the
-  longest value. Left open by C42 (#837).
-
 - **The Cloud restore screen shows capture and expiry times as the server's raw ISO text** in both
-  languages, and the Review screen shows invoice languages as codes. _(C113, #1014: one code now.)_
-  Left open by C42 (#837).
+  languages. Left open by C42 (#837).
 
-- **The Spanish certificate export steps name Chrome, macOS and Firefox menus from memory**
-  ("Gestionar certificados importados de Windows", "Acceso a Llaveros", "Sus certificados"…), and
-  the FNMT links still open FNMT's English pages. Check them on real Spanish systems with the item
-  below. Left open by C42 (#837).
-
-- **The certificate export help has never been followed on a real machine** — still open after
-  #334. Nobody exported a certificate through Windows', macOS' or Firefox's own certificate store
-  while reading the new guidance, so the instructions are unverified against the thing they
-  describe.
-  [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
-
-- **Switching setup mode does not clean up what the server already holds** — still open after
-  #334. If someone fills in Demo, Prepare or Live far enough that the server has stored part of
-  that answer and then switches mode, what the server kept is untested — write a test that stages
-  configuration in one mode, switches, and asserts what survives.
-  [Detail](backlog/setup.md#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
-
-- **The setup app's catch-all redirect was not proven by deleting it** — still open after #334.
-  The reviews checked this by running the route tests and the full server suites, not by removing
-  each exclusion one at a time and watching a test fail, and no separate probe confirmed the trading
-  app is untouched by the redirect.
-  [Detail](backlog/setup.md#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
-
-- **A draft carrying a country with no venue-setup pack** — found while bringing `apps/setup` to
-  the coverage bar (2026-09-23), left unfixed. It shows Spain in the country select while the
-  screen holds the other value, so "Check the country." sits beside what looks like a valid choice.
-  [Detail](backlog/setup.md#a-draft-carrying-a-country-with-no-venue-setup-pack)
+- **Loose ends left by #334.**
+  - The certificate export help has never been followed on a real machine. Nobody exported a
+    certificate through Windows', macOS' or Firefox's own certificate store while reading the new
+    guidance, so the instructions are unverified against the thing they describe. The Spanish
+    steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
+    Windows", "Acceso a Llaveros", "Sus certificados"…), and the FNMT links still open FNMT's
+    English pages; check them on real Spanish systems at the same time (left open by C42, #837).
+    [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
+  - Switching setup mode does not clean up what the server already holds. If someone fills in
+    Demo, Prepare or Live far enough that the server has stored part of that answer and then
+    switches mode, what the server kept is untested — write a test that stages configuration in
+    one mode, switches, and asserts what survives.
+    [Detail](backlog/setup.md#switching-setup-mode-does-not-clean-up-what-the-server-already-holds)
+  - The setup app's catch-all redirect was not proven by deleting it. The reviews checked this by
+    running the route tests and the full server suites, not by removing each exclusion one at a
+    time and watching a test fail, and no separate probe confirmed the trading app is untouched by
+    the redirect.
+    [Detail](backlog/setup.md#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
 - **A fiscal test or a provision that answers after the wizard has been removed from the page
   leaves it stuck when it is put back** — found while bringing `apps/setup` to the coverage bar
@@ -619,21 +590,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   unreachable in use.
   [Detail](backlog/setup.md#a-fiscal-test-or-a-provision-that-answers-after-the-wizard-has-been-removed-from-the-page-leaves-it-stuck-when-it-is-put-back)
 
-- **In Demo, a server refusal of a field Demo hides can only be retried unchanged** — a Demo gap
-  on the setup wizard's venue screen as it stands after C47s (#840), left unfixed. Whether the
-  server ever refuses Demo's fixed series codes is not established.
-  [Detail](backlog/setup.md#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
-
-- **In Demo with a draft country that has no venue-setup pack** — a Demo gap on the setup
-  wizard's venue screen as it stands after C47s (#840), left unfixed. The screen says from the
-  start that Demo's invoice settings have not loaded, even when they have (the unknown country names
-  no filing module to take a description from), and Next only moves focus to that sentence.
-  [Detail](backlog/setup.md#in-demo-with-a-draft-country-that-has-no-venue-setup-pack)
-
-- **In Demo, a local check that fails only on a field Demo hides** — a Demo gap on the setup
-  wizard's venue screen as it stands after C47s (#840), left unfixed. All of this was read in the
-  code, not run; whether a real draft can reach that state has not been tested.
-  [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+- **Loose ends left by C47s (#840): Demo gaps on the setup wizard's venue screen, left unfixed.**
+  - In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
+    server ever refuses Demo's fixed series codes is not established.
+    [Detail](backlog/setup.md#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
+  - In Demo with a draft country that has no venue-setup pack. Seen in a throwaway test on
+    2026-09-29, since deleted; nothing pins it.
+    [Detail](backlog/setup.md#in-demo-with-a-draft-country-that-has-no-venue-setup-pack)
+  - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
+    not run; whether a real draft can reach that state has not been tested.
+    [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
 - **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
   backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
@@ -664,13 +630,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   cannot be reprinted or looked up on the till: both look a sale up through its till order, which a
   practice sale does not have (the look's reading, not checked against the code).
 
-- **The demo's Drinks section labels in Catalan and Galician are drafts awaiting a speaker's
-  check**, like W109-3's text below. Left open by A321 (the demo's included Drinks menu opens onto
-  four sections).
-
 - **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
   owner decision 4, 2026-10-06). A speaker of each
-  should read it.
+  should read it. The demo's Drinks section labels in Catalan and Galician are drafts awaiting the
+  same check, left open by A321 (the demo's included Drinks menu opens onto four sections).
   [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
@@ -695,42 +658,36 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   warning on one device and confirm the page appears.
   [Detail](backlog/setup.md#the-tills-this-device-hasnt-trusted-the-till-yet-page-has-never-been-seen-on-a-real-device)
 
-- **The look left a switched-off printer named "A331 look Epson" (the owner's Epson at
-  192.168.10.81) in the shared demo venue.** Left open by A331 batch 3b (#1415).
-
 - **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**
   `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` under `--reset` before
   `devSetup` reaches `demoSeedEnvironment`, against the file's header. Fix: the same check at the
   top of `main()` that `dev-onboard.ts` has. Found by A680.
 
-- **The setup wizard has no text for `sif.throwaway_allocation_refused`.** A box started with
-  `WAITRON_ENV=production` still offers Demo and Preparation (`apps/setup/src/screens/mode-screen.ts`
-  shows only a production warning), and either one is refused with that code, so the operator sees
-  the wizard's generic failure. Left open by A680 (its plan's D6).
-
-- **Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
-  #1700.** Neither needs a supplied allocation since A680, so on a shared network a stranger can set
-  up an unconfigured box in either mode before its owner does. Only a preproduction venue can come of
-  it. Left open by A680 (its plan's unsure point 2).
+- **Loose ends left by A680 (#1718).**
+  - The setup wizard has no text for `sif.throwaway_allocation_refused`. A box started with
+    `WAITRON_ENV=production` still offers Demo and Preparation
+    (`apps/setup/src/screens/mode-screen.ts` shows only a production warning), and either one is
+    refused with that code, so the operator sees the wizard's generic failure (its plan's D6).
+  - Demo and Preparation can be set up by anyone who reaches the setup wizard first, as before
+    #1700. Neither needs a supplied allocation since A680, so on a shared network a stranger can
+    set up an unconfigured box in either mode before its owner does. Only a preproduction venue can
+    come of it (its plan's unsure point 2).
+  - The throwaway-allocation seat names a Spanish term in a country-neutral contract:
+    `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
+    (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
+    Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
+    shape, so a rename changes both. Owner's call.
+  - The route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its plan's
+    table ("cell 1" … "cell 14"), which goes when plans are deleted at go-live, and the file does
+    not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
+    behaviour.
+  - Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
+    checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
+    be refused one, which fits a practice-only venue, but nothing ran it.
 
 - **A fresh Demo venue opens its dashboard on a red tax-filing alert** (`fiscal.submission_delayed`
   over the demo seed's back-dated sales). Found by A680.
   [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)
-
-- **The throwaway-allocation seat names a Spanish term in a country-neutral contract.**
-  `ModuleProvisioning.throwawayAllocation.prepare` takes `taxpayerNif`
-  (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
-  Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
-  shape, so a rename changes both. Owner's call. Left open by A680 (#1718).
-
-- **A680's route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its
-  plan's table ("cell 1" … "cell 14")**, which goes when plans are deleted at go-live, and the file
-  does not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
-  behaviour. Left open by A680 (#1718).
-
-- **Whether a throwaway venue can get an offline recovery pack is untested.** #1717's recovery pack
-  checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably be
-  refused one, which fits a practice-only venue, but nothing ran it. Left open by A680 (#1718).
 
 ### Menus and the catalogue
 

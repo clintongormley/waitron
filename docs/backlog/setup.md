@@ -93,15 +93,6 @@ What constrains the next change to the wizard:
   and watching a test fail, and no separate probe confirmed the trading app is untouched by the
   redirect.
 
-## A draft carrying a country with no venue-setup pack
-
-**Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
-seen in a throwaway test, since deleted, and none has a test pinning it:
-
-- _A draft carrying a country with no venue-setup pack_ (a configuration import can bring one) shows
-  Spain in the country select while the screen holds the other value, so "Check the country." sits
-  beside what looks like a valid choice.
-
 ## A fiscal test or a provision that answers after the wizard has been removed from the page leaves it stuck when it is put back
 
 **Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
