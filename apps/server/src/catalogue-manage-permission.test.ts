@@ -54,12 +54,6 @@ beforeEach(() => {
 
 const writes: [label: string, path: string, method: string, body: unknown][] = [
   [
-    "the new-product VAT class",
-    "/management-api/catalogue-settings",
-    "PUT",
-    { defaultProductVatClass: "reduced" },
-  ],
-  [
     "a unit",
     "/management-api/units",
     "POST",

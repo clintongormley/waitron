@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { createRequest } from "@waitron/dashboard-kit";
-import { DashboardApi } from "./api/client.js";
+import { DashboardApi, type VenueDefaults } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
@@ -113,7 +113,12 @@ async function mount(options: { permissions?: string[]; required?: boolean; path
       "/management-api/receipt-settings": { settings: {} },
       "/management-api/location-settings": { name: "Casa", operationDescription: "Legacy" },
       "/management-api/venue-details": venueDetailsFixture(),
-      "/management-api/receipt-language": { language: "es-ES", choices: ["es-ES"], fixed: null },
+      "/management-api/venue-defaults": {
+        receiptLanguage: "es-ES",
+        receiptLanguageChoices: ["es-ES"],
+        fixedReceiptLanguage: null,
+        defaultProductVatClass: "general",
+      } satisfies VenueDefaults,
       "/management-api/alerts": { visible: false, alerts: [] },
       "/management-api/venue-service/opening-hours": {
         departments: [],

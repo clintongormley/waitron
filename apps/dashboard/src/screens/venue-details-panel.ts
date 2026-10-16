@@ -12,9 +12,9 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import type {
   DashboardApi,
   VenueDetailsModel,
@@ -24,7 +24,7 @@ import type {
   VenueClockView,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
   VENUE_DETAIL_FIELDS,
@@ -43,16 +43,6 @@ const LABELS: Record<VenueDetailField, StringKey> = {
   province: "venue_details.province",
   timeZone: "venue_details.timeZone",
   dayCutover: "venue_details.dayCutover",
-};
-const HELP: Record<VenueDetailField, StringKey> = {
-  name: "venue_details.name_warning",
-  addressLine1: "venue_details.address_notice",
-  addressLine2: "venue_details.address_notice",
-  postalCode: "venue_details.postcode_warning",
-  city: "venue_details.city_warning",
-  province: "venue_details.geography_context",
-  timeZone: "venue_details.clock_warning",
-  dayCutover: "venue_details.clock_warning",
 };
 const PROBLEMS: Record<string, StringKey> = {
   required: "venue_details.required",
@@ -73,48 +63,60 @@ const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : fi
 export class VenueDetailsPanel extends LitElement {
   static override styles = [
     baseStyles,
+    settingsCardStyles,
     css`
       :host {
-        display: block;
+        display: grid;
+        gap: var(--wt-space-5);
         min-width: 0;
       }
-      dl {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin: 0 0 var(--wt-space-4);
-      }
-      dt {
-        font-weight: var(--wt-font-weight-medium);
-      }
-      dd {
-        margin: 0 0 var(--wt-space-2);
-        overflow-wrap: anywhere;
-      }
-      .identity {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2) var(--wt-space-3);
-        margin: 0 0 var(--wt-space-4);
-      }
-      .identity p {
-        margin: 0;
-        font-weight: var(--wt-font-weight-medium);
-        overflow-wrap: anywhere;
+      /* Its dialog opens in the top layer; out of the grid's flow it adds no second gap between cards. */
+      dashboard-legal-name-dialog {
+        display: block;
+        position: absolute;
       }
       form {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .fields {
+        display: grid;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+      .fields > .field,
+      .fields > .pair {
+        max-width: var(--wt-form-max-width);
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+        gap: var(--wt-space-3);
+      }
       .field {
         min-width: 0;
       }
+      .locked {
+        color: var(--wt-color-text-muted);
+      }
+      .reason,
+      .reason > div {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
       .reason {
         color: var(--wt-color-text-muted);
-        max-width: var(--wt-field-max-width);
+        padding-bottom: var(--wt-space-4);
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+      @media (max-width: 48rem) {
+        .pair {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       .reason p {
         margin: 0;
+        max-width: var(--wt-form-max-width);
       }
       .warnings {
         padding: var(--wt-space-3);
@@ -466,7 +468,7 @@ export class VenueDetailsPanel extends LitElement {
       for (const reason of policy.reasons) if (REASONS[reason]) keys.add(REASONS[reason]!);
     }
     if (keys.size === 0) return nothing;
-    return html`<div class="reason" data-test="locked-notes">
+    return html`<div data-test="locked-notes">
       ${[...keys].map((key) => html`<p>${t(key)}</p>`)}
     </div>`;
   }
@@ -488,12 +490,15 @@ export class VenueDetailsPanel extends LitElement {
         this.#change(field, event);
     };
     const value = this.draft![field] ?? "";
-    const locked = this.model!.policy[field].decision === "refuse";
-    if (field === "dayCutover" || (locked && this.#patch()[field] === undefined))
-      return html`<div data-test=${`locked-${field}`}>
-        <strong>${t(LABELS[field])}</strong>
-        <p>${value || t("venue_details.unset")}</p>
-      </div>`;
+    if (this.#isLockedRow(field))
+      return settingsRows([
+        {
+          label: t(LABELS[field]),
+          value: html`${value || t("venue_details.unset")}
+            <span class="locked">· ${t("venue_details.locked")}</span>`,
+          dataTest: `locked-${field}`,
+        },
+      ]);
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
@@ -520,9 +525,21 @@ export class VenueDetailsPanel extends LitElement {
               @wt-change=${change}
             ></wt-input>`
       }
-      <wt-help-tooltip aria-label=${`${t(LABELS[field])}: ${t("venue_details.help")}`}
-        >${t(HELP[field])}</wt-help-tooltip
-      >
+    </div>`;
+  }
+  #isLockedRow(field: VenueDetailField): boolean {
+    return this.model!.policy[field].decision === "refuse" && this.#patch()[field] === undefined;
+  }
+  #fields(): TemplateResult {
+    const pair = !this.#isLockedRow("postalCode") && !this.#isLockedRow("city");
+    return html`<div class="fields">
+      ${this.#field("name")} ${this.#field("addressLine1")} ${this.#field("addressLine2")}
+      ${
+        pair
+          ? html`<div class="pair">${this.#field("postalCode")} ${this.#field("city")}</div>`
+          : html`${this.#field("postalCode")} ${this.#field("city")}`
+      }
+      ${this.#field("province")} ${this.#field("timeZone")}
     </div>`;
   }
   override render(): TemplateResult {
@@ -532,49 +549,69 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
-    return html`<h2>${t("venue_details.title")}</h2>
-      ${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
-      ${
-        !model
-          ? html`<p role="status">${t("venue_details.loading")}</p>`
-          : html`
-              <div class="identity">
-                <p data-test="issuer">
-                  ${model.issuer.legalName} · ${model.issuer.taxId} · ${model.issuer.country}
-                </p>
-                ${
-                  this.readOnly
-                    ? nothing
-                    : html`<wt-button
-                        data-test="change-legal-name"
-                        @click=${() => {
-                          if (current() && this.model)
-                            this.renderRoot
-                              .querySelector("dashboard-legal-name-dialog")
-                              ?.show(this.model.issuer.legalName);
-                        }}
-                        >${t("venue_details.change_legal_name")}</wt-button
-                      >`
-                }
-              </div>
-              <dashboard-legal-name-dialog
-                .api=${this.api}
-                @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
-                  if (generation === this.#generation) this.model = event.detail.model;
-                }}
-              ></dashboard-legal-name-dialog>
-              <dashboard-business-day-start-editor
-                .api=${this.api}
-                .model=${model.businessDayClock}
-                .readOnly=${this.readOnly}
-                @saved=${(event: CustomEvent<VenueDetailsModel>) => {
-                  event.stopPropagation();
-                  this.model = event.detail;
-                  void this.#load();
-                }}
-              ></dashboard-business-day-start-editor>
-
-              ${
+    return html`${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
+    ${
+      !model
+        ? html`<p role="status">${t("venue_details.loading")}</p>`
+        : html`
+            ${settingsCard({
+              id: "business-card",
+              heading: t("venue_settings.card.business"),
+              dataTest: "issuer",
+              editing: false,
+              action: this.readOnly
+                ? nothing
+                : html`<wt-button
+                    data-test="change-legal-name"
+                    @click=${() => {
+                      if (current() && this.model)
+                        this.renderRoot
+                          .querySelector("dashboard-legal-name-dialog")
+                          ?.show(this.model.issuer.legalName);
+                    }}
+                    >${t("venue_details.change_legal_name")}</wt-button
+                  >`,
+              body: settingsRows([
+                {
+                  label: t("venue_details.legal_name"),
+                  value: model.issuer.legalName,
+                  dataTest: "saved-legalName",
+                },
+                {
+                  label: t("venue_details.tax_id"),
+                  value: model.issuer.taxId,
+                  dataTest: "saved-taxId",
+                },
+                {
+                  label: t("venue_details.country"),
+                  value: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
+                    model.issuer.country,
+                  )!,
+                  dataTest: "saved-country",
+                },
+              ]),
+            })}
+            <dashboard-legal-name-dialog
+              .api=${this.api}
+              @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
+                if (generation === this.#generation) this.model = event.detail.model;
+              }}
+            ></dashboard-legal-name-dialog>
+            ${settingsCard({
+              id: "venue-card",
+              heading: t("venue_settings.card.venue"),
+              editing: Boolean(this.draft && !this.readOnly),
+              action:
+                this.draft || this.readOnly
+                  ? nothing
+                  : html`<wt-button
+                      data-test="edit"
+                      @click=${() => {
+                        if (current()) this.#begin();
+                      }}
+                      >${t("action.edit")}</wt-button
+                    >`,
+              body:
                 this.draft && !this.readOnly
                   ? html`<form
                       @submit=${(event: Event) => {
@@ -583,17 +620,7 @@ export class VenueDetailsPanel extends LitElement {
                       }}
                       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
                     >
-                      ${VENUE_DETAIL_FIELDS.map((field) => this.#field(field))}
-                      ${this.#lockedNotes()}
-                      ${
-                        ["addressLine1", "addressLine2", "postalCode", "city", "province"].some(
-                          (field) => this.#patch()[field as VenueDetailField] !== undefined,
-                        )
-                          ? html`<p class="reason" data-test="address-notice">
-                              ${t("venue_details.address_notice")}
-                            </p>`
-                          : nothing
-                      }
+                      ${this.#fields()}
                       ${
                         this.#warnings().length > 0
                           ? html`<div class="warnings" data-test="warnings">
@@ -616,6 +643,10 @@ export class VenueDetailsPanel extends LitElement {
                             </div>`
                           : nothing
                       }
+                      <div class="reason" data-test="form-foot">
+                        ${this.#lockedNotes()}
+                        <p data-test="address-notice">${t("venue_details.address_notice")}</p>
+                      </div>
                       <wt-form-actions .error=${this.actionError}>
                         <wt-button
                           slot="cancel"
@@ -643,30 +674,32 @@ export class VenueDetailsPanel extends LitElement {
                         >
                       </wt-form-actions>
                     </form>`
-                  : html`<dl>
-                        <dt>${t(LABELS.name)}</dt>
-                        <dd data-test="saved-name">${model.details.name}</dd>
-                        <dt>${t("venue_details.address")}</dt>
-                        <dd data-test="address">${this.#address(model.details)}</dd>
-                        <dt>${t(LABELS.timeZone)}</dt>
-                        <dd data-test="saved-timeZone">${model.details.timeZone}</dd>
-                        <dt>${t(LABELS.dayCutover)}</dt>
-                        <dd data-test="saved-dayCutover">${model.details.dayCutover}</dd>
-                      </dl>
-                      ${
-                        this.readOnly
-                          ? nothing
-                          : html`<wt-button
-                              data-test="edit"
-                              @click=${() => {
-                                if (current()) this.#begin();
-                              }}
-                              >${t("action.edit")}</wt-button
-                            >`
-                      }`
-              }
-            `
-      }`;
+                  : settingsRows([
+                      { label: t(LABELS.name), value: model.details.name, dataTest: "saved-name" },
+                      {
+                        label: t("venue_details.address"),
+                        value: this.#address(model.details),
+                        dataTest: "address",
+                      },
+                      {
+                        label: t(LABELS.timeZone),
+                        value: model.details.timeZone,
+                        dataTest: "saved-timeZone",
+                      },
+                    ]),
+            })}
+            <dashboard-business-day-start-editor
+              .api=${this.api}
+              .model=${model.businessDayClock}
+              .readOnly=${this.readOnly}
+              @saved=${(event: CustomEvent<VenueDetailsModel>) => {
+                event.stopPropagation();
+                this.model = event.detail;
+                void this.#load();
+              }}
+            ></dashboard-business-day-start-editor>
+          `
+    }`;
   }
 }
 declare global {

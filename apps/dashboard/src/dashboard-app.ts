@@ -67,8 +67,7 @@ import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
-import "./screens/receipt-language-panel.js";
-import "./screens/catalogue-defaults-screen.js";
+import "./screens/venue-defaults-panel.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/kitchen-screen.js";
@@ -119,7 +118,6 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
-  "catalogue-defaults",
   "content-languages",
   "venue-settings",
   "approvals",
@@ -228,11 +226,6 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
       { screen: "units", labelKey: "nav.units" },
-      {
-        screen: "catalogue-defaults",
-        labelKey: "nav.catalogue_defaults",
-        requiresPermission: "catalogue.manage",
-      },
     ],
   },
   {
@@ -307,11 +300,11 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
       ></dashboard-venue-details-panel>`,
   },
   {
-    key: "receipt-language",
+    key: "defaults",
     tab: "venue-details",
     requiresPermission: "venue.configure",
     render: (api) =>
-      html`<dashboard-receipt-language-panel .api=${api}></dashboard-receipt-language-panel>`,
+      html`<dashboard-venue-defaults-panel .api=${api}></dashboard-venue-defaults-panel>`,
   },
   {
     key: "statuses",
@@ -2465,10 +2458,6 @@ export class DashboardApp extends LitElement {
         ></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
-      case "catalogue-defaults":
-        return html`<dashboard-catalogue-defaults-screen
-          .api=${this.api}
-        ></dashboard-catalogue-defaults-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}

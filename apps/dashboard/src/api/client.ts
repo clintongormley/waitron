@@ -582,6 +582,14 @@ export interface ReceiptLanguage {
   fixed: { locale: string; reason: Record<string, string> } | null;
 }
 
+export interface VenueDefaults {
+  /** As stored, even when it is not one of `receiptLanguageChoices`. */
+  receiptLanguage: string;
+  receiptLanguageChoices: string[];
+  fixedReceiptLanguage: string | null;
+  defaultProductVatClass: VatClass;
+}
+
 export interface TestEmailAddress {
   name: string;
   address: string;
@@ -2357,12 +2365,6 @@ export class DashboardApi {
     return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "GET");
   }
 
-  saveCatalogueSettings(
-    input: Pick<CatalogueSettings, "defaultProductVatClass">,
-  ): Promise<CatalogueSettings> {
-    return this.#request<CatalogueSettings>("/management-api/catalogue-settings", "PUT", input);
-  }
-
   saveCatalogueDefaultColor(color: string | null): Promise<CatalogueSettings> {
     return this.#request<CatalogueSettings>(
       "/management-api/catalogue-settings/default-color",
@@ -3005,8 +3007,14 @@ export class DashboardApi {
     return this.#request<ReceiptLanguage>("/management-api/receipt-language", "GET");
   }
 
-  putReceiptLanguage(language: string): Promise<void> {
-    return this.#request<void>("/management-api/receipt-language", "PUT", { language });
+  getVenueDefaults(): Promise<VenueDefaults> {
+    return this.#request<VenueDefaults>("/management-api/venue-defaults", "GET");
+  }
+
+  putVenueDefaults(
+    changes: Partial<Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass">>,
+  ): Promise<VenueDefaults> {
+    return this.#request<VenueDefaults>("/management-api/venue-defaults", "PUT", changes);
   }
 
   previewReceiptDraft(

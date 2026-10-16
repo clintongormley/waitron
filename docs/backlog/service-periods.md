@@ -312,39 +312,6 @@ special-day write routes.
    the names, then "plus N more" past a cut-off. Owner: try 5 and 10 names on the real screen and
    keep the one that reads better.
 
-## A755. Venue settings: four cards on one page
-
-**A755 (owner, 2026-10-16) — the owner approved the mock-ups as drawn.** Mock-ups:
-[view](mockups/a755-venue-settings/01-venue-details-view.png),
-[editing the venue card](mockups/a755-venue-settings/02-editing-the-venue-card.png),
-[editing the defaults card](mockups/a755-venue-settings/03-editing-the-defaults-card.png); the
-canvas they were drawn on is [here](https://claude.ai/artifact/6YxjmqL8TnptCV9S9evCnE) (owner's account
-only). The boards still draw today's tabs; A756, A757 and A758 take the Kitchen, Tables and
-Adjustment reasons tabs away, leaving Venue settings one page with no tabs.
-
-1. **Four cards, each editing on its own**, the others staying in view mode:
-   - **Business:** legal name, tax ID, country, with "Change legal name";
-   - **Venue:** venue name, the address as one block, time zone, with Edit;
-   - **Business day:** starts at, scheduled change, with "Change start";
-   - **Defaults:** default receipt language and VAT class for new products, with Edit.
-2. **The business-day start shows once.** Today it shows twice: in the business-day editor and as
-   the "Business day starts at" row (`apps/dashboard/src/screens/venue-details-panel.ts:654`), and
-   "Change start" touches the Venue name label below it.
-3. **The edit form:** fields stop at a readable width (560 px in the mock-up); postcode and city
-   side by side; no "?" buttons (the owner saw them on the address fields, A237) — the hint is the
-   placeholder; the lock reason and the note about the address on receipts said once at the card's
-   foot; Save quiet until something changes (A331).
-4. **The receipt language becomes "Default receipt language"**, because staff can still print
-   another at the till. Its legal paragraph goes (`fixedReceiptLocale.reason`,
-   `packages/country-es/src/spain.ts:197-203`; check what else reads it before deleting it). In
-   Catalonia editing shows a dropdown offering only Catalan, not today's read-only card
-   (`apps/dashboard/src/screens/receipt-language-panel.ts`).
-5. **The VAT class for new products comes back from Products and menus** into the Defaults card,
-   and the Defaults page and its sidebar entry go. A494 moved it out on 2026-10-11, when it was an
-   unheaded panel; the owner, 2026-10-16: it is a venue setting, not a page of its own. **Both
-   settings on the card fall under `venue.configure`** (owner, 2026-10-16), so the VAT default no
-   longer needs `catalogue.manage`.
-
 ## A759. The Calendar's Year | Month switch goes; the title moves between views
 
 **A759 (owner, 2026-10-16).** Owner: "i'm not sure whether we need the Year|Month … it is now obvious
@@ -414,6 +381,14 @@ not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
   Week view, and no legend. Its day box lists each area's number of people; role names and times
   wait for the month read to carry each block (backlog: "Staffing's day box: each area's staff
   roles and times").
+
+- **The "VAT class for new products" default is a venue setting (owner, 2026-10-16, A755).** It sits
+  on Venue settings' Defaults card beside the default receipt language, and both are saved together
+  under `venue.configure`, not `catalogue.manage`.
+
+- **Venue settings' Venue card has no "?" buttons (owner, 2026-10-16, A755)**, though its fields start
+  filled in: what a change does shows in its review box once the field changes
+  ([design-system.md](../developers/design-system.md) → Forms).
 
 - **The Calendar's day box does not add a date to an existing special day (A720, 2026-10-15).** The
   ordinary-date dialog it replaced offered that; a date is added from the special day's own editor,

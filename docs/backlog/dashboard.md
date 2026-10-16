@@ -393,8 +393,8 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
   A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
-  gates the catalogue, units, content languages and the "VAT class for new products" default
-  (A755 moves that default under `venue.configure`, owner 2026-10-16). Input
+  gates the catalogue, units and content languages; the "VAT class for new products" default is set
+  under `venue.configure` (owner, 2026-10-16, A755). Input
   since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
   staff included, chosen so nobody lost the ability to take payment; the review decides who keeps
   it, and whether to rename it — it is the only permission whose action is two words (a reviewer
@@ -650,8 +650,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   other forms were not tried, and the recipe editor clears its choice on removal by design. It
   matters only if a screen ever moves an open form. DONE for the unit form in A397 part 2 (#1439): its
   edit-first case in `catalogue-forms.unsaved.test.ts` failed before the fix and passes after.
-  Still untried: the "VAT class for new products" default, the ingredient form, the options list
-  and its option window, the extras list, Add to menus, Add products, Schedule and Change time.
+  Still untried: the ingredient form, the options list and its option window, the extras list,
+  Add to menus, Add products, Schedule and Change time.
 - **Batch 2b — LANDED in #1424 (A331-2b, 2026-10-08).** The menus screen: the menu details
   form (new and rename) and the section form (new and edit), which are one form mounted twice, and
   an include's Edit dialog. Each opens quiet, turns blue on the first edit, goes quiet again when

@@ -21,17 +21,23 @@ import type {
 } from "../api/client.js";
 import { t, fill, currentLocale } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
 type Draft = { effectiveBusinessDay: string; dayCutover: string };
 @customElement("dashboard-business-day-start-editor")
 export class BusinessDayStartEditor extends LitElement {
   static override styles = [
     baseStyles,
+    settingsCardStyles,
     css`
       :host {
         display: block;
         min-width: 0;
-        margin-top: var(--wt-space-4);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
       form,
       dl {
@@ -375,47 +381,64 @@ export class BusinessDayStartEditor extends LitElement {
     const draft = this.draft;
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
-    const action = saveActionState(this.#scope);
+    const saveAction = saveActionState(this.#scope);
     const ready = this.#ready();
     const preview = this.preview;
     const conflicts = preview && this.#conflictLines(preview);
-    return html`<h3>${t("business_day.title")}</h3>
-      <dl>
-        <dt>${t("business_day.current")}</dt>
-        <dd>${current.slice(0, 5)} (${model.clock.timeZone})</dd>
-        ${
-          pending
-            ? html`<dt>${t("business_day.pending")}</dt>
-                <dd>${pending.effectiveBusinessDay} · ${pending.dayCutover.slice(0, 5)}</dd>
-                <dt>${t("business_day.locks")}</dt>
-                <dd>${this.#instant(pending.locksAt)}</dd>`
-            : nothing
-        }
-      </dl>
-      ${pending?.editable === false ? html`<p data-test="locked">${t("business_day.locked")}</p>` : nothing}
-      ${
-        !this.readOnly && !draft && pending?.editable !== false
-          ? html`<wt-button
-                data-test=${pending ? "replace" : "change"}
-                ?disabled=${this.busy}
-                @click=${() => {
-                  if (active()) this.#begin();
-                }}
-                >${t(pending ? "business_day.replace" : "business_day.change")}</wt-button
-              >${
-                pending
-                  ? html`<wt-button
-                      data-test="cancel-pending"
-                      ?disabled=${this.busy}
-                      @click=${() => {
-                        if (active()) void this.#cancelPending();
-                      }}
-                      >${t("business_day.cancel_pending")}</wt-button
-                    >`
-                  : nothing
-              }`
-          : nothing
-      }
+    const action =
+      !this.readOnly && !draft && pending?.editable !== false
+        ? html`<div class="actions">
+            <wt-button
+              data-test=${pending ? "replace" : "change"}
+              ?disabled=${this.busy}
+              @click=${() => {
+                if (active()) this.#begin();
+              }}
+              >${t(pending ? "business_day.replace" : "business_day.change")}</wt-button
+            >${
+              pending
+                ? html`<wt-button
+                    data-test="cancel-pending"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (active()) void this.#cancelPending();
+                    }}
+                    >${t("business_day.cancel_pending")}</wt-button
+                  >`
+                : nothing
+            }
+          </div>`
+        : nothing;
+    return html`${settingsCard({
+        id: "business-day-card",
+        heading: t("venue_settings.card.business_day"),
+        editing: false,
+        action,
+        body: html`${settingsRows([
+          {
+            label: t("business_day.starts_at"),
+            value: current.slice(0, 5),
+            dataTest: "saved-dayCutover",
+          },
+          {
+            label: t("business_day.scheduled"),
+            value: pending
+              ? `${pending.effectiveBusinessDay} · ${pending.dayCutover.slice(0, 5)}`
+              : t("business_day.none"),
+            dataTest: "saved-pending",
+          },
+          ...(pending
+            ? [
+                {
+                  label: t("business_day.locks"),
+                  value: this.#instant(pending.locksAt),
+                  dataTest: "saved-locksAt",
+                },
+              ]
+            : []),
+        ])}
+        ${pending?.editable === false ? html`<p data-test="locked">${t("business_day.locked")}</p>` : nothing}`,
+      })}
       ${this.actionError && !draft ? html`<p class="error" role="alert">${this.actionError}</p>` : nothing}
       <wt-dialog
         .open=${!!draft}
@@ -532,8 +555,8 @@ export class BusinessDayStartEditor extends LitElement {
                     >${t("action.cancel")}</wt-button
                   ><wt-button
                     data-test="save"
-                    variant=${action.variant}
-                    ?disabled=${action.unchanged || this.busy || this.readOnly || !ready || this.acknowledged !== this.#key() || (this.attempted && Object.keys(this.#problems()).length > 0)}
+                    variant=${saveAction.variant}
+                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || this.acknowledged !== this.#key() || (this.attempted && Object.keys(this.#problems()).length > 0)}
                     @click=${() => {
                       if (active()) void this.#save();
                     }}

@@ -59,8 +59,8 @@ beforeAll(() => {
 
 const till = (method: string, path: string, body: unknown = {}) =>
   send(venue.app, venue.cookie, method, path, body);
-const changeTo = (language: string) =>
-  send(settings, manager, "PUT", "/management-api/receipt-language", { language });
+const changeTo = (receiptLanguage: string) =>
+  send(settings, manager, "PUT", "/management-api/venue-defaults", { receiptLanguage });
 
 function rows<T>(query: ReturnType<typeof sql>): T[] {
   return venue.db.all<T>(query);
@@ -161,7 +161,10 @@ describe("a receipt-language change while orders are open", () => {
       tender: { method: "cash", amount: "35.00" },
     });
     expect(paid.status).toBe(200);
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
     expect(language()).toEqual(["gl-ES"]);
   });
 
@@ -188,14 +191,20 @@ describe("a receipt-language change while orders are open", () => {
                              'general', 121)`);
     expect(statusOf(orderId)).toBe("open");
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
     expect(language()).toEqual(["gl-ES"]);
   });
 
   it("accepts the language already saved while an order is open, writing nothing new", async () => {
     reset();
     await seatedWith(venue, "Paella");
-    expect(await changeTo("es-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("es-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "es-ES" },
+    });
     expect(language()).toEqual(["es-ES"]);
   });
 
@@ -228,7 +237,10 @@ describe("a receipt-language change while orders are open", () => {
       sql`select locale from sales where working_order_id = ${id}`,
     );
     expect(sale!.locale).toBe("es-ES");
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
   });
 
   it("accepts a change once every counter sale is paid and sent", async () => {
@@ -237,7 +249,10 @@ describe("a receipt-language change while orders are open", () => {
     expect(dishLines(id).every((line) => line.sent_at !== null && line.served_at === null)).toBe(
       true,
     );
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
     const prep = await till("POST", `/api/working-orders/${id}/prep`);
     expect(prep.json).toMatchObject({ code: "ticket.already_fired" });
   });
@@ -248,7 +263,10 @@ describe("a receipt-language change while orders are open", () => {
     const [line] = dishLines(party.tabId);
     expect(line!.served_at).toBeNull();
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
     expect(language()).toEqual(["gl-ES"]);
 
     const served = await till("POST", `/api/parties/${party.partyId}/served`, {
@@ -272,7 +290,10 @@ describe("a receipt-language change while orders are open", () => {
     expect(served.status).toBe(200);
     expect(dishLines(party.tabId)[0]!.served_at).not.toBeNull();
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
 
     const unserved = await till("POST", `/api/parties/${party.partyId}/unserved`, {
       submissionId: randomUUID(),
@@ -314,7 +335,10 @@ describe("a receipt-language change while orders are open", () => {
       rows<{ state: string }>(sql`select state from parties where id = ${survivor.partyId}`),
     ).toEqual([{ state: "open" }]);
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
     expect(language()).toEqual(["gl-ES"]);
   });
 
@@ -335,7 +359,10 @@ describe("a receipt-language change while orders are open", () => {
     }
     expect(dishLines(id)[0]!.sent_at).toBeNull();
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
 
     expect((await till("POST", `/api/working-orders/${id}/prep`)).status).toBe(200);
     expect(dishLines(id)[0]!.sent_at).not.toBeNull();
@@ -373,7 +400,10 @@ describe("a receipt-language change while orders are open", () => {
     expect(prep).toMatchObject({ status: 409, json: { code: "ticket.already_fired" } });
     expect(dishLines(id)[1]!.sent_at).toBeNull();
 
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
 
     const before = dishLines(id);
     const after = await till("POST", `/api/working-orders/${id}/prep`);
@@ -398,7 +428,10 @@ describe("a receipt-language change while orders are open", () => {
       expect(placed.status).toBe(200);
       expect(statusOf(id)).toBe("placed");
 
-      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+      expect(await changeTo("gl-ES")).toMatchObject({
+        status: 200,
+        json: { receiptLanguage: "gl-ES" },
+      });
 
       const collected = await till("POST", `/api/working-orders/${id}/collect`, {
         tender: { method: "cash", amount: "35.00" },
@@ -454,7 +487,10 @@ describe("a receipt-language change while orders are open", () => {
       expect(before.sales).toEqual([expect.objectContaining({ locale: "es-ES" })]);
       expect(before.lines).toHaveLength(1);
 
-      expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+      expect(await changeTo("gl-ES")).toMatchObject({
+        status: 200,
+        json: { receiptLanguage: "gl-ES" },
+      });
       expect(language()).toEqual(["gl-ES"]);
 
       const collected = await till("POST", `/api/working-orders/${id}/collect`, {
@@ -499,7 +535,10 @@ describe("a receipt-language change while orders are open", () => {
     reset();
     const party = await seatedWith(venue);
     expect(statusOf(party.tabId)).toBe("open");
-    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(await changeTo("gl-ES")).toMatchObject({
+      status: 200,
+      json: { receiptLanguage: "gl-ES" },
+    });
   });
 
   // Why an open order holding a line still blocks. A language changed underneath one by direct SQL
@@ -518,5 +557,28 @@ describe("a receipt-language change while orders are open", () => {
     });
     expect(split).toMatchObject({ status: 500, json: { code: "server.internal" } });
     expect(dishLines(party.tabId)).toEqual(before);
+  });
+});
+
+describe("PUT /management-api/venue-defaults while orders are open", () => {
+  const vatClass = () =>
+    rows<{ default_product_vat_class: string }>(
+      sql`select default_product_vat_class from catalogue_settings where id = 1`,
+    )[0]?.default_product_vat_class ?? "general";
+
+  it("refuses a changed receipt language and writes neither it nor the VAT class beside it", async () => {
+    reset();
+    await seatedWith(venue, "Paella");
+    const before = vatClass();
+    expect(before).not.toBe("zero");
+
+    const answer = await send(settings, manager, "PUT", "/management-api/venue-defaults", {
+      receiptLanguage: "gl-ES",
+      defaultProductVatClass: "zero",
+    });
+
+    expect(answer).toEqual(refusedFor(1));
+    expect(language()).toEqual(["es-ES"]);
+    expect(vatClass()).toBe(before);
   });
 });

@@ -127,6 +127,8 @@ it.each([
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
   ["getReceiptLanguage", [], "locations"],
+  ["getVenueDefaults", [], "locations"],
+  ["getVenueDefaults", [], "catalogue_settings"],
   ["getBumpMode", [], "locations"],
   ["getFloorPlan", ["z1"], "floor_plans"],
   ["getFloorPlan", ["z1"], "floor_plan_tables"],
@@ -691,6 +693,14 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   const query = dashboardQuery(api, "getCatalogueSettings", []);
   expect(query.dependencies).toEqual([{ type: "catalogue_settings" }]);
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
+});
+
+it("subscribes the venue defaults to the location and the catalogue settings alone", () => {
+  const api = new DashboardApi("", async () => new Response("{}"));
+  expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
+    { type: "locations" },
+    { type: "catalogue_settings" },
+  ]);
 });
 
 it.each([

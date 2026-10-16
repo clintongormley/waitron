@@ -445,24 +445,36 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
-  it("reads and saves the location's receipt language", async () => {
+  it("reads the location's receipt language", async () => {
     const answer = {
       language: "ca-ES",
       choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
       fixed: { locale: "ca-ES", reason: { en: "Because.", es: "Porque." } },
     };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(answer))
-      .mockResolvedValueOnce(emptyResponse());
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getReceiptLanguage()).resolves.toEqual(answer);
-    await expect(api.putReceiptLanguage("gl-ES")).resolves.toBeUndefined();
+
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-language", "GET", undefined]]);
+  });
+
+  it("reads and saves the venue defaults through one route, sending only the changed fields", async () => {
+    const answer = {
+      receiptLanguage: "es-ES",
+      receiptLanguageChoices: ["es-ES", "ca-ES"],
+      fixedReceiptLanguage: null,
+      defaultProductVatClass: "zero" as const,
+    };
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getVenueDefaults()).resolves.toEqual(answer);
+    await expect(api.putVenueDefaults({ defaultProductVatClass: "zero" })).resolves.toEqual(answer);
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/receipt-language", "GET", undefined],
-      ["/management-api/receipt-language", "PUT", { language: "gl-ES" }],
+      ["/management-api/venue-defaults", "GET", undefined],
+      ["/management-api/venue-defaults", "PUT", { defaultProductVatClass: "zero" }],
     ]);
   });
 
@@ -1411,18 +1423,13 @@ it("reads a venue clock preview passively with encoded clock values", async () =
   expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });
 
-it("reads and saves the new-product default through the catalogue settings route", async () => {
+it("reads the new-product default through the catalogue settings route", async () => {
   const config = { defaultProductVatClass: "reduced" as const, defaultColor: null };
-  const input = { defaultProductVatClass: "reduced" as const };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));
   const api = new DashboardApi("", fetchImpl);
   expect(typeof api.getCatalogueSettings).toBe("function");
   expect(await api.getCatalogueSettings()).toEqual(config);
-  expect(await api.saveCatalogueSettings(input)).toEqual(config);
-  expect(callsOf(fetchImpl)).toEqual([
-    ["/management-api/catalogue-settings", "GET", undefined],
-    ["/management-api/catalogue-settings", "PUT", input],
-  ]);
+  expect(callsOf(fetchImpl)).toEqual([["/management-api/catalogue-settings", "GET", undefined]]);
 });
 
 it("saves the venue default colour through its own catalogue settings route", async () => {

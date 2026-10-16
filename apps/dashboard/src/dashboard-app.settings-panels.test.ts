@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
+import { vatClassLabel } from "./screens/venue-defaults-panel.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
@@ -97,7 +98,12 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
-    getReceiptLanguage: pending(),
+    getVenueDefaults: vi.fn().mockResolvedValue({
+      receiptLanguage: "es-ES",
+      receiptLanguageChoices: ["es-ES"],
+      fixedReceiptLanguage: null,
+      defaultProductVatClass: "reduced",
+    }),
     listStatuses: vi.fn().mockResolvedValue([]),
     listCourses: vi.fn().mockResolvedValue([]),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
@@ -227,13 +233,46 @@ it("replaces a removed Receipts deep link with Venue details for a manager with 
   expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("venue-details");
 });
 
-it.each([
-  ["manager", ["catalogue.manage", "person.manage", "venue.view", "venue.configure"]],
-  ["supervisor", ["venue.view"]],
-])("shows no product defaults on Venue settings to %s", async (role, permissions) => {
-  const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
+it("shows the VAT class for new products in the Defaults card to venue.configure without catalogue.manage", async () => {
+  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+    "venue.view",
+    "venue.configure",
+  ]);
+  const defaults = () =>
+    page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
+  await expect
+    .poll(
+      () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
+    )
+    .toBe(vatClassLabel("reduced"));
+});
+
+it("shows no Defaults card to a supervisor", async () => {
+  const el = await mount("/manage/venue-settings/view/venue-details", "supervisor", ["venue.view"]);
   await expect
     .poll(() => page(el).shadowRoot!.querySelector("dashboard-venue-details-panel"))
     .not.toBeNull();
-  expect(page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel")).toBeNull();
+  expect(page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")).toBeNull();
+});
+
+it("orders the Venue details cards Business, Venue, Business day, Defaults", async () => {
+  const el = await mount("/manage/venue-settings/view/venue-details", "manager", [
+    "venue.view",
+    "venue.configure",
+  ]);
+  const h2s = (root: ParentNode): string[] =>
+    [...root.querySelectorAll("*")].flatMap((node) => [
+      ...(node.matches(".settings-card > header > h2") ? [node.textContent!.trim()] : []),
+      ...(node.shadowRoot ? h2s(node.shadowRoot) : []),
+    ]);
+  const headings = () =>
+    h2s(page(el).shadowRoot!.querySelector('[data-test="venue-settings-venue-details"]')!);
+  await expect
+    .poll(headings)
+    .toEqual([
+      t("venue_settings.card.business"),
+      t("venue_settings.card.venue"),
+      t("venue_settings.card.business_day"),
+      t("venue_settings.card.defaults"),
+    ]);
 });
