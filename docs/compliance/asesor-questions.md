@@ -584,6 +584,10 @@ on and asked for the text. We offered to give back — send it.
 
 **PROPOSED; owner/adviser approval pending; no implementation or enquiry.** This dated section adds to the historical list without changing earlier answers or numbering. The older “nothing blocks the build” note does not open A664’s approval gates.
 
+### Initial 2026-10-16 proposal, retained as historical context
+
+The initial questions below predate the owner’s answer at approximately 22:25. The dated revision after them supersedes their short live-allergy/contact expiry premise; those earlier windows are not the current proposal. No enquiry was sent.
+
 English context: the [retention design](../superpowers/specs/2026-10-16-a664-data-retention-design.md), [complete static inventory](../superpowers/specs/2026-10-16-a664-retention-table-inventory.md) and [primary-source register](research/2026-10-16-a664-retention.md) distinguish invoices, RF, accounting/payment evidence, time records, payroll artifacts and service-only personal data. The legal clock texts are already researched (F01–F40, L1–L9); the unanswered work is their application to this venue and this proposed custody/erasure process. The proposed 30/90-day routine windows and 35-day recovery-copy ceiling are driver choices, not legal periods or owner decisions. All A664 product code, including reporting, waits for owner and relevant-adviser design agreement. No invariant change or protected-row purge is authorised.
 
 ### Fiscal/commercial adviser: apply the evidence map to this venue (G1)
@@ -605,6 +609,26 @@ Obtain the actual acquiring/provider agreements from the operator before classif
 > ¿Cuándo corresponde bloqueo del artículo 32, frente a custodia documental o limitación de uso, con qué responsabilidades/plazos aplicables, quién conserva las claves y quién puede acceder? Revise también la propuesta de copias de recuperación inaccesibles con caducidad máxima de 35 días, borrado de versiones/réplicas, reaplicación de supresiones antes de abrir una restauración y respuesta sobre copias ya entregadas a terceros. Indique si debe acortarse el retraso o cambiar el proceso antes de habilitarlo, y los contratos/roles/destinos que faltan comprobar.
 
 These referrals do not ask the fiscal adviser to certify the GDPR programme. The controller’s wider notices, rights, contracts, breaches and accountability work remains separate. G4 needs measured storage/restore results; G5 needs a separate protected-storage decision and any explicit permission for conflicting invariant changes. Written answers here do not substitute for either. No answer is recorded yet.
+
+### Dated revision, 2026-10-16 after the owner’s answer at approximately 22:25
+
+**Current proposal; not owner agreement or legal clearance.** The owner leans towards one shared schedule for live undeleted business/evidence, including dinner allergy evidence, with unnecessary identifying information assessed separately and potentially shorter retired-record periods. The [current table-by-table field audit](../superpowers/specs/2026-10-16-a664-personal-data-audit.md) finds explicit names/contact fields and linkable staff/payment/health fields in the schema; no actual venue data was inspected. This revision replaces the initial proposal to remove live allergy notes at service end and to apply automatic short contact expiry. Six years is a discussion baseline for the common schedule, not a blanket statutory rule. The actual longest applicable floor and actual venue clocks remain to be agreed. No G0–G5 gate is waived; all product/report code waits for owner and relevant G1–G3 agreement.
+
+**Fiscal/commercial adviser (G1):**
+
+> Para este restaurante, revise la propuesta de un calendario común para los registros empresariales y probatorios vivos, incluidos los hechos sobre alergias del pedido. Identifique los libros y su último asiento real, los documentos que constituyen facturas, RF, justificantes de cobro/devolución y pruebas de incidencias, y cualquier período especial o interrupción aplicable. El punto de partida propuesto es seis años por conjunto anual; no se presume un plazo legal único desde la creación de la fila. Indique qué obligación aplicable exigiría ampliar el calendario común y qué hechos probatorios deben conservarse aun cuando el operador oculte, archive o marque un registro como eliminado. La suficiencia y accesibilidad del archivo y la custodia tras cierre siguen pendientes de su revisión.
+
+**Labour specialist/gestoría (G2):**
+
+> Para el convenio y los documentos reales del centro, valore la inclusión de los registros vivos necesarios de personal en ese calendario común. Distinga jornada, resúmenes, nóminas/cotización, ausencias y planificación, manteniendo sus propios hechos iniciales y mínimos de L1/L2/L6/L8/L9. Concrete la identidad mínima del trabajador y de los actores que debe seguir vinculada a las pruebas, los accesos necesarios, las reclamaciones y quién levanta las retenciones. La baja laboral o la suspensión de una cuenta no demuestra que ya puedan eliminarse esas identidades; tampoco justifica conservar credenciales obsoletas.
+
+**Privacy specialist with controller, coordinated with G1/G2 (G3):**
+
+> Valore si el calendario común propuesto es necesario y proporcionado para cada categoría viva, especialmente las respuestas de alergias, descripción del comensal, asignaciones de platos, notas de salud y datos laborales. Determine la base del artículo 6 y la excepción aplicable del artículo 9. Identifique los datos personales identificativos que dejan de ser necesarios y deben retirarse antes, frente a las identidades mínimas y hechos que todavía acreditan una obligación o reclamación. La política común no autoriza conservar datos innecesarios; tampoco se presume que terminar la cena permita destruir sus pruebas de alergias.
+>
+> Para registros realmente retirados, sustituidos o archivados, concrete las obligaciones y plazos restantes, los hechos iniciales reales del centro, el bloqueo del artículo 32 cuando proceda, las retenciones por litigio y las condiciones de destrucción. La retirada inmediata o en el siguiente barrido diario, sin período adicional, es solo una propuesta cuando no quede deber, retención, dependencia ni protección de almacenamiento. Ocultar, archivar o pulsar Eliminar no acredita esos requisitos. Mantenga la evaluación de copias/restauraciones, retraso de recuperación propuesto de 35 días, roles, contratos, claves y destinatarios de la versión inicial. Si el original protegido no puede retirarse sin alterar historia inmutable, indique el tratamiento y la escalada necesarios; una vista ocultada no elimina el original.
+
+No answer or owner/adviser agreement is recorded. No Q48 enquiry has been sent. G4 still requires measured storage/restore results; G5 remains a separate protected-storage decision, with separate explicit permission for any invariant conflict.
 
 ---
 

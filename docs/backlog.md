@@ -6129,15 +6129,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 _Formerly entries spread across the old sections._
 
-- **A664 — archive or delete a venue's old data once it no longer has to be kept (owner,
-  2026-10-14; research complete 2026-10-16, proposed design awaiting owner and relevant adviser
-  approval; implementation open).** The [proposed design](superpowers/specs/2026-10-16-a664-data-retention-design.md)
-  separates legal evidence, short operational windows, holds, archives and recovery copies. Its
-  [source register](compliance/research/2026-10-16-a664-retention.md) and
-  [208-table static inventory](superpowers/specs/2026-10-16-a664-retention-table-inventory.md)
-  support [Q48](compliance/asesor-questions.md#q48-a664-retention-and-evidence-process-added-2026-10-16).
-  No product code, including reporting, starts before owner and relevant-adviser design agreement. No automatic deletion or protected-history removal is approved.
-  [Detail](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
+- **A664 — archive or delete a venue's old data once it no longer has to be kept.** Revised
+  design awaits owner and relevant adviser agreement; build remains open. Shared live-evidence
+  retention, separate personal-data review and shorter eligible retired-record periods remain
+  proposals. [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **libvips is LGPL-3.0-or-later** and ships in the box image with its notices and a written
   source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
