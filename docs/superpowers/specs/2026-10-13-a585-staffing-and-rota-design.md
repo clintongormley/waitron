@@ -8,6 +8,9 @@
 > station sending-department lanes, and calls the season painter a standard week. See its
 > [Part 1 plan](../plans/2026-10-16-a724-staffing-guide-bands.md). The month’s day-box work stays open.
 
+> 2026-10-16: A720 Part 5 removes the Staffing month’s season chips and legend; every day opens the
+> shared day box. See design-system.md, the Staffing view.
+
 > **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
 > the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
 > editor. References below describe the code when this document was written.

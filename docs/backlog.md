@@ -1572,8 +1572,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
   themes that this combination reads well. Left open by A720.
 
-- **The day box should re-place itself when its content changes.** `calendar-day-box` places itself
-  only when `show()` is called, so each host (Opening hours' `placeDayBox`, Staffing's month) must
+- **The day box should re-place itself when its content changes.** `calendar-day-box` measures its content
+  only in `show()` and on a scroll or resize, so each host (Opening hours' `placeDayBox`, Staffing's month) must
   wait for every pending redraw first; A720 Part 5's first version placed it one redraw early, off
   screen. Have the box re-place itself while open whenever its own content changes. Left open by A720.
 
@@ -4811,7 +4811,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   replaces the Area picker and the By area | By person switch; two rows of controls; no "Add shift"
   in every cell — click an empty day for its open slots; the people panel goes; an empty week says
   why and offers the painter; one day at a time on a phone; the Staffing month's Monday rota link
-  moves into the day box. Before A586–A588.
+  goes, since its day box already offers it. Before A586–A588.
   [Detail](backlog/workforce.md#a763-the-rota-view-redesigned-one-show-menu-no-button-per-cell-an-empty-week-that-says-why), [mockups](backlog/mockups/a763-rota/)
 
 - **A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
@@ -4903,10 +4903,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
   (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
   second read.
-- **A702. Opening hours' season chips may widen the page on a long season name.** The Staffing
-  month's chips grew a 390 px view to 1098 px on an 80-character unbroken name until A585-3 gave
-  them `max-width: 100%; overflow-wrap: anywhere`; `packages/venue-service/src/dashboard/season-chips.ts`
-  has no width rule either, untried at phone width. Next: try it at 390 px and wrap the same way.
+- **A702. Opening hours' season chips may widen the page on a long season name.**
+  `packages/venue-service/src/dashboard/season-chips.ts` has no width rule, untried at phone width.
+  Next: try it at 390 px and wrap it with `max-width: 100%; overflow-wrap: anywhere`.
 - **A703. Keeping a Calendar view's address words is a special case named in the app.**
   `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
   (`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself

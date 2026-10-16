@@ -3883,7 +3883,7 @@ month's largest number, and the number. ‹ › step months, a Show picker offer
 (kept in the address as `area`), and a day closed all day reads Closed. It has no row of season
 chips and no legend. Every day is a button that opens the shared day box (Day box below): the
 date, the special day's name, a line saying which season's standard staffing the day follows or
-that a special day replaces it, and each shown area's number, with ", N unfilled" when the week
+that a special day replaces it ("Special day" when no season holds it), and each shown area's number, with ", N unfilled" when the week
 has a roster version. For a person who may write, the box offers "Edit <special day> staffing" on a
 special day and "Edit <season>'s standard week" on any other day a season holds; for a person who
 may only look, it offers "Show <special day> staffing" and "Show <season>'s standard week", both on
@@ -3988,7 +3988,7 @@ Opening hours' Year.
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
   resize leaves none of the date inside the window and every box around it that clips its contents.
-  It is headed by the date, with the special day's name, or else the public holiday's, beside it;
+  In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
   them; then each department's hours followed by its zones' (in the Month, with one department
   picked, that department alone). A zone that follows its department reads "as <department>"; a
