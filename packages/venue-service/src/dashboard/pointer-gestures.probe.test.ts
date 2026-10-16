@@ -38,7 +38,8 @@ beforeEach(() => {
   for (const kind of KINDS) document.addEventListener(kind, record, true);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await commands.parkPointer();
   for (const kind of KINDS) document.removeEventListener(kind, record, true);
   page.remove();
   window.scrollTo(0, 0);

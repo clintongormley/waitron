@@ -87,15 +87,21 @@ describe("parkPointer command registration", () => {
 });
 
 describe("pointer gesture command registration", () => {
-  for (const dir of packageDirsWithVitestConfig()) {
+  const callers = packageDirsWithVitestConfig().filter((dir) => {
     let files: string[];
     try {
       files = sourceFilesIn(join(dir, "src"));
     } catch {
       files = [];
     }
-    if (!files.some((f) => CALLS_POINTER_GESTURE.test(readFileSync(f, "utf8")))) continue;
+    return files.some((f) => CALLS_POINTER_GESTURE.test(readFileSync(f, "utf8")));
+  });
 
+  it("finds packages calling the commands (the scan is not silently empty)", () => {
+    expect(callers.length).toBeGreaterThan(0);
+  });
+
+  for (const dir of callers) {
     const rel = dir.slice(repoRoot.length + 1);
     it(`${rel} registers pointerGestureCommands in its vitest config`, () => {
       const config = readFileSync(join(dir, "vitest.config.ts"), "utf8");
