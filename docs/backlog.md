@@ -2258,7 +2258,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
   [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16; spec written, plan next).** Each
+- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
+  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
+  firing and the pass, is planned from the spec once A773-1 lands. Each
   course gets "Held until fired". A table's unsent list is laid out as Fire now plus held groups:
   it is arranged by ticking, Move to… and drag, and sent with Send all or Fire. The four draft
   buttons and the check window go. Each bill keeps its own unsent list. Only the waiter fires. Each
