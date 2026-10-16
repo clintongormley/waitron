@@ -1,13 +1,10 @@
 import { DROPDOWN_ICONS, NUTRITION_ICONS } from "@waitron/ui";
 
 /**
- * Paths for wt-icon's 16x16 viewBox. `kebab` (wt-row-actions), wt-combobox's `DROPDOWN_ICONS`,
- * `close` (wt-toast) and `minus` and `plus` (wt-number-stepper) are drawn by shared primitives,
- * which need their consuming app to register them.
- *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
  * Google, licensed under the Apache License, Version 2.0
  * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
+ * Shared nutrition paths: see deploy/third-party/nutrition-icons/.
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
   ...NUTRITION_ICONS,

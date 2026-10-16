@@ -24,5 +24,4 @@ Lupin (a flower spike), sulphites (a flask), vegan (a two-leaf sprout) and veget
 vegan and vegetarian drawings. No circled Erudus variant or coeliac mark is included.
 
 The imported path coordinates are rounded to four decimal places after scaling. Multiple
-source paths are joined into one SVG path. The 16-unit drawing uses `currentColor` through
-`wt-icon`; no font or image file is needed at runtime.
+source paths are joined into one 16-unit SVG path; no font or image file is needed at runtime.
