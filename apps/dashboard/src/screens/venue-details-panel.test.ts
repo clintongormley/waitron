@@ -95,9 +95,11 @@ afterEach(() => {
 it("shows the saved issuer and venue values as text without a second page h1", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
-  expect(q(el, "[data-test=issuer]")?.textContent).toContain("Issuer SL");
-  expect(q(el, "[data-test=issuer]")?.textContent).toContain("B12345678");
-  expect(q(el, "[data-test=issuer]")?.textContent).toContain("ES");
+  expect(rows(q(el, "[data-test=issuer]"))).toEqual([
+    "Legal name: Issuer SL",
+    "Tax ID: B12345678",
+    "Country: Spain",
+  ]);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Venue");
   expect(q(el, "h1")).toBeNull();
   expect(q(el, "[data-test=edit]")).not.toBeNull();
@@ -546,17 +548,78 @@ const text = (node: Element | null | undefined) =>
 const lines = (el: Panel) =>
   [...(q(el, "[data-test=address]")?.children ?? [])].map((line) => text(line));
 const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+const cards = (el: Panel) => [...el.shadowRoot!.querySelectorAll("section.settings-card")];
+function rows(card: Element | null | undefined): string[] {
+  return [...(card?.querySelectorAll("dt") ?? [])].map(
+    (label) => `${text(label)}: ${text(label.nextElementSibling)}`,
+  );
+}
 
-it("shows the legal name, tax ID and country as one line outside the form, in view and edit mode", async () => {
+it("shows the legal name, tax ID and country name as labelled rows outside the form, in view and edit mode", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
-  expect(text(q(el, "[data-test=issuer]"))).toBe("Issuer SL · B12345678 · ES");
-  expect(el.shadowRoot!.textContent).not.toContain("Legal name");
-  expect(el.shadowRoot!.textContent).not.toContain("Tax ID");
+  const expected = ["Legal name: Issuer SL", "Tax ID: B12345678", "Country: Spain"];
+  expect(rows(q(el, "[data-test=issuer]"))).toEqual(expected);
   await click(el, "[data-test=edit]");
-  expect(text(q(el, "[data-test=issuer]"))).toBe("Issuer SL · B12345678 · ES");
+  expect(rows(q(el, "[data-test=issuer]"))).toEqual(expected);
   expect(q(el, "form [data-test=issuer]")).toBeNull();
   expect(q(el, "form")).not.toBeNull();
+});
+
+it("names the country in the screen's language", async () => {
+  setLocale("es");
+  const el = await mount(rig().api);
+  expect(rows(q(el, "[data-test=issuer]"))).toEqual([
+    "Razón social: Issuer SL",
+    "NIF: B12345678",
+    "País: España",
+  ]);
+});
+
+it("shows an unknown country code as the code itself in this browser", async () => {
+  setLocale("en-GB");
+  const model = venueDetailsFixture();
+  model.issuer.country = "XQ";
+  const el = await mount(rig(model).api);
+  expect(text(q(el, "[data-test=saved-country]"))).toBe("XQ");
+});
+
+it("draws Business and Venue cards headed by h2s, each with its action in its header", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig().api);
+  const [business, venue] = cards(el);
+  expect(cards(el).map((card) => text(card.querySelector("h2")))).toEqual(["Business", "Venue"]);
+  expect(business!.getAttribute("aria-labelledby")).toBe(business!.querySelector("h2")!.id);
+  expect(venue!.getAttribute("aria-labelledby")).toBe(venue!.querySelector("h2")!.id);
+  expect(q(el, "[data-test=issuer]")).toBe(business);
+  expect(rows(venue).map((row) => row.split(":")[0])).toEqual([
+    "Venue name",
+    "Address",
+    "Time zone",
+  ]);
+  expect(q(el, "[data-test=change-legal-name]")!.closest("header")?.parentElement).toBe(business);
+  expect(q(el, "[data-test=edit]")!.closest("header")?.parentElement).toBe(venue);
+});
+
+it("shows both cards with no action when read-only", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig().api, true);
+  expect(cards(el).map((card) => text(card.querySelector("h2")))).toEqual(["Business", "Venue"]);
+  expect(el.shadowRoot!.querySelectorAll("section.settings-card header wt-button")).toHaveLength(0);
+});
+
+it("reads Business, then Venue, then the business-day editor", async () => {
+  const el = await mount(rig().api);
+  const order = [
+    ...el.shadowRoot!.querySelectorAll(
+      "section.settings-card, dashboard-business-day-start-editor",
+    ),
+  ].map((node) => (node.localName === "section" ? node.querySelector("h2")!.id : node.localName));
+  expect(order).toEqual([
+    cards(el)[0]!.querySelector("h2")!.id,
+    cards(el)[1]!.querySelector("h2")!.id,
+    "dashboard-business-day-start-editor",
+  ]);
 });
 
 it.each([
@@ -569,9 +632,8 @@ it.each([
   const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((label) => text(label));
   for (const perLine of ["Street address", "Address line 2", "Postcode", "City", "Province"])
     expect(labels).not.toContain(perLine);
-  expect(labels).toEqual(
-    expect.arrayContaining(["Venue name", "Time zone", "Business day starts at"]),
-  );
+  expect(labels).toEqual(expect.arrayContaining(["Venue name", "Time zone"]));
+  expect(labels).not.toContain("Business day starts at");
 });
 
 it.each([

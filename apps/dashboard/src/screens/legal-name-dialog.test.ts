@@ -71,12 +71,12 @@ async function press(panel: Panel): Promise<void> {
   await dialogHost(panel).updateComplete;
 }
 
-it("offers Change legal name beside the identity line only when the panel can be edited", async () => {
+it("offers Change legal name in the Business card's header only when the panel can be edited", async () => {
   setLocale("en-GB");
   const editable = await mount(stubApi());
   const shown = button(editable)!;
   expect(shown.textContent!.trim()).toBe("Change legal name");
-  expect(shown.closest(".identity")?.querySelector("[data-test=issuer]")).toBeTruthy();
+  expect(shown.closest("header")?.parentElement?.matches("[data-test=issuer]")).toBe(true);
   expect(shown.variant).toBe(
     editable.shadowRoot!.querySelector<WtButton>("[data-test=edit]")!.variant,
   );

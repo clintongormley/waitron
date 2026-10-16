@@ -15,6 +15,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import type {
   DashboardApi,
   VenueDetailsModel,
@@ -24,7 +25,7 @@ import type {
   VenueClockView,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
   VENUE_DETAIL_FIELDS,
@@ -73,34 +74,11 @@ const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : fi
 export class VenueDetailsPanel extends LitElement {
   static override styles = [
     baseStyles,
+    settingsCardStyles,
     css`
       :host {
         display: block;
         min-width: 0;
-      }
-      dl {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin: 0 0 var(--wt-space-4);
-      }
-      dt {
-        font-weight: var(--wt-font-weight-medium);
-      }
-      dd {
-        margin: 0 0 var(--wt-space-2);
-        overflow-wrap: anywhere;
-      }
-      .identity {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2) var(--wt-space-3);
-        margin: 0 0 var(--wt-space-4);
-      }
-      .identity p {
-        margin: 0;
-        font-weight: var(--wt-font-weight-medium);
-        overflow-wrap: anywhere;
       }
       form {
         display: grid;
@@ -532,49 +510,69 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
-    return html`<h2>${t("venue_details.title")}</h2>
-      ${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
-      ${
-        !model
-          ? html`<p role="status">${t("venue_details.loading")}</p>`
-          : html`
-              <div class="identity">
-                <p data-test="issuer">
-                  ${model.issuer.legalName} · ${model.issuer.taxId} · ${model.issuer.country}
-                </p>
-                ${
-                  this.readOnly
-                    ? nothing
-                    : html`<wt-button
-                        data-test="change-legal-name"
-                        @click=${() => {
-                          if (current() && this.model)
-                            this.renderRoot
-                              .querySelector("dashboard-legal-name-dialog")
-                              ?.show(this.model.issuer.legalName);
-                        }}
-                        >${t("venue_details.change_legal_name")}</wt-button
-                      >`
-                }
-              </div>
-              <dashboard-legal-name-dialog
-                .api=${this.api}
-                @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
-                  if (generation === this.#generation) this.model = event.detail.model;
-                }}
-              ></dashboard-legal-name-dialog>
-              <dashboard-business-day-start-editor
-                .api=${this.api}
-                .model=${model.businessDayClock}
-                .readOnly=${this.readOnly}
-                @saved=${(event: CustomEvent<VenueDetailsModel>) => {
-                  event.stopPropagation();
-                  this.model = event.detail;
-                  void this.#load();
-                }}
-              ></dashboard-business-day-start-editor>
-
-              ${
+    return html`${this.readError && !this.actionError ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>` : nothing}
+    ${
+      !model
+        ? html`<p role="status">${t("venue_details.loading")}</p>`
+        : html`
+            ${settingsCard({
+              id: "business-card",
+              heading: t("venue_settings.card.business"),
+              dataTest: "issuer",
+              editing: false,
+              action: this.readOnly
+                ? nothing
+                : html`<wt-button
+                    data-test="change-legal-name"
+                    @click=${() => {
+                      if (current() && this.model)
+                        this.renderRoot
+                          .querySelector("dashboard-legal-name-dialog")
+                          ?.show(this.model.issuer.legalName);
+                    }}
+                    >${t("venue_details.change_legal_name")}</wt-button
+                  >`,
+              body: settingsRows([
+                {
+                  label: t("venue_details.legal_name"),
+                  value: model.issuer.legalName,
+                  dataTest: "saved-legalName",
+                },
+                {
+                  label: t("venue_details.tax_id"),
+                  value: model.issuer.taxId,
+                  dataTest: "saved-taxId",
+                },
+                {
+                  label: t("venue_details.country"),
+                  value: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
+                    model.issuer.country,
+                  )!,
+                  dataTest: "saved-country",
+                },
+              ]),
+            })}
+            <dashboard-legal-name-dialog
+              .api=${this.api}
+              @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
+                if (generation === this.#generation) this.model = event.detail.model;
+              }}
+            ></dashboard-legal-name-dialog>
+            ${settingsCard({
+              id: "venue-card",
+              heading: t("venue_settings.card.venue"),
+              editing: Boolean(this.draft && !this.readOnly),
+              action:
+                this.draft || this.readOnly
+                  ? nothing
+                  : html`<wt-button
+                      data-test="edit"
+                      @click=${() => {
+                        if (current()) this.#begin();
+                      }}
+                      >${t("action.edit")}</wt-button
+                    >`,
+              body:
                 this.draft && !this.readOnly
                   ? html`<form
                       @submit=${(event: Event) => {
@@ -643,30 +641,32 @@ export class VenueDetailsPanel extends LitElement {
                         >
                       </wt-form-actions>
                     </form>`
-                  : html`<dl>
-                        <dt>${t(LABELS.name)}</dt>
-                        <dd data-test="saved-name">${model.details.name}</dd>
-                        <dt>${t("venue_details.address")}</dt>
-                        <dd data-test="address">${this.#address(model.details)}</dd>
-                        <dt>${t(LABELS.timeZone)}</dt>
-                        <dd data-test="saved-timeZone">${model.details.timeZone}</dd>
-                        <dt>${t(LABELS.dayCutover)}</dt>
-                        <dd data-test="saved-dayCutover">${model.details.dayCutover}</dd>
-                      </dl>
-                      ${
-                        this.readOnly
-                          ? nothing
-                          : html`<wt-button
-                              data-test="edit"
-                              @click=${() => {
-                                if (current()) this.#begin();
-                              }}
-                              >${t("action.edit")}</wt-button
-                            >`
-                      }`
-              }
-            `
-      }`;
+                  : settingsRows([
+                      { label: t(LABELS.name), value: model.details.name, dataTest: "saved-name" },
+                      {
+                        label: t("venue_details.address"),
+                        value: this.#address(model.details),
+                        dataTest: "address",
+                      },
+                      {
+                        label: t(LABELS.timeZone),
+                        value: model.details.timeZone,
+                        dataTest: "saved-timeZone",
+                      },
+                    ]),
+            })}
+            <dashboard-business-day-start-editor
+              .api=${this.api}
+              .model=${model.businessDayClock}
+              .readOnly=${this.readOnly}
+              @saved=${(event: CustomEvent<VenueDetailsModel>) => {
+                event.stopPropagation();
+                this.model = event.detail;
+                void this.#load();
+              }}
+            ></dashboard-business-day-start-editor>
+          `
+    }`;
   }
 }
 declare global {
