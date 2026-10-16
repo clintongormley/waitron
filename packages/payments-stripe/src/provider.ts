@@ -32,6 +32,22 @@ import type { StripeClient } from "./client.js";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
 
+interface Activity {
+  collecting: Set<string>;
+  resolving: Set<string>;
+}
+
+// A credential change replaces the provider, while its previous collect can still be running.
+const activities = new WeakMap<Database, Activity>();
+function activityOf(db: Database): Activity {
+  let activity = activities.get(db);
+  if (activity === undefined) {
+    activity = { collecting: new Set(), resolving: new Set() };
+    activities.set(db, activity);
+  }
+  return activity;
+}
+
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
 /** Stripe (stripe@22.6.2, `PaymentIntents.d.ts`): "You can cancel a PaymentIntent object when it's
@@ -121,13 +137,23 @@ export class StripeTerminalProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
+    const paymentRef = randomUUID();
+    const activity = activityOf(this.opts.db);
+    activity.collecting.add(paymentRef);
+    try {
+      return await this.collectHeld(params, paymentRef);
+    } finally {
+      activity.collecting.delete(paymentRef);
+    }
+  }
+
+  private async collectHeld(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     // Per-collect, not per-provider: one cached provider serves every reader on this vendor.
     if (params.readerRef === undefined)
       throw new Error(
         "stripe collect requires a readerRef (the chosen reader's provider reference)",
       );
     const readerId = params.readerRef;
-    const paymentRef = randomUUID();
     const key = { provider: PROVIDER, paymentRef };
 
     // Commit the attempt before any network call.
@@ -285,6 +311,23 @@ export class StripeTerminalProvider implements PaymentProvider {
    * Stripe with no transaction open, then writes: a PaymentIntent still awaiting its card is
    * cancelled first and read again, because the cancel can lose a race to the card. */
   async resolveAbandonedAttempt(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
+    const activity = activityOf(this.opts.db);
+    if (activity.collecting.has(paymentRef) || activity.resolving.has(paymentRef)) {
+      return { outcome: "unknown", reason: "ambiguous" };
+    }
+    activity.resolving.add(paymentRef);
+    try {
+      return await this.resolveInactiveAttempt(paymentRef, now, audit);
+    } finally {
+      activity.resolving.delete(paymentRef);
+    }
+  }
+
+  private async resolveInactiveAttempt(
     paymentRef: string,
     now: Date,
     audit: AbandonedAttemptAudit,
