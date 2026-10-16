@@ -2099,6 +2099,12 @@ the server cheaply whether it changed.
   buttons and the check window go. Each bill keeps its own unsent list. Only the waiter fires. Each
   station gets "Waits for the pass": fired food there becomes Requested until the pass fires it.
   Station Fire and the venue's fire control go. Counter orders have no courses. Changes A756.
+  **Revised 2026-10-17** (owner): the right-hand panel becomes a Sent box (Served; Fired, ready
+  first; Held, folded, flashing when due) above a New order that empties on send; sent dishes have
+  no tick boxes and are acted on through A738's line window (Fire now, Recall, Move to station,
+  one Discount…, Cancel item with charge or no-charge by the dish's state); Recall returns a dish
+  to the New order; Pay waits for unsent dishes; Away and the pass's Done go; each pass fires only
+  what it sees. [Panel mockups](mockups/a773-order-panel/).
   Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](mockups/a773-courses-and-groups/)
 

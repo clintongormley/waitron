@@ -1976,12 +1976,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
   screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands. The owner has requested
-  answers to [six illustrated choices](backlog/mockups/a773-1-open-points/README.md) before
-  the affected A773-1 tasks continue; the plan's defaults are not approved.
+  firing and the pass, is planned from the spec once A773-1 lands. **Revised 2026-10-17** (owner):
+  the table screen's panel becomes a Sent box (Served, Fired, Held) above a New order that empties
+  on send; sent dishes are acted on through the line window; Recall returns a dish to the New order;
+  Pay waits for unsent dishes; Away and the pass's Done go. The
+  [six choices](backlog/mockups/a773-1-open-points/README.md) are answered in the spec's §14; the
+  A773-1 plan is revised against the spec before its dependent tasks.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
   [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [mockups](backlog/mockups/a773-courses-and-groups/)
+  [mockups](backlog/mockups/a773-courses-and-groups/),
+  [panel mockups](backlog/mockups/a773-order-panel/)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,

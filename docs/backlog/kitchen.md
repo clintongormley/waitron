@@ -191,6 +191,8 @@ about grouping these corrections.
 - "Who fires held courses" is dropped, not moved to departments.
 - There is no "Every station" card: every station setting is set on each station.
 - Stations gain "Waits for the pass", and the Courses page gains "Held until fired".
+- "Changes after sending" has three values (A773 revision, owner 2026-10-17): no changes; while
+  held; while held or waiting. It decides when a sent dish can be recalled.
 
 See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#7-settings--changes-to-a756).
 
