@@ -471,6 +471,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         quantity: "1",
         gross: "9.00",
         listGross: "10.00",
+        listUnitPriceGross: "10.00",
         net: {
           unitPrice: "8.18",
           priceQuantity: "1.000",
@@ -596,6 +597,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         quantity: "1",
         gross: "27.00",
         listGross: "30.00",
+        listUnitPriceGross: "30.00",
         net: {
           unitPrice: "22.31",
           priceQuantity: "1.000",
@@ -609,6 +611,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         quantity: "1",
         gross: "2.25",
         listGross: "2.50",
+        listUnitPriceGross: "2.50",
         net: {
           unitPrice: "2.05",
           priceQuantity: "1.000",
@@ -644,6 +647,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         quantity: "1",
         gross: "9.72",
         listGross: "12.00",
+        listUnitPriceGross: "12.00",
         net: {
           unitPrice: "8.03",
           priceQuantity: "1.000",
@@ -658,6 +662,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         quantity: "1",
         gross: "2.25",
         listGross: "2.50",
+        listUnitPriceGross: "2.50",
         net: {
           unitPrice: "2.05",
           priceQuantity: "1.000",
@@ -711,6 +716,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     const input = burgerAndBread();
     input.result.lines[0]!.adjustments = [{ kind: "discount", amount: "2.28" }];
     delete input.result.lines[1]!.listGross;
+    delete input.result.lines[1]!.listUnitPriceGross;
     delete input.result.billAdjustments;
     expect(tableOf(buildReceiptDocument(input)).rows.map((r) => [r.item, r.amount])).toEqual([
       ["Hamburguesa", "9,92"],
