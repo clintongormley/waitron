@@ -1819,6 +1819,55 @@ still fails. During A489's failing-test experiment, substituting the old 110,000
 the captured workload and the doubled walk. All migration,
 row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
+### Reducing repeated upgrade-test setup work (A736)
+
+A walk pays setup costs at every migration date, including dates that add no table or row. The
+filler now reads a table's constraints only when it has fewer than two rows, or appears in
+`ONE_ROW`. It still counts every table before and after filling and compares every carried count
+before selecting the tables to fill. A partial child reads its fully populated parent's keys from
+the database. Constraint information is read anew whenever a table needs a row; there is no schema
+cache across migrations.
+
+Feed installation in this guard runs inside one `withWriteLock` transaction. The next migration
+still meets all the installed triggers; the guard does not exercise interruption partway through
+feed installation. Product boot and migration code are unchanged. The deadline remains 30 seconds
+plus 500 ms per step, with another ten seconds for the report.
+
+Measured 2026-10-16 on macOS, Node v26.11.1 and Vitest 4.1.11, from main
+`3e713d3a780b8f65447ab203bc9a2f08f336f884`:
+
+- `pnpm exec vitest run scripts/migration-upgrade.test.ts --execArgv=--cpu-prof
+  --execArgv=--cpu-prof-dir=<receipt-directory>`: the unchanged test took 57,430 ms. Inclusive CPU
+  profile samples attributed 16,714 ms to `installChangeFeed`, 13,323 ms to `removeChangeFeed`, and
+  8,498 ms to `carryRows`, including 2,655 ms to `shapeOf`. These samples include native calls;
+  they do not separate CPU work from waiting inside SQLite.
+- The same profiled command after skipping unnecessary schema reads took 60,630 ms. `shapeOf`
+  samples fell to 611 ms and `carryRows` to 6,099 ms, while feed installation/removal samples rose
+  to 19,343/14,919 ms. This sample does not show a whole-walk improvement from that change alone.
+- A temporary `useVenueDb` probe on the full current schema installed all 186 sources with and
+  without `withWriteLock`, in alternating order twice. Installation took 75.28/72.24 ms without
+  the transaction and 41.18/39.40 ms with it. Removal took 55.62/53.31 ms without and 22.63/25.23 ms
+  with it; removal remains unchanged in this branch. Each installation was checked for a count of 558
+  feed triggers, and each removal for an empty feed-trigger list.
+- With both test changes, `pnpm exec vitest run scripts/migration-upgrade.test.ts --silent=false
+  --disableConsoleIntercept` took 45,610 ms. A temporary full phase report recorded the same
+  284 steps, 1,472 phases and 208 populated tables: migrate 28,777 ms, open 915 ms, feed installation
+  7,422 ms, close 1,026 ms and rows 6,574 ms. The deadline was 172,000 ms.
+- Before the changes, `pnpm exec vitest run --coverage --silent=false --disableConsoleIntercept`
+  passed all 6,703 root cases in 68.51 seconds; the upgrade walk's timed phases summed to
+  63,429 ms. This run did not reproduce the historical deadline failures.
+
+The regression case in `scripts/migration-upgrade.test.ts` initially failed with two schema reads
+where one was required. It now also checks the preserved parent rows and the child's second valid
+row. A separate case removes one of three rows and requires a row-loss refusal even though two
+rows remain. Existing migration, reset, trigger and row-preservation assertions are unchanged.
+
+The older overrun reports show accumulated short phases, not one stalled migration. These probes
+identify and reduce repeated work, but do not establish which host scheduling or storage event
+caused the earlier 165,500/171,000 ms overruns. Their logs and the probes above remain under
+`~/waitron-campaign-f/receipts/a736/`; the original reports remain in
+`receipts/a10-2-ci-fix-push.log` and `receipts/a585-6/push2.log` in that lane.
+
 ### The upgrade test keeps its database in memory on Linux
 
 `scripts/migration-upgrade.test.ts` makes its scratch directory under `scratchParent()`
