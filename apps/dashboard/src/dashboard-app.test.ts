@@ -3013,7 +3013,6 @@ describe("dashboard-app", () => {
         }),
       });
       await flush(el);
-      expect(el.shadowRoot!.querySelector("dashboard-catalogue-defaults-screen")).toBeNull();
       expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
       expect(location.pathname).toBe("/manage/overview");
     },

@@ -98,7 +98,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
-    getReceiptLanguage: pending(),
     getVenueDefaults: vi.fn().mockResolvedValue({
       receiptLanguage: "es-ES",
       receiptLanguageChoices: ["es-ES"],
@@ -246,7 +245,6 @@ it("shows the VAT class for new products in the Defaults card to venue.configure
       () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
     )
     .toBe(vatClassLabel("reduced"));
-  expect(page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel")).toBeNull();
 });
 
 it("shows no Defaults card to a supervisor", async () => {
@@ -255,7 +253,6 @@ it("shows no Defaults card to a supervisor", async () => {
     .poll(() => page(el).shadowRoot!.querySelector("dashboard-venue-details-panel"))
     .not.toBeNull();
   expect(page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")).toBeNull();
-  expect(page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel")).toBeNull();
 });
 
 it("orders the Venue details cards Business, Venue, Business day, Defaults", async () => {
