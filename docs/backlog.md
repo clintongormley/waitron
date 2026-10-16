@@ -4824,7 +4824,9 @@ the tree. What remains, largest first:
   failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
   descriptions of code that exists today. Open, among them: a cut-off primary keeps streaming, into
   its own copy (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner,
-  2026-09-26); mirror fidelity, which the detail does not cover.
+  2026-09-26); mirror fidelity, which the detail does not cover; and
+  [provider cancellation ownership](backlog/payments.md#decisions-and-deliberate-limits) before
+  enabling a second venue node (A764).
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 - **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted

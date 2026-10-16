@@ -224,6 +224,10 @@ for reconciliation rather than show a receipt).
   Check them automatically after collection ends; keep the order locked until the outcome is known.
   Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
+  Collection ownership is process-local. The provider sweep runs in every node role; only sale
+  recovery and bill completion check for primary. Before enabling a second venue node, restrict
+  provider cancellation to its collection owner or add coordination between nodes. Today's venue
+  has one node (CLAUDE.md §5); this is not a claim of protection across nodes.
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

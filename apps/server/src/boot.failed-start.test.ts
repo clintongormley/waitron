@@ -1084,38 +1084,46 @@ describe("settled-tender recovery boot lifetime", () => {
 });
 
 describe("pending card checks boot lifetime", () => {
-  it("stops the pending card loop when a later boot step fails", async () => {
+  it("stops and awaits the pending card loop when a later boot step fails", async () => {
     const venueDir = await seededVenueDir();
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
     const failure = new Error("late card-loop boot failure");
     let signal: AbortSignal | undefined;
-    let stopped = false;
     let release = () => {};
+    let markAborted!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      markAborted = resolve;
+    });
     vi.mocked(runPendingCardLoop).mockImplementationOnce((options) => {
       signal = options.signal;
       return new Promise<void>((resolve) => {
         release = resolve;
-        options.signal.addEventListener(
-          "abort",
-          () => {
-            stopped = true;
-            resolve();
-          },
-          { once: true },
-        );
+        options.signal.addEventListener("abort", markAborted, { once: true });
       });
     });
     vi.mocked(startMdnsResponder).mockImplementationOnce(() => {
       throw failure;
     });
+    const starting = startServer(env).then(
+      () => "started" as const,
+      (error: unknown) => error,
+    );
+    const deadline = new AbortController();
     try {
-      await expect(startServer(env)).rejects.toBe(failure);
+      await Promise.race([aborted, starting]);
       expect(runPendingCardLoop).toHaveBeenCalledOnce();
       expect(signal?.aborted).toBe(true);
-      expect(stopped).toBe(true);
+      expect(
+        await Promise.race([starting, delay(50, "waiting", { signal: deadline.signal })]),
+      ).toBe("waiting");
+      expect(readVenueHolder(venueDir)).not.toBeNull();
+      release();
+      expect(await starting).toBe(failure);
       expect(readVenueHolder(venueDir)).toBeNull();
     } finally {
+      deadline.abort();
       release();
+      await starting;
     }
   }, 60_000);
 

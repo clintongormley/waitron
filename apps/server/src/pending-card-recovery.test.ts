@@ -15,6 +15,7 @@ import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { payWorkingOrderIntegratedOrchestration as pay } from "./till-sale.js";
+import * as tillSale from "./till-sale.js";
 import { withAutomaticCardRecovery, withPendingSweep } from "./boot.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
@@ -169,54 +170,61 @@ describe("automatic card capture recovery", () => {
     expect(await suite.db.select().from(sales)).toEqual([]);
   });
 
-  it("leaves a late capture alone until the till's original request has finished", async () => {
-    const venue = await provisionBillVenue(suite.db);
-    const id = await tabWith(venue, "Caña");
-    const client = new FakeStripe();
-    client.stallNext();
-    const created = vi.spyOn(client, "createPaymentIntent");
-    const provider = new StripeTerminalProvider({
-      db: suite.db,
-      client,
-      poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
-    });
-    let enter!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      enter = resolve;
-    });
-    let release!: () => void;
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const collect = provider.collect.bind(provider);
-    vi.spyOn(provider, "collect").mockImplementation(async (params) => {
-      const result = await collect(params);
-      const intent = await created.mock.results[0]!.value;
-      client.setIntent(intent.id, { status: "succeeded", amount: 300, amountReceived: 300 });
-      await provider.resolvePending(venue.clock.now().instant);
-      enter();
-      await released;
-      return result;
-    });
-    const deps = {
-      ...venue,
-      provider,
-      readerRef: "reader_live",
-      pool: { get: async () => provider },
-    };
-    const paying = pay(deps, venue.cfg, { id, lines: [] }, venue.operatorId);
-    try {
-      await entered;
-      expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
-      expect(await suite.db.select().from(sales)).toEqual([]);
-    } finally {
-      release();
-      await paying;
-    }
-    expect(await paying).toEqual({ outcome: "timeout" });
-    expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
-    expect(await statusOf(venue, id)).toBe("settled");
-  });
+  it.each([false, true])(
+    "leaves a live request alone with stale initial read=%s",
+    async (stale) => {
+      const venue = await provisionBillVenue(suite.db);
+      const id = await tabWith(venue, "Caña");
+      const client = new FakeStripe();
+      client.stallNext();
+      const created = vi.spyOn(client, "createPaymentIntent");
+      const provider = new StripeTerminalProvider({
+        db: suite.db,
+        client,
+        poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
+      });
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const collect = provider.collect.bind(provider);
+      vi.spyOn(provider, "collect").mockImplementation(async (params) => {
+        const result = await collect(params);
+        const intent = await created.mock.results[0]!.value;
+        client.setIntent(intent.id, { status: "succeeded", amount: 300, amountReceived: 300 });
+        await provider.resolvePending(venue.clock.now().instant);
+        enter();
+        await released;
+        return result;
+      });
+      const deps = {
+        ...venue,
+        provider,
+        readerRef: "reader_live",
+        pool: { get: async () => provider },
+      };
+      const paying = pay(deps, venue.cfg, { id, lines: [] }, venue.operatorId);
+      let initialRead: ReturnType<typeof vi.spyOn> | undefined;
+      try {
+        await entered;
+        if (stale)
+          initialRead = vi.spyOn(tillSale, "paymentAttemptIsLive").mockReturnValueOnce(false);
+        expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 0, errors: [] });
+        expect(await suite.db.select().from(sales)).toEqual([]);
+      } finally {
+        initialRead?.mockRestore();
+        release();
+        await paying;
+      }
+      expect(await paying).toEqual({ outcome: "timeout" });
+      expect(await recoverAutomaticCardPayments(deps)).toEqual({ filed: 1, errors: [] });
+      expect(await statusOf(venue, id)).toBe("settled");
+    },
+  );
 
   it("records the late capture once, with the original device and tip, without collecting again", async () => {
     const venue = await provisionBillVenue(suite.db);
