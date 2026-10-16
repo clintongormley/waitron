@@ -4826,14 +4826,9 @@ the tree. What remains, largest first:
 
 - **Replication, membership & failover — residuals** — **Until slice 3 a venue has ONE node and no
   failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
-  descriptions of code that exists today. Open: a cut-off primary keeps streaming, into its own copy
-  (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner, 2026-09-26);
-  `retireSelf` and `rejoinAsSecondary` lost their drain confirmations; `rejoin --accept-loss` waives
-  nothing today; an adopted mirror can no longer leave adoption-pending; re-admission, the
-  membership chart filling up, chart hygiene, the resume-at-restore marker, the worker-lifecycle
-  manager, power-loss durability and the selling gate, getting the AEAT certificate onto a promoted
-  standby, restore-onto-cloud re-encrypt, the carry-ins, mirror fidelity, split-brain on the
-  promoted side, the till UX for a timed-out card.
+  descriptions of code that exists today. Open, among them: a cut-off primary keeps streaming, into
+  its own copy (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner,
+  2026-09-26); mirror fidelity, which the detail does not cover.
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 - **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
@@ -4843,18 +4838,23 @@ the tree. What remains, largest first:
 
 **Cloud integration and SQLite work.**
 
-- **Customer remote setup UI and production deployment remain open.** Left open by the Cloud
-  connection integration (2026-09-24; #638, #808).
-
-- **Shutdown waits for an in-progress local database copy or encryption step.** Next: measure that
-  shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly beyond
-  its current in-memory 512 MiB format limit. Cloud documentation: `docs/authenticated-captures.md`
-  in waitron-cloud. Left open by the Cloud connection integration (2026-09-24; #638, #808).
-
-- **After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
-  operator step.** Continuous complete-server recovery, planned final-write handover and production
-  recovery remain open. Cloud owns route placement and fencing in its backlog. Left open by the
-  Cloud connection integration (2026-09-24; #638, #808).
+- **Loose ends left by the Cloud connection integration (2026-09-24; #638, #808).**
+  - Customer remote setup UI and production deployment remain open.
+  - Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
+    shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly
+    beyond its current in-memory 512 MiB format limit. Cloud documentation:
+    `docs/authenticated-captures.md` in waitron-cloud.
+  - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
+    operator step. Continuous complete-server recovery, planned final-write handover and production
+    recovery remain open. Cloud owns route placement and fencing in its backlog.
+  - A stop made while `cloud-replacement.json` is unreadable is not recorded in it. Owner to choose:
+    refuse Stop access while the replacement file is unreadable, or record the stop somewhere that
+    survives the repair.
+    [Detail](backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
+  - The Litestream stream's sealed-state restore and activation still need integration with Cloud
+    storage and owner recovery. Connected does not mean those services are configured. Cloud service
+    ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
+    behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work.
 
 - **Four Cloud reply and state readers accept a one-item list where they want text.** Each turns
   the field into text before checking it, so `["ready"]` passes as `"ready"`:
@@ -4864,21 +4864,9 @@ the tree. What remains, largest first:
   `cloud-installation.ts` and `cloud-translation.ts`; these four predate it. Found by its review
   (2026-10-15), not measured against a real Cloud.
 
-
 - **The signing and size-capped reading of a request to Cloud is repeated across the
   `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
   as a refactor larger than that PR (its simplify review, 2026-10-15).
-
-- **A stop made while `cloud-replacement.json` is unreadable is not recorded in it.** Owner to
-  choose: refuse Stop access while the replacement file is unreadable, or record the stop somewhere
-  that survives the repair. Left open by the Cloud connection integration (2026-09-24; #638, #808).
-  [Detail](backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
-
-- **The Litestream stream's sealed-state restore and activation still need integration with Cloud
-  storage and owner recovery.** Connected does not mean those services are configured. Cloud service
-  ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side
-  behavior. Public hosting, ingress controls and Cloud audit/retention remain deployment work. Left
-  open by the Cloud connection integration (2026-09-24; #638, #808).
 
 - **Observations are synthetic until service adapters exist.** Left open by the Cloud connection
   integration (2026-09-24; #638, #808).
@@ -4894,27 +4882,21 @@ the tree. What remains, largest first:
   `venue.db` only in locked form — do not reopen it.
   [Detail](backlog/replication-cloud.md#sqlite--litestream-replaces-postgresql)
 
-- **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
-  conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
-  Cloud's production store still needs its own run. Left open by the SQLite failover-loop prototype
-  gate (#425; receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
-  [Detail](backlog/replication-cloud.md#validate-every-supported-object-store)
-
-- **The store pointer and a new generation are exercised for a rebuild, not for a promotion.** A
-  promoted node's generation, and Cloud's recovery orchestration (tracked in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
-  settle the Waitron ↔ Waitron Cloud contract before assigning them. Left open by the SQLite
-  failover-loop prototype gate (#425; receipts in
-  [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
-
-- **250 sales a day is still an assumption** nothing in this repository measures, so the
-  days-per-GiB figure rescales but does not hold. Left open by the SQLite failover-loop prototype
-  gate (#425; receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
-
-- **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
-  wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task
-  should pin them or delete them. Left open by the SQLite failover-loop prototype gate (#425;
-  receipts in [the results note](research/2026-09-16-sqlite-failover-prototype.md)).
+- **Loose ends left by the SQLite failover-loop prototype gate (#425; receipts in
+  [the results note](research/2026-09-16-sqlite-failover-prototype.md)).**
+  - **Validate every supported object store.** Topology §12.2's real-store gate remains open; the
+    conditional-write promotion tie-break must be demonstrated on each target (risk 11). Waitron
+    Cloud's production store still needs its own run.
+    [Detail](backlog/replication-cloud.md#validate-every-supported-object-store)
+  - The store pointer and a new generation are exercised for a rebuild, not for a promotion. A
+    promoted node's generation, and Cloud's recovery orchestration (tracked in the
+    [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
+    settle the Waitron ↔ Waitron Cloud contract before assigning them.
+  - 250 sales a day is still an assumption nothing in this repository measures, so the days-per-GiB
+    figure rescales but does not hold.
+  - Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
+    wrapper are driven by no scenario, and the runner's own `main()` is undriven — a later task
+    should pin them or delete them.
 
 - **Task 1a** (#548, each machine's own rows keyed by its node id). Deny's delete is the one
   join-request node filter no test fails without (the `requirePending` read before it already
@@ -4922,53 +4904,38 @@ the tree. What remains, largest first:
   holders torn by a concurrent promotion, credential sealing, and scheduler takeover. Left open by
   SQLite slice 2.
 
-- **A node row holding no endorsement still signs `endorsements: []`, and no first-start case
-  asserts it.** Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
-
-- **Two comments claim more than the code keeps.** Narrow both the next time either file is edited.
-  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
-  [Detail](backlog/replication-cloud.md#two-comments-claim-more-than-the-code-keeps)
-
-- **A restored box whose cloud peer does not answer during its first start signs the next term and
-  removes the marker**; a fencing document the peer serves later at that same term reads as not
-  newer, so the box is never fenced (reproduced with a temporary two-boot case in
-  `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned. Left open by SQLite slice 2
-  Task 9a (#630, the first start after a restore).
-  [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
-
-- **The pointer's term is taken without checking its signature,** as the supervisor already does, so
-  whoever can write the bucket can push a restored box's term up (never down). Left open by SQLite
-  slice 2 Task 9a (#630, the first start after a restore).
-
-- **A marker left on a fenced box survives `waitron-rejoin`,** which wipes the database and removes
-  only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first start
-  runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin should
-  clear it is the owner's call. Left open by SQLite slice 2 Task 9a (#630, the first start after a
-  restore).
-
-- **A sell-only local secondary that is not fenced runs the first start and signs the next term.**
-  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
-
-- **The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
-  restored copy holds.** Left open by SQLite slice 2 Task 9a (#630, the first start after a
-  restore).
-  [Detail](backlog/replication-cloud.md#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds)
-
-- **Only the start that finishes a restore checks the row's signature.** A mirror or fenced start
-  checks only that it can be read and is shaped as a document (A53); a start still finishing an
-  adoption checks neither. Left open by SQLite slice 2 Task 9a (#630, the first start after a
-  restore).
-  [Detail](backlog/replication-cloud.md#only-the-start-that-finishes-a-restore-checks-the-rows-signature)
-
-- **On a start with NO restore marker, text that is not JSON or a machine list that is not a list
-  fails with the generic text.** Whether to give it a curated code is open. Left open by SQLite
-  slice 2 Task 9a (#630, the first start after a restore).
-  [Detail](backlog/replication-cloud.md#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text)
-
-- **A mirror that deferred its first start and is then promoted without a restart**
-  (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
-  `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
-  Left open by SQLite slice 2 Task 9a (#630, the first start after a restore).
+- **Loose ends left by SQLite slice 2 Task 9a (#630, the first start after a restore).**
+  - A node row holding no endorsement still signs `endorsements: []`, and no first-start case
+    asserts it.
+  - A comment claims more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
+    says a signing failure "leaves the node exactly as it was". Signing empties pending
+    `change_log` rows (measured by #655's Codex seat), so they are not strictly untouched; no case
+    losing a real one is known. Narrow it the next time the file is edited.
+  - A restored box whose cloud peer does not answer during its first start signs the next term and
+    removes the marker; a fencing document the peer serves later at that same term reads as not
+    newer, so the box is never fenced (reproduced with a temporary two-boot case in
+    `apps/server/src/boot.reconcile.test.ts`). Recorded, not redesigned.
+    [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
+  - The pointer's term is taken without checking its signature, as the supervisor already does, so
+    whoever can write the bucket can push a restored box's term up (never down).
+  - A marker left on a fenced box survives `waitron-rejoin`, which wipes the database and removes
+    only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first
+    start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
+    should clear it is the owner's call.
+  - A sell-only local secondary that is not fenced runs the first start and signs the next term.
+  - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
+    restored copy holds.
+    [Detail](backlog/replication-cloud.md#the-restored-membership-rows-check-assertrestoredmembershipvalid-678-trusts-the-keys-the-restored-copy-holds)
+  - Only the start that finishes a restore checks the row's signature. A mirror or fenced start
+    checks only that it can be read and is shaped as a document (A53); a start still finishing an
+    adoption checks neither.
+    [Detail](backlog/replication-cloud.md#only-the-start-that-finishes-a-restore-checks-the-rows-signature)
+  - On a start with NO restore marker, text that is not JSON or a machine list that is not a list
+    fails with the generic text. Whether to give it a curated code is open.
+    [Detail](backlog/replication-cloud.md#on-a-start-with-no-restore-marker-text-that-is-not-json-or-a-machine-list-that-is-not-a-list-fails-with-the-generic-text)
+  - A mirror that deferred its first start and is then promoted without a restart
+    (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
+    `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
 
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body

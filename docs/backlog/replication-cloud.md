@@ -185,18 +185,6 @@ venue key** stored in `venue.db` only in locked form — do not reopen it.
   refuse a stale conditional write, and the loop test runs that check against versitygw. Waitron
   Cloud's production store still needs its own run.
 
-## Two comments claim more than the code keeps
-
-**Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
-node row holding no endorsement still signs `endorsements: []`, and no first-start case asserts it.
-Open:
-
-- Two comments claim more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
-  says a signing failure "leaves the node exactly as it was", and `promoteMirrorToPrimary`'s
-  (`apps/server/src/promote.ts`) says a failure before the commit "leaves the mirror as it was".
-  Signing empties pending `change_log` rows (measured by #655's Codex seat), so they are not strictly
-  untouched; no case losing a real one is known. Narrow both the next time either file is edited.
-
 ## A restored box whose cloud peer does not answer during its first start signs the next term and removes the marker
 
 **Task 9a** (#630, the first start after a restore — `apps/server/src/rebuild-first-start.ts`). A
