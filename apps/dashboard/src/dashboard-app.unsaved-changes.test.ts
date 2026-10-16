@@ -914,6 +914,12 @@ it.each([
           throw { code: "product.not_found" };
         },
         getReceiptLanguage: async () => ({ language: "en-GB", choices: ["en-GB"], fixed: null }),
+        getVenueDefaults: async () => ({
+          receiptLanguage: "en-GB",
+          receiptLanguageChoices: ["en-GB"],
+          fixedReceiptLanguage: null,
+          defaultProductVatClass: "general",
+        }),
         getVenueDepartments: async () => [
           { id: "bar", name: "Restaurant", active: true, isDefault: true },
         ],

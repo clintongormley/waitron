@@ -3,10 +3,11 @@ import { commands, page, userEvent } from "vitest/browser";
 import { registerIcons, type WtFormActions, type WtInput, type WtTabs } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "./api/client.js";
+import type { DashboardApi, VenueDefaults } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
+import { receiptLanguageName } from "./widgets/receipt-language.js";
 import {
   mountReceiptDialog,
   receiptApi,
@@ -64,6 +65,12 @@ async function mount(
           venueAddress: [],
         }),
         getReceiptLanguage: async () => ({ language: "es-ES", choices: ["es-ES"], fixed: null }),
+        getVenueDefaults: async () => ({
+          receiptLanguage: "es-ES",
+          receiptLanguageChoices: ["es-ES"],
+          fixedReceiptLanguage: null,
+          defaultProductVatClass: "general",
+        }),
         getVenueDepartments: async () => [],
         getMe: async () => ({
           personId: "p1",
@@ -844,72 +851,87 @@ it("a failed banner read keeps the name the banner shows", async () => {
   expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).not.toBeNull();
 });
 
-function languagePanel(app: DashboardApp) {
-  return settings(app).shadowRoot!.querySelector("dashboard-receipt-language-panel");
+type DefaultsPanel = HTMLElementTagNameMap["dashboard-venue-defaults-panel"];
+function defaultsPanel(app: DashboardApp) {
+  return settings(app).shadowRoot!.querySelector("dashboard-venue-defaults-panel");
 }
-async function readyLanguage(app: DashboardApp) {
+async function readyDefaults(app: DashboardApp) {
   await expect
-    .poll(() => languagePanel(app)?.shadowRoot?.querySelector("[name=receiptLanguage]"))
+    .poll(() => defaultsPanel(app)?.shadowRoot?.querySelector("[data-test=edit]"))
     .toBeTruthy();
-  return languagePanel(app)!;
+  return defaultsPanel(app)!;
 }
-function languageField(panel: HTMLElementTagNameMap["dashboard-receipt-language-panel"]) {
+async function editDefaults(panel: DefaultsPanel) {
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await expect.poll(() => panel.shadowRoot!.querySelector("[name=receiptLanguage]")).toBeTruthy();
+}
+function languageField(panel: DefaultsPanel) {
   return panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     "[name=receiptLanguage]",
   )!;
 }
-async function pickLanguage(
-  panel: HTMLElementTagNameMap["dashboard-receipt-language-panel"],
-  value: string,
-) {
+function defaultsSave(panel: DefaultsPanel) {
+  return panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+}
+function savedLanguage(panel: DefaultsPanel) {
+  return panel.shadowRoot!.querySelector("[data-test=saved-receiptLanguage]")?.textContent?.trim();
+}
+async function pickLanguage(panel: DefaultsPanel, value: string) {
   languageField(panel).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await panel.updateComplete;
 }
-const languageModel = { language: "es-ES", choices: ["es-ES", "ca-ES"], fixed: null };
+const defaultsModel: VenueDefaults = {
+  receiptLanguage: "es-ES",
+  receiptLanguageChoices: ["es-ES", "ca-ES"],
+  fixedReceiptLanguage: null,
+  defaultProductVatClass: "general",
+};
+const savedCatalan: DashboardApi["putVenueDefaults"] = async (changes) => ({
+  ...defaultsModel,
+  ...changes,
+});
 
-it("Venue details hosts receipt language with its own quiet Save", async () => {
-  const put = vi.fn<DashboardApi["putReceiptLanguage"]>(async () => {});
+it("Venue details hosts the Defaults card, whose Save stays quiet until the draft changes", async () => {
+  const put = vi.fn(savedCatalan);
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
-    getReceiptLanguage: async () => languageModel,
-    putReceiptLanguage: put,
+    getVenueDefaults: async () => defaultsModel,
+    putVenueDefaults: put,
   });
-  const panel = await readyLanguage(app);
+  const panel = await readyDefaults(app);
   expect(panel.checkVisibility()).toBe(true);
-  const save = panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=language-save]",
-  )!;
+  await editDefaults(panel);
+  const save = defaultsSave(panel);
   expect(save.disabled).toBe(true);
   expect(save.variant).toBe("secondary");
   await pickLanguage(panel, "ca-ES");
   expect(save.disabled).toBe(false);
   await save.updateComplete;
   await userEvent.click(page.elementLocator(save.shadowRoot!.querySelector("button")!));
-  await expect.poll(() => put.mock.calls).toEqual([["ca-ES"]]);
-  await expect.poll(() => save.disabled).toBe(true);
-  expect(languageField(panel).value).toBe("ca-ES");
+  await expect.poll(() => put.mock.calls).toEqual([[{ receiptLanguage: "ca-ES" }]]);
+  await expect.poll(() => savedLanguage(panel)).toBe(receiptLanguageName("ca-ES"));
 });
 
 it.each([["venue.view"], ["layout.configure"], ["venue.configure"]])(
-  "the hosted receipt-language gate matches the server for %j",
+  "the hosted Defaults card gate matches the server for %j",
   async (permission) => {
     const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {}, [
       permission,
     ]);
-    expect(languagePanel(app) !== null).toBe(permission === "venue.configure");
+    expect(defaultsPanel(app) !== null).toBe(permission === "venue.configure");
   },
 );
 
-it("saving hosted receipt language preserves a separate venue-details draft", async () => {
-  const put = vi.fn<DashboardApi["putReceiptLanguage"]>(async () => {});
+it("saving the Defaults card preserves a separate venue-details draft", async () => {
+  const put = vi.fn(savedCatalan);
   const detailsWrite = vi.fn<DashboardApi["patchVenueDetails"]>();
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
-    getReceiptLanguage: async () => languageModel,
-    putReceiptLanguage: put,
+    getVenueDefaults: async () => defaultsModel,
+    putVenueDefaults: put,
     patchVenueDetails: detailsWrite,
   });
-  const panel = await readyLanguage(app);
+  const panel = await readyDefaults(app);
   const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   await expect.poll(() => details.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
   details.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
@@ -920,17 +942,11 @@ it("saving hosted receipt language preserves a separate venue-details draft", as
     page.elementLocator(name.shadowRoot!.querySelector("input")!),
     "Draft venue",
   );
+  await editDefaults(panel);
   await pickLanguage(panel, "ca-ES");
-  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
-  await expect.poll(() => put.mock.calls).toEqual([["ca-ES"]]);
-  await expect
-    .poll(
-      () =>
-        panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-test=language-save]",
-        )!.disabled,
-    )
-    .toBe(true);
+  defaultsSave(panel).click();
+  await expect.poll(() => put.mock.calls).toEqual([[{ receiptLanguage: "ca-ES" }]]);
+  await expect.poll(() => savedLanguage(panel)).toBe(receiptLanguageName("ca-ES"));
   expect(name.value).toBe("Draft venue");
   expect(detailsWrite).not.toHaveBeenCalled();
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
@@ -942,11 +958,12 @@ it("saving hosted receipt language preserves a separate venue-details draft", as
   await expect.poll(() => location.pathname).toBe("/manage/overview");
 });
 
-it("hosted receipt language protects sidebar navigation through Keep and Discard", async () => {
+it("the hosted Defaults card protects sidebar navigation through Keep and Discard", async () => {
   const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
-    getReceiptLanguage: async () => languageModel,
+    getVenueDefaults: async () => defaultsModel,
   });
-  const panel = await readyLanguage(app);
+  const panel = await readyDefaults(app);
+  await editDefaults(panel);
   await pickLanguage(panel, "ca-ES");
   app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await choose(app, "keep");
@@ -965,14 +982,14 @@ it("hosted receipt language protects sidebar navigation through Keep and Discard
 for (const locale of ["en-GB", "es-ES"]) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
-      it(`hosted receipt language layout ${locale}/${theme}/${width}`, async () => {
+      it(`hosted Defaults card layout ${locale}/${theme}/${width}`, async () => {
         registerIcons(DASHBOARD_ICONS);
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
         const { app } = await mount("/manage/venue-settings/view/venue-details", locale, theme, {
-          getReceiptLanguage: async () => languageModel,
+          getVenueDefaults: async () => defaultsModel,
         });
-        const panel = await readyLanguage(app);
+        const panel = await readyDefaults(app);
         const screen = settings(app);
         const details = screen.shadowRoot!.querySelector("dashboard-venue-details-panel")!;
         expect(panel.getBoundingClientRect().top).toBeGreaterThan(
@@ -986,13 +1003,15 @@ for (const locale of ["en-GB", "es-ES"]) {
         expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
         await page.screenshot({
           element: panel,
-          path: `__screenshots__/look/a493-host-language-${locale}-${theme}-${width}-saved.png`,
+          path: `__screenshots__/look/a755-defaults-${locale}-${theme}-${width}-saved.png`,
         });
+        await editDefaults(panel);
         await pickLanguage(panel, "ca-ES");
         await expectNoA11yViolations(screen);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
         await page.screenshot({
           element: panel,
-          path: `__screenshots__/look/a493-host-language-${locale}-${theme}-${width}-draft.png`,
+          path: `__screenshots__/look/a755-defaults-${locale}-${theme}-${width}-draft.png`,
         });
       });
     }

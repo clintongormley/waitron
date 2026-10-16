@@ -147,6 +147,12 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getReceiptLanguage: vi
       .fn()
       .mockResolvedValue({ language: "es-ES", choices: ["es-ES"], fixed: null }),
+    getVenueDefaults: vi.fn().mockResolvedValue({
+      receiptLanguage: "es-ES",
+      receiptLanguageChoices: ["es-ES"],
+      fixedReceiptLanguage: null,
+      defaultProductVatClass: "general",
+    }),
     previewReceiptDraft: vi.fn(() => new Promise(() => undefined)),
     getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
     getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
@@ -4610,7 +4616,7 @@ it("keeps Venue settings within the window at desktop width, in view and edit mo
     await expect.poll(() => panels()?.children.length).toBe(2);
     expect([...panels().children].map((panel) => panel.localName)).toEqual([
       "dashboard-venue-details-panel",
-      "dashboard-receipt-language-panel",
+      "dashboard-venue-defaults-panel",
     ]);
     const details = panels().querySelector("dashboard-venue-details-panel")!;
     await expect

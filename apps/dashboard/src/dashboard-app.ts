@@ -68,6 +68,7 @@ import "./screens/units-screen.js";
 import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
 import "./screens/receipt-language-panel.js";
+import "./screens/venue-defaults-panel.js";
 import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
@@ -307,11 +308,11 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
       ></dashboard-venue-details-panel>`,
   },
   {
-    key: "receipt-language",
+    key: "defaults",
     tab: "venue-details",
     requiresPermission: "venue.configure",
     render: (api) =>
-      html`<dashboard-receipt-language-panel .api=${api}></dashboard-receipt-language-panel>`,
+      html`<dashboard-venue-defaults-panel .api=${api}></dashboard-venue-defaults-panel>`,
   },
   {
     key: "statuses",
