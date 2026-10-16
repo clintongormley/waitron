@@ -356,6 +356,15 @@ describe("DayPicker", () => {
     await expectRun(host, null);
   });
 
+  it("the Tab stop follows focus a script moves from one day to another", async () => {
+    const host = await mount();
+    button(host, 12).focus();
+    button(host, 14).focus();
+    expect(host.picker.focusDate).toBe(day(14));
+    await host.updateComplete;
+    expect(button(host, 14).tabIndex).toBe(0);
+  });
+
   it("a click no Enter keydown preceded chooses and does not open", async () => {
     const host = await mount();
     button(host, 23).focus();

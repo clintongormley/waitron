@@ -93,17 +93,23 @@ export class DayPicker implements ReactiveController {
     this.#set(null);
   }
 
+  #focusTarget: EventTarget | null = null;
+
   hostConnected(): void {
-    this.#host.addEventListener("focusin", this.#focusin);
+    // A focusin moving between two elements of one shadow root stops at that root, so the host
+    // never hears it.
+    this.#focusTarget = this.#host.shadowRoot ?? this.#host;
+    this.#focusTarget.addEventListener("focusin", this.#focusin as EventListener);
   }
 
   hostDisconnected(): void {
-    this.#host.removeEventListener("focusin", this.#focusin);
+    this.#focusTarget?.removeEventListener("focusin", this.#focusin as EventListener);
+    this.#focusTarget = null;
     this.#end();
   }
 
-  /** Focus reaches the controller through the host, whatever moved it (Tab, a dialog handing
-   *  focus back, a click), so the grid's one Tab stop follows it. */
+  /** Focus reaches the controller whatever moved it (Tab, a dialog handing focus back, a click,
+   *  a script), so the grid's one Tab stop follows it. */
   #focusin = (event: FocusEvent): void => {
     const day = this.#dayOf(event);
     if (day === null) return;
