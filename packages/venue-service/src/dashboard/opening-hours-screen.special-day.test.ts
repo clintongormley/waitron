@@ -32,7 +32,6 @@ const holiday = (date: string, name: string): HolidayFact => ({
   scope: "national",
   sourceId: "official",
 });
-/** Every date of 2026, so a drag over the Year finds each date it crosses. */
 function everyDate2026(
   day: (
     date: string,

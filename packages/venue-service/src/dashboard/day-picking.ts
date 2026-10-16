@@ -63,8 +63,9 @@ export class DayPicker implements ReactiveController {
   #focus: LocalDate | null = null;
   #gesture: Gesture | null = null;
   /** The gesture whose click to swallow. Measured in Chromium: the click after a gesture carries
-   *  its pointerId, a script's or a key's click carries -1, and after a touch drag none comes. A
-   *  browser whose click is a plain MouseEvent is told apart by `detail`, 0 for a click no press made. */
+   *  its pointerId, a script's or a key's click carries -1, and after a touch drag none comes.
+   *  Where a click is a plain MouseEvent, `detail` stands in: Chromium gave 0 for a script's and a
+   *  key's click. */
   #swallowClick: number | null = null;
   /** The swallowed click was a gesture's second, so the dblclick that follows is the gesture's. */
   #ignoreDblclick = false;
