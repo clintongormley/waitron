@@ -47,6 +47,8 @@ import {
  * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
  * | GET /api/transactions/:saleId/receipt | session only; no profile action | transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
  * | POST /api/transactions/:saleId/reprint | print-receipt | reprint; transaction-receipt-api.test.ts: "GET needs a session but no print action; POST requires print-receipt" |
+ * | GET /api/transactions/:saleId/refundable-tenders; GET /api/tender-refunds/:refundId | admitted session; no payment capability | tender-refund-api.test.ts: "%s reads are passive and require no payment capability"; shared display refused in "does not expose a refund command or its reads on a shared kitchen display" |
+ * | POST /api/transactions/:saleId/refunds; POST /api/tender-refunds/:refundId/retry | original tender's take-cash / hand-keyed-card-payment / integrated-card-payment | tender-refund-api.test.ts: "%s creation and retry require the tender's current capability"; allowed cash/manual/connected cases in that suite |
  * | GET /api/working-orders/:id/kitchen-note | take-orders | take-orders; till-api.kitchen-note.test.ts: "refuses profiles without take-orders for %s reads and writes" |
  * | PUT /api/working-orders/:id/kitchen-note | take-orders | same refusal case |
  * | GET /api/parties/:id/kitchen-note | take-orders | same refusal case |
