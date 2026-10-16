@@ -54,26 +54,37 @@ function packageDirsWithVitestConfig(): string[] {
   return dirs;
 }
 
+type Uses = { parkPointer: boolean; pointerGesture: boolean };
+
+/** What each package's source uses, from one read of its files; both blocks below share it. */
+const usesByPackage = new Map<string, Uses>(
+  packageDirsWithVitestConfig().map((dir) => {
+    let files: string[];
+    try {
+      files = sourceFilesIn(join(dir, "src"));
+    } catch {
+      files = [];
+    }
+    const uses: Uses = { parkPointer: false, pointerGesture: false };
+    for (const f of files) {
+      const text = readFileSync(f, "utf8");
+      uses.parkPointer ||= IMPORTS_A11Y_HELPERS.test(text) || CALLS_PARK_POINTER.test(text);
+      uses.pointerGesture ||= CALLS_POINTER_GESTURE.test(text);
+      if (uses.parkPointer && uses.pointerGesture) break;
+    }
+    return [dir, uses];
+  }),
+);
+
 describe("parkPointer command registration", () => {
-  const packages = packageDirsWithVitestConfig();
+  const packages = [...usesByPackage.keys()];
 
   it("finds packages to check (the scan is not silently empty)", () => {
     expect(packages.length).toBeGreaterThan(0);
   });
 
   for (const dir of packages) {
-    const src = join(dir, "src");
-    let files: string[];
-    try {
-      files = sourceFilesIn(src);
-    } catch {
-      files = [];
-    }
-    const needsParkPointer = files.some((f) => {
-      const text = readFileSync(f, "utf8");
-      return IMPORTS_A11Y_HELPERS.test(text) || CALLS_PARK_POINTER.test(text);
-    });
-    if (!needsParkPointer) continue;
+    if (!usesByPackage.get(dir)!.parkPointer) continue;
 
     const rel = dir.slice(repoRoot.length + 1);
     it(`${rel} registers parkPointer in its vitest config`, () => {
@@ -87,15 +98,7 @@ describe("parkPointer command registration", () => {
 });
 
 describe("pointer gesture command registration", () => {
-  const callers = packageDirsWithVitestConfig().filter((dir) => {
-    let files: string[];
-    try {
-      files = sourceFilesIn(join(dir, "src"));
-    } catch {
-      files = [];
-    }
-    return files.some((f) => CALLS_POINTER_GESTURE.test(readFileSync(f, "utf8")));
-  });
+  const callers = [...usesByPackage].filter(([, uses]) => uses.pointerGesture).map(([dir]) => dir);
 
   it("finds packages calling the commands (the scan is not silently empty)", () => {
     expect(callers.length).toBeGreaterThan(0);
