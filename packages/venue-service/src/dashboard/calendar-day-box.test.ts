@@ -168,7 +168,16 @@ describe("calendar-day-box", () => {
     await expect.poll(() => closes).toBe(1);
     expect(isOpen()).toBe(false);
     box.hide();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // The browser queues every popover's toggle event as a task in one queue, so a close this
+    // second hide() had queued would arrive before the probe's own toggle event.
+    const probe = document.createElement("div");
+    probe.popover = "manual";
+    host.append(probe);
+    const probed = new Promise((resolve) =>
+      probe.addEventListener("toggle", resolve, { once: true }),
+    );
+    probe.showPopover();
+    await probed;
     expect(closes).toBe(1);
   });
 

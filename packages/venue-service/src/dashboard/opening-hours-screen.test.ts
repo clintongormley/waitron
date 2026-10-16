@@ -1221,9 +1221,17 @@ describe("Year view", () => {
     yearDate(year, "2026-11-04").click();
     await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-11-04"));
     await expect.poll(() => held.length).toBe(2);
+    // A probe read released just after December's travels the same promise chain behind it, so
+    // once the probe's answer arrives December's has been applied or dropped.
+    const probed = new Promise((resolve) => {
+      const detach = el.api.watchMonth("2027-05", resolve, resolve, () => {});
+      onTestFinished(detach);
+    });
+    await expect.poll(() => held.length).toBe(3);
     // December's answer carries November's dates, so it would fill the November box if applied.
     held[0]!.release(await redated("2026-11"));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    held[2]!.release(await redated("2027-05"));
+    await probed;
     await el.updateComplete;
     expect(dayBox(el)!.line).toBe("");
     expect(dayBox(el)!.message).toBe(t("day.loading"));
@@ -1935,7 +1943,6 @@ describe("Month view", () => {
     expect(dayBox(el)!.name).toBe("Immaculate Conception");
     dateButton(month, "2026-12-09").click();
     await expect.poll(() => dayBox(el)?.heading).toBe(formatDate("2026-12-09"));
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(boxOpen(el)).toBe(true);
     expect(dayBox(el)!.heading).toBe(formatDate("2026-12-09"));
     // A close the first box sent arrives after the next date's click.
@@ -1944,7 +1951,7 @@ describe("Month view", () => {
     first.dispatchEvent(
       new CustomEvent("calendar-day-box-close", { bubbles: true, composed: true }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
     expect(boxOpen(el)).toBe(true);
     expect(dayBox(el)!.heading).toBe(formatDate("2026-12-10"));
   });
