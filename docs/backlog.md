@@ -4994,6 +4994,9 @@ the tree. What remains, largest first:
   existing `/docker/` assertion failed. The menu-upgrade populated case also exceeded 30 seconds.
   Both files then passed all 105 cases in isolation, without a code or test change; no repair is
   claimed. Investigate the full-suite workload and the diagnostic's preparation phase.
+  A further full hook failed the mutation-shard fixture's 30-second bound and two step-watch
+  cases (a 212 ms phase against a 100 ms limit, then a missing diagnostic match). These remain
+  uninvestigated; A668-5 is parked after two full root-suite failures.
   [Receipt](backlog/ci.md#a668-5-normal-push-recurrence-2026-10-16).
 
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or

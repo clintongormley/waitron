@@ -332,6 +332,23 @@ the preparation before Docker from the deliberately hung command before deciding
 700 ms budget should measure. Lane G retains both full logs and the process/open-file/memory
 snapshots under its A668-5 receipts.
 
+The next normal-hook attempt, on `ec0a6a92742275449d6d7731e7a283fee9a9eccd` after
+integrating A771, failed three of 6,780 cases in 201.03 seconds:
+
+- `scripts/mutation-shard.test.mjs:371`, "fills every shard": exceeded 30,000 ms (reported
+  33,088 ms).
+- `scripts/step-watch.test.mjs:360`, the moving-phases case: rejected after phase one took
+  212 ms against the 100 ms no-progress limit (case duration 363 ms).
+- `scripts/step-watch.test.mjs:379`: the diagnostic-matching case raised
+  `TypeError: object null is not iterable` at line 390 (case duration 425 ms).
+
+The captured one-minute load average was 87.83. These failures were not repaired or assigned a
+cause, and none of these test files or their implementations changed in A668-5. After these two
+full-suite failures, Lane G parked the branch under RUNNER H10; it did not make another push,
+change a test/limit or bypass the hook. Investigate the monitor's observed phase timing and its
+missing diagnostic match separately from the mutation fixture's elapsed-time limit. The new
+failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
+
 ## Decisions and deliberate limits
 
 - **Upgrade-test work budget follows the migration count (A489, 2026-10-11) and counts the walk's
