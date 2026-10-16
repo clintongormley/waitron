@@ -268,11 +268,32 @@ log printed the frozen line, then `Error: [vitest-pool]: Worker forks emitted er
 unexpectedly`; the progress reporter went on listing `routes.test.ts` as running, and Vitest
 finished the other files and exited 1.
 
+A test that fakes the clock made a healthy worker look frozen too, until the stamp stopped reading
+the faked clock. Under Vitest 4.1.11, `vi.useFakeTimers()` with its default options replaces
+`process.hrtime` as well as the timers. The stamp is a real interval, so when it fired while a test
+had the clock faked it stored the fake reading, near zero, and the watchdog thread, comparing it
+with its own real clock, saw a silence about as long as the machine had been up. A folder first
+taken while the clock was faked got its stamp on a fake interval, which did not fire while the
+test's fake clock stood still.
+The stamp now reads `process.hrtime.bigint` and runs on `setInterval`, both taken when
+`packages/store/src/venue-liveness.ts` loads. Measured 2026-10-16 on Node v26.11.1, macOS, Vitest
+4.1.11, before that change: a 1,100 ms `Atomics.wait` added after `vi.useFakeTimers()` in the first
+case of "the timer turn under fake timers" and a 1,500 ms one in the second got the worker killed
+with `lastTickAt` `2026-08-31T07:10:36.669Z`, 46 days before the run, and Vitest printed
+`Worker exited unexpectedly`; after it, both cases passed. The same two waits added to the expiry
+case of `packages/payments/src/simulator.test.ts` and the case after it got the worker killed with
+`lastTickAt` `2026-08-31T07:20:36.668Z`, ten minutes later — the ten minutes that case moves its
+fake clock — and Vitest reported `11 passed (22)`; after the change, `22 passed (22)`. The waits were removed
+afterwards.
+
 Guard: the cases "a timer turn after each test" and "the timer turn under fake timers" in
 `packages/db/src/testing/venue-db.test.ts`, weaker than the rule: they cover `useVenueDb` alone. A
 suite that opens a venue folder another way — calling `openVenueDatabase` or `openVenueStore`
 itself, as many suites across `packages/`, `apps/` and `scripts/` do
-(`grep -rlE 'openVenue(Database|Store)\(' --include='*.test.ts'`) — gets no yield from it.
+(`grep -rlE 'openVenue(Database|Store)\(' --include='*.test.ts'`) — gets no yield from it. The
+stamp's own clock is guarded by the cases under "a holder whose test fakes the clock" in
+`packages/store/src/venue-liveness.test.ts`, for any holder, and weaker than their name: they fake
+the clock only the way `vi.useFakeTimers()` does with its default options.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 

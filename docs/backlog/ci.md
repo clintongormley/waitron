@@ -470,3 +470,14 @@ The expiry case uses unrestricted `vi.useFakeTimers()` at
 separate worker. A fake clock crossing that boundary is a hypothesis, not a measured cause.
 Next: retain per-case timing and heartbeat values around that boundary, reproduce the full-run
 exit, then fix the responsible side without weakening the expiry assertion or watchdog.
+
+On 2026-10-16 (A769, branch `fix/a769-venue-service-shard-hang`, on top of `1df3f5557`) the
+unchanged suite passed 22 of 22 in each of 17 runs without the fix below, so the failure did not
+reproduce as it was. With a 1,100 ms `Atomics.wait` added after the expiry case's
+`vi.useFakeTimers()` and a 1,500 ms one in the case after it, the run printed the frozen line with
+`lastTickAt` `2026-08-31T07:20:36.668Z` and `Tests 11 passed (22)`, exit 1 — within a tenth of a
+second of the logged one, which is ten minutes, the time that case moves its fake clock, after the
+moment this machine's monotonic clock read zero. The watchdog's stamp now reads a real clock and runs
+on a real interval, both taken when `venue-liveness.ts` loads; with those waits the run then printed
+`Tests 22 passed (22)`, and three unchanged runs did too. Detail:
+[testing-guide.md](../developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
