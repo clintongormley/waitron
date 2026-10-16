@@ -199,8 +199,11 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   where that would put the table past the plan's top or left edge, or x or y below 0, the table
   steps right or down by the fewest whole squares that keep it inside." In practice: under one
   square at the drawn edge (largest computed 0.933); and for a table with a gap at x 0 (or y 0),
-  half the growth along that axis, because x cannot go below 0 (8 × 4 turned 90° at (0, 5):
-  growing its down-facing side by 3 gives (0, 7), its drawn left moving from 2 to 3.5, computed).
+  a slide away from the edge whose size depends on the table's size and turn, because x cannot go
+  below 0 (8 × 4 turned 90° at (0, 5): growing its down-facing side by 3 gives (0, 7), its drawn
+  left moving from 2 to 3.5, computed; growing its right-facing top side by 3 gives (2, 3) 8 × 7,
+  its drawn left moving from 2 to 2.5, measured 2026-10-16 with `resizeFrom`, so the slide is not
+  half the growth in general).
   Today that table could not grow those sides at all (the reproduction above).
 - **At the edge, growth is not reversible square for square.** Away from the edge a growth and its
   reverse put the table back (today's `roundShift` promise, kept). At the edge they need not, and
@@ -486,10 +489,14 @@ src/screens/floor-plan-editor.test.ts`):
    the same for y) in the drag branch with `this.#origin.x`; this test must fail; restore.
 8. One full turn by key walks a corner table away from the edge (Decision 3): an 8 × 8 at (0, 0),
    ArrowRight on its arrow 24 times with the parent applying each change, ends at 0° at (2, 2).
-9. Shift+ArrowDown on a turned table near the corner (an 8 × 8 at (2, 2) turned 30°), with the parent
-   applying the change and T2 at (20, 0): T2 does not move on screen and nothing overflows. This and
-   test 3 are the evidence for deleting the backlog entry "An arrow-key turn that makes a corner
-   table poke further out still shifts the other tables a square" in Task 9.
+9. Shift+ArrowRight on a turned table near the corner (an 8 × 8 at (1, 1) turned 15°), with the
+   parent applying the change and T2 at (20, 0): it sends exactly
+   `{ key: "t1", x: 1, y: 2, width: 9, height: 8 }`, T2 does not move on screen and nothing
+   overflows ("Shift+ArrowRight on a turned table near the corner steps it in, and moves no other
+   table"). This and the key-turn tests (test 3 among them) are the evidence for deleting the
+   backlog entry "An arrow-key turn that makes a corner table poke further out still shifts the
+   other tables a square" in Task 9. (Built in place of a first version, Shift+ArrowDown on an
+   8 × 8 at (2, 2) turned 30°, which could not fail.)
 10. Dashboard: "a turn from the canvas that steps the table in keeps its x and y, and one Undo puts
    all three back": `fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 15, x: 1, y: 1 })` then
    `placed(el, "m1")` has rotation 15, x 1, y 1; one Undo restores the earlier placement.

@@ -2250,11 +2250,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     without it that follows the link lands on Overview. Revisit beside the permissions review.
   - On computers whose scrollbars take space, a size reading just after a floor plan drop may
     shift the plan by the extra room.
-  - An arrow-key turn that makes a corner table poke further out still shifts the other tables a
-    square; a Shift+arrow resize of a turned corner table was not tested for the same shift.
   - Resizing a floor plan table needs a pointer or a keyboard, so a screen-reader user on a touch
     screen cannot resize a table (accepted by the A502 coordinator, not yet by the owner).
-  - Small floor plan canvas details: `reveal` does not count the side dots.
+  - Small floor plan canvas details: `reveal` does not count the side dots or the corners.
 
   [Detail](backlog/till.md#loose-ends-left-by-a466-a429-slice-2--a502-part-3)
 
@@ -2273,6 +2271,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
   [Detail](backlog/till.md#loose-ends-left-by-a718)
 
+- **Loose ends left by A672.**
+  - No key moves a floor plan table's top or left side or a corner. Shift with the arrow keys
+    moves only its right and bottom sides.
+  - Turning a floor plan table by key walks it away from the plan's top-left edge. Each press
+    steps a table that would poke past the edge back in from where the last press left it, and
+    turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to
+    (2, 2). Part of the owner question in "A turned floor plan table narrower than its unturned box
+    stops short of the plan's left or top edge".
+
+  [Detail](backlog/till.md#loose-ends-left-by-a672)
+
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
   [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
@@ -2285,8 +2294,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 
-- **A562. A 2 × 2 table shows no name in the floor plan editor (2026-10-13).** Its handles cover
-  it when selected; seen more since tables come back at their kept size (#1604).
+- **A562. A 2 × 2 table shows no name in the floor plan editor (2026-10-13).** Its name waits on
+  A561's decision; seen more since tables come back at their kept size (#1604).
   [Detail](backlog/till.md#a562-a-2--2-table-shows-no-name-in-the-floor-plan-editor)
 
 - **A563. The till says "part of a joined table" for a joined table that has come apart
@@ -2354,10 +2363,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   and how its parts wrap remain open; Add button placement now follows A671.
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
 
-- **A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
-  (owner, 2026-10-14).** A table at the plan's top-left limit cannot go up or left although empty
-  grid shows there; corners get resize handles and the turn arrow moves to top centre; a small turn
-  flashes scroll bars. [Detail](backlog/till.md#a672-the-floor-plan-editors-canvas-the-top-left-limit-corner-handles-scroll-bars-on-a-turn)
+- **A turned floor plan table narrower than its unturned box stops short of the plan's left or top
+  edge.** Its saved x and y cannot go below 0, so it keeps a gap there and slides a little away as
+  it grows; owner question asked 2026-10-16, (a) keeping it so is built. Left open by A672.
+  [Detail](backlog/till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 
 - **A570. A table split off a joined table whose removal was refused cannot be moved
   (2026-10-13).** Refused Back, Take off and Reset table. Left open by A503 part 4 (#1608).
