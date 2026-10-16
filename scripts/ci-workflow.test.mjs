@@ -1034,10 +1034,13 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   }
   const CROSS_CHECK_COMMAND = ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'];
 
-  /** Starts a run whose every `gh` call waits for `release`, for the case to kill. */
+  /**
+   * Starts a run whose every `gh` call waits for `release`, for the case to kill. The run leads its
+   * own process group, so the case can end the leftover subshell too however it exits.
+   */
   function startHeldCrossCheck(needs, answers) {
     const { env, stateDir } = prepareCrossCheck(needs, answers, { holdGh: true });
-    const child = spawn("bash", CROSS_CHECK_COMMAND, { env, stdio: "ignore" });
+    const child = spawn("bash", CROSS_CHECK_COMMAND, { env, stdio: "ignore", detached: true });
     const exited = new Promise((done) => child.once("exit", (code, signal) => done(signal)));
     return { child, exited, stateDir };
   }
@@ -1191,8 +1194,12 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
         expect(callsIn(next.stateDir), "calls the next run saw after the leftover call").toBe(1);
         expect(callsIn(killed.stateDir), "calls the killed run's leftover call made").toBe(1);
       } finally {
-        killed.child.kill("SIGKILL");
         writeFileSync(join(killed.stateDir, "release"), "");
+        try {
+          process.kill(-killed.child.pid, "SIGKILL");
+        } catch {
+          // The group has already ended.
+        }
       }
     },
     LEFTOVER_CALL_TEST_TIMEOUT_MS,
