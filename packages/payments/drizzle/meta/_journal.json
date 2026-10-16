@@ -57,6 +57,13 @@
       "when": 1791655198883,
       "tag": "0007_card_reader_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792192571804,
+      "tag": "0008_automatic_payment_resolution",
+      "breakpoints": true
     }
   ]
 }
