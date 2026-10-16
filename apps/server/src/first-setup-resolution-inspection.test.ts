@@ -591,6 +591,46 @@ it("a no-master declaration cannot clear saved consumption intent", async () => 
   });
   expect((await f.store.read())?.consumptionIntent).toBe(true);
 });
+
+it.each(["file", "directory"] as const)(
+  "a missing configured outside %s is unknown register history for password-free Start again",
+  async (kind) => {
+    const f = await actionsFixture();
+    const missing = join(f.root, "missing-outside-history");
+    const resolution = createFirstSetupResolutionInspection({
+      ...f,
+      ...(kind === "file"
+        ? { publicEvidencePaths: [missing] }
+        : { publicEvidenceDirectories: [missing] }),
+    });
+    const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
+    const actions = createFirstSetupResolutionActions({
+      ...f,
+      host: {
+        resolution,
+        store: f.store,
+        coordinator: f.coordinator,
+        owner: f.recovering,
+        evidence: { invalidate: () => {} },
+        delivery: { invalidate: () => {} },
+      },
+    });
+    const inspection = await resolution.inspectFirstSetupResolution();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    await expect(
+      actions.startAgainFirstSetup({
+        inspectionId: inspection.inspectionId,
+        revision: inspection.revision!,
+        ownerGeneration: inspection.ownerGeneration!,
+        register: { kind: "no-current-master", confirmed: true },
+      }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
 it("an authenticated missing-database retirement preserves spent intent and all document bytes", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });

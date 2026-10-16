@@ -84,14 +84,18 @@ export function createFirstSetupResolutionActions(
         selectionGeneration: inspected.binding.selectionGeneration,
       };
     },
-    async resumeWorkspaceSelection(request: {
-      inspectionId: string;
-      revision: number;
-      ownerGeneration: number;
-      workspaceId: string;
-      selectionGeneration: number;
-      password: string;
-    }): Promise<WorkspaceBinding> {
+    async resumeWorkspaceSelection(
+      request: {
+        inspectionId: string;
+        revision: number;
+        ownerGeneration: number;
+        workspaceId: string;
+        selectionGeneration: number;
+      } & (
+        | { password: string; register?: never }
+        | { register: Extract<RegisterAnswer, { kind: "no-current-master" }>; password?: never }
+      ),
+    ): Promise<WorkspaceBinding> {
       const inspected = await inspectSelection();
       if (inspected === null) conflict();
       if (
@@ -102,7 +106,23 @@ export function createFirstSetupResolutionActions(
         request.selectionGeneration !== inspected.binding.selectionGeneration
       )
         conflict();
-      return host.owner.withResolutionPassword(inspected.state, request.password, async () => {
+      const assertLocalReset = async (
+        current: NonNullable<Awaited<ReturnType<typeof inspectSelection>>>,
+      ) => {
+        if (
+          request.register?.kind !== "no-current-master" ||
+          request.register.confirmed !== true ||
+          current.record.authority !== "local-empty-no-custodian" ||
+          current.record.database !== "empty-preactivation" ||
+          current.record.register.kind !== "no-current-master" ||
+          !unused(current.state) ||
+          (await host.resolution.inspectFirstSetupResolution()).artifacts.some((artifact) =>
+            artifact.name.startsWith("outside-"),
+          )
+        )
+          unavailable();
+      };
+      const resume = async () => {
         const anchor = {
           venueDir: inspected.binding.anchorVenueDir,
           stateDir: inspected.binding.anchorStateDir,
@@ -112,16 +132,22 @@ export function createFirstSetupResolutionActions(
         try {
           if (inspected.retired.venueDir !== anchor.venueDir)
             target = await lockVenueDatabase(inspected.retired.venueDir);
-          const current = await inspectSelection();
-          if (current === null || current.inspectionId !== inspected.inspectionId) conflict();
-          return await host.coordinator.run(() =>
-            selectFirstSetupWorkspace(anchor, current.record),
-          );
+          return await host.coordinator.run(async () => {
+            const current = await inspectSelection();
+            if (current === null || current.inspectionId !== inspected.inspectionId) conflict();
+            if (request.password === undefined) await assertLocalReset(current);
+            return selectFirstSetupWorkspace(anchor, current.record);
+          });
         } finally {
           target?.release();
           hold.release();
         }
-      });
+      };
+      if (request.password !== undefined)
+        return host.owner.withResolutionPassword(inspected.state, request.password, resume);
+      // Only resume the recorded empty reset; selection rechecks every archived local original.
+      await assertLocalReset(inspected);
+      return resume();
     },
     startAgainFirstSetup(request: StartAgainFirstSetupRequest): Promise<WorkspaceBinding> {
       return host.resolution.withVenueExclusion(() =>
@@ -152,7 +178,8 @@ export function createFirstSetupResolutionActions(
             (artifact) =>
               ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
                 artifact.name,
-              ) || artifact.status === "missing",
+              ) ||
+              (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
           );
           const retired = await readFirstSetupRetirements(options);
           const noInheritedRegister = retired.every(

@@ -144,6 +144,24 @@ it("rejects unknown fields, private input, incomplete answers and impossible aut
       code: "setup.attempt_invalid",
     });
 });
+it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
+  "local-empty authority cannot authorise %s",
+  async (action) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare(
+        {
+          ...f.input,
+          authority: "local-empty-no-custodian",
+          register: { kind: "no-current-master", confirmed: true },
+          action,
+        },
+        f.originals,
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
+
 it("refuses an evidence directory symlink without writing to its target", async () => {
   const f = await fixture();
   const target = await mkdtemp(join(tmpdir(), "setup-outside-"));

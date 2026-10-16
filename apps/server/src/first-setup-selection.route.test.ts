@@ -324,3 +324,22 @@ it("shares failed-password throttling with unfinished-setup ownership recovery",
     await f.dispose();
   }
 });
+
+it("a no-master declaration cannot resume a retirement that required the original password", async () => {
+  const f = await fixture();
+  try {
+    const inspection = await (await f.get()).json();
+    const response = await f.post({
+      ...inspection,
+      register: { kind: "no-current-master", confirmed: true },
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+    await expect(resolveFirstSetupWorkspace(f.anchor)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(f.restart).not.toHaveBeenCalled();
+  } finally {
+    await f.dispose();
+  }
+});

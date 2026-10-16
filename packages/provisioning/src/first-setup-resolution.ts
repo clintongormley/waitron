@@ -231,7 +231,7 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     (value.database !== "empty-preactivation" ||
       !object(answer) ||
       answer.kind !== "no-current-master" ||
-      value.action !== "retire")
+      !["retire", "select-workspace"].includes(String(value.action)))
   )
     invalid();
   if (value.nextWorkspace !== null) {

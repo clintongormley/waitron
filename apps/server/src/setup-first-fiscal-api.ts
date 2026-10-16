@@ -565,13 +565,15 @@ export function mountFirstSetupResolutionApi(
         const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
         if (!(socket instanceof TLSSocket) || !socket.encrypted)
           throw new AppError("setup.owner_required", {});
-        const body = exact(await readFirstFiscalBody(c), [
+        const rawBody = object(await readFirstFiscalBody(c));
+        const withPassword = Object.hasOwn(rawBody, "password");
+        const body = exact(rawBody, [
           "inspectionId",
           "revision",
           "ownerGeneration",
           "workspaceId",
           "selectionGeneration",
-          "password",
+          withPassword ? "password" : "register",
         ]);
         if (
           ![body.revision, body.ownerGeneration, body.selectionGeneration].every(
@@ -579,13 +581,21 @@ export function mountFirstSetupResolutionApi(
           )
         )
           invalid();
+        let proof:
+          { password: string } | { register: { kind: "no-current-master"; confirmed: true } };
+        if (withPassword) proof = { password: text(body.password) };
+        else {
+          const register = exact(body.register, ["kind", "confirmed"]);
+          if (register.kind !== "no-current-master" || register.confirmed !== true) invalid();
+          proof = { register: { kind: "no-current-master", confirmed: true } };
+        }
         const selected = await selection.resumeWorkspaceSelection({
           inspectionId: text(body.inspectionId),
           revision: body.revision as number,
           ownerGeneration: body.ownerGeneration as number,
           workspaceId: text(body.workspaceId),
           selectionGeneration: body.selectionGeneration as number,
-          password: text(body.password),
+          ...proof,
         });
         setTimeout(() => options.requestRestart?.(), 0);
         return c.json({
