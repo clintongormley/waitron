@@ -71,3 +71,42 @@ it.each(cases)("Defaults card: $locale / $theme", async ({ theme, locale }) => {
     host.remove();
   }
 });
+
+it.each(cases)(
+  "Defaults card notes and read failure at phone width: $locale / $theme",
+  async ({ theme, locale }) => {
+    setLocale(locale);
+    await page.viewport(390, 900);
+    try {
+      for (const state of ["warning", "stored-differs", "read-error"] as const) {
+        const api = {
+          getVenueDefaults: async () => {
+            if (state === "read-error") throw { code: "management.failed" };
+            return state === "warning" ? { ...MADRID, receiptLanguage: "eu-ES" } : BARCELONA;
+          },
+          getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es", "ca"] }),
+        } as unknown as DashboardApi;
+        const { el, host } = await mountWidget<VenueDefaultsPanel>(
+          "dashboard-venue-defaults-panel",
+          { api },
+          theme,
+        );
+        const marker = {
+          warning: "[data-test=receipt-language-warning]",
+          "stored-differs": "[data-test=stored-differs]",
+          "read-error": "[data-test=read-error]",
+        }[state];
+        await expect.poll(() => el.shadowRoot!.querySelector(marker)).toBeTruthy();
+        await expectNoA11yViolations(host);
+        expect(el.scrollWidth).toBeLessThanOrEqual(390);
+        await page.screenshot({
+          element: host,
+          path: `__screenshots__/look/a755-defaults-${locale}-${theme}-390-${state}.png`,
+        });
+        host.remove();
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);

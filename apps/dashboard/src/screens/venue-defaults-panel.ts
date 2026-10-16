@@ -19,7 +19,9 @@ import {
   localToday,
   type VatClass,
 } from "@waitron/catalogue/src/vat-rates.js";
+import { QueryController } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
+import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
@@ -84,9 +86,10 @@ export class VenueDefaultsPanel extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
-  readonly #queries = new DashboardQueries(
+  #writes = 0;
+  readonly #queries = new QueryController(
     this,
-    () => this.api,
+    () => this.api.liveData,
     (error) => {
       this.readError = codeMessage(codeOf(error));
     },
@@ -174,16 +177,30 @@ export class VenueDefaultsPanel extends LitElement {
     });
   }
   #adopt(model: VenueDefaults): void {
-    if (!this.draft || !this.#scope || !saveActionState(this.#scope).unchanged) return;
-    this.#expected = {
+    if (!this.draft || !this.#scope) return;
+    if (!saveActionState(this.#scope).unchanged) {
+      const fixed = model.fixedReceiptLanguage;
+      if (fixed && this.draft.receiptLanguage !== fixed) {
+        this.draft = { ...this.draft, receiptLanguage: fixed };
+        this.#scope.changed();
+      }
+      return;
+    }
+    const expected = {
       receiptLanguage: model.receiptLanguage,
       defaultProductVatClass: model.defaultProductVatClass,
     };
-    this.draft = {
-      ...this.#expected,
+    const draft = {
+      ...expected,
       receiptLanguage: model.fixedReceiptLanguage ?? model.receiptLanguage,
     };
-    this.#scope.commit(this.#expected);
+    if (this.#expected && Object.keys(changes(this.#expected, expected)).length === 0) {
+      if (Object.keys(changes(this.draft, draft)).length > 0) this.draft = draft;
+      return;
+    }
+    this.#expected = expected;
+    this.draft = draft;
+    this.#scope.commit(expected);
   }
   #change(field: Field, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
@@ -206,6 +223,7 @@ export class VenueDefaultsPanel extends LitElement {
     try {
       const answer = await this.api.putVenueDefaults(changes(this.#expected, this.draft));
       if (generation !== this.#generation || scope !== this.#scope) return;
+      this.#writes++;
       this.model = answer;
       this.#cancel();
     } catch (error) {
@@ -287,14 +305,26 @@ export class VenueDefaultsPanel extends LitElement {
   }
   async #load(): Promise<void> {
     const generation = this.#generation;
+    const query = dashboardQuery(this.api, "getVenueDefaults", []);
     await Promise.all([
       this.#queries
-        .watch("getVenueDefaults", [], (value) => {
-          if (generation !== this.#generation) return;
-          this.model = value;
-          this.readError = "";
-          this.#adopt(value);
-        })
+        .watch(
+          "getVenueDefaults",
+          {
+            ...query,
+            key: `${query.key}:venue-defaults-panel`,
+            read: async () => {
+              const writes = this.#writes;
+              return { writes, value: await query.read() };
+            },
+          },
+          ({ writes, value }) => {
+            if (generation !== this.#generation || writes !== this.#writes) return;
+            this.model = value;
+            this.readError = "";
+            this.#adopt(value);
+          },
+        )
         .catch(() => {}),
       this.#contentQueries
         .watch("getContentLanguages", [], (value) => {

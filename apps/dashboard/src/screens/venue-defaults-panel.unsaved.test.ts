@@ -1,5 +1,6 @@
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { LeaveController, type WtCombobox } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
@@ -183,5 +184,20 @@ it("a Barcelona venue stored in Spanish: Save on the untouched Edit sends Catala
   click(panel, "save");
   await expect.poll(() => viewing(panel)).toBe(true);
   expect(writes).toEqual([{ receiptLanguage: "ca-ES" }]);
+  expect(unload()).toBe(false);
+});
+
+it("picking the saved language again from the list quiets Save and releases protection", async () => {
+  const { panel } = await mount();
+  await change(panel, "receiptLanguage", "ca-ES");
+  expect(unload()).toBe(true);
+  const chooser = field(panel, "receiptLanguage")!;
+  await chooser.updateComplete;
+  await userEvent.click(page.elementLocator(chooser.shadowRoot!.querySelector(".trigger")!));
+  await userEvent.click(page.getByRole("option", { name: "Spanish", exact: true }));
+  const save =
+    panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  await expect.poll(() => save.disabled).toBe(true);
+  expect(chooser.value).toBe("es-ES");
   expect(unload()).toBe(false);
 });

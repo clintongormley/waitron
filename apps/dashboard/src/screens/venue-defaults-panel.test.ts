@@ -3,8 +3,12 @@ import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WtButton, WtCombobox } from "@waitron/ui";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "../widgets/test-helpers.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./venue-defaults-panel.js";
 
@@ -375,5 +379,296 @@ it("a clean draft adopts a live change and a dirty one keeps its value", async (
   await flush(el);
   expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
   expect(combo(el, "defaultProductVatClass")!.value).toBe("general");
+  expect(saveButton(el).disabled).toBe(false);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it.each([
+  ["en-GB", ["Spanish", "Catalan", "Galician", "Basque"]],
+  ["es-ES", ["Español", "Catalán", "Gallego", "Euskera"]],
+])(
+  "names the language choices in %s under a required label with its star",
+  async (locale, names) => {
+    setLocale(locale);
+    const el = await mount(rig({ ...MADRID, receiptLanguage: "gl-ES" }).api);
+    await edit(el);
+    const control = combo(el, "receiptLanguage")!;
+    await control.updateComplete;
+    expect(control.label).toBe(t("receipts.language"));
+    const star = control.shadowRoot!.querySelector(".required")!;
+    expect(star.textContent).toBe("*");
+    expect(star.getAttribute("aria-hidden")).toBe("true");
+    expect(control.options.map((option) => option.label)).toEqual(names);
+    expect(control.value).toBe("gl-ES");
+  },
+);
+
+it("a refusal beside the language marks the field invalid, names the refusal and takes focus", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  r.api.putVenueDefaults.mockRejectedValueOnce({ code: "receipt.language_orders_open" });
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  saveButton(el).click();
+  const chooser = combo(el, "receiptLanguage")!;
+  const sentence = codeMessage("receipt.language_orders_open");
+  await expect.poll(() => chooser.error).toBe(sentence);
+  await chooser.updateComplete;
+  const native = chooser.shadowRoot!.querySelector(".trigger")!;
+  expect(native.getAttribute("aria-invalid")).toBe("true");
+  expect(
+    native
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => chooser.shadowRoot!.getElementById(id)!.textContent!.trim()),
+  ).toEqual([sentence]);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(chooser);
+  expect(native.textContent).toContain("Catalan");
+  expect(q(el, "[role=status]")).toBeNull();
+});
+
+it("keeps a refusal at the bottom through a failed read and its recovery", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  r.api.putVenueDefaults.mockRejectedValueOnce({ code: "management.failed" });
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  saveButton(el).click();
+  const sentence = codeMessage("management.failed");
+  await expect.poll(() => bottom(el)).toBe(sentence);
+  r.api.getVenueDefaults.mockRejectedValueOnce({ code: "management.failed" });
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeNull();
+  expect(bottom(el)).toBe(sentence);
+  expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+});
+
+it("a staged language survives a live read and reconnecting, and once reverted adopts the next live change", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  r.state.stored = { ...r.state.stored, receiptLanguage: "gl-ES" };
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
+  await flush(el);
+  expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+  expect(saveButton(el).disabled).toBe(false);
+  await pick(el, "receiptLanguage", "es-ES");
+  expect(saveButton(el).disabled).toBe(true);
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("gl-ES");
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("while a save is in flight a pick and a second Save are ignored, and a refusal brings Save back", async () => {
+  setLocale("en-GB");
+  const r = rig(BARCELONA);
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  saveButton(el).click();
+  await el.updateComplete;
+  expect(saveButton(el).disabled).toBe(true);
+  expect(saveButton(el).loading).toBe(true);
+  expect(combo(el, "receiptLanguage")!.disabled).toBe(true);
+  expect(combo(el, "defaultProductVatClass")!.disabled).toBe(true);
+  await pick(el, "defaultProductVatClass", "zero");
+  expect(combo(el, "defaultProductVatClass")!.value).toBe("reduced");
+  saveButton(el).click();
+  expect(r.api.putVenueDefaults.mock.calls).toEqual([[{ receiptLanguage: "ca-ES" }]]);
+  pending.reject({ code: "receipt.language_orders_open" });
+  await expect
+    .poll(() => combo(el, "receiptLanguage")!.error)
+    .toBe(codeMessage("receipt.language_orders_open"));
+  await el.updateComplete;
+  expect(saveButton(el).disabled).toBe(false);
+  expect(saveButton(el).loading).toBe(false);
+  expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+});
+
+it("a read begun before a successful save does not put back the old language", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const el = await mount(r.api);
+  const stale = deferred<VenueDefaults>();
+  r.api.getVenueDefaults.mockImplementationOnce(() => stale.promise);
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  saveButton(el).click();
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
+  stale.resolve(structuredClone(MADRID));
+  await stale.promise;
+  await frame();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
+});
+
+it.each(["success", "refusal"] as const)(
+  "ignores a departed card's late %s once it is back",
+  async (answer) => {
+    setLocale("en-GB");
+    const r = rig();
+    const pending = deferred<VenueDefaults>();
+    r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+    const el = await mount(r.api);
+    await edit(el);
+    await pick(el, "receiptLanguage", "ca-ES");
+    saveButton(el).click();
+    await el.updateComplete;
+    await reattachAfterDetachedUpdate(el);
+    await pick(el, "receiptLanguage", "gl-ES");
+    if (answer === "success") pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+    else pending.reject({ code: "management.failed" });
+    await pending.promise.catch(() => {});
+    await frame();
+    await flush(el);
+    expect(q(el, "[data-test=edit]")).toBeNull();
+    expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
+    expect(combo(el, "receiptLanguage")!.error).toBe("");
+    expect(bottom(el)).toBe("");
+    expect(saveButton(el).loading).toBe(false);
+    expect(saveButton(el).disabled).toBe(false);
+  },
+);
+
+it("in Edit the content warning follows the staged language and goes once its content is enabled", async () => {
+  setLocale("en-GB");
+  const r = rig(MADRID, { defaultLanguage: "es", languages: ["es"] });
+  const el = await mount(r.api);
+  await edit(el);
+  const warning = () => q(el, "[data-test=receipt-language-warning]");
+  expect(warning()).toBeNull();
+  await pick(el, "receiptLanguage", "gl-ES");
+  await expect.poll(() => text(warning())).toContain("Galician");
+  expect(warning()!.getAttribute("role")).toBe("note");
+  expect(text(warning())).toBe(
+    t("receipt_language.warning").replace("{receipt}", "Galician").replace("{default}", "Spanish"),
+  );
+  r.state.content = { defaultLanguage: "es", languages: ["es", "gl"] };
+  r.liveData.invalidate([{ type: "content_languages" }]);
+  await expect.poll(warning).toBeNull();
+  expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
+  expect(r.api.putVenueDefaults).not.toHaveBeenCalled();
+});
+
+it("a failed content read blocks nothing and shows no warning; its recovery brings the warning", async () => {
+  setLocale("en-GB");
+  const r = rig(
+    { ...MADRID, receiptLanguage: "gl-ES" },
+    { defaultLanguage: "es", languages: ["es"] },
+  );
+  r.api.getContentLanguages.mockRejectedValueOnce(new Error("offline"));
+  const el = await mount(r.api);
+  expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Galician");
+  expect(q(el, "[role=alert]")).toBeNull();
+  expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
+  r.liveData.invalidate([{ type: "content_languages" }]);
+  await expect
+    .poll(() => text(q(el, "[data-test=receipt-language-warning]")))
+    .toContain("Galician");
+});
+
+it("shows an arbitrary stored language as written, with no warning and no write", async () => {
+  setLocale("en-GB");
+  const r = rig({ ...MADRID, receiptLanguage: "not a language" });
+  const el = await mount(r.api);
+  expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("not a language");
+  expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
+  await edit(el);
+  const control = combo(el, "receiptLanguage")!;
+  await control.updateComplete;
+  expect(control.value).toBe("not a language");
+  expect(control.shadowRoot!.querySelector(".trigger")!.textContent).toContain("not a language");
+  expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
+  expect(saveButton(el).disabled).toBe(true);
+  expect(r.api.putVenueDefaults).not.toHaveBeenCalled();
+});
+
+it("words the missing-content warning in Spanish", async () => {
+  setLocale("es-ES");
+  const r = rig(
+    { ...MADRID, receiptLanguage: "gl-ES" },
+    { defaultLanguage: "es", languages: ["es"] },
+  );
+  const el = await mount(r.api);
+  await expect
+    .poll(() => text(q(el, "[data-test=receipt-language-warning]")))
+    .toBe(
+      "Por defecto, los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en español, el idioma predeterminado.",
+    );
+});
+
+it("warns when the fixed receipt language is absent from the content languages", async () => {
+  setLocale("en-GB");
+  const r = rig(
+    { ...BARCELONA, receiptLanguage: "ca-ES" },
+    { defaultLanguage: "es", languages: ["es"] },
+  );
+  const el = await mount(r.api);
+  await expect.poll(() => text(q(el, "[data-test=receipt-language-warning]"))).toContain("Catalan");
+});
+
+it.each([
+  ["en-GB", "By default, receipts print in A $& {fixed} until you switch to B $& {stored}."],
+  [
+    "es-ES",
+    "Por defecto, los recibos se imprimen en A $& {fixed} hasta que cambies a B $& {stored}.",
+  ],
+])("keeps unknown stored and fixed language names as written (%s)", async (locale, sentence) => {
+  setLocale(locale);
+  const el = await mount(
+    rig({
+      receiptLanguage: "A $& {fixed}",
+      receiptLanguageChoices: [],
+      fixedReceiptLanguage: "B $& {stored}",
+      defaultProductVatClass: "reduced",
+    }).api,
+  );
+  expect(text(q(el, "[data-test=stored-differs]"))).toBe(sentence);
+  await edit(el);
+  expect(combo(el, "receiptLanguage")!.options).toEqual([
+    { value: "B $& {stored}", label: "B $& {stored}" },
+  ]);
+});
+
+it("a live update that fixes the language moves a staged choice to the fixed one and keeps the VAT draft", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "gl-ES");
+  await pick(el, "defaultProductVatClass", "zero");
+  r.state.stored = {
+    ...r.state.stored,
+    receiptLanguageChoices: ["ca-ES"],
+    fixedReceiptLanguage: "ca-ES",
+  };
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+  expect(combo(el, "receiptLanguage")!.options).toEqual([{ value: "ca-ES", label: "Catalan" }]);
+  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
   expect(saveButton(el).disabled).toBe(false);
 });

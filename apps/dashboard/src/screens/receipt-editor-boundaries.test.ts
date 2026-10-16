@@ -1,8 +1,8 @@
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LeaveController } from "@waitron/ui";
-import type { DashboardApi } from "../api/client.js";
+import { LeaveController, type WtButton, type WtCombobox } from "@waitron/ui";
+import type { DashboardApi, VenueDefaults } from "../api/client.js";
 import { mountWidget, cleanupWidgets, dialogClosed } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
@@ -13,50 +13,73 @@ import {
   clickReceiptSave,
   deferred,
 } from "../testing/department-receipt-dialog-fixture.js";
-import { original, pick, clickSave, unload } from "../testing/receipt-language-fixture.js";
-import "./receipt-language-panel.js";
+import "./venue-defaults-panel.js";
 
 class ReceiptBoundaryHost extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   override render() {
-    return html`<dashboard-receipt-language-panel
-        .api=${this.api}
-      ></dashboard-receipt-language-panel>
+    return html`<dashboard-venue-defaults-panel .api=${this.api}></dashboard-venue-defaults-panel>
       <dashboard-department-receipt-dialog .api=${this.api}></dashboard-department-receipt-dialog>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
 customElements.define("receipt-boundary-test-host", ReceiptBoundaryHost);
+type Card = HTMLElementTagNameMap["dashboard-venue-defaults-panel"];
+const stored: VenueDefaults = {
+  receiptLanguage: "es-ES",
+  receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+  fixedReceiptLanguage: null,
+  defaultProductVatClass: "reduced",
+};
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+const languageField = (card: Card) =>
+  card.shadowRoot!.querySelector<WtCombobox>("wt-combobox[name=receiptLanguage]");
+const cardSave = (card: Card) => card.shadowRoot!.querySelector<WtButton>("[data-test=save]");
+async function pick(card: Card, language: string) {
+  languageField(card)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: language }, bubbles: true, composed: true }),
+  );
+  await card.updateComplete;
+}
+async function clickSave(card: Card) {
+  await cardSave(card)!.updateComplete;
+  await userEvent.click(page.elementLocator(cardSave(card)!.shadowRoot!.querySelector("button")!));
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 async function mount() {
   const receipt = receiptApi();
   const languageWrite = deferred<void>();
-  const languageWrites: string[] = [];
+  const languageWrites: Partial<VenueDefaults>[] = [];
   let languageReadCount = 0;
   const api = Object.assign(receipt, {
-    getReceiptLanguage: async () => {
+    getVenueDefaults: async () => {
       languageReadCount++;
-      return structuredClone(original);
+      return structuredClone(stored);
     },
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es", "ca"] }),
-    putReceiptLanguage: async (value: string) => {
-      languageWrites.push(value);
+    putVenueDefaults: async (changes: Partial<VenueDefaults>) => {
+      languageWrites.push(changes);
       await languageWrite.promise;
+      return { ...stored, ...changes };
     },
   });
   const { el: app } = await mountWidget<ReceiptBoundaryHost>("receipt-boundary-test-host", {
     api: api as unknown as DashboardApi,
   });
-  const language = app.shadowRoot!.querySelector("dashboard-receipt-language-panel")!;
+  const language = app.shadowRoot!.querySelector("dashboard-venue-defaults-panel")!;
   const el = app.shadowRoot!.querySelector("dashboard-department-receipt-dialog")!;
-  await expect
-    .poll(() => language.shadowRoot!.querySelector("[name=receiptLanguage]"))
-    .toBeTruthy();
+  await expect.poll(() => language.shadowRoot!.querySelector("[data-test=edit]")).toBeTruthy();
+  language.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await expect.poll(() => languageField(language)).toBeTruthy();
   async function openReceipt() {
     el.show({ id: "bar", name: "Bar" });
     await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
@@ -78,7 +101,7 @@ async function mount() {
   };
 }
 it.each(["success", "refusal"] as const)(
-  "a language %s settles only its draft while a separate receipt is edited",
+  "a Defaults %s settles only its draft while a separate receipt is edited",
   async (answer) => {
     const { language, el, receipt, languageWrite, languageWrites, openReceipt } = await mount();
     await pick(language, "ca-ES");
@@ -87,24 +110,19 @@ it.each(["success", "refusal"] as const)(
     await editReceipt(el, "email", "bar@example.com");
     if (answer === "success") languageWrite.resolve();
     else languageWrite.reject({ code: "receipt.language_orders_open" });
-    await expect
-      .poll(
-        () =>
-          language.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-            "[data-test=language-save]",
-          )?.loading,
-      )
-      .toBe(false);
+    if (answer === "success")
+      await expect.poll(() => language.shadowRoot!.querySelector("[data-test=edit]")).toBeTruthy();
+    else await expect.poll(() => cardSave(language)?.loading).toBe(false);
     expect(receiptField(el, "email").value).toBe("bar@example.com");
     expect(receiptSave(el).disabled).toBe(false);
     expect(unload()).toBe(true);
-    expect(languageWrites).toEqual(["ca-ES"]);
+    expect(languageWrites).toEqual([{ receiptLanguage: "ca-ES" }]);
     expect(receipt.putDepartmentReceipt).not.toHaveBeenCalled();
     await editReceipt(el, "email", "");
     expect(unload()).toBe(answer === "refusal");
   },
 );
-it("a receipt save commits only its authored draft and leaves a staged venue language protected", async () => {
+it("a receipt save commits only its authored draft and leaves a staged Defaults draft protected", async () => {
   const { language, el, receipt, languageWrites, openReceipt } = await mount();
   await pick(language, "ca-ES");
   const dialog = await openReceipt();
@@ -118,7 +136,7 @@ it("a receipt save commits only its authored draft and leaves a staged venue lan
   await pick(language, "es-ES");
   expect(unload()).toBe(false);
 });
-it("a successful language write retires an old leave choice without cleaning a receipt draft", async () => {
+it("a successful Defaults write retires an old leave choice without cleaning a receipt draft", async () => {
   const { app, language, el, languageWrite, openReceipt } = await mount();
   await pick(language, "ca-ES");
   await clickSave(language);
@@ -146,7 +164,7 @@ it("a successful language write retires an old leave choice without cleaning a r
   await editReceipt(el, "email", "");
   expect(unload()).toBe(false);
 });
-it("an unchanged receipt read keeps the outstanding language leave choice current", async () => {
+it("an unchanged receipt read keeps the outstanding Defaults leave choice current", async () => {
   const { app, language, receipt, openReceipt } = await mount();
   await pick(language, "ca-ES");
   await openReceipt();
@@ -166,15 +184,11 @@ it("an unchanged receipt read keeps the outstanding language leave choice curren
     page.elementLocator(question.shadowRoot!.querySelector("[data-choice=keep]")!),
   );
   expect(await pending).toBe("kept");
-  expect(
-    language.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "[name=receiptLanguage]",
-    )!.value,
-  ).toBe("ca-ES");
+  expect(languageField(language)!.value).toBe("ca-ES");
   expect(language.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
 });
 
-it("an unchanged language read leaves an outstanding receipt leave choice current", async () => {
+it("an unchanged Defaults read leaves an outstanding receipt leave choice current", async () => {
   const { app, el, receipt, openReceipt, languageReadCount } = await mount();
   await openReceipt();
   await editReceipt(el, "email", "bar@example.com");

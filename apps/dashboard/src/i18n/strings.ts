@@ -517,15 +517,12 @@ export const en = {
   "receipts.preview_paper": "Receipt preview",
   "receipts.preview_error": "The preview could not be updated.",
   "receipts.not_printed": "Sent to the tax agency (not printed)",
-  "receipts.saved":
-    "Saved. Receipts printed from now on, and future tax records, use these settings.",
   "receipts.trim_save_error": "The receipt settings could not be saved.",
   "receipts.trim_too_long": "Use at most {max} characters.",
   "receipts.language": "Default receipt language",
   "receipts.language_invalid": "Choose one of the languages offered.",
   "receipts.language_save_error": "The receipt language could not be saved.",
   "receipts.language_stored": "By default, receipts print in {stored} until you switch to {fixed}.",
-  "receipts.language_use": "Use {fixed}",
   "receipt_language.warning":
     "By default, receipts print in {receipt}, which is not one of your content languages. Product names on them print in {default}, the default language.",
   "nav.content_languages": "Content languages",
@@ -3480,8 +3477,6 @@ export const es: Record<StringKey, string> = {
   "receipts.preview_paper": "Vista previa del recibo",
   "receipts.preview_error": "No se ha podido actualizar la vista previa.",
   "receipts.not_printed": "Se envía a Hacienda (no se imprime)",
-  "receipts.saved":
-    "Guardado. Los recibos que se impriman a partir de ahora y los futuros registros fiscales usarán estos ajustes.",
   "receipts.trim_save_error": "No se han podido guardar los ajustes del recibo.",
   "receipts.trim_too_long": "Usa como máximo {max} caracteres.",
   "receipts.language": "Idioma predeterminado del recibo",
@@ -3489,7 +3484,6 @@ export const es: Record<StringKey, string> = {
   "receipts.language_save_error": "No se ha podido guardar el idioma del recibo.",
   "receipts.language_stored":
     "Por defecto, los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
-  "receipts.language_use": "Usar {fixed}",
   "receipt_language.warning":
     "Por defecto, los recibos se imprimen en {receipt}, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en {default}, el idioma predeterminado.",
   "nav.content_languages": "Idiomas del contenido",

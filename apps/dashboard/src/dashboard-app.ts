@@ -67,7 +67,6 @@ import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
-import "./screens/receipt-language-panel.js";
 import "./screens/venue-defaults-panel.js";
 import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
