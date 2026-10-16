@@ -376,7 +376,16 @@ function kitchenWords(locale: string) {
 }
 
 function slipHeader(slip: CorrectionSlip): string {
-  if (slip.kind === "ORDER NOTE CHANGED") return kitchenWords(slip.locale).changed;
+  if (slip.kind === "ORDER NOTE CHANGED") {
+    const removed = slip.orderNoteChange.after === null;
+    return ticketLanguage(slip.locale) === "es"
+      ? removed
+        ? "NOTA PARA COCINA ELIMINADA"
+        : "NOTA PARA COCINA CAMBIADA"
+      : removed
+        ? "KITCHEN NOTE REMOVED"
+        : "KITCHEN NOTE CHANGED";
+  }
   if (slip.kind === "TO STATION")
     return `${kitchenWords(slip.locale).movedTo} ${slip.toStation.toLocaleUpperCase(slip.locale)}`;
   if (slip.kind !== "EXTRA CANCELLED") return slip.kind;

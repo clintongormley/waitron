@@ -1849,6 +1849,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
   colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
+- **Consider consolidating paper for a whole-order kitchen-note change.** The current correction
+  path produces one slip and one acknowledged notice for each affected dish at its station.
+  Decide whether paper should instead summarise the affected work once per printer, and whether
+  acknowledgement should remain per dish. [Detail](backlog/kitchen.md#whole-order-note-correction-volume).
+
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
   moved to Prep stations' Times tab, and Prep stations is offered only to someone with
   `venue_service.manage`; the stations service-times route still lets `venue.view` read them

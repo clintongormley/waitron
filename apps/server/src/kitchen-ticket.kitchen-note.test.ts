@@ -110,21 +110,23 @@ describe.each([
   it.each([
     {
       locale: "en-GB",
-      changed: "*** CHANGED ***",
+      changed: "KITCHEN NOTE CHANGED",
+      removedHeading: "KITCHEN NOTE REMOVED",
       current: "For the kitchen: New time",
       before: "Was: Old time",
       removed: "Note for the kitchen removed",
     },
     {
       locale: "es-ES",
-      changed: "*** CAMBIADO ***",
+      changed: "NOTA PARA COCINA CAMBIADA",
+      removedHeading: "NOTA PARA COCINA ELIMINADA",
       current: "Para cocina: New time",
       before: "Antes: Old time",
       removed: "Nota para cocina eliminada",
     },
   ])(
     "prints a $locale note edit or removal separately from the dish note",
-    ({ locale, changed, current, before, removed }) => {
+    ({ locale, changed, removedHeading, current, before, removed }) => {
       for (const after of ["New time", null]) {
         const lines = printedLines(
           formatCorrectionSlip(
@@ -141,7 +143,7 @@ describe.each([
             layout,
           ),
         );
-        expect(lines).toContain(changed);
+        expect(lines.slice(0, 2).join(" ")).toContain(after === null ? removedHeading : changed);
         expect(lines).toContain(after === null ? removed : current);
         expect(lines).toContain(before);
         expect(lines).toContain("  * No onions");

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
+  locations,
   orderGroups,
   printJobs,
   ticketItems,
@@ -19,7 +20,12 @@ import {
   writeKitchenNote,
   writePrintHeldWork,
 } from "@waitron/venue-service";
-import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";
+import { locationId } from "@waitron/shared";
+import {
+  enqueueCorrectionSlips,
+  enqueueOrderKitchenNoteChange,
+  reprintOrderTickets,
+} from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
 import { placeGroups } from "./order-groups.js";
@@ -388,4 +394,59 @@ describe("effective kitchen headings", () => {
       ),
     ).toBe(true);
   });
+});
+
+it("uses the existing per-dish acknowledgement and correction paper for a shared instruction", async () => {
+  await printer();
+  const p = await sent();
+  await order(v, p.tabId, "Burger");
+  await order(v, p.tabId, "Burger");
+  const before = await v.db.select().from(printJobs);
+  await set({ partyId: p.partyId }, "New shared time");
+  const notices = await inTx(v, (tx) => listStationNotices(tx, v.cfg, stationId));
+  expect(notices).toHaveLength(3);
+  expect(notices.map((notice) => notice.orderNoteChange)).toEqual([
+    { before: "Old time", after: "New shared time" },
+    { before: "Old time", after: "New shared time" },
+    { before: "Old time", after: "New shared time" },
+  ]);
+  expect(await v.db.select().from(printJobs)).toHaveLength(before.length + 3);
+});
+
+it("does not correct retained work on an abandoned bill", async () => {
+  await printer();
+  const p = await sent();
+  await inTx(v, (tx) =>
+    tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, p.tabId)),
+  );
+  const before = await v.db.select().from(printJobs);
+  await inTx(v, (tx) =>
+    enqueueOrderKitchenNoteChange(tx, v.cfg, [p.tabId], { before: "Old time", after: "New time" }),
+  );
+  expect(await v.db.select().from(kitchenNotices)).toEqual([]);
+  expect(await v.db.select().from(printJobs)).toEqual(before);
+});
+
+it("does not correct a different location's work when the supplied order ids cross the boundary", async () => {
+  await printer();
+  const p = await sent();
+  const [other] = await inTx(v, (tx) =>
+    tx
+      .insert(locations)
+      .values({
+        name: "Other restaurant",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Restaurant",
+      })
+      .returning(),
+  );
+  const before = await v.db.select().from(printJobs);
+  await inTx(v, (tx) =>
+    enqueueOrderKitchenNoteChange(tx, { ...v.cfg, locationId: locationId(other!.id) }, [p.tabId], {
+      before: "Old time",
+      after: "New time",
+    }),
+  );
+  expect(await v.db.select().from(kitchenNotices)).toEqual([]);
+  expect(await v.db.select().from(printJobs)).toEqual(before);
 });

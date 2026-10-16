@@ -1429,3 +1429,61 @@ it.each(["reload", "table"])(
     expect(api.setKitchenNote).not.toHaveBeenCalled();
   },
 );
+
+it("keeps the second party after the first party's note save returns", async () => {
+  const pending = deferred<typeof partyNote>();
+  const { el } = await mountedTable({ setKitchenNote: vi.fn().mockReturnValue(pending.promise) });
+  await editTable(el, "First party change");
+  const second: TableParty = {
+    ...tableParty(),
+    id: "party-second",
+    tableIds: ["table-second"],
+    mainBillId: "bill-second",
+    revision: 1,
+    kitchenNote: {
+      scope: { partyId: "party-second" },
+      note: "Second party instruction",
+      revision: 0,
+      ownerRevision: 1,
+    },
+  };
+  vi.mocked(api.getTablesState).mockResolvedValue([
+    tableRow(tableParty()),
+    { ...tableRow(second), id: "table-second", label: "Second" },
+  ]);
+  emit(tableScreen(el), "floor-refresh", {});
+  await flush(el);
+  emit(tableScreen(el), "open-table", { tableId: "table-second", seated: true });
+  await flush(el);
+  expect(tableScreen(el).party?.id).toBe("party-second");
+  expect(tableHeading(el).note).toBe("Second party instruction");
+  pending.resolve({ ...partyNote, note: "First party change", revision: 3, ownerRevision: 4 });
+  await flush(el);
+  expect(tableScreen(el).party?.id).toBe("party-second");
+  expect(tableScreen(el).party?.kitchenNote.scope).toEqual({ partyId: "party-second" });
+  expect(tableHeading(el).note).toBe("Second party instruction");
+  expect(tableHeading(el).revision).toBe(0);
+});
+
+it("keeps a newer passive note when another floor read carries an older snapshot", async () => {
+  const { el } = await mountedTable();
+  vi.mocked(api.getTablesState).mockResolvedValue([
+    tableRow(
+      tableParty({ ...partyNote, note: "Newer passive note", revision: 4, ownerRevision: 6 }),
+    ),
+  ]);
+  emit(tableScreen(el), "floor-refresh", { poll: true });
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Newer passive note");
+  expect(tableScreen(el).party?.revision).toBe(3);
+  vi.mocked(api.getTablesState).mockResolvedValue([
+    tableRow(
+      tableParty({ ...partyNote, note: "Older passive note", revision: 3, ownerRevision: 5 }),
+    ),
+  ]);
+  emit(tableScreen(el), "floor-refresh", { poll: true });
+  await flush(el);
+  expect(tableHeading(el).note).toBe("Newer passive note");
+  expect(tableHeading(el).revision).toBe(4);
+  expect(tableScreen(el).party?.revision).toBe(3);
+});
