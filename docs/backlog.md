@@ -4232,89 +4232,102 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   four-year synthetic measurement and the remaining query paths are in
   [workforce detail](backlog/workforce.md#a10-period-read-cost).
 
-
 - **Staffing paint in calendar delete confirmations.** Decide whether a shared deletion-impact
   seam should count staffing paint when you delete a season or special-day date. The approved
   A585 scope leaves that count out. [Detail](backlog/workforce.md#staffing-paint-in-calendar-delete-confirmations)
-- **Copy rota assignments in one read.** `changeRotaWeek` reads an assignment per copied shift.
-  Measure a large week under the venue write queue, then batch that read while preserving the
-  shift-id map and rollback checks. Query cost is unmeasured; A585-7 review finding.
-- **Reuse the rota picker's baseline labour checks.** `candidateWarnings` validates the unchanged
-  week once per candidate on each redraw. Measure a large picker, then share that baseline across
-  its candidates without sharing candidate-specific warnings. A585-7 review; cost unmeasured.
-- **The dashboard live-query guard misses inline dependency lists.** The A585-7 review put an
-  unknown name inside `client.ts`; `scripts/live-subscriptions.test.ts` stayed green because it
-  reads `live-queries.ts` declarations. Add a guard that refuses inline lists and a failing control.
+
+- **Loose ends left by A585-7 (#1766).** Each comes from A585-7's review.
+  - Copy rota assignments in one read: `changeRotaWeek` reads an assignment per copied shift.
+    Measure a large week under the venue write queue, then batch that read while preserving the
+    shift-id map and rollback checks. Query cost is unmeasured.
+  - Reuse the rota picker's baseline labour checks: `candidateWarnings` validates the unchanged
+    week once per candidate on each redraw. Measure a large picker, then share that baseline across
+    its candidates without sharing candidate-specific warnings. Cost unmeasured.
+  - The dashboard live-query guard misses inline dependency lists: the review put an unknown name
+    inside `client.ts`; `scripts/live-subscriptions.test.ts` stayed green because it reads
+    `live-queries.ts` declarations. Add a guard that refuses inline lists and a failing control.
+
 - **Rota warnings: pin the outer query's local-date boundaries.** The offset-aware in-week filter
   is covered, but replacing the unattached-shift query's local date with UTC leaves the warnings
   cases green. Add cases at the outer edges of its three-week window; see
   [workforce detail](backlog/workforce.md#rota-warning-query-boundaries).
+
 - **Roster browser-entry guard: reject server-only re-exports.** It rejects a Node import but
   accepts `export … from "node:fs"`. Cover re-exports as well as imports; see
   [workforce detail](backlog/workforce.md#roster-browser-entry-re-exports).
+
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
-  formatting.** `stepMonth` and the first and last month in
-  `packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
-  `add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
-  and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
-  both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
-  already shared through `@waitron/venue-service/dashboard/season-tint`). Next: move `stepMonth`
-  and the limits into a browser-safe venue-service file and export it.
+  formatting.** Next: move `stepMonth` and the limits into a browser-safe venue-service file and
+  export it.
+  [Detail](backlog/workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
+
 - **A700. A failed Opening hours read also hides the Calendar's other views.** A module view draws
   only once the page's own model loads (`render` in
   `packages/venue-service/src/dashboard/opening-hours-screen.ts`), so a person who only wanted the
   Staffing view sees the switch and the Opening hours error instead (A585-3). Next: decide whether a
   module view draws without that model.
+
 - **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
   `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
   and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
   (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
   second read.
+
 - **A702. Opening hours' season chips may widen the page on a long season name.**
   `packages/venue-service/src/dashboard/season-chips.ts` has no width rule, untried at phone width.
   Next: try it at 390 px and wrap it with `max-width: 100%; overflow-wrap: anywhere`.
+
 - **A703. Keeping a Calendar view's address words is a special case named in the app.**
   `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
-  (`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself
-  (`moduleParams`, `calendarViewPath`). A585-3's review offered two general forms: keep unknown pairs
-  for every destination while it stays the same, or let a screen's own address config declare a
-  destination open-ended and hand back its unknown pairs. Next: owner to choose, or keep as is.
+  (`packages/ui/src/url-state.ts`). A585-3's review offered two general forms. Next: owner to
+  choose, or keep as is.
+  [Detail](backlog/workforce.md#a703-keeping-a-calendar-views-address-words-is-a-special-case-named-in-the-app)
+
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
   hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
   block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
   review). Next: decide whether a block may run to the day's real end.
+
 - **The Rota shift routes read a null or malformed JSON body as an empty object.**
   For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "week"` and
   `PATCH …/rota/shifts/:shiftId` 404 `shift.not_found` for an unknown id, neither naming `body`
   (A750's probe, 2026-10-16). Next: swap `readJsonBody` for `readRawJsonBody`, as change-week did.
+
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
   A585-4 moved the code there. Next: place it above or beside the block instead.
+
 - **A708. The special-day staffing painter draws every date on the location's baseline changeover,
   while each date's opening hours and staffing slots use that date's own.** So when a changeover
   change is scheduled, a block can be drawn longer than the slots it asks for. Needs a decision on
   how one grid shows dates with different changeovers. Left open by A585-4.
   [Detail](backlog/workforce.md#a708-special-day-staffing-on-a-date-with-its-own-changeover)
+
 - **A710. Readable initials in short staffing blocks** — a later zoom/readability design remains
   open. Keep the whole-day overview without vertical scrolling; use the tooltip and block menu
   for a short block's full name (owner, 2026-10-16).
   [Detail](backlog/workforce.md#a710-readable-initials-in-short-staffing-blocks)
+
 - **A711. The two staffing painters copy each other's lifecycle, and venue-service's painters'
   parts.** A shared base or controller, and more exports from `@waitron/venue-service/painter`,
   would remove the copies. Left open by A585-4.
   [Detail](backlog/workforce.md#a711-shared-staffing-painter-code)
+
 - **A712. The staffing painters have no "Opening hours | Staffing" switch in their bar, and a date
   that follows the season does not show the season's blocks faintly** — not built, by A585-4's plan.
   Each ‹ › step and each close adds a browser history entry, because a Calendar view can only push
   an address, not replace one.
+
 - **A586. Labour rules and hours balance per person** — named agreements, one per person's contract
   (today one `convenio_config` per location); a running total of hours clocked and rostered against
   hours due, annual leave counted, with the yearly overtime cap. After A585; build on the working-time record
   ([spec open point 6](superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md)).
+
 - **A587. Availability** — "can't work Wednesdays", preferred days; the `availability` table exists
   unused. Shown in A585's picker and warnings. After A586.
+
 - **A588. A solver drafts the rota** — fills A585's open slots from each person's staff roles, rules
   (A586), availability (A587) and contracted hours, for the manager to adjust. After A587.
 

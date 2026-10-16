@@ -218,6 +218,26 @@ screen.
    day (A720 Part 5); it is still to state where that week's rota stands. The Rota tab opens the
    week of the day last picked in the month, else the current week.
 
+## A699. The Staffing month keeps its own copy of month stepping, and staffing its own date formatting
+
+**A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
+formatting.** `stepMonth` and the first and last month in
+`packages/staffing/src/dashboard/staffing-month.ts` are a third copy beside
+`add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
+and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
+both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
+already shared through `@waitron/venue-service/dashboard/season-tint`). Next: move `stepMonth`
+and the limits into a browser-safe venue-service file and export it.
+
+## A703. Keeping a Calendar view's address words is a special case named in the app
+
+**A703. Keeping a Calendar view's address words is a special case named in the app.**
+`apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
+(`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself
+(`moduleParams`, `calendarViewPath`). A585-3's review offered two general forms: keep unknown pairs
+for every destination while it stays the same, or let a screen's own address config declare a
+destination open-ended and hand back its unknown pairs. Next: owner to choose, or keep as is.
+
 ## Decisions and deliberate limits
 
 ### Whole-day staffing overview (A710, owner 2026-10-16)
