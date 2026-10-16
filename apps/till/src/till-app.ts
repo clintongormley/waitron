@@ -1549,7 +1549,6 @@ export class TillApp extends LitElement {
             this.#counterSends++;
             this.#clearBasket();
             this.counterLines = null;
-            this.#clearCardOutcome();
             this.collectFlow = undefined;
           }
         }
@@ -4803,11 +4802,7 @@ export class TillApp extends LitElement {
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
         )
           this.#commitBasket(payload);
-        if (
-          session === this.#operatorSession &&
-          this.#store.id === id &&
-          !this.#cancelledDemoReaderOrders.has(id)
-        ) {
+        if (session === this.#operatorSession && !this.#cancelledDemoReaderOrders.has(id)) {
           this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
           this.requestUpdate();
         }
@@ -6136,7 +6131,6 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       this.#dismissStationChoices();
       this.#clearBasket();
-      this.#clearCardOutcome();
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
@@ -7314,7 +7308,6 @@ export class TillApp extends LitElement {
     this.stage = "order";
     this.collectFlow = undefined;
     this.errorKey = undefined;
-    this.#clearCardOutcome();
     const home = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
     this.#setActiveTab(home, true);
     if (home === "counter") void this.#loadStations();
@@ -9662,7 +9655,6 @@ export class TillApp extends LitElement {
     ) {
       this.#dismissStationChoices();
       this.#clearBasket();
-      this.#clearCardOutcome();
     }
     this.submittedNotice = t("counter.moved_to_table").replace("{table}", () => label);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
@@ -10268,7 +10260,6 @@ export class TillApp extends LitElement {
         this.stage = "order";
         this.collectFlow = undefined;
         this.counterLines = null;
-        this.#clearCardOutcome();
       }
       await this.#refreshAfterWrite("station", "refresh.station_after_cancel");
       // A read started after the session ended could show the next operator this cancel's failure
@@ -11873,6 +11864,7 @@ export class TillApp extends LitElement {
           void this.#refreshFloorZones();
         }}
         @move-held-order=${(event: CustomEvent<MoveHeldOrderDetail>) => {
+          // A Held row's click may already be travelling when retrieval makes its order current.
           if (event.detail.orderId === this.#store.id) {
             const held = event.composedPath().find((node) => node instanceof TillHeldOrders);
             this.#replaceBasket(

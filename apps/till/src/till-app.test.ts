@@ -19670,6 +19670,37 @@ describe("W69 held move basket protection", () => {
     expect(c.store.id).toBe("other");
     expect(c.store.lines[0]!.product.id).toBe("jamon");
   });
+
+  it("protects the edited current order when a native held Move click outlives its row's order switch", async () => {
+    const { el, c } = await loaded({ listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) });
+    const lines = [...c.store.lines];
+    c.store.loadFrom("other-order", lines);
+    await flush(el);
+    const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
+    await held.updateComplete;
+    await userEvent.click(
+      held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+    );
+    await expect.poll(() => held.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
+    const target = held
+      .shadowRoot!.querySelector('[data-target="t9"]')!
+      .shadowRoot!.querySelector("button")!;
+    target.addEventListener(
+      "click",
+      () => {
+        c.store.loadFrom("wo-1", lines, "Mesa 4", 3);
+        c.store.label = "Local lunch";
+      },
+      { once: true },
+    );
+    await userEvent.click(target);
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    await choose(el, "keep");
+    expect(c.store.id).toBe("wo-1");
+    expect(c.store.label).toBe("Local lunch");
+    expect(c.store.lines[0]!.quantity).toBe("2");
+  });
   for (const locale of ["en-GB", "es-ES"])
     for (const theme of ["light", "dark"] as const)
       for (const width of [390, 1280])
@@ -21189,6 +21220,80 @@ describe("A767 card outcome belongs to its order", () => {
             await page.viewport(size.width, size.height);
           }
         });
+
+  it("stores a late decline for its own order while another order is open", async () => {
+    let decline!: (outcome: PayOutcome) => void;
+    const pay = vi.fn(
+      () =>
+        new Promise<PayOutcome>((resolve) => {
+          decline = resolve;
+        }),
+    );
+    const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+      id,
+      orderNumber: 41,
+      revision: 3,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 3 },
+      lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+    }));
+    const { el } = await mountApp({ ...readerTill(), pay, retrieveWorkingOrder });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "declined-order" });
+    await flush(el);
+    emit(c, "collect-card", { readerId: "reader-41", tip: "0.50" });
+    await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
+    emit(c, "retrieve-order", { id: "other-order" });
+    await flush(el);
+    expect(c.store.id).toBe("other-order");
+    decline({ outcome: "declined" });
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
+    expect(c.store.id).toBe("other-order");
+    emit(c, "retrieve-order", { id: "declined-order" });
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+  });
+
+  it("restores the declined order's panel after Hold and Retrieve, and Retry pays that order", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({ ...readerTill(), pay });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    emit(c, "collect-card", { readerId: "reader-41", tip: "0.50" });
+    await flush(el);
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+    pay.mockClear();
+    await userEvent.click(
+      tenderPay(el).shadowRoot!.querySelector(".retry")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(pay).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: "wo-1", readerId: "reader-41", tip: "0.50" }),
+    );
+  });
+
+  it("updates the panel when the shared basket changes order without a list refresh", async () => {
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({ ...readerTill(), pay });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    emit(c, "collect-card", {});
+    await flush(el);
+    const lines = [...c.store.lines];
+    c.store.loadFrom("other-order", [{ product: cafe, quantity: "1" }]);
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
+    c.store.loadFrom("wo-1", lines, "Mesa 4", 3);
+    await flush(el);
+    expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+  });
 
   it("does not charge the replacement order from a Retry control painted for the previous order", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
