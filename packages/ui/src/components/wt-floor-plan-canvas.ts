@@ -7,6 +7,7 @@ import { floorPlanTableStyles } from "../floor-plan-table-styles.js";
 import {
   GRID_SQUARE_PX,
   type PlanPlacement,
+  type PlanCorner,
   type PlanRect,
   type PlanSide,
   bounds,
@@ -80,6 +81,19 @@ export interface TableResize {
 }
 
 const SIDES: readonly PlanSide[] = ["top", "right", "bottom", "left"];
+
+const CORNERS: readonly PlanCorner[] = ["top-left", "top-right", "bottom-right", "bottom-left"];
+
+/** A side shorter than this, in squares, draws no dot; its corners resize it. */
+const SIDE_DOT_MIN_SQUARES = 4;
+
+/** Judged from the stored placement, never the draft, so a dot never vanishes under the pointer. */
+function sidesWithDots(t: PlanCanvasTable): PlanSide[] {
+  const { width, height } = t.placement;
+  return SIDES.filter(
+    (side) => (side === "top" || side === "bottom" ? width : height) >= SIDE_DOT_MIN_SQUARES,
+  );
+}
 
 const DEFAULT_COPY: Required<FloorPlanCanvasCopy> = {
   label: "Floor plan",
@@ -260,7 +274,9 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .resize-handle,
-      .resize-dot {
+      .resize-dot,
+      .resize-corner-handle,
+      .resize-corner {
         position: absolute;
       }
 
@@ -291,6 +307,24 @@ export class WtFloorPlanCanvas extends LitElement {
         background: var(--wt-color-primary);
       }
 
+      .resize-corner-handle {
+        width: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
+        height: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
+        margin: calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2) 0 0
+          calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2);
+        border-radius: var(--wt-radius-full);
+        touch-action: none;
+        pointer-events: auto;
+      }
+
+      .resize-corner {
+        width: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
+        height: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
+        margin: calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2) 0 0
+          calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2);
+        background: var(--wt-color-primary);
+      }
+
       [data-side="top"] {
         top: 0;
         left: 50%;
@@ -308,6 +342,26 @@ export class WtFloorPlanCanvas extends LitElement {
 
       [data-side="left"] {
         top: 50%;
+        left: 0;
+      }
+
+      [data-corner="top-left"] {
+        top: 0;
+        left: 0;
+      }
+
+      [data-corner="top-right"] {
+        top: 0;
+        left: 100%;
+      }
+
+      [data-corner="bottom-right"] {
+        top: 100%;
+        left: 100%;
+      }
+
+      [data-corner="bottom-left"] {
+        top: 100%;
         left: 0;
       }
 
@@ -661,7 +715,7 @@ export class WtFloorPlanCanvas extends LitElement {
       >
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
-      ${SIDES.map(
+      ${sidesWithDots(t).map(
         (side) =>
           html`<div
             class="resize-dot"
@@ -671,13 +725,22 @@ export class WtFloorPlanCanvas extends LitElement {
             style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
           ></div>`,
       )}
+      ${CORNERS.map(
+        (corner) =>
+          html`<div
+            class="resize-corner"
+            part="resize-corner"
+            data-corner=${corner}
+            style=${styleMap({ cursor: resizeCursor(corner, p.rotation) })}
+          ></div>`,
+      )}
     </div>`;
   }
 
   /** Drawn before the table's button, so the button is above them; the dots are drawn after it. */
   #renderHitAreas(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     return html`<div class="frame" aria-hidden="true" style=${this.#frameStyle(p)}>
-      ${SIDES.map(
+      ${sidesWithDots(t).map(
         (side) =>
           html`<div
             class="resize-handle"
@@ -686,6 +749,15 @@ export class WtFloorPlanCanvas extends LitElement {
             style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
             @click=${(e: Event) => e.stopPropagation()}
             @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", side })}
+          ></div>`,
+      )}
+      ${CORNERS.map(
+        (corner) =>
+          html`<div
+            class="resize-corner-handle"
+            part="resize-corner-handle"
+            data-corner=${corner}
+            style=${styleMap({ cursor: resizeCursor(corner, p.rotation) })}
           ></div>`,
       )}
     </div>`;

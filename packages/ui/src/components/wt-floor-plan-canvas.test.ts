@@ -1,7 +1,7 @@
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
-import { type PlanPlacement, outward, resizeFrom } from "../floor-plan-geometry.js";
+import { type PlanPlacement, outward, resizeCursor, resizeFrom } from "../floor-plan-geometry.js";
 import type {
   PlanCanvasTable,
   TableMove,
@@ -369,7 +369,6 @@ it("paints from tokens", async () => {
   expect(getComputedStyle(part(el, "grid")).backgroundImage).toContain("rgb(7, 8, 9)");
 });
 
-/** The grid's padding against where a table at x 0 and y 0 is drawn, in screen px. */
 function marginOf(el: WtFloorPlanCanvas, key: string) {
   const grid = part(el, "grid");
   const style = getComputedStyle(grid);
@@ -432,9 +431,11 @@ it("paints the side dots, the size badge and the turn arrow from tokens", async 
   const top = getComputedStyle(drawn(el, "top"));
   expect(top.borderTopColor).toBe("rgb(4, 5, 6)");
   expect(top.backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(drawnCorner(el, "top-left")).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(handles(el)[0]!).color).toBe("rgb(13, 14, 15)");
   const at = dragDot(el, "right", 24, 0);
   await el.updateComplete;
+  expect(getComputedStyle(drawnCorner(el, "top-right")).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(drawn(el, "right")).backgroundColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(drawn(el, "top")).backgroundColor).toBe("rgb(10, 11, 12)");
   const badge = getComputedStyle(part(el, "size-badge"));
@@ -1077,6 +1078,34 @@ const dot = (el: WtFloorPlanCanvas, side: string) =>
 const drawn = (el: WtFloorPlanCanvas, side: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[part~="resize-dot"][data-side="${side}"]`)!;
 
+const CORNERS = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+
+/** Each corner's direction from the table's centre, along its own right and down. */
+const CORNER_SIGNS = {
+  "top-left": [-1, -1],
+  "top-right": [1, -1],
+  "bottom-right": [1, 1],
+  "bottom-left": [-1, 1],
+} as const;
+
+const cornerAreas = (el: WtFloorPlanCanvas) =>
+  el.shadowRoot!.querySelectorAll<HTMLElement>('[part~="resize-corner-handle"]');
+
+const cornerArea = (el: WtFloorPlanCanvas, corner: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(
+    `[part~="resize-corner-handle"][data-corner="${corner}"]`,
+  )!;
+
+const drawnCorner = (el: WtFloorPlanCanvas, corner: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[part~="resize-corner"][data-corner="${corner}"]`)!;
+
+const sidesWithDots = (el: WtFloorPlanCanvas) => [...dots(el)].map((d) => d.dataset.side);
+
+const drawnSides = (el: WtFloorPlanCanvas) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>('[part~="resize-dot"]')].map(
+    (d) => d.dataset.side,
+  );
+
 const badgeOf = (el: WtFloorPlanCanvas) =>
   el.shadowRoot!.querySelector<HTMLElement>('[part~="size-badge"]');
 
@@ -1154,6 +1183,87 @@ it("draws each side dot a hit area of --wt-space-5 round a dot --wt-space-3 acro
   const left = drawn(el, "left").getBoundingClientRect();
   expect(left.width).toBe(10);
   expect(left.height).toBe(10);
+  const cornerHit = cornerArea(el, "top-left").getBoundingClientRect();
+  expect(cornerHit.width).toBe(30);
+  expect(cornerHit.height).toBe(30);
+  const square = drawnCorner(el, "top-left").getBoundingClientRect();
+  expect(square.width).toBe(10);
+  expect(square.height).toBe(10);
+});
+
+it("draws four corners in the side dots' frames on the selected table only, out of the tab order and hidden from assistive technology", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  const found = [...cornerAreas(el)];
+  expect(found.map((c) => c.dataset.corner)).toEqual([...CORNERS]);
+  const squares = [...el.shadowRoot!.querySelectorAll<HTMLElement>('[part~="resize-corner"]')];
+  expect(squares.map((c) => c.dataset.corner)).toEqual([...CORNERS]);
+  for (const c of found) {
+    expect(c.parentElement).toBe(dot(el, "top").parentElement);
+    expect(c.parentElement!.getAttribute("aria-hidden")).toBe("true");
+    expect(c.hasAttribute("tabindex")).toBe(false);
+    const square = drawnCorner(el, c.dataset.corner!);
+    expect(square.parentElement).toBe(drawn(el, "top").parentElement);
+    expect(square.hasAttribute("tabindex")).toBe(false);
+    expect(getComputedStyle(square).pointerEvents).toBe("none");
+  }
+  expect(dots(el)).toHaveLength(4);
+  el.selected = null;
+  await el.updateComplete;
+  expect(cornerAreas(el)).toHaveLength(0);
+  expect(el.shadowRoot!.querySelectorAll('[part~="resize-corner"]')).toHaveLength(0);
+});
+
+it.each([0, 30])("centres each corner on the table's own corner turned %i°", async (rotation) => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation })], {
+    selected: "t1",
+  });
+  for (const corner of CORNERS) {
+    const [u, v] = CORNER_SIGNS[corner];
+    const at = turnedPoint(el, "t1", rotation, u * 48, v * 24);
+    for (const node of [cornerArea(el, corner), drawnCorner(el, corner)]) {
+      const c = centreOf(node);
+      expect(Math.abs(c.x - at.x), corner).toBeLessThanOrEqual(1);
+      expect(Math.abs(c.y - at.y), corner).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+it.each([
+  [2, 2, []],
+  [2, 6, ["right", "left"]],
+  [6, 2, ["top", "bottom"]],
+  [4, 4, ["top", "right", "bottom", "left"]],
+  [3, 8, ["right", "left"]],
+] as const)(
+  "a selected %i × %i draws four corners and a side dot only on a side at least 4 squares long",
+  async (width, height, sides) => {
+    const el = await canvas([table("t1", "T1", { x: 10, y: 10, width, height })], {
+      selected: "t1",
+    });
+    expect(cornerAreas(el)).toHaveLength(4);
+    expect(sidesWithDots(el)).toEqual(sides);
+    expect(drawnSides(el)).toEqual(sides);
+  },
+);
+
+it("keeps the left and right dots of a side drag that shrinks the height below 4 until the parent applies it", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 6, height: 6 })], {
+    selected: "t1",
+  });
+  const sized = resizes(el);
+  const at = dragDot(el, "bottom", 0, -3 * 12);
+  await el.updateComplete;
+  expect(button(el, "t1").getBoundingClientRect().height).toBe(3 * 12);
+  expect(sidesWithDots(el)).toEqual(["top", "right", "bottom", "left"]);
+  expect(drawnSides(el)).toEqual(["top", "right", "bottom", "left"]);
+  await release(el, at);
+  expect(sized.map((e) => e.detail)).toEqual([{ key: "t1", x: 10, y: 10, width: 6, height: 3 }]);
+  el.tables = [table("t1", "T1", { x: 10, y: 10, width: 6, height: 3 })];
+  await el.updateComplete;
+  expect(sidesWithDots(el)).toEqual(["top", "bottom"]);
+  expect(drawnSides(el)).toEqual(["top", "bottom"]);
 });
 
 it("dragging the right dot sends one resize at release, from resizeFrom", async () => {
@@ -1264,6 +1374,19 @@ it.each([
   },
 );
 
+it.each([0, 30, 90])(
+  "shows each corner of a table turned %i° the arrow resizeCursor gives it",
+  async (rotation) => {
+    const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4, rotation })], {
+      selected: "t1",
+    });
+    const want = CORNERS.map((corner) => resizeCursor(corner, rotation));
+    expect(new Set(want).size).toBe(2);
+    expect(CORNERS.map((corner) => cursorOf(drawnCorner(el, corner)))).toEqual(want);
+    expect(CORNERS.map((corner) => cursorOf(cornerArea(el, corner)))).toEqual(want);
+  },
+);
+
 it("turns the dots' arrows with the table while its turn arrow is dragged", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
   const handle = handles(el)[0]!;
@@ -1293,6 +1416,8 @@ it.each(["pointerup", "pointercancel"])(
     expect(cursorOf(button(el, "t2"))).toBe("ew-resize");
     expect(cursorOf(dot(el, "left"))).toBe("ew-resize");
     expect(cursorOf(drawn(el, "left"))).toBe("ew-resize");
+    expect(cursorOf(cornerArea(el, "top-left"))).toBe("ew-resize");
+    expect(cursorOf(drawnCorner(el, "top-left"))).toBe("ew-resize");
     expect(cursorOf(handles(el)[0]!)).toBe("ew-resize");
     expect(cursorOf(part(el, "grid"))).toBe("ew-resize");
     pointer(window, end, 1, at.x, at.y);
@@ -1300,6 +1425,8 @@ it.each(["pointerup", "pointercancel"])(
     expect(cursorOf(button(el, "t1"))).toBe("pointer");
     expect(cursorOf(button(el, "t2"))).toBe("pointer");
     expect(cursorOf(dot(el, "left"))).toBe("ns-resize");
+    expect(cursorOf(cornerArea(el, "top-left"))).toBe(resizeCursor("top-left", 90));
+    expect(cursorOf(drawnCorner(el, "top-left"))).toBe(resizeCursor("top-left", 90));
     expect(cursorOf(handles(el)[0]!)).toBe("grab");
     expect(cursorOf(part(el, "grid"))).toBe("auto");
   },
@@ -1666,6 +1793,13 @@ it("writes a selected refused table's reason below every side dot at every turn"
           d.getBoundingClientRect().bottom,
         );
       }
+      // The circle, not the box: a turned square's upright box reaches past the circle.
+      for (const c of cornerAreas(el)) {
+        expect(
+          top,
+          `${width}×${height} at ${rotation}°, ${c.dataset.corner}`,
+        ).toBeGreaterThanOrEqual(centreOf(c).y + c.offsetWidth / 2);
+      }
     }
   }
 });
@@ -1704,7 +1838,7 @@ function sidePresses(el: WtFloorPlanCanvas, rotation: number, out: number) {
 }
 
 it.each([0, 30])(
-  "a selected 2 × 2 table turned %i° is dragged by a press at its centre or just inside a side's dot",
+  "a selected 2 × 2 table turned %i° is dragged by a press at its centre or just inside a side's midpoint",
   async (rotation) => {
     const p = place({ x: 10, y: 10, width: 2, height: 2, rotation });
     const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
@@ -1723,22 +1857,71 @@ it.each([0, 30])(
   },
 );
 
+for (const rotation of [0, 30]) {
+  it.todo(
+    `a press just outside a corner of a selected 2 × 2 table turned ${rotation}° resizes from that corner (Task 7)`,
+  );
+}
+
+/** `out` px from the table's `corner` along the corner's own diagonal, outwards, turned with it. */
+function cornerPoint(el: WtFloorPlanCanvas, p: PlanPlacement, corner: string, out: number) {
+  const [u, v] = CORNER_SIGNS[corner as (typeof CORNERS)[number]];
+  const d = out / Math.SQRT2;
+  return turnedPoint(el, "t1", p.rotation, u * (p.width * 6 + d), v * (p.height * 6 + d));
+}
+
+/** `out` px from the middle of the table's `side`, outwards, turned with it. */
+function sidePoint(el: WtFloorPlanCanvas, p: PlanPlacement, side: string, out: number) {
+  const [u, v] = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] }[side]!;
+  return turnedPoint(el, "t1", p.rotation, u * (p.width * 6 + out), v * (p.height * 6 + out));
+}
+
+const topmost = (el: WtFloorPlanCanvas, at: { x: number; y: number }) =>
+  el.shadowRoot!.elementFromPoint(at.x, at.y);
+
 it.each([0, 30])(
-  "a press just outside a side of a selected 2 × 2 table turned %i° resizes that side",
+  "a press just outside a corner of a selected table turned %i° lands on that corner, and just inside on the table",
   async (rotation) => {
-    const p = place({ x: 10, y: 10, width: 2, height: 2, rotation });
+    const p = place({ x: 10, y: 10, width: 8, height: 4, rotation });
     const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
       selected: "t1",
     });
     await settled(el);
-    const sized = resizes(el);
-    const moved = moves(el);
-    for (const { side, at, by } of sidePresses(el, rotation, 3)) {
-      await pressAndDrag(el, at, by);
-      expect(sized.at(-1)?.detail, side).toEqual({ key: "t1", ...resized(resizeFrom(p, side, 2)) });
+    window.scrollTo(0, 0);
+    for (const corner of CORNERS) {
+      expect(topmost(el, cornerPoint(el, p, corner, 3)), corner).toBe(cornerArea(el, corner));
+      expect(topmost(el, cornerPoint(el, p, corner, -3))?.closest("button"), corner).toBe(
+        button(el, "t1"),
+      );
     }
-    expect(sized).toHaveLength(4);
-    expect(moved).toEqual([]);
+  },
+);
+
+it.each([
+  [1, 1, 0],
+  [1, 1, 30],
+  [2, 2, 0],
+  [2, 2, 30],
+  [2, 6, 0],
+  [2, 6, 30],
+] as const)(
+  "every handle of a selected %i × %i table turned %i° can be pressed 10 px out from it",
+  async (width, height, rotation) => {
+    const p = place({ x: 10, y: 10, width, height, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    await settled(el);
+    window.scrollTo(0, 0);
+    for (const corner of CORNERS) {
+      // Until Task 8 moves the turn arrow to the top side, it starts --wt-space-1 past the
+      // top-right corner and takes a press 10 px out there.
+      const out = corner === "top-right" ? 3 : 10;
+      expect(topmost(el, cornerPoint(el, p, corner, out)), corner).toBe(cornerArea(el, corner));
+    }
+    for (const side of sidesWithDots(el)) {
+      expect(topmost(el, sidePoint(el, p, side!, 10)), side).toBe(dot(el, side!));
+    }
   },
 );
 
@@ -2735,8 +2918,9 @@ it("draws the turn arrow of a selected table at the grid's corner inside the gri
   const el = await canvas([table("t1", "T1", { width: 1, height: 1 })], { selected: "t1" });
   await settled(el);
   expectInside(handles(el)[0]!.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
-  for (const d of dots(el)) {
-    expectInside(d.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+  expect(cornerAreas(el)).toHaveLength(4);
+  for (const c of cornerAreas(el)) {
+    expectInside(c.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
   }
   el.reveal("t1");
   expectInside(handles(el)[0]!.getBoundingClientRect(), viewportOf(el).getBoundingClientRect());
@@ -2805,6 +2989,10 @@ it.each(Array.from({ length: 24 }, (_, i) => i * 15))(
     expectInside(handles(el)[0]!.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
     for (const d of dots(el)) {
       expectInside(d.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
+    }
+    expect(cornerAreas(el)).toHaveLength(4);
+    for (const c of cornerAreas(el)) {
+      expectInside(c.getBoundingClientRect(), part(el, "grid").getBoundingClientRect());
     }
   },
 );
