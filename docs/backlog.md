@@ -1573,6 +1573,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   1, 2, 3, 5 and 6 landed in #1765, #1770 and #1784, and point 4 with A720 Part 4; the Year | Month
   switch goes (A759), "Seasons…" and the chips' ✎ A721's; 7 remains. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
+- **Look at a picked, focused today in the Month.** `--wt-focus-offset` and
+  `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so on
+  today, picked and focused, the focus ring covers the outer half of the wider picked ring
+  (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
+  themes that this combination reads well. Left open by A720.
+
 - **An ignored `to` stays in the address bar.** A special-day address whose `to` is earlier than
   its date, malformed, or more than 365 days after it opens the new day on its first date alone
   (`MAX_RUN_DATES`, `opening-hours-screen.ts`), but the address still shows the `to`. Left open by

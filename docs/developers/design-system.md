@@ -3968,14 +3968,15 @@ Opening hours' Year.
   it opens that special day instead. On a phone a tap picks a day and opens its day box, and a
   finger that moves straight away scrolls the page. Holding a finger on a day (a long press) picks
   it without selecting its number as text; moving the finger then stretches the run, and the page
-  does not scroll while it does; lifting it after a long press without moving opens the editor.
+  does not scroll while it does; lifting it after a long press without moving opens the editor as a double-click does.
   On the keyboard the arrow keys move to the next day and pick it alone, Shift with an arrow
   stretches the run, Enter opens the editor as a double-click does, and Space, like a click, opens
   the day box. In a screen reader's reading mode Enter arrives as a click, so it opens the day
-  box, whose special-day action opens the editor on that one day; in its focus mode Shift with an
+  box, whose special-day action opens the editor on that day, or the special day holding it; in its focus mode Shift with an
   arrow and Enter pick a run and open the editor on it. A viewer picks one day at a time, with a
-  click, a tap, Space or an arrow key; for a viewer a drag, Shift, a double-click, a long press and
-  Enter pick no run and open no editor.
+  click, a tap, Space, Enter or an arrow key (Shift is ignored), and a click, a tap, Space or Enter
+  opens the day box; for a viewer a drag, a double-click and a long press pick no run, and nothing
+  opens the editor.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens, and Staffing's month and
   A722's Week are to open it too (backlog A720, A722). One box at a time floats below the date that
