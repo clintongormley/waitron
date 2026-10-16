@@ -5725,10 +5725,11 @@ the tree. What remains, largest first:
   On recurrence, retain separate install and version-check statuses before assigning a cause.
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
-- **At a load average near 60, four more root guard files fail on time (left open by A751).**
+- **At a load average near 60, five more root guard files fail on time (left open by A751).**
   With three root projects and eight spinning shell loops on the 18-core Mac, A751's branch passed
-  the four files it fixed and still failed `guarded-teardowns`, `menu-sections-upgrade`,
-  `mutation-shard` and `pre-push`; three more failed the same load before the change.
+  the four files it fixed and still failed `fiscal-allocation-migration`, `guarded-teardowns`,
+  `menu-sections-upgrade`, `mutation-shard` and `pre-push`; `fiscal-allocation-migration` passed
+  the same load before the change, and three others failed it before and passed it after.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or

@@ -302,10 +302,11 @@ branch. Receipts in lane B's campaign folder,
 `425cf16b8`).
 
 Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A751's branch each failed
-7–8 tests in four files, every one of them in all three runs except `guarded-teardowns` (one run):
+7–8 tests in four or five files, every one of them in all three runs except `guarded-teardowns` (one run):
 
 | File | Case | What it printed (one run) |
 | --- | --- | --- |
+| `scripts/fiscal-allocation-migration.test.ts` | the whole file | `Hook timed out in 60000ms`, in `useVenueDb`'s `beforeAll` (`packages/db/src/testing/venue-db.ts`) |
 | `scripts/guarded-teardowns.test.ts` | guards the resource it releases | `STACK_TRACE_ERROR` after 82 s |
 | `scripts/menu-sections-upgrade.test.ts` | both cases | `STACK_TRACE_ERROR` after 43–69 s |
 | `scripts/mutation-shard.test.mjs` | fills every shard | `STACK_TRACE_ERROR` after 51–58 s |
@@ -313,9 +314,12 @@ Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A75
 
 `brand-build` (`status: null` after 10 s), `run-with-deadline` and `write-path-tables` failed the
 same load before A751 and passed it on the branch; whether that is A751's lighter `ci-workflow` and
-upgrade walk or chance was not measured. None of these failed with the root project and 16 spinning
+upgrade walk or chance was not measured. `fiscal-allocation-migration` went the other way: it
+passed the load before A751 and failed it in all three runs on the branch. Before A751 the walk
+was cut off at 173 s; on the branch it ran for about 15 minutes beside the other files, which may
+explain it — not measured. None of these failed with the root project and 16 spinning
 loops alone (`a751-receipts/loaded16-full-root.json`), nor in lane G's failing push of 2026-10-16.
-Each needs the same treatment A751 gave its four: what the bound waits for, its worst case under
+Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
 this load with the bound lifted, and whether the case can be made cheaper.
 
 ## Decisions and deliberate limits
