@@ -329,6 +329,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the PDF keeps only the recovery key. Protected-code and fiscal-assertion restrictions remain.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
+  Hour codec and module admission checks pass locally; clock/history selection and
+  setup/recovery integration remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.
