@@ -1,7 +1,8 @@
+import { LitElement, html } from "lit";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, expect, it, vi } from "vitest";
-import type { WtButton, WtCombobox } from "@waitron/ui";
+import { LeaveController, type WtButton, type WtCombobox } from "@waitron/ui";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -59,6 +60,27 @@ async function mount(api: DashboardApi) {
   await expect.poll(() => q(el, "section.settings-card dl")).toBeTruthy();
   await flush(el);
   return el;
+}
+class LeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  api!: DashboardApi;
+  override render() {
+    return html`<dashboard-venue-defaults-panel .api=${this.api}></dashboard-venue-defaults-panel>
+      ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+  }
+}
+customElements.define("venue-defaults-panel-leave-host", LeaveHost);
+async function mountWithLeave(api: DashboardApi) {
+  const { el: host } = await mountWidget<LeaveHost>("venue-defaults-panel-leave-host", { api });
+  const el = host.shadowRoot!.querySelector("dashboard-venue-defaults-panel")!;
+  await expect.poll(() => el.shadowRoot && q(el, "section.settings-card dl")).toBeTruthy();
+  await flush(el);
+  return el;
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
 }
 afterEach(() => {
   cleanupWidgets();
@@ -460,7 +482,7 @@ it("keeps a refusal at the bottom through a failed read and its recovery", async
 it("a staged language survives a live read and reconnecting, and once reverted adopts the next live change", async () => {
   setLocale("en-GB");
   const r = rig();
-  const el = await mount(r.api);
+  const el = await mountWithLeave(r.api);
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
   r.state.stored = { ...r.state.stored, receiptLanguage: "gl-ES" };
@@ -472,11 +494,14 @@ it("a staged language survives a live read and reconnecting, and once reverted a
   await flush(el);
   expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
   expect(saveButton(el).disabled).toBe(false);
+  expect(unload()).toBe(true);
   await pick(el, "receiptLanguage", "es-ES");
   expect(saveButton(el).disabled).toBe(true);
+  expect(unload()).toBe(false);
   r.liveData.invalidate([{ type: "locations" }]);
   await expect.poll(() => combo(el, "receiptLanguage")!.value).toBe("gl-ES");
   expect(saveButton(el).disabled).toBe(true);
+  expect(unload()).toBe(false);
 });
 
 it("while a save is in flight a pick and a second Save are ignored, and a refusal brings Save back", async () => {
@@ -484,10 +509,11 @@ it("while a save is in flight a pick and a second Save are ignored, and a refusa
   const r = rig(BARCELONA);
   const pending = deferred<VenueDefaults>();
   r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
-  const el = await mount(r.api);
+  const el = await mountWithLeave(r.api);
   await edit(el);
   saveButton(el).click();
   await el.updateComplete;
+  expect(unload()).toBe(true);
   expect(saveButton(el).disabled).toBe(true);
   expect(saveButton(el).loading).toBe(true);
   expect(combo(el, "receiptLanguage")!.disabled).toBe(true);
@@ -504,18 +530,23 @@ it("while a save is in flight a pick and a second Save are ignored, and a refusa
   expect(saveButton(el).disabled).toBe(false);
   expect(saveButton(el).loading).toBe(false);
   expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+  expect(unload()).toBe(true);
+  saveButton(el).click();
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(unload()).toBe(false);
 });
 
 it("a read begun before a successful save does not put back the old language", async () => {
   setLocale("en-GB");
   const r = rig();
-  const el = await mount(r.api);
+  const el = await mountWithLeave(r.api);
   const stale = deferred<VenueDefaults>();
   r.api.getVenueDefaults.mockImplementationOnce(() => stale.promise);
   r.liveData.invalidate([{ type: "locations" }]);
   await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(2);
   await edit(el);
   await pick(el, "receiptLanguage", "ca-ES");
+  expect(unload()).toBe(true);
   saveButton(el).click();
   await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
   expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
@@ -524,6 +555,7 @@ it("a read begun before a successful save does not put back the old language", a
   await frame();
   await flush(el);
   expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Catalan");
+  expect(unload()).toBe(false);
 });
 
 it.each(["success", "refusal"] as const)(
