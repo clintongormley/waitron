@@ -2514,11 +2514,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   grid shows there; corners get resize handles and the turn arrow moves to top centre; a small turn
   flashes scroll bars. [Detail](backlog/till.md#a672-the-floor-plan-editors-canvas-the-top-left-limit-corner-handles-scroll-bars-on-a-turn)
 
-- **A673. The floor plan editor on a touch screen: pinch to zoom, tap before drag (owner,
-  2026-10-14).** Pinch zooms and one finger moves the view, as on the till's map; a table is tapped
-  to select it before it can be dragged. A mouse still drags straight away.
-  [Detail](backlog/till.md#a673-the-floor-plan-editor-on-a-touch-screen-pinch-to-zoom-tap-before-drag)
-
 - **A570. A table split off a joined table whose removal was refused cannot be moved
   (2026-10-13).** Refused Back, Take off and Reset table. Left open by A503 part 4 (#1608).
   [Detail](backlog/till.md#a570-a-table-split-off-a-joined-table-whose-removal-was-refused-cannot-be-moved)

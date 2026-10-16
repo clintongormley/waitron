@@ -461,21 +461,6 @@ work here is the inline Made of picker and how its parts wrap.
    disappear. Related to the open "a size reading just after a floor plan drop may shift the plan"
    entry in `docs/backlog.md`; not measured whether it is the same cause.
 
-## A673. The floor plan editor on a touch screen: pinch to zoom, tap before drag
-
-**A673 (owner, 2026-10-14).**
-
-1. **Pinch to zoom, and one finger moves the view**, as the till's floor map already does
-   (`packages/ui/src/components/wt-floor-map.ts`: pan, pinch and wheel). The editor's canvas draws a
-   fixed `GRID_SQUARE_PX` (12) per square and sets `touch-action: none`, so a pinch does nothing
-   today. Moving, resizing and turning convert pointer distance to squares through
-   `GRID_SQUARE_PX`, so each must divide by the zoom. Reuse the floor map's gesture code rather than
-   writing a second one. How the editor lays out at phone width has not been looked at.
-2. **On a touch screen a table is tapped to select it before it can be dragged** (owner, agreed).
-   A finger on an unselected table moves the view, like empty grid, so panning a crowded plan does
-   not move tables by accident. With a mouse, pressing a table still drags it straight away and
-   selects it as it goes (today every press starts a move at once, `#onPointerDown`).
-
 ## A570. A table split off a joined table whose removal was refused cannot be moved
 
 **A570 (2026-10-13).** When a joined table's removal is refused, its split rows stay
@@ -1451,6 +1436,15 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   `held.product_gone`, and the first edit of the order removes such an extra.
 
 ## Decisions and deliberate limits
+
+### Touch gestures in the floor plan editor (owner, 2026-10-14; A673)
+
+On a touch screen, tap a table to select it before dragging it. A finger on an unselected table
+moves the view, so you can pan a crowded plan without moving a table. Two fingers zoom the view.
+A mouse can drag a table straight away. The implementation uses the same `Gestures` helper as
+the till's floor map. The current contract is in
+[design-system.md](../developers/design-system.md).
+
 
 ### A671. The floor plan editor's side panel: less text, nothing jumps
 

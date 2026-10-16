@@ -21,6 +21,7 @@ import {
   snapToSquare,
 } from "../floor-plan-geometry.js";
 import { ROTATION_STEP, snapRotation } from "../floor.js";
+import { Gestures, type GesturePoint } from "../gestures.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
@@ -137,7 +138,7 @@ interface Draft {
 
 /**
  * Controlled: it never changes `tables` or `selected`, only asks through `wt-table-select`; the
- * parent sets `selected`. Tables are drawn at the plan's true size, so a small one is smaller than
+ * parent sets `selected`. Tables keep their relative sizes, so a small one may be smaller than
  * `--wt-tap-min`.
  */
 @customElement("wt-floor-plan-canvas")
@@ -156,6 +157,7 @@ export class WtFloorPlanCanvas extends LitElement {
         width: 100%;
         height: 100%;
         overflow: auto;
+        touch-action: none;
       }
 
       .grid {
@@ -329,6 +331,14 @@ export class WtFloorPlanCanvas extends LitElement {
 
   @state() private resizing: { key: string; side: PlanSide; cursor: ResizeCursor } | null = null;
 
+  @state() private zoom = 1;
+
+  #gestures: Gestures | null = null;
+
+  #scroll: { x: number; y: number } | null = null;
+
+  #heldPan = { dx: 0, dy: 0 };
+
   #drag: Drag | null = null;
 
   #ignoreGridClick = false;
@@ -377,8 +387,34 @@ export class WtFloorPlanCanvas extends LitElement {
     return { ...DEFAULT_COPY, ...this.copy };
   }
 
+  constructor() {
+    super();
+    this.addEventListener("pointerdown", this.#onViewPointerDown);
+    this.addEventListener("wheel", this.#onWheel, { passive: false });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#gestures = new Gestures(this, {
+      tap: this.#onTap,
+      doubleTap: this.#onTap,
+      holdStart: () => {
+        this.#heldPan = { dx: 0, dy: 0 };
+      },
+      holdDrag: ({ dx, dy }) => {
+        if (this.#drag === null)
+          this.#moveView(1, 0, 0, dx - this.#heldPan.dx, dy - this.#heldPan.dy);
+        this.#heldPan = { dx, dy };
+      },
+      pan: ({ dx, dy }) => {
+        if (this.#drag === null) this.#moveView(1, 0, 0, dx, dy);
+      },
+      pinch: ({ ratio, x, y, dx, dy }) => {
+        if (this.#drag !== null) return;
+        const box = this.renderRoot.querySelector(".viewport")!.getBoundingClientRect();
+        this.#moveView(ratio, x - box.left - dx, y - box.top - dy, dx, dy);
+      },
+    });
     void this.updateComplete.then(() => {
       if (this.isConnected) this.#observer.observe(this.renderRoot.querySelector(".viewport")!);
     });
@@ -387,6 +423,8 @@ export class WtFloorPlanCanvas extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#observer.disconnect();
+    this.#gestures!.disconnect();
+    this.#gestures = null;
     this.#endDrag();
   }
 
@@ -424,11 +462,17 @@ export class WtFloorPlanCanvas extends LitElement {
     } else {
       if (hold === "key") {
         const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
-        x = Math.max(x, this.#origin.x - Math.floor(viewport.scrollLeft / GRID_SQUARE_PX));
-        y = Math.max(y, this.#origin.y - Math.floor(viewport.scrollTop / GRID_SQUARE_PX));
+        x = Math.max(
+          x,
+          this.#origin.x - Math.floor(viewport.scrollLeft / (GRID_SQUARE_PX * this.zoom)),
+        );
+        y = Math.max(
+          y,
+          this.#origin.y - Math.floor(viewport.scrollTop / (GRID_SQUARE_PX * this.zoom)),
+        );
       }
-      columns = Math.max(this.visible.columns, x + plan.columns);
-      rows = Math.max(this.visible.rows, y + plan.rows);
+      columns = Math.max(Math.floor(this.visible.columns / this.zoom), x + plan.columns);
+      rows = Math.max(Math.floor(this.visible.rows / this.zoom), y + plan.rows);
     }
     // The first tables drawn take their room unscrolled, so their corners show from the start.
     if (this.#drewTables) {
@@ -473,8 +517,11 @@ export class WtFloorPlanCanvas extends LitElement {
     const copy = this.#copy;
     const gridStyle = styleMap({
       width: px(this.#size.columns),
-      height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset}px`,
+      height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset / this.zoom}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
+      zoom: String(this.zoom),
+      minWidth: `${100 / this.zoom}%`,
+      minHeight: `${100 / this.zoom}%`,
     });
     return html`
       <div
@@ -643,10 +690,16 @@ export class WtFloorPlanCanvas extends LitElement {
 
   /** Centres each reason under its table, held inside the grid: its width is known only once drawn. */
   override updated(): void {
+    if (this.#scroll !== null) {
+      const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+      viewport.scrollLeft = this.#scroll.x;
+      viewport.scrollTop = this.#scroll.y;
+      this.#scroll = null;
+    }
     if (this.#shift.x !== 0 || this.#shift.y !== 0) {
       const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
-      viewport.scrollLeft += this.#shift.x * GRID_SQUARE_PX;
-      viewport.scrollTop += this.#shift.y * GRID_SQUARE_PX;
+      viewport.scrollLeft += this.#shift.x * GRID_SQUARE_PX * this.zoom;
+      viewport.scrollTop += this.#shift.y * GRID_SQUARE_PX * this.zoom;
       this.#shift = { x: 0, y: 0 };
     }
     const reasons = this.renderRoot.querySelectorAll<HTMLElement>(".refused-reason");
@@ -660,7 +713,7 @@ export class WtFloorPlanCanvas extends LitElement {
         badge !== null && reason.dataset.key === badged
           ? `0 calc(${badge.offsetHeight}px + var(--wt-space-1))`
           : "";
-      const width = reason.getBoundingClientRect().width;
+      const width = reason.getBoundingClientRect().width / this.zoom;
       const centred = Number(reason.dataset.centre) - width / 2;
       reason.style.left = `${Math.min(Math.max(centred, 0), Math.max(grid - width, 0))}px`;
     }
@@ -742,7 +795,63 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#rotate(t.key, rotation);
   }
 
+  readonly #onViewPointerDown = (e: PointerEvent): void => {
+    if (
+      (e.pointerType === "touch" || e.pointerType === "pen") &&
+      this.#drag !== null &&
+      e.pointerId !== this.#drag.pointerId
+    )
+      this.#endDrag();
+  };
+
+  readonly #onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    if (this.#drag !== null) return;
+    const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+    const x = e.deltaX * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? viewport.clientWidth : 1);
+    const y = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? viewport.clientHeight : 1);
+    const box = viewport.getBoundingClientRect();
+    this.#moveView(
+      e.ctrlKey ? 2 ** (-y / 100) : 1,
+      e.clientX - box.left,
+      e.clientY - box.top,
+      e.ctrlKey ? 0 : -x,
+      e.ctrlKey ? 0 : -y,
+    );
+  };
+
+  readonly #onTap = (at: GesturePoint): void => {
+    if (at.pointerType !== "touch" && at.pointerType !== "pen") return;
+    const target = at.target instanceof Element ? at.target.closest(".table") : null;
+    if (target !== null) this.#select((target as HTMLElement).dataset.key!);
+    else if (at.target instanceof Element && at.target.classList.contains("grid"))
+      this.#select(null);
+  };
+
+  #moveView(ratio: number, mx: number, my: number, dx: number, dy: number): void {
+    const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+    const zoom = Math.min(4, Math.max(0.5, this.zoom * ratio));
+    const change = zoom / this.zoom;
+    const scroll = this.#scroll ?? { x: viewport.scrollLeft, y: viewport.scrollTop };
+    this.#scroll = {
+      x: Math.min(
+        Math.max(0, this.#size.columns * GRID_SQUARE_PX * zoom - viewport.clientWidth),
+        Math.max(0, (scroll.x + mx) * change - mx - dx),
+      ),
+      y: Math.min(
+        Math.max(
+          0,
+          this.#size.rows * GRID_SQUARE_PX * zoom + this.bottomInset - viewport.clientHeight,
+        ),
+        Math.max(0, (scroll.y + my) * change - my - dy),
+      ),
+    };
+    this.zoom = zoom;
+    this.requestUpdate();
+  }
+
   #onPointerDown(e: PointerEvent, t: PlanCanvasTable, grab: Grab): void {
+    if ((e.pointerType === "touch" || e.pointerType === "pen") && t.key !== this.selected) return;
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
     if (this.#drag !== null || e.button !== 0) return;
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
@@ -750,8 +859,8 @@ export class WtFloorPlanCanvas extends LitElement {
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });
     const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
     const p = t.placement;
-    const centreX = grid.left + (this.#origin.x + p.x + p.width / 2) * GRID_SQUARE_PX;
-    const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX;
+    const centreX = grid.left + (this.#origin.x + p.x + p.width / 2) * GRID_SQUARE_PX * this.zoom;
+    const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX * this.zoom;
     this.#drag = {
       ...grab,
       table: t,
@@ -779,8 +888,8 @@ export class WtFloorPlanCanvas extends LitElement {
     const p = drag.table.placement;
     const now = this.draft?.placement ?? p;
     if (drag.kind === "move") {
-      const x = clampToGrid(p.x + snapToSquare(e.clientX - drag.startX));
-      const y = clampToGrid(p.y + snapToSquare(e.clientY - drag.startY));
+      const x = clampToGrid(p.x + snapToSquare((e.clientX - drag.startX) / this.zoom));
+      const y = clampToGrid(p.y + snapToSquare((e.clientY - drag.startY) / this.zoom));
       if (x !== now.x || y !== now.y) {
         this.draft = { key: drag.table.key, placement: { ...p, x, y } };
       }
@@ -789,7 +898,7 @@ export class WtFloorPlanCanvas extends LitElement {
     if (drag.kind === "resize") {
       const out = outward(drag.side, p.rotation);
       const along = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
-      const next = resizeFrom(p, drag.side, snapToSquare(along));
+      const next = resizeFrom(p, drag.side, snapToSquare(along / this.zoom));
       if (!sameBox(next, now)) this.draft = { key: drag.table.key, placement: next };
       return;
     }
@@ -863,12 +972,17 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #onTableClick(e: Event, key: string): void {
     e.stopPropagation();
-    this.#select(key);
+    if (!(e instanceof PointerEvent && (e.pointerType === "touch" || e.pointerType === "pen")))
+      this.#select(key);
   }
 
   readonly #onGridClick = (e: Event): void => {
     e.stopPropagation();
-    if (!this.#ignoreGridClick) this.#select(null);
+    if (
+      !this.#ignoreGridClick &&
+      !(e instanceof PointerEvent && (e.pointerType === "touch" || e.pointerType === "pen"))
+    )
+      this.#select(null);
   };
 
   #select(key: string | null): void {
