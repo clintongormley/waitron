@@ -203,8 +203,8 @@ the basket resolved, and decides what is stored:
 - A pick on a dish not sold by the unit — its unit has a scale or allows any decimal places — is
   refused with `extras.unsupported_product`, whose `soldBy` is `weight` or `fraction`: a child
   priced dish × pick would carry a weight or a fraction of an extra, not a number of them. Its
-  extras lists are treated as not offered, so a list's `minPicks` does not refuse an order of it
-  with no picks (`extrasListsFor`, `apps/server/src/working-order.ts`). An options answer on such
+  extras lists are checked with no minimum, so a required list does not refuse an order of it with
+  no picks (`extrasListsFor`, `apps/server/src/working-order.ts`). An options answer on such
   a dish is still allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
@@ -301,9 +301,10 @@ which `listMenuOffers` built when the menu was published, with each extras item 
 marked with whether it can be sold now; nothing in `apps/till` outside its tests calls
 `GET /api/products`, the route over `listAvailableProducts`.
 
-Nothing else on those two payloads describes a modifier. The till's picker walks
-`offeredModifiers` through `offeredListsOf` (`apps/till/src/state/order-line.ts`), which drops every
-extras list on a dish not sold by the unit (`apps/till/src/widgets/modifier-picker.ts`), and the two
+Nothing else on those two payloads describes a modifier. The till's picker
+(`apps/till/src/widgets/modifier-picker.ts`) walks `offeredModifiers` through `offeredListsOf`
+(`apps/till/src/state/order-line.ts`), which drops every extras list on a dish not sold by the unit,
+and the two
 surfaces that ADD a line — a product tap (`pickProduct`, `apps/till/src/widgets/product-pick.ts`) and
 tender-pay's weighed quantity — decide whether a dish needs a picker from those lists or from an
 available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`).

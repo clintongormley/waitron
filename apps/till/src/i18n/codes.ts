@@ -49,8 +49,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
 
   "extras.unsupported_product": {
-    en: "Extras can only be added to a dish sold by the unit. Remove them and try again",
-    es: "Solo se pueden añadir extras a un plato que se vende por unidades. Quítalos e inténtalo de nuevo",
+    en: "Extras can only be added to a dish sold by the unit.",
+    es: "Solo se pueden añadir extras a un plato que se vende por unidades.",
   },
   "ticket.extra_not_movable": {
     en: "Extras cannot be moved separately",

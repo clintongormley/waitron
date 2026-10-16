@@ -404,8 +404,8 @@ function soldByTheUnit(unit: { hardwareUnit: string | null; precision: number })
   return unit.hardwareUnit === null && unit.precision === 0;
 }
 
-/** The extras lists a line of a dish in `unit` is checked against. A dish not sold by the unit is
- * offered none of them, so none may demand a pick; a pick that is sent is refused as
+/** The extras lists a line of a dish in `unit` is checked against. The till draws no extras list on
+ * a dish not sold by the unit, so none may demand a pick here; a pick the lists accept is refused as
  * `extras.unsupported_product` once it is priced. */
 function extrasListsFor(
   lists: ResolvedExtraList[],

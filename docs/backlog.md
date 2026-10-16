@@ -1466,6 +1466,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A663 Part 2d). Refuse it, or say so, in the product editor (`writeProductModifiers`,
   `packages/catalogue/src/product-modifiers.ts`, checks no unit).
 
+- **A held order or a basket line carrying extras on a dish whose unit has since gained decimals or
+  a scale is not flagged by the till** (left open by A663 Part 2d). The held-order rebuild
+  (`apps/till/src/till-app.ts`) and `lineBlock` (`apps/till/src/state/menu-refresh.ts`) still read
+  the raw extras lists rather than `offeredListsOf`, so only the server's
+  `extras.unsupported_product` stops it, and the till offers no way to drop just the extras. Read,
+  not run.
+
 - **Check what an extra costs on a dish sold in a unit counted in many small units with no decimals
   (ml)** (left open by A663 Part 2d). Such a dish keeps its extras, and by
   `packages/catalogue/src/pricing.ts` (`quantity` of an extra = dish quantity × portion × picks) an
