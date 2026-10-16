@@ -22,7 +22,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
@@ -886,13 +886,11 @@ it("A724: a negative offset uses the authored end before the dated boundary clam
       0,
     );
     await db.update(menuPeriods).set({ endOffsetMinutes: -30 }).where(eq(menuPeriods.id, f.lunch));
-    await db
-      .insert(locationDayCutoverChanges)
-      .values({
-        locationId: f.cfg.locationId,
-        effectiveBusinessDay: "2026-10-13",
-        dayCutover: "03:00:00",
-      });
+    await db.insert(locationDayCutoverChanges).values({
+      locationId: f.cfg.locationId,
+      effectiveBusinessDay: "2026-10-13",
+      dayCutover: "03:00:00",
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "09:00", endsAt: "03:00" }]),
     );
@@ -990,4 +988,99 @@ it("A724: two reaching zones union their open shares without filling a shared cl
         { periodId: f.lunch, startsAt: "15:00", endsAt: "16:00" },
       ]),
     );
+  }));
+
+it.each([
+  { offset: 1, until: "03:01" },
+  { offset: 30, until: "03:30" },
+])(
+  "A724 bounds $offset minutes of carried grace by an earlier dated changeover",
+  async ({ offset, until }) =>
+    tx(async (db) => {
+      const f = await fixture(db);
+      await replaceMenuWeek(
+        db,
+        f.cfg,
+        f.department,
+        week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
+        at,
+        0,
+      );
+      await db
+        .update(menuPeriods)
+        .set({ endOffsetMinutes: offset })
+        .where(eq(menuPeriods.id, f.lunch));
+      await db
+        .insert(locationDayCutoverChanges)
+        .values({
+          locationId: f.cfg.locationId,
+          effectiveBusinessDay: "2026-10-13",
+          dayCutover: "03:00:00",
+        });
+      expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
+        always: null,
+        days: [
+          {
+            date: day,
+            departments: [
+              {
+                departmentId: f.department,
+                ranges: [{ periodId: f.lunch, startsAt: "09:00", endsAt: "03:00" }],
+              },
+            ],
+          },
+          {
+            date: "2026-10-13",
+            departments: [
+              {
+                departmentId: f.department,
+                ranges: [{ periodId: f.lunch, startsAt: "03:00", endsAt: until }],
+              },
+            ],
+          },
+        ],
+      });
+    }),
+);
+
+it("A724 all-day negative offsets match sending on consecutive weekdays", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:00" }],
+      })),
+      at,
+      0,
+    );
+    await db.update(menuPeriods).set({ endOffsetMinutes: -30 }).where(eq(menuPeriods.id, f.lunch));
+    const forecast = await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13");
+    expect(forecast.days).toEqual(
+      [day, "2026-10-13"].map((date) => ({
+        date,
+        departments: [
+          {
+            departmentId: f.department,
+            ranges: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "05:30" }],
+          },
+        ],
+      })),
+    );
+    const accepts = [];
+    for (const at of [
+      "2026-10-13T05:20:00+02:00",
+      "2026-10-13T05:45:00+02:00",
+      "2026-10-13T06:00:00+02:00",
+    ]) {
+      accepts.push(
+        (
+          await resolveDepartmentService(db, f.cfg, f.department, new Date(at))
+        ).sendableMenuIds.includes(f.menu),
+      );
+    }
+    expect(accepts).toEqual([true, false, true]);
   }));

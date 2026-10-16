@@ -219,7 +219,8 @@ export async function readPlannedServiceGuides(
               const raw = rangeSpan(slot, origin.dayCutover);
               const offset = offsets.get(slot.periodId) ?? 0;
               if (shift && offset <= 0) continue;
-              const end = raw.end + offset - shift;
+              const sendingEnd = shift ? Math.min(raw.end, origin.endMinute) : raw.end;
+              const end = sendingEnd + offset - shift;
               const sending = {
                 start: Math.max(0, raw.start - shift),
                 end: Math.min(end, current.endMinute),

@@ -469,7 +469,9 @@ actors in `ticket_item_moves`.
 Prep stations' Times tab is read-only. `stationServiceTimes` uses the shared
 `readPlannedServiceGuides` reader to combine routed products on period menus with department
 hours. The forecast applies each period's signed last-order offset before subtracting zone closed
-times, and joins overlapping shares of the same period. The public reader takes at most 42 dates
+times, and joins overlapping shares of the same period. Positive grace can appear at the start
+of the following business day. If a scheduled changeover cuts the period short, carried grace
+starts at that effective cutoff. The public reader takes at most 42 dates
 and works out each from that date's own plan, season and special day (`readDayPlan`); its route
 refuses a `week` query (`packages/venue-service/src/station-service-times.ts`). The staffing season
 painter instead passes the selected season's weekdays directly to the shared reader. The special-day

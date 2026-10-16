@@ -818,15 +818,13 @@ async function guideVenue() {
       .insert(departmentDays)
       .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 5 })
       .returning();
-    await tx
-      .insert(departmentDayRanges)
-      .values({
-        dayId: day!.id,
-        departmentId: v.departmentId,
-        periodId: period!.id,
-        startsAt: "12:00:00",
-        endsAt: "16:00:00",
-      });
+    await tx.insert(departmentDayRanges).values({
+      dayId: day!.id,
+      departmentId: v.departmentId,
+      periodId: period!.id,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
     await setRoutingCell(
       tx,
       cfg,
@@ -905,14 +903,12 @@ it("A724 guides a station by the edited special day, including zone openings", a
       .insert(specialDays)
       .values({ locationId: v.cfg.locationId, name: "Repeating closure", repeatsYearly: true })
       .returning();
-    await tx
-      .insert(specialDayDates)
-      .values({
-        locationId: v.cfg.locationId,
-        specialDayId: other!.id,
-        date: "2025-08-14",
-        closedAllDay: true,
-      });
+    await tx.insert(specialDayDates).values({
+      locationId: v.cfg.locationId,
+      specialDayId: other!.id,
+      date: "2025-08-14",
+      closedAllDay: true,
+    });
   });
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
   expect(read.guides[`department:${v.departmentId}`]![v.aug14]).toEqual([lunchGuide(v)]);
@@ -943,15 +939,13 @@ it("A724 keeps the sending department identity of every station range", async ()
       .insert(departmentDays)
       .values({ departmentId: department!.id, seasonId: v.seasonId, weekday: 5 })
       .returning();
-    await tx
-      .insert(departmentDayRanges)
-      .values({
-        dayId: day!.id,
-        departmentId: department!.id,
-        periodId: period!.id,
-        startsAt: "13:00:00",
-        endsAt: "17:00:00",
-      });
+    await tx.insert(departmentDayRanges).values({
+      dayId: day!.id,
+      departmentId: department!.id,
+      periodId: period!.id,
+      startsAt: "13:00:00",
+      endsAt: "17:00:00",
+    });
     await setRoutingCell(
       tx,
       cfg,
@@ -982,4 +976,75 @@ it("A724 returns empty guide maps for a special day with no dates", async () => 
   const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
   expect(Object.values(read.guides)).toEqual([{}, {}, {}]);
   expect(read.areas.every((a) => a.dates.length === 0)).toBe(true);
+});
+
+it("A724 adjacent periods with the same colour keep their own names and endpoints", async () => {
+  const v = await guideVenue();
+  const tea = await inTx(async (tx) => {
+    const [period] = await tx
+      .insert(menuPeriods)
+      .values({ departmentId: v.departmentId, menuId: v.menuId, name: "Tea", colour: "blue" })
+      .returning();
+    const [day] = await tx
+      .select({ id: departmentDays.id })
+      .from(departmentDays)
+      .where(eq(departmentDays.seasonId, v.seasonId));
+    await tx
+      .insert(departmentDayRanges)
+      .values({
+        dayId: day!.id,
+        departmentId: v.departmentId,
+        periodId: period!.id,
+        startsAt: "16:00:00",
+        endsAt: "18:00:00",
+      });
+    return period!.id;
+  });
+  const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
+  expect(read.guides[`department:${v.departmentId}`]![5]).toEqual([
+    lunchGuide(v),
+    { ...lunchGuide(v), periodId: tea, periodName: "Tea", startsAt: "16:00", endsAt: "18:00" },
+  ]);
+  expect(read.guides[`station:${v.stationId}`]![5]).toEqual([
+    lunchGuide(v, "15:30"),
+    { ...lunchGuide(v), periodId: tea, periodName: "Tea", startsAt: "16:00", endsAt: "18:00" },
+  ]);
+});
+
+it("A724 a closed own date wins over a repeating open date with sending hours", async () => {
+  const v = await guideVenue();
+  await inTx(async (tx) => {
+    const [day] = await tx
+      .insert(departmentDays)
+      .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday: 6 })
+      .returning();
+    await tx
+      .insert(departmentDayRanges)
+      .values({
+        dayId: day!.id,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "12:00:00",
+        endsAt: "16:00:00",
+      });
+    await tx
+      .update(specialDayDates)
+      .set({ closedAllDay: true })
+      .where(eq(specialDayDates.id, v.aug15));
+    const [feria] = await tx
+      .insert(specialDays)
+      .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
+      .returning();
+    await tx
+      .insert(specialDayDates)
+      .values({
+        locationId: v.cfg.locationId,
+        specialDayId: feria!.id,
+        date: "2025-08-15",
+        closedAllDay: false,
+      });
+  });
+  const read = await inTx((tx) => readSpecialDayStaffing(tx, v.cfg, v.specialDayId));
+  expect(read.guides[`department:${v.departmentId}`]![v.aug15]).toEqual([]);
+  expect(read.guides[`station:${v.stationId}`]![v.aug15]).toEqual([]);
 });
