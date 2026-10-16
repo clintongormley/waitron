@@ -260,6 +260,7 @@ it.each(
           quantity: "1",
           gross: "10.30",
           listGross: "12.00",
+          listUnitPriceGross: "12.00",
           net: {
             unitPrice: "8.51",
             priceQuantity: "1.000",
@@ -274,6 +275,7 @@ it.each(
           quantity: "1",
           gross: "0.00",
           listGross: "1.10",
+          listUnitPriceGross: "1.10",
           parentLineNo: 1,
           net: {
             unitPrice: "0.00",

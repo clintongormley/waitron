@@ -32,7 +32,12 @@ describe("beforeVatFigures", () => {
   it("works the owner's menu: 10,00 at 10% VAT less 10% is 9,09 less 0,91", () => {
     expect(
       beforeVatFigures(
-        filed({ gross: "9.00", listGross: "10.00", net: net("8.18", "8.18", "10.00") }),
+        filed({
+          gross: "9.00",
+          listGross: "10.00",
+          listUnitPriceGross: "10.00",
+          net: net("8.18", "8.18", "10.00"),
+        }),
       ),
     ).toEqual({ price: "9.09", amount: "9.09", discount: "0.91" });
   });
@@ -41,19 +46,17 @@ describe("beforeVatFigures", () => {
     // 10% of 11,36 would be 1,14; the filed base 10,23 leaves 1,13.
     expect(
       beforeVatFigures(
-        filed({ gross: "11.25", listGross: "12.50", net: net("10.23", "10.23", "10.00") }),
+        filed({
+          gross: "11.25",
+          listGross: "12.50",
+          listUnitPriceGross: "12.50",
+          net: net("10.23", "10.23", "10.00"),
+        }),
       ),
     ).toEqual({ price: "11.36", amount: "11.36", discount: "1.13" });
   });
 
-  it("reads a line no discount touched as filed", () => {
-    expect(
-      beforeVatFigures(filed({ quantity: "2", gross: "8.80", net: net("4.00", "8.00", "10") })),
-    ).toEqual({ price: "4.00", amount: "8.00", discount: "0.00" });
-  });
-
-  it("divides a counted line's list total back to its unit price", () => {
-    // Croquetas: 2 × 3,33 with 21% VAT, part of a whole-bill discount.
+  it("prints the filed figures, and no discount, when a line has a list total but no stored price", () => {
     expect(
       beforeVatFigures(
         filed({
@@ -63,11 +66,44 @@ describe("beforeVatFigures", () => {
           net: net("2.48", "4.96", "21.00"),
         }),
       ),
+    ).toEqual({ price: "2.48", amount: "4.96", discount: "0.00" });
+  });
+
+  it("prints the filed figures, and no discount, when a line has a stored price but no list total", () => {
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "2",
+          gross: "6.00",
+          listUnitPriceGross: "3.33",
+          net: net("2.48", "4.96", "21.00"),
+        }),
+      ),
+    ).toEqual({ price: "2.48", amount: "4.96", discount: "0.00" });
+  });
+
+  it("reads a line no discount touched as filed", () => {
+    expect(
+      beforeVatFigures(filed({ quantity: "2", gross: "8.80", net: net("4.00", "8.00", "10") })),
+    ).toEqual({ price: "4.00", amount: "8.00", discount: "0.00" });
+  });
+
+  it("prices a counted line at its stored unit price", () => {
+    // Croquetas: 2 × 3,33 with 21% VAT, part of a whole-bill discount.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "2",
+          gross: "6.00",
+          listGross: "6.66",
+          listUnitPriceGross: "3.33",
+          net: net("2.48", "4.96", "21.00"),
+        }),
+      ),
     ).toEqual({ price: "2.75", amount: "5.50", discount: "0.54" });
   });
 
-  it("keeps the filed price and base for less than one priced unit", () => {
-    // Jamón: 0.123 kg at 24,00 €/kg; 2,95 ÷ 0.123 would give 23,98 a kilo, not 24,00.
+  it("prints a weighed line with no stored price at its filed figures", () => {
     expect(
       beforeVatFigures(
         filed({
@@ -80,7 +116,7 @@ describe("beforeVatFigures", () => {
     ).toEqual({ price: "19.69", amount: "2.42", discount: "0.00" });
   });
 
-  it("prints a weighed line under one kilo at its stored price before any discount (owner, Q9)", () => {
+  it("prints a weighed line at its stored price before any discount (owner, Q9)", () => {
     // J1, measured: 0.123 kg at 24,00 €/kg, 10% off, charged 2,65, filed base 2,41.
     expect(
       beforeVatFigures(
@@ -93,6 +129,21 @@ describe("beforeVatFigures", () => {
         }),
       ),
     ).toEqual({ price: "21.82", amount: "2.68", discount: "0.27" });
+  });
+
+  it("prints a weighed line at its stored price when its discount comes to nothing before VAT", () => {
+    // 0.062 kg at 24,00 €/kg is 1,49; 1% off charges 1,48, at 23,95 €/kg, and both totals have base 1,35.
+    expect(
+      beforeVatFigures(
+        filed({
+          quantity: "0.062",
+          gross: "1.48",
+          listGross: "1.49",
+          listUnitPriceGross: "24.00",
+          net: net("21.77", "1.35", "10.00"),
+        }),
+      ),
+    ).toEqual({ price: "21.82", amount: "1.35", discount: "0.00" });
   });
 
   it("gives a comped weighed line its value (owner, Q9)", () => {
@@ -130,12 +181,17 @@ describe("beforeVatFigures", () => {
     // 10,00 ÷ 1,21 = 8,26, below the filed base 9,50: a row would read «--1,24».
     expect(
       beforeVatFigures(
-        filed({ gross: "11.50", listGross: "10.00", net: net("9.50", "9.50", "21.00") }),
+        filed({
+          gross: "11.50",
+          listGross: "10.00",
+          listUnitPriceGross: "10.00",
+          net: net("9.50", "9.50", "21.00"),
+        }),
       ),
     ).toEqual({ price: "9.50", amount: "9.50", discount: "0.00" });
   });
 
-  it("prices an extra per its portion", () => {
+  it("prices an extra at its stored price per portion", () => {
     // Two 0.05 portions at 1,50 with 21% VAT, 10% off: 1,50 a portion is 1,24 before VAT.
     expect(
       beforeVatFigures(
@@ -143,6 +199,7 @@ describe("beforeVatFigures", () => {
           quantity: "0.100",
           gross: "2.70",
           listGross: "3.00",
+          listUnitPriceGross: "1.50",
           net: net("1.12", "2.23", "21.00", "0.050"),
         }),
       ),
@@ -164,8 +221,18 @@ describe("invoiceDiscounts", () => {
   const under = (result: InvoiceDiscounts) => Object.fromEntries(result.under);
   const own = (amount: string): ReceiptAdjustment => ({ ...TEN, amount });
 
-  const rioja = filed({ gross: "27.00", listGross: "30.00", net: net("22.31", "22.31", "21.00") });
-  const pan = filed({ gross: "2.25", listGross: "2.50", net: net("2.05", "2.05", "10.00") });
+  const rioja = filed({
+    gross: "27.00",
+    listGross: "30.00",
+    listUnitPriceGross: "30.00",
+    net: net("22.31", "22.31", "21.00"),
+  });
+  const pan = filed({
+    gross: "2.25",
+    listGross: "2.50",
+    listUnitPriceGross: "2.50",
+    net: net("2.05", "2.05", "10.00"),
+  });
 
   // S5: a whole-bill 10% and nothing of a dish's own.
   const s5Bill = own("3.25");
@@ -182,6 +249,7 @@ describe("invoiceDiscounts", () => {
         filed({
           gross: "9.72",
           listGross: "12.00",
+          listUnitPriceGross: "12.00",
           net: net("8.03", "8.03", "21.00"),
           adjustments: [s1Own],
         }),
@@ -193,6 +261,7 @@ describe("invoiceDiscounts", () => {
           quantity: "2",
           gross: "6.00",
           listGross: "6.66",
+          listUnitPriceGross: "3.33",
           net: net("2.48", "4.96", "21.00"),
           dishFamily: 1,
         }),
@@ -211,11 +280,17 @@ describe("invoiceDiscounts", () => {
       group(
         3,
         3,
-        filed({ gross: "8.09", listGross: "9.00", net: net("6.69", "6.69", "21.00") }),
+        filed({
+          gross: "8.09",
+          listGross: "9.00",
+          listUnitPriceGross: "9.00",
+          net: net("6.69", "6.69", "21.00"),
+        }),
         filed({
           parentLineNo: 4,
           gross: "1.36",
           listGross: "1.50",
+          listUnitPriceGross: "1.50",
           net: net("1.12", "1.12", "21.00"),
         }),
       ),
@@ -225,6 +300,7 @@ describe("invoiceDiscounts", () => {
         filed({
           gross: "2.99",
           listGross: "3.33",
+          listUnitPriceGross: "3.33",
           net: net("2.47", "2.47", "21.00"),
           dishFamily: 1,
         }),
@@ -242,6 +318,7 @@ describe("invoiceDiscounts", () => {
         filed({
           gross: "0.00",
           listGross: "30.00",
+          listUnitPriceGross: "30.00",
           net: net("0.00", "0.00", "21.00"),
           adjustments: [{ kind: "comp", amount: "27.00" }],
         }),
@@ -262,15 +339,30 @@ describe("invoiceDiscounts", () => {
           quantity: "2",
           gross: "5.94",
           listGross: "6.66",
+          listUnitPriceGross: "3.33",
           net: net("2.46", "4.91", "21.00"),
           adjustments: [s14Own],
         }),
       ),
-      group(1, 1, filed({ gross: "11.88", listGross: "12.00", net: net("9.82", "9.82", "21.00") })),
+      group(
+        1,
+        1,
+        filed({
+          gross: "11.88",
+          listGross: "12.00",
+          listUnitPriceGross: "12.00",
+          net: net("9.82", "9.82", "21.00"),
+        }),
+      ),
       group(
         2,
         secondCroquetasFamily,
-        filed({ gross: "2.96", listGross: "3.33", net: net("2.45", "2.45", "21.00") }),
+        filed({
+          gross: "2.96",
+          listGross: "3.33",
+          listUnitPriceGross: "3.33",
+          net: net("2.45", "2.45", "21.00"),
+        }),
       ),
     ],
     bill: [{ kind: "discount", percentBp: 100, amount: "0.21" } satisfies ReceiptAdjustment],
@@ -287,11 +379,21 @@ describe("invoiceDiscounts", () => {
           quantity: "2",
           gross: "6.00",
           listGross: "6.66",
+          listUnitPriceGross: "3.33",
           net: net("2.48", "4.96", "21.00"),
           adjustments: [s11Own],
         }),
       ),
-      group(1, 0, filed({ gross: "2.99", listGross: "3.33", net: net("2.47", "2.47", "21.00") })),
+      group(
+        1,
+        0,
+        filed({
+          gross: "2.99",
+          listGross: "3.33",
+          listUnitPriceGross: "3.33",
+          net: net("2.47", "2.47", "21.00"),
+        }),
+      ),
     ],
     bill: [],
   };
@@ -305,6 +407,7 @@ describe("invoiceDiscounts", () => {
         filed({
           gross: "7.29",
           listGross: "9.00",
+          listUnitPriceGross: "9.00",
           net: net("6.02", "6.02", "21.00"),
           adjustments: [own("1.05")],
         }),
@@ -312,6 +415,7 @@ describe("invoiceDiscounts", () => {
           parentLineNo: 1,
           gross: "1.21",
           listGross: "1.50",
+          listUnitPriceGross: "1.50",
           net: net("1.10", "1.10", "10.00"),
         }),
       ),
@@ -330,6 +434,7 @@ describe("invoiceDiscounts", () => {
         filed({
           gross: "9.72",
           listGross: "12.00",
+          listUnitPriceGross: "12.00",
           net: net("8.03", "8.03", "21.00"),
           adjustments: [s12Entry],
         }),
@@ -449,13 +554,23 @@ describe("invoiceDiscounts", () => {
   it("prints a family's row under the first of its groups that carries an own entry", () => {
     const result = invoiceDiscounts(
       [
-        group(0, 0, filed({ gross: "3.00", listGross: "3.33", net: net("2.48", "2.48", "21.00") })),
+        group(
+          0,
+          0,
+          filed({
+            gross: "3.00",
+            listGross: "3.33",
+            listUnitPriceGross: "3.33",
+            net: net("2.48", "2.48", "21.00"),
+          }),
+        ),
         group(
           1,
           0,
           filed({
             gross: "3.00",
             listGross: "3.33",
+            listUnitPriceGross: "3.33",
             net: net("2.48", "2.48", "21.00"),
             adjustments: [own("0.66")],
           }),
@@ -487,6 +602,7 @@ describe("invoiceDiscounts", () => {
           filed({
             gross: "0.96",
             listGross: "1.01",
+            listUnitPriceGross: "1.01",
             net: net("0.79", "0.79", "21.00"),
             adjustments: [{ kind: "discount", amount: "0.06" }],
           }),
@@ -494,7 +610,12 @@ describe("invoiceDiscounts", () => {
         group(
           1,
           1,
-          filed({ gross: "11.01", listGross: "12.00", net: net("9.10", "9.10", "21.00") }),
+          filed({
+            gross: "11.01",
+            listGross: "12.00",
+            listUnitPriceGross: "12.00",
+            net: net("9.10", "9.10", "21.00"),
+          }),
         ),
       ],
       [{ kind: "discount", amount: "1.00" }],
@@ -507,7 +628,16 @@ describe("invoiceDiscounts", () => {
     const result = invoiceDiscounts(
       [
         group(0, 0, rioja),
-        group(1, 1, filed({ gross: "0.94", listGross: "1.04", net: net("0.90", "0.90", "4.00") })),
+        group(
+          1,
+          1,
+          filed({
+            gross: "0.94",
+            listGross: "1.04",
+            listUnitPriceGross: "1.04",
+            net: net("0.90", "0.90", "4.00"),
+          }),
+        ),
         group(2, 0, pan),
       ],
       [s5Bill],
@@ -519,6 +649,7 @@ describe("invoiceDiscounts", () => {
     const pizza = filed({
       gross: "8.10",
       listGross: "9.00",
+      listUnitPriceGross: "9.00",
       net: net("6.69", "6.69", "21.00"),
       adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.05" }],
     });
@@ -526,11 +657,13 @@ describe("invoiceDiscounts", () => {
       parentLineNo: 1,
       gross: "1.35",
       listGross: "1.50",
+      listUnitPriceGross: "1.50",
       net: net("1.12", "1.12", "21.00"),
     });
     const comped = filed({
       gross: "0.00",
       listGross: "30.00",
+      listUnitPriceGross: "30.00",
       net: net("0.00", "0.00", "21.00"),
       adjustments: [{ kind: "comp", amount: "30.00" }],
     });
@@ -562,6 +695,7 @@ describe("invoiceDiscounts", () => {
       const burger = filed({
         gross: "10.26",
         listGross: "12.00",
+        listUnitPriceGross: "12.00",
         net: net("8.48", "8.48", "21.00"),
         adjustments: [TEN, { kind: "discount", percentBp: 500, amount: "0.54" }],
       });
@@ -571,11 +705,17 @@ describe("invoiceDiscounts", () => {
     });
 
     it("reads rates 10 and 10.00 as one rate", () => {
-      const dish = filed({ gross: "9.00", listGross: "10.00", net: net("8.18", "8.18", "10") });
+      const dish = filed({
+        gross: "9.00",
+        listGross: "10.00",
+        listUnitPriceGross: "10.00",
+        net: net("8.18", "8.18", "10"),
+      });
       const extra = filed({
         parentLineNo: 1,
         gross: "1.35",
         listGross: "1.50",
+        listUnitPriceGross: "1.50",
         net: net("1.23", "1.23", "10.00"),
       });
       const result = invoiceDiscounts([group(0, 0, dish, extra)], []);
@@ -594,6 +734,7 @@ describe("invoiceDiscounts", () => {
         ...olives,
         net: net("1.36", "1.36", "10.00"),
         listGross: "1.65",
+        listUnitPriceGross: "1.65",
         gross: "1.50",
       };
       const result = invoiceDiscounts(

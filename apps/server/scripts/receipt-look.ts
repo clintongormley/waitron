@@ -129,7 +129,11 @@ const AGUA_DISCOUNTED = filed(
   "Agua, pan y aceite",
   "21.60",
   { unitPrice: "4.91", base: "19.64", tax: "1.96", rate: "10.00" },
-  { listGross: "24.00", adjustments: [{ kind: "discount", percentBp: 1000, amount: "2.40" }] },
+  {
+    listGross: "24.00",
+    listUnitPriceGross: "6.00",
+    adjustments: [{ kind: "discount", percentBp: 1000, amount: "2.40" }],
+  },
 );
 const AGUA = filed("4", "Agua, pan y aceite", "24.00", {
   unitPrice: "5.45",
@@ -207,7 +211,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
           tax: "4.69",
           rate: "21.00",
         },
-        { listGross: "30.00" },
+        { listGross: "30.00", listUnitPriceGross: "30.00" },
       ),
       filed(
         "1",
@@ -219,7 +223,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
           tax: "0.20",
           rate: "10.00",
         },
-        { listGross: "2.50" },
+        { listGross: "2.50", listUnitPriceGross: "2.50" },
       ),
     ],
     [
@@ -245,6 +249,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
         },
         {
           listGross: "10.00",
+          listUnitPriceGross: "10.00",
           adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.00" }],
         },
       ),
@@ -253,7 +258,7 @@ const FULL_INVOICES: Record<string, ReceiptDocumentInput> = {
     "9.00",
     "1.00",
   ),
-  // A comped weighed line under one kilo with no stored unit price.
+  // A comped weighed line with no stored unit price.
   "full-comped-weighed": fullInvoice(
     [
       BLOODY_MARY,
