@@ -1499,6 +1499,24 @@ decide what becomes of the statuses a venue has already made. It comes back with
 drawn out and a recommendation. The open note that the Tables tab's colour field label is cut to
 "C…" at 390 px goes with the screen.
 
+**Widened 2026-10-16 (owner): how each state is shown, on the floor and in the order lists.** The
+board shows every state as it looks today beside a proposal, for the owner to choose. Today a table
+can carry the signals `take_order`, `ready` (per station), `long_wait` (warm, overdue, forgotten),
+`held_unavailable`, `bill_requested`, `unsent_draft`, `release_due` and `needs_clearing`
+(`apps/server/src/table-signals.ts`, chips in `apps/till/src/widgets/signal-chips.ts`), besides
+seated, joined, paid and taken off. Three additions the owner asked for:
+
+- **Items held in the kitchen.** The floor marks a held group only when its release reminder is
+  due (`till-floor-screen.ts`, the `reminderDueAt` check); a table with held groups and no due
+  reminder looks like one with nothing held. Mark every table with held items; a due reminder keeps
+  a stronger mark.
+- **Late orders pulse.** Decide which of warm, overdue and forgotten pulse; the same pulse as A738's
+  Waiting tab; a colour change instead under reduced motion.
+- **Item counts by state in the order lists.** Held orders' rows read "4 · €24.50", where 4 is the
+  number of LINES (`itemCount`, `apps/server/src/working-order.ts`), unlabelled. Show instead the
+  number of items ordered, then how many are held, waiting, ready and so on — in Held, Waiting and
+  the other lists A765 names.
+
 ## A758. Adjustment reasons: review the rules, then a page of their own
 
 **A758 (owner, 2026-10-16) — design first; the review comes back to the owner with worked examples
@@ -1966,6 +1984,25 @@ Board 1 is the target; board 2 the windows.
   likely needs its own permission, since a typed price is a way to under-charge. **Open:** whether
   it needs a product behind it for reports and the invoice line.
 
+**Added 2026-10-16 (owner):**
+
+- **The table-order screen gets the same clean-up**: no Vegan/Vegetarian/No meat/No fish buttons
+  (the Filter replaces them), the status bar instead of "Keep Open open later", and no "Where the
+  rules send it" dropdown on each line.
+- **The "last added" bar on the counter too.** The table-order screen shows the line the last tap
+  added or grew, with −1 and +1 (`#lastAdded`, `till-table-order-screen.ts`); the counter shares
+  the store (`WorkingOrderStore.lastAdded`) but draws no bar. On both: the bar takes its own space
+  rather than sticking over the last row of product buttons, and a long press on it opens the line
+  window.
+- **Held and Waiting: tapping an order shows its items** (name, quantity, extras, note), and
+  tapping again closes it, so staff can check it before Retrieve. Its buttons act at once and do
+  not open the row.
+- **No empty "Modifiers" heading** on a line with no modifiers chosen (seen on Bravas de Casa).
+- **Open, for the next owner session:** a later addition to a table offers "Fire now", "Add to
+  held group…" and "Add as new group" as choices drawn like buttons, plus Send to carry the choice
+  out (`#laterAction`); the first order says "Send all" for what "Add as new group" means. The
+  owner is deciding how grouping and sending should work; build nothing on it until then.
+
 ### A739. Paying: Hold · Pay, and one payment window
 
 Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
@@ -2048,3 +2085,62 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
   `packages/venue-service/src/menu-timetable.ts`); within the period the till remembers the last
   menu looked at in each zone on this device. Example: Lunch starts, the Bar counter shows the Lunch
   menu, the bartender switches to Drinks, it stays on Drinks until Afternoon starts at 16:00.
+- **Added 2026-10-16 (owner):** Floor's pills today include the Counter zone, which has no floor
+  plan (`buildZoneTabs` takes every zone, `till-floor-screen.ts`); only table zones belong there.
+  List and the ⋮ menu sit on their own row above the pills; they move onto the pills' row.
+
+## A765. Say which table an order belongs to
+
+**A765 (owner, 2026-10-16).** In Held orders a party's bill is listed as "#2" with its count and
+total; it shows no Move to table (`order.partyId !== null`, `apps/till/src/widgets/held-orders.ts`),
+but nothing says which table it is. `HeldOrderSummary` (`apps/server/src/working-order.ts`) carries
+the party id and no table name. The server sends the table's name (a joined table's combined
+name) with each order, and every list that shows orders names it: Held orders first, then Waiting,
+Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
+build after A757's board if it has been decided, else name the table alone.
+
+## A766. The till's floor plan grows while a table is dragged past its edge
+
+**A766 (owner, 2026-10-16).** Dragging a table beyond the plan's edge on the till's floor leaves the
+plan its old size until the table is let go, so the waiter cannot see where it will land. Grow it
+as the table moves. Related open notes on the same drag are in A474 above.
+
+## A767. Signing back in, a false "discard your edits", and a card panel on the wrong order
+
+**A767 (owner, 2026-10-16).** Seen on one till, in this order:
+
+1. **The card panel stays on the wrong order — do this first.** With a counter order waiting on a
+   declined card (Retry card, Use another tender, Keep waiting), switching to another order leaves
+   the panel on screen. It belongs to the declined order: hide it on switching, show it again on
+   switching back, and add a test that Retry card can never act on an order other than the one
+   shown. Which way it goes wrong today (retrying #1's payment, or charging #2 under #1's attempt)
+   was not checked.
+2. **Signing back in lands on the counter.** The owner was logged out while on a table's order and
+   signed back in as the same person. The code means to keep the table-order screen and give them
+   their own draft on that party (`#resumeOrderDraft`, `apps/till/src/till-app.ts`); instead the
+   counter showed held order #1, still waiting on its declined card. A sign-out keeps the counter's
+   basket on purpose (`#requestLeave`, `except: [this.#basketOwner]`), so #1 was most likely left
+   from earlier. Find what moved the screen. While #1 was open on the counter it was also listed
+   under Held orders with Retrieve and Discard; an order open on the counter is not listed there.
+3. **Retrieve asks to discard edits nobody made.** On that screen, Retrieve on #2 asked to discard
+   unsaved edits. Unproven guess from reading: sign-in re-checks the basket against the current
+   menu (`#reconcileBasket`) and that marks it changed. Reproduce before fixing.
+
+## A768. The till: open a table fast, and stop needing a reload
+
+**A768 (owner, 2026-10-16).** Two halves that share one idea: keep what the till has read, and ask
+the server cheaply whether it changed.
+
+- **Opening a table takes a second or two.** The order screen appears only after, in turn: the
+  draft being left is saved (`#flushDraft`); the zone's whole menu is re-read
+  (`listZoneOffers`, every open, the same zone included); for a seated table with no main bill,
+  its bills; then its lines and bills beside the draft. Time each step on a till first. Then keep
+  each zone's menu and check it with the existing `/api/menu-state` read (`MenuStatePoll` already
+  does this for the counter's zone and the open table's), re-reading only when it moved; switch to
+  the order screen at once with a loading state; and stop waiting on the save of the order left.
+- **Settings read once at page load go stale.** The till takes the venue's courses from its start
+  read (`listCourses`, `apps/server/src/till-api.ts`; `this.courses = till.courses`,
+  `apps/till/src/till-app.ts`) and never again. Seen 2026-10-16: no course headings or course
+  pickers on a table's unsent order until the till page was reloaded. Courses first; then every
+  other value from that read (bump mode, fire control, card provider, tips, receipt languages and
+  the rest) is either refreshed while the till is open or recorded as fixed until reload, with why.

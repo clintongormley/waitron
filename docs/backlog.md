@@ -803,6 +803,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   stations' routing view (`/manage/prep-stations/view/routing`). Decided with it: the Availability
   column stays as it is, and the table staying wider than its box at desktop width is accepted
   (there will always be too many columns here; folding the sidebar to a strip gives it more room).
+  **Added 2026-10-16 (owner):** the heading is "Standalone", and the editor field and the filter
+  both become "Standalone ordering by" (today "Ordered on its own by" and "Standalone ordering");
+  a Course column and a Course filter join the list, and "Default course" is renamed "Course"
+  everywhere the dashboard shows it. A course change is live on the till without republishing
+  (course is left out of the published copy, `packages/catalogue/src/menu-document.ts`); confirm
+  that on a till while building.
 
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
@@ -2179,7 +2185,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
   Design first. Decided: the Tables tab goes; optional states are switched per department; an
   optional state is one the code understands, not a label the venue makes up. The review maps every
-  state, A508's future ones included, and comes back to the owner before building.
+  state, A508's future ones included, and comes back to the owner before building. **Widened
+  2026-10-16 (owner):** the same board decides how each state is shown on the floor and in the
+  order lists — a mark for items held in the kitchen, a pulse for late orders, and item counts by
+  state in place of the order lists' unlabelled line count.
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab)
 
 - **A758. Adjustment reasons: review the rules, then a page of their own (owner, 2026-10-16).**
@@ -2188,6 +2197,28 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Square import sorts reasons, and a starter list. Then the page under Service, with search, drag
   handles and Delete. Role lists with or after editable roles.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own)
+
+- **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
+  bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
+  name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
+  [Detail](backlog/till.md#a765-say-which-table-an-order-belongs-to)
+
+- **A766. The till's floor plan grows while a table is dragged past its edge (owner,
+  2026-10-16).** Today it grows only when the table is let go.
+  [Detail](backlog/till.md#a766-the-tills-floor-plan-grows-while-a-table-is-dragged-past-its-edge)
+
+- **A767. Signing back in, a false "discard your edits", and a card panel on the wrong order
+  (owner, 2026-10-16).** Logged out on a table's order, the same person signing back in lands on the
+  counter showing an old held order waiting on a declined card; Retrieve then asks to discard
+  edits nobody made; switching orders leaves Retry card on screen. Fix the card panel first: Retry
+  card must never act on an order other than the one shown.
+  [Detail](backlog/till.md#a767-signing-back-in-a-false-discard-your-edits-and-a-card-panel-on-the-wrong-order)
+
+- **A768. The till: open a table fast, and stop needing a reload (owner, 2026-10-16).** Opening a
+  table waits on up to four requests in a row, one re-reading the zone's whole menu; keep each
+  zone's menu and check it with `/api/menu-state`. Courses, and other settings read once when the
+  page loads, stay stale until a reload — seen: no course grouping until the till was reloaded.
+  [Detail](backlog/till.md#a768-the-till-open-a-table-fast-and-stop-needing-a-reload)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642. The drag's override sheet is added to the document and to every
@@ -2222,7 +2253,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the note as their own lines and every amount aligned; the line window is today's modifiers window
   plus allergens and the note, opened by ⓘ, long press or double click; product info the same way;
   a Hold window; a custom item. After A182 part 2 (retire canvases, not yet queued) and A668's data
-  shape. [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
+  shape. **Added 2026-10-16 (owner):** the same clean-up on the table-order screen; the "last
+  added" bar on the counter too, clear of the product buttons, its long press opening the line
+  window; tapping an order in Held or Waiting shows its items; no empty "Modifiers" heading. How a
+  later addition to a table is grouped and sent is still being decided. [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,
@@ -2240,6 +2274,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   several counter zones; Floor shows only with a table zone, its floor plans as pills; ☰ → Settings
   → Zones on this device picks which of the profile's zones the device shows and where it starts.
   The menu follows the service period and is remembered per zone within it. After A182 part 2.
+  **Added 2026-10-16 (owner):** Floor's pills hold no counter zone (today Counter is one), and List
+  and ⋮ sit on the same row as the pills.
   [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
