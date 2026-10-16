@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { migrationUpgradeBudget } from "./migration-upgrade-budget.mjs";
 import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
-// The receipts are named in docs/superpowers/plans/2026-10-16-a751-root-guard-time-limits.md.
+// Receipt: docs/developers/ci-and-gates.md, "The upgrade budget counts the walk's own processor
+// time".
 const CAPTURED_CI_WORK_MS = 110_242;
 const HEAVIEST_LOADED_WALL_MS = 1_108_000;
 const LARGEST_LOADED_GAP_MS = 34_000;

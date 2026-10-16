@@ -197,6 +197,8 @@ export async function reportStallAfter(
       reject(new Error(message));
     };
   });
+  // A body that throws before returning never reaches the race, which is what handles `failed`.
+  failed.catch(() => undefined);
   const onIdle = () => {
     fail(
       `Still running after ${took()} ms with no phase started or finished for ${Math.round(now() - lastEventAt)} ms, past the ${idleMs} ms no-progress limit. ${watch.stalled()}`,

@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { setTimeout } from "node:timers";
+import { clearTimeout, setTimeout } from "node:timers";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   LIGHT_A_PACKAGES,
@@ -691,13 +691,12 @@ function ciJobsApiStep() {
 }
 
 // The slowest default-window case took 4.6 s in three root projects run at once beside eight CPU
-// burners, and 3.2 s in an idle root run (~/waitron-campaign-b/a751-receipts/heavy3/root{1,2,3}.json,
-// idle-full-root.json); a 10 s kill fired in lane G's loaded push on 2026-10-16 (A751).
+// burners, and 3.2 s in an idle root run; a 10 s kill fired in lane G's loaded push on 2026-10-16
+// (A751).
 const VERDICT_SPAWN_TIMEOUT_MS = 30_000;
 
 // A case's per-test bound clears the kill bound of every run it makes, plus five seconds for the
-// rest. `scripts/spawn-timeout-budget.test.ts` reads only numbers and sums of them, so each is a
-// literal.
+// rest.
 const ONE_RUN_TEST_TIMEOUT_MS = 35_000;
 const TWO_RUNS_TEST_TIMEOUT_MS = 65_000;
 const THREE_RUNS_TEST_TIMEOUT_MS = 95_000;
@@ -706,6 +705,31 @@ const FIVE_RUNS_TEST_TIMEOUT_MS = 155_000;
 // The merge-job cases run once, or three times, per merge job, and are bounded for this many.
 const MERGE_JOBS_BOUNDED = 5;
 const FIFTEEN_RUNS_TEST_TIMEOUT_MS = 455_000;
+// The leftover-call case waits three times for a step of the killed run and makes one other run.
+const LEFTOVER_STEP_WAIT_MS = 15_000;
+const LEFTOVER_CALL_TEST_TIMEOUT_MS = 3 * LEFTOVER_STEP_WAIT_MS + VERDICT_SPAWN_TIMEOUT_MS + 5_000;
+
+/** Resolves once `check()` is true, polling; rejects naming `what` after `ms`. */
+async function waitUntil(check, ms, what) {
+  const giveUpAt = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() >= giveUpAt) throw new Error(`gave up after ${ms}ms waiting for ${what}`);
+    await new Promise((done) => setTimeout(done, 20));
+  }
+}
+
+/** `promise`'s value, or a rejection naming `what` after `ms`. */
+async function within(promise, ms, what) {
+  let timer;
+  const late = new Promise((_, refuse) => {
+    timer = setTimeout(() => refuse(new Error(`gave up after ${ms}ms waiting for ${what}`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // jq's exit status for an `error(...)` or a failed `fromjson`. A jq compile error exits 3 and a
 // missing jq 127, so neither can satisfy it; any error jq hits while running still exits 5, which
@@ -720,8 +744,7 @@ const JQ_REFUSED = 5;
 function runVerdict(needs) {
   const env = { PATH: process.env.PATH, VERDICT_SCRIPT: ciVerdictStep().script };
   if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
-  // `exec` leaves one shell for the kill to hit, not two. The script's own `$(…)` subshells still
-  // outlive a kill: the jobs API cross-check's leftover-call case asserts that one does.
+  // `exec` leaves one shell for the kill to hit, not two.
   const result = spawnSync("bash", ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
     encoding: "utf8",
     env,
@@ -921,16 +944,24 @@ describe("the `ci` aggregate's verdict", () => {
 });
 
 // A stand-in for `gh`, first on PATH. Call n writes its arguments to args.n, prints out.n (or the
-// latest out file before it) and exits with status.n (default 0). With GH_STUB_DELAY set, each call
-// first waits that many seconds.
+// latest out file before it) and exits with status.n (default 0). With GH_STUB_HOLD set, each call
+// first creates held, waits for release (giving up after 1200 polls 50 ms apart), and creates
+// finished as it ends.
 const GH_STUB = `#!/usr/bin/env bash
-if [ -n "\${GH_STUB_DELAY:-}" ]; then /bin/sleep "$GH_STUB_DELAY"; fi
+if [ -n "\${GH_STUB_HOLD:-}" ]; then
+  : > "$STUB_DIR/held"
+  for ((i = 0; i < 1200; i++)); do
+    [ -f "$STUB_DIR/release" ] && break
+    /bin/sleep 0.05
+  done
+fi
 n=$(( $(cat "$STUB_DIR/count" 2>/dev/null || echo 0) + 1 ))
 echo "$n" > "$STUB_DIR/count"
 printf '%s\n' "$@" > "$STUB_DIR/args.$n"
 for ((i = n; i >= 1; i--)); do
   if [ -f "$STUB_DIR/out.$i" ]; then cat "$STUB_DIR/out.$i"; break; fi
 done
+if [ -n "\${GH_STUB_HOLD:-}" ]; then : > "$STUB_DIR/finished"; fi
 exit "$(cat "$STUB_DIR/status.$n" 2>/dev/null || echo 0)"
 `;
 
@@ -979,7 +1010,7 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
    * Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. Runs with
    * three tries and no delay unless `defaults` is set.
    */
-  function runCrossCheck(needs, answers, { defaults = false, ghDelay, killAfterMs } = {}) {
+  function prepareCrossCheck(needs, answers, { defaults = false, holdGh = false } = {}) {
     const stateDir = mkdtempSync(join(root, "run-"));
     lastStateDir = stateDir;
     answers.forEach((answer, at) => {
@@ -997,17 +1028,27 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       VERDICT_SCRIPT: ciJobsApiStep().script,
     };
     if (!defaults) Object.assign(env, { JOBS_API_TRIES: "3", JOBS_API_DELAY: "0" });
-    if (ghDelay !== undefined) env.GH_STUB_DELAY = ghDelay;
+    if (holdGh) env.GH_STUB_HOLD = "1";
     if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
-    const result = spawnSync("bash", ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
+    return { env, stateDir };
+  }
+  const CROSS_CHECK_COMMAND = ["-c", 'exec bash -e -c "$VERDICT_SCRIPT" 2>&1'];
+
+  /** Starts a run whose every `gh` call waits for `release`, for the case to kill. */
+  function startHeldCrossCheck(needs, answers) {
+    const { env, stateDir } = prepareCrossCheck(needs, answers, { holdGh: true });
+    const child = spawn("bash", CROSS_CHECK_COMMAND, { env, stdio: "ignore" });
+    const exited = new Promise((done) => child.once("exit", (code, signal) => done(signal)));
+    return { child, exited, stateDir };
+  }
+
+  function runCrossCheck(needs, answers, options) {
+    const { env, stateDir } = prepareCrossCheck(needs, answers, options);
+    const result = spawnSync("bash", CROSS_CHECK_COMMAND, {
       encoding: "utf8",
       env,
-      timeout: killAfterMs ?? VERDICT_SPAWN_TIMEOUT_MS,
+      timeout: VERDICT_SPAWN_TIMEOUT_MS,
     });
-    if (killAfterMs !== undefined) {
-      expect(result.error?.code, "the run was meant to be killed").toBe("ETIMEDOUT");
-      return { stateDir };
-    }
     if (result.error !== undefined || result.status === null) {
       throw new Error(
         `the cross-check script failed to run (killed after ${VERDICT_SPAWN_TIMEOUT_MS}ms?): ${result.error?.message ?? result.signal}`,
@@ -1119,26 +1160,42 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   });
 
   // A kill ends the script's shell, not the `$(gh …)` subshell it is waiting on, so a killed run
-  // can still call `gh` after the next run has started
-  // (~/waitron-campaign-b/a751-receipts/orphan-probe-2.log). The kill lands a second into a
-  // three-second `gh` call; the check comes a second and a half after that call ends.
+  // can still call `gh` after the next run has started. Receipt: docs/developers/testing-guide.md,
+  // "A `spawnSync` timeout kills only the process it started".
   it(
     "keeps a killed run's leftover call out of the next run's count",
-    () => {
-      const started = Date.now();
-      const killed = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])], {
-        ghDelay: "3",
-        killAfterMs: 1000,
-      });
-      const next = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
-      expect(next.status, next.output).toBe(0);
-      expect(next.calls).toBe(1);
-      const wait = Math.max(0, started + 4500 - Date.now());
-      spawnSync("/bin/sleep", [String(wait / 1000)]);
-      expect(callsIn(next.stateDir), "calls the next run saw after the leftover call").toBe(1);
-      expect(callsIn(killed.stateDir), "the killed run's leftover call never came").toBe(1);
+    async () => {
+      const killed = startHeldCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
+      try {
+        await waitUntil(
+          () => existsSync(join(killed.stateDir, "held")),
+          LEFTOVER_STEP_WAIT_MS,
+          "the killed run's `gh` call to start",
+        );
+        killed.child.kill("SIGTERM");
+        expect(
+          await within(killed.exited, LEFTOVER_STEP_WAIT_MS, "the killed run to end"),
+          "the signal that ended the killed run",
+        ).toBe("SIGTERM");
+
+        const next = runCrossCheck(needsFor("lint"), [page([apiJob("lint", "success")])]);
+        expect(next.status, next.output).toBe(0);
+        expect(next.calls).toBe(1);
+
+        writeFileSync(join(killed.stateDir, "release"), "");
+        await waitUntil(
+          () => existsSync(join(killed.stateDir, "finished")),
+          LEFTOVER_STEP_WAIT_MS,
+          "the killed run's leftover `gh` call to finish",
+        );
+        expect(callsIn(next.stateDir), "calls the next run saw after the leftover call").toBe(1);
+        expect(callsIn(killed.stateDir), "calls the killed run's leftover call made").toBe(1);
+      } finally {
+        killed.child.kill("SIGKILL");
+        writeFileSync(join(killed.stateDir, "release"), "");
+      }
     },
-    TWO_RUNS_TEST_TIMEOUT_MS,
+    LEFTOVER_CALL_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -1480,12 +1537,16 @@ describe("the test shards", () => {
   it(
     "give each package its dedicated shard, with the UI pair sharing one",
     async () => {
-      const selected = OWN_SHARD_PACKAGES.map((name) => {
-        const dedicated = shards.filter((shard) => shard.filters.includes(name));
-        expect(dedicated).toHaveLength(1);
-        return selects(dedicated[0].filters, pnpmCalls.signal);
+      // Every shard is checked before any lookup starts: a lookup already running when a later
+      // check throws is aborted by `afterEach` with nothing to receive its refusal.
+      const dedicated = OWN_SHARD_PACKAGES.map((name) => {
+        const found = shards.filter((shard) => shard.filters.includes(name));
+        expect(found, name).toHaveLength(1);
+        return found[0];
       });
-      const answers = await Promise.all(selected);
+      const answers = await Promise.all(
+        dedicated.map((shard) => selects(shard.filters, pnpmCalls.signal)),
+      );
       OWN_SHARD_PACKAGES.forEach((name, at) => {
         expect(answers[at]).toEqual(
           name === "@waitron/ui" || name === "@waitron/ui-core"

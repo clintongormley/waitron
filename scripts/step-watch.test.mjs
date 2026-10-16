@@ -454,6 +454,33 @@ describe("reportStallAfter", () => {
     );
   });
 
+  it("rejects with a body's synchronous error, leaving no unhandled rejection, when a phase event had already failed the work budget", async () => {
+    const unhandled = [];
+    const record = (reason) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    let cpu = 0;
+    const watch = createStepWatch();
+    try {
+      await expect(
+        reportStallAfter(
+          watch,
+          { workMs: 100, idleMs: 10_000 },
+          () => {
+            cpu = 140;
+            void watch.phase("over budget", () => undefined);
+            throw new Error("the body's own error");
+          },
+          { cpuNow: () => cpu },
+        ),
+      ).rejects.toThrow("the body's own error");
+      await wait(50);
+    } finally {
+      process.off("unhandledRejection", record);
+    }
+
+    expect(unhandled.map((reason) => reason?.message)).toEqual([]);
+  });
+
   it("measures the test thread's own processor time by default", async () => {
     const watch = createStepWatch();
 

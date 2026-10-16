@@ -37,10 +37,8 @@ import {
 const repoRoot = join(import.meta.dirname, "..");
 
 /**
- * The spawn limit is 2.1x the slowest generate measured (140 s, staffing, three root projects and 8
- * CPU burners sustained, 2026-10-16; receipts named in
- * docs/superpowers/plans/2026-10-16-a751-root-guard-time-limits.md). The per-test bound clears it
- * plus the copy and the comparison around it.
+ * 300 s is 2.1x the slowest generate measured under load (A751). The per-test bound clears it plus
+ * the copy and the comparison around it.
  */
 const GENERATE_TIMEOUT_MS = 300_000;
 const TEST_TIMEOUT_MS = 330_000;
