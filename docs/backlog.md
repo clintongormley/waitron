@@ -4818,12 +4818,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   block can ask for anyone in the last hour, while `placeShift` can place a shift there (#1686's
   review). Next: decide whether a block may run to the day's real end.
 - **The Rota shift routes read a null or malformed JSON body as an empty object.**
-  `POST /management-api/staffing/rota/shifts` answered 400 `management.request_invalid` with
-  `field: "week"` for no body, `{` and `null`, and `PATCH …/rota/shifts/:shiftId` answered 404
-  `shift.not_found` for an unknown id with each of those bodies, refusing none of them as the body
-  (A750's probe, 2026-10-16). Both read through `readJsonBody`, which turns those bodies into `{}`;
-  change-week and A645's six staff-role/paint routes name `body`. Next: read both through
-  `readRawJsonBody`, with a failing route test first.
+  For no body, `{` and `null`, `POST …/rota/shifts` answered 400 with `field: "week"` and
+  `PATCH …/rota/shifts/:shiftId` 404 `shift.not_found` for an unknown id, neither naming `body`
+  (A750's probe, 2026-10-16). Next: swap `readJsonBody` for `readRawJsonBody`, as change-week did.
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
