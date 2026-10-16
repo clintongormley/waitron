@@ -64,6 +64,25 @@ export type CalendarViews = {
 /** The module view an address names: its id and the `<key>/<value>` pairs after it. */
 type ModuleAddress = { id: string; params: Readonly<Record<string, string>> };
 
+/** One month read followed at a time; `month` is the one followed, or "" for none. */
+class MonthWatch {
+  month = "";
+  #detach?: () => void;
+  /** On a month other than the followed one, stops following that and calls `start`, which
+   *  returns the new read's detach, if it starts one. */
+  follow(month: string, start: (month: string) => (() => void) | undefined): void {
+    if (month === this.month) return;
+    this.stop();
+    this.month = month;
+    this.#detach = start(month);
+  }
+  stop(): void {
+    this.#detach?.();
+    this.#detach = undefined;
+    this.month = "";
+  }
+}
+
 @customElement("dashboard-opening-hours-screen")
 export class OpeningHoursScreen extends LitElement {
   static override styles = [
@@ -131,20 +150,15 @@ export class OpeningHoursScreen extends LitElement {
   @state() private requestedMonth = "";
   @state() private monthModel?: OpeningHoursMonth;
   @state() private monthReadError = "";
-  private monthDetach?: () => void;
-  private watchedMonth = "";
+  private readonly monthWatch = new MonthWatch();
   /** The Year's or the Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
   /** The month read behind the Year's day box, held while that box is open. */
   @state() private boxMonth?: OpeningHoursMonth;
-  private boxMonthDetach?: () => void;
-  private watchedBoxMonth = "";
+  private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
   /** The date whose day box last opened: Month from the Year opens its month. */
   private lastDay?: LocalDate;
-  /** The date the drawn box was last shown for: a close sent while another date's box waits to be
-   *  shown belongs to the old box. */
-  private dayBoxShown?: LocalDate;
   /** The open request the box was last shown for: once that box is hidden, a content change
    *  while its close is on the way must not show it again. */
   private dayBoxPlaced?: CalendarDayOpen;
@@ -162,8 +176,7 @@ export class OpeningHoursScreen extends LitElement {
   private sentHolidays?: { date: LocalDate; holidays: readonly HolidayFact[] };
   /** The month read for a new special day's date when no other read covers it. */
   @state() private holidayRead?: { month: string; holidays: readonly HolidayFact[] };
-  private holidayDetach?: () => void;
-  private watchedHolidayMonth = "";
+  private readonly holidayWatch = new MonthWatch();
   /** The address of the view the painter opened over, or none on a direct load. */
   private baseHref?: string;
   /** The history entry this screen pushed the painter into over `base`: only from that entry
@@ -473,14 +486,11 @@ export class OpeningHoursScreen extends LitElement {
   }
   override disconnectedCallback() {
     this.detach?.();
-    this.monthDetach?.();
-    this.watchedMonth = "";
+    this.monthWatch.stop();
     this.yearDetach?.();
     this.watchedYear = 0;
-    this.holidayDetach?.();
-    this.watchedHolidayMonth = "";
-    this.boxMonthDetach?.();
-    this.watchedBoxMonth = "";
+    this.holidayWatch.stop();
+    this.boxMonthWatch.stop();
     this.afterDayBox = undefined;
     this.generation = {};
     super.disconnectedCallback();
@@ -563,57 +573,51 @@ export class OpeningHoursScreen extends LitElement {
     return (today || browserToday()).slice(0, 7);
   }
   private watchMonth() {
-    const month = this.shownMonth();
-    if (month === this.watchedMonth) return;
-    this.monthDetach?.();
-    this.monthDetach = undefined;
-    this.watchedMonth = month;
-    this.monthReadError = "";
-    if (!month) {
-      this.monthModel = undefined;
-      return;
-    }
-    this.monthDetach = this.api.watchMonth(
-      month,
-      (model) => {
-        this.monthModel = model;
-        this.monthReadError = "";
-      },
-      () => {
-        this.monthReadError = t("opening.load_error");
-        if (this.monthModel?.month !== month) this.monthModel = undefined;
-      },
-      () => {
-        this.monthReadError = "";
-      },
-    );
+    this.monthWatch.follow(this.shownMonth(), (month) => {
+      this.monthReadError = "";
+      if (!month) {
+        this.monthModel = undefined;
+        return undefined;
+      }
+      return this.api.watchMonth(
+        month,
+        (model) => {
+          this.monthModel = model;
+          this.monthReadError = "";
+        },
+        () => {
+          this.monthReadError = t("opening.load_error");
+          if (this.monthModel?.month !== month) this.monthModel = undefined;
+        },
+        () => {
+          this.monthReadError = "";
+        },
+      );
+    });
   }
   private boxMonthNeeded() {
     if (this.view !== "year" || this.moduleView || !this.dayBox) return "";
     return this.dayBox.date.slice(0, 7);
   }
   private watchBoxMonth() {
-    const month = this.boxMonthNeeded();
-    if (month === this.watchedBoxMonth) return;
-    this.boxMonthDetach?.();
-    this.boxMonthDetach = undefined;
-    this.watchedBoxMonth = month;
-    this.boxMonth = undefined;
-    this.boxMonthError = "";
-    if (!month) return;
-    this.boxMonthDetach = this.api.watchMonth(
-      month,
-      (model) => {
-        this.boxMonth = model;
-        this.boxMonthError = "";
-      },
-      () => {
-        this.boxMonthError = t("opening.load_error");
-      },
-      () => {
-        this.boxMonthError = "";
-      },
-    );
+    this.boxMonthWatch.follow(this.boxMonthNeeded(), (month) => {
+      this.boxMonth = undefined;
+      this.boxMonthError = "";
+      if (!month) return undefined;
+      return this.api.watchMonth(
+        month,
+        (model) => {
+          this.boxMonth = model;
+          this.boxMonthError = "";
+        },
+        () => {
+          this.boxMonthError = t("opening.load_error");
+        },
+        () => {
+          this.boxMonthError = "";
+        },
+      );
+    });
   }
   /** The public holidays this screen already holds for `date`'s month, or none when it holds no
    *  read covering it. */
@@ -633,29 +637,26 @@ export class OpeningHoursScreen extends LitElement {
     const date = this.special?.specialDayId === null ? this.special.date : null;
     if (!date || this.sentHolidays?.date === date) return "";
     const month = date.slice(0, 7);
-    if (this.watchedMonth === month && !this.monthReadError) return "";
+    if (this.monthWatch.month === month && !this.monthReadError) return "";
     if (this.watchedYear === Number(date.slice(0, 4)) && !this.yearReadError) return "";
     return month;
   }
   private watchHolidays() {
-    const month = this.holidayMonthNeeded();
-    if (month === this.watchedHolidayMonth) return;
-    this.holidayDetach?.();
-    this.holidayDetach = undefined;
-    this.watchedHolidayMonth = month;
-    if (!month) return;
-    const settled = (holidays: readonly HolidayFact[]) => {
-      if (this.watchedHolidayMonth === month) this.holidayRead = { month, holidays };
-    };
-    this.holidayDetach = this.api.watchMonth(
-      month,
-      (model) => settled(model.days.flatMap((day) => day.holidays)),
-      // A failed read opens the day unfilled rather than not at all.
-      () => {
-        if (this.holidayRead?.month !== month) settled([]);
-      },
-      () => {},
-    );
+    this.holidayWatch.follow(this.holidayMonthNeeded(), (month) => {
+      if (!month) return undefined;
+      const settled = (holidays: readonly HolidayFact[]) => {
+        if (this.holidayWatch.month === month) this.holidayRead = { month, holidays };
+      };
+      return this.api.watchMonth(
+        month,
+        (model) => settled(model.days.flatMap((day) => day.holidays)),
+        // A failed read opens the day unfilled rather than not at all.
+        () => {
+          if (this.holidayRead?.month !== month) settled([]);
+        },
+        () => {},
+      );
+    });
   }
   /** Feeds only the season dialog's naming of a refusal, so a failed read keeps the last list. */
   private readKnownSpecialDays() {
@@ -953,14 +954,13 @@ export class OpeningHoursScreen extends LitElement {
     }
     if (this.dayBoxPlaced === open && !box.shown) return;
     box.show(anchor);
-    this.dayBoxShown = open.date;
     this.dayBoxPlaced = open;
   }
   private dayBoxClosed(event: Event) {
     event.stopPropagation();
-    if (!this.dayBox || this.dayBox.date !== this.dayBoxShown) return;
+    // A close sent while another date's box waits to be shown belongs to the old box.
+    if (!this.dayBox || this.dayBox.date !== this.dayBoxPlaced?.date) return;
     this.dayBox = undefined;
-    this.dayBoxShown = undefined;
     this.dayBoxPlaced = undefined;
     const act = this.afterDayBox;
     this.afterDayBox = undefined;
@@ -981,19 +981,18 @@ export class OpeningHoursScreen extends LitElement {
         shown: openingHoursDay(day, read.seasons, this.model!.departments, departmentId),
         message: "",
         error,
-        specialDayId: day.specialDay?.id ?? null,
-        season: read.seasons.find(({ id }) => id === day.seasonId),
+        day,
+        seasons: read.seasons,
         holidays: read.days.flatMap((row) => row.holidays),
       };
     }
     if (!year || year.year !== Number(date.slice(0, 4))) return undefined;
-    const yearDay = year.days.find((row) => row.date === date);
     return {
       shown: undefined,
       message: error ? "" : t("day.loading"),
       error,
-      specialDayId: yearDay?.specialDay?.id ?? null,
-      season: year.seasons.find(({ id }) => id === yearDay?.seasonId),
+      day: year.days.find((row) => row.date === date),
+      seasons: year.seasons,
       holidays: year.days.flatMap((row) => row.holidays),
     };
   }
@@ -1001,7 +1000,9 @@ export class OpeningHoursScreen extends LitElement {
     const open = this.dayBox;
     const content = open && !this.moduleView ? this.dayBoxContent(open.date) : undefined;
     if (!open || !content) return nothing;
-    const { shown, specialDayId, season, holidays } = content;
+    const { shown, day, holidays } = content;
+    const specialDayId = day?.specialDay?.id ?? null;
+    const season = content.seasons.find(({ id }) => id === day?.seasonId);
     const act = (run: () => unknown) => () => {
       this.afterDayBox = run;
       this.shadowRoot?.querySelector("calendar-day-box")?.hide();
