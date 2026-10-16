@@ -6,10 +6,10 @@ import {
   departments,
   readDayPlan,
   type DayPlan,
-  readDepartmentSeasonWeeks,
   readSeasons,
   readSpecialDayPlan,
-  resolveDepartmentsDays,
+  readPlannedServiceGuides,
+  type PlannedServiceGuides,
   seasons,
   specialDayDates,
   specialDays,
@@ -23,6 +23,7 @@ import type {
   SpecialDayStaffing,
   SpecialDayStaffingEdit,
   StaffingArea,
+  StaffingGuideRange,
 } from "./staffing-types.js";
 import "./errors.js";
 
@@ -138,8 +139,52 @@ async function currentCutover(tx: Transaction, cfg: Cfg): Promise<string> {
   return (await readLocationClock(tx, cfg.locationId)).dayCutover;
 }
 
-const guideRanges = (ranges: readonly { startsAt: string; endsAt: string }[]) =>
-  ranges.map((r) => ({ startsAt: r.startsAt, endsAt: r.endsAt }));
+function namedGuides(
+  areas: readonly StaffingArea[],
+  forecast: PlannedServiceGuides,
+  columns: readonly (readonly [string, string])[],
+): Record<string, Record<string, StaffingGuideRange[]>> {
+  const periods = new Map(forecast.periods.map((period) => [period.id, period]));
+  const departments = new Map(
+    forecast.departments.map((department) => [department.id, department.name]),
+  );
+  return Object.fromEntries(
+    areas.map(({ area }) => [
+      areaKey(area),
+      Object.fromEntries(
+        columns.map(([key, column]) => {
+          const sources =
+            area.kind === "department"
+              ? [
+                  {
+                    departmentId: area.id,
+                    ranges: forecast.departmentRanges.get(area.id)?.get(column) ?? [],
+                  },
+                ]
+              : (forecast.stationRanges.get(area.id)?.get(column) ?? []);
+          return [
+            key,
+            sources.flatMap(({ departmentId, ranges }) =>
+              ranges.flatMap((range) => {
+                const period = periods.get(range.periodId);
+                if (!period) return [];
+                return [
+                  {
+                    ...range,
+                    periodName: period.name,
+                    periodColour: period.colour,
+                    departmentId,
+                    departmentName: departments.get(departmentId)!,
+                  },
+                ];
+              }),
+            ),
+          ];
+        }),
+      ),
+    ]),
+  );
+}
 
 async function assertSeasonHere(tx: Transaction, cfg: Cfg, seasonId: string): Promise<void> {
   const [row] = await tx
@@ -228,12 +273,11 @@ export async function readSeasonStaffing(
   const areas = await listStaffingAreas(tx, cfg);
   const cutover = await currentCutover(tx, cfg);
   const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
-  const hours = await readDepartmentSeasonWeeks(
-    tx,
-    venueScope(cfg),
-    idsOf(areas, "department"),
+  const forecast = await readPlannedServiceGuides(tx, venueScope(cfg), idsOf(areas, "station"), {
+    kind: "season",
+    seasonId,
     cutover,
-  );
+  });
   return {
     cutover,
     seasons: all.map(({ id, name, startsOn }) => ({ id, name, startsOn })),
@@ -247,14 +291,10 @@ export async function readSeasonStaffing(
         ),
       };
     }),
-    guides: Object.fromEntries(
-      areas.map(({ area }) => {
-        const week = area.kind === "department" ? hours.get(area.id)?.get(seasonId) : undefined;
-        return [
-          areaKey(area),
-          Object.fromEntries(WEEKDAYS.map((w) => [w, guideRanges(week?.[w] ?? [])])),
-        ];
-      }),
+    guides: namedGuides(
+      areas,
+      forecast,
+      WEEKDAYS.map((weekday) => [String(weekday), String(weekday)]),
     ),
   };
 }
@@ -308,27 +348,19 @@ export async function readSpecialDayStaffing(
     ),
     cutover,
   );
-  const hours = await resolveDepartmentsDays(
-    tx,
-    venueScope(cfg),
-    idsOf(areas, "department"),
-    dates.map((d) => d.date),
+  const forecast = await readPlannedServiceGuides(tx, venueScope(cfg), idsOf(areas, "station"), {
+    kind: "dates",
+    dates: dates.map(({ date }) => date),
     clock,
     plan,
-  );
+  });
   return {
     cutover,
     name: specialDayName,
-    guides: Object.fromEntries(
-      areas.map(({ area }) => {
-        const byDate = area.kind === "department" ? hours.get(area.id) : undefined;
-        return [
-          areaKey(area),
-          Object.fromEntries(
-            dates.map(({ dateId, date }) => [dateId, guideRanges(byDate?.get(date)?.ranges ?? [])]),
-          ),
-        ];
-      }),
+    guides: namedGuides(
+      areas,
+      forecast,
+      dates.map(({ dateId, date }) => [dateId, date]),
     ),
     areas: areas.map(({ area, name }) => ({
       area,

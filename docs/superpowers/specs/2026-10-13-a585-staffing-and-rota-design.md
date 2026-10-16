@@ -1,5 +1,9 @@
 # A585 — Staffing needs and the rota: who the venue needs, when, and who fills it
 
+> 2026-10-16: A724 replaces the painters’ bare opening-hour guides with named period bands and
+> station sending-department lanes, and calls the season painter a standard week. See its
+> [Part 1 plan](../plans/2026-10-16-a724-staffing-guide-bands.md). The month’s day-box work stays open.
+
 > **2026-10-15:** A585 part 8 retires the dashboard Rota screen and its shift dialog, and drops
 > the free-text shift/template `role`. Plan shifts in Calendar → Rota; staffing owns its shift
 > editor. References below describe the code when this document was written.

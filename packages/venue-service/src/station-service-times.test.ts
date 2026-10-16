@@ -22,12 +22,15 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
-import { setRoutingCell } from "./routing-store.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
+import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes } from "./station-service-times.js";
 import { readSeasons } from "./seasons.js";
+import { menuPeriods } from "./schema/menus.js";
+import * as service from "./index.js";
+import { readLocationClock } from "@waitron/reporting";
 import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
 
 const suite = useVenueDb({
@@ -686,4 +689,396 @@ it("reads the seasons and each season week once over a 42-day range", async () =
     } finally {
       spy.mockRestore();
     }
+  }));
+
+// The authored period end, rather than a closure-created segment, carries the offset.
+it.each([
+  { startsAt: "22:00", endsAt: "02:00", offset: -30, expectedEnd: "01:30" },
+  { startsAt: "12:00", endsAt: "16:00", offset: 15, expectedEnd: "16:15" },
+])(
+  "A724: station orders $startsAt–$endsAt with offset $offset end at $expectedEnd",
+  async ({ startsAt, endsAt, offset, expectedEnd }) =>
+    tx(async (db) => {
+      const f = await fixture(db);
+      await replaceMenuWeek(
+        db,
+        f.cfg,
+        f.department,
+        week("slots", [{ periodId: f.lunch, startsAt, endsAt }]),
+        at,
+        0,
+      );
+      await db
+        .update(menuPeriods)
+        .set({ endOffsetMinutes: offset })
+        .where(eq(menuPeriods.id, f.lunch));
+      expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+        planned(f, [{ periodId: f.lunch, startsAt, endsAt: expectedEnd }]),
+      );
+    }),
+);
+
+it("A724: zone closure trims positive grace after the authored end is offset", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0);
+    await db.update(menuPeriods).set({ endOffsetMinutes: 15 }).where(eq(menuPeriods.id, f.lunch));
+    await replaceZoneClosedWeek(
+      db,
+      f.cfg,
+      f.terrace,
+      week("ranges", [{ startsAt: "16:00", endsAt: "17:00" }]),
+      0,
+      at,
+    );
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
+  }));
+
+it("A724: a selected season supplies raw department guides and batched station demand", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await winterLunchOnly(db, f);
+    const ids = await seasonIds(db, f);
+    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
+      kind: "season",
+      seasonId: ids("Winter"),
+      cutover: "06:00",
+    });
+    expect(result?.departmentRanges.get(f.department)?.get("1")).toEqual([f.lunchRange]);
+    expect(result?.stationRanges.get(f.station)?.get("1")).toEqual([
+      { departmentId: f.department, ranges: [f.lunchRange] },
+    ]);
+    expect(result?.stationRanges.get(f.unused)?.get("1")).toEqual([]);
+    expect(result?.periods.find((p) => p.id === f.lunch)).toMatchObject({
+      name: "Lunch",
+      colour: "blue",
+      departmentId: f.department,
+    });
+    const autumn = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station], {
+      kind: "season",
+      seasonId: ids("Autumn"),
+      cutover: "06:00",
+    });
+    expect(autumn?.stationRanges.get(f.station)?.get("1")).toEqual([]);
+  }));
+
+it("A724: scheduled default demand stays bounded and no-preparation stays empty", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await clearRoutingCell(db, f.cfg, {
+      row: { kind: "category", categoryId: f.category },
+      zoneId: f.terrace,
+    });
+    const ids = await seasonIds(db, f);
+    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.defaultStation], {
+      kind: "season",
+      seasonId: ids("Autumn"),
+      cutover: "06:00",
+    });
+    expect(result?.stationRanges.get(f.defaultStation)?.get("1")).toEqual([
+      {
+        departmentId: f.department,
+        ranges: [f.lunchRange, { periodId: f.afternoon, startsAt: "16:00", endsAt: "18:00" }],
+      },
+    ]);
+    await setRoutingCell(
+      db,
+      f.cfg,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      { kind: "no_preparation" },
+    );
+    const none = await service.readPlannedServiceGuides?.(db, f.cfg, [f.defaultStation], {
+      kind: "season",
+      seasonId: ids("Autumn"),
+      cutover: "06:00",
+    });
+    expect(none?.stationRanges.get(f.defaultStation)?.get("1")).toEqual([]);
+  }));
+
+it("A724: grace from the previous weekday crosses the changeover in both readers", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: weekday === 0 ? [{ periodId: f.lunch, startsAt: "22:00", endsAt: "06:00" }] : [],
+      })),
+      at,
+      0,
+    );
+    await db.update(menuPeriods).set({ endOffsetMinutes: 15 }).where(eq(menuPeriods.id, f.lunch));
+    const ids = await seasonIds(db, f);
+    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station], {
+      kind: "season",
+      seasonId: ids("Autumn"),
+      cutover: "06:00",
+    });
+    expect(result?.stationRanges.get(f.station)?.get("1")).toEqual([
+      {
+        departmentId: f.department,
+        ranges: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:15" }],
+      },
+    ]);
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+      planned(f, [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:15" }]),
+    );
+  }));
+
+it("A724: batched dated forecasts retain distinct sending departments", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const takeaway = await paintableTakeaway(db, f);
+    const clock = await readLocationClock(db, f.cfg.locationId);
+    const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
+      kind: "dates",
+      dates: [day],
+      clock,
+    });
+    expect(result?.stationRanges.get(f.station)?.get(day)).toEqual([
+      { departmentId: f.department, ranges: [f.lunchRange] },
+      {
+        departmentId: takeaway,
+        ranges: [{ periodId: expect.any(String), startsAt: "15:00", endsAt: "17:00" }],
+      },
+    ]);
+    expect(result?.stationRanges.get(f.unused)?.get(day)).toEqual([]);
+  }));
+
+it.each([
+  { startsAt: "06:00", endsAt: "06:00", offset: 0, expected: [["06:00", "06:00"]] },
+  { startsAt: "12:00", endsAt: "13:00", offset: -60, expected: [] },
+])(
+  "A724: full-day and empty sending windows $startsAt/$endsAt/$offset",
+  async ({ startsAt, endsAt, offset, expected }) =>
+    tx(async (db) => {
+      const f = await fixture(db);
+      await replaceMenuWeek(
+        db,
+        f.cfg,
+        f.department,
+        week("slots", [{ periodId: f.lunch, startsAt, endsAt }]),
+        at,
+        0,
+      );
+      await db
+        .update(menuPeriods)
+        .set({ endOffsetMinutes: offset })
+        .where(eq(menuPeriods.id, f.lunch));
+      const result = await stationServiceTimes(db, f.cfg, f.station, day, day);
+      expect(
+        result.days[0]!.departments.flatMap((d) => d.ranges.map((r) => [r.startsAt, r.endsAt])),
+      ).toEqual(expected);
+    }),
+);
+
+it("A724: a negative offset uses the authored end before the dated boundary clamps it", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
+      at,
+      0,
+    );
+    await db.update(menuPeriods).set({ endOffsetMinutes: -30 }).where(eq(menuPeriods.id, f.lunch));
+    await db.insert(locationDayCutoverChanges).values({
+      locationId: f.cfg.locationId,
+      effectiveBusinessDay: "2026-10-13",
+      dayCutover: "03:00:00",
+    });
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+      planned(f, [{ periodId: f.lunch, startsAt: "09:00", endsAt: "03:00" }]),
+    );
+  }));
+
+it("A724: the destination zone closure removes prior-day grace", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: weekday === 0 ? [{ periodId: f.lunch, startsAt: "22:00", endsAt: "06:00" }] : [],
+      })),
+      at,
+      0,
+    );
+    await db.update(menuPeriods).set({ endOffsetMinutes: 15 }).where(eq(menuPeriods.id, f.lunch));
+    await replaceZoneClosedWeek(
+      db,
+      f.cfg,
+      f.terrace,
+      week("ranges", [{ startsAt: "06:00", endsAt: "07:00" }]),
+      0,
+      at,
+    );
+    const result = await stationServiceTimes(db, f.cfg, f.station, day, day);
+    expect(result.days).toEqual([{ date: day, departments: [] }]);
+  }));
+
+it("A724: season forecasting batches stations and never reads calendar dates", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const ids = await seasonIds(db, f);
+    const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      await service.readPlannedServiceGuides(db, f.cfg, [f.station, f.defaultStation, f.unused], {
+        kind: "season",
+        seasonId: ids("Autumn"),
+        cutover: "06:00",
+      });
+      const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+      for (const table of ["department_days", "zone_days", "menu_periods", "routing_cells"])
+        expect(
+          texts.filter((text) => text.includes(`from "${table}"`)),
+          table,
+        ).toHaveLength(1);
+      expect(texts.filter((text) => text.includes('from "products"'))).toHaveLength(2);
+      expect(
+        texts.filter((text) => /from "(?:special_days|special_day_dates|seasons)"/.test(text)),
+      ).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  }));
+
+it("A724: two reaching zones union their open shares without filling a shared closure", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const [second] = await db
+      .insert(floorZones)
+      .values({ ...f.cfg, name: "Inside" })
+      .returning();
+    await configureZone(db, f.cfg, { zoneId: second!.id, departmentId: f.department });
+    await setRoutingCell(
+      db,
+      f.cfg,
+      { row: { kind: "category", categoryId: f.category }, zoneId: second!.id },
+      { kind: "station", stationId: f.station },
+    );
+    await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0);
+    await replaceZoneClosedWeek(
+      db,
+      f.cfg,
+      f.terrace,
+      week("ranges", [{ startsAt: "13:00", endsAt: "15:00" }]),
+      0,
+      at,
+    );
+    await replaceZoneClosedWeek(
+      db,
+      f.cfg,
+      second!.id,
+      week("ranges", [{ startsAt: "14:00", endsAt: "16:00" }]),
+      0,
+      at,
+    );
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
+      planned(f, [
+        { periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" },
+        { periodId: f.lunch, startsAt: "15:00", endsAt: "16:00" },
+      ]),
+    );
+  }));
+
+it.each([
+  { offset: 1, until: "03:01" },
+  { offset: 30, until: "03:30" },
+])(
+  "A724 bounds $offset minutes of carried grace by an earlier dated changeover",
+  async ({ offset, until }) =>
+    tx(async (db) => {
+      const f = await fixture(db);
+      await replaceMenuWeek(
+        db,
+        f.cfg,
+        f.department,
+        week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
+        at,
+        0,
+      );
+      await db
+        .update(menuPeriods)
+        .set({ endOffsetMinutes: offset })
+        .where(eq(menuPeriods.id, f.lunch));
+      await db.insert(locationDayCutoverChanges).values({
+        locationId: f.cfg.locationId,
+        effectiveBusinessDay: "2026-10-13",
+        dayCutover: "03:00:00",
+      });
+      expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
+        always: null,
+        days: [
+          {
+            date: day,
+            departments: [
+              {
+                departmentId: f.department,
+                ranges: [{ periodId: f.lunch, startsAt: "09:00", endsAt: "03:00" }],
+              },
+            ],
+          },
+          {
+            date: "2026-10-13",
+            departments: [
+              {
+                departmentId: f.department,
+                ranges: [{ periodId: f.lunch, startsAt: "03:00", endsAt: until }],
+              },
+            ],
+          },
+        ],
+      });
+    }),
+);
+
+it("A724 all-day negative offsets match sending on consecutive weekdays", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:00" }],
+      })),
+      at,
+      0,
+    );
+    await db.update(menuPeriods).set({ endOffsetMinutes: -30 }).where(eq(menuPeriods.id, f.lunch));
+    const forecast = await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13");
+    expect(forecast.days).toEqual(
+      [day, "2026-10-13"].map((date) => ({
+        date,
+        departments: [
+          {
+            departmentId: f.department,
+            ranges: [{ periodId: f.lunch, startsAt: "06:00", endsAt: "05:30" }],
+          },
+        ],
+      })),
+    );
+    const accepts = [];
+    for (const at of [
+      "2026-10-13T05:20:00+02:00",
+      "2026-10-13T05:45:00+02:00",
+      "2026-10-13T06:00:00+02:00",
+    ]) {
+      accepts.push(
+        (
+          await resolveDepartmentService(db, f.cfg, f.department, new Date(at))
+        ).sendableMenuIds.includes(f.menu),
+      );
+    }
+    expect(accepts).toEqual([true, false, true]);
   }));

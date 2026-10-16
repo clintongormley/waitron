@@ -123,29 +123,15 @@ The PDF currently prints scalar values as `null`, `true` and `false`, including 
 reviewed serializer contract and its tests retain these spellings. Decide readable localized PDF
 wording separately, keeping CSV's scalar spellings stable; no legal-field or writer change is implied.
 
-## A724. Staffing: named opening hours behind the grid, a prep station's hours, special days reached from the day box
+## A724. Staffing: special days reached from the day box
 
-**A724 (owner, 2026-10-15).** Mockups: [a department](mockups/a718-a727-calendar-and-stations/08-staffing-painter-department.png),
-[a prep station](mockups/a718-a727-calendar-and-stations/09-staffing-painter-station.png), [the month](mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
-Files: `packages/staffing/src/dashboard/staffing-grid.ts`, `staffing-season-painter.ts`,
-`staffing-special-day-painter.ts`, `staffing-month.ts`, `packages/staffing/src/paint.ts`.
-Coordinate with A585 parts 5–8 on the same files.
+**A724 point 3 (owner, 2026-10-15).** Waits for all of lane A's A720 parts to land. Mockup:
+[the month](mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
+Files: `packages/staffing/src/dashboard/staffing-month.ts` and its calendar host.
 
-1. **The opening hours behind the grid are named.** Today each period is a light blue band with a
-   dashed top and bottom edge, so where periods meet there are unexplained dotted lines
-   (`staffing-grid.ts:156-169`). Draw each period faded in its own colour with its name and times at
-   the top, and say in the paint row what the shading is: "Shaded: {department}'s opening hours, by
-   period".
-2. **A prep station's grid shows when it gets orders.** Today the server sends hours for
-   departments only (`paint.ts:250-257`), so Kitchen's grid is blank. Shade it from each period's
-   start to its last orders (its end offset), counting a period only when its menu has a dish routed
-   to the station, in one lane per department that sends it dishes, each band labelled with its
-   department and period. Owner: "we do know the minimum hours for the departments because we derive
-   them from the periods and the menus". A722 point 6 draws the same reading.
-3. **Special days are reached from the day box.** The special-day staffing painter exists (A585-4)
+**Special days are reached from the day box.** The special-day staffing painter exists (A585-4)
    but opens only from a special day's date. The month gets A720's day box, offering "Edit
    {special day} staffing" or "Edit {season}'s standard week"; no seasons or special-days row.
-4. **"Autumn: standard week"** as A723 point 1.
 
 ## Rota warning query boundaries
 
@@ -172,6 +158,16 @@ can ask contributing modules for that count, or deliberately keep the confirmati
 The completed rota retirement does not depend on that choice.
 
 ## Decisions and deliberate limits
+
+### Named staffing guide bands (A724, owner 2026-10-15)
+
+The season painter is headed “{season}: standard week”. A department's opening periods are named,
+faded bands in their own colours, with their times at the top. Its paint row says “Shaded:
+{department}'s opening hours, by period”. A prep station's guides show when it gets orders from the
+period menus that route it dishes, from each period's start to last orders. Sending departments keep
+separate, stable lanes, each band named by department and period. Staffing paint remains independent
+of those guides. The [Part 1 plan](../superpowers/plans/2026-10-16-a724-staffing-guide-bands.md)
+records the implementation and its verification checks.
 
 ### A585. Staff roles and rota planning
 

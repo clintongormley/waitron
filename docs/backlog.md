@@ -4733,9 +4733,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
-- **A724. Staffing: named opening hours behind the grid, a prep station's hours, special days
-  reached from the day box (owner, 2026-10-15).** No more unexplained dotted lines; a station's grid
-  shaded from the periods whose menus send it dishes. [Detail](backlog/workforce.md#a724-staffing-named-opening-hours-behind-the-grid-a-prep-stations-hours-special-days-reached-from-the-day-box), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+- **A724. Staffing: reach special days and standard weeks from the month day box (owner,
+  2026-10-15).** After all of A720 lands, use its day box to open the special day's staffing or the
+  season's standard week, with no seasons or special-days row.
+  [Detail](backlog/workforce.md#a724-staffing-special-days-reached-from-the-day-box), [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png)
 
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
@@ -4841,10 +4842,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
   re-reads the list for nothing (found by reading, #1681's review). Next: drop `persons` from that
   query's list, keeping it on `staff-role-delete-impact`, which joins it for holders' names.
-- **A706. A prep station's column in the staffing painters draws no opening hours behind it.**
-  venue-service has no per-weekday station hours read: `stationServiceTimes`
-  (`packages/venue-service/src/station-service-times.ts`) works per date, at most 42 days. Left open
-  by A585-4.
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before

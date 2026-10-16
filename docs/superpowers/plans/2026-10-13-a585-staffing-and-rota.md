@@ -1,5 +1,9 @@
 # A585 Staffing needs and the rota — Implementation Plan
 
+> 2026-10-16: A724 changes the staffing painters’ guide contract, bands and season title.
+> Use its [Part 1 plan](2026-10-16-a724-staffing-guide-bands.md) for that work; the historical
+> A585 steps below retain their original contract. The month’s day-box work stays open.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.

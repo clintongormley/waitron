@@ -3,7 +3,7 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
 import type { SpecialDayStaffing, SpecialDayStaffingEdit, StaffRole } from "../staffing-types.js";
 import { StaffingApi } from "../dashboard/client.js";
-import { STAFF_ROLES, headChef, sous } from "./season-staffing-fixture.js";
+import { STAFF_ROLES, headChef, sous, LUNCH_GUIDE, BAR_GUIDE } from "./season-staffing-fixture.js";
 import { bar, kitchen, restaurant } from "./staffing-month-fixture.js";
 
 /** Christmas over two dates: the Restaurant painted on the Eve, the Kitchen on the Eve and empty on the
@@ -18,11 +18,17 @@ export function specialDayStaffing(): SpecialDayStaffing {
     name: "Christmas",
     guides: {
       "department:dep-restaurant": {
-        eve: [{ startsAt: "12:00", endsAt: "16:00" }],
+        eve: [{ ...LUNCH_GUIDE }],
         day: [],
       },
-      "department:dep-bar": { eve: [], day: [] },
-      "station:st-kitchen": { eve: [], day: [] },
+      "department:dep-bar": { eve: [{ ...BAR_GUIDE }], day: [] },
+      "station:st-kitchen": {
+        eve: [
+          { ...LUNCH_GUIDE, endsAt: "15:30" },
+          { ...BAR_GUIDE, endsAt: "17:30" },
+        ],
+        day: [],
+      },
     },
     areas: [
       { area: restaurant, name: "Restaurant", dates: dates([{ ...headChef }]) },

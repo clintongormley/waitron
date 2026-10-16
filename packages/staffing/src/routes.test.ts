@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, kitchenStations, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  kitchenStations,
+  locations,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -19,6 +25,9 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import {
   VENUE_SERVICE_MIGRATIONS,
   departments,
+  menuPeriods,
+  departmentDays,
+  departmentDayRanges,
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
@@ -1037,5 +1046,50 @@ describe("changing a week through the route", () => {
     expect(
       (await r.call("POST", `${root}/change-week`, r.manager, { week: "2026-11-30" })).status,
     ).toBe(409);
+  });
+});
+
+it("A724 paint routes carry exact period metadata for season and special-day guides", async () => {
+  const p = await painted();
+  const periodId = await withTransaction(suite.db, async (tx) => {
+    const menuId = randomUUID();
+    await tx.insert(catalogues).values({ id: menuId, name: "Lunch menu" });
+    const [period] = await tx
+      .insert(menuPeriods)
+      .values({ departmentId: p.departmentId, menuId, name: "Lunch", colour: "blue" })
+      .returning();
+    const [day] = await tx
+      .insert(departmentDays)
+      .values({ departmentId: p.departmentId, seasonId: p.seasonId, weekday: 5 })
+      .returning();
+    await tx.insert(departmentDayRanges).values({
+      departmentId: p.departmentId,
+      dayId: day!.id,
+      periodId: period!.id,
+      startsAt: "12:00:00",
+      endsAt: "16:00:00",
+    });
+    return period!.id;
+  });
+  const guide = {
+    periodId,
+    periodName: "Lunch",
+    periodColour: "blue",
+    departmentId: p.departmentId,
+    departmentName: "Dining room",
+    startsAt: "12:00",
+    endsAt: "16:00",
+  };
+  const season = await p.call("GET", `${STAFFING}/seasons/${p.seasonId}`, p.supervisor);
+  expect(season.status).toBe(200);
+  expect((await season.json()).guides).toEqual({
+    [`department:${p.departmentId}`]: { ...week(), 5: [guide] },
+    [`station:${p.stationId}`]: week(),
+  });
+  const special = await p.call("GET", `${STAFFING}/special-days/${p.specialDayId}`, p.supervisor);
+  expect(special.status).toBe(200);
+  expect((await special.json()).guides).toEqual({
+    [`department:${p.departmentId}`]: { [p.aug14]: [guide], [p.aug15]: [] },
+    [`station:${p.stationId}`]: { [p.aug14]: [], [p.aug15]: [] },
   });
 });

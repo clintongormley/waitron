@@ -58,6 +58,13 @@ export {
   type StationServiceTimes,
 } from "./station-service-times.js";
 
+export {
+  readPlannedServiceGuides,
+  type ServiceGuideRequest,
+  type PlannedServiceGuides,
+  type GuideDepartmentRanges,
+} from "./planned-service-guides.js";
+
 export * from "./department-receipts.js";
 
 export {
