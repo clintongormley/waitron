@@ -5,6 +5,7 @@ import {
   withOperationAuthority,
   type ModuleOperationInput,
   type OperationBinding,
+  type ModuleOperationHost,
 } from "@waitron/module";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -16,7 +17,7 @@ import {
   type HourSelectionFacts,
   type HourSelectionStore,
 } from "./hour-selection.js";
-import { createHourPreparation } from "./hour-preparation.js";
+import { createHourPreparation, createHostedHourPreparation } from "./hour-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 
@@ -86,6 +87,7 @@ function fixture() {
   const selection = createHourSelection(options);
   const preparation = createHourPreparation(options);
   return {
+    withState,
     selection,
     preparation,
     revisions,
@@ -479,5 +481,91 @@ it.each(["", "   "])(
       ).rejects.toMatchObject(refuse("reauthentication_required"));
     });
     expect(f.revisions).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "the hosted adapter keeps the host scope separate from clock metadata (confirmed: %s)",
+  async (confirmed) => {
+    const f = fixture();
+    const host: ModuleOperationHost = {
+      environment: {},
+      readPublicEvidence: async () => undefined,
+      withPreparationState: f.withState,
+      readSetupFacts: async () => ({
+        context: {
+          attemptId: "owned-attempt",
+          binding,
+          administratorId: "administrator",
+          country: "ES",
+          taxId: f.facts.scope.taxpayerNif,
+          environment: f.facts.scope.environment,
+          recipientVenueId: binding.sourceId,
+          bases: structuredClone(bases),
+        },
+        contextKey: f.facts.contextKey,
+        localHistory: f.facts.history[0],
+      }),
+    };
+    const preparation = createHostedHourPreparation(host, {
+      monotonicNow: () => 0,
+      readClock: async (context) => {
+        Object.assign(context, { taxId: "changed" });
+        return {
+          clock: f.facts.clock,
+          ...(confirmed ? { confirmation: confirmHourClock(f.facts.clock) } : {}),
+          scope: { taxpayerNif: "changed", environment: "production" },
+        };
+      },
+    });
+    const selected = await withOperationAuthority(binding, "administrator", (authority) =>
+      preparation.select({ binding, authority, answer: "no" }),
+    );
+    expect(selected).toMatchObject({ status: "selected", scope: f.facts.scope });
+    if (selected.status !== "selected") throw new Error("expected selected hour");
+    await withOperationAuthority(binding, "administrator", (authority) =>
+      preparation.prepare({ binding, authority, input: selected.input }, (operation) =>
+        withTransaction(suite.db, (tx) =>
+          activatePreparedModuleAllocation(
+            tx,
+            {
+              nodeId: TENANT_A.nodeId,
+              locationId: locationId(TENANT_A.locationId),
+            },
+            operation,
+          ),
+        ),
+      ),
+    );
+    expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+      expect.objectContaining({
+        taxpayerNif: f.facts.scope.taxpayerNif,
+        environment: "preproduction",
+        installationIdentity: "06RB",
+      }),
+    ]);
+  },
+);
+
+it.each(["readSetupFacts", "withPreparationState"] as const)(
+  "a hosted adapter requires %s",
+  (missing) => {
+    const host: ModuleOperationHost = {
+      environment: {},
+      readPublicEvidence: async () => undefined,
+      readSetupFacts: async () => {
+        throw new Error("must not read");
+      },
+      withPreparationState: async () => {
+        throw new Error("must not enter");
+      },
+    };
+    delete host[missing];
+    expect(() =>
+      createHostedHourPreparation(host, {
+        monotonicNow: () => 0,
+        readClock: async () => ({ clock: clock() }),
+      }),
+    ).toThrowError(expect.objectContaining(refuse("outside_confirmation_missing")));
   },
 );

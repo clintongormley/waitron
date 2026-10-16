@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi, beforeEach } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { emptyDrainResult } from "@waitron/fiscal";
 import {
@@ -18,6 +18,12 @@ import { initialSetupInput } from "./testing/allocated-provision.js";
 import { freePorts } from "./testing/free-ports.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { request } from "../test/first-fiscal.js";
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
 
 const calls = vi.hoisted(() => ({ throwaway: vi.fn(), outside: vi.fn(), drain: vi.fn() }));
 vi.mock("@waitron/composition", async (original) => {
@@ -171,14 +177,14 @@ it.each([true, false])(
         {
           id: expect.any(String),
           entorno: "preproduction",
-          num_serie_factura: "A-S000001/1",
+          num_serie_factura: "A-06RB/1",
           huella: expect.any(String),
         },
       ]);
       expect(first.series.map(({ code, next_number }) => ({ code, next_number }))).toEqual([
-        { code: "A-S000001", next_number: 2 },
-        { code: "FF-S000001", next_number: 1 },
-        { code: "R-S000001", next_number: 1 },
+        { code: "A-06RB", next_number: 2 },
+        { code: "FF-06RB", next_number: 1 },
+        { code: "R-06RB", next_number: 1 },
       ]);
       await server.close();
       server = undefined;

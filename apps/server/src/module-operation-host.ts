@@ -4,6 +4,7 @@ import { writeModuleConfig } from "./module-config.js";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
+import { readDeploymentEnvironment, withTransaction, type Database } from "@waitron/db";
 import {
   configureModuleOperations,
   enabledModules,
@@ -42,10 +43,12 @@ export function createModuleOperationHost(
     read: ModuleOperationHost["readPublicEvidence"];
     withPreparationState?: ModuleOperationHost["withPreparationState"];
     readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
+    readSetupFacts?: ModuleOperationHost["readSetupFacts"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
+    ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.withPreparationState === undefined
       ? {}
       : { withPreparationState: evidence.withPreparationState }),
@@ -62,6 +65,7 @@ export function createFirstSetupModuleHost(options: {
   venueDir: string;
   modules: readonly WaitronModule[];
   moduleConfig?: ModuleConfig;
+  database?: () => Database | undefined;
   freezeConfiguration?: (
     request: import("@waitron/provisioning").VenueRequest,
     newTaxpayer: boolean,
@@ -84,6 +88,10 @@ export function createFirstSetupModuleHost(options: {
     held: (hold, body) => sharedCoordinator.held(hold, () => holds.run(hold, body)),
   };
   const preparation: { current?: ReturnType<typeof createModulePreparationState> } = {};
+  const preparationBindings = new AsyncLocalStorage<{
+    binding: OperationBinding;
+    active: boolean;
+  }>();
   const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> = async (name) => {
     const retired = await readFirstSetupRetirements(options);
     if (retired.length === 0) return [];
@@ -115,11 +123,82 @@ export function createFirstSetupModuleHost(options: {
     return result;
   };
   const host = createModuleOperationHost(options.environment, {
+    readSetupFacts: async (binding) => {
+      const current = preparationBindings.getStore();
+      const held = { ...binding };
+      const check = () => {
+        if (current?.active !== true || !isDeepStrictEqual(current.binding, held))
+          throw new AppError("setup.attempt_conflict", {});
+      };
+      check();
+      const state = await store.read();
+      check();
+      if (state === null) throw new AppError("setup.owner_required", {});
+      const context = firstSetupModuleContext(state, held.module);
+      if (!isDeepStrictEqual(context.binding, held))
+        throw new AppError("setup.attempt_conflict", {});
+      const selected = enabledModules(
+        modules,
+        venueFiscalSelection(
+          modules,
+          state.frozen.request.location.fiscalTerritory,
+          options.moduleConfig,
+        ).config,
+      );
+      if (
+        !isDeepStrictEqual(
+          selected.map(({ name, version }) => ({ module: name, version })),
+          state.frozen.modules.map(({ module, version }) => ({ module, version })),
+        )
+      )
+        throw new AppError("setup.attempt_conflict", {});
+      const database = options.database?.();
+      const contribution = initialSetupFor(modules, held.module);
+      if (database === undefined || contribution?.localHistory === undefined)
+        throw new AppError("setup.not_ready", {});
+      const localHistory = await withTransaction(database, async (tx) => {
+        check();
+        const environment = await readDeploymentEnvironment(database);
+        check();
+        if (environment !== null && environment !== state.frozen.environment)
+          throw new AppError("setup.attempt_conflict", {});
+        return contribution.localHistory!(tx, environment);
+      });
+      check();
+      return structuredClone({
+        context,
+        contextKey: JSON.stringify([
+          state.frozen.attemptId,
+          state.ownerGeneration,
+          context.country,
+          context.taxId,
+          context.environment,
+          state.frozen.request.location,
+          context.bases,
+          state.frozen.modules.map(({ module, version }) => ({ module, version })),
+          state.frozen.configurationImport ?? null,
+        ]),
+        localHistory,
+      });
+    },
     read: async (binding) => evidence.current?.read(binding),
     readRetiredSetup,
     withPreparationState: (binding, run) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
-      return preparation.current.withState(binding, run, holds.getStore());
+      return preparation.current.withState(
+        binding,
+        (state) => {
+          const scope = { binding: { ...binding }, active: true };
+          return preparationBindings.run(scope, async () => {
+            try {
+              return await run(state);
+            } finally {
+              scope.active = false;
+            }
+          });
+        },
+        holds.getStore(),
+      );
     },
   });
   const modules = configureModuleOperations(options.modules, host);

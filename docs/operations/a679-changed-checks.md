@@ -97,10 +97,10 @@ preproduction publication proceeds without an authority-acceptance receipt; prod
 requires its certificate and accepted readiness. This follows the existing ordinary setup route's
 production gate and `FiscalContribution.activationReadiness`'s production-only contract.
 
-The new disposable hour allocator has focused writer checks, but the configured default is still
-the historical allocator. An independently installed candidate switching that default reports
+The new disposable hour allocator has focused writer checks. An independently installed candidate switching that default reported
 13 old-check failures across five files. Lane E's 2026-10-16 18:55 question proposes the exact
-literal replacements and date fixture. That patch is not applied; it changes no golden suite,
+literal replacements and date fixture. The owner approved that exact patch at 20:00; the default
+switch and those replacements are now applied. They change no golden suite,
 numeric counter expectation or root guard.
 
 The broader Task 4 run also reports the supplied-production case in
@@ -125,6 +125,32 @@ That read is now admitted, while the replacement callback checks the earlier wri
 A refused replacement rejects the whole held operation; the new test checks that outer rejection
 and the absence of a preparation journal.
 
-The adapter's clock/history providers are controlled fixtures in these component tests. The real
-fiscal contribution's host wiring and the five-file disposable-test permission remain open;
-the configured defaults and their old assertions are untouched.
+The adapter's clock/history providers are controlled fixtures in those component tests. The next
+checkpoint below adds real local-history reads; full fiscal-contribution and mode wiring remains open.
+
+### Task 4 approved disposable checks and real host facts
+
+The owner's 2026-10-16 20:00 answer approves the exact five-file patch proposed at 18:55:
+
+| File | Changed checks | Authority |
+| --- | --- | --- |
+| `packages/fiscal-verifactu/src/throwaway-allocation.test.ts` | Default-seat installation and series use literal `06RB`; reservation evidence is null and paper signing fields are absent. Throwaway markers, source binding, environment, clean SIF and historical explicit-signer checks remain. | Exact 20:00 approval; hour-code design, disposable setup. |
+| `packages/provisioning/src/throwaway-allocation.test.ts` | Default-seat identity and all three series use `06RB`, for real and synthetic taxpayers. | The same exact approval. |
+| `apps/server/src/provision-throwaway.test.ts` | Default-seat identity and all three series use `06RB`. | The same exact approval. |
+| `apps/server/src/setup-throwaway.route.test.ts` | Shared expected-venue helper uses `06RB` and all three hour-coded series. | The same exact approval. |
+| `apps/server/src/fiscal-readiness-first-setup.test.ts` | The disposable sample is `A-06RB/1`; all three disposable series retain their prior counter expectations. The supplied production fixture's `contract-S000001` expectation remains. | The same exact approval. |
+
+All five files freeze Date alone at `2026-10-16T11:40:00.000Z` and restore real Date afterwards.
+The approved patch had stray closing braces and an obsolete type member in the fiscal file;
+removing that syntax debris changes none of its approved assertions.
+
+New host-facts tests read the actual module history under the preparation hold, including a
+revoked identity on another node and an occupied inventory without a deployment stamp. The
+hosted adapter takes its scope, bases and configuration fingerprint from that host. These checks
+use controlled clock decisions; they do not qualify browser or internet observation collection,
+the complete wizard, CLI or recovery paths. The adapter and generic read interface are staged.
+Boot supplies its existing database handle without opening another database here.
+
+The broader Task 4 command still reports the retained unowned Live provision refusal above.
+Its success assertion is unchanged. Keep Task 4 open until the owned production fixture and all
+entry paths are qualified; this checkpoint is not branch readiness.

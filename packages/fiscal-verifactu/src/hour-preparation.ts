@@ -3,12 +3,16 @@ import {
   readOperationAuthority,
   type ModuleOperationInput,
   type ModuleOperationPreparation,
+  type ModuleOperationHost,
+  type InitialSetupContext,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { createAllocationPreparation } from "./allocation-preparation.js";
 import { createHourSelection, type HourSelectionFacts } from "./hour-selection.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import type { HourClockDecision } from "./hour-clock.js";
+import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
 
 type SelectionOptions = Parameters<typeof createHourSelection>[0];
@@ -118,4 +122,33 @@ export function createHourPreparation(
         : selected;
     },
   };
+}
+
+export function createHostedHourPreparation(
+  host: ModuleOperationHost,
+  options: {
+    readClock(
+      context: InitialSetupContext,
+    ): Promise<{ clock: HourClockDecision; confirmation?: object }>;
+    monotonicNow(): number;
+  },
+) {
+  if (host.readSetupFacts === undefined || host.withPreparationState === undefined)
+    return refuse("outside_confirmation_missing");
+  return createHourPreparation({
+    withState: host.withPreparationState,
+    monotonicNow: options.monotonicNow,
+    read: async (binding) => {
+      const facts = await host.readSetupFacts!(binding);
+      const clock = await options.readClock(structuredClone(facts.context));
+      return {
+        scope: { taxpayerNif: facts.context.taxId, environment: facts.context.environment },
+        bases: facts.context.bases,
+        contextKey: facts.contextKey,
+        history: [facts.localHistory as HourHistorySource],
+        clock: clock.clock,
+        ...(clock.confirmation === undefined ? {} : { confirmation: clock.confirmation }),
+      };
+    },
+  });
 }

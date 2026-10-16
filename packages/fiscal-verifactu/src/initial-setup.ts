@@ -1,4 +1,5 @@
 import { projectHourHistory } from "./hour-history.js";
+import { readHourHistory } from "./hour-history-reader.js";
 import "./errors.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -283,6 +284,7 @@ function createInitialSetup(
     return { scope, allocations, operationId };
   };
   const contribution: InitialSetupContribution = {
+    localHistory: readHourHistory,
     retainedAssignments(evidence) {
       if (!record(evidence)) refuse();
       if (evidence.format === "waitron-hour-history") {

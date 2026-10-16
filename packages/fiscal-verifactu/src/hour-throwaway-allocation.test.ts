@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
@@ -10,6 +10,18 @@ import { createHourThrowawayAllocation } from "./hour-throwaway-allocation.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { registroSif } from "./schema/sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
+import { createThrowawayAllocation } from "./throwaway-allocation.js";
+const signing = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    generateKeyPairSync: (...args: unknown[]) => {
+      signing.calls++;
+      return Reflect.apply(actual.generateKeyPairSync, actual, args);
+    },
+  };
+});
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
 const bases = [
@@ -181,4 +193,19 @@ it("the default clock records the actual preparation time in its disposable inpu
   expect(Date.parse(value.allocation.issuedAt)).toBeLessThanOrEqual(after);
   expect(value.approval.confirmedAt).toBe(value.allocation.issuedAt);
   expect(value.allocation.installationIdentity).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}$/);
+});
+
+it("the configured disposable seat activates without generating a signer", async () => {
+  const before = signing.calls;
+  const prepared = FISCAL_PROVISIONING.throwawayAllocation!.prepare(input());
+  const series = await activate(prepared);
+  expect(signing.calls).toBe(before);
+  expect(series).toHaveLength(bases.length);
+  expect(series.every(({ code }) => /-[0-9A-HJKMNP-TV-Z]{4}$/.test(code))).toBe(true);
+});
+
+it("the historical signing control reaches the observed key generator", () => {
+  const before = signing.calls;
+  createThrowawayAllocation().prepare(input());
+  expect(signing.calls).toBe(before + 1);
 });

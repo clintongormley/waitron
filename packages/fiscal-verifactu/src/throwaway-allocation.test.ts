@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
 import { deployment, locations, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
@@ -8,6 +8,12 @@ import { locationId, nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { createThrowawayAllocation } from "./throwaway-allocation.js";
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -85,19 +91,19 @@ describe("the throwaway allocation seat", () => {
   describe("on a preproduction-stamped venue", () => {
     beforeEach(() => seedVenue("preproduction"));
 
-    it("signs a preproduction allocation any taxpayer can activate", async () => {
+    it("activates a preproduction hour allocation for any taxpayer", async () => {
       const administratorId = randomUUID();
       const series = await activate(signFor(administratorId), administratorId);
       expect(suite.db.all(sql`select numero_instalacion, node_id from registro_sif`)).toEqual([
-        { numero_instalacion: "S000001", node_id: node.nodeId },
+        { numero_instalacion: "06RB", node_id: node.nodeId },
       ]);
       expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
         { taxpayer_nif: TAXPAYER, environment: "preproduction" },
       ]);
       expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-        { code: "A-S000001", purpose: "standard" },
-        { code: "FF-S000001", purpose: "full" },
-        { code: "R-S000001", purpose: "rectificative" },
+        { code: "A-06RB", purpose: "standard" },
+        { code: "FF-06RB", purpose: "full" },
+        { code: "R-06RB", purpose: "rectificative" },
       ]);
     });
 
@@ -113,17 +119,7 @@ describe("the throwaway allocation seat", () => {
         source: string;
         environment: string;
         installationIdentity: string;
-        reservationEvidence: {
-          block: {
-            payload: {
-              custodianId: string;
-              recipientVenueId: string;
-              generationId: string;
-              blockId: string;
-            };
-          };
-          consumption: { payload: { sourceId: string; incidentEvidence: string } };
-        };
+        reservationEvidence: null;
       };
       const approval = JSON.parse(row!.approval) as Record<string, unknown>;
       const throwawayId =
@@ -131,26 +127,17 @@ describe("the throwaway allocation seat", () => {
 
       expect(row!.allocation_key).toMatch(throwawayId);
       expect(allocation.allocationId).toBe(row!.allocation_key);
-      const block = allocation.reservationEvidence.block.payload;
-      expect(block.custodianId).toBe("waitron-throwaway-preproduction");
-      expect(block.recipientVenueId).toBe("throwaway-preproduction");
-      expect(block.generationId).toMatch(throwawayId);
-      expect(block.blockId).toMatch(throwawayId);
-      expect(new Set([row!.allocation_key, block.generationId, block.blockId]).size).toBe(3);
-      expect(allocation.reservationEvidence.consumption.payload).toMatchObject({
-        sourceId: "throwaway-preproduction",
-        incidentEvidence: "throwaway-preproduction-allocation",
-      });
+      expect(allocation.reservationEvidence).toBeNull();
+      expect(JSON.stringify(allocation)).not.toMatch(/signature|custodian|generationId|blockId/);
       expect(prepared.sourceId).toBe("throwaway-preproduction");
       expect(approval).toMatchObject({
         sourceId: "throwaway-preproduction",
         incidentEvidence: "throwaway-preproduction-allocation",
       });
-      // Unchanged on purpose: these reach AEAT or the unchanged validation.
       expect(allocation).toMatchObject({
-        source: "initial-paper",
+        source: "hour",
         environment: "preproduction",
-        installationIdentity: "S000001",
+        installationIdentity: "06RB",
       });
       const sif = suite.db.all(sql`select * from registro_sif`);
       expect(sif).toHaveLength(1);

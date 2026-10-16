@@ -10,6 +10,11 @@ import {
 } from "./operation-input.js";
 
 export interface ModuleOperationHost {
+  readSetupFacts?(binding: OperationBinding): Promise<{
+    readonly context: InitialSetupContext;
+    readonly contextKey: string;
+    readonly localHistory: unknown;
+  }>;
   withPreparationState?<T>(
     binding: OperationBinding,
     run: (state: {

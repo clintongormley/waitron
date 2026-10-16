@@ -21,6 +21,10 @@ export interface InitialSetupImport {
 }
 
 export interface InitialSetupContribution {
+  localHistory?(
+    tx: Transaction,
+    environment: "production" | "preproduction" | null,
+  ): Promise<unknown>;
   retainedAssignments?(evidence: unknown): {
     readonly keys: readonly string[];
     readonly positions: readonly { namespace: string; position: number }[];

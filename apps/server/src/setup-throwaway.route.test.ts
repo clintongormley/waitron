@@ -28,6 +28,12 @@ import { createSetupOperationStore } from "./setup-operation.js";
 type Mode = "demo" | "prepare" | "live";
 type Box = { environment: DeploymentEnvironment; devMode: boolean };
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
+});
+afterEach(() => vi.useRealTimers());
+
 const PRODUCTION_BOX: Box = { environment: "production", devMode: false };
 const PREPRODUCTION_BOX: Box = { environment: "preproduction", devMode: false };
 const DEV_BOX: Box = { environment: "preproduction", devMode: true };
@@ -303,7 +309,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   /** Cell 12's facts, for a venue stamped `environment`. */
   function expectThrowawayVenue(environment: string) {
     expect(venueDb.db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
-      { numero_instalacion: "S000001" },
+      { numero_instalacion: "06RB" },
     ]);
     expect(
       venueDb.db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
@@ -315,9 +321,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       },
     ]);
     expect(venueDb.db.all(sql`select code, purpose from invoice_series order by code`)).toEqual([
-      { code: "A-S000001", purpose: "standard" },
-      { code: "FF-S000001", purpose: "full" },
-      { code: "R-S000001", purpose: "rectificative" },
+      { code: "A-06RB", purpose: "standard" },
+      { code: "FF-06RB", purpose: "full" },
+      { code: "R-06RB", purpose: "rectificative" },
     ]);
     expect(venueDb.db.all(sql`select environment from deployment`)).toEqual([{ environment }]);
   }

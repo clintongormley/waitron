@@ -815,6 +815,7 @@ async function bootServer(
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
+    database: () => db,
     environment: env,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
