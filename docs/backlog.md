@@ -1572,6 +1572,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
   themes that this combination reads well. Left open by A720.
 
+- **The day box should re-place itself when its content changes.** `calendar-day-box` places itself
+  only when `show()` is called, so each host (Opening hours' `placeDayBox`, Staffing's month) must
+  wait for every pending redraw first; A720 Part 5's first version placed it one redraw early, off
+  screen. Have the box re-place itself while open whenever its own content changes. Left open by A720.
+
 - **An ignored `to` stays in the address bar.** A special-day address whose `to` is earlier than
   its date, malformed, or more than 365 days after it opens the new day on its first date alone
   (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`. Left
