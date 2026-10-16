@@ -162,10 +162,11 @@ export class OpeningHoursMonthView extends LitElement {
       .day[aria-pressed="true"] {
         box-shadow: 0 0 0 var(--wt-field-line-width-active) var(--wt-color-text);
       }
+      /* Beside today's inner ring a picked ring of the same width reads as one thicker ring. */
       .day[aria-pressed="true"][aria-current="date"] {
         box-shadow:
           inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary),
-          0 0 0 var(--wt-field-line-width-active) var(--wt-color-text);
+          0 0 0 calc(var(--wt-field-line-width-active) * 2) var(--wt-color-text);
       }
       button.day:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);

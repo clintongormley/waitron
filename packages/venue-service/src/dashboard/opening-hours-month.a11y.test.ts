@@ -96,6 +96,36 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     await expectNoA11yViolations(host);
   });
 
+  // Today's inner ring would hide a picked ring as thin as its own, so a picked today's is twice
+  // as wide; the ring is read against the page, which is what lies outside the date.
+  test("a picked today's outer ring is twice a picked day's, and stands out from the page", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, { model: monthModel(), departments: DEPARTMENTS });
+    host.append(el);
+    await el.updateComplete;
+    const day = (date: string) => `opening-hours-month td[data-date="${date}"] button.day`;
+    await commands.mouseDrag([day("2026-12-29"), day("2026-12-31")]);
+    await commands.parkPointer();
+    await el.updateComplete;
+    const shadow = (date: string) =>
+      getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(`[data-date="${date}"] .day`)!)
+        .boxShadow;
+    const outer = /^(rgba?\([^)]*\)) 0px 0px 0px (\d+)px$/;
+    const picked = outer.exec(shadow("2026-12-29"))!;
+    const today = outer.exec(
+      shadow("2026-12-30")
+        .split(/,\s*(?=rgb)/)
+        .at(-1)!,
+    )!;
+    expect(shadow("2026-12-30")).toContain("inset");
+    expect(Number(today[2])).toBe(2 * Number(picked[2]));
+    expect(today[1]).toBe(picked[1]);
+    expect(contrastRatio(today[1]!, getComputedStyle(host).backgroundColor)).toBeGreaterThanOrEqual(
+      3,
+    );
+  });
+
   test.each(Object.keys(states))("%s", async (state) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");
