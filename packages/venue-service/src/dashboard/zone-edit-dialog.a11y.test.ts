@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import {
@@ -46,6 +47,28 @@ describe.each(["light", "dark"] as const)("zone editor accessibility in %s", (th
       await expectNoA11yViolations(app);
     } finally {
       finish?.();
+    }
+  });
+  it.each([
+    ["en", 390],
+    ["en", 1280],
+    ["es", 390],
+    ["es", 1280],
+  ] as const)("%s at %i stays inside the viewport", async (locale, width) => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, 1100);
+      setLocale(locale);
+      const { el, app } = await mountZoneEditor(undefined, theme);
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      expect(window.innerWidth).toBe(width);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      expect(
+        el.shadowRoot!.querySelector("wt-form-actions")!.getBoundingClientRect().bottom,
+      ).toBeLessThan(1100);
+      await expectNoA11yViolations(app);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
     }
   });
 });

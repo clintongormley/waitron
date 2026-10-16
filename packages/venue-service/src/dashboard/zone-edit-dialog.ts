@@ -10,26 +10,15 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
-  type PreviewTable,
 } from "@waitron/ui";
-import {
-  placedTables,
-  type VenueServiceApi,
-  type VenueServiceView,
-  type ZoneEditInput,
-  type ZoneFloorPlan,
-} from "./client.js";
+import type { VenueServiceApi, VenueServiceView, ZoneEditInput } from "./client.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
-import type { OpeningHoursModel } from "../menu-timetable-types.js";
-import { seasonPainterPath } from "./opening-hours-paths.js";
-import { zoneClosedWeek } from "./zone-closed-week.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "./service-settings-fields.js";
-import "@waitron/ui/src/components/wt-floor-plan-preview.js";
 
 const copy = (value: ZoneEditInput): ZoneEditInput => ({ ...value });
 const equal = (a: ZoneEditInput, b: ZoneEditInput) =>
@@ -46,28 +35,11 @@ export class ZoneEditDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      a {
-        color: var(--wt-color-primary-text);
-      }
-      a:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      p {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-      .muted {
-        color: var(--wt-color-text-muted);
-      }
-      .zone-context {
-        display: grid;
-        gap: var(--wt-space-2);
-      }
       .form {
         display: grid;
         gap: var(--wt-space-4);
         min-width: 0;
+        max-inline-size: var(--wt-field-max-width);
       }
     `,
   ];
@@ -81,17 +53,6 @@ export class ZoneEditDialog extends LitElement {
   @state() private dismissed = false;
   @state() private refused: Partial<Record<Field, string>> = {};
   @state() private failure = "";
-  @state() private plan?: ZoneFloorPlan;
-  @state() private planFailed = false;
-  @state() private hours?: OpeningHoursModel;
-  @state() private hoursFailed = false;
-  private planDetach?: () => void;
-  private planApi?: VenueServiceApi;
-  private planZone?: string;
-  private previewOf?: ZoneFloorPlan;
-  private previewTables: PreviewTable[] = [];
-  private hoursDetach?: () => void;
-  private hoursApi?: VenueServiceApi;
   private opened = "";
   private source?: ZoneEditInput;
   private baseline?: ZoneEditInput;
@@ -114,12 +75,6 @@ export class ZoneEditDialog extends LitElement {
   }
   override disconnectedCallback() {
     this.shadowRoot?.querySelector("wt-modal")?.closeAfter("security");
-    this.watchPlan(undefined, undefined);
-    this.hoursDetach?.();
-    this.hoursDetach = undefined;
-    this.hoursApi = undefined;
-    this.hours = undefined;
-    this.hoursFailed = false;
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -140,27 +95,6 @@ export class ZoneEditDialog extends LitElement {
   }
   protected override willUpdate() {
     const row = this.zone;
-    if (this.isConnected) {
-      this.watchPlan(this.api, row?.id);
-      if (this.api !== this.hoursApi) {
-        this.hoursDetach?.();
-        this.hoursApi = this.api;
-        this.hours = undefined;
-        this.hoursFailed = false;
-        this.hoursDetach = this.api?.openingHours?.watchOpeningHours(
-          (model) => {
-            this.hours = model;
-            this.hoursFailed = false;
-          },
-          () => {
-            this.hoursFailed = true;
-          },
-          () => {
-            this.hoursFailed = false;
-          },
-        );
-      }
-    }
     if (!row) {
       const gone = this.opened === this.zoneId && !this.dismissed;
       this.scope?.dispose();
@@ -222,45 +156,6 @@ export class ZoneEditDialog extends LitElement {
       this.draft = copy(source);
       this.scope.commit(source);
     }
-  }
-  private watchPlan(api: VenueServiceApi | undefined, zoneId: string | undefined) {
-    if (api === this.planApi && zoneId === this.planZone) return;
-    this.planDetach?.();
-    this.planDetach = undefined;
-    this.planApi = api;
-    this.planZone = zoneId;
-    this.plan = undefined;
-    this.planFailed = false;
-    if (!api || zoneId === undefined) return;
-    this.planDetach = api.watchZoneFloorPlan(
-      zoneId,
-      (plan) => {
-        this.plan = plan;
-        this.planFailed = false;
-      },
-      () => {
-        this.planFailed = true;
-      },
-      () => {
-        this.planFailed = false;
-      },
-    );
-  }
-  private floorPlan(zone: { id: string; name: string }) {
-    if (this.plan !== this.previewOf) {
-      this.previewOf = this.plan;
-      this.previewTables = placedTables(this.plan?.tables ?? []);
-    }
-    const empty = this.plan !== undefined && this.previewTables.length === 0;
-    return html`${this.planFailed ? html`<p role="alert" data-test="floor-plan-error">${t("venue.floor_plan_load_error")}</p>` : nothing}
-      ${this.previewTables.length ? html`<wt-floor-plan-preview .tables=${this.previewTables} label=${t("venue.zone_floor_plan_preview").replace("{zone}", zone.name)}></wt-floor-plan-preview>` : nothing}
-      <p>
-        <a
-          data-test="zone-floor-plan"
-          href=${`/manage/floor-plan/zone/${encodeURIComponent(zone.id)}?back=${encodeURIComponent("/manage/venue-operations")}`}
-          >${t(empty ? "venue.zone_add_floor_plan" : "venue.zone_floor_plan")}</a
-        >
-      </p>`;
   }
   private current(id: string, generation: object) {
     return this.isConnected && this.zone?.id === id && this.generation === generation;
@@ -403,24 +298,6 @@ export class ZoneEditDialog extends LitElement {
               if (current()) this.changed("name", event.detail.value);
             }}
           ></wt-input>
-          <div class="zone-context">
-            ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
-            <p class="muted" data-test="closed-week-summary">
-              ${zoneClosedWeek(this.hours, zone.departmentId, zone.id)}
-            </p>
-            <p>
-              <a
-                data-test="zone-opening-hours"
-                href=${seasonPainterPath({
-                  seasonId: this.hours?.currentSeasonId ?? undefined,
-                  departmentId: zone.departmentId,
-                  zoneId: zone.id,
-                })}
-                >${t("venue.zone_opening_hours")}</a
-              >
-            </p>
-            ${this.floorPlan(zone)}
-          </div>
           <dashboard-service-settings-fields
             .value=${this.draft}
             .follows=${follows}
