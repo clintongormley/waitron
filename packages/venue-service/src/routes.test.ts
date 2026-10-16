@@ -3973,3 +3973,77 @@ describe("department description setup in the live model", () => {
     },
   );
 });
+
+it("A724: the station planning route returns last orders with its period end offset", async () => {
+  const f = await fixture();
+  const expected = await withTransaction(db, async (tx) => {
+    const cfg = { locationId: f.locationId };
+    const departmentId = (await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }))
+      .id;
+    await configureZone(tx, cfg, { zoneId: f.zoneId, departmentId });
+    const product = await createProduct(tx, {
+      catalogueId: f.menuId,
+      name: randomUUID(),
+      categoryId: f.categoryId,
+      pricingUnit: "each",
+      unitPrice: "3",
+      vatClass: "general",
+    });
+    await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
+    const periodId = (
+      await saveMenuPeriod(
+        tx,
+        cfg,
+        departmentId,
+        {
+          name: "Lunch",
+          menuId: f.menuId,
+          staffMenuIds: [],
+          colour: "blue",
+          endOffsetMinutes: -30,
+        },
+        0,
+      )
+    ).id;
+    const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
+    await replaceMenuWeek(
+      tx,
+      cfg,
+      departmentId,
+      Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
+      new Date("2026-10-10T10:00:00Z"),
+      0,
+    );
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ ...cfg, name: "Cocktails" })
+      .returning();
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
+      { kind: "station", stationId: station!.id },
+    );
+    return {
+      stationId: station!.id,
+      departmentId,
+      ranges: [{ periodId, startsAt: "12:00", endsAt: "15:30" }],
+    };
+  });
+  const response = await send(
+    f.app,
+    "GET",
+    `/management-api/venue-service/stations/${expected.stationId}/service-times?from=2026-10-12&to=2026-10-12`,
+    f.supervisorCookie,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    always: null,
+    days: [
+      {
+        date: "2026-10-12",
+        departments: [{ departmentId: expected.departmentId, ranges: expected.ranges }],
+      },
+    ],
+  });
+});

@@ -1,20 +1,12 @@
-import { and, eq, sql } from "drizzle-orm";
-import { kitchenStations, products, type Transaction } from "@waitron/db";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
+import { and, eq } from "drizzle-orm";
+import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
 import { addDays, isLocalDate } from "./hours-rules.js";
-import { readDayPlan, resolveDepartmentsDays, resolveZoneClosedDays } from "./day-resolver.js";
-import { readActiveDepartments, readActivePeriods } from "./menu-timetable.js";
-import { readSeasons } from "./seasons.js";
-import { readServiceZones } from "./zone-closed-times.js";
-import { periodProductIds } from "./routing-periods.js";
-import { loadRoutingRules } from "./routing-store.js";
-import { selectRoutingCell } from "./routing.js";
-import { rangeSpan, rangeSpanInDay, type ServiceRange, type ClosedRange } from "./service-day.js";
-import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
+import type { ServiceRange } from "./service-day.js";
+import { readPlannedServiceGuides } from "./planned-service-guides.js";
 import "./errors.js";
 
 export interface StationServiceDay {
@@ -24,47 +16,6 @@ export interface StationServiceDay {
 export interface StationServiceTimes {
   readonly always: "default" | null;
   readonly days: readonly StationServiceDay[];
-}
-
-type Span = { start: number; end: number };
-function plannedSpan(
-  range: ClosedRange,
-  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
-): Span {
-  const span = rangeSpanInDay(range, context);
-  return { ...span, end: Math.min(span.end, context.endMinute) };
-}
-function subtract(
-  range: Span,
-  closed: readonly ClosedRange[],
-  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
-): Span[] {
-  let shares = [range];
-  for (const closure of closed) {
-    const { start, end } = plannedSpan(closure, context);
-    shares = shares.flatMap((share) => {
-      if (end <= share.start || start >= share.end) return [share];
-      return [
-        ...(start > share.start ? [{ start: share.start, end: start }] : []),
-        ...(end < share.end ? [{ start: end, end: share.end }] : []),
-      ];
-    });
-  }
-  return shares;
-}
-function union(shares: Span[]): Span[] {
-  const joined: Span[] = [];
-  for (const share of shares.sort((a, b) => a.start - b.start || a.end - b.end)) {
-    const last = joined[joined.length - 1];
-    if (last && share.start <= last.end) last.end = Math.max(last.end, share.end);
-    else joined.push({ ...share });
-  }
-  return joined;
-}
-function timeAt(minute: number, cutover: string): string {
-  const [hour, minuteOfHour] = cutover.split(":").map(Number);
-  const clock = (hour! * 60 + minuteOfHour! + minute) % 1440;
-  return `${String(Math.floor(clock / 60)).padStart(2, "0")}:${String(clock % 60).padStart(2, "0")}`;
 }
 
 export async function stationServiceTimes(
@@ -93,105 +44,18 @@ export async function stationServiceTimes(
   if (!station) throw new AppError("station.not_found", { stationId });
   if (station.isDefault) return { always: "default", days: [] };
 
-  // Planning excludes daily station overrides and kept-open extensions.
   const clock = await readLocationClock(tx, cfg.locationId);
-  const periods = await readActivePeriods(tx, cfg);
-  const zones = await readServiceZones(tx, cfg);
-  const departments = (await readActiveDepartments(tx, cfg)).map((department) => ({
-    id: department.id,
-    periods: periods.filter((period) => period.departmentId === department.id),
-    zones: zones.filter((zone) => zone.departmentId === department.id),
-  }));
-  const seasons = await readSeasons(tx, cfg);
-  const offered = await periodProductIds(tx, periods);
-  const productRows = await tx
-    .select({
-      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
-      categoryId: effectiveProductColumns.categoryId,
-    })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(eq(products.active, true));
-  const base = await loadRoutingRules(tx, cfg, null);
-  const rules = {
-    ...base,
-    zoneDepartment: new Map(
-      departments.flatMap((department) =>
-        department.zones.map((zone) => [zone.id, department.id] as const),
-      ),
-    ),
-  };
-  const reaches = new Map<string, Set<string>>();
-  for (const department of departments) {
-    for (const period of department.periods) {
-      const productIds = new Set(offered.get(period.id)!);
-      const facts = productRows.filter((product) => productIds.has(product.routedId));
-      const zones = new Set<string>();
-      for (const zone of department.zones) {
-        if (
-          facts.some((product) => {
-            const target = selectRoutingCell(
-              rules,
-              { kind: "product", productId: product.routedId },
-              zone.id,
-              product.categoryId,
-              { periods: new Map([[department.id, period.id]]) },
-            ).target;
-            return target?.kind === "station" && target.stationId === stationId;
-          })
-        )
-          zones.add(zone.id);
-      }
-      reaches.set(period.id, zones);
-    }
-  }
   const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
-  const plan = await readDayPlan(tx, cfg, dates, seasons);
-  const departmentDays = await resolveDepartmentsDays(
-    tx,
-    cfg,
-    departments.map((department) => department.id),
+  const guides = await readPlannedServiceGuides(tx, cfg, [stationId], {
+    kind: "dates",
     dates,
     clock,
-    plan,
-  );
-  const zoneDays = await resolveZoneClosedDays(
-    tx,
-    cfg,
-    departments.flatMap((department) => department.zones.map((zone) => zone.id)),
-    dates,
-    clock,
-    plan,
-  );
-  const days: StationServiceDay[] = [];
-  for (const date of dates) {
-    const context = serviceDayWallContext(clock, date);
-    const cutover = context.dayCutover;
-    const results: StationServiceDay["departments"][number][] = [];
-    for (const department of departments) {
-      const slots = departmentDays.get(department.id)!.get(date)!.ranges;
-      const byPeriod = new Map<string, Span[]>();
-      for (const slot of slots) {
-        const shares = byPeriod.get(slot.periodId) ?? [];
-        for (const zone of department.zones) {
-          if (!reaches.get(slot.periodId)?.has(zone.id)) continue;
-          const closed = zoneDays.get(zone.id)!.get(date)!;
-          shares.push(...subtract(plannedSpan(slot, context), closed, context));
-        }
-        byPeriod.set(slot.periodId, shares);
-      }
-      const ranges = [...byPeriod]
-        .flatMap(([periodId, shares]) =>
-          union(shares).map(({ start, end }) => ({
-            periodId,
-            startsAt: timeAt(start, cutover),
-            endsAt: timeAt(end, cutover),
-          })),
-        )
-        .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
-      if (ranges.length > 0) results.push({ departmentId: department.id, ranges });
-    }
-    days.push({ date, departments: results });
-  }
-  return { always: null, days };
+  });
+  return {
+    always: null,
+    days: dates.map((date) => ({
+      date,
+      departments: guides.stationRanges.get(stationId)!.get(date)!,
+    })),
+  };
 }
