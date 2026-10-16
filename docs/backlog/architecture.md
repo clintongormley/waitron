@@ -5,8 +5,17 @@ their full text.
 
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
-- **A646 — owner, 2026-10-14; open; needs a design (brainstorm and spec) before a plan; not
-  queued.** The owner asked for a system section where an administrator installs and configures
+- **A646 — owner, 2026-10-14; OPEN; DESIGN PROPOSED, awaiting owner agreement (2026-10-16).**
+  [Proposed design](../superpowers/specs/2026-10-16-a646-modules-page-design.md), not an approved
+  decision or an implementation plan. [Static mockups](mockups/a646-modules-page/README.md) illustrate the proposal. Build waits for owner design agreement and A739/A764 to land. The
+  first independent build PR must repair retained disabled-module append-only protection before
+  any UI toggle; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+  The author proposes Settings > Modules, Google as an optional module, card providers as
+  contributions within Payments, separate applied/desired revisions and bounded runtime refusals.
+  The spec holds the single owner question, worked examples, build boundaries and uncertainties.
+
+  **Original request and reading receipts, retained from 2026-10-14:** The owner asked for a system
+  section where an administrator installs and configures
   optional modules, starting from the Profile → Security tab's Google login row, which today only
   says "Google login becomes available when it is configured for this installation."
 
@@ -35,7 +44,7 @@ their full text.
   3. SumUp and Stripe are set up from that page too. Card payments links to the list, filtered to
      card providers.
 
-  **What the design must settle:**
+  **Original design questions (the linked proposal awaits agreement):**
   - **How a switch takes effect.** Boot picks the modules it migrates and protects from the module
     configuration (`apps/server/src/boot.ts`), so today a change takes effect only on the next
     start. Either the page asks for a restart, or switching applies a module's migrations and
