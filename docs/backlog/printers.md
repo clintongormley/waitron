@@ -560,8 +560,8 @@ gets longer, so we should just make it look good with the date on its own line".
   description is read, never by writing one at creation (A662 plan, 2026-10-16).** Existing
   departments get it with no data migration. A stored description `parseReceipt`
   (`packages/venue-service/src/department-receipts.ts`) cannot use — blank, over 500 characters,
-  or holding a control character — counts as none, so a sale files the default rather than being
-  refused; the dialog, the Departments warning and the printed receipt already read it as absent.
+  or holding a character below U+0020 other than a tab, carriage return or line feed — counts as
+  none, so a sale files the default rather than being refused; the dialog, the Departments warning and the printed receipt already read it as absent.
 
 - **TOTAL is printed double size with no asesor question (owner, 2026-10-14).** Orden HAC/1177/2024
   art. 20.1.b asks for the VERI\*FACTU phrase in «un tipo de letra y tamaño bien visibles, similares

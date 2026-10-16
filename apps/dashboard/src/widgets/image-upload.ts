@@ -37,8 +37,8 @@ export interface ImageUploader {
  *
  * As a `logo` it is the receipt's logo, in the box it prints in on 80 mm paper at 203 dpi (sharp
  * fits every logo inside it, enlarging a small one), with Remove beside it; with none, one
- * "+ Add a logo" box. Either button opens the picker, and focus comes back to it when the picker
- * closes.
+ * "+ Add a logo" box. The picture, or the "+ Add a logo" box, opens the picker; when the picker
+ * closes, focus goes to whichever of the two is then drawn.
  */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {

@@ -3926,7 +3926,7 @@ describe("department description setup in the live model", () => {
     JSON.stringify({ operationDescription: "x".repeat(501) }),
     JSON.stringify({ operationDescription: "bad\u0001text" }),
   ])(
-    "reports missing or unreadable department description %j only when the installed field requires it",
+    "reports missing or unreadable department description %j only when the installed field requires it and offers no default",
     async (receipt) => {
       const fx = await fixture(true);
       const department = await withTransaction(db, (tx) =>

@@ -1,7 +1,9 @@
 # A662 — Tidy the Edit receipt dialog, and a default tax-agency description
 
 Spec: backlog entry A662 (`docs/backlog.md`) and its detail in `docs/backlog/printers.md`
-("## A662 — tidy the Edit receipt dialog, and a default tax-agency description"), mockup
+("## A662 — tidy the Edit receipt dialog, and a default tax-agency description"; both deleted
+when A662 landed, read them with `git show 4d498fe9c:docs/backlog.md` and
+`git show 4d498fe9c:docs/backlog/printers.md`), mockup
 `docs/backlog/mockups/a662-edit-receipt/1-logo.png`. Five points, quoted where they decide
 something below. Queue constraints: "Point 1 is a sale-path change: keep the refusal for any case
 the owner did not name, assert the domain code where it still applies, and run the fiscal gates
@@ -87,8 +89,8 @@ is a default rather than a fix to the import.
   Departments screen's handling of the code stay, reachable in the no-default case.
 - **A stored value that cannot be used counts as none — a departure to name in the PR.** The
   queue says "keep the refusal for any case the owner did not name"; a stored but unusable
-  description (non-text, over 500 characters, a control character) is such a case, and it now
-  files the default instead of being refused. Chosen because `parseReceipt`
+  description (non-text, over 500 characters, a character below U+0020 other than a tab, carriage
+  return or line feed) is such a case, and it now files the default instead of being refused. Chosen because `parseReceipt`
   (`department-receipts.ts:113-121`) already reads every such value as absent, for the dialog, the
   warning and the printed receipt alike; keeping a refusal for it alone would add a second
   "stored but unusable" state to the venue-service read contract (`module.ts`). What the writers

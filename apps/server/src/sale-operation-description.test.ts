@@ -147,7 +147,7 @@ describe("department operation description", () => {
     expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBe("Retained meals");
   });
   it.each([undefined, "", " \t\n ", 7, ["Deli meals"], "x".repeat(501), "Bad\u0000text"])(
-    "refuses missing/invalid authored description %j without another department fallback",
+    "refuses missing/invalid authored description %j when no default is offered, without another department fallback",
     async (operationDescription) => {
       const f = await fixture();
       await authored(f.primary, operationDescription === undefined ? {} : { operationDescription });

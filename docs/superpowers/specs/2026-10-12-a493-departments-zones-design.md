@@ -3,6 +3,12 @@
 > **2026-10-15 — A685:** The missing-department case now answers `sale.department_missing`;
 > see `apps/server/src/sale-operation-description.ts` and its sibling tests. An existing
 > department without a description still answers `department.operation_description_required`.
+>
+> **2026-10-16 — A662:** When the installed fiscal module offers a default description (Veri\*Factu's
+> “Venta en establecimiento”), a department without a usable description of its own files that
+> default, Edit receipt opens with it filled in, and the Departments list does not ask for one;
+> `department.operation_description_required` answers only when no default is offered. Current
+> contract: `docs/developers/design-system.md`, Edit receipt, and `docs/developers/products.md`.
 
 > **2026-10-16 — A718:** Edit receipt and the floor-plan link left the row menus for the list's
 > Also edit column; the list has no column picker; the zone editor no longer shows the closed-times
