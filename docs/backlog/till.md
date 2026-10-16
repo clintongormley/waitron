@@ -441,15 +441,14 @@ work here is the inline Made of picker and how its parts wrap.
 
 **Left open by A672 (2026-10-16).** A table's saved x and y are its corner before it is turned, and
 neither goes below 0 (`stepInside`, `packages/ui/src/floor-plan-geometry.ts`; `checkPlacement`,
-`apps/server/src/floor-plan.ts`). So a table that is narrower turned than unturned, such as an
-8 × 4 turned 90°, stops with a gap at the plan's left or top edge (2 squares for that table), and
-growing it there can slide it a little away from that edge, by an amount that depends on its size
-and turn. At that edge a growth of several squares can end differently from the same growth a
-square at a time, and a growth then the same shrink need not put the table back
-(`packages/ui/src/floor-plan-geometry.test.ts`, "is not reversible square for square at the
-edge"). Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a
-saved position go below 0 so the turned outline can touch the edge and grow without sliding, a
-separate job in which the database and the server accept a wider range. Pictures:
+`apps/server/src/floor-plan.ts`). So a table that is narrower turned than unturned, such as an 8 × 4
+turned 90°, stops with a gap at the plan's left or top edge (2 squares for that table). At that edge
+a growth of several squares can end differently from the same growth a square at a time, and a
+growth then the same shrink need not put the table back
+(`packages/ui/src/floor-plan-geometry.test.ts`, "is not reversible square for square at the edge").
+Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a saved
+position go below 0 so the turned outline can touch the edge, a separate job in which the database
+and the server accept a wider range. Pictures:
 [keep the gap](mockups/a672-floor-plan-canvas/q4-a-keep-gap.png),
 [below 0](mockups/a672-floor-plan-canvas/q4-b-below-zero.png). Next: the owner's answer.
 
@@ -1581,7 +1580,8 @@ grey filled for a joined table's parts. Only the square changes placement; a pla
 selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
 Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and
 [a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
-handles were built by A672. The current contract is in
+handles belong to A672. (2026-10-16, A672: those corner handles are now built; the A672 entry is
+deleted.) The current contract is in
 [design-system.md](../developers/design-system.md#departments-and-zones).
 
 
@@ -2191,8 +2191,8 @@ the server cheaply whether it changed.
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
   scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
-- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots are hidden from
-  assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
+- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots and corners are
+  hidden from assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
   cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
 - **Small floor plan canvas details:** `reveal` does not count the side dots or the corners. Left open by A466 (A429 slice 2) / A502 part 3.
 

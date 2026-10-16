@@ -691,6 +691,7 @@ at the original scale is at least 28 px, and is always its accessible name, with
 click on a table or on empty grid sends `wt-table-select`, and the parent decides by setting
 `selected`. Dragging a table, or an arrow key on a focused one, sends `wt-table-move`
 (`{ key, x, y }`) once, in whole squares; the grid grows while a table is dragged right or down.
+
 **The top and left edge.** x and y never go below 0, and a turned table stops where its drawn
 outline meets the plan's top or left edge: at the least whole x and y at which it does not poke
 past it (`stepInside`, `packages/ui/src/floor-plan-geometry.ts`), so less than a square from the
@@ -724,7 +725,9 @@ Every selected table shows a corner (`resize-corner`, a filled `--wt-color-prima
 `--wt-space-3` across) on each of its own four corners, and a side dot (`resize-dot`,
 `--wt-space-3` across, a `--wt-color-primary` border on `--wt-color-surface`, filled
 `--wt-color-primary` while dragged) at the midpoint of each of its own sides at least 4 squares
-long, judged from the table's placement before a drag: a 2 × 2 shows its four corners and no dots.
+long, judged from the placement the parent set, never the drag's draft: the canvas does not change
+that placement during a drag, so a drag alone never makes a dot vanish under the pointer. A 2 × 2
+shows its four corners and no dots.
 Each is pressed through a `--wt-space-5` round area centred on it (`resize-handle` for a dot,
 `resize-corner-handle` for a corner) drawn under the table's button: where they overlap the table
 takes the press, so a selected table of any size can still be dragged, and a dot or corner is
@@ -737,7 +740,8 @@ direction, and keeps the opposite corner's x and y each within half a square (`r
 Width and height stay 1–99. Where keeping that point would put the table past the plan's top or
 left edge, or x or y below 0, the table steps right or down by the fewest whole squares that keep
 it inside, or no further past the edge than it began; a growth whose exact placement would cross
-the edge stops at the largest that would not, and a shrink is always taken. So at the edge a growth
+the edge, or go further past it than the table began, stops at the largest that would not, and a
+shrink is always taken. So at the edge a growth
 and its reverse need not put the table back. The release sends one `wt-table-resize`
 (`{ key, x, y, width, height }`) if the box changed. Shift
 with an arrow key on the focused selected table does the same from the keyboard, a square a press:

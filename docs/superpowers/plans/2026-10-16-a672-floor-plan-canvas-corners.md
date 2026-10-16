@@ -200,10 +200,11 @@ Throwaway probes, kept outside the repository in `~/waitron-campaign-b/a672-prob
   steps right or down by the fewest whole squares that keep it inside." In practice: under one
   square at the drawn edge (largest computed 0.933); and for a table with a gap at x 0 (or y 0),
   a slide away from the edge whose size depends on the table's size and turn, because x cannot go
-  below 0 (8 × 4 turned 90° at (0, 5): growing its down-facing side by 3 gives (0, 7), its drawn
-  left moving from 2 to 3.5, computed; growing its right-facing top side by 3 gives (2, 3) 8 × 7,
-  its drawn left moving from 2 to 2.5, measured 2026-10-16 with `resizeFrom`, so the slide is not
-  half the growth in general).
+  below 0. Measured 2026-10-16 with `resizeFrom`, each beside the same growth away from the edge:
+  an 8 × 4 turned 90° at (0, 5), its down-facing side grown 3, gives (0, 7) and its drawn left
+  moves from 2 to 3.5, where at (10, 5) it gives (8, 7) and moves from 12 to 11.5; a 10 × 1 turned
+  45° at (0, 10), its right side grown 4, gives (0, 11) and its drawn left moves from 1.11 to 1.70,
+  where at (20, 10) it gives (19, 11) and moves from 21.11 to 20.70.
   Today that table could not grow those sides at all (the reproduction above).
 - **At the edge, growth is not reversible square for square.** Away from the edge a growth and its
   reverse put the table back (today's `roundShift` promise, kept). At the edge they need not, and

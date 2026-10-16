@@ -2364,8 +2364,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a569-the-floor-plan-editors-made-of-picker-and-two-wraps)
 
 - **A turned floor plan table narrower than its unturned box stops short of the plan's left or top
-  edge.** Its saved x and y cannot go below 0, so it keeps a gap there and slides a little away as
-  it grows; owner question asked 2026-10-16, (a) keeping it so is built. Left open by A672.
+  edge.** An 8 × 4 turned 90° stops 2 squares from the left edge, because its saved corner cannot
+  go below 0. Owner question asked 2026-10-16; (a), keeping it so, is built. Left open by A672.
   [Detail](backlog/till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 
 - **A570. A table split off a joined table whose removal was refused cannot be moved
