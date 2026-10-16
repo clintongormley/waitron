@@ -20,6 +20,7 @@ import {
 } from "@waitron/shared";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
 import "./reader-picker.js";
@@ -60,7 +61,44 @@ export interface CollectCardDetail {
 export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
-export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
+export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>;
+
+const KEEP_CARD_REASONS = new Set(["lost_card", "stolen_card", "pickup_card"]);
+const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
+  ["insufficient_funds", "card.insufficient_funds"],
+  ["expired_card", "card.expired"],
+  ["incorrect_pin", "card.wrong_pin"],
+  ["invalid_pin", "card.wrong_pin"],
+  ["authentication_required", "card.authentication"],
+  ["authentication_not_handled", "card.authentication"],
+  ["card_velocity_exceeded", "card.limit"],
+  ["withdrawal_count_limit_exceeded", "card.limit"],
+  ["card_not_supported", "card.unsupported_purchase"],
+  ["currency_not_supported", "card.unsupported_currency"],
+  ["duplicate_transaction", "card.duplicate"],
+  ["incorrect_address", "card.wrong_address"],
+  ["incorrect_zip", "card.wrong_address"],
+  ["incorrect_cvc", "card.wrong_cvc"],
+  ["invalid_cvc", "card.wrong_cvc"],
+  ["incorrect_number", "card.wrong_number"],
+  ["invalid_number", "card.wrong_number"],
+  ["invalid_account", "card.invalid_account"],
+  ["new_account_information_available", "card.invalid_account"],
+  ["invalid_amount", "card.invalid_amount"],
+  ["invalid_expiry_month", "card.wrong_expiry"],
+  ["invalid_expiry_year", "card.wrong_expiry"],
+  ["issuer_not_available", "card.bank_no_answer"],
+  ["offline_pin_required", "card.pin_required"],
+  ["online_or_offline_pin_required", "card.pin_required"],
+  ["pin_try_exceeded", "card.pin_limit"],
+  ["processing_error", "card.processing_error"],
+  ["reenter_transaction", "card.processing_error"],
+  ["restricted_card", "card.not_permitted"],
+  ["not_permitted", "card.not_permitted"],
+  ["testmode_decline", "card.test_card"],
+  ["mobile_device_authentication_required", "card.mobile_authentication"],
+  ["customer_canceled", "card.cancelled"],
+]);
 
 const ZERO = decimal("0");
 
@@ -216,7 +254,7 @@ export class TillTenderPay extends LitElement {
   /** False on a device whose profile does not take cash: no Cash button, and a line saying where to
    * take it. */
   @property({ type: Boolean }) takesCash = true;
-  @property() cardOutcome?: CardOutcome;
+  @property({ attribute: false }) cardOutcome?: CardOutcome;
   /** Bumped by the app when no card attempt is still running, after any retry and any
    * kitchen-station question an attempt asks, whether or not it produced a {@link cardOutcome}. */
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -407,12 +445,6 @@ export class TillTenderPay extends LitElement {
     else select();
   }
 
-  /**
-   * Lit's default `hasChanged` (`!==`) means re-committing the SAME outcome is not a change, which
-   * is what lets Switch tender and Keep waiting leave {@link view} where the operator put it. A new
-   * attempt produces a fresh value because `till-app`'s `#collectCard` clears `cardOutcome`
-   * first.
-   */
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
       this.view = "card_outcome";
@@ -518,13 +550,12 @@ export class TillTenderPay extends LitElement {
   }
 
   #retryCard(): void {
+    if (
+      this.cardOutcome?.outcome === "declined" &&
+      KEEP_CARD_REASONS.has(this.cardOutcome.failureReason ?? "")
+    )
+      return;
     this.#collectCard(this.#lastCollectDetail);
-  }
-
-  /** The `POST /api/pay` this outcome came from has already resolved, so nothing is running to wait
-   * ON; this only puts the spinner back up. */
-  #wait(): void {
-    this.view = "collecting";
   }
 
   #onTipChange(event: Event): void {
@@ -988,22 +1019,37 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /** One message whichever of decline, timeout or network-unavailable it was — a deliberate
-   * single treatment. */
   #renderCardOutcome() {
+    const reason =
+      this.cardOutcome?.outcome === "declined" ? this.cardOutcome.failureReason : undefined;
+    const keepCard = KEEP_CARD_REASONS.has(reason ?? "");
+    const message =
+      this.cardOutcome?.outcome === "timeout" ||
+      this.cardOutcome?.outcome === "network_unavailable" ||
+      reason === "reader_unavailable"
+        ? t("card.no_answer")
+        : keepCard
+          ? t("card.keep_card")
+          : t(CARD_FAILURE_MESSAGES.get(reason ?? "") ?? "card.declined");
     return html`
       <div class="summary card-outcome">
-        <p class="prompt">${t("card.declined")}</p>
+        <p class="prompt" role="status">${message}</p>
       </div>
       <div class="actions">
-        <wt-button class="retry" variant="primary" size="lg" @click=${() => this.#retryCard()}>
-          ${t("card.retry")}
-        </wt-button>
+        ${
+          keepCard
+            ? nothing
+            : html`<wt-button
+                class="retry"
+                variant="primary"
+                size="lg"
+                @click=${() => this.#retryCard()}
+              >
+                ${t("card.retry")}
+              </wt-button>`
+        }
         <wt-button class="switch-tender" variant="secondary" @click=${() => this.#requestCancel()}>
-          ${t("card.switch_tender")}
-        </wt-button>
-        <wt-button class="wait" variant="secondary" @click=${() => this.#wait()}>
-          ${t("card.wait")}
+          ${t("card.cancel")}
         </wt-button>
       </div>
     `;

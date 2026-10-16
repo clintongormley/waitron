@@ -43,7 +43,7 @@ import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillStationScreen } from "./screens/till-station-screen.js";
-import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { CardOutcome, TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillEquipmentDialog } from "./widgets/equipment-dialog.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
@@ -9836,10 +9836,9 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
       expect(c.store.lines).toHaveLength(1);
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-      // `cardOutcome` is `private` (TS's `private` is compile-time only, so the cast through
-      // `unknown` still reads its real runtime value). `till-tender-pay`'s own tests cover the rendered
-      // retry/switch-tender/wait output, so this layer stays scoped to till-app's own state.
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
       // The held list is re-read only on a captured outcome — nothing settled here, so no re-read.
       expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
     });
@@ -9860,7 +9859,7 @@ describe("till-app", () => {
         expect(counter(el)).not.toBeNull();
         expect(c.store.lines).toHaveLength(1);
         expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-        expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe(outcome);
+        expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({ outcome });
       },
     );
 
@@ -9876,7 +9875,9 @@ describe("till-app", () => {
 
       emit(c, "collect-card", {}); // first — declines
       await flush(el);
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
 
       emit(counter(el)!, "collect-card", {}); // retry — captures
       await flush(el);
@@ -9896,7 +9897,9 @@ describe("till-app", () => {
 
       emit(c, "collect-card", {});
       await flush(el);
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
 
       // Switch tender instead of retrying the card: park the (still-declined) basket for later.
       emit(counter(el)!, "park-order", { label: "Mesa 4" });
@@ -9904,7 +9907,7 @@ describe("till-app", () => {
 
       // store.clear() re-minted a fresh id — this is now an UNRELATED next-customer basket, and it
       // must not show the previous basket's decline.
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toBeUndefined();
     });
 
     it("retrieve: a declined cardOutcome does not survive into a DIFFERENT retrieved order's basket", async () => {
@@ -9916,7 +9919,9 @@ describe("till-app", () => {
 
       emit(c, "collect-card", {});
       await flush(el);
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
 
       // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
       emit(counter(el)!, "retrieve-order", { id: "wo-1" });
@@ -9924,7 +9929,7 @@ describe("till-app", () => {
 
       // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
       // not this one.
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toBeUndefined();
       expect(c.store.id).toBe("wo-1");
     });
 
@@ -9942,13 +9947,17 @@ describe("till-app", () => {
 
       emit(c, "collect-card", {});
       await flush(el);
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
 
       emit(counter(el)!, "discard-order", { id: "some-other-held-order" });
       await flush(el);
 
       // The current basket (and its decline) is untouched — discard never reached `#store`.
-      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect((el as unknown as { cardOutcome?: CardOutcome }).cardOutcome).toEqual({
+        outcome: "declined",
+      });
       expect(c.store.id).toBe(declinedBasketId);
       expect(c.store.lines).toHaveLength(1);
     });
@@ -10523,6 +10532,43 @@ describe("till-app", () => {
       expect(tenderPay(el).tipsEnabled).toBe(true);
     });
 
+    it("carries a keep-card reason to the real counter widget and Cancel retains the unpaid basket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined", failureReason: "stolen_card" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale: "en-GB",
+          cardProvider: "stripe_terminal",
+          capabilities: [
+            "print-receipt",
+            "integrated-card-payment",
+            "take-cash",
+          ] as CapabilityFlag[],
+        }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "collect-card", {});
+      await flush(el);
+      const payWidget = tenderPay(el);
+      expect(payWidget.shadowRoot!.querySelector(".prompt")!.textContent).toBe(
+        "Card declined: the bank asks you to keep this card. Do not retry.",
+      );
+      expect(payWidget.shadowRoot!.querySelector(".retry")).toBeNull();
+      expect(payWidget.shadowRoot!.querySelector(".wait")).toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      payWidget.shadowRoot!.querySelector<HTMLElement>(".switch-tender")!.click();
+      await flush(el);
+      await vi.waitFor(() =>
+        expect(tenderPay(el).shadowRoot!.querySelector(".pay")).not.toBeNull(),
+      );
+      expect(c.store.lines).toHaveLength(1);
+      expect(ticket(el)).toBeNull();
+      expect(pay).toHaveBeenCalledOnce();
+    });
+
     it("threads a declined cardOutcome through to the widget, driving its card_outcome view", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({
@@ -10540,7 +10586,7 @@ describe("till-app", () => {
       emit(c, "collect-card", {});
       await flush(el);
 
-      expect(tenderPay(el).cardOutcome).toBe("declined");
+      expect(tenderPay(el).cardOutcome).toEqual({ outcome: "declined" });
       expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
     });
   });

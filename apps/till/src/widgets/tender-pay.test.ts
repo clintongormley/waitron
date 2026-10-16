@@ -1223,15 +1223,15 @@ describe("till-tender-pay", () => {
       expect(spy).not.toHaveBeenCalled(); // a client-side abort emits nothing
     });
 
-    it("a declined cardOutcome (driven purely by the prop) shows retry / switch-tender / wait", async () => {
+    it("a declined cardOutcome (driven purely by the prop) shows Retry and Cancel", async () => {
       const store = new WorkingOrderStore();
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
-        cardOutcome: "declined",
+        cardOutcome: { outcome: "declined" },
       });
       expect(query(el, ".retry")).not.toBeNull();
       expect(query(el, ".switch-tender")).not.toBeNull();
-      expect(query(el, ".wait")).not.toBeNull();
+      expect(query(el, ".wait")).toBeNull();
       expect(el.shadowRoot!.textContent).toContain(t("card.declined"));
     });
 
@@ -1246,7 +1246,7 @@ describe("till-tender-pay", () => {
       await typeTip(el, "0.50");
       click(el, ".pay-card");
       await el.updateComplete;
-      el.cardOutcome = "declined";
+      el.cardOutcome = { outcome: "declined" };
       await el.updateComplete;
       const spy = vi.fn();
       el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
@@ -1260,7 +1260,7 @@ describe("till-tender-pay", () => {
       const store = new WorkingOrderStore();
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
         store,
-        cardOutcome: "declined",
+        cardOutcome: { outcome: "declined" },
       });
       const spy = vi.fn();
       el.addEventListener("collect-card", spy);
@@ -1272,16 +1272,17 @@ describe("till-tender-pay", () => {
       expect(spy).not.toHaveBeenCalled();
     });
 
-    it("Wait returns to the collecting spinner, not idle", async () => {
-      const store = new WorkingOrderStore();
+    it("a completed decline stays on its outcome panel through an unrelated update", async () => {
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-        store,
-        cardOutcome: "declined",
+        store: new WorkingOrderStore(),
+        cardOutcome: { outcome: "declined" },
       });
-      click(el, ".wait");
+      el.requestUpdate();
       await el.updateComplete;
-      expect(query(el, ".collecting")).not.toBeNull();
-      expect(query(el, ".retry")).toBeNull();
+      expect(query(el, ".wait")).toBeNull();
+      expect(query(el, ".collecting")).toBeNull();
+      expect(query(el, ".retry")).not.toBeNull();
+      expect(query(el, ".switch-tender")).not.toBeNull();
     });
 
     it("a finished attempt with no card outcome takes the spinner back to the choices", async () => {
@@ -1330,7 +1331,7 @@ describe("till-tender-pay", () => {
       });
       click(el, ".pay-card");
       await el.updateComplete;
-      el.cardOutcome = "declined";
+      el.cardOutcome = { outcome: "declined" };
       await el.updateComplete;
       el.cardAttemptsOver = 1;
       await el.updateComplete;
@@ -1347,7 +1348,7 @@ describe("till-tender-pay", () => {
       });
       click(el, ".pay-card");
       await el.updateComplete;
-      el.cardOutcome = "timeout";
+      el.cardOutcome = { outcome: "timeout" };
       el.cardAttemptsOver = 1;
       await el.updateComplete;
       expect(query(el, ".retry")).not.toBeNull();
@@ -1607,7 +1608,7 @@ describe("till-tender-pay", () => {
       await el.updateComplete;
       click(el, ".pay-card");
       await el.updateComplete;
-      el.cardOutcome = "declined";
+      el.cardOutcome = { outcome: "declined" };
       await el.updateComplete;
       const spy = vi.fn();
       el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
