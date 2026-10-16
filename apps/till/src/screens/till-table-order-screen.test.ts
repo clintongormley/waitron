@@ -2937,7 +2937,7 @@ describe("till-table-order-screen", () => {
           name: "billId",
           value: "wo-4",
           checked: true,
-          label: `${billName(1)} ${t("table.bill_main")}`,
+          label: billName(1),
         },
         { name: "billId", value: "wo-check", checked: false, label: billName(2) },
         { name: "billId", value: "wo-part", checked: false, label: billName(5) },
@@ -3061,7 +3061,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(choices(el).map(({ value, checked, label }) => ({ value, checked, label }))).toEqual([
-        { value: "wo-4", checked: false, label: `${billName(1)} ${t("table.bill_main")}` },
+        { value: "wo-4", checked: false, label: billName(1) },
         { value: "wo-third", checked: false, label: billName(2) },
         {
           value: "wo-check",
@@ -3080,9 +3080,7 @@ describe("till-table-order-screen", () => {
       el.bills = [{ ...tabBill, status: "placed" }, checkBill, partlyPaidBill];
       await el.updateComplete;
 
-      expect(checkedChoice(el)).toEqual([
-        { value: "wo-check", label: `${billName(2)} ${t("table.bill_main")}` },
-      ]);
+      expect(checkedChoice(el)).toEqual([{ value: "wo-check", label: billName(2) }]);
       expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
     });
 
@@ -3094,9 +3092,7 @@ describe("till-table-order-screen", () => {
       sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-4"]')!.click();
       await el.updateComplete;
 
-      expect(checkedChoice(el)).toEqual([
-        { value: "wo-4", label: `${billName(1)} ${t("table.bill_main")}` },
-      ]);
+      expect(checkedChoice(el)).toEqual([{ value: "wo-4", label: billName(1) }]);
       expect(confirmPreview(el)!.detail.billId).toBe("wo-4");
     });
 
@@ -3127,9 +3123,7 @@ describe("till-table-order-screen", () => {
       el.bills = [paidBill, checkBill, tabBill];
       await el.updateComplete;
 
-      expect(checkedChoice(el)).toEqual([
-        { value: "wo-4", label: `${billName(3)} ${t("table.bill_main")}` },
-      ]);
+      expect(checkedChoice(el)).toEqual([{ value: "wo-4", label: billName(3) }]);
       expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
     });
   });

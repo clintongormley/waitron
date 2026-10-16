@@ -1319,7 +1319,6 @@ export const en = {
   "table.bills_title": "Bills",
   // `{party}` is the party's display name; `{n}` the bill's place in the list.
   "table.bill_of": "{party} · Bill {n}",
-  "table.bill_main": "New orders",
   "table.send_to": "Send to",
   "table.send_to_new": "A new bill",
   "table.send_to_not_open": "(no longer open)",
@@ -2863,7 +2862,6 @@ export const es: Record<StringKey, string> = {
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "table.bills_title": "Cuentas",
   "table.bill_of": "{party} · Cuenta {n}",
-  "table.bill_main": "Pedidos nuevos",
   "table.send_to": "Enviar a",
   "table.send_to_new": "Una cuenta nueva",
   "table.send_to_not_open": "(ya no está abierta)",

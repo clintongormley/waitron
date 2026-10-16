@@ -680,11 +680,6 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      .bill-main {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
       .bill-invoice {
         display: block;
         color: var(--wt-color-text-muted);
@@ -2038,7 +2033,7 @@ export class TillTableOrderScreen extends LitElement {
    * null when there is only one place to send to.
    */
   #sendToChoices(): {
-    choices: { value: string; label: string; main: boolean; closed: boolean }[];
+    choices: { value: string; label: string; closed: boolean }[];
     checked: string;
   } | null {
     const party = this.party;
@@ -2050,14 +2045,13 @@ export class TillTableOrderScreen extends LitElement {
             {
               value: bill.workingOrderId,
               label: this.#billName(index),
-              main: bill.workingOrderId === party.mainBillId,
               closed: bill.status !== "open",
             },
           ]
         : [],
     );
     if (chosen !== null && !choices.some((choice) => choice.value === chosen.value)) {
-      choices.push({ ...chosen, main: false, closed: true });
+      choices.push({ ...chosen, closed: true });
     }
     const openMain = this.#shownBills().find(
       (bill) =>
@@ -2066,7 +2060,7 @@ export class TillTableOrderScreen extends LitElement {
         bill.status === "open",
     );
     if (openMain === undefined) {
-      choices.unshift({ value: "", label: t("table.send_to_new"), main: false, closed: false });
+      choices.unshift({ value: "", label: t("table.send_to_new"), closed: false });
     }
     if (choices.length < 2) return null;
     return { choices, checked: chosen?.value ?? openMain?.workingOrderId ?? "" };
@@ -2099,11 +2093,7 @@ export class TillTableOrderScreen extends LitElement {
               }}
             />
             <span
-              >${choice.label}${
-                choice.main
-                  ? html` <span class="bill-main">${t("table.bill_main")}</span>`
-                  : nothing
-              }${choice.closed ? ` ${t("table.send_to_not_open")}` : nothing}</span
+              >${choice.label}${choice.closed ? ` ${t("table.send_to_not_open")}` : nothing}</span
             >
           </label>`,
       )}
@@ -3692,12 +3682,7 @@ export class TillTableOrderScreen extends LitElement {
       aria-current=${shown ? "true" : nothing}
     >
       <span
-        ><span class="bill-name">${this.#billName(index)}</span>${
-          bill.workingOrderId === this.party?.mainBillId
-            ? html` <span class="bill-main" data-bill-main>${t("table.bill_main")}</span>`
-            : nothing
-        }
-        ${
+        ><span class="bill-name">${this.#billName(index)}</span> ${
           bill.invoiceType === "F1" && bill.recipient !== null
             ? html`<span class="bill-invoice" data-invoice-choice
                 >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
