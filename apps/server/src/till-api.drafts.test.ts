@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
   orderDraftLines,
+  orderGroups,
   parties,
   products,
   ticketItems,
@@ -171,6 +172,54 @@ describe("GET /api/parties/:id/drafts", () => {
 });
 
 describe("PUT /api/parties/:id/drafts", () => {
+  it("returns saved placement on every line through PUT, GET, resave and takeover", async () => {
+    const party = await seated();
+    const groupId = randomUUID();
+    await inTx(venue, (tx) =>
+      tx.insert(orderGroups).values({
+        id: groupId,
+        partyId: party.partyId,
+        position: 1,
+        state: "held",
+        submittedBy: venue.operatorId,
+      }),
+    );
+    const places = [
+      { slot: 0, joinGroupId: null, afterGroupId: null },
+      { slot: 2, joinGroupId: null, afterGroupId: null },
+      { slot: 0, joinGroupId: groupId, afterGroupId: null },
+      { slot: 3, joinGroupId: null, afterGroupId: groupId },
+    ];
+    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: null,
+      revision: 0,
+      lines: places.map((place) => ({ ...dish("Caña"), ...place })),
+    });
+    expect(saved.status).toBe(200);
+    const draft = saved.json as unknown as DraftAnswer;
+    expect(draft.lines).toMatchObject(places);
+    expect(draft.lines).toHaveLength(4);
+    const again = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: draft.lines,
+    });
+    expect(again.status).toBe(200);
+    const reread = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    expect(reread.status).toBe(200);
+    expect(reread.json).toEqual({ drafts: [again.json] });
+    expect((again.json as unknown as DraftAnswer).lines).toMatchObject(places);
+    const taken = await admin(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${draft.id}/take-over`,
+      {
+        revision: (again.json as unknown as DraftAnswer).revision,
+      },
+    );
+    expect(taken.status).toBe(200);
+    expect((taken.json as unknown as DraftAnswer).lines).toMatchObject(places);
+  });
+
   it.each([
     [{ slot: null }, "lines.0.slot"],
     [{ slot: -1 }, "lines.0.slot"],

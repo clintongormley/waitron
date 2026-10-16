@@ -4185,6 +4185,9 @@ describe("TillApi: a party's drafts", () => {
     });
 
   const beer = {
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId: "mi-beer",
     variantId: null,
     menuVersionId: "mv-7",

@@ -46,6 +46,9 @@ export interface DraftLine {
   course?: { id: string; name: string; displayOrder: number };
   makeAt?: string | null;
   noMerge: boolean;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
   unavailable: boolean;
 }
 
@@ -580,6 +583,9 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
       courseId: optionalId(entry.courseId, field("courseId")),
       makeAt: optionalId(entry.makeAt, field("makeAt")),
       noMerge: noMerge ?? false,
+      slot,
+      joinGroupId,
+      afterGroupId,
     };
   });
 }
@@ -800,6 +806,9 @@ async function storedLines(
       ...(course === null ? {} : { course }),
       makeAt: row.makeAtStationId,
       noMerge: row.noMerge,
+      slot: row.slot,
+      joinGroupId: row.joinGroupId,
+      afterGroupId: row.afterGroupId,
       unavailable: false,
     },
   }));
@@ -839,6 +848,9 @@ async function replaceLines(
     courseId: line.courseId,
     makeAtStationId: line.makeAt ?? null,
     noMerge: line.noMerge,
+    slot: line.slot,
+    joinGroupId: line.joinGroupId,
+    afterGroupId: line.afterGroupId,
   }));
   await tx
     .insert(orderDraftLines)

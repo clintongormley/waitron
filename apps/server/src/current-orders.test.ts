@@ -1371,6 +1371,9 @@ describe("a party that has left", () => {
 
 describe("where each submission's groups go (spec §3)", () => {
   const item = (v: Venue, dish: Dish): DraftLineInput => ({
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId: v.offer(dish),
     variantId: null,
     menuVersionId: null,

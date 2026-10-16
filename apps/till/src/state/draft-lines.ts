@@ -40,6 +40,9 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
     courseId: line.courseId ?? null,
     ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
   };
 }
 

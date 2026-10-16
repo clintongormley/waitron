@@ -30,6 +30,9 @@ function line(overrides: Partial<DraftLine> & { menuItemId: string }): DraftLine
     quantity: "1.000",
     courseId: null,
     noMerge: false,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     unavailable: false,
     ...overrides,
   };

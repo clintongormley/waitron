@@ -78,6 +78,9 @@ function seed(ownerId: string, ...products: TillProduct[]): Draft {
     draftId: null,
     revision: 0,
     lines: products.map((product) => ({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: product.menuItemId!,
       variantId: null,
       menuVersionId: null,

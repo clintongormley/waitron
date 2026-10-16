@@ -216,9 +216,20 @@ const saved = (input: DraftLineInput, quantity: string): DraftLine => ({
 });
 
 describe("toDraftLineInput", () => {
+  it("gives an unplaced line explicit Fire-now wire defaults", () => {
+    expect(toDraftLineInput(burgerLine())).toMatchObject({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
+    });
+  });
+
   it("sends a plain line's menu item and version, with every other part empty", () => {
     const line: OrderLine = { product: menuOfferToTillProduct(fish, VERSION), quantity: "0.350" };
     expect(toDraftLineInput(line)).toEqual({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: "mi-fish",
       variantId: null,
       menuVersionId: VERSION,
@@ -233,6 +244,9 @@ describe("toDraftLineInput", () => {
 
   it("sends the variant, each answer, each list's picks, the note, the course and no-merge", () => {
     expect(toDraftLineInput({ ...burgerLine(), noMerge: true })).toEqual({
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
       menuItemId: "mi-burger",
       variantId: "v-double",
       menuVersionId: VERSION,

@@ -258,6 +258,9 @@ function item(v: Venue, dish: Dish, overrides: Partial<LineInput> = {}): LineInp
     quantity: "1",
     courseId: null,
     noMerge: false,
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     ...overrides,
   };
 }
@@ -585,6 +588,9 @@ describe("saving a draft", () => {
         courseId: null,
         makeAt: null,
         noMerge: false,
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
         unavailable: false,
       },
     ]);
@@ -676,6 +682,97 @@ describe("saving a draft", () => {
     });
     expect(await draftRow(draft.id)).toMatchObject({ revision: 0, state: "open" });
     expect(await storedLines(draft.id)).toHaveLength(1);
+  });
+});
+
+describe("draft placement persistence", () => {
+  it.each(["fire", "new", "join", "after"] as const)(
+    "keeps the %s destination through save, replacement, read and takeover",
+    async (kind) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const groupId = randomUUID();
+      await db.insert(orderGroups).values({
+        id: groupId,
+        partyId,
+        position: 1,
+        state: "held",
+        submittedBy: ALEX,
+      });
+      const place = {
+        slot: kind === "new" || kind === "after" ? 2 : 0,
+        joinGroupId: kind === "join" ? groupId : null,
+        afterGroupId: kind === "after" ? groupId : null,
+      };
+      const sent = {
+        ...item(v, "beer"),
+        ...place,
+        joinGroupId: place.joinGroupId?.toUpperCase() ?? null,
+        afterGroupId: place.afterGroupId?.toUpperCase() ?? null,
+      };
+      const first = await save(v, partyId, ALEX, null, 0, [sent]);
+      expect(first.lines).toMatchObject([{ ...place, quantity: "1.000" }]);
+      expect(await storedLines(first.id)).toMatchObject([place]);
+      const second = await save(v, partyId, ALEX, first.id, first.revision, [
+        { ...sent, quantity: "2" },
+      ]);
+      expect(second.lines).toMatchObject([{ ...place, quantity: "2.000" }]);
+      expect((await draftsOf(v, partyId))[0]!.lines).toEqual(second.lines);
+      expect((await takeOver(v, partyId, second.id, SAM, second.revision)).lines).toEqual(
+        second.lines,
+      );
+    },
+  );
+
+  it("keeps identical dishes apart by destination while adding quantities within each destination", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const g1 = randomUUID(),
+      g2 = randomUUID();
+    await db.insert(orderGroups).values([
+      { id: g1, partyId, position: 1, state: "held", submittedBy: ALEX },
+      { id: g2, partyId, position: 2, state: "held", submittedBy: ALEX },
+    ]);
+    const places = [
+      { slot: 0, joinGroupId: null, afterGroupId: null },
+      { slot: 1, joinGroupId: null, afterGroupId: null },
+      { slot: 2, joinGroupId: null, afterGroupId: null },
+      { slot: 0, joinGroupId: g1, afterGroupId: null },
+      { slot: 0, joinGroupId: g2, afterGroupId: null },
+      { slot: 3, joinGroupId: null, afterGroupId: g1 },
+      { slot: 4, joinGroupId: null, afterGroupId: g2 },
+    ];
+    const draft = await save(
+      v,
+      partyId,
+      ALEX,
+      null,
+      0,
+      places.flatMap((place) => [
+        { ...item(v, "beer"), ...place },
+        { ...item(v, "beer", { quantity: "2" }), ...place },
+      ]),
+    );
+    expect(
+      draft.lines.map(({ slot, joinGroupId, afterGroupId, quantity }) => ({
+        slot,
+        joinGroupId,
+        afterGroupId,
+        quantity,
+      })),
+    ).toEqual(places.map((place) => ({ ...place, quantity: "3.000" })));
+    expect(await draftsOf(v, partyId)).toEqual([draft]);
+    expect(await storedLines(draft.id)).toMatchObject(places);
+  });
+
+  it("returns explicit Fire-now defaults when a caller leaves the placement fields out", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      { menuItemId: v.offer("beer"), quantity: "1" },
+    ]);
+    expect(draft.lines).toMatchObject([{ slot: 0, joinGroupId: null, afterGroupId: null }]);
+    expect((await draftsOf(v, partyId))[0]!.lines).toEqual(draft.lines);
   });
 });
 

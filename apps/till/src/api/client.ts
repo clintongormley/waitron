@@ -695,6 +695,9 @@ export interface DraftLine {
   makeAt?: string | null;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
   noMerge: boolean;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
   unavailable: boolean;
 }
 

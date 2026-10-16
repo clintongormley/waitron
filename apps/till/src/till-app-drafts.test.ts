@@ -1165,6 +1165,9 @@ describe("till-app: an order that moves to another party", () => {
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-flan",
           variantId: null,
           menuVersionId: "v1",
@@ -1493,6 +1496,9 @@ describe("till-app: a save the server refuses", () => {
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-steak",
           variantId: null,
           menuVersionId: "v1",
@@ -2587,6 +2593,9 @@ describe("till-app: a later addition is decided from the table's own groups", ()
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-beer",
           variantId: null,
           menuVersionId: "v1",
@@ -2620,6 +2629,9 @@ describe("till-app: a later addition is decided from the table's own groups", ()
 
 describe("till-app: a table open that another overtakes", () => {
   const beerLine = {
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId: "offer-beer",
     variantId: null,
     menuVersionId: "v1",
@@ -2715,6 +2727,9 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-flan",
           variantId: null,
           menuVersionId: "v1",
@@ -2979,6 +2994,9 @@ describe("till-app: the next person after an ordinary sign-out", () => {
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-flan",
           variantId: null,
           menuVersionId: "v1",
@@ -3166,6 +3184,9 @@ describe("till-app: a table open whose last wait outlives the session", () => {
 
 describe("till-app: another device's save arriving while the draft is shown", () => {
   const steakLine = {
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId: "offer-steak",
     variantId: null,
     menuVersionId: "v1",
@@ -3230,6 +3251,9 @@ describe("till-app: other people's drafts and taking one over", () => {
   const SAM = "p-sam";
 
   const line = (menuItemId: string, quantity = "1") => ({
+    slot: 0,
+    joinGroupId: null,
+    afterGroupId: null,
     menuItemId,
     variantId: null,
     menuVersionId: "v1",
@@ -3863,6 +3887,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-flan",
           variantId: null,
           menuVersionId: "v1",
@@ -3977,6 +4004,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-flan",
           variantId: null,
           menuVersionId: "v1",
@@ -4052,6 +4082,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-beer",
           variantId: null,
           menuVersionId: "v0",
@@ -4172,6 +4205,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-beer",
           variantId: null,
           menuVersionId: "v0",
@@ -4241,6 +4277,9 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       revision: 0,
       lines: [
         {
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId: "offer-beer",
           variantId: null,
           menuVersionId: "v1",
@@ -4276,6 +4315,9 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
       draftId: null,
       revision: 0,
       lines: menuItemIds.map((menuItemId) => ({
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
         menuItemId,
         variantId: null,
         menuVersionId: version,
@@ -4459,6 +4501,9 @@ describe("till-app: a draft line that cannot be sold now", () => {
       draftId: null,
       revision: 0,
       lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
         menuItemId,
         variantId: null,
         menuVersionId: "v1",
@@ -4595,6 +4640,9 @@ describe("till-app: a draft line that cannot be sold now", () => {
         draftId: null,
         revision: 0,
         lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
+          slot: 0,
+          joinGroupId: null,
+          afterGroupId: null,
           menuItemId,
           variantId: null,
           menuVersionId: "v1",
@@ -4822,6 +4870,9 @@ describe("till-app: a draft line that cannot be sold now", () => {
         revision: 0,
         lines: [
           {
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
             menuItemId: "offer-beer",
             variantId: null,
             menuVersionId: "v1",

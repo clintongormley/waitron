@@ -739,6 +739,9 @@ it("clears a saved draft station missing from the station list", async () => {
     takenOverFrom: null,
     lines: [
       {
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
         id: "draft-line-1",
         menuItemId: "menu-item-cafe-0",
         variantId: null,
