@@ -1538,11 +1538,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
-- **A718. Departments and zones: a column for the receipt and floor plan, a trimmed zone editor
-  (owner, 2026-10-15).** No column picker; a column links to a department's receipt and a zone's
-  floor plan; the zone editor loses its season sentence, Opening hours link and floor-plan link and
-  preview, and its Save lines up with the fields. [Detail](backlog/service-periods.md#a718-departments-and-zones-a-column-for-the-receipt-and-floor-plan-a-trimmed-zone-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
@@ -1606,10 +1601,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   `packages/shared/src/business-day-clock.ts`** (`oldCutoverOn`) to avoid validating the clock on
   every day; a lookup exported from `shared` that validates once would remove the copy — left open
   by A506-4, #1597.
-
-- **The zone editor's closed-times sentences without a season name** are used only by a venue with
-  no seasons, believed unreachable; no test names those keys — left open by A506-5, #1603.
-  [Detail](backlog/service-periods.md#the-zone-editors-closed-times-sentences-without-a-season-name)
 
 - **A department or zone delete's preview never counts a special day's painted hours**, yet the
   delete removes them — left open by A506-5, #1603.
@@ -1716,10 +1707,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   live refresh that moves the painter to another season then leaves the address on the old season
   — left open by A506-8, #1634.
 
-- **Closing a painter opened from the zone dialog's "Opening hours (normal week)" link lands on the
-  Opening hours Year, not back on Departments and zones**, so a manager loses their place — left
-  open by A506-8, #1634.
-
 - **At 390 px a block too short for both lines shows its period's name but not its times**; only
   its spoken label names them (`paint-grid.ts`) — left open by A506-8, #1634.
 
@@ -1756,12 +1743,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   every province and area of `packages/country-es/src/data/es-2026.ts` read 729 holidays in 61
   lists and found no name twice. Re-check when a new year's list is added.
 
-- **Some Departments screen test stubs answer a floor-plan read with a non-plan.** Check the
-  relocated zone editor tests and `apps/dashboard/src/dashboard-app.test.ts` for stubs answering
-  every request with one body. The zone editor's floor-plan read
-  (`watchZoneFloorPlan`, `packages/venue-service/src/dashboard/client.ts`) needs a plan-shaped answer. Also
-  re-check that a recovery case fails when its recovery step is deleted. These unresolved
-  fixture and assertion findings came from A366 slice 6 Part C (#1510); A493 relocated their owner.
+- **Re-check that each Departments screen recovery case fails when its recovery step is deleted.**
+  An unresolved assertion finding from A366 slice 6 Part C (#1510); A493 relocated its owner.
 
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
@@ -2401,9 +2384,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   after Prefix, so it is not heard when the field takes focus; the fix is a visible description in
   the shared `wt-input`. Left open by A466 (A429 slice 2) / A502 part 3.
 
-- **The zone editor's "Edit floor plan" link is not hidden without `venue.configure`.** Every role
-  with `venue_service.manage` has `venue.configure` today, and a module screen's context carries no
-  permissions. Revisit beside the permissions review. Left open by A466 (A429 slice 2) / A502 part 3.
+- **The Departments list's "Floor plan" link is shown without `venue.configure`.** The floor-plan
+  screen needs it (`UNLISTED_SCREENS`, `apps/dashboard/src/dashboard-app.ts`), so a session without
+  it that follows the link lands on Overview. Every role with `venue_service.manage` has
+  `venue.configure` today, and a module screen's context does not say whether the person holds it
+  (`DashboardModuleContext`, `packages/dashboard-kit/src/contract.ts`). Revisit beside the
+  permissions review. Left open by A466 (A429 slice 2) / A502 part 3; A718 moved the link from the
+  zone editor to the list.
 
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's

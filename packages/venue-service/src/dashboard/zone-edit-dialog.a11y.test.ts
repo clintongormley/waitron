@@ -18,8 +18,7 @@ describe.each(["light", "dark"] as const)("zone editor accessibility in %s", (th
     let finish: (() => void) | undefined;
     const { el, modal, app } = await mountZoneEditor(
       (async (path, method = "GET") => {
-        if (method === "GET")
-          return path.includes("floor-plan") ? { tables: [] } : { departments: [] };
+        if (method === "GET") return { departments: [] };
         if (state === "pending")
           await new Promise<void>((resolve) => {
             finish = resolve;

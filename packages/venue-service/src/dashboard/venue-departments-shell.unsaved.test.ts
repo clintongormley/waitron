@@ -52,11 +52,9 @@ class App extends LitElement {
     vi.fn(async (path: string) =>
       path.endsWith("/profiles")
         ? []
-        : path.endsWith("/floor-plan")
-          ? { tables: [] }
-          : path.endsWith("/opening-hours")
-            ? departmentHoursModel()
-            : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
+        : path.endsWith("/opening-hours")
+          ? departmentHoursModel()
+          : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
     ) as DashboardRequest,
   );
   override render() {

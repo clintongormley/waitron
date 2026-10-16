@@ -515,16 +515,18 @@ A screen that styles its own native control reads the same variable on the eleme
 A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
-button beside the ruler's answer. Guards: the form-width
+button beside the ruler's answer; the zone editor's `.form` reads it too, so Save ends where its fields
+end. Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; each field and the
 message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
 content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); `wt-slider`'s own case "the field max-width token bounds the slider's width" (`packages/ui/src/components/wt-slider.test.ts`); the calibration case in
-`apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
+`apps/dashboard/src/screens/printers-screen.test.ts`; one 1280px case each in
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/department-dialogs.test.ts` (these two measure the
 reasons screen's two role `wt-combobox`es and the department Rename dialog's `wt-input` and
-field error). A new field primitive that does not read
+field error); and the zone editor's Save-edge cases at 1280 and 390px in
+`packages/venue-service/src/dashboard/zone-edit-dialog.test.ts`. A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
@@ -4393,8 +4395,10 @@ shows the same message; its Save remains available. Cases: `floor-plan-tables-pa
 `floor-plan-add-joined-table.test.ts` and the `floor-plan-editor*.test.ts` files beside them in
 `apps/dashboard/src/screens/`.
 
-A department's menu offers Edit, Add a zone, Edit receipt and Delete. A zone's menu offers
-Edit, Add or Edit floor plan, and Delete. Unassigned zones keep their Add to department action.
+A department's menu offers Edit, Add a zone and Delete. A zone's menu offers Edit and Delete.
+The list has no column picker. Its Also edit column links each row's other editor: Receipt, which
+opens Edit receipt, on a department whose receipt can be edited; on a zone, Floor plan, or Add
+floor plan when no table is placed on the zone's plan. Unassigned zones keep their Add to department action.
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
@@ -4411,13 +4415,7 @@ languages staff may print in, with the venue's receipt language first. A new dep
 authored receipt content. Venue settings holds the receipt language; there is no venue receipt
 page or live venue fallback for receipt decoration.
 
-The zone editor shows an Opening hours link, which opens the season painter on that zone in the
-current season, and the closed times of the current season (the
-first season when none is current), named first: "Winter: closed from 23:30 Monday to Thursday".
-A venue with no seasons gets the sentence without a name. Identical ranges share a day group; more
-than two groups show a day count. Special days stay in Opening hours. A zone with placed
-tables shows a read-only floor-plan preview above Edit floor plan; otherwise it offers Add floor
-plan. Failed reads show their own messages without clearing an action refusal. The floor-plan
+The zone editor holds only its fields: no opening hours and no floor plan. The floor-plan
 editor returns to the list. Its header ends with Undo and Redo, then Cancel beside Save, the
 owner's exception to Cancel on the left (A502).
 
