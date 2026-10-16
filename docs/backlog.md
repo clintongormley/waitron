@@ -5713,7 +5713,7 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   box's restore over a real network was not measured.
 
 - **The upgrade walk's historical runtime variation remains unexplained after reducing setup work
-  (A736).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
+  (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).** The captured 165,500/171,000 ms overruns have not been reproduced on the quieter host.
   On recurrence, retain the phase report and host state before retrying; compare repeated samples
   before assigning the variation to CPU scheduling or storage.
   [Measurement](developers/ci-and-gates.md#reducing-repeated-upgrade-test-setup-work-a736)

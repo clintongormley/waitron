@@ -1864,6 +1864,17 @@ rows remain. A third checks `ONE_ROW` reachability when two rows are already pre
 tracking state afterwards. Existing migration, reset, trigger and row-preservation assertions are
 unchanged.
 
+The independent run-it review's ordinary candidate run passed in 65,550 ms; its isolated
+`ONE_ROW`-omission run passed in 60,540 ms before the dedicated case was added. These additional
+samples retain the runtime-variation caveat. Its feed-definition probe compared stored trigger
+names and SQL after transactional and ordinary installation at every step: all 286 installations
+matched. There are 284 distinct step dates; `core/0012_printer_calibration` and
+`venue-service/0038_clammy_klaw` each reach feed installation again after their row-loss reset.
+Deleting the schema filter, row-loss refusal or pre-migration feed cleanup made each corresponding
+test fail. The driver then deleted the `ONE_ROW` exception in the disposable checkout and observed
+the new reachability case fail too. Review artifacts are retained with
+[PR #1788](https://github.com/clintongormley/waitron/pull/1788)'s campaign receipts.
+
 The retained failure reports were re-read on 2026-10-16. The table sums only the first contiguous
 `Phases finished before it:` block in each log; GitHub repeats part of the CI report in an error
 annotation. Summing both copies gives 168,686 ms for that CI failure, rather than the first
