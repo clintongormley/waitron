@@ -1,6 +1,14 @@
+import "./errors.js";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { OperationOperator } from "@waitron/module";
+import {
+  readOperationAuthority,
+  type ModuleOperationInput,
+  type OperationOperator,
+} from "@waitron/module";
+import { AppError } from "@waitron/shared";
+import { encodeHourIdentity, isHourAllocatedSeries, isHourIdentity } from "./hour-identity.js";
+import type { AllocationOperationEvidence } from "./allocation-operation.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import {
   encodeEmergencyIdentity,
@@ -22,7 +30,7 @@ export interface FiscalAllocation {
   readonly environment: "preproduction" | "production";
   readonly installationIdentity: string;
   readonly series: readonly { readonly code: string; readonly purpose: string }[];
-  readonly source: "initial-paper" | "paper" | "cloud" | "emergency";
+  readonly source: "initial-paper" | "paper" | "cloud" | "emergency" | "hour";
   readonly reservationEvidence: unknown;
   readonly issuedAt: string;
 }
@@ -71,6 +79,7 @@ export interface AllocationContext {
   } | null;
   readonly priorActivation: "none" | "committed" | "uncertain";
   readonly authority:
+    | { readonly kind: "hour"; readonly token: object }
     | { readonly kind: "paper-declared"; readonly token: object }
     | {
         readonly kind: "paper";
@@ -183,8 +192,10 @@ function allocationShape(value: unknown): value is FiscalAllocation {
     typeof value.softwareId === "string" &&
     /^[A-Z0-9]{2}$/.test(value.softwareId) &&
     (value.environment === "preproduction" || value.environment === "production") &&
-    isInstallationIdentity(value.installationIdentity) &&
-    ["initial-paper", "paper", "cloud", "emergency"].includes(value.source as string) &&
+    (value.source === "hour"
+      ? isHourIdentity(value.installationIdentity)
+      : isInstallationIdentity(value.installationIdentity)) &&
+    ["initial-paper", "paper", "cloud", "emergency", "hour"].includes(value.source as string) &&
     timestamp(value.issuedAt) &&
     Array.isArray(value.series) &&
     value.series.every(
@@ -239,6 +250,111 @@ function freeze(value: unknown): void {
   Object.freeze(value);
 }
 
+interface HourAdmissionFacts {
+  readonly requiredBases: AllocationContext["requiredBases"];
+  readonly priorActivation: AllocationContext["priorActivation"];
+}
+
+const hourAdmissions = new WeakMap<
+  object,
+  {
+    readonly operation: ModuleOperationInput;
+    readonly allocation: FiscalAllocation;
+    readonly approval: RecoveryApproval;
+    readonly facts: HourAdmissionFacts;
+  }
+>();
+
+export function hourAdmissionRefusal(
+  operation: ModuleOperationInput,
+  token: object,
+): AllocationRefusal | null {
+  const held = hourAdmissions.get(token);
+  if (held === undefined) return "outside_confirmation_missing";
+  if (
+    !isDeepStrictEqual(held.operation.binding, operation.binding) ||
+    !isDeepStrictEqual(held.operation.input, operation.input)
+  )
+    return "reservation_mismatch";
+  if (
+    held.operation.authority !== operation.authority ||
+    readOperationAuthority(operation.authority, operation.binding) === undefined
+  )
+    return "reauthentication_required";
+  return null;
+}
+
+// This carrier grants callback-scoped admission; durable clock/history selection belongs to its caller.
+export async function withHourAdmission<T>(
+  operation: ModuleOperationInput,
+  facts: HourAdmissionFacts,
+  run: (evidence: AllocationOperationEvidence) => Promise<T>,
+): Promise<T> {
+  const binding = { ...operation.binding };
+  const authority = operation.authority;
+  const operator = readOperationAuthority(authority, binding);
+  const refuse = (reason: string): never => {
+    throw new AppError("sif.allocation_invalid", { reason });
+  };
+  if (
+    operator === undefined ||
+    binding.module !== "fiscal-verifactu" ||
+    !["setup", "restore", "re-register", "promote"].includes(binding.action)
+  )
+    return refuse("reauthentication_required");
+  if (
+    !record(operation.input) ||
+    Reflect.ownKeys(operation.input).length !== 2 ||
+    !exact(operation.input, ["allocation", "approval"])
+  )
+    return refuse("malformed_allocation");
+  const input = structuredClone(operation.input);
+  if (record(input.allocation) && input.allocation.source !== "hour")
+    return refuse("source_mismatch");
+  if (!allocationShape(input.allocation)) return refuse("malformed_allocation");
+  if (!approvalShape(input.approval)) return refuse("malformed_approval");
+  const selectedFacts = structuredClone(facts);
+  const token = Object.freeze({});
+  hourAdmissions.set(token, {
+    operation: { binding, authority, input },
+    allocation: input.allocation,
+    approval: input.approval,
+    facts: selectedFacts,
+  });
+  try {
+    const evidence: AllocationOperationEvidence = {
+      allocationId: input.allocation.allocationId,
+      authority: { kind: "hour", token },
+      requiredBases: selectedFacts.requiredBases,
+      priorActivation: selectedFacts.priorActivation,
+      incidentEvidence: input.approval.incidentEvidence,
+    };
+    const result = validateEnvelope(
+      input.allocation,
+      input.approval,
+      {
+        ...binding,
+        taxpayerNif: input.allocation.taxpayerNif,
+        softwareId: input.allocation.softwareId,
+        environment: input.allocation.environment,
+        mode: binding.action === "setup" ? "initial-setup" : "recovery",
+        operatorId: operator.operatorId,
+        reauthentication: { operatorId: operator.operatorId, eventId: binding.eventId },
+        priorActivation:
+          selectedFacts.priorActivation === "committed" ? "none" : selectedFacts.priorActivation,
+        requiredBases: selectedFacts.requiredBases,
+        incidentEvidence: evidence.incidentEvidence,
+        authority: evidence.authority,
+      },
+      selectedFacts.priorActivation === "committed",
+    );
+    if (!result.ok) return refuse(result.reason);
+    return await run(evidence);
+  } finally {
+    hourAdmissions.delete(token);
+  }
+}
+
 // Scope, authentication and outside facts must come from the host, never submitted module state.
 export function validateAllocationEnvelope(
   input: unknown,
@@ -274,7 +390,9 @@ function validateEnvelope(
   if (input.taxpayerNif !== context.taxpayerNif) return refuse("taxpayer_mismatch");
   if (input.softwareId !== context.softwareId) return refuse("software_mismatch");
   if (input.environment !== context.environment) return refuse("environment_mismatch");
-  const prefix = { "initial-paper": "S", paper: "P", cloud: "C", emergency: "E" }[input.source];
+  const prefix = { "initial-paper": "S", paper: "P", cloud: "C", emergency: "E", hour: "" }[
+    input.source
+  ];
   if (
     !input.installationIdentity.startsWith(prefix) ||
     (input.source === "initial-paper" && context.mode !== "initial-setup") ||
@@ -306,7 +424,35 @@ function validateEnvelope(
     return refuse("reauthentication_required");
   if (context.priorActivation === "uncertain") return refuse("uncertain_prior_activation");
   if (context.priorActivation === "committed") return refuse("prior_activation_requires_replay");
-  if (input.source === "emergency" && context.authority.kind === "emergency") {
+  if (input.source === "hour") {
+    if (context.authority.kind !== "hour") return refuse("reservation_untrusted");
+    const held = hourAdmissions.get(context.authority.token);
+    if (held === undefined) return refuse("outside_confirmation_missing");
+    const operator = readOperationAuthority(held.operation.authority, held.operation.binding);
+    if (operator === undefined) return refuse("reauthentication_required");
+    if (
+      !isDeepStrictEqual(held.allocation, input) ||
+      !isDeepStrictEqual(held.approval, permission) ||
+      !isDeepStrictEqual(operator.operatorId, context.operatorId) ||
+      held.operation.binding.eventId !== context.eventId ||
+      held.operation.binding.sourceId !== context.sourceId ||
+      held.operation.binding.targetNodeId !== context.targetNodeId ||
+      (held.operation.binding.action === "setup" ? "initial-setup" : "recovery") !== context.mode ||
+      (replay
+        ? held.facts.priorActivation !== "committed"
+        : held.facts.priorActivation !== context.priorActivation)
+    )
+      return refuse("reservation_mismatch");
+    if (input.reservationEvidence !== null) return refuse("reservation_mismatch");
+    try {
+      if (encodeHourIdentity(Date.parse(input.issuedAt)) !== input.installationIdentity)
+        return refuse("reservation_mismatch");
+    } catch {
+      return refuse("reservation_mismatch");
+    }
+  } else if (context.authority.kind === "hour") {
+    return refuse("source_mismatch");
+  } else if (input.source === "emergency" && context.authority.kind === "emergency") {
     if (
       (!replay && !emergencyDraws.has(context.authority.draw)) ||
       context.authority.draw.identity !== input.installationIdentity
@@ -382,7 +528,13 @@ function validateEnvelope(
     )
       return refuse("reservation_mismatch");
   }
-  if (!isAllocatedSeries(input.series, input.installationIdentity, context.requiredBases))
+  if (
+    !(input.source === "hour" ? isHourAllocatedSeries : isAllocatedSeries)(
+      input.series,
+      input.installationIdentity,
+      context.requiredBases,
+    )
+  )
     return refuse("series_mismatch");
   const result = structuredClone({ ok: true as const, allocation: input, approval: permission });
   freeze(result);

@@ -248,7 +248,15 @@ Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery
 The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
-where superseded. No hour-code implementation or generated-PDF acceptance is claimed.
+where superseded. Clock/history selection, entry-path integration and generated-PDF acceptance
+remain open.
+
+**Hour-plan Task 1 checkpoint, 2026-10-16:** module tests exercise four-character hour names,
+the complete configured series set (including multiple standard bases and `FF/full`),
+initial activation, recovery, re-registration and exact replay through the unchanged
+`allocation.ts` writer. Callback-scoped admission refuses copied/expired authority and
+an operation changed from restore to re-registration. This does not qualify the wizard
+or clock/history policy; those remain later tasks in the replacement plan.
 
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and

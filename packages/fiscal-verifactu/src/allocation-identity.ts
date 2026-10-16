@@ -47,7 +47,18 @@ export function isAllocatedSeries(
   installationIdentity: string,
   requiredBases: readonly { code: string; purpose: string }[],
 ): boolean {
-  if (!isInstallationIdentity(installationIdentity) || !Array.isArray(value)) return false;
+  return (
+    isInstallationIdentity(installationIdentity) &&
+    seriesMatchBases(value, installationIdentity, requiredBases)
+  );
+}
+
+export function seriesMatchBases(
+  value: unknown,
+  installationIdentity: string,
+  requiredBases: readonly { code: string; purpose: string }[],
+): boolean {
+  if (!Array.isArray(value)) return false;
   if (requiredBases.length === 0 || value.length !== requiredBases.length) return false;
   const expected = new Map<string, string>();
   for (const base of requiredBases) {
