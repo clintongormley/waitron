@@ -938,7 +938,7 @@ it("a real drag of a table that moves nothing keeps the selection", async () => 
   expect(selections).toEqual([]);
 });
 
-it("the handle stays at its corner while the table is dragged round", async () => {
+it("the handle stays above the middle of the top side while the table is dragged round", async () => {
   const p = place({ x: 10, y: 10, width: 8, height: 4 });
   const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
     selected: "t1",
@@ -2192,8 +2192,8 @@ it.each([
     for (const at of samples) {
       expect(topmost(el, at)?.closest('[part~="rotate-handle"]')).toBe(arrow);
     }
-    // The arrow is drawn on top of everything, so only with it out of the way does a sample show
-    // what it would otherwise cover.
+    // The arrow is drawn on top of its own table's hit areas, so only with it out of the way does
+    // a sample show what it would otherwise cover.
     arrow.style.pointerEvents = "none";
     for (const at of samples) {
       expect(

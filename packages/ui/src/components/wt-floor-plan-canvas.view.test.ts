@@ -784,6 +784,67 @@ it.each([1, 2])(
   },
 );
 
+it("a table that pokes out only on the left, set by the parent during a drag, grows the room on the left alone, scrolled away under the pointer", async () => {
+  const { el } = await draggingIn("width: 600px; height: 360px", 1);
+  const viewport = part(el, "viewport");
+  const room = offsetOf(el, button(el));
+  const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  const under = centre(button(el));
+  const leftOnly: PlanCanvasTable = {
+    ...table("Corner", 0, 20),
+    placement: { ...table("Corner", 0, 20).placement, rotation: 45 },
+  };
+  el.tables = [table("T1", 20, 10), leftOnly];
+  await settled(el);
+  await settled(el);
+  expect(offsetOf(el, button(el))).toEqual({ left: room.left + 24, top: room.top });
+  expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+    left: scroll.left + 24,
+    top: scroll.top,
+  });
+  expect(centre(button(el))).toEqual(under);
+});
+
+it.each([
+  ["an undo of a drop", true],
+  ["a refused drop", false],
+])(
+  "the room a parent-set table grew during a drag stays after the release, and %s gives it back",
+  async (_, applied) => {
+    const { el, to, before } = await draggingIn("width: 600px; height: 360px", 1);
+    const viewport = part(el, "viewport");
+    // T1 drawn at its draft, (22, 12).
+    const room = offsetOf(el, button(el));
+    const square = (dx: number, dy: number) => ({
+      left: room.left + 12 * dx,
+      top: room.top + 12 * dy,
+    });
+    el.tables = [table("T1", 20, 10), pokingOut];
+    await settled(el);
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual(square(2, 2));
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    await settled(el);
+    await settled(el);
+    // Back at (20, 10) until the parent answers, with the two squares of room kept.
+    expect(offsetOf(el, button(el))).toEqual(square(0, 0));
+    if (applied) {
+      el.tables = [table("T1", 22, 12)];
+      await settled(el);
+      await settled(el);
+      expect(offsetOf(el, button(el))).toEqual(square(2, 2));
+    }
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual(square(-2, -2));
+    const back = part(el, "grid").getBoundingClientRect();
+    expect({ width: back.width, height: back.height }).toEqual(before.grid);
+    expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }).toEqual(before.scroll);
+  },
+);
+
 it.each([1, 2])(
   "at zoom %i, a table that pokes out set by the parent during a drag grows a box that takes its height from the plan once, and steadily",
   async (zoom) => {
