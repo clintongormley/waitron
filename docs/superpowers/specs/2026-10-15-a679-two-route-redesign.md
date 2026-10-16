@@ -1,5 +1,11 @@
 # A679: keep invoice names distinct after recovery
 
+> **2026-10-16 direction:** Tasks 9–12 wait for owner approval of the
+> [hour-coded series proposal](2026-10-16-a679-hour-coded-series-design.md) and a replacement implementation plan.
+> This document retains the earlier register-based design as history; the new naming
+> policy is proposed, not implemented. Owner PDF acceptance is viewing generated
+> EN/ES PDFs through Drive, replacing the physical owner typing exercise.
+
 **Owner update, 2026-10-15 at 22:15:** group each typed field independently in fours.
 Register continuation takes 20 entered characters, 23 including grouping spaces.
 A generated named node recovery key takes 47 entered characters, 57 displayed;

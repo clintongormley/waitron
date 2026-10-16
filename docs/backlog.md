@@ -323,16 +323,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
-- **A679. First Live setup: one page and one recovery PDF.** Implement the
-  [two-route redesign](superpowers/specs/2026-10-15-a679-two-route-redesign.md) through the
-  [replacement implementation plan](superpowers/plans/2026-10-15-a679-one-pdf-implementation.md):
-  one setup-page PDF, unsigned paper S/P history or the built signed Cloud C protocol, emergency E
-  and repair-v2 rules. The owner’s 2026-10-15 21:30 change removes the paper custody signing key;
-  typed positions, checks and recovery keys use easy-to-type characters grouped in fours
-  (owner 22:15). Keep the paper PDF when joining Cloud and continue its S/P register for
-  later paper allocations. Paper-to-Cloud import is no longer required. Preserve the existing branch work. The N
-  proposal and old 44-step paper check/FOLLOW-UP are cancelled. Qualification opens the built
-  PDF, re-uploads the original saved file, and checks continuation/recovery by typing from its printout. Scanning is not required.
+- **A679. First Live setup: one page and one recovery PDF.** Complete the existing First Live setup
+  branch. Before Tasks 9–12, obtain
+  owner approval of the [hour-coded series proposal](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
+  requested on 2026-10-16, then replace the register-based implementation plan.
+  The proposal replaces paper/Cloud allocation with four UTC-hour characters and
+  keeps only the recovery key in the PDF. It grants no implementation permission.
+  Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
+  recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,
