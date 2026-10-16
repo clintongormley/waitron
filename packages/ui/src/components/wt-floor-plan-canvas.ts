@@ -162,6 +162,7 @@ export class WtFloorPlanCanvas extends LitElement {
         height: 100%;
         overflow: auto;
         touch-action: none;
+        background-color: var(--wt-color-surface);
       }
 
       .grid {
@@ -170,6 +171,8 @@ export class WtFloorPlanCanvas extends LitElement {
         min-width: 100%;
         min-height: 100%;
         background-color: var(--wt-color-surface);
+        background-origin: content-box;
+        background-clip: content-box;
         background-image:
           linear-gradient(
             to right,
@@ -539,6 +542,8 @@ export class WtFloorPlanCanvas extends LitElement {
       width: px(this.#size.columns),
       height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset / this.zoom}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
+      paddingLeft: px(this.#origin.x),
+      paddingTop: px(this.#origin.y),
       zoom: String(this.zoom),
       "--wt-plan-control-scale": String(Math.max(1, 1 / this.zoom)),
       minWidth: `${100 / this.zoom}%`,

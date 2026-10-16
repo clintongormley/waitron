@@ -324,6 +324,21 @@ it("wheel zoom stays between half and four times the original grid", async () =>
   expect(button(el).getBoundingClientRect().width).toBe(48);
 });
 
+it("zoomed to half, the blank margin still ends where a table at x 0 is drawn", async () => {
+  const el = await canvas();
+  el.tables = [table("T1", 0, 0)];
+  await settled(el);
+  wheel(el, 10000);
+  await settled(el);
+  const grid = part(el, "grid");
+  const g = grid.getBoundingClientRect();
+  const b = button(el).getBoundingClientRect();
+  const style = getComputedStyle(grid);
+  expect(b.width).toBe(48);
+  expect(parseFloat(style.paddingLeft) / 2).toBeCloseTo(b.left - g.left);
+  expect(parseFloat(style.paddingTop) / 2).toBeCloseTo(b.top - g.top);
+});
+
 it("an empty zoomed-out grid still fills the viewport without scrollbars", async () => {
   const el = await canvas();
   el.tables = [];

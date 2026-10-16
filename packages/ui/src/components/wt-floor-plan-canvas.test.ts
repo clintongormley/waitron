@@ -369,6 +369,60 @@ it("paints from tokens", async () => {
   expect(getComputedStyle(part(el, "grid")).backgroundImage).toContain("rgb(7, 8, 9)");
 });
 
+/** The grid's padding against where a table at x 0 and y 0 is drawn, in screen px. */
+function marginOf(el: WtFloorPlanCanvas, key: string) {
+  const grid = part(el, "grid");
+  const style = getComputedStyle(grid);
+  const g = grid.getBoundingClientRect();
+  const b = button(el, key).getBoundingClientRect();
+  return {
+    style,
+    padding: { left: parseFloat(style.paddingLeft), top: parseFloat(style.paddingTop) },
+    drawn: { left: b.left - g.left, top: b.top - g.top },
+  };
+}
+
+it("draws no grid in the margin, so the lines start at the plan's x 0 and y 0", async () => {
+  const el = await canvas([table("t1", "T1")]);
+  await settled(el);
+  const m = marginOf(el, "t1");
+  expect(m.padding).toEqual({ left: 72, top: 72 });
+  expect(m.drawn.left).toBeCloseTo(72);
+  expect(m.drawn.top).toBeCloseTo(72);
+  expect(m.style.backgroundClip).toBe("content-box, content-box");
+  expect(m.style.backgroundOrigin).toBe("content-box, content-box");
+});
+
+it("draws no grid in the margin past a table that arrived poking out", async () => {
+  const el = await canvas([
+    table("t1", "T1", { rotation: 45 }),
+    table("t2", "T2", { x: 0, y: 20 }),
+  ]);
+  await settled(el);
+  const m = marginOf(el, "t2");
+  expect(m.padding.left).toBeGreaterThan(72);
+  expect(m.padding.left).toBeCloseTo(m.drawn.left);
+  const top = getComputedStyle(part(el, "grid")).paddingTop;
+  const turned = button(el, "t1").getBoundingClientRect();
+  const grid = part(el, "grid").getBoundingClientRect();
+  // The 8 × 8's unturned top-left is at the plan's (0, 0); its centre is 4 squares in.
+  expect(parseFloat(top)).toBeCloseTo(turned.top + turned.height / 2 - grid.top - 4 * 12);
+});
+
+it("paints the blank margin with the surface colour", async () => {
+  const el = await canvas([table("t1", "T1")]);
+  host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");
+  expect(getComputedStyle(part(el, "viewport")).backgroundColor).toBe("rgb(10, 11, 12)");
+});
+
+it("a click in the blank margin still asks to clear the selection", async () => {
+  const el = await canvas([table("t1", "T1")], { selected: "t1" });
+  await settled(el);
+  const seen = selects(el);
+  await userEvent.click(part(el, "grid"), { position: { x: 6, y: 6 } });
+  expect(seen.map((e) => e.detail)).toEqual([{ key: null }]);
+});
+
 it("paints the side dots, the size badge and the turn arrow from tokens", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
   host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
