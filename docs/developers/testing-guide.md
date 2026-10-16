@@ -1785,8 +1785,8 @@ Keep rollback assertions, and assert the domain code that the API maps to its cl
 
 ## A default you did not state is not a value you tested
 
-`@simplewebauthn/server` 14 decides its default signature-algorithm list when the module loads, from
-what the running Node's Web Crypto reports:
+`@simplewebauthn/server` 14 takes its default signature-algorithm list from what the running Node's
+Web Crypto reports. 14.0.2 decided it once, when the module loaded:
 
 ```js
 // esm/registration/generateRegistrationOptions.js:23-30 in 14.0.2, verbatim
@@ -1800,14 +1800,22 @@ if (SettingsService.runtimeSupportsPQC()) {
 }
 ```
 
+14.0.3 moved it into `getDefaultSupportedAlgorithmIDs()`
+(`esm/registration/generateRegistrationOptions.js:22-27`), which runs on every call that leaves the
+list out; the probe itself runs at the first such call, and `SettingsService` keeps its answer
+(`esm/services/settingsService.js:43`).
+
 Both `.d.ts` files still document the default as `[COSEALG.EdDSA, COSEALG.ES256, COSEALG.RS256]`.
 Reading the types tells you three; only running tells you four.
 
-`verifyRegistrationResponse.js:36` defaults its own `supportedAlgorithmIDs` to that same mutated
-binding, so one runtime probe decides both what a WebAuthn registration OFFERS and what it ACCEPTS.
-On Node 26.7.0 the probe says yes, and it is flagged experimental: importing the package prints two
-warnings, `"The supports Web Crypto API method is an experimental feature and might change at any
-time"` and the same sentence for `"The ML-DSA-44 Web Crypto API algorithm"`.
+`verifyRegistrationResponse.js:36` defaults its own `supportedAlgorithmIDs` to the same list (in
+14.0.3 by calling that function), so one runtime probe decides both what a WebAuthn registration
+OFFERS and what it ACCEPTS. On Node 26.7.0 the probe says yes, and it is flagged experimental: the
+first call that runs the probe prints two warnings, `"The supports Web Crypto API method is an
+experimental feature and might change at any time"` and the same sentence for `"The ML-DSA-44 Web
+Crypto API algorithm"`. Measured 2026-10-16 on 14.0.3, Node v26.11.1: importing the package printed
+nothing; calling `getDefaultSupportedAlgorithmIDs()` printed both warnings and returned
+`[-48,-8,-7,-257]`.
 
 Version 13.3.2 had no such probe. Its options default was the three classical algorithms and its
 verify default was a fixed list of ten — `supportedCOSEAlgorithmIdentifiers`,

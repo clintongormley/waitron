@@ -33,6 +33,12 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 > meets the LGPL's conditions — in particular whether the offer's two forms (GPL-3.0 §6(b) for a
 > box Waitron supplies, §6(d)-style directions for the image pulled from a registry, with requests
 > to info@waitron.io) are the right ones.
+>
+> **Open licensing question, 2026-10-16.** cairo is built into that libvips. sharp's libvips
+> package lists it under the Mozilla Public License, and cairo's own `COPYING` offers LGPL 2.1 or
+> MPL 1.1. `deploy/third-party/` ships neither text and its source offer does not name cairo. Ask
+> the legal advisor which licence the image should take cairo under, and whether the image must
+> ship that licence's text and a source offer for cairo.
 
 ---
 

@@ -10,9 +10,13 @@ their full text.
 - **#1181 (stripe 22.6.2 → 23.0.0, a major)** is lane F's A776: `packages/payments-stripe` is
   mid-change there. Map each breaking change to its call sites; test through the real client as well
   as a fake (CLAUDE.md §4). Payments: full review path.
+- **#1299 and #1423 (sharp 0.35.5 alone)** are superseded by #1760, which carries sharp 0.35.5, and are
+  closed when it lands.
 - **axe-core 4.13 → 4.14 — held back in #1760 (A775, 2026-10-16).** 4.14.0's changelog: "**label-content-name-mismatch:** Enable rule by default (#5421)" — in 4.13.0 the
   rule carried the `experimental` tag, which axe skips by default. On #1760's CI (run 38956342330)
-  it failed every package with accessibility tests, most often on the shared `wt-combobox`; others
+  it failed every package with accessibility tests that ran, except ui-core, whose only failure was
+  the helper self-test below; `packages/ui` did not run there (pnpm stopped after ui-core failed).
+  It failed most often on the shared `wt-combobox`; others
   seen include the language chooser's trigger, the station queue's item buttons, the opening-hours
   month's day cells and the data table's filters trigger (the full list is not yet taken). 4.14 also
   reports an empty text box's undecided colour contrast as `emptyValue` instead of `bgOverlap`,
@@ -24,10 +28,12 @@ their full text.
 **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed — OPEN (found 2026-10-03 by #1139's
 review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 `docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
-0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
+0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:332` and
 `packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
-`packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:280` and
+`packages/db/src/testing/schema-conformance.ts:226`, `docs/developers/conventions-data.md:332` and
 `docs/backlog.md` (the 0.45.2 unnamed-`unique()` note under _CI, tests and developer tooling_), none of them re-checked against 0.45.3.
+Naming 0.45.3: `scripts/journal-monotonic.test.ts:12` and `docs/developers/conventions-data.md:2419`,
+`:2444` and `:2481`.
 0.45.4 arrived with #1760 (A775, 2026-10-16); its published package differs from 0.45.3 only in
 `postgres-js/session.*` and the version files — `sqlite-core/dialect.js` and `migrator.js` are
 byte-identical (`npm pack` of both, `cmp`), so the claims citing 0.45.3's dialect still describe the
@@ -70,8 +76,8 @@ installed code, and only their number is stale.
   manifest.** #432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
   `@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
   explains why those floors were low, so this was a judgement, not a rule being followed. The vite 8
-  and passkey upgrades below left the same shape (`^8.0.0` against 8.3.0 installed; `^14.0.0` below
-  14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
+  and passkey upgrades below left the same shape (at the time: `^8.0.0` against 8.3.0 installed;
+  `^14.0.0` below 14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
   #765, raised the floor of each caret range it changed to the new version and kept each manifest's own form (an
   exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
   `@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
