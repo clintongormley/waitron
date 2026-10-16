@@ -116,7 +116,7 @@ function input(value: unknown, kept: boolean): FirstFiscalDeliveryInput | FirstF
     refuse();
   return value as unknown as FirstFiscalDeliveryInput | FirstFiscalKeptInput;
 }
-function readDeliveryManifest(module: string, v: unknown): Manifest | null {
+export function readDeliveryManifest(module: string, v: unknown): Manifest | null {
   if (!name(module)) refuse();
   if (v === null) return null;
   if (

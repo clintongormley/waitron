@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFile, writeFile, readdir, unlink, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { initialSetupFor, withOperationAuthority } from "@waitron/module";
 import {
@@ -16,7 +16,7 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { ALL_MODULES } from "@waitron/composition";
 const fiscalModules = ALL_MODULES;
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const fixtures: Awaited<ReturnType<typeof declaredFirstFiscalFixture>>[] = [];
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
@@ -399,6 +399,7 @@ it("original-password recovery and a current-master answer can retire an unused 
   const f = await fixture(2, request.taxId, "production", false);
   await suite.db.archiveTo(join(f.state.venueDir, "venue.db"));
   const initial = await f.host.resolution.inspectFirstSetupResolution();
+  expect(initial.emptyDatabase).toBe(true);
   const recovered = await f.host.owner.recoverFirstSetupOwner({
     inspectionId: initial.inspectionId,
     revision: f.state.revision,

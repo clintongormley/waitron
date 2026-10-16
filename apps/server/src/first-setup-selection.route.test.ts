@@ -290,6 +290,7 @@ it("serialises competing resumptions and publishes one applied selection", async
 it("shares failed-password throttling with unfinished-setup ownership recovery", async () => {
   const f = await fixture();
   try {
+    vi.spyOn(performance, "now").mockReturnValue(0);
     const inspection = await (await f.get()).json();
     let throttled = false;
     for (let attempt = 0; attempt < 12; attempt++) {

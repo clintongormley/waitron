@@ -41,3 +41,16 @@ composes every available module; the new empty proof checks their required schem
 assertions stay unchanged. The schema-scanner tests deliberately retain isolated orphan rows
 without parents, so a parent table cannot conceal a missing scan of the sale or filing table.
 The owner authorised this read-only empty-proof inspection on 2026-10-16 at 13:40.
+
+The unused-PDF restart qualification adds two fixture corrections without changing an earlier
+assertion. `apps/server/src/first-setup-retired-assignments.test.ts` now applies the complete module
+schema instead of core alone. Its password-authorised empty replacement uses the same positive
+schema proof as other empty-only actions; a new assertion checks that fixture precondition.
+`apps/server/test/declared-first-fiscal.ts` gains optional candidate serials and workspace roots
+for the new repeated-replacement cases. Existing calls keep their former inputs.
+
+The shared-throttle case in `apps/server/src/first-setup-selection.route.test.ts` holds
+`performance.now()` constant while it sends the requests. Its original refusal assertions stay
+unchanged. In the retained failing run, the next request succeeded after an earlier 429;
+the throttle's first delay can expire between real HTTPS requests. Socket timers remain real,
+and the suite's existing mock teardown restores the clock.

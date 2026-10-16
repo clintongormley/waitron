@@ -41,7 +41,7 @@ function uncertain(): never {
 export function firstSetupFrozenDigest(state: FirstSetupState): string {
   return createHash("sha256").update(JSON.stringify(state.frozen)).digest("hex");
 }
-function readMetadata(value: unknown, state: FirstSetupState): StagedNodeKey {
+export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState): StagedNodeKey {
   if (typeof value !== "object" || value === null || Array.isArray(value)) invalid();
   const v = value as Record<string, unknown>;
   const fields = ["version", "stageId", "attemptId", "nodeId", "frozenDigest", "name", "verifier"];
@@ -80,7 +80,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       : options.coordinator.held(hold, () => run(hold));
   const read = async (state: FirstSetupState) => {
     const data = await readDurableHostJson(path, 4096);
-    return data === null ? null : readMetadata(data, state);
+    return data === null ? null : readFirstSetupStagedKey(data, state);
   };
   return {
     stageInitialNodeKey(

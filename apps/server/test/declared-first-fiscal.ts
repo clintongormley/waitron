@@ -25,16 +25,18 @@ export const publicDigest = (value: unknown) =>
   createHash("sha256").update(declaredHistoryBytes(value)).digest("hex");
 export async function declaredFirstFiscalFixture(options?: {
   modules?: readonly WaitronModule[];
+  serials?: readonly number[];
+  workspace?: { root: string; stateDir: string; venueDir: string };
   moduleConfig?: ModuleConfig;
-  extendHistory(
+  extendHistory?(
     history: DeclaredRegisterHistory,
     context: import("@waitron/module").InitialSetupContext,
   ): DeclaredRegisterHistory;
 }) {
-  const root = await mkdtemp(join(tmpdir(), "declared-delivery-"));
+  const root = options?.workspace?.root ?? (await mkdtemp(join(tmpdir(), "declared-delivery-")));
   try {
-    const stateDir = join(root, "state"),
-      venueDir = join(root, "venue"),
+    const stateDir = options?.workspace?.stateDir ?? join(root, "state"),
+      venueDir = options?.workspace?.venueDir ?? join(root, "venue"),
       coordinator = createFirstSetupCoordinator();
     const store = createFirstSetupStore({ stateDir, venueDir, coordinator });
     const modules =
@@ -71,7 +73,7 @@ export async function declaredFirstFiscalFixture(options?: {
     const claim = await owner.claimFirstSetup({ environment: "production", request }, nonce);
     let state = (await store.read())!;
     let context = firstSetupModuleContext(state, MODULE);
-    const selected = FISCAL_INITIAL_SETUP.candidates(context, { serials: [1] });
+    const selected = FISCAL_INITIAL_SETUP.candidates(context, { serials: options?.serials ?? [1] });
     state = await store.update(state.frozen.attemptId, state.revision, {
       kind: "candidates",
       module: MODULE,
@@ -122,13 +124,13 @@ export async function declaredFirstFiscalFixture(options?: {
           revision: "1",
           previousDigest: "0".repeat(64),
           createdAt: time,
-          sHighWater: 1,
+          sHighWater: options?.serials?.[0] ?? 1,
           pHighWater: 0,
           events: [reservation, consumption],
         },
       ],
     };
-    history = options?.extendHistory(history, context) ?? history;
+    history = options?.extendHistory?.(history, context) ?? history;
     const input = {
       allocation: {
         ...allocation,

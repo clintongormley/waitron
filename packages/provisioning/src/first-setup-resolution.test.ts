@@ -45,6 +45,57 @@ async function fixture() {
   ];
   return { root, roots, store, input, originals, coordinator };
 }
+it("retains unused-assignment authority with a consulted register across restart", async () => {
+  const f = await fixture();
+  const prepared = await f.store.prepare(
+    { ...f.input, authority: "local-empty-unused-assignment" },
+    f.originals,
+  );
+  const applied = await f.store.apply(prepared);
+  const restarted = resolution.createFirstSetupResolutionStore({
+    ...f.roots,
+    coordinator: f.coordinator,
+  });
+  expect(await restarted.read(f.input.resolutionId)).toEqual([prepared, applied]);
+  expect(applied.authority).toBe("local-empty-unused-assignment");
+  expect(applied.register).toEqual(f.input.register);
+});
+it.each(["missing", "committed-exact", "unknown-or-nonempty"] as const)(
+  "unused-assignment authority refuses %s database evidence",
+  async (database) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare(
+        { ...f.input, authority: "local-empty-unused-assignment", database },
+        f.originals,
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
+it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
+  "unused-assignment authority cannot authorise %s",
+  async (action) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare(
+        { ...f.input, authority: "local-empty-unused-assignment", action },
+        f.originals,
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
+it.each([null, { kind: "no-current-master", confirmed: true }])(
+  "unused-assignment authority refuses an absent consulted register %j",
+  async (register) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare(
+        { ...f.input, authority: "local-empty-unused-assignment", register },
+        f.originals,
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "retains %s separately from the unchanged consumption evidence across restart",
   async (status) => {

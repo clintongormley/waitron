@@ -37,6 +37,33 @@ const boundary = createErrorBoundary(
 function invalid(): never {
   throw new AppError("setup.request_invalid", { field: "body" });
 }
+
+function registerAnswer(value: unknown): import("@waitron/provisioning").RegisterAnswer {
+  const raw = object(value);
+  let register: import("@waitron/provisioning").RegisterAnswer;
+  if (raw.kind === "no-current-master") {
+    exact(raw, ["kind", "confirmed"]);
+    if (raw.confirmed !== true) invalid();
+    register = { kind: "no-current-master", confirmed: true };
+  } else {
+    exact(raw, ["kind", "status", "custodian", "reference", "consultedAt"]);
+    if (
+      raw.kind !== "current-master" ||
+      typeof raw.status !== "string" ||
+      !["Consumed", "Not consumed", "Unknown"].includes(raw.status)
+    )
+      invalid();
+    register = {
+      kind: "current-master",
+      status: raw.status as "Consumed" | "Not consumed" | "Unknown",
+      custodian: text(raw.custodian),
+      reference: text(raw.reference),
+      consultedAt: text(raw.consultedAt),
+    };
+  }
+  return register;
+}
+
 function assertFirstFiscalRequest(c: Context): void {
   const origin = c.req.header("Origin"),
     site = c.req.header("Sec-Fetch-Site");
@@ -583,12 +610,10 @@ export function mountFirstSetupResolutionApi(
         )
           invalid();
         let proof:
-          { password: string } | { register: { kind: "no-current-master"; confirmed: true } };
+          { password: string } | { register: import("@waitron/provisioning").RegisterAnswer };
         if (withPassword) proof = { password: text(body.password) };
         else {
-          const register = exact(body.register, ["kind", "confirmed"]);
-          if (register.kind !== "no-current-master" || register.confirmed !== true) invalid();
-          proof = { register: { kind: "no-current-master", confirmed: true } };
+          proof = { register: registerAnswer(body.register) };
         }
         const selected = await selection.resumeWorkspaceSelection({
           inspectionId: text(body.inspectionId),
@@ -774,28 +799,7 @@ export function mountFirstSetupResolutionApi(
           )
         )
           invalid();
-        const raw = object(body.register);
-        let register: import("@waitron/provisioning").RegisterAnswer;
-        if (raw.kind === "no-current-master") {
-          exact(raw, ["kind", "confirmed"]);
-          if (raw.confirmed !== true) invalid();
-          register = { kind: "no-current-master", confirmed: true };
-        } else {
-          exact(raw, ["kind", "status", "custodian", "reference", "consultedAt"]);
-          if (
-            raw.kind !== "current-master" ||
-            typeof raw.status !== "string" ||
-            !["Consumed", "Not consumed", "Unknown"].includes(raw.status)
-          )
-            invalid();
-          register = {
-            kind: "current-master",
-            status: raw.status as "Consumed" | "Not consumed" | "Unknown",
-            custodian: text(raw.custodian),
-            reference: text(raw.reference),
-            consultedAt: text(raw.consultedAt),
-          };
-        }
+        const register = registerAnswer(body.register);
         const selected = await options.startAgain!({
           inspectionId: text(body.inspectionId),
           revision: body.revision as number,

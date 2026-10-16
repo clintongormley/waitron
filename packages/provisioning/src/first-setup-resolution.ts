@@ -37,7 +37,7 @@ interface ResolutionMetadata {
   evidenceDigest: string;
   evidenceReferences: string[];
   database: "empty-preactivation" | "missing" | "committed-exact" | "unknown-or-nonempty";
-  authority: "original-password" | "local-empty-no-custodian";
+  authority: "original-password" | "local-empty-no-custodian" | "local-empty-unused-assignment";
   phase: "prepared" | "applied";
   nextWorkspace: WorkspaceBinding | null;
   recordedAt: string;
@@ -205,7 +205,9 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     !["empty-preactivation", "missing", "committed-exact", "unknown-or-nonempty"].includes(
       String(value.database),
     ) ||
-    !["original-password", "local-empty-no-custodian"].includes(String(value.authority)) ||
+    !["original-password", "local-empty-no-custodian", "local-empty-unused-assignment"].includes(
+      String(value.authority),
+    ) ||
     ![
       "marker-repair",
       "ownership-rebind",
@@ -244,6 +246,14 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     (value.database !== "empty-preactivation" ||
       !object(answer) ||
       answer.kind !== "no-current-master" ||
+      !["retire", "select-workspace"].includes(String(value.action)))
+  )
+    invalid();
+  if (
+    value.authority === "local-empty-unused-assignment" &&
+    (value.database !== "empty-preactivation" ||
+      !object(answer) ||
+      answer.kind !== "current-master" ||
       !["retire", "select-workspace"].includes(String(value.action)))
   )
     invalid();
