@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
@@ -54,11 +54,14 @@ const TIP_EDGE = 8;
  *  kept inside the window's edges. */
 function placeTip(tip: HTMLElement, block: HTMLElement): void {
   if (!tip.matches(":popover-open")) tip.showPopover();
+  tip.style.left = "0px";
+  tip.style.top = "0px";
   tip.style.maxWidth = `${window.innerWidth - 2 * TIP_EDGE}px`;
   const gap = parseFloat(getComputedStyle(tip).getPropertyValue("--wt-space-1"));
   const at = block.getBoundingClientRect();
   const size = tip.getBoundingClientRect();
   const above = at.top - gap - size.height;
+  tip.dataset.side = above >= 0 ? "above" : "below";
   tip.style.top = `${above >= 0 ? above : at.bottom + gap}px`;
   tip.style.left = `${Math.max(TIP_EDGE, Math.min(at.left, window.innerWidth - TIP_EDGE - size.width))}px`;
 }
@@ -222,13 +225,27 @@ export class OpeningHoursWeekView extends LitElement {
         position: fixed;
         inset: auto;
         margin: 0;
+        overflow: visible;
         padding: var(--wt-space-1) var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
+        border: 0;
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-raised);
-        box-shadow: var(--wt-shadow-1);
-        color: var(--wt-color-text);
+        background: var(--wt-color-text);
+        color: var(--wt-color-bg);
         font-size: var(--wt-font-size-sm);
+      }
+      /* Bridges the gap between the tip and its block, so the pointer crossing it never leaves
+         both (WCAG 1.4.13). */
+      .tip::before {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        block-size: var(--wt-space-1);
+      }
+      .tip[data-side="above"]::before {
+        inset-block-start: 100%;
+      }
+      .tip[data-side="below"]::before {
+        inset-block-end: 100%;
       }
       .text {
         overflow: hidden;
@@ -304,6 +321,10 @@ export class OpeningHoursWeekView extends LitElement {
   #onScroll = (): void => {
     if (this.#shownFor) this.#hideTip();
   };
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("model") || changed.has("date") || changed.has("departmentId")) this.#hideTip();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -420,7 +441,6 @@ export class OpeningHoursWeekView extends LitElement {
         <div class="scale">
           ${labels.map(
             (minute) =>
-              // A label is centred on its tick, its centre held at least 2.5ch from the end.
               html`<span
                 class="label"
                 style=${styleMap({ left: `min(${(minute / longest) * 100}%, calc(100% - 2.5ch))` })}

@@ -361,6 +361,11 @@ describe("Opening hours week: a block's label", () => {
     expect(open(el)).toBe(true);
     expect(text(tip(el))).toBe("Restaurant · Lunch 16:00–17:00");
     expect(tip(el).getBoundingClientRect().bottom).toBeLessThan(lunch.getBoundingClientRect().top);
+    const painted = getComputedStyle(tip(el));
+    expect(painted.backgroundColor).toBe(resolved(el, "--wt-color-text"));
+    expect(painted.color).toBe(resolved(el, "--wt-color-bg"));
+    expect(painted.borderTopWidth).toBe("0px");
+    expect(painted.boxShadow).toBe("none");
     await commands.parkPointer();
     expect(open(el)).toBe(false);
 
@@ -406,14 +411,19 @@ describe("Opening hours week: a block's label", () => {
     expect(open(el)).toBe(true);
     const seen: string[] = [];
     const listener = (event: KeyboardEvent) => seen.push(event.key);
+    const prevented: boolean[] = [];
+    const reader = (event: KeyboardEvent) => prevented.push(event.defaultPrevented);
     document.addEventListener("keydown", listener);
+    window.addEventListener("keydown", reader, { capture: true });
     try {
       await userEvent.keyboard("{Escape}");
     } finally {
       document.removeEventListener("keydown", listener);
+      window.removeEventListener("keydown", reader, { capture: true });
     }
     expect(open(el)).toBe(false);
     expect(seen).toEqual([]);
+    expect(prevented).toEqual([true]);
   });
 
   it("a tap shows it and it stays after the tap's own pointerleave", async () => {
@@ -453,6 +463,70 @@ describe("Opening hours week: a block's label", () => {
     await frames();
     expect(window.scrollY).toBeGreaterThan(0);
     expect(open(el)).toBe(false);
+  });
+
+  it("moving the mouse onto the tip keeps it, above or below its block", async () => {
+    const el = await mount({ model: sliverModel() });
+    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
+    await commands.mouseMove([blockSelector("2026-12-02", "rest", 2), tipSelector], {
+      steps: 20,
+      keepX: true,
+    });
+    expect(tip(el).dataset.side).toBe("above");
+    expect(open(el)).toBe(true);
+    await commands.parkPointer();
+    expect(open(el)).toBe(false);
+
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    document.body.append(spacer);
+    hosts.push(spacer);
+    const first = block(el, "2026-11-30", "rest", 1);
+    window.scrollTo(0, first.getBoundingClientRect().top + window.scrollY);
+    await frames();
+    await commands.mouseMove([blockSelector("2026-11-30", "rest", 1), tipSelector], {
+      steps: 20,
+      keepX: true,
+    });
+    expect(tip(el).dataset.side).toBe("below");
+    expect(open(el)).toBe(true);
+  });
+
+  it("a tip shown again is placed afresh", async () => {
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    const el = await mount();
+    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
+    expect(open(el)).toBe(true);
+    const breakfast = block(el, "2026-12-02", "rest", 1);
+    await userEvent.hover(breakfast);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+    const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
+    expect(gap).toBeGreaterThan(0);
+    const box = tip(el).getBoundingClientRect();
+    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(
+      Math.abs(box.bottom - (breakfast.getBoundingClientRect().top - gap)),
+    ).toBeLessThanOrEqual(0.5);
+  });
+
+  it("a change to what the Week shows hides the tip", async () => {
+    const el = await mount({ model: sliverModel() });
+    for (const change of [
+      () => (el.date = "2026-12-09"),
+      () => (el.model = monthModel()),
+      () => (el.departmentId = "rest"),
+    ]) {
+      await userEvent.click(block(el, "2026-12-02", "rest", 2));
+      expect(open(el)).toBe(true);
+      change();
+      await el.updateComplete;
+      expect(open(el)).toBe(false);
+      if (el.date !== "2026-12-02") {
+        el.date = "2026-12-02";
+        await el.updateComplete;
+      }
+    }
   });
 
   it("a faded zone piece names its zone", async () => {
