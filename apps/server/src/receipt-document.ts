@@ -5,6 +5,8 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  divideDecimal,
+  MONEY_SCALE,
   perDishOptionQuantity,
   resolveSnapshotText,
   subtractDecimal,
@@ -51,6 +53,7 @@ export interface ReceiptDocumentInput {
   namesLocale?: string;
   simulated?: boolean;
   duplicate?: boolean;
+  guests?: number;
 }
 
 // The roll renderer resolves an indent after this prefix against the columns the line is drawn in.
@@ -132,6 +135,7 @@ export function buildReceiptDocument({
   namesLocale = invoiceLocale,
   simulated = false,
   duplicate = false,
+  guests,
 }: ReceiptDocumentInput): ReceiptDocument {
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
@@ -419,6 +423,12 @@ export function buildReceiptDocument({
     }
   }
   rule();
+  if (guests !== undefined) {
+    const people = `${guests} ${guests === 1 ? label.guest : label.guests}`;
+    const each = divideDecimal(decimal(result.total), decimal(String(guests)), MONEY_SCALE);
+    row(`${people} · ${label.perPerson}`, formatMoney(each, locale));
+    rule();
+  }
 
   if (receipt.footerMessage) {
     align("center");

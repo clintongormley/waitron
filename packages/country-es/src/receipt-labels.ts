@@ -40,6 +40,9 @@ export const SPAIN_RECEIPT_LABELS = {
     pricesExcludeVat: "Precios sin IVA",
     taxableBase: "Base imponible",
     registeredAddress: "Domicilio fiscal",
+    guest: "comensal",
+    guests: "comensales",
+    perPerson: "por persona",
   },
   "ca-ES": {
     nif: "NIF",
@@ -76,6 +79,9 @@ export const SPAIN_RECEIPT_LABELS = {
     pricesExcludeVat: "Preus sense IVA",
     taxableBase: "Base imposable",
     registeredAddress: "Domicili fiscal",
+    guest: "comensal",
+    guests: "comensals",
+    perPerson: "per persona",
   },
   "gl-ES": {
     nif: "NIF",
@@ -112,6 +118,9 @@ export const SPAIN_RECEIPT_LABELS = {
     pricesExcludeVat: "Prezos sen IVE",
     taxableBase: "Base impoñible",
     registeredAddress: "Domicilio fiscal",
+    guest: "comensal",
+    guests: "comensais",
+    perPerson: "por persoa",
   },
   "eu-ES": {
     nif: "IFZ",
@@ -148,5 +157,8 @@ export const SPAIN_RECEIPT_LABELS = {
     pricesExcludeVat: "Prezioak BEZik gabe",
     taxableBase: "Zerga-oinarria",
     registeredAddress: "Helbide fiskala",
+    guest: "mahaikide",
+    guests: "mahaikide",
+    perPerson: "pertsonako",
   },
 } as const satisfies Readonly<Record<string, ReceiptLabels>>;

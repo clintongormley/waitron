@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
-import { buildReceiptDocument } from "./receipt-document.js";
+import {
+  buildReceiptDocument,
+  type ReceiptDocumentInput,
+  type ReceiptElement,
+} from "./receipt-document.js";
 import {
   FULL_INVOICE_FIXTURE,
   FULL_INVOICE_DOCUMENT_FIXTURE,
@@ -853,5 +857,78 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
         ["Jamón 0.050 kg", "2,00 €"],
       ]),
     );
+  });
+});
+
+describe("guests and the amount per person", () => {
+  const amounts = (input: ReceiptDocumentInput) =>
+    buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "amount" ? [[e.caption, e.amount]] : [],
+    );
+  const guestsAt = (elements: readonly ReceiptElement[], caption: string) =>
+    elements.findIndex((e) => e.kind === "amount" && e.caption === caption);
+
+  it("prints guests and the amount per person after the payment, in its own section", () => {
+    const { elements } = buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 4 });
+    const at = guestsAt(elements, "4 comensales · por persona");
+    expect(elements[at]).toMatchObject({ amount: "4,92 €" }); // 19,69 ÷ 4 = 4,9225 → 4,92
+    const change = guestsAt(elements, "Cambio");
+    expect(at).toBeGreaterThan(change);
+    expect(elements[at - 1]).toEqual({ kind: "rule" });
+    expect(elements[at + 1]).toEqual({ kind: "rule" }); // the fixture's footer «Hasta pronto» follows
+  });
+
+  it("prints no guests line without guests", () => {
+    expect(
+      JSON.stringify(buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE).elements),
+    ).not.toContain("comensal");
+  });
+
+  it("says comensal for one guest", () => {
+    expect(amounts({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 1 })).toContainEqual([
+      "1 comensal · por persona",
+      "19,69 €",
+    ]);
+  });
+
+  it("rounds a half cent away from zero", () => {
+    const input = {
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      guests: 2,
+      result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, total: "0.05" },
+    };
+    expect(amounts(input)).toContainEqual(["2 comensales · por persona", "0,03 €"]);
+  });
+
+  it("prints the line in the receipt's language", () => {
+    expect(
+      amounts({ ...FULL_INVOICE_DOCUMENT_FIXTURE, guests: 3, invoiceLocale: "ca-ES" }),
+    ).toContainEqual(["3 comensals · per persona", "6,56 €"]); // 19,69 ÷ 3 = 6,5633 → 6,56
+  });
+
+  it("prints it after the payment on a simplified receipt too", () => {
+    const { elements } = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      guests: 4,
+      result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, invoiceType: "F2" },
+    });
+    const at = guestsAt(elements, "4 comensales · por persona");
+    expect(elements[at]).toMatchObject({ amount: "4,92 €" });
+    expect(at).toBeGreaterThan(guestsAt(elements, "Cambio"));
+    expect(elements[at - 1]).toEqual({ kind: "rule" });
+    expect(elements[at + 1]).toEqual({ kind: "rule" });
+  });
+
+  it("follows the TOTAL section's rule when no payment is printed", () => {
+    expect(FULL_INVOICE_DOCUMENT_FIXTURE.result.payments).toBeUndefined();
+    const { elements } = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      guests: 4,
+      result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, tender: { method: "unpaid" } },
+    });
+    const at = guestsAt(elements, "4 comensales · por persona");
+    expect(elements[at]).toMatchObject({ amount: "4,92 €" });
+    expect(elements[at - 1]).toEqual({ kind: "rule" });
+    expect(elements[at - 2]).toMatchObject({ kind: "amount", caption: "TOTAL" });
   });
 });
