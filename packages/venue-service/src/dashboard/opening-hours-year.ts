@@ -195,8 +195,7 @@ export class OpeningHoursYearView extends LitElement {
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
   /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
-   *  presses during the wait add up, and with no `model` only the heading naming it and ‹ › are
-   *  drawn. 0 steps from `model`. */
+   *  presses during the wait add up. 0 steps from `model`. */
   @property({ type: Number }) year = 0;
   /** Set by the host when the year read failed: with no `model`, the month names are still drawn,
    *  as the only way left to a month. */
