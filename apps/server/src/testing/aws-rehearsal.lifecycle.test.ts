@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -197,7 +198,9 @@ describe("withAwsRehearsal — the happy path", () => {
       runId: RUN_ID,
       commit: "0123456789abcdef",
       node: process.version,
-      sdkVersion: "3.1140.0",
+      sdkVersion: (
+        createRequire(import.meta.url)("@aws-sdk/client-s3/package.json") as { version: string }
+      ).version,
       litestreamVersion: "0.5.17",
       region: "eu-north-1",
       startedAt: "2026-10-14T10:00:00.005Z",
