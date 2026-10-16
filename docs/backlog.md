@@ -346,8 +346,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   refused when the host offers owned setup. Full boot still has two unchanged configuration-error
   failures, with `boot.ts` reserved by lane F's A737 branch. Real-server configuration-import checks
   now cover fresh hour names/counters, both taxpayer choices, replacement refusal and restart.
-  The retained paper-era import fixture still needs exact fiscal-check permission. Complete wizard
-  and CLI admission remain unfinished.
+  The owner's exact 2026-10-17 import-fixture permission is applied; all eight retained import
+  cases pass with hour preparation. Complete wizard and CLI admission remain unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

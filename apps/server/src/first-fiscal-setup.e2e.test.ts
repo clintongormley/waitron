@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -28,7 +28,6 @@ import {
   decodeConfigurationBundle,
 } from "./configuration-transfer.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
-import { publicFirstFiscalInput } from "../test/first-fiscal-public.js";
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -52,10 +51,39 @@ vi.mock("@waitron/composition", async (original) => {
     ),
   };
 });
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const now = Date.now(),
+      mono = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: now,
+      uncertaintyMs: 500,
+      wallStartedMs: now,
+      wallFinishedMs: now,
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const instant = Date.parse("2026-10-16T11:40:00Z"),
+    monotonic = performance.now();
+  vi.setSystemTime(instant);
+  vi.spyOn(Date, "now").mockImplementation(
+    () => instant + Math.trunc(performance.now() - monotonic),
+  );
+});
 const selected = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "ES-common").config);
 const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const dirs: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -262,9 +290,25 @@ it.each([
         expect(response.status).toBe(200);
         return response.body;
       };
+      const challenge = await post("/setup-api/first-setup/preparation", {
+        module: MODULE,
+        proposal: { action: "clock-challenge" },
+      });
+      expect(challenge.status).toBe(200);
+      const comparison = await post("/setup-api/first-setup/preparation", {
+        module: MODULE,
+        proposal: {
+          action: "compare-clocks",
+          browser: {
+            challengeId: challenge.body.preparation.id,
+            instantMs: Date.now(),
+          },
+        },
+      });
+      expect(comparison.status).toBe(200);
       const candidates = await post("/setup-api/first-setup/candidates", {
         module: MODULE,
-        proposal: { serials: [1] },
+        proposal: { answer: "no" },
         ...(await reconfirm("block-use")),
       });
       expect(candidates.status).toBe(200);
@@ -274,31 +318,18 @@ it.each([
         headers: headers(),
       } as RequestInit);
       expect(exported.status).toBe(200);
-      const signed = publicFirstFiscalInput((await exported.json()).modules[0].request);
+      const prepared = (await exported.json()).modules[0].request;
+      expect(prepared).toMatchObject({
+        kind: "waitron-hour-setup",
+        status: "selected",
+        identity: "06RB",
+      });
       const imported = await post("/setup-api/first-setup/input", {
         module: MODULE,
-        input: signed.input,
+        input: prepared.input,
       });
       expect(imported.status).toBe(200);
       state = imported.body.state;
-      expect(
-        (
-          await post("/setup-api/first-setup/enrol", {
-            module: MODULE,
-            publicKey: signed.key,
-            comparison: signed.key.fingerprint,
-          })
-        ).status,
-      ).toBe(200);
-      expect(
-        (
-          await post("/setup-api/first-setup/current-master", {
-            module: MODULE,
-            statement: signed.current,
-            ...(await reconfirm("activation")),
-          })
-        ).status,
-      ).toBe(200);
       if (readinessAfterImport) {
         expect(await post("/setup-api/fiscal-test", live)).toEqual({
           status: 200,

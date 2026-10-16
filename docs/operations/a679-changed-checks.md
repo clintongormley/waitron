@@ -288,3 +288,25 @@ selected cases passed. No production file in the feature checkout was changed fo
 
 Task 4 remains incomplete. CLI admission, the retained import fixture, the two boot configuration
 failures and later wizard/recovery/PDF tasks still need their own qualification.
+
+## Task 4 retained import fixture — approval applied, 2026-10-17
+
+The owner approved the exact proposed import-fixture patch at 00:03. Its SHA-256 is
+`1a753dbcb88b518acf81fc73c428f5dc8050d265e3a6f483bd911dc0ad491433`.
+The current test file matches that proposal byte for byte. The preceding 2026-10-16 entry records
+the earlier failure; its permission wait is now closed.
+
+| Check | Before | After | Authority |
+| --- | --- | --- | --- |
+| `apps/server/src/first-fiscal-setup.e2e.test.ts:309` | Candidate selection submits `serials: [1]`. | A clock challenge and comparison precede the taxpayer-wide No answer; the exported request must name `06RB`. | Exact owner approval, 2026-10-17 00:03; hour-plan Task 4. |
+| Same file, former lines 284–302 | Two 200 checks cover custodian enrolment and current-register confirmation. | Two 200 checks cover the clock challenge and comparison. | The same exact approval. |
+
+The fixture controls internet-clock and release replies. Its wall-clock reading advances from
+16 October 2026 at 11:40 UTC using real monotonic elapsed time; ordinary timers keep running.
+Every other original matcher remains, including readiness before/after import, certificate/email
+requirements, import refusal, empty failed venues, publication and restart. No production source
+changes in this continuation.
+
+Run `pnpm --filter @waitron/server exec vitest run src/first-fiscal-setup.e2e.test.ts` to reproduce
+the eight passing retained cases. This closes the fixture qualification only. CLI admission,
+the two boot configuration failures and later wizard/recovery/PDF tasks remain open.
