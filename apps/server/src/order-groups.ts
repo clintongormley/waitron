@@ -212,7 +212,7 @@ export async function placeGroups(
     await VENUE_SERVICE.moveAllergyDraftTicks(
       tx,
       partyId,
-      inserted
+      rows
         .filter((row) => row.parentLineId == null)
         .map((row, i) => ({
           draftLineId: draftIds[i]!,

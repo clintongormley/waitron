@@ -815,27 +815,34 @@ async function replaceLines(
           ),
     ),
   );
-  for (const [index, line] of lines.entries()) {
-    const row = {
-      id: line.id,
-      draftId: intoDraftId,
-      position: index + 1,
-      menuItemId: line.menuItemId,
-      variantId: line.variantId,
-      menuVersionId: line.menuVersionId,
-      options: line.options,
-      extras: line.extras,
-      note: line.note,
-      quantity: stringToThousandths(line.quantity),
-      courseId: line.courseId,
-      makeAtStationId: line.makeAt ?? null,
-      noMerge: line.noMerge,
-    };
-    await tx
-      .insert(orderDraftLines)
-      .values(row)
-      .onConflictDoUpdate({ target: orderDraftLines.id, set: row });
-  }
+  if (lines.length === 0) return;
+  const rows = lines.map((line, index) => ({
+    id: line.id,
+    draftId: intoDraftId,
+    position: index + 1,
+    menuItemId: line.menuItemId,
+    variantId: line.variantId,
+    menuVersionId: line.menuVersionId,
+    options: line.options,
+    extras: line.extras,
+    note: line.note,
+    quantity: stringToThousandths(line.quantity),
+    courseId: line.courseId,
+    makeAtStationId: line.makeAt ?? null,
+    noMerge: line.noMerge,
+  }));
+  await tx
+    .insert(orderDraftLines)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: orderDraftLines.id,
+      set: {
+        draftId: intoDraftId,
+        position: sql`excluded.position`,
+        quantity: sql`excluded.quantity`,
+        noMerge: sql`excluded.no_merge`,
+      },
+    });
 }
 
 /** One open draft of the party, which the caller knows is there. */

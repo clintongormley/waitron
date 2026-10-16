@@ -108,7 +108,13 @@ export async function savePartyAllergy(
     const who = printable(entry.who, field("who"), 40, true)!;
     if (!record(entry.allergens) || Object.keys(entry.allergens).length === 0)
       invalid(field("allergens"));
-    const allergens = validateAllergens(entry.allergens)!;
+    let allergens;
+    try {
+      allergens = validateAllergens(entry.allergens)!;
+    } catch (error) {
+      if (!(error instanceof AppError) || !error.code.startsWith("allergen.")) throw error;
+      throw new AppError("allergy.invalid", { field: field("allergens") }, { reason: error.code });
+    }
     const note = printable(entry.note, field("note"), 2000, false);
     return { id: guestId, partyId, position, who, allergens, note };
   });
@@ -140,6 +146,11 @@ export async function setAllergyLineTicks(
   input: unknown,
 ): Promise<void> {
   if (!Array.isArray(input)) invalid("ticks");
+  const [party] = await tx
+    .select({ state: parties.state })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined || party.state !== "open") invalid("partyId");
   const guests = await tx
     .select({ id: partyAllergyGuests.id })
     .from(partyAllergyGuests)

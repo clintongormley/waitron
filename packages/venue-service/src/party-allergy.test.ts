@@ -188,13 +188,13 @@ it.each([
 it("uses the catalogue kind validator and normalises printable guest text", async () => {
   await expect(
     save({ answer: "allergies", guests: [{ ...guest, allergens: { gluten: {} } }] }),
-  ).rejects.toMatchObject({ code: "allergen.kinds_required" });
+  ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "guests.0.allergens" } });
   await expect(
     save({
       answer: "allergies",
       guests: [{ ...guest, allergens: { nuts: { kinds: ["wheat"] } } }],
     }),
-  ).rejects.toMatchObject({ code: "allergen.invalid_kind" });
+  ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "guests.0.allergens" } });
   const result = await save({
     answer: "allergies",
     guests: [{ who: ` Seat\n3 `, allergens: { milk: {} }, note: "  no\x1bmilk\nplease  " }],
@@ -515,4 +515,31 @@ it("accepts a working dish from a party merged into this party, while keeping un
   expect((await read()).ticks).toEqual([
     { guestId: state.guests[0]!.id, draftLineId: null, workingLineId },
   ]);
+});
+
+it("refuses dish assignments once the party is closed", async () => {
+  const state = await save({ answer: "allergies", guests: [guest] });
+  const draftLineId = await draftLine();
+  await tx((t) =>
+    t
+      .update(parties)
+      .set({ state: "closed", closedAt: new Date().toISOString(), closedBy: actor })
+      .where(eq(parties.id, partyId)),
+  );
+  await expect(
+    tx((t) =>
+      allergy.setAllergyLineTicks(t, partyId, [{ guestId: state.guests[0]!.id, draftLineId }]),
+    ),
+  ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "partyId" } });
+  expect((await read()).ticks).toEqual([]);
+});
+
+it("identifies the guest whose allergen declaration is invalid", async () => {
+  await expect(
+    save({
+      answer: "allergies",
+      guests: [guest, { who: "Second guest", allergens: { bogus: {} } }],
+    }),
+  ).rejects.toMatchObject({ code: "allergy.invalid", params: { field: "guests.1.allergens" } });
+  expect((await read()).guests).toEqual([]);
 });
