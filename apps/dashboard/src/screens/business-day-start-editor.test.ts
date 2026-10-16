@@ -464,3 +464,47 @@ it("counts the distinct lines it shows", async () => {
   expect(twoSeasons.lines).toHaveLength(2);
   expect(twoSeasons.count).toBe("Conflicting schedules: 2. Review opening hours");
 });
+
+const cardRows = (el: Editor) =>
+  [...el.shadowRoot!.querySelectorAll("section.settings-card dt")].map(
+    (label) =>
+      `${label.textContent!.trim()} ${label.nextElementSibling!.textContent!.replace(/\s+/g, " ").trim()}`,
+  );
+it.each([
+  ["en-GB", "Business day", ["Starts at 05:00", "Scheduled change None"]],
+  ["es", "Día de trabajo", ["Empieza a las 05:00", "Cambio programado Ninguno"]],
+])(
+  "draws its own card with the start once and no time zone (%s)",
+  async (locale, heading, rows) => {
+    setLocale(locale);
+    const { el } = await rig();
+    const card = q(el, "section.settings-card")!;
+    expect(card.querySelector("h2")!.textContent!.trim()).toBe(heading);
+    expect(cardRows(el)).toEqual(rows);
+    expect(card.textContent).not.toContain("Europe/Madrid");
+    expect(q(el, "h3")).toBeNull();
+    expect(q(el, "[data-test=change]")!.closest("header")?.parentElement).toBe(card);
+  },
+);
+it("shows a pending change as date · time with its lock time, and its actions in the header", async () => {
+  setLocale("en-GB");
+  const { el } = await rig(
+    {},
+    {
+      ...clockModel(),
+      pending: {
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: "03:00:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        locksAt: "2026-11-03T04:00:00.000Z",
+        editable: true,
+      },
+    },
+  );
+  const rows = cardRows(el);
+  expect(rows.slice(0, 2)).toEqual(["Starts at 05:00", "Scheduled change 2026-11-04 · 03:00"]);
+  expect(rows[2]).toMatch(/^Editable until /);
+  const card = q(el, "section.settings-card")!;
+  expect(q(el, "[data-test=replace]")!.closest("header")?.parentElement).toBe(card);
+  expect(q(el, "[data-test=cancel-pending]")!.closest("header")?.parentElement).toBe(card);
+});

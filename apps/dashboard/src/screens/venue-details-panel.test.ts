@@ -798,3 +798,24 @@ it("leaves the Business card in view mode while the Venue card is open", async (
   expect(rows(business)[0]).toBe("Legal name: Issuer SL");
   expect(q(el, "[data-test=change-legal-name]")!.closest("header")?.parentElement).toBe(business);
 });
+
+const deepText = (root: ShadowRoot | Element): string =>
+  [...root.querySelectorAll("*")]
+    .map((node) => (node.shadowRoot ? deepText(node.shadowRoot) : ""))
+    .join(" ") + (root.textContent ?? "");
+const deepHeadings = (root: ShadowRoot): string[] =>
+  [...root.querySelectorAll("*")].flatMap((node) =>
+    node.matches("section.settings-card > header > h2")
+      ? [text(node)]
+      : node.shadowRoot
+        ? deepHeadings(node.shadowRoot)
+        : [],
+  );
+it("shows the business-day start once, in a third card after Business and Venue", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig(venueDetailsFixture({ dayCutover: "05:00" })).api);
+  const all = deepText(el.shadowRoot!);
+  expect(count(all, "05:00")).toBe(1);
+  expect(all).not.toContain("Business day starts at");
+  expect(deepHeadings(el.shadowRoot!)).toEqual(["Business", "Venue", "Business day"]);
+});
