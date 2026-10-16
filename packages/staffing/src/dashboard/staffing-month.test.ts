@@ -314,6 +314,20 @@ describe("the Staffing view's month", () => {
     expect(lines(el, "2026-12-02")).toEqual(["3"]);
   });
 
+  it("draws an empty grid for a read with no days", async () => {
+    const { api } = fakeApi(async (month) => ({
+      ...staffingMonth(month),
+      days: [],
+      areas: [],
+      seasons: [],
+    }));
+    const { el } = await mount({ api });
+    expect(root(el).querySelector("table")).not.toBeNull();
+    expect(root(el).querySelectorAll("td")).toHaveLength(0);
+    expect(root(el).querySelector("[data-test=loading]")).toBeNull();
+    expect(root(el).querySelector("[data-test=load-error]")).toBeNull();
+  });
+
   it("shows why the month could not be read", async () => {
     const { api } = fakeApi(() => Promise.reject({ code: "connection.failed" }));
     const { el } = await mount({ api });

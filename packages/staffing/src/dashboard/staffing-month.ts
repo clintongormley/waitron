@@ -446,7 +446,7 @@ export class StaffingMonthView extends LitElement {
     );
     const stop =
       [this.focusDate, month.today].find((date) => month.days.some((day) => day.date === date)) ??
-      month.days.find((day) => day.inMonth)!.date;
+      month.days.find((day) => day.inMonth)?.date;
     return html`<table @keydown=${this.#keydown}>
         <thead>
           <tr>
