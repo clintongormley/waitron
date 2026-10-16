@@ -214,7 +214,10 @@ console.log(JSON.stringify({
       );
       expect(result.status, result.stderr).toBe(0);
       const notice = readFileSync(join(dir, "dist/out.js.NOTICES.txt"), "utf8");
-      expect(notice).toContain("hono 4.13.9");
+      const { version } = JSON.parse(
+        readFileSync(join(ROOT, "apps/server/node_modules/hono/package.json"), "utf8"),
+      );
+      expect(notice).toContain(`===== hono ${version} — LICENSE =====`);
       expect(notice).toContain(
         readFileSync(join(ROOT, "apps/server/node_modules/hono/LICENSE"), "utf8"),
       );

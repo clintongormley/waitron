@@ -16,12 +16,12 @@
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
-    "drizzle-orm": "^0.45.3"
+    "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"

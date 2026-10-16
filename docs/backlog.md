@@ -5589,15 +5589,16 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   check and clear it: workflow-guide → Dependabot pull requests); such a PR also has to re-measure
   mutation first (the entry below, _A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it_).
 
-- **Open Dependabot pull requests — low priority, not queued (owner, 2026-10-08: take them from here
-  when a lane has room).** #1179 (Vitest 5) waits on Stryker (owner). The rest: **sharp 0.35.5
-  (#1299 root, #1423 `apps/server`) and the compose group (#1178)**; **the npm minor-and-patch group
-  (#1267, 13 updates)**; **stripe 22.6.2 → 23.0.0 (#1181, a major)**. [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
+- **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner); #1181 (stripe 23, a
+  major) is lane F's A776; #1299 and #1423 (sharp 0.35.5 alone) are superseded by #1760 and are
+  closed when it lands. **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
+  accessibility rule our screens fail, so it moves in its own PR with the fixes (A775).
+  [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
 
-- **Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed** — OPEN (found 2026-10-03
-  by #1139's review). **Next action:** read each claim against the installed 0.45.3, then update the
-  number or the claim.
-  [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-0453-is-installed)
+- **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN (found
+  2026-10-03 by #1139's review). **Next action:** read each claim against the installed 0.45.4, then
+  update the number or the claim.
+  [Detail](backlog/dependencies.md#comments-and-docs-still-name-drizzle-orm-0452-and-0453-0454-is-installed)
 
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7** —
   left behind by the TypeScript 7 upgrade (#460, 2026-09-20). When a release supports it, the root
@@ -6043,6 +6044,18 @@ _Formerly entries spread across the old sections._
   source offer in `/app/third-party/` (`deploy/third-party/`). The legal advisor is asked to
   confirm it (`docs/compliance/action-plan.md`, 2026-09-23). Left open by photos shrunk
   on upload (#543).
+
+- **cairo, built into that libvips, is listed under the Mozilla Public License, and `/app/third-party/`
+  carries neither its licence text nor a source offer for it** — found by A775 (#1760, 2026-10-16).
+  sharp's libvips package lists cairo under the MPL (1.1 since 1.3.4, 2.0 in 1.3.3); that list is
+  the package's `README.md`, copied into the image as `/app/third-party/libvips/NOTICES.md`
+  (`deploy/Dockerfile`). cairo's own `COPYING` offers LGPL 2.1 or MPL 1.1. `deploy/third-party/` covers
+  only the LGPL-3.0 libraries: it holds neither the MPL 1.1 nor the LGPL 2.1 text (the Debian base
+  image's `/usr/share/common-licenses/` has both, unreferenced), and its source offer does not name
+  cairo. The gap predates this bump: 1.3.3 already listed cairo under the MPL, and
+  `deploy/third-party/README.md` has never mentioned the MPL (`git log -S'MPL'` finds nothing).
+  The legal advisor is asked (`docs/compliance/action-plan.md`, 2026-10-16). **Next action:** add
+  the licence text and source notice the answer calls for.
 
 ### Later and parked
 
