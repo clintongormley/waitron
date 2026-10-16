@@ -52,6 +52,7 @@ export class OpeningHoursYearView extends LitElement {
       .head h2 {
         margin: 0;
         font-size: var(--wt-font-size-lg);
+        font-variant-numeric: tabular-nums;
       }
       season-chips {
         margin-block-end: var(--wt-space-2);
@@ -83,6 +84,18 @@ export class OpeningHoursYearView extends LitElement {
         border-radius: var(--wt-radius-md);
         padding: var(--wt-space-2);
         background: var(--wt-color-surface);
+      }
+      .month-list {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .month-list .month-name {
+        min-height: var(--wt-tap-min);
       }
       .month-name {
         padding: 0;
@@ -182,9 +195,11 @@ export class OpeningHoursYearView extends LitElement {
   /** The year as the server reads it; the host fetches a new one on `year-change`. */
   @property({ attribute: false }) model?: OpeningHoursYear;
   /** The year the host asked for, ahead of `model` while its read is pending; ‹ › step from it so
-   *  presses during the wait add up, and with no `model` only the heading naming it, ‹ › and the
-   *  switch's slot are drawn. 0 steps from `model`. */
+   *  presses during the wait add up. 0 steps from `model`. */
   @property({ type: Number }) year = 0;
+  /** Set by the host when the year read failed: with no `model`, the month names are still drawn,
+   *  as the only way left to a month. */
+  @property({ type: Boolean }) readFailed = false;
   /** The season writes the chips send. */
   @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) areaApi?: HolidayAreaWrites;
@@ -250,15 +265,7 @@ export class OpeningHoursYearView extends LitElement {
     const headingId = `month-${month}`;
     const handlers = this.#dayPicker.handlers;
     return html`<section class="month" data-month=${key}>
-      <button
-        type="button"
-        class="month-name"
-        id=${headingId}
-        data-test="month-name"
-        @click=${() => this.#emit("year-month-open", { date: `${key}-01` })}
-      >
-        ${formatMonthName(Number(month))}
-      </button>
+      ${this.#monthName(key, headingId)}
       <table
         aria-labelledby=${headingId}
         @pointerdown=${handlers.pointerdown}
@@ -432,9 +439,31 @@ export class OpeningHoursYearView extends LitElement {
       ${step(-1, "previous-year", "hours.calendar.previous_year", "‹")}
       <h2 data-test="year" aria-live="polite">${shown}</h2>
       ${step(1, "next-year", "hours.calendar.next_year", "›")}
-      <slot name="switch"></slot>
     </div>`;
-    return html`${head}${model ? this.#body(model) : nothing}`;
+    return html`${head}${
+      model ? this.#body(model) : this.readFailed ? this.#monthList(shown) : nothing
+    }`;
+  }
+
+  #monthName(key: string, id?: string) {
+    return html`<button
+      type="button"
+      class="month-name"
+      id=${id ?? nothing}
+      data-test="month-name"
+      @click=${() => this.#emit("year-month-open", { date: `${key}-01` })}
+    >
+      ${formatMonthName(Number(key.slice(5)))}
+    </button>`;
+  }
+
+  #monthList(year: number) {
+    return html`<ul class="month-list">
+      ${MONTHS.map((month) => {
+        const key = `${yearKey(year)}-${month}`;
+        return html`<li data-month=${key}>${this.#monthName(key)}</li>`;
+      })}
+    </ul>`;
   }
 
   #body(model: OpeningHoursYear) {

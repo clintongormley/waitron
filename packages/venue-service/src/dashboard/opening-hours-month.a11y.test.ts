@@ -126,6 +126,17 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     );
   });
 
+  test.each(["en", "es"] as const)("the year linked to the Year view (%s)", async (locale) => {
+    setLocale(locale);
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, { model: monthModel(), departments: DEPARTMENTS, linkYear: true });
+    host.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-test="month-year"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test.each(Object.keys(states))("%s", async (state) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");

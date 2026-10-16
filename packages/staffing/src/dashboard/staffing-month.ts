@@ -7,12 +7,13 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
 import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
+import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/fixed-title";
 import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { dateFormat, mondayFirst, utc } from "./format.js";
-import { t, tf } from "./strings.js";
+import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
 
@@ -34,6 +35,7 @@ export class StaffingMonthView extends LitElement {
   static override styles = [
     baseStyles,
     seasonTintStyles,
+    fixedTitleStyles,
     css`
       :host {
         display: block;
@@ -46,13 +48,6 @@ export class StaffingMonthView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-      }
-      .head h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-      }
-      .head h2::first-letter {
-        text-transform: uppercase;
       }
       .alert {
         margin: 0 0 var(--wt-space-2);
@@ -389,10 +384,18 @@ export class StaffingMonthView extends LitElement {
         >${glyph}</wt-button
       >`;
     };
-    const title = `${dateFormat({ month: "long" }).format(utc(`${current}-01`))} ${Number(current.slice(0, 4))}`;
+    const year = Number(current.slice(0, 4));
+    const title = (month: string, language?: string) =>
+      `${dateFormat({ month: "long" }, language).format(utc(`${current.slice(0, 4)}-${month}-01`))} ${year}`;
+    const titles = Object.keys(STAFFING_STRINGS).flatMap((language) =>
+      Array.from({ length: 12 }, (_, index) => title(String(index + 1).padStart(2, "0"), language)),
+    );
     return html`<div class="head">
         ${step(-1, "previous-month", "staffing.month.previous", "‹")}
-        <h2 data-test="month" aria-live="polite">${title}</h2>
+        ${fixedTitle(
+          html`<h2 data-test="month" aria-live="polite">${title(current.slice(5, 7))}</h2>`,
+          titles,
+        )}
         ${step(1, "next-month", "staffing.month.next", "›")}
         ${this.read ? this.#picker(this.read.areas) : nothing}
       </div>

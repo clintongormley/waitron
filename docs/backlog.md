@@ -1585,12 +1585,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   special day's dates as one coloured run. After A721 and A723.
   [Detail](backlog/service-periods.md#a762-every-painter-says-what-it-edits-in-its-colour-and-the-staffing-month-marks-special-days)
 
-- **A759. The Calendar's Year | Month switch goes; the title moves between views (owner,
-  2026-10-16).** A month name in Year opens that month; in "‹ February 2026 ›" the year is a link
-  back to Year; the day box's "Open this week" opens A722's Week, whose title links back to its
-  month and year. The "‹ title ›" keeps a fixed width so the arrows stay put. Before A722 is built.
-  [Detail](backlog/service-periods.md#a759-the-calendars-year--month-switch-goes-the-title-moves-between-views)
-
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan

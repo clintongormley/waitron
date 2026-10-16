@@ -36,6 +36,7 @@ const SUBPATHS: string[] = [
   "packages/staffing/src/dashboard",
   "packages/venue-service/src/dashboard/painter.ts",
   "packages/venue-service/src/dashboard/calendar-day-box.ts",
+  "packages/venue-service/src/dashboard/fixed-title.ts",
 ];
 
 function tsFiles(path: string): string[] {

@@ -201,8 +201,12 @@ async function hours(
   screen.api = api;
   app.append(screen);
   await expect
-    .poll(() => screen.shadowRoot?.querySelector("[data-test=view-switch]"))
-    .not.toBeNull();
+    .poll(() =>
+      screen.shadowRoot
+        ?.querySelector("opening-hours-year")
+        ?.shadowRoot?.querySelector("[data-test=year]"),
+    )
+    .toBeTruthy();
   async function replace(next: OpeningHoursModel) {
     model = next;
     live.invalidate([{ type: "departments" }, { type: "floor_zones" }]);

@@ -111,6 +111,28 @@ describe("the Staffing view's month", () => {
     expect(root(el).querySelectorAll("tbody tr")).toHaveLength(5);
   });
 
+  it("keeps ‹ and › in place whatever month and year it shows, in every language", async () => {
+    const months = [
+      ...Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, "0")}`),
+      "2011-05",
+      "2088-05",
+    ];
+    const lefts: [string, number][] = [];
+    for (const locale of ["en", "es"] as const) {
+      setLocale(locale);
+      const { el } = await mount();
+      for (const month of months) {
+        el.month = month;
+        await settled(el);
+        lefts.push([
+          `${locale} ${month}`,
+          root(el).querySelector("[data-test=next-month]")!.getBoundingClientRect().left,
+        ]);
+      }
+    }
+    expect(lefts).toEqual(lefts.map(([shown]) => [shown, lefts[0]![1]]));
+  });
+
   it("dims the days outside the month and marks today", async () => {
     const { el } = await mount();
     expect(cell(el, "2026-11-30").hasAttribute("data-outside")).toBe(true);

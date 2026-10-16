@@ -164,7 +164,7 @@ async function mount(
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
-  await expect.poll(() => el.shadowRoot?.querySelector("[data-test=view-switch]")).not.toBeNull();
+  await expect.poll(() => drawnView(el)).toBeDefined();
   await el.updateComplete;
   return { el, ...recorded };
 }
@@ -192,8 +192,15 @@ async function cancel(painter: SpecialDayPainter) {
   frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
   await settle(painter);
 }
-const checkedView = (el: Screen) =>
-  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=view-switch] input:checked")?.value;
+/** Which Opening hours view is drawn, known by its own heading. */
+const drawnView = (el: Screen) =>
+  el.shadowRoot!.querySelector("opening-hours-year")?.shadowRoot?.querySelector("[data-test=year]")
+    ? "year"
+    : el
+          .shadowRoot!.querySelector("opening-hours-month")
+          ?.shadowRoot?.querySelector("[data-test=month]")
+      ? "month"
+      : undefined;
 
 describe("the special-day painter's address", () => {
   it("opens a stored special day over the Year on a direct load, fed the screen's model and api, and closes to the Year", async () => {
@@ -205,7 +212,7 @@ describe("the special-day painter's address", () => {
     expect(painter.model.departments.map(({ id }) => id)).toEqual(["d1", "d2"]);
     expect(painter.readOnly).toBe(false);
     expect(nameOf(painter)).toBe("Christmas dinners");
-    expect(checkedView(el)).toBe("year");
+    expect(drawnView(el)).toBe("year");
     await cancel(painter);
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
     await expect.poll(() => painterOf(el)).toBeNull();
@@ -319,7 +326,7 @@ describe("the special-day painter's address", () => {
     const { el } = await mount(from);
     await expect.poll(() => location.pathname).toBe(to);
     await expect.poll(() => el.shadowRoot!.querySelector("opening-hours-month")).not.toBeNull();
-    expect(checkedView(el)).toBe("month");
+    expect(drawnView(el)).toBe("month");
   });
 });
 
@@ -471,7 +478,7 @@ describe("a run picked on the Year", () => {
     history.back();
     await expect.poll(() => location.pathname).toBe(address);
     await expect.poll(() => painterOf(el)).toBeNull();
-    expect(checkedView(el)).toBe("year");
+    expect(drawnView(el)).toBe("year");
   });
 
   it("a run of 366 dates read from an address opens whole, and a longer one opens on its first date alone", async () => {

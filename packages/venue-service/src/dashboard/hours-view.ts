@@ -11,8 +11,8 @@ export function format(key: Parameters<typeof t>[0], values: Record<string, stri
 /** One formatter per language and options: building one costs far more than using it, and the
  *  Year draws hundreds of dates on every render. */
 const formatters = new Map<string, Intl.DateTimeFormat>();
-function dateFormat(options: Intl.DateTimeFormatOptions) {
-  const locale = currentLocale().startsWith("es") ? "es-ES" : "en-GB";
+function dateFormat(options: Intl.DateTimeFormatOptions, language = currentLocale()) {
+  const locale = language.startsWith("es") ? "es-ES" : "en-GB";
   const key = `${locale} ${JSON.stringify(options)}`;
   let formatter = formatters.get(key);
   if (!formatter) {
@@ -49,9 +49,11 @@ export function formatShortDate(date: LocalDate, year: boolean): string {
   ).format(asUtc(date));
 }
 
-/** A month's name from its number, 1 to 12, "December", in the dashboard's language. */
-export function formatMonthName(month: number): string {
-  return dateFormat({ month: "long" }).format(asUtc(`2001-${String(month).padStart(2, "0")}-01`));
+/** A month's name from its number, 1 to 12, "December", in `language`, else the dashboard's. */
+export function formatMonthName(month: number, language?: string): string {
+  return dateFormat({ month: "long" }, language).format(
+    asUtc(`2001-${String(month).padStart(2, "0")}-01`),
+  );
 }
 
 /** A date's day, month and year, "12 October 2026", in the dashboard's language. */

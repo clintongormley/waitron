@@ -15,8 +15,9 @@ import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
 import { closedHatch } from "./period-colour-styles.js";
+import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
-import { t } from "./strings.js";
+import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -71,6 +72,7 @@ export class OpeningHoursMonthView extends LitElement {
   static override styles = [
     baseStyles,
     seasonTintStyles,
+    fixedTitleStyles,
     css`
       :host {
         display: block;
@@ -84,19 +86,29 @@ export class OpeningHoursMonthView extends LitElement {
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
       }
-      .head h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-      }
-      .head h2::first-letter {
-        text-transform: uppercase;
-      }
       .sub {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2) var(--wt-space-4);
         margin-block-end: var(--wt-space-2);
+      }
+      .year-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .year-link:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .year-hint {
+        ${visuallyHiddenStyles}
       }
       .rows {
         margin: 0;
@@ -293,8 +305,8 @@ export class OpeningHoursMonthView extends LitElement {
   /** The month as the server reads it; the host fetches a new one on `month-change`. */
   @property({ attribute: false }) model?: OpeningHoursMonth;
   /** The `YYYY-MM` the host asked for, ahead of `model` while its read is pending; ‹ › step from it
-   *  so presses during the wait add up, and only the heading, ‹ › and the switch's slot are drawn
-   *  until `model` is of this month. "" steps from `model`. */
+   *  so presses during the wait add up, and only the heading and ‹ › are drawn until `model` is of
+   *  this month. "" steps from `model`. */
   @property() month = "";
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
@@ -303,6 +315,8 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
+  /** Draws the title's year as a link sending `month-year-open`, where a Year view exists. */
+  @property({ type: Boolean }) linkYear = false;
   #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     canPick: () => !this.readOnly && !this.stationMode,
@@ -546,15 +560,34 @@ export class OpeningHoursMonthView extends LitElement {
       >`;
     };
     const year = Number(current.slice(0, 4));
+    const shown = Number(current.slice(5, 7));
+    // A candidate is shaped as the title is: a plain title one text node, a linked one with its
+    // year an inline-block. Shaped otherwise, Chromium measured the title a hair wider.
+    const title = (month: number, language?: string) =>
+      this.linkYear
+        ? html`${formatMonthName(month, language)} <span class="year-link">${year}</span>`
+        : `${formatMonthName(month, language)} ${year}`;
+    const titles = Object.keys(VENUE_SERVICE_STRINGS).flatMap((language) =>
+      Array.from({ length: 12 }, (_, index) => title(index + 1, language)),
+    );
+    const heading = this.linkYear
+      ? html`${formatMonthName(shown)}
+          <button
+            type="button"
+            class="year-link"
+            data-test="month-year"
+            aria-describedby="year-hint"
+            @click=${() => this.#emit("month-year-open", { year })}
+          >
+            ${year}
+          </button>`
+      : title(shown);
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
-        <h2 data-test="month" aria-live="polite">
-          ${formatMonthName(Number(current.slice(5, 7)))} ${year}
-        </h2>
-        ${step(1, "next-month", "month.next", "›")}
-        <slot name="switch"></slot>
-        ${model ? this.#tools(model) : nothing}
+        ${fixedTitle(html`<h2 data-test="month" aria-live="polite">${heading}</h2>`, titles)}
+        ${step(1, "next-month", "month.next", "›")} ${model ? this.#tools(model) : nothing}
       </div>
+      ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
       ${model ? this.#grid(model) : nothing}`;
   }
 

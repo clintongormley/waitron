@@ -132,4 +132,16 @@ describe.each(["light", "dark"] as const)("Opening hours year accessibility (%s)
       expect(el.shadowRoot!.querySelector("td.mark-holiday.mark-special")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  test("a year whose read failed, listing only its months", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-year") as OpeningHoursYearView;
+    el.year = 2026;
+    el.readFailed = true;
+    host.append(el);
+    await el.updateComplete;
+    expect(el.model).toBeUndefined();
+    expect(el.shadowRoot!.querySelectorAll('[data-test="month-name"]')).toHaveLength(12);
+    await expectNoA11yViolations(host);
+  });
 });

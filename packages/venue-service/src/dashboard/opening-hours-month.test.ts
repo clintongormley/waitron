@@ -467,16 +467,15 @@ describe("Opening hours month", () => {
     expect(picker.value).toBe("rest");
   });
 
-  it("draws only ‹ month ›, the switch's slot and Show above the dates", async () => {
+  it("draws only ‹ month › and Show above the dates", async () => {
     const el = await mount();
     for (const id of ["year-back", "add-special-day", "rows"])
       expect(testId(el, id), id).toBeNull();
     expect(root(el).querySelector("season-chips")).toBeNull();
     const parts = [
       '[data-test="previous-month"]',
-      '[data-test="month"]',
+      '.fixed-title:has(> [data-test="month"])',
       '[data-test="next-month"]',
-      'slot[name="switch"]',
       'wt-combobox[name="departmentId"]',
     ];
     const head = root(el).querySelector(".head")!;
@@ -484,6 +483,72 @@ describe("Opening hours month", () => {
       parts,
     );
   });
+
+  it("links the year to the Year view only when asked, keeping the title's text", async () => {
+    const el = await mount(monthModel(), { linkYear: true });
+    const opened = events<{ year: number }>(el, "month-year-open");
+    const link = root(el).querySelector<HTMLButtonElement>(
+      '[data-test="month"] > button[data-test="month-year"]',
+    )!;
+    expect(link.type).toBe("button");
+    expect(text(link)).toBe("2026");
+    expect(link.hasAttribute("aria-label")).toBe(false);
+    await expect.element(link).toHaveAccessibleName("2026");
+    await expect.element(link).toHaveAccessibleDescription("Whole year");
+    const hint = root(el).getElementById(link.getAttribute("aria-describedby")!)!;
+    expect(hint.closest('[data-test="month"]')).toBeNull();
+    expect(text(testId(el, "month"))).toBe("December 2026");
+    expect(testId(el, "month")!.getAttribute("aria-live")).toBe("polite");
+    link.click();
+    expect(opened).toEqual([{ year: 2026 }]);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    await expect.element(link).toHaveAccessibleDescription("Todo el año");
+  });
+
+  it.each([
+    ["the Calendar's month without linkYear", {}],
+    ["station mode", { stationMode: true, readOnly: true }],
+  ] as const)("keeps the year plain text in %s", async (_, extra) => {
+    const el = await mount(monthModel(), extra);
+    const opened = events<{ year: number }>(el, "month-year-open");
+    expect(root(el).querySelector('[data-test="month"] button')).toBeNull();
+    expect(root(el).querySelector("[aria-describedby]")).toBeNull();
+    expect(text(testId(el, "month"))).toBe("December 2026");
+    testId(el, "month")!.click();
+    expect(opened).toEqual([]);
+  });
+
+  it.each([true, false])(
+    "keeps ‹ and › in place whatever month and year it shows, in every language (linkYear %s)",
+    async (linkYear) => {
+      const months = [
+        ...Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, "0")}`),
+        "2011-05",
+        "2088-05",
+      ];
+      const lefts: [string, number][] = [];
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = document.createElement("opening-hours-month");
+        el.linkYear = linkYear;
+        applyTokens(el);
+        document.body.append(el);
+        hosts.push(el);
+        for (const month of months) {
+          el.month = month;
+          await el.updateComplete;
+          lefts.push([
+            `${locale} ${month}`,
+            testId(el, "next-month")!.getBoundingClientRect().left,
+          ]);
+        }
+        el.remove();
+      }
+      expect(lefts).toEqual(lefts.map(([shown]) => [shown, lefts[0]![1]]));
+    },
+  );
 
   it("keeps station mode as it was", async () => {
     const el = await mount(monthModel(), {
