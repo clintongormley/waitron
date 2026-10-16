@@ -609,6 +609,17 @@ browser test** — most of these rules exist because a test passed while proving
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
+- **A test file whose awaits are all synchronous `node:sqlite` work gives the event loop no timer
+  turn, so the venue watchdog kills its worker once the file outlasts `WATCHDOG_KILL_MS`;
+  `useVenueDb` waits one real timer after every test.** Cost: main run 38932759150's venue-service
+  shard 1 lost its worker to the watchdog. Guard: two cases in
+  `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
+  folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
+  `setInterval` captured when `@waitron/store` loads, because `vi.useFakeTimers()` fakes both by
+  default. Guard: the cases under "a holder whose test fakes the clock" in
+  `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options only, and
+  only when the store loads before the clock is faked. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
   leaks containers; `pnpm reap` removes them by label and age — but not every rig stamps the label.

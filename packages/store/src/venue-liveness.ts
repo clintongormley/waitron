@@ -41,6 +41,11 @@ const PRODUCTION_TIMINGS: Timings = {
 
 let timings = PRODUCTION_TIMINGS;
 
+// Taken at load: a test that fakes the clock (Vitest's `vi.useFakeTimers()`, by default, replaces `process.hrtime`
+// and the timers) must not stamp a fake time, or leave the stamp to a timer only its fake clock runs.
+const monotonicNow = process.hrtime.bigint.bind(process.hrtime);
+const realSetInterval = globalThis.setInterval;
+
 /** For tests: bounds for folders taken from now on. Anything left out is the production value. */
 export function setVenueLivenessTimings(overrides: Partial<Timings>): void {
   timings = { ...PRODUCTION_TIMINGS, ...overrides };
@@ -227,7 +232,7 @@ function startWatchdog(lockedAt: string): Watchdog {
   // The main thread's monotonic clock, which the worker reads on the same clock: a wall-clock step
   // (a box setting its time at boot) must not look like a frozen thread.
   const beat = new BigInt64Array(new SharedArrayBuffer(8));
-  const stamp = () => Atomics.store(beat, 0, process.hrtime.bigint());
+  const stamp = () => Atomics.store(beat, 0, monotonicNow());
   stamp();
   // The thread first, so a thread that cannot be created leaves no timer behind.
   const worker = createWorker(WATCHDOG_SOURCE, {
@@ -257,7 +262,7 @@ function startWatchdog(lockedAt: string): Watchdog {
       "VenueWatchdogWarning",
     );
   });
-  const tick = setInterval(stamp, timings.tickMs);
+  const tick = realSetInterval(stamp, timings.tickMs);
   tick.unref();
   return { worker, tick };
 }

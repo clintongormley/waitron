@@ -1325,7 +1325,7 @@ jobs:
 
       - run: pnpm --filter @waitron/venue-service exec playwright install chromium
 
-      # This step, the shard's DEBUG channels and the two failure() steps below: ci-and-gates.md,
+      # This step, the shard's DEBUG channels and the two failure()/cancelled() steps below: ci-and-gates.md,
       # "A failed venue-service shard keeps its browser start-up record".
       - name: Sample the runner's memory and processes
         run: |
@@ -1368,7 +1368,7 @@ jobs:
           retention-days: 1
 
       - name: Snapshot the runner after a failed shard
-        if: failure()
+        if: failure() || cancelled()
         run: |
           {
             date -u +%FT%T.%3NZ
@@ -1379,7 +1379,7 @@ jobs:
           } > "$RUNNER_TEMP/shard-diagnostics/after.txt" 2>&1 || true
 
       - name: Keep the failed shard's start-up record
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: venue-service-diagnostics-${{ matrix.shard }}

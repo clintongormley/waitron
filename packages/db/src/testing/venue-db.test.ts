@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { installAppendOnlyTriggers } from "@waitron/store";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -124,6 +124,54 @@ describe("resetPerTest: false", () => {
 
   it("still has it in the next test", () => {
     expect(count(suite.db, "tenants")).toBe(1);
+  });
+});
+
+/**
+ * A file of synchronous database work otherwise gives the event loop no timer turn at all, so an
+ * interval — the venue watchdog's stamp among them — would wait for the whole file.
+ */
+describe("a timer turn after each test", () => {
+  useVenueDb({ migrations: [] });
+  let firings = 0;
+  let interval: ReturnType<typeof setInterval> | undefined;
+  beforeAll(() => {
+    interval = setInterval(() => {
+      firings += 1;
+    }, 1);
+  });
+  afterAll(() => {
+    clearInterval(interval);
+  });
+
+  it("takes none during a test that only works synchronously", () => {
+    firings = 0;
+    const until = performance.now() + 20;
+    while (performance.now() < until) {
+      // Busy: no timer can run until this test returns.
+    }
+    expect(firings).toBe(0);
+  });
+
+  it("let the interval fire between the two tests", () => {
+    expect(firings).toBeGreaterThan(0);
+  });
+});
+
+describe("the timer turn under fake timers", () => {
+  useVenueDb({ migrations: [] });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  it("leaves fake timers on for the hook after it", () => {
+    vi.useFakeTimers();
+    expect(vi.isFakeTimers()).toBe(true);
+  });
+
+  it("runs after that hook finished", () => {
+    vi.useRealTimers();
+    expect(vi.isFakeTimers()).toBe(false);
   });
 });
 

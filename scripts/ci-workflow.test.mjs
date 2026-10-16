@@ -1965,14 +1965,17 @@ describe("the venue-service shards' browser start-up record", () => {
     );
   });
 
-  it("keeps the folder as an artifact when the shard fails, and only then", () => {
+  it("snapshots the runner and keeps the folder when the shard fails or is cancelled, and only then", () => {
     const named = body.findIndex((line) =>
       /^ {10}name: venue-service-diagnostics-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
     );
     expect(named, "no diagnostics artifact").toBeGreaterThan(-1);
     const start = body.findLastIndex((line, at) => at < named && /^ {6}- /.test(line));
     const upload = body.slice(start, named + 3);
-    expect(upload).toContain("        if: failure()");
+    expect(upload).toContain("        if: failure() || cancelled()");
+    const snapshot = body.findIndex((line) => /^ {6}- name: Snapshot the runner/.test(line));
+    expect(snapshot, "no snapshot step").toBeGreaterThan(-1);
+    expect(body[snapshot + 1]).toBe("        if: failure() || cancelled()");
     expect(upload.join("\n")).toContain("actions/upload-artifact@");
     expect(upload).toContain("          path: ${{ runner.temp }}/shard-diagnostics/");
   });

@@ -47,7 +47,7 @@ import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import "./errors.js";
 
-// The retained fixture runs synchronous work across cases; let the venue watchdog tick between them.
+// Synchronous work runs from case to case; let the venue watchdog tick between them.
 afterEach(() => yieldTurn());
 
 const LOCALE = "es-ES";

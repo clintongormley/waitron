@@ -29,7 +29,8 @@ and once the commit has returned it hands those rows to this process's change li
 
 A suite asks for its database through `useVenueDb` (`./src/testing/venue-db.ts`), which opens a
 SQLite venue directory under `os.tmpdir()`, applies the migration sets it is handed, installs the
-append-only triggers and empties the data between tests. That is a written rule (`CLAUDE.md` §4),
+append-only triggers, empties the data between tests and gives the event loop one real timer turn
+after every test. That is a written rule (`CLAUDE.md` §4),
 enforced by `scripts/venue-db-helper.test.ts`: no `.ts` file under `packages/` or `apps/` may NAME
 the retired helper `usePgliteDb`, this package included.
 

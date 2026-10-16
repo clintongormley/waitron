@@ -220,13 +220,13 @@ on 2026-09-09; [Vitest issue 10791](https://github.com/vitest-dev/vitest/issues/
 called `orchestrator.createTesters()` with no deadline in `BrowserPool.runNextTest`. That is a
 possible mechanism, not a diagnosis of those runs, and the hang was not reproduced locally.
 
-### A retained database fixture can keep the watchdog from taking a timer turn
+## Three `apps/server` suites added their own timer turn before `useVenueDb` gave one
 
-If your suite keeps its database across cases with `resetPerTest: false`, awaited synchronous
-queries can run from one case into the next without letting timers run. Give the event loop a
-turn between cases with an `afterEach` hook that awaits `setImmediate` from
-`node:timers/promises`. You keep the same rows and assertions while letting the venue watchdog
-record its next tick.
+Awaited synchronous queries can run from one case into the next without letting timers run, with or
+without `resetPerTest: false` (next section). `bill-payments.test.ts`,
+`bill-payments.signed-in.test.ts` and `till-money.write-session.test.ts` in `apps/server` each added
+an `afterEach` hook awaiting `setImmediate` from `node:timers/promises` before `useVenueDb` gave a
+turn of its own; whether they still need it was not measured.
 
 Measured 2026-10-08 on Node v26.7.0, macOS, Vitest 4.1.11: a disposable copy of
 `apps/server/src/bill-payments.test.ts`, with `setVenueLivenessTimings` set to a 10-second kill
@@ -237,6 +237,65 @@ another run after 47 cases. The snapshots, fixture and all assertions were retai
 unchanged production watchdog's bound is 120 seconds; these accelerated local probes do not
 measure Linux shard duration. CI run `37674514404`, attempts 1 and 2, each logged
 `venue.holder_frozen` inside that rollback comparison before the worker exit.
+
+## A file of synchronous database work gets no timer turn unless `useVenueDb` yields one
+
+An `await` on a `node:sqlite` query is satisfied by synchronous work, and under Vitest 4.1.11 the
+run measured below took no timer turn between one test and the next. A file made of such tests can therefore run from
+its first test to its last without any interval firing — including the venue watchdog's stamp
+(`packages/store/src/venue-liveness.ts`). Once the file outlasts `WATCHDOG_KILL_MS` (120 s on 2026-10-16),
+the watchdog kills the worker as frozen. `useVenueDb` awaits one real `setTimeout(…, 0)` in its
+`afterEach`, after any reset, so every test in a suite that uses it ends with a timer turn. The
+`setTimeout` is captured when the module loads, so a suite that calls `vi.useFakeTimers()` and
+leaves them on cannot replace it and stall the hook.
+
+The incident. `main` run 38932759150, job `test-venue-service (1)` (job 117080878600, runner region
+eastus2), was cancelled at its 10-minute limit at 16:47:08Z with `src/routes.test.ts` and
+`src/routing.test.ts` still running. Its log at 16:44:02.087Z shows
+`{"code":"provisioning.database_holder_frozen","kind":"script","pid":2757,"lockedAt":"2026-10-16T16:41:59.557Z","lastTickAt":"2026-10-16T16:41:59.566Z","stack":null,...}`:
+the watchdog killed the Vitest worker running `routes.test.ts`, whose stamp interval had not fired
+after the folder was opened. That runner was slow throughout: `pnpm install` took 54.5 s and the
+pnpm self-install 13 s, against 3.1 s and 1 s on run 38921822907's passing shard 1 (centralus),
+where `routes.test.ts` took 21.0 s in all; on the slow runner it took 33 s to reach its first
+database open. Inference, not measured: at that speed the shard would have passed its time limit
+with or without the kill.
+
+Measured 2026-10-16 on Node v26.11.1, macOS, Vitest 4.1.11: a 50 ms probe interval in the worker
+running `routes.test.ts` saw one 20,939 ms stretch with no timer turn — the whole file of 196
+tests. With the `afterEach` yield in `useVenueDb`, the same worker's longest gap was 1,262 ms.
+Reproduced locally before the yield, with `WATCHDOG_KILL_MS` cut to 5 s (reverted afterwards): the
+log printed the frozen line, then `Error: [vitest-pool]: Worker forks emitted error … Worker exited
+unexpectedly`; the progress reporter went on listing `routes.test.ts` as running, and Vitest
+finished the other files and exited 1.
+
+A test that fakes the clock made a healthy worker look frozen too, until the stamp stopped reading
+the faked clock. Under Vitest 4.1.11, `vi.useFakeTimers()` with its default options replaces
+`process.hrtime` as well as the timers. The stamp is a real interval, so when it fired while a test
+had the clock faked it stored the fake reading — the time the fake clock had moved since the test faked it, near zero
+unless the test moved it — and the watchdog thread, comparing it
+with its own real clock, saw a silence about as long as the machine had been up. A folder first
+taken while the clock was faked got its stamp on a fake interval, which did not fire while the
+test's fake clock stood still.
+The stamp now reads `process.hrtime.bigint` and runs on `setInterval`, both taken when
+`packages/store/src/venue-liveness.ts` loads. Measured 2026-10-16 on Node v26.11.1, macOS, Vitest
+4.1.11, before that change: a 1,100 ms `Atomics.wait` added after `vi.useFakeTimers()` in the first
+case of "the timer turn under fake timers" and a 1,500 ms one in the second got the worker killed
+with `lastTickAt` `2026-08-31T07:10:36.669Z`, 46 days before the run, and Vitest printed
+`Worker exited unexpectedly`; after it, both cases passed. The same two waits added to the expiry
+case of `packages/payments/src/simulator.test.ts` and the case after it got the worker killed with
+`lastTickAt` `2026-08-31T07:20:36.668Z`, ten minutes later — the ten minutes that case moves its
+fake clock — and Vitest reported `11 passed (22)`; after the change, `22 passed (22)`. The waits were removed
+afterwards.
+
+Guard: the cases "a timer turn after each test" and "the timer turn under fake timers" in
+`packages/db/src/testing/venue-db.test.ts`, weaker than the rule: they cover `useVenueDb` alone. A
+suite that opens a venue folder another way — calling `openVenueDatabase` or `openVenueStore`
+itself, as many suites across `packages/`, `apps/` and `scripts/` do
+(`grep -rlE 'openVenue(Database|Store)\(' --include='*.test.ts'`) — gets no yield from it. The
+stamp's own clock is guarded by the cases under "a holder whose test fakes the clock" in
+`packages/store/src/venue-liveness.test.ts`, for a folder taken through `lockVenueDirectory`
+whatever opens it, and weaker than their name: they fake the clock only the way
+`vi.useFakeTimers()` does with its default options, and only after `@waitron/store` has loaded.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
