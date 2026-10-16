@@ -370,13 +370,18 @@ it("shows no copy of the address and previews its live replacement without chang
   const { el, api } = await mountReceiptDialog();
   expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
   await editReceipt(el, "email", "bar@example.com");
+  await expect
+    .poll(() => api.previewReceiptDraft.mock.lastCall?.[0].receipt.email)
+    .toBe("bar@example.com");
   const before = api.previewReceiptDraft.mock.calls.length;
   api.getDepartmentReceipt.mockResolvedValue({
     ...receiptModel,
     venueAddress: ["Plaza Nueva 2", "41001 Sevilla"],
   });
   api.liveData.invalidate([{ type: "locations" }]);
-  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBeGreaterThan(before);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(before + 1);
+  expect(api.previewReceiptDraft.mock.lastCall![0].receipt.email).toBe("bar@example.com");
   expect(el.shadowRoot!.textContent).not.toContain("Plaza Nueva 2");
   expect(receiptField(el, "email").value).toBe("bar@example.com");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();

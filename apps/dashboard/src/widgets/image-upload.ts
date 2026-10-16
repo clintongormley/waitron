@@ -20,7 +20,7 @@ import { dpiValue, safeWidthDots } from "@waitron/printing/src/layout.js";
 import { LOGO_MAX_HEIGHT_DOTS } from "@waitron/printing/src/dither.js";
 import { paperGround } from "./print-paper.js";
 
-/** CSS px for a count of dots at 203 dpi, so a logo is drawn the size it prints. */
+/** CSS px for a count of dots at 203 dpi, so a logo is drawn the size it prints on 80 mm paper. */
 const logoPx = (dots: number) => unsafeCSS(`${(dots / dpiValue("203dpi")) * 96}px`);
 
 export interface ImageUploader {
@@ -35,9 +35,10 @@ export interface ImageUploader {
  * footer then holds Remove. Its default slot holds what sits beside the photo, taking the rest of
  * the row.
  *
- * As a `logo` it is the receipt's logo, in the box it prints in (sharp fits every logo inside it,
- * enlarging a small one), with Remove beside it; with none, one "+ Add a logo" box. Either button
- * opens the picker, and focus comes back to it when the picker closes.
+ * As a `logo` it is the receipt's logo, in the box it prints in on 80 mm paper at 203 dpi (sharp
+ * fits every logo inside it, enlarging a small one), with Remove beside it; with none, one
+ * "+ Add a logo" box. Either button opens the picker, and focus comes back to it when the picker
+ * closes.
  */
 @customElement("dashboard-image-upload")
 export class ImageUpload extends LitElement {
@@ -277,7 +278,6 @@ export class ImageUpload extends LitElement {
         aria-label=${t("image.remove_logo_name")}
         ?disabled=${this.disabled}
         @click=${() => {
-          if (this.disabled) return;
           this.#remove();
           void this.#focusLogo();
         }}

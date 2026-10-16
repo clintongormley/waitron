@@ -655,6 +655,15 @@ describe("image-upload as a receipt logo", () => {
     },
   );
 
+  it("draws the logo on white paper in the dark theme", async () => {
+    const { el } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), logo: true, image: "own.png" },
+      "dark",
+    );
+    expect(getComputedStyle(choose(el)).backgroundColor).toBe("rgb(255, 255, 255)");
+  });
+
   it("disables both buttons, and closes a library left open", async () => {
     const { el } = await logo({ image: "own.png" });
     await userEvent.click(page.elementLocator(choose(el)));

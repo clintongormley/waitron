@@ -53,6 +53,7 @@ it.each([1280, 390])(
         el.shadowRoot!.querySelector("wt-modal")?.shadowRoot?.querySelector("dialog");
       await expect.poll(() => native()?.matches(":modal")).toBe(true);
       const opening = native()!.getBoundingClientRect().width;
+      if (width === 1280) expect(opening).toBeCloseTo(1024, 0);
       read.resolve(structuredClone(receiptModel));
       await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
       await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
