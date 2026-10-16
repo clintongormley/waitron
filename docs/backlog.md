@@ -1975,7 +1975,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   on send; sent dishes are acted on through the line window; Recall returns a dish to the New order;
   Pay waits for unsent dishes; Away and the pass's Done go. The
   [six choices](backlog/mockups/a773-1-open-points/README.md) are answered in the spec's §14; the
-  A773-1 plan is revised against the spec before its dependent tasks.
+  A773-1 [plan revision](superpowers/plans/2026-10-16-a773-1-unsent-list.md) now maps the
+  revised spec to executable tasks, retaining completed T1/T6/T14 and partial T2/T7. It adds
+  bill-line-backed Recall, stage-based cancellation, payment guards for anyone's unsent dishes,
+  held-table finish choices and stable group display numbers. Implementation remains unlanded;
+  A773-2 keeps Requested/pass release, Away/Done removal, station settings and counter changes.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
   [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](backlog/mockups/a773-courses-and-groups/),
