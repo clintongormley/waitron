@@ -590,6 +590,9 @@ it("reorders by the given ids and refuses a list that is not exactly the venue's
   `QUERY_DEPENDENCIES = { "staff-roles": ["staff_roles", "person_staff_roles", "staffing_blocks", "shift_assignments", "persons"] }`.
   The client imports `StaffRole` from `../staffing-types.js`, never from a server file.
 
+> 2026-10-16, A636: the Staff roles list now watches only `staff_roles` and
+> `person_staff_roles`; `staff-role-delete-impact` retains its separate `persons` dependency.
+
 - [ ] **Step 1: Failing browser tests** in `staff-roles-screen.test.ts`: the list shows each staff
   role's colour swatch (styled with `part=`, CLAUDE.md §3), name and holder count in position order;
   the `actions` column is pinned to the end; "+ New staff role" opens the dialog; a role whose

@@ -4833,11 +4833,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (2026-10-16). A645's six staff-role/paint routes instead name `body`; the Rota route was
   outside that item's scope. Next: align its body refusal with the adjacent routes, with a
   failing route test first.
-- **A636. The Staff roles list re-reads when any person changes.** Its live query `staff-roles`
-  (`packages/staffing/src/dashboard/live-queries.ts`) depends on `persons`, but the list read
-  (`listStaffRoles`) reads holder ids from `person_staff_roles` alone, so every person write
-  re-reads the list for nothing (found by reading, #1681's review). Next: drop `persons` from that
-  query's list, keeping it on `staff-role-delete-impact`, which joins it for holders' names.
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
   does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before

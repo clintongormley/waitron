@@ -329,6 +329,46 @@ describe("the staff roles page", () => {
     liveData.clear();
   });
 
+  it("refreshes a renamed holder in the delete warning without re-reading the list, and refreshes holder counts", async () => {
+    let roles = [{ ...runner, blockCount: 0, holderIds: ["p-ana"] }];
+    let holderName = "Ana";
+    const liveData = new LiveData();
+    const request = await mount(
+      fakeRequest(() => roles, {
+        [`GET ${BASE}/role-r/delete-impact`]: () => ({
+          ...impactOf(roles[0]!),
+          removes: [
+            {
+              key: "staff_role_holders",
+              count: roles[0]!.holderIds.length,
+              targets: roles[0]!.holderIds.map((id) => ({
+                id,
+                name: id === "p-ana" ? holderName : id,
+              })),
+            },
+          ],
+        }),
+      }),
+      { liveData },
+    );
+    const listReads = () => request.mock.calls.filter(([path]) => path === BASE).length;
+    await choose("delete-role-r");
+    expect(dialogLines()).toEqual(["Removes it from 1 person: Ana."]);
+    expect(cells("role-r")[1]).toBe("1 person");
+    expect(listReads()).toBe(1);
+
+    holderName = "Ana Ruiz";
+    liveData.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(dialogLines()).toEqual(["Removes it from 1 person: Ana Ruiz."]));
+    expect(listReads()).toBe(1);
+
+    roles = [{ ...runner, blockCount: 0, holderIds: ["p-ana", "p-marc"] }];
+    liveData.invalidate([{ type: "person_staff_roles" }]);
+    await vi.waitFor(() => expect(cells("role-r")[1]).toBe("2 people"));
+    expect(listReads()).toBe(2);
+    liveData.clear();
+  });
+
   it("opens the dialog for a new staff role from Add staff role", async () => {
     await mount(fakeRequest(() => [waiter]));
     const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!;
