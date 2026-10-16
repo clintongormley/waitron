@@ -1043,13 +1043,9 @@ describe("a profile's starting screen and shared-display actions", () => {
   });
 });
 
-/**
- * The keys out of and into device_profiles among core and identity's tables, which
- * `translateWriteError`'s doc relies on.
- */
 describe("what can refuse a write to device_profiles", () => {
   // Migrates core and identity only: a key from another module's set is not seen.
-  it("has ONE key out of device_profiles and ONE key into it that can refuse", async () => {
+  it("has no key out of device_profiles and ONE key into it that can refuse", async () => {
     const { rows } = await suite.db.execute<{
       child: string;
       column: string;
@@ -1084,12 +1080,6 @@ describe("what can refuse a write to device_profiles", () => {
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "CASCADE",
-      },
-      {
-        child: "device_profiles",
-        column: "canvas_id",
-        parent: "canvases",
-        on_delete: "RESTRICT",
       },
       {
         child: "devices",

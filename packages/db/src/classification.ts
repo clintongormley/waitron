@@ -131,7 +131,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("printers", "state", STATE),
   classify("page_printers", "state", STATE),
   classify("print_agents", "state", STATE),
-  classify("canvases", "state", STATE),
   classify("tenant_themes", "state", STATE),
   classify("tenant_receipts", "state", STATE),
   classify("incidents", "state", STATE),

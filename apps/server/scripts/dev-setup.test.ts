@@ -295,7 +295,6 @@ describe("devSetup against a real venue directory", () => {
       db
         .select({
           name: deviceProfiles.name,
-          canvasId: deviceProfiles.canvasId,
           capabilities: deviceProfiles.capabilities,
         })
         .from(deviceProfiles)
@@ -304,7 +303,6 @@ describe("devSetup against a real venue directory", () => {
     expect(profiles).toEqual([
       {
         name: "Counter",
-        canvasId: null,
         capabilities: [
           "integrated-card-payment",
           "open-cash-drawer",
@@ -323,7 +321,6 @@ describe("devSetup against a real venue directory", () => {
       },
       {
         name: "Handheld",
-        canvasId: null,
         capabilities: [
           "take-orders",
           "hand-keyed-card-payment",
@@ -334,7 +331,6 @@ describe("devSetup against a real venue directory", () => {
       },
       {
         name: "Kitchen",
-        canvasId: null,
         capabilities: [
           "act-as-kds",
           "prepare-orders",

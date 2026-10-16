@@ -279,12 +279,9 @@ const suite = useVenueDb({
 let saleTillProfiles = 0;
 async function enrolSaleTillDevice(): Promise<void> {
   saleTillProfiles += 1;
-  const profileId = await seedDeviceProfile(
-    suite.db,
-    `Sale till profile ${saleTillProfiles}`,
-    ["take-cash"],
-    null,
-  );
+  const profileId = await seedDeviceProfile(suite.db, `Sale till profile ${saleTillProfiles}`, [
+    "take-cash",
+  ]);
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db, profileId);
 }
 
@@ -383,7 +380,7 @@ async function enrolTillDevice(
 ): Promise<{ deviceId: string; cookie: string }> {
   tillDeviceCounter += 1;
   const profileId =
-    deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
+    deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, []));
   const dev = await enrolDeviceForTest(db, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
@@ -391,12 +388,10 @@ async function enrolTillDevice(
   return { deviceId: dev.deviceId, cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}` };
 }
 
-/** Seed a `device_profiles` row — the bundle a device resolves its canvas + capabilities through. */
 async function seedDeviceProfile(
   db: Database,
   name: string,
   capabilities: string[],
-  canvasId: string | null,
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
   const rows = await withTransaction(db, async (tx) => {
@@ -404,7 +399,7 @@ async function seedDeviceProfile(
     // which a raw insert never runs.
     return tx
       .insert(deviceProfiles)
-      .values({ name, formFactor: "till", canvasId, capabilities, inactivityTimeoutSeconds })
+      .values({ name, formFactor: "till", capabilities, inactivityTimeoutSeconds })
       .returning({ id: deviceProfiles.id });
   });
   return rows[0]!.id;
@@ -1570,8 +1565,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       suite.db,
       "Counter",
       ["integrated-card-payment", "open-cash-drawer"],
-      null,
-      // The profile carries a non-null auto-logout timeout, so the boot payload must mirror it.
       300,
     );
     try {
@@ -1606,12 +1599,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("retains the profile capabilities and null timeout without canvas selection", async () => {
-    const deviceProfileId = await seedDeviceProfile(
-      suite.db,
-      "Default+caps",
-      ["open-cash-drawer"],
-      null,
-    );
+    const deviceProfileId = await seedDeviceProfile(suite.db, "Default+caps", ["open-cash-drawer"]);
     try {
       const cookie = await enrolTillDeviceCookie(suite.db, deviceProfileId);
       const app = new Hono();
@@ -1881,7 +1869,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
   it("prefers the session's device's profile's starting zone, whatever device cookie the request carries", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const profileId = await seedDeviceProfile(suite.db, `Starting zone ${randomUUID()}`, [], null);
+    const profileId = await seedDeviceProfile(suite.db, `Starting zone ${randomUUID()}`, []);
     const { deviceId } = await enrolTillDevice(suite.db, profileId);
     const token = await openSession(suite.db, deviceId);
     const otherCookie = await enrolTillDeviceCookie(suite.db);
@@ -2126,7 +2114,6 @@ describe("the device checks read the session's device, not the device cookie", (
       suite.db,
       `Session profile ${randomUUID()}`,
       capabilities,
-      null,
     );
     const { deviceId } = await enrolTillDevice(suite.db, profileId);
     return `${SESSION_COOKIE}=${await openSession(suite.db, deviceId)}`;
@@ -2156,7 +2143,6 @@ describe("the device checks read the session's device, not the device cookie", (
       suite.db,
       `Cookie profile ${randomUUID()}`,
       capabilities,
-      null,
     );
     return (await enrolTillDevice(suite.db, profileId)).cookie;
   }
@@ -2351,7 +2337,7 @@ describe("a device's profile decides who may sign in on it", () => {
     cookie: string;
     profileId: string;
   }> {
-    const profileId = await seedDeviceProfile(suite.db, `Managers ${randomUUID()}`, [], null);
+    const profileId = await seedDeviceProfile(suite.db, `Managers ${randomUUID()}`, []);
     await suite.db.insert(deviceProfileAdmissionRoles).values({
       deviceProfileId: profileId,
       role: "manager",

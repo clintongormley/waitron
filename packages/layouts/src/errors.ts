@@ -1,8 +1,6 @@
 import "@waitron/shared";
-import type { CardType } from "./canvas.js";
 
 // Receipt params name known fields and approved languages, never authored text or unknown keys.
-// `configKey` may echo a card's unknown configuration key, never its value.
 declare module "@waitron/shared" {
   interface ErrorParams {
     "receipt.invalid": {
@@ -29,32 +27,9 @@ declare module "@waitron/shared" {
       language?: string;
       maxLength?: number;
     };
-    // `bad_capabilities` is no longer thrown: a bad capability set is `device_profile.invalid`.
-    "canvas.invalid": {
-      reason:
-        | "not_object"
-        | "bad_capabilities"
-        | "bad_form_factor"
-        | "no_tabs"
-        | "bad_tab"
-        | "duplicate_tab"
-        | "bad_columns"
-        | "unknown_card"
-        | "bad_span"
-        | "bad_config"
-        | "bad_visible_when"
-        | "missing_required";
-      tabIndex?: number;
-      card?: CardType;
-      configKey?: string;
-    };
-    "canvas.not_found": Record<string, never>;
-    "canvas.name_taken": Record<string, never>;
-    "canvas.in_use": Record<string, never>;
     "device_profile.invalid": {
       reason:
         | "bad_capabilities"
-        | "bad_canvas_ref"
         | "bad_inactivity_timeout"
         | "shared_display_action"
         | "bad_starting_screen"

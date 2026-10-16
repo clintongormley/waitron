@@ -42,7 +42,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "location_catalogues", locationColumns: ["location_id"] },
     { name: "ingredients" },
     { name: "recipe_lines" },
-    { name: "canvases" },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
     { name: "floor_zones", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
     { name: "table_service_statuses" },

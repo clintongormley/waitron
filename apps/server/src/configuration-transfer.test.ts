@@ -2270,6 +2270,9 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     new Date("2026-10-04T12:00:00Z"),
     versions,
   );
+  expect(transferred.tables).not.toHaveProperty("canvases");
+  for (const profile of transferred.tables.device_profiles!)
+    expect(profile).not.toHaveProperty("canvas_id");
   await applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,

@@ -483,22 +483,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the form and try again",
     es: "Revisa el formulario e inténtalo de nuevo",
   },
-  "canvas.not_found": {
-    en: "That canvas no longer exists",
-    es: "Ese lienzo ya no existe",
-  },
-  "canvas.name_taken": {
-    en: "A canvas with that name already exists",
-    es: "Ya existe un lienzo con ese nombre",
-  },
-  "canvas.in_use": {
-    en: "That canvas is still assigned to a device profile — reassign or remove the profile first",
-    es: "Ese lienzo todavía está asignado a un perfil de dispositivo. Reasígnalo o elimina el perfil primero",
-  },
-  "canvas.invalid": {
-    en: "The canvas isn't valid",
-    es: "El lienzo no es válido",
-  },
+
   "device_profile.not_found": {
     en: "That device profile no longer exists",
     es: "Ese perfil de dispositivo ya no existe",
@@ -517,42 +502,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   // Client-side pseudo-codes live here, not in `t()`, so one editor banner resolves them and the
   // server's codes through the same `codeMessage` call.
-  "canvas_editor.err_no_name": {
-    en: "Enter a name for this canvas",
-    es: "Introduce un nombre para este lienzo",
-  },
-  "canvas_editor.err_no_tabs": {
-    en: "Add at least one tab",
-    es: "Añade al menos una pestaña",
-  },
-  "canvas_editor.err_duplicate_tab": {
-    en: "Two tabs share the same key",
-    es: "Dos pestañas comparten la misma clave",
-  },
-  "canvas_editor.err_bad_tab": {
-    en: "Give every tab a name of 60 characters or fewer",
-    es: "Da a cada pestaña un nombre de 60 caracteres o menos",
-  },
-  "canvas_editor.err_bad_columns": {
-    en: "A tab's column count must be between 1 and 24",
-    es: "El número de columnas de una pestaña debe estar entre 1 y 24",
-  },
-  "canvas_editor.err_bad_span": {
-    en: "A card's size must fit within its tab",
-    es: "El tamaño de una tarjeta debe caber en su pestaña",
-  },
-  "canvas_editor.err_bad_visible_when": {
-    en: "A card has an unknown visibility state",
-    es: "Una tarjeta tiene un estado de visibilidad desconocido",
-  },
-  "canvas_editor.err_bad_config": {
-    en: "Check the card's settings",
-    es: "Revisa los ajustes de la tarjeta",
-  },
-  "canvas_editor.err_missing_required": {
-    en: "A till canvas must include every sale card",
-    es: "Un lienzo de TPV debe incluir todas las tarjetas de venta",
-  },
+
   "receipt.invalid": {
     en: "The receipt settings aren't valid",
     es: "Los ajustes del recibo no son válidos",

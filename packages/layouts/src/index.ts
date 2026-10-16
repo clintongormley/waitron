@@ -1,6 +1,5 @@
 export type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
 export { DEFAULT_RECEIPT } from "./defaults.js";
-export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 export {
   MAX_RECEIPT_EMAIL_LENGTH,
   MAX_RECEIPT_FIELD_LENGTH,
@@ -9,7 +8,6 @@ export {
   validateDepartmentReceipt,
   validateVenueReceiptSettings,
 } from "./validate.js";
-export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
 export {
   FORM_FACTORS,
@@ -19,7 +17,6 @@ export {
   PROFILE_SCREENS,
   kindOfFormFactor,
 } from "./device-types.js";
-export { CARD_TYPES } from "./canvas.js";
 export type {
   FormFactor,
   DeviceKind,
@@ -28,12 +25,8 @@ export type {
   ProfileAction,
   ProfileScreen,
 } from "./device-types.js";
-export type { CardType, CardInstance, TabDef, CanvasDef } from "./canvas.js";
 export type { ThemeOverride } from "./theme.js";
-export { CARD_CONTRACTS, SALE_CRITICAL_CARDS, GRID_MAX_COLUMNS } from "./card-contract.js";
-export type { CardContract } from "./card-contract.js";
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
-export { DEFAULT_CANVASES } from "./default-canvases.js";
 export {
   isSharedDisplay,
   profileAllows,
@@ -45,14 +38,6 @@ export {
   defaultProfileName,
 } from "./device-profile.js";
 export type { DefaultDeviceProfile } from "./device-profile.js";
-export {
-  listCanvases,
-  getCanvas,
-  createCanvas,
-  updateCanvas,
-  deleteCanvas,
-  getCanvasForFormFactor,
-} from "./canvas-store.js";
 export {
   listDeviceProfiles,
   getDeviceProfile,
