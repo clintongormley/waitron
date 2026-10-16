@@ -23,7 +23,7 @@ import { createSetupOperationStore } from "./setup-operation.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { inTurn } from "./attempt-turns.js";
 import type { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
-import "@waitron/provisioning";
+import { assertFirstSetupBootTarget } from "@waitron/provisioning";
 
 export interface FirstSetupClaimPayload {
   environment: "production" | "preproduction";
@@ -154,6 +154,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
   };
   const authorize = async (owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> => {
     const state = await store.read();
+    if (state !== null) await assertFirstSetupBootTarget(state);
     if (
       state === null ||
       !validToken(owner.capability) ||
@@ -218,6 +219,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
         const capability = token();
         const rebind = () =>
           coordinator.run(async (hold) => {
+            if (before !== null) await assertFirstSetupBootTarget(before);
             if (
               snapshot !== undefined &&
               (await options.resolution!.inspectFirstSetupResolution()).inspectionId !==
@@ -301,6 +303,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
     authorize,
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
       const state = await store.read();
+      if (state !== null) await assertFirstSetupBootTarget(state);
       if (
         state === null ||
         !validToken(owner.capability) ||

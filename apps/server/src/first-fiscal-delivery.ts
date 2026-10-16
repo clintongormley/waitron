@@ -250,7 +250,9 @@ export function createFirstFiscalDelivery(options: Options) {
           value = input(supplied, false) as FirstFiscalDeliveryInput;
         if (
           !state.consumptionIntent ||
-          !["consumption-intent", "committed", "publication"].includes(state.status)
+          !["consumption-intent", "activation-started", "committed", "publication"].includes(
+            state.status,
+          )
         )
           refuse();
         const stage = await options.keys.readStage(owner, held);
@@ -328,7 +330,9 @@ export function createFirstFiscalDelivery(options: Options) {
           manifest = await readManifest(value.module);
         if (
           !state.consumptionIntent ||
-          !["consumption-intent", "committed", "publication"].includes(state.status) ||
+          !["consumption-intent", "activation-started", "committed", "publication"].includes(
+            state.status,
+          ) ||
           manifest === null ||
           !matches(manifest, state, value) ||
           !equal(manifest.stage, await options.keys.readStage(owner, held))
@@ -364,7 +368,9 @@ export function createFirstFiscalDelivery(options: Options) {
           historyDigest: manifest.historyDigest,
           documentDigest: manifest.documentDigest,
         }) ||
-        !["consumption-intent", "committed", "publication"].includes(state.status) ||
+        !["consumption-intent", "activation-started", "committed", "publication"].includes(
+          state.status,
+        ) ||
         !equal(binding, firstSetupModuleContext(state, binding.module).binding)
       )
         refuse();

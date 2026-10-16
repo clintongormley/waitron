@@ -256,7 +256,89 @@ export async function activateFirstFiscal(
     if (state.status === "activation-started")
       await advance({ kind: "committed", result: checked });
   }
-  const result = checked!.venue;
+  return publishCheckedFirstFiscal(host, deps, state, checked!, { owner, body, payload }, hold);
+}
+
+export async function finishFirstFiscalSetup(
+  host: FirstFiscalHost,
+  deps: SetupDeps,
+  owner: FirstSetupOwnerAttempt,
+  body: Record<string, unknown>,
+  hold: FirstSetupHold,
+): Promise<VenueResult> {
+  let state = await host.owner.authorize(owner);
+  const ownership = [...state.history]
+    .reverse()
+    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
+    throw new AppError("setup.owner_required", {});
+  if (!["activation-started", "committed", "publication"].includes(state.status)) conflict();
+  host.assertSelection(state);
+  const publication = firstFiscalPayload(host, state, body);
+  if (!isDeepStrictEqual(state.inputs.$publication, { digest: publication.digest })) conflict();
+  for (const module of state.frozen.modules) {
+    if (initialSetupFor(host.modules, module.module) === undefined) continue;
+    const evidence = await host.evidence.read(
+      firstSetupModuleContext(state, module.module).binding,
+    );
+    if (
+      typeof evidence?.current !== "object" ||
+      evidence.current === null ||
+      !("priorActivation" in evidence.current) ||
+      evidence.current.priorActivation !== "committed"
+    )
+      throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
+  }
+  const checked = await checkedFirstFiscalCommit(host, deps, state);
+  if (checked === null) conflict();
+  if (state.status === "activation-started")
+    state = await host.store.update(
+      state.frozen.attemptId,
+      state.revision,
+      { kind: "committed", result: checked },
+      hold,
+    );
+  return publishCheckedFirstFiscal(
+    host,
+    deps,
+    state,
+    checked,
+    { owner, body, payload: publication },
+    hold,
+  );
+}
+
+export async function publishCheckedFirstFiscal(
+  host: FirstFiscalHost,
+  deps: SetupDeps,
+  state: FirstSetupState,
+  checked: NonNullable<Awaited<ReturnType<typeof checkedFirstFiscalCommit>>>,
+  publication: {
+    owner: FirstSetupOwnerAttempt;
+    body: Record<string, unknown>;
+    payload: ReturnType<typeof firstFiscalPayload>;
+  },
+  hold: FirstSetupHold,
+): Promise<VenueResult> {
+  if (
+    deps.db === undefined ||
+    deps.ring === undefined ||
+    deps.establishIdentity === undefined ||
+    deps.seedMembership === undefined ||
+    deps.persistTrading === undefined
+  )
+    throw new AppError("setup.not_ready", {});
+  if (
+    !["committed", "publication"].includes(state.status) ||
+    !isDeepStrictEqual(state.result, checked)
+  )
+    conflict();
+  const { owner, body, payload } = publication;
+  if (!isDeepStrictEqual(state.inputs.$publication, { digest: payload.digest })) conflict();
+  const advance = async (change: Parameters<typeof host.store.update>[2]) => {
+    state = await host.store.update(state.frozen.attemptId, state.revision, change, hold);
+  };
+  const result = checked.venue;
   for (const module of state.frozen.modules) {
     const binding = firstSetupModuleContext(state, module.module).binding;
     if (!(await host.delivery.has(binding))) continue;

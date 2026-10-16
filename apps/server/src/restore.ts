@@ -1,4 +1,4 @@
-import { assertVenueFirstSetupAllowed, FIRST_SETUP_HOST_FILES } from "@waitron/provisioning";
+import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -205,9 +205,7 @@ async function validateEntryMetadata(
     else if (entry.name === DB_DUMP_NAME) dumpEntry ??= entry;
     else if (
       entry.name.startsWith(SECRETS_PREFIX) &&
-      !FIRST_SETUP_HOST_FILES.some(
-        (name) => posix.normalize(entry.name) === `${SECRETS_PREFIX}${name}`,
-      )
+      !isFirstSetupHostPath(posix.normalize(entry.name.slice(SECRETS_PREFIX.length)))
     )
       secretEntries.push(entry);
     else firstUnexpected ??= entry;

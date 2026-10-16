@@ -31,6 +31,7 @@ export type { AheadSet } from "./schema-ahead.js";
 import "./errors.js";
 export {
   FIRST_SETUP_HOST_FILES,
+  isFirstSetupHostPath,
   createFirstSetupCoordinator,
   createFirstSetupStore,
   assertOtherSetupAllowed,
@@ -48,3 +49,17 @@ export type {
   FirstSetupMarker,
   FirstSetupRepair,
 } from "./first-setup-state.js";
+export { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
+export type {
+  RegisterAnswer,
+  WorkspaceBinding,
+  ResolutionRecord,
+  ResolutionInput,
+  FirstSetupOriginal,
+} from "./first-setup-resolution.js";
+export {
+  selectFirstSetupWorkspace,
+  resolveFirstSetupWorkspace,
+  assertFirstSetupBootTarget,
+} from "./first-setup-workspace.js";
+export type { FirstSetupAnchor, FirstSetupBootTarget } from "./first-setup-workspace.js";

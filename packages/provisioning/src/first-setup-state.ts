@@ -1,3 +1,4 @@
+import { assertFirstSetupVenueTarget } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -134,7 +135,17 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup.json",
   "first-setup-claim.json",
   "module-operation-public.json",
+  "first-setup-node-key.json",
+  "first-fiscal-documents",
+  "first-setup-resolutions",
+  "first-setup-workspaces",
+  "first-setup-selection.json",
+  "first-setup-retirement.json",
+  "first-setup-workspace.json",
 ] as const;
+export function isFirstSetupHostPath(path: string): boolean {
+  return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));
+}
 const STATE_LIMIT = 1024 * 1024;
 const MARKER_LIMIT = 16 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
@@ -475,6 +486,7 @@ export async function inspectFirstSetupMarker(
   venueDir: string,
   stateDir?: string,
 ): Promise<FirstSetupMarker | null> {
+  await assertFirstSetupVenueTarget(venueDir);
   return (
     (
       await readPair(
@@ -485,6 +497,7 @@ export async function inspectFirstSetupMarker(
   );
 }
 export async function assertVenueFirstSetupAllowed(venueDir: string): Promise<void> {
+  await assertFirstSetupVenueTarget(venueDir);
   const pair = await readPair(await canonicalDirectory(venueDir));
   assertOtherSetupAllowed(pair?.state ?? null);
 }
@@ -619,6 +632,7 @@ export function createFirstSetupStore(options: {
         )
           invalid();
         const old = await read();
+        await assertFirstSetupVenueTarget(venueDir);
         assertOtherSetupAllowed(old);
         if (old?.status === "complete") conflict();
         const previous =
@@ -676,6 +690,7 @@ export function createFirstSetupStore(options: {
         const ownership = change.kind === "resume" || change.kind === "recover";
         const pair = ownership ? await readResumable() : null;
         const state = ownership ? (pair?.state ?? null) : await read();
+        await assertFirstSetupVenueTarget(venueDir);
         if (state === null || state.frozen.attemptId !== attemptId || state.revision !== revision)
           conflict();
         const allowed =

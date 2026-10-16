@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readBreakGlassVerifier } from "@waitron/db";
 import { verifySecretAsync } from "@waitron/identity";
@@ -10,7 +11,7 @@ import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { activateFirstFiscal } from "./first-fiscal-activation.js";
+import { activateFirstFiscal, finishFirstFiscalSetup } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const fixtures: Awaited<ReturnType<typeof declaredFirstFiscalFixture>>[] = [];
@@ -48,10 +49,10 @@ async function fixture() {
     historyDigest: f.statement.delivery.historyDigest,
     documentDigest: f.statement.delivery.documentDigest,
   };
-  const consult = async (replay = false) => {
+  const consult = async (replay = false, recovered = f.ownerAttempt) => {
     const state = (await host.store.read())!,
       owner = {
-        ...f.ownerAttempt,
+        ...recovered,
         revision: state.revision,
         ownerGeneration: state.ownerGeneration,
       };
@@ -130,6 +131,32 @@ async function fixture() {
     staged,
     consult,
     activate,
+    recover: async () => {
+      const inspection = await host.resolution.inspectFirstSetupResolution();
+      const rebound = await host.owner.recoverFirstSetupOwner({
+        inspectionId: inspection.inspectionId,
+        revision: inspection.revision!,
+        ownerGeneration: inspection.ownerGeneration!,
+        clientClaimNonce: Buffer.alloc(32, 82).toString("base64url"),
+        password: f.password,
+      });
+      return {
+        attemptId: rebound.state.attemptId,
+        revision: rebound.state.revision,
+        ownerGeneration: rebound.ownerGeneration,
+        capability: rebound.capability,
+      };
+    },
+    finish: (owner = f.ownerAttempt, suppliedBody = body) =>
+      host.coordinator.run((hold) =>
+        finishFirstFiscalSetup(
+          host,
+          { ...deps, provision: undefined, assertFiscalReady: undefined },
+          owner,
+          suppliedBody,
+          hold,
+        ),
+      ),
     interrupt: () => {
       interrupt = true;
     },
@@ -156,4 +183,84 @@ it("publication after interruption preserves the staged verifier with zero furth
   expect(await readBreakGlassVerifier(suite.db, f.staged.key.nodeId)).toBe(verifier);
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+});
+
+it("Finish setup is a separate publication-only path after original-password recovery", async () => {
+  const f = await fixture();
+  await f.consult();
+  f.interrupt();
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  const rows = await suite.db.select().from(fiscalAllocations);
+  const owner = await f.recover();
+  await f.consult(true, owner);
+  const result = await f.finish(owner);
+  expect(result.nodeId).toBe(f.staged.key.nodeId);
+  expect(f.counts()).toEqual({ activations: 1, publications: 1 });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(rows);
+});
+it("Finish setup refuses before activation and cannot spend a fresh allocation", async () => {
+  const f = await fixture();
+  const owner = await f.recover();
+  await f.consult(false, owner);
+  await expect(f.finish(owner)).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(f.counts()).toEqual({ activations: 0, publications: 0 });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
+it("Finish setup needs a fresh outside committed confirmation and the original password", async () => {
+  const f = await fixture();
+  await f.consult();
+  f.interrupt();
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  await f.consult(true);
+  await expect(f.finish(f.ownerAttempt)).rejects.toMatchObject({ code: "setup.owner_required" });
+  const owner = await f.recover();
+  await expect(f.finish(owner)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+  expect(f.counts()).toEqual({ activations: 1, publications: 0 });
+});
+
+it("Finish setup recovers the exact committed result when the host result write was interrupted", async () => {
+  const f = await fixture();
+  await f.consult();
+  const original = f.host.store.update;
+  const update = vi.spyOn(f.host.store, "update").mockImplementation(async (...args) => {
+    if (args[2].kind === "committed") {
+      update.mockRestore();
+      throw new Error("synthetic lost host result");
+    }
+    return original(...args);
+  });
+  try {
+    await expect(f.activate()).rejects.toThrow("synthetic lost host result");
+  } finally {
+    update.mockRestore();
+  }
+  expect((await f.host.store.read())?.status).toBe("activation-started");
+  const rows = await suite.db.select().from(fiscalAllocations);
+  const owner = await f.recover();
+  await f.consult(true, owner);
+  await f.finish(owner);
+  expect(f.counts()).toEqual({ activations: 1, publications: 1 });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(rows);
+});
+it("Finish setup refuses changed publication inputs after exact commitment", async () => {
+  const f = await fixture();
+  await f.consult();
+  f.interrupt();
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  const owner = await f.recover();
+  await f.consult(true, owner);
+  await expect(
+    f.finish(owner, {
+      mode: "live",
+      email: {
+        server: "different.example",
+        port: 465,
+        encryption: "tls",
+        user: "",
+        password: "",
+        from: "venue@example.test",
+      },
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(f.counts()).toEqual({ activations: 1, publications: 0 });
 });

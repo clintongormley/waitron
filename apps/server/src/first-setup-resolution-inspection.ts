@@ -3,6 +3,7 @@ import { lstat, open, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { AppError } from "@waitron/shared";
 import type { SQLWrapper } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase, type Database } from "@waitron/db";
@@ -118,7 +119,69 @@ export function createFirstSetupResolutionInspection(
     publicEvidenceDirectories?: readonly string[];
   },
 ) {
-  return {
+  const service = {
+    async captureFirstSetupOriginals() {
+      const inspection = await service.inspectFirstSetupResolution();
+      const originals: { name: string; bytes: Buffer | null }[] = [];
+      const capture = async (path: string, name: string, limit = 128 * 1024 * 1024) => {
+        let file;
+        try {
+          file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+          const info = await file.stat();
+          if (!info.isFile() || info.size > limit) throw new AppError("setup.not_ready", {});
+          const bytes = await file.readFile();
+          if (bytes.length > limit) throw new AppError("setup.not_ready", {});
+          originals.push({ name, bytes });
+        } catch (error) {
+          if (!missing(error)) throw error;
+          originals.push({ name, bytes: null });
+        } finally {
+          await file?.close();
+        }
+      };
+      for (const file of inspection.artifacts) {
+        if (file.name.startsWith("outside-") || file.name === "first-fiscal-documents") continue;
+        const venue = ["first-setup-claim.json", "venue.db", "venue.db-wal"].includes(file.name);
+        await capture(
+          join(venue ? options.venueDir : options.stateDir, file.name),
+          `${venue ? "venue" : "state"}/${file.name}`,
+        );
+      }
+      const directory = async (path: string, name: string, fileName: (name: string) => string) => {
+        try {
+          const info = await lstat(path);
+          if (!info.isDirectory() || info.isSymbolicLink())
+            throw new AppError("setup.not_ready", {});
+          const names = (await readdir(path)).sort();
+          if (names.length > 1024) throw new AppError("setup.not_ready", {});
+          originals.push({ name, bytes: Buffer.from(JSON.stringify(names)) });
+          for (const item of names) {
+            const label = fileName(item);
+            if (!originals.some((original) => original.name === label))
+              await capture(join(path, item), label, 8 * 1024 * 1024);
+          }
+        } catch (error) {
+          if (!missing(error)) throw error;
+          originals.push({ name, bytes: null });
+        }
+      };
+      await directory(
+        join(options.stateDir, "first-fiscal-documents"),
+        "directory:state/first-fiscal-documents",
+        (name) => `state/first-fiscal-documents/${name}`,
+      );
+      for (const path of options.publicEvidencePaths ?? [])
+        await capture(path, `outside-file:${path}`, 8 * 1024 * 1024);
+      for (const path of options.publicEvidenceDirectories ?? [])
+        await directory(
+          path,
+          `directory:outside:${path}`,
+          (name) => `outside-file:${join(path, name)}`,
+        );
+      if ((await service.inspectFirstSetupResolution()).inspectionId !== inspection.inspectionId)
+        throw new AppError("setup.attempt_conflict", {});
+      return { inspection, originals };
+    },
     async withVenueExclusion<T>(body: () => Promise<T>): Promise<T> {
       const hold = await lockVenueDatabase(options.venueDir);
       try {
@@ -233,4 +296,5 @@ export function createFirstSetupResolutionInspection(
       };
     },
   };
+  return service;
 }

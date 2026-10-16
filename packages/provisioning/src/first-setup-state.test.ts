@@ -926,3 +926,22 @@ it.each([
     await expect(readFile(f.statePath)).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
+
+it("a retired root cannot be claimed again or accept a delayed state update", async () => {
+  const f = await fixture();
+  const state = await f.claim();
+  const abandoned = await f.store.update(state.frozen.attemptId, state.revision, {
+    kind: "abandoned",
+  });
+  await writeFile(join(f.options.venueDir, "first-setup-retirement.json"), "{}");
+  const before = await readFile(f.statePath);
+  await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  await expect(
+    f.store.update(abandoned.frozen.attemptId, abandoned.revision, {
+      kind: "recover",
+      capabilityHash: digest("different"),
+      claimNonceHash: digest("different-nonce"),
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+  expect(await readFile(f.statePath)).toEqual(before);
+});

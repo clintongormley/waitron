@@ -331,3 +331,47 @@ it.each(["pre-consumption-abandoned", "complete"])(
     expect((await f.store.read())?.status).toBe(kind === "complete" ? "complete" : "abandoned");
   },
 );
+
+it.each([
+  "first-setup-node-key.json",
+  "first-fiscal-documents/manifest.json",
+  "first-fiscal-documents/0-0.json",
+  "first-setup-resolutions/id/000001.json",
+  "first-setup-workspaces/id/state/first-setup.json",
+  "first-setup-selection.json",
+  "first-setup-retirement.json",
+  "first-setup-workspace.json",
+])("cannot import retirement or current setup authority through %s", async (name) => {
+  const f = await fixture();
+  const { unpackBundleToDir } = await import("./state-secrets.js");
+  await expect(
+    unpackBundleToDir({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
+  ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+  await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(
+    validateDatabaseEntries(
+      [
+        {
+          name: "manifest.json",
+          bytes: Buffer.from(
+            JSON.stringify({
+              manifestVersion: 1,
+              createdAt: "2026-10-15T00:00:00.000Z",
+              environment: "preproduction",
+              modules: {},
+            }),
+          ),
+        },
+        { name: `secrets/${name}`, bytes: Buffer.from("{}") },
+      ],
+      join(f.root, "source.db"),
+      {
+        stateDir: f.stateDir,
+        stagingDir: join(f.root, "staging"),
+        migrationsRoot: null,
+        environment: "preproduction",
+        modules: [],
+      },
+    ),
+  ).rejects.toMatchObject({ code: "restore.unexpected_entry" });
+});

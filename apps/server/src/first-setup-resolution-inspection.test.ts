@@ -516,3 +516,191 @@ it.each(["delivery", "outside"] as const)(
     expect(result.repairEligible).toBe(false);
   },
 );
+
+async function actionsFixture() {
+  const f = await fixture("active");
+  const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
+  const service = createFirstSetupResolutionActions({
+    ...f,
+    host: {
+      resolution: f.service,
+      owner: f.recovering,
+      store: f.store,
+      coordinator: f.coordinator,
+      evidence: { invalidate: () => {} },
+      delivery: { invalidate: () => {} },
+    },
+  });
+  const request = async () => {
+    const inspection = await f.service.inspectFirstSetupResolution();
+    return {
+      inspectionId: inspection.inspectionId,
+      revision: inspection.revision!,
+      ownerGeneration: inspection.ownerGeneration!,
+      register: { kind: "no-current-master" as const, confirmed: true as const },
+    };
+  };
+  return { ...f, actions: service, startRequest: request };
+}
+it("Start again retires a qualified unused workspace without a password and never changes its original claim", async () => {
+  const f = await actionsFixture();
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const binding = await f.actions.startAgainFirstSetup(await f.startRequest());
+  expect(binding.anchorVenueDir).toBe(
+    await import("node:fs/promises").then((fs) => fs.realpath(f.venueDir)),
+  );
+  expect(binding.venueDir).not.toBe(f.venueDir);
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  const { assertVenueFirstSetupAllowed } = await import("@waitron/provisioning");
+  await expect(assertVenueFirstSetupAllowed(f.venueDir)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});
+it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
+  "absence of a paper signer does not make %s history eligible for password-free reset",
+  async (name) => {
+    const f = await actionsFixture();
+    await writeFile(join(f.stateDir, name), "{}");
+    const req = await f.startRequest();
+    await expect(f.actions.startAgainFirstSetup(req)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
+it("a no-master declaration cannot clear saved consumption intent", async () => {
+  const f = await actionsFixture();
+  await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
+  const req = await f.startRequest();
+  await expect(f.actions.startAgainFirstSetup(req)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect((await f.store.read())?.consumptionIntent).toBe(true);
+});
+it("an authenticated missing-database retirement preserves spent intent and all document bytes", async () => {
+  const f = await actionsFixture();
+  await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
+  const inspection = await f.service.inspectFirstSetupResolution();
+  const recovered = await f.recovering.recoverFirstSetupOwner({
+    inspectionId: inspection.inspectionId,
+    revision: inspection.revision!,
+    ownerGeneration: inspection.ownerGeneration!,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const owner = {
+    attemptId: recovered.state.attemptId,
+    revision: recovered.state.revision,
+    ownerGeneration: recovered.ownerGeneration,
+    capability: recovered.capability,
+  };
+  await rm(join(f.venueDir, "venue.db"));
+  await mkdir(join(f.stateDir, "first-fiscal-documents"));
+  await writeFile(
+    join(f.stateDir, "first-fiscal-documents", "orphan.json"),
+    "retained malformed public chunk",
+  );
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const binding = await f.actions.startAgainFirstSetup({
+    ...(await f.startRequest()),
+    owner,
+    register: {
+      kind: "current-master",
+      status: "Unknown",
+      custodian: "Elena",
+      reference: "d".repeat(64),
+      consultedAt: "2026-10-16T02:00:00.000Z",
+    },
+  });
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect((JSON.parse(before.toString()) as { consumptionIntent: boolean }).consumptionIntent).toBe(
+    true,
+  );
+  await expect(readFile(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(f.stateDir, "first-fiscal-documents", "orphan.json"), "utf8")).toBe(
+    "retained malformed public chunk",
+  );
+  await expect(readFile(join(binding.venueDir, "venue.db"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+it("Start again rejects a stale snapshot before recording retirement", async () => {
+  const f = await actionsFixture();
+  const request = await f.startRequest();
+  await writeFile(join(f.stateDir, "trading.env"), "CHANGED");
+  await expect(f.actions.startAgainFirstSetup(request)).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+  await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("retirement snapshots retain configured public files, receipt directories and absent paths", async () => {
+  const f = await fixture("active");
+  const publicFile = join(f.root, "configured-history.json"),
+    receipts = join(f.root, "receipts");
+  await writeFile(publicFile, "original configured bytes");
+  await mkdir(receipts);
+  await writeFile(join(receipts, "one.json"), "original receipt");
+  const service = createFirstSetupResolutionInspection({
+    ...f,
+    publicEvidencePaths: [publicFile, join(f.root, "missing.json")],
+    publicEvidenceDirectories: [receipts],
+  });
+  const snapshot = await service.captureFirstSetupOriginals();
+  expect(snapshot.originals).toContainEqual({
+    name: `outside-file:${publicFile}`,
+    bytes: Buffer.from("original configured bytes"),
+  });
+  expect(snapshot.originals).toContainEqual({
+    name: `outside-file:${join(receipts, "one.json")}`,
+    bytes: Buffer.from("original receipt"),
+  });
+  expect(snapshot.originals).toContainEqual({
+    name: `directory:outside:${receipts}`,
+    bytes: Buffer.from('["one.json"]'),
+  });
+  expect(snapshot.originals).toContainEqual({
+    name: `outside-file:${join(f.root, "missing.json")}`,
+    bytes: null,
+  });
+  expect(snapshot.inspection.inspectionId).toBe(
+    (await service.inspectFirstSetupResolution()).inspectionId,
+  );
+});
+
+it.each(["missing", "corrupt", "partial"] as const)(
+  "password-free Start again refuses a %s database",
+  async (kind) => {
+    const f = await actionsFixture();
+    const path = join(f.venueDir, "venue.db");
+    await rm(path);
+    if (kind === "corrupt") await writeFile(path, "not a database");
+    if (kind === "partial") await writeFile(path, Buffer.alloc(0));
+    await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    await expect(readFile(join(f.venueDir, "first-setup-retirement.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
+it("Start again serialises two browsers so an unchanged old claim is retired only once", async () => {
+  const f = await actionsFixture(),
+    request = await f.startRequest();
+  const results = await Promise.allSettled([
+    f.actions.startAgainFirstSetup(request),
+    f.actions.startAgainFirstSetup(request),
+  ]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+  const { resolveFirstSetupWorkspace } = await import("@waitron/provisioning");
+  const target = await resolveFirstSetupWorkspace(f);
+  expect(target.binding).not.toBeNull();
+});

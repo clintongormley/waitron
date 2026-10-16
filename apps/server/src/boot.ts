@@ -2,7 +2,11 @@ import type { WaitronModule } from "@waitron/module";
 import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { assertOtherSetupAllowed, readTenantIdentities } from "@waitron/provisioning";
+import {
+  assertOtherSetupAllowed,
+  assertFirstSetupBootTarget,
+  readTenantIdentities,
+} from "@waitron/provisioning";
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
@@ -807,6 +811,7 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  await assertFirstSetupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   const firstSetupHost = createFirstSetupModuleHost({
