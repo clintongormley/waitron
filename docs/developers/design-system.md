@@ -679,8 +679,8 @@ you set spacing without replacing its error and folding behaviour.
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid, initially 12 px per square, that fills its
 box and reaches at least 8 squares past the furthest table. Above and left of the plan it always
-keeps a margin of `(--wt-tap-min + --wt-space-1) × √2`, rounded up to whole squares (6 with today's
-tokens) and read from the tokens outside a drag, so a selected table's handles stay inside the grid
+keeps a margin of `(--wt-tap-min + --wt-space-1) × √2`, rounded up to whole squares and enlarged
+when zoomed out, so a selected table's handles stay inside the grid
 at x 0 and y 0, and selecting a table moves nothing. A turned table reaching past the top or left
 edge gets extra squares on top of that margin, so it can be scrolled wholly into view. Each table is a button at its true
 size and angle, so a small one is below `--wt-tap-min`; its name is drawn only when its shorter side
@@ -695,7 +695,9 @@ unselected table or empty grid pans the view. Two fingers zoom about their movin
 adding a second finger cancels a table edit before zooming. A mouse drags a table immediately.
 The wheel pans, and Ctrl+wheel zooms about the pointer, from half to four times the original
 12-pixel squares. Moving, resizing and turning still use the plan's grid coordinates at every
-zoom. These gestures share `Gestures` with `wt-floor-map`.
+zoom. Zooming out preserves the turn handle's `--wt-tap-min` target, its symbol, the resize handles'
+token sizes and a one-pixel grid stroke on screen; zooming in enlarges them with the plan. A mouse can also drag empty grid to pan;
+its release click clears the selection. These gestures share `Gestures` with `wt-floor-map`.
 
 The selected table's handles sit in a frame with its box and turn, so they turn with it. The turn
 arrow (`rotate-handle`, named by `copy.rotate`) is a bare `--wt-color-text` icon in a

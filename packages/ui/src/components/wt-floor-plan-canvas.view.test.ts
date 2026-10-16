@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
 import type { PlanCanvasTable, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
 import "./wt-floor-plan-canvas.js";
@@ -448,4 +449,169 @@ it("an extra finger on a selected table cannot edit it while a pinch is waiting 
   pointer(window, "pointermove", 4, at.x + 24, at.y);
   pointer(window, "pointerup", 4, at.x + 24, at.y);
   expect(moves).toEqual([{ key: "T1", x: 12, y: 10 }]);
+});
+
+it("zooming out keeps the turn handle and resize targets at their token sizes", async () => {
+  const el = await canvas("T1");
+  el.style.setProperty("--wt-tap-min", "60px");
+  el.style.setProperty("--wt-space-5", "28px");
+  wheel(el, 100);
+  await el.updateComplete;
+  const arrow = part(el, "rotate-handle").getBoundingClientRect();
+  expect(arrow.width).toBe(60);
+  expect(arrow.height).toBe(60);
+  for (const handle of el.shadowRoot!.querySelectorAll<HTMLElement>('[part="resize-handle"]')) {
+    expect(handle.getBoundingClientRect().width).toBe(28);
+    expect(handle.getBoundingClientRect().height).toBe(28);
+  }
+});
+
+it("zoomed-out handles at the plan's corner remain inside the grid", async () => {
+  const el = await canvas("T1");
+  el.tables = [
+    { ...table("T1", 0, 0), placement: { ...table("T1", 0, 0).placement, rotation: 225 } },
+  ];
+  await el.updateComplete;
+  wheel(el, 100);
+  await el.updateComplete;
+  const grid = part(el, "grid").getBoundingClientRect();
+  const arrow = part(el, "rotate-handle").getBoundingClientRect();
+  expect(arrow.width).toBeGreaterThanOrEqual(44);
+  expect(arrow.left).toBeGreaterThanOrEqual(grid.left);
+  expect(arrow.top).toBeGreaterThanOrEqual(grid.top);
+});
+
+it("a selected table's touch drag moves only the table and leaves the view still", async () => {
+  const el = await canvas("T1");
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = 60;
+  viewport.scrollTop = 60;
+  const moves = events(el, "wt-table-move");
+  const at = centre(button(el));
+  pointer(button(el), "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x - 24, at.y - 36);
+  pointer(window, "pointerup", 1, at.x - 24, at.y - 36);
+  await el.updateComplete;
+  expect([viewport.scrollLeft, viewport.scrollTop]).toEqual([60, 60]);
+  expect(moves).toEqual([{ key: "T1", x: 8, y: 7 }]);
+});
+
+it("a mouse tap selects once through its native click", async () => {
+  const el = await canvas();
+  const selections = events(el, "wt-table-select");
+  const at = centre(button(el));
+  pointer(button(el), "pointerdown", 1, at.x, at.y, "mouse");
+  pointer(window, "pointerup", 1, at.x, at.y, "mouse");
+  button(el).dispatchEvent(
+    new PointerEvent("click", { bubbles: true, composed: true, pointerType: "mouse", detail: 1 }),
+  );
+  expect(selections).toEqual([{ key: "T1" }]);
+});
+
+it("reconnecting the canvas installs one gesture listener and pans once", async () => {
+  const el = await canvas();
+  const parent = el.parentElement!;
+  el.remove();
+  parent.appendChild(el);
+  await settled(el);
+  const viewport = part(el, "viewport");
+  const at = centre(viewport);
+  pointer(part(el, "grid"), "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x - 24, at.y - 36);
+  pointer(window, "pointerup", 1, at.x - 24, at.y - 36);
+  await el.updateComplete;
+  expect([viewport.scrollLeft, viewport.scrollTop]).toEqual([24, 36]);
+});
+
+it("wheel input during a table edit cannot change its scale or scroll", async () => {
+  const el = await canvas("T1");
+  const at = centre(button(el));
+  const moves = events(el, "wt-table-move");
+  pointer(button(el), "pointerdown", 1, at.x, at.y);
+  wheel(el, -100);
+  wheel(el, 24, false);
+  await el.updateComplete;
+  expect(button(el).getBoundingClientRect().width).toBe(96);
+  expect(part(el, "viewport").scrollTop).toBe(0);
+  pointer(window, "pointermove", 1, at.x + 24, at.y);
+  pointer(window, "pointerup", 1, at.x + 24, at.y);
+  expect(moves).toEqual([{ key: "T1", x: 12, y: 10 }]);
+});
+
+it("a keyboard turn at twice zoom gives back only the corner margin already scrolled away", async () => {
+  const el = await canvas("T1");
+  el.tables = [
+    {
+      ...table("T1", 0, 0),
+      placement: { ...table("T1", 0, 0).placement, width: 60, height: 60, rotation: 45 },
+    },
+    table("T2", 70, 0),
+  ];
+  el.addEventListener("wt-table-rotate", (event) => {
+    const { key, rotation } = (event as CustomEvent<{ key: string; rotation: number }>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, rotation } } : t,
+      );
+    });
+  });
+  await settled(el);
+  await doubled(el);
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = 24;
+  viewport.scrollTop = 24;
+  await settled(el);
+  const other = el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+  const before = centre(other);
+  part(el, "rotate-handle").focus({ preventScroll: true });
+  await userEvent.keyboard("{ArrowLeft}");
+  await settled(el);
+  expect(el.tables[0]!.placement.rotation).toBe(30);
+  expect(centre(other)).toEqual(before);
+});
+
+it("grid growth at twice zoom leaves a corner-bound table under the pointer", async () => {
+  const el = await canvas("T1");
+  el.tables = [
+    { ...table("T1", 10, 10), placement: { ...table("T1", 10, 10).placement, rotation: 45 } },
+    table("T2", 26, 0),
+  ];
+  await settled(el);
+  await doubled(el);
+  const at = centre(button(el));
+  pointer(button(el), "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x - 240, at.y - 240);
+  await el.updateComplete;
+  expect(centre(button(el)).x).toBeCloseTo(at.x - 240);
+  expect(centre(button(el)).y).toBeCloseTo(at.y - 240);
+  pointer(window, "pointercancel", 1, at.x - 240, at.y - 240);
+});
+
+it("a mouse can pan empty grid and its release click clears the selection", async () => {
+  const el = await canvas("T1");
+  const selections = events(el, "wt-table-select");
+  const at = centre(part(el, "viewport"));
+  pointer(part(el, "grid"), "pointerdown", 1, at.x, at.y, "mouse");
+  pointer(window, "pointermove", 1, at.x - 48, at.y - 24, "mouse");
+  pointer(window, "pointerup", 1, at.x - 48, at.y - 24, "mouse");
+  part(el, "grid").dispatchEvent(
+    new PointerEvent("click", { bubbles: true, composed: true, pointerType: "mouse", detail: 1 }),
+  );
+  await el.updateComplete;
+  expect([part(el, "viewport").scrollLeft, part(el, "viewport").scrollTop]).toEqual([48, 24]);
+  expect(selections).toEqual([{ key: null }]);
+});
+
+it("a zoomed-out grid keeps a screen pixel for each line and a full-size turn symbol", async () => {
+  const el = await canvas("T1");
+  el.style.setProperty("--wt-font-size-lg", "24px");
+  wheel(el, 100);
+  await el.updateComplete;
+  const scale = button(el).getBoundingClientRect().width / 96;
+  const image = getComputedStyle(part(el, "grid")).backgroundImage;
+  const stroke = Number(image.match(/([\d.]+)px/)![1]);
+  expect.soft(stroke * scale).toBeGreaterThanOrEqual(1);
+  const icon = part(el, "rotate-handle").querySelector<HTMLElement>("wt-icon")!;
+  expect(icon.getBoundingClientRect().width).toBe(24);
+  expect(icon.getBoundingClientRect().height).toBe(24);
 });

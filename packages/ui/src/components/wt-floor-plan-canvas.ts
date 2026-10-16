@@ -161,13 +161,22 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .grid {
+        --wt-plan-control-scale: 1;
         position: relative;
         min-width: 100%;
         min-height: 100%;
         background-color: var(--wt-color-surface);
         background-image:
-          linear-gradient(to right, var(--wt-color-border) 1px, transparent 1px),
-          linear-gradient(to bottom, var(--wt-color-border) 1px, transparent 1px);
+          linear-gradient(
+            to right,
+            var(--wt-color-border) calc(1px * var(--wt-plan-control-scale)),
+            transparent calc(1px * var(--wt-plan-control-scale))
+          ),
+          linear-gradient(
+            to bottom,
+            var(--wt-color-border) calc(1px * var(--wt-plan-control-scale)),
+            transparent calc(1px * var(--wt-plan-control-scale))
+          );
       }
 
       .table {
@@ -217,13 +226,13 @@ export class WtFloorPlanCanvas extends LitElement {
 
       .rotate-handle {
         position: absolute;
-        left: calc(100% + var(--wt-space-1));
-        bottom: calc(100% + var(--wt-space-1));
+        left: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
+        bottom: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
         display: flex;
         align-items: center;
         justify-content: center;
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
+        width: calc(var(--wt-tap-min) * var(--wt-plan-control-scale));
+        height: calc(var(--wt-tap-min) * var(--wt-plan-control-scale));
         margin: 0;
         padding: 0;
         border: none;
@@ -232,6 +241,10 @@ export class WtFloorPlanCanvas extends LitElement {
         cursor: grab;
         touch-action: none;
         pointer-events: auto;
+      }
+
+      .rotate-handle wt-icon {
+        transform: scale(var(--wt-plan-control-scale));
       }
 
       .rotate-handle:focus-visible {
@@ -246,19 +259,22 @@ export class WtFloorPlanCanvas extends LitElement {
       /* Under the table's button, which takes a press where the two overlap, so a selected table
          of any size can still be dragged; the dot is grabbed outside the table. */
       .resize-handle {
-        width: var(--wt-space-5);
-        height: var(--wt-space-5);
-        margin: calc(var(--wt-space-5) / -2) 0 0 calc(var(--wt-space-5) / -2);
+        width: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
+        height: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
+        margin: calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2) 0 0
+          calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2);
         border-radius: var(--wt-radius-full);
         touch-action: none;
         pointer-events: auto;
       }
 
       .resize-dot {
-        width: var(--wt-space-3);
-        height: var(--wt-space-3);
-        margin: calc(var(--wt-space-3) / -2) 0 0 calc(var(--wt-space-3) / -2);
-        border: calc(var(--wt-space-1) / 2) solid var(--wt-color-primary);
+        width: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
+        height: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
+        margin: calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2) 0 0
+          calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2);
+        border: calc(var(--wt-space-1) * var(--wt-plan-control-scale) / 2) solid
+          var(--wt-color-primary);
         border-radius: var(--wt-radius-full);
         background: var(--wt-color-surface);
       }
@@ -432,13 +448,13 @@ export class WtFloorPlanCanvas extends LitElement {
     return this.draft?.key === t.key ? this.draft.placement : t.placement;
   }
 
-  override willUpdate(changed: PropertyValues<this>): void {
+  override willUpdate(changed: PropertyValues): void {
     const placements = this.tables.map((t) => this.#placementOf(t));
     const box = bounds(placements);
     const plan = gridExtent(placements, { columns: 0, rows: 0 });
     const hold = this.#holding(changed.has("tables"));
     // Not while a drag holds the room, so nothing drawn moves under the pointer.
-    if (hold !== "drag" && (!this.hasUpdated || changed.has("tables"))) {
+    if (changed.has("zoom") || (hold !== "drag" && (!this.hasUpdated || changed.has("tables")))) {
       const host = getComputedStyle(this);
       // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
       // either axis, so its reach past the table's turned box is the side times √2.
@@ -446,7 +462,7 @@ export class WtFloorPlanCanvas extends LitElement {
         (parseFloat(host.getPropertyValue("--wt-tap-min")) +
           parseFloat(host.getPropertyValue("--wt-space-1"))) *
         Math.SQRT2;
-      this.#margin = Math.ceil(reach / GRID_SQUARE_PX);
+      this.#margin = Math.ceil((reach * Math.max(1, 1 / this.zoom)) / GRID_SQUARE_PX);
     }
     // Tolerates float error in a corner computed to land exactly on the edge.
     let x = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9)));
@@ -520,6 +536,7 @@ export class WtFloorPlanCanvas extends LitElement {
       height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset / this.zoom}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
       zoom: String(this.zoom),
+      "--wt-plan-control-scale": String(Math.max(1, 1 / this.zoom)),
       minWidth: `${100 / this.zoom}%`,
       minHeight: `${100 / this.zoom}%`,
     });
@@ -599,7 +616,8 @@ export class WtFloorPlanCanvas extends LitElement {
    *  selected table's bottom dot: the grid runs `gridExtent`'s margin past the lowest table. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
-    const dot = t.key === this.selected ? " + var(--wt-space-5) / 2" : "";
+    const dot =
+      t.key === this.selected ? " + var(--wt-space-5) * var(--wt-plan-control-scale) / 2" : "";
     const style = styleMap({
       top: `calc(${px(box.y + box.height)}${dot} + var(--wt-space-1))`,
     });
@@ -668,7 +686,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const box = this.#drawnBox(p);
     const style = styleMap({
       left: px(box.x + box.width / 2),
-      top: `calc(${px(box.y + box.height)} + var(--wt-space-5) / 2 + var(--wt-space-1))`,
+      top: `calc(${px(box.y + box.height)} + var(--wt-space-5) * var(--wt-plan-control-scale) / 2 + var(--wt-space-1))`,
     });
     return html`<span class="size-badge" part="size-badge" aria-hidden="true" style=${style}
       >${p.width} × ${p.height}</span
