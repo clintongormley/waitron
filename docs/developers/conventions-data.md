@@ -2434,6 +2434,15 @@ workspace keeps the locking path in the table above. `first-setup-resolution.boo
 the database or changes the selected workspace after discovery and checks that the callback refuses
 without creating a database. The same suite checks direct, supervised and already-recovery entry.
 
+**First-setup durable replay, 2026-10-16:** on Node v26.11.1, the new
+`first-setup-resolution.durability.test.ts` left an applied record visible after injecting a
+directory-sync failure; retry returned it without another sync. The renamed-backlink and final
+selection cases in `first-setup-workspace.test.ts` reproduced the same early success. Replays now
+sync the existing record or witness directory before returning. The resolution suite also injects
+write, file-sync, rename and directory-sync failures into original chunks, manifests and both
+action phases, then resumes through a new store and compares retained bytes. These are filesystem
+fault injections, not physical power-loss measurements.
+
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
 

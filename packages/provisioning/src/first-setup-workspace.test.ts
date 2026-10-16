@@ -10,7 +10,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import * as provision from "./index.js";
@@ -682,3 +682,67 @@ it("creating a document directory in retired local state still refuses an alread
     code: "setup.attempt_uncertain",
   });
 });
+
+it.each(["retirement", "backlink", "state-selection", "venue-selection", "applied-selection"])(
+  "does not acknowledge selection while a renamed %s directory still refuses sync",
+  async (point) => {
+    const f = await fixture();
+    const paths = {
+      retirement: join(f.anchor.venueDir, "first-setup-retirement.json"),
+      backlink: join(f.binding.venueDir, "first-setup-workspace.json"),
+      "state-selection": join(f.anchor.stateDir, "first-setup-selection.json"),
+      "venue-selection": join(f.anchor.venueDir, "first-setup-selection.json"),
+      "applied-selection": join(
+        f.anchor.stateDir,
+        "first-setup-resolutions",
+        f.binding.resolutionId,
+        "000004.json",
+      ),
+    };
+    const path = paths[point as keyof typeof paths];
+    const actual = await vi.importActual<typeof filesystem>("node:fs/promises");
+    let renamed = false;
+    let refusals = 0;
+    vi.mocked(filesystem.rename).mockImplementation(async (from, to) => {
+      await actual.rename(from, to);
+      if (String(to) === path) renamed = true;
+    });
+    vi.mocked(filesystem.open).mockImplementation(async (...args) => {
+      const handle = await actual.open(...args);
+      if (renamed && String(args[0]) === dirname(path)) {
+        vi.spyOn(handle, "sync").mockImplementation(async () => {
+          refusals++;
+          throw new Error("selection directory still refuses sync");
+        });
+      }
+      return handle;
+    });
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(refusals).toBeGreaterThan(0);
+    const original = await filesystem.readFile(path);
+    const beforeReplay = refusals;
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(refusals).toBeGreaterThan(beforeReplay);
+    vi.mocked(filesystem.open).mockImplementation(actual.open);
+    vi.mocked(filesystem.rename).mockImplementation(actual.rename);
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).resolves.toEqual(
+      f.binding,
+    );
+    expect(await filesystem.readFile(path)).toEqual(original);
+    expect((await f.store.read(f.binding.resolutionId)).map((record) => record.phase)).toEqual([
+      "prepared",
+      "applied",
+      "prepared",
+      "applied",
+    ]);
+    expect(await provision.resolveFirstSetupWorkspace(f.anchor)).toEqual({
+      venueDir: f.binding.venueDir,
+      stateDir: f.binding.stateDir,
+      binding: f.binding,
+    });
+  },
+);

@@ -515,7 +515,11 @@ export function createFirstSetupResolutionStore(options: {
         )
           conflict();
         const existing = records[prepared.sequence];
-        if (existing !== undefined) return existing;
+        if (existing !== undefined) {
+          // A prior rename can be visible after its directory sync failed.
+          await folder(prepared.resolutionId, true);
+          return existing;
+        }
         const record: ResolutionRecord = {
           ...prepared,
           sequence: prepared.sequence + 1,

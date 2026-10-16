@@ -149,6 +149,7 @@ async function writeOnce(path: string, witness: Witness) {
   const current = await read(path);
   if (current !== null) {
     if (!isDeepStrictEqual(current, witness)) uncertain();
+    await firstSetupDirectory(dirname(path), true);
     return;
   }
   await writeDurableHostJson(path, witness, LIMIT);
@@ -343,6 +344,7 @@ export async function selectFirstSetupWorkspace(
     const archive = store(anchor);
     const records = await archive.read(record.resolutionId);
     if (alreadySelected && records.length === 4) {
+      await archive.apply(records[2]!);
       await resolveFirstSetupWorkspace(anchor);
       return binding;
     }
