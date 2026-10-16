@@ -325,3 +325,40 @@ it.each(["000003.json", "000004.json"])(
     }
   },
 );
+
+it.each(["marker-repair", "ownership-rebind"] as const)(
+  "records an unconsulted register for password-authorised %s without inventing absence",
+  async (action) => {
+    const f = await fixture();
+    const prepared = await f.store.prepare({ ...f.input, action, register: null }, f.originals);
+    const applied = await f.store.apply(prepared);
+    const restarted = resolution.createFirstSetupResolutionStore({
+      ...f.roots,
+      coordinator: resolution.createFirstSetupCoordinator(),
+    });
+    expect(await restarted.read(f.input.resolutionId)).toEqual([prepared, applied]);
+    expect(applied).toMatchObject({ action, register: null, authority: "original-password" });
+    expect(await restarted.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+  },
+);
+it.each(["retire", "select-workspace", "finish-publication"] as const)(
+  "an unconsulted register cannot authorise %s",
+  async (action) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare({ ...f.input, action, register: null }, f.originals),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);
+it.each(["marker-repair", "ownership-rebind"] as const)(
+  "an unconsulted register cannot grant local-empty authority for %s",
+  async (action) => {
+    const f = await fixture();
+    await expect(
+      f.store.prepare(
+        { ...f.input, action, register: null, authority: "local-empty-no-custodian" },
+        f.originals,
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  },
+);

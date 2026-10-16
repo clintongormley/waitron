@@ -26,7 +26,7 @@ export interface WorkspaceBinding {
   resolutionId: string;
   selectionGeneration: number;
 }
-export interface ResolutionRecord {
+interface ResolutionMetadata {
   version: 1;
   resolutionId: string;
   sequence: number;
@@ -38,19 +38,21 @@ export interface ResolutionRecord {
   evidenceReferences: string[];
   database: "empty-preactivation" | "missing" | "committed-exact" | "unknown-or-nonempty";
   authority: "original-password" | "local-empty-no-custodian";
-  register: RegisterAnswer;
-  action:
-    "marker-repair" | "ownership-rebind" | "retire" | "select-workspace" | "finish-publication";
   phase: "prepared" | "applied";
   nextWorkspace: WorkspaceBinding | null;
   recordedAt: string;
 }
+export type ResolutionRecord = ResolutionMetadata &
+  (
+    | { action: "marker-repair" | "ownership-rebind"; register: RegisterAnswer | null }
+    | { action: "retire" | "select-workspace" | "finish-publication"; register: RegisterAnswer }
+  );
 export interface FirstSetupOriginal {
   name: string;
   bytes: Uint8Array | null;
 }
-export type ResolutionInput = Omit<
-  ResolutionRecord,
+type InputFor<Record> = Omit<
+  Record,
   | "version"
   | "sequence"
   | "previousRecordDigest"
@@ -59,6 +61,11 @@ export type ResolutionInput = Omit<
   | "phase"
   | "recordedAt"
 >;
+export type ResolutionInput = ResolutionRecord extends infer Record
+  ? Record extends ResolutionRecord
+    ? InputFor<Record>
+    : never
+  : never;
 const LIMIT = 65536;
 const HASH = /^[a-f0-9]{64}$/;
 const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
@@ -210,6 +217,12 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
     invalid();
   const answer = value.register;
   if (
+    answer === null &&
+    value.authority === "original-password" &&
+    ["marker-repair", "ownership-rebind"].includes(String(value.action))
+  ) {
+    // These password-authorised actions do not consult the current register.
+  } else if (
     exact(answer, ["kind", "confirmed"]) &&
     answer.kind === "no-current-master" &&
     answer.confirmed === true

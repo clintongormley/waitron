@@ -24,6 +24,7 @@ import { createPasswordThrottle } from "./password-throttle.js";
 import { inTurn } from "./attempt-turns.js";
 import type { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { assertFirstSetupBootTarget } from "@waitron/provisioning";
+import { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
 
 export interface FirstSetupClaimPayload {
   environment: "production" | "preproduction";
@@ -227,34 +228,41 @@ export function createFirstSetupOwner(options: OwnerOptions) {
             )
               refuse();
             let current;
+            const audit =
+              recovery && options.resolution !== undefined
+                ? createFirstSetupOwnerAudit(before, options.resolution)
+                : undefined;
             if (recovery) {
               const retained = await store.readForRepair();
               if (retained === null || !isDeepStrictEqual(retained, repair)) refuse();
+              await audit?.reconcile(retained.state);
               if (retained.repairMarker !== null) {
                 if (snapshot !== undefined) {
                   if (inspected?.repairEligible !== true) throw new AppError("setup.not_ready", {});
-                  await store.repairMarker(
-                    retained,
-                    async () => {
-                      const currentInspection =
-                        await options.resolution!.inspectFirstSetupResolution();
-                      if (
-                        currentInspection.inspectionId !== snapshot.inspectionId ||
-                        !currentInspection.repairEligible
-                      )
-                        refuse();
-                    },
-                    hold,
-                  );
+                  const repair = () =>
+                    store.repairMarker(
+                      retained,
+                      async () => {
+                        const currentInspection =
+                          await options.resolution!.inspectFirstSetupResolution();
+                        if (
+                          currentInspection.inspectionId !== snapshot.inspectionId ||
+                          !currentInspection.repairEligible
+                        )
+                          refuse();
+                      },
+                      hold,
+                    );
+                  if (audit === undefined) await repair();
+                  else await audit.perform("marker-repair", retained.state, repair);
                 } else {
                   if (options.assertRepairAllowed === undefined)
                     throw new AppError("setup.not_ready", {});
                   const assertAllowed = options.assertRepairAllowed;
-                  await store.repairMarker(
-                    retained,
-                    () => assertAllowed(retained.state, hold),
-                    hold,
-                  );
+                  const repair = () =>
+                    store.repairMarker(retained, () => assertAllowed(retained.state, hold), hold);
+                  if (audit === undefined) await repair();
+                  else await audit.perform("marker-repair", retained.state, repair);
                 }
               }
               current = retained.state;
@@ -265,26 +273,31 @@ export function createFirstSetupOwner(options: OwnerOptions) {
               current.ownerGeneration !== before.ownerGeneration
             )
               refuse();
-            const updated = await store.update(
-              current.frozen.attemptId,
-              current.revision,
-              recovery
-                ? {
-                    kind: "recover",
-                    capabilityHash: hash(capability),
-                    claimNonceHash: hash(clientClaimNonce),
-                  }
-                : { kind: "resume", capabilityHash: hash(capability) },
-              hold,
-            );
+            const update = () =>
+              store.update(
+                current.frozen.attemptId,
+                current.revision,
+                recovery
+                  ? {
+                      kind: "recover",
+                      capabilityHash: hash(capability),
+                      claimNonceHash: hash(clientClaimNonce),
+                    }
+                  : { kind: "resume", capabilityHash: hash(capability) },
+                hold,
+              );
+            const updated =
+              audit === undefined
+                ? await update()
+                : await audit.perform("ownership-rebind", current, update);
             invalidate(current.frozen.attemptId);
             options.onOwnershipRecovered?.(current.frozen.attemptId);
             return updated;
           });
         const state =
-          snapshot === undefined
-            ? await rebind()
-            : await options.resolution!.withVenueExclusion(rebind);
+          recovery && options.resolution !== undefined
+            ? await options.resolution.withVenueExclusion(rebind)
+            : await rebind();
         finish?.("success");
         return {
           state: publicFirstSetupState(state),

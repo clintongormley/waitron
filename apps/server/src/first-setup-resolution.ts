@@ -114,6 +114,7 @@ export function createFirstSetupResolutionActions(
           request.register.confirmed !== true ||
           current.record.authority !== "local-empty-no-custodian" ||
           current.record.database !== "empty-preactivation" ||
+          current.record.action !== "retire" ||
           current.record.register.kind !== "no-current-master" ||
           !unused(current.state) ||
           (await host.resolution.inspectFirstSetupResolution()).artifacts.some((artifact) =>
@@ -183,7 +184,10 @@ export function createFirstSetupResolutionActions(
           );
           const retired = await readFirstSetupRetirements(options);
           const noInheritedRegister = retired.every(
-            ({ state, record }) => record.register.kind === "no-current-master" && unused(state),
+            ({ state, record }) =>
+              record.action === "retire" &&
+              record.register.kind === "no-current-master" &&
+              unused(state),
           );
           const emptyWorkspace =
             inspection.database === "no-venue-rows" && unused(state) && noOtherHistory;

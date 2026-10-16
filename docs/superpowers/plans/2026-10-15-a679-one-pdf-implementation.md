@@ -332,10 +332,10 @@ Node-key format is display metadata, never a replacement secret value.
 ## Task 8: V2 retirement, workspace selection and publication-only finish
 
 **Files:** provisioning resolution/workspace modules/tests; server resolution/entry/API files; bin/node-entry/boot/recovery and CLI/restore admission.
-**Interfaces:** retain V2 `WorkspaceBinding`, `ResolutionRecord` and `RegisterAnswer` shapes; `startAgainFirstSetup(request):Promise<WorkspaceBinding>`; `resolveFirstSetupWorkspace(anchor):Promise<BootTarget>`; `assertFirstSetupBootTarget(target):Promise<void>`; `finishFirstFiscalSetup(request,hold):Promise<VenueResult>`.
+**Interfaces:** retain V2 `WorkspaceBinding` and both `RegisterAnswer` variants. **Owner, 2026-10-16:** `ResolutionRecord.register` may be null only for password-authorised marker-repair/ownership-rebind, meaning not consulted and granting no reset or fiscal authority; `startAgainFirstSetup(request):Promise<WorkspaceBinding>`; `resolveFirstSetupWorkspace(anchor):Promise<BootTarget>`; `assertFirstSetupBootTarget(target):Promise<void>`; `finishFirstFiscalSetup(request,hold):Promise<VenueResult>`.
 
 - [ ] RED: Consumed stays spent; Not consumed never clears saved intent; Unknown leaves old assignment unavailable.
-- [ ] RED: no signing key cannot satisfy no-master; any existing/unknown paper history refuses password-free empty reset.
+- [ ] RED: no signing key cannot satisfy no-master. **Owner, 2026-10-16:** add the unused-enrolled-PDF exception from the design inventory: password-free Start again needs positive never-activated and empty-database evidence, preserves the entire old attempt and burns its whole name block. Existing/unknown business data still refuses. This new exception is not yet implemented by the earlier no-master checks.
 - [ ] RED: missing DB remains missing at the old path; known exact commit finishes publication with zero activation.
 - [ ] RED: restore old roots/marker, lose either selection witness or substitute backlink; refuse before database open.
 - [ ] Run: `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-resolution.test.ts src/first-setup-workspace.test.ts`.

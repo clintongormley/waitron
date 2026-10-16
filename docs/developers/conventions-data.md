@@ -2443,6 +2443,18 @@ write, file-sync, rename and directory-sync failures into original chunks, manif
 action phases, then resumes through a new store and compares retained bytes. These are filesystem
 fault injections, not physical power-loss measurements.
 
+**First-setup password recovery audit, 2026-10-16:** the module host’s password recovery takes
+anchor/target exclusion on the older route as well as the inspection-bound route. On Node
+v26.11.1, `first-setup-owner-audit.test.ts` first recovered ownership while a child process held
+`venue.lock`; after the exclusion change it refuses with `provisioning.database_in_use`, leaves
+the state bytes unchanged and writes no audit. Eligible marker repair and ownership recovery
+record prepared/applied actions with retained source bytes and predecessor digests. Their
+owner-approved `register: null` means no consultation and grants no reset or fiscal authority.
+The suite injects failure before/after each action-record rename and the marker/state rename,
+then retries with a new owner service. Changed non-target evidence or a state change beyond the
+recorded recovery refuses reconciliation. These are filesystem fault injections, not physical
+power-loss measurements.
+
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
 
