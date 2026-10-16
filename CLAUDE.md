@@ -711,6 +711,10 @@ browser test** — most of these rules exist because a test passed while proving
   [testing-guide.md](docs/developers/testing-guide.md#a-scripted-click-runs-microtasks-only-after-the-whole-dispatch).
 - **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
   event left the menu at `(0, 0)` for its first frame.
+- **A placement check measures a box after the content that sizes it arrives, with room for CI's
+  larger fonts on the side it expects the box.** Cost: A771, the check failed 3 of 7 main runs.
+  Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-placement-check-measures-a-box-at-its-final-size-with-room-for-cis-fonts).
 - **Test public recovery links through the real boot modes that serve them.** Mounting a route on a
   bare Hono app cannot establish that trading or recovery boot installs it.
 - **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** A fake
