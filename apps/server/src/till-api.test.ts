@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  canvases,
   deviceProfiles,
   floorZones,
   kitchenCourses,
@@ -43,7 +42,7 @@ import {
   permissionsForRole,
   persons,
 } from "@waitron/identity";
-import { CAPABILITY_FLAGS, DEFAULT_CANVASES } from "@waitron/layouts";
+import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
@@ -277,8 +276,6 @@ const suite = useVenueDb({
   },
 });
 
-// Enrolled fresh in each `beforeEach` that needs it, because the `GET /api/till` canvas tests
-// `delete from devices`, so a once-only device would not survive to a later describe.
 let saleTillProfiles = 0;
 async function enrolSaleTillDevice(): Promise<void> {
   saleTillProfiles += 1;
@@ -1207,9 +1204,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     const res = await app.request("/api/till");
     expect(res.status).toBe(200);
     const body = await res.json();
-    // The receipt-issuer identity (legal name + NIF), the UI locale and the card
-    // fields. The tenant has authored no receipt or canvas, so `receipt` is the built-in default and
-    // `canvas` is the `till` form-factor default, even for this cookieless request.
     expect(body).toEqual({
       locale: "es-ES",
       clockingAvailable: false,
@@ -1235,10 +1229,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       cardProvider: "none",
       activeReaders: [],
       tipsEnabled: false,
-      // The seeded location has no address.
-      // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
-      // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
-      canvas: DEFAULT_CANVASES.till,
+      formFactor: "till",
       // A cookieless request has no device profile, so no capabilities.
       capabilities: [],
       // The auto-logout timeout also rides the profile: no profile → null (the app default).
@@ -1574,20 +1565,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till surfaces the calling device's PROFILE canvas + capabilities (device-profile §5.3)", async () => {
-    // A device whose PROFILE references a canvas gets that CanvasDef under `canvas`, and the profile's
-    // capabilities under `capabilities`. Cleaned up in `finally` so the shared-tenant no-cookie
-    // assertion above stays order-independent.
-    const [prof] = await suite.db
-      .insert(canvases)
-      .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
-      .returning({ id: canvases.id });
-    const canvasId = prof!.id;
+  it("GET /api/till surfaces the device form factor and profile capabilities", async () => {
     const deviceProfileId = await seedDeviceProfile(
       suite.db,
       "Counter",
       ["integrated-card-payment", "open-cash-drawer"],
-      canvasId,
+      null,
       // The profile carries a non-null auto-logout timeout, so the boot payload must mirror it.
       300,
     );
@@ -1599,12 +1582,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        canvas: unknown;
+        formFactor: unknown;
         capabilities: unknown;
         inactivityTimeoutSeconds: unknown;
       };
-      // The resolved CanvasDef, verbatim (the `getCanvas` definition) — through the profile.
-      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      expect(body.formFactor).toBe("till");
+      expect(body).not.toHaveProperty("canvas");
       // The profile's capabilities, as the explicit sibling.
       expect(body.capabilities).toEqual(["integrated-card-payment", "open-cash-drawer"]);
       // The profile's auto-logout timeout, mirrored onto the boot payload like `capabilities`.
@@ -1619,14 +1602,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       await suite.db.execute(
         sql`delete from device_profiles where id not in (select device_profile_id from devices)`,
       );
-      await suite.db.execute(sql`delete from canvases `);
     }
   });
 
-  it("resolves the form-factor default canvas + the profile's capabilities when the profile's canvasId is NULL", async () => {
-    // A "default canvas + these capabilities" profile (§5.2): canvas_id NULL, so the canvas falls back to
-    // the form-factor default while the capabilities STILL come from the profile. Proves the two axes are
-    // independent — a null canvas reference does not empty the capability set.
+  it("retains the profile capabilities and null timeout without canvas selection", async () => {
     const deviceProfileId = await seedDeviceProfile(
       suite.db,
       "Default+caps",
@@ -1640,11 +1619,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        canvas: unknown;
+        formFactor: unknown;
         capabilities: unknown;
         inactivityTimeoutSeconds: unknown;
       };
-      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      expect(body.formFactor).toBe("till");
+      expect(body).not.toHaveProperty("canvas");
       expect(body.capabilities).toEqual(["open-cash-drawer"]);
       // This profile was seeded with no timeout, so the boot payload carries null (the app default).
       expect(body.inactivityTimeoutSeconds).toBeNull();
@@ -1658,9 +1638,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("falls back to the form-factor default canvas + `capabilities: []` for an enrolled device with NO profile (§5.3)", async () => {
-    // A no-profile device renders the form-factor default canvas with an EMPTY capability set, so render
-    // and firewall agree (§5.3).
+  it("returns the till form factor and empty capabilities for the default enrolled profile", async () => {
     const cookie = await enrolTillDeviceCookie(suite.db, null);
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1668,12 +1646,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const res = await app.request("/api/till", { headers: { cookie } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        canvas: unknown;
+        formFactor: unknown;
         capabilities: unknown;
         inactivityTimeoutSeconds: unknown;
       };
-      // No profile → the built-in default canvas for a till device, and an empty capability set.
-      expect(body.canvas).toEqual(DEFAULT_CANVASES.till);
+      expect(body.formFactor).toBe("till");
+      expect(body).not.toHaveProperty("canvas");
       expect(body.capabilities).toEqual([]);
       // No profile → no timeout resolved, so the boot payload carries null (the app default).
       expect(body.inactivityTimeoutSeconds).toBeNull();
@@ -1687,21 +1665,69 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("resolves the `till` form-factor default canvas + `capabilities: []` when the request carries no device cookie", async () => {
-    // Cookieless: the boot read still resolves the `till` form-factor default canvas, so the counter
-    // always has a canvas to render, and an empty capability set.
+  it("returns the till form factor and empty capabilities without a device cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const res = await app.request("/api/till"); // no cookie header
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty("canvas");
-    expect((body as { canvas: unknown }).canvas).toEqual(DEFAULT_CANVASES.till);
+    expect(body).toHaveProperty("formFactor", "till");
+    expect(body).not.toHaveProperty("canvas");
     expect((body as { capabilities: unknown }).capabilities).toEqual([]);
     // Cookieless → no device, no profile, so the timeout resolves to null (the app default).
     expect((body as { inactivityTimeoutSeconds: unknown }).inactivityTimeoutSeconds).toBeNull();
     expect(body).not.toHaveProperty("layout");
   });
+});
+
+it.each(["till", "phone-portrait", "tablet-landscape", "kds"] as const)(
+  "GET /api/till returns the enrolled %s form factor without canvas data",
+  async (formFactor) => {
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({
+        name: `Fixed ${formFactor}`,
+        formFactor,
+        capabilities: [],
+        inactivityTimeoutSeconds: 42,
+      })
+      .returning({ id: deviceProfiles.id });
+    try {
+      const enrolled = await enrolDeviceForTest(suite.db, cfg, {
+        name: `Fixed ${formFactor}`,
+        profileId: profile!.id,
+        ...(formFactor === "kds"
+          ? { kitchenScreen: { kind: "station" as const, stationIds: null, zoneIds: null } }
+          : {}),
+      });
+      const cookie = `${DEVICE_COOKIE}=${enrolled.deviceId}.${enrolled.token}`;
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const response = await app.request("/api/till", { headers: { cookie } });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toHaveProperty("formFactor", formFactor);
+      expect(body).not.toHaveProperty("canvas");
+      expect(body).toHaveProperty("capabilities", []);
+      expect(body).toHaveProperty("inactivityTimeoutSeconds", 42);
+      expect(body).not.toHaveProperty("startingScreen");
+    } finally {
+      await suite.db.execute(sql`delete from device_kitchen_screens where device_id in
+        (select id from devices where device_profile_id = ${profile!.id})`);
+      await suite.db.execute(sql`delete from devices where device_profile_id = ${profile!.id}`);
+      await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profile!.id));
+    }
+  },
+);
+
+it("GET /api/till boots fixed till screens without a canvas for a cookieless request", async () => {
+  const app = new Hono();
+  mountTillApi(app, deps(suite.db), collect([]));
+  const response = await app.request("/api/till");
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body).toHaveProperty("formFactor", "till");
+  expect(body).not.toHaveProperty("canvas");
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {

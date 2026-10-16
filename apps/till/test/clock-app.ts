@@ -87,18 +87,7 @@ export async function clockApp(
     cardProvider: "none",
     activeReaders: [],
     tipsEnabled: false,
-    canvas: {
-      formFactor: "till",
-      tabs: [
-        { key: "counter", title: "Counter", columns: 12, cards: [] },
-        {
-          key: "floor",
-          title: "Floor",
-          columns: 24,
-          cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
-        },
-      ],
-    },
+    formFactor: "till",
     capabilities: options.action === false ? [] : ["clock-in"],
     inactivityTimeoutSeconds: options.timeoutSeconds ?? null,
     startingScreen: null,

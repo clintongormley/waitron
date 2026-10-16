@@ -33,7 +33,7 @@ export type {
   PersonHours,
 } from "@waitron/workforce/attendance-contract";
 
-import type { CanvasDef, CapabilityFlag, NavigationScreen } from "../layout.js";
+import type { FormFactor, CapabilityFlag, NavigationScreen } from "../layout.js";
 import type {
   ExtraSelection,
   KitchenSignal,
@@ -167,11 +167,7 @@ export interface TillInfo {
   /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
   activeReaders: TillActiveReader[];
   tipsEnabled: boolean;
-  /**
-   * The CALLING device's layout canvas — its assigned one, or the form-factor default the server falls
-   * back to (a cookieless request gets the `till` default).
-   */
-  canvas: CanvasDef;
+  formFactor: FormFactor;
   /** The CALLING device's capability set from its profile; `[]` for a no-profile or cookieless request. */
   capabilities: CapabilityFlag[];
   /**
