@@ -6,6 +6,7 @@ it.each([
   "tender.refund_exceeds_payment",
   "tender.refund_unavailable",
   "tender.refund_in_progress",
+  "tender.manual_refund_pin_required",
 ])("explains settled-tender refusal %s in English and Spanish", (code) => {
   for (const locale of ["en", "es"]) {
     expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));

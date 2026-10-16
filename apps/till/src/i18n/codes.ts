@@ -473,6 +473,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A refund of this payment is still pending. Check that refund before starting another",
     es: "Una devolución de este pago sigue pendiente. Revisa esa devolución antes de iniciar otra",
   },
+  "tender.manual_refund_pin_required": {
+    en: "A manager must enter their PIN to confirm this terminal refund",
+    es: "Un responsable debe introducir su PIN para confirmar esta devolución en el datáfono",
+  },
   "bill.refund_not_whole": {
     en: "A payment for particular items can only be given back in full, which frees those items to be paid for again",
     es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
