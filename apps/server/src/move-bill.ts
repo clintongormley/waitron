@@ -14,6 +14,7 @@ import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
 import {
   checkAndBumpParty,
@@ -98,6 +99,7 @@ export async function moveBill(
 
   // Read before the bill's party changes, which clears the party's main bill when it is this bill.
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
+  const noteScope = path.partyId === null ? { workingOrderId: billId } : { partyId: path.partyId };
   let firers: ReadonlyMap<string, Firer> = new Map();
   if (source !== null) {
     await refuseMainBillLeaving(tx, source, billId);
@@ -109,6 +111,7 @@ export async function moveBill(
   let held: string[] = [];
   if (destination.kind === "counter") {
     if (source === null) throw new AppError("management.request_invalid", { field: "to" });
+    await inheritKitchenNote(tx, noteScope, { workingOrderId: billId }, "copy");
     await tx
       .update(workingOrders)
       .set({
@@ -125,6 +128,7 @@ export async function moveBill(
       operatorId: options.operatorId,
       tableId: destination.tableId,
     });
+    await inheritKitchenNote(tx, noteScope, { partyId }, "copy");
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
     ({ held } = await groupArrivingDishes(
       tx,
@@ -138,6 +142,7 @@ export async function moveBill(
     result = { partyId, billId, merged: false };
   } else {
     const partyId = destination.partyId;
+    await inheritKitchenNote(tx, noteScope, { partyId }, "combine");
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.

@@ -11,6 +11,7 @@ import {
   readSentWork,
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   guardParty,
   readMainBill,
@@ -146,6 +147,8 @@ export async function splitBill(
     existingService: true,
     copyServiceContextFrom: billId,
   });
+  if (path.partyId === null)
+    await inheritKitchenNote(tx, { workingOrderId: billId }, { workingOrderId: newBillId }, "copy");
   const before = await readSentWork(tx, billId);
   const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,

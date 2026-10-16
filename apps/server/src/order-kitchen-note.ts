@@ -16,6 +16,24 @@ import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import type { Database } from "@waitron/db";
 import "./errors.js";
 
+export async function inheritKitchenNote(
+  tx: Transaction,
+  from: KitchenNoteScope,
+  into: KitchenNoteScope,
+  mode: "copy" | "combine",
+): Promise<void> {
+  const fromKey = VENUE_SERVICE.kitchenNoteKey(from);
+  const intoKey = VENUE_SERVICE.kitchenNoteKey(into);
+  const notes = await VENUE_SERVICE.readKitchenNotes(tx, [from, into]);
+  const source = notes.get(fromKey)!;
+  const target = notes.get(intoKey)!;
+  const note =
+    mode === "copy"
+      ? source.note
+      : [...new Set([target.note, source.note].filter((text) => text !== null))].join("; ") || null;
+  await VENUE_SERVICE.writeKitchenNote(tx, into, target.revision, note);
+}
+
 export async function readOrderKitchenNotes(
   tx: Transaction,
   orderIds: readonly string[],
