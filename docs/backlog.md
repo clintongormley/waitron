@@ -4323,13 +4323,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 _Formerly entries spread across the old sections._ Detail: [backlog/back-office.md](backlog/back-office.md).
 
 - **The recipe routes and the recipe screen are unreached** — found by #615 while pruning comments.
-  Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
-  methods, or to remount the routes and route the screen.
+  Recipe authoring is gone from the dashboard, and nothing replaces it as a surface; the parked
+  recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
+  surface that no longer exists. Next action: the owner decides whether to delete `recipe-api.ts`,
+  the screen and the client methods, or to remount the routes and route the screen; whoever
+  reopens recipe depth decides first whether recipe authoring returns as its own surface.
   [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
-
-- **The recipe screen's `#loadRecipe` guard compares product ids**, so choosing A, then B, then A
-  again lets the first A answer apply and turn Save back on while the second A load is still
-  running. Found by #607 (`apps/dashboard/src/screens`), read only, not run.
 
 - **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued. A negative
   gross total on the purchase-invoice routes is a supplier credit note and is accepted and stored by
@@ -4337,18 +4336,13 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   or the credit note should become its own document type.
   [Detail](backlog/back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
 
-- A weighed item cancelled in part can differ by a cent between the cancel's list value and what
-  stays on the line, so a rate can be a cent's share off. **Next action:** none unless someone sees
-  it matter. Left open by service Task 12 (#923, adjustment reports).
-
-- With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
-  date inputs show it, nothing announces it. **Next action:** decide whether it should keep the day
-  it opened on. Left open by service Task 12 (#923).
-
-- **Recipe authoring is gone from the dashboard, and nothing replaces it as a surface.** The parked
-  recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
-  surface that no longer exists. **Next action:** whoever reopens recipe depth decides first whether
-  recipe authoring returns as its own surface.
+- **Loose ends left by service Task 12 (#923, adjustment reports).**
+  - A weighed item cancelled in part can differ by a cent between the cancel's list value and what
+    stays on the line, so a rate can be a cent's share off. **Next action:** none unless someone
+    sees it matter.
+  - With no day picked, a screen left open past the day's cutover moves to the new, empty day; the
+    date inputs show it, nothing announces it. **Next action:** decide whether it should keep the
+    day it opened on.
 
 ### The box: backups, upgrades and recovery
 
