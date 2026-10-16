@@ -17,7 +17,7 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
-import type { HeldExtra, TillCourse, TillProduct } from "../api/client.js";
+import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
@@ -210,6 +210,7 @@ export class WorkingOrderStore {
   #kitchenNote: string | null = null;
   #savedKitchenNote: string | null = null;
   #kitchenNoteRevision = 0;
+  #kitchenNoteOwnerRevision = 0;
   #kitchenNoteScopeKey?: string;
   #lastAdded?: OrderLine;
   #limit: Decimal | null = null;
@@ -286,6 +287,22 @@ export class WorkingOrderStore {
   get kitchenNoteRevision(): number {
     return this.#kitchenNoteRevision;
   }
+  get kitchenNoteOwnerRevision(): number {
+    return this.#kitchenNoteOwnerRevision;
+  }
+
+  acceptKitchenNote(note: KitchenNoteSnapshot): void {
+    this.#kitchenNote = note.note;
+    this.#savedKitchenNote = note.note;
+    this.#kitchenNoteRevision = note.revision;
+    this.#kitchenNoteOwnerRevision = note.ownerRevision;
+    this.#kitchenNoteScopeKey =
+      "partyId" in note.scope
+        ? `party:${note.scope.partyId}`
+        : `order:${note.scope.workingOrderId}`;
+    this.emit("changed");
+  }
+
   get kitchenNoteScopeKey(): string {
     return this.#kitchenNoteScopeKey ?? `order:${this.#id}`;
   }
@@ -615,6 +632,7 @@ export class WorkingOrderStore {
     this.#kitchenNote = null;
     this.#savedKitchenNote = null;
     this.#kitchenNoteRevision = 0;
+    this.#kitchenNoteOwnerRevision = 0;
     this.#kitchenNoteScopeKey = undefined;
     this.#invalidatePricing();
     this.#persisted = false;
@@ -632,7 +650,12 @@ export class WorkingOrderStore {
     lines: OrderLine[],
     label?: string,
     revision = 0,
-    kitchenNote?: { note: string | null; revision: number; scopeKey: string },
+    kitchenNote?: {
+      note: string | null;
+      revision: number;
+      scopeKey: string;
+      ownerRevision?: number;
+    },
   ): void {
     const last = id === this.#id ? this.lastAdded : undefined;
     this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
@@ -645,6 +668,7 @@ export class WorkingOrderStore {
     this.#kitchenNote = kitchenNote?.note ?? null;
     this.#savedKitchenNote = this.#kitchenNote;
     this.#kitchenNoteRevision = kitchenNote?.revision ?? 0;
+    this.#kitchenNoteOwnerRevision = kitchenNote?.ownerRevision ?? revision;
     this.#kitchenNoteScopeKey = kitchenNote?.scopeKey;
     this.#invalidatePricing();
     this.#persisted = true;

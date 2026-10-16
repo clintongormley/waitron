@@ -298,6 +298,12 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
   it("clears an open basket for the cancelled order before a later list read answers", async () => {
     const el = await signedIn({
       retrievePlacedOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-sent" },
+          note: null,
+          revision: 0,
+          ownerRevision: 2,
+        },
         id: "wo-sent",
         orderNumber: 12,
         label: null,
@@ -358,6 +364,12 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     expect(counter(el).store.editsLocked).toBe(false);
 
     answer({
+      kitchenNote: {
+        scope: { workingOrderId: "wo-sent" },
+        note: null,
+        revision: 0,
+        ownerRevision: 2,
+      },
       id: "wo-sent",
       orderNumber: 12,
       label: null,
@@ -386,7 +398,19 @@ describe("till-app: cancelling and crediting an invoiced counter order", () => {
     await typeReason(el, "Wrong order");
     await confirmCancel(el);
 
-    answer({ id: "wo-other", orderNumber: 13, label: null, revision: 2, lines: [] });
+    answer({
+      kitchenNote: {
+        scope: { workingOrderId: "wo-other" },
+        note: null,
+        revision: 0,
+        ownerRevision: 2,
+      },
+      id: "wo-other",
+      orderNumber: 13,
+      label: null,
+      revision: 2,
+      lines: [],
+    });
     await flush(el);
     expect(counter(el).store.id).toBe("wo-other");
     expect(counter(el).stage).toBe("collect");

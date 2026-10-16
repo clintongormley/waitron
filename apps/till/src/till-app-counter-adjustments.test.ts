@@ -107,6 +107,12 @@ const tabLine = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLi
 /** Croquetas the kitchen has, and a caña at `canaPrice` (given away when not 2.50). */
 function heldOrder(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): HeldOrder {
   return {
+    kitchenNote: {
+      scope: { workingOrderId: "wo-9" },
+      note: null,
+      revision: 0,
+      ownerRevision: revision,
+    },
     id: "wo-9",
     orderNumber: 12,
     label: "Mesa 4",

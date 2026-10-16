@@ -106,6 +106,10 @@ export class TillOrderKitchenNote extends LitElement {
     super.disconnectedCallback();
   }
 
+  closeEditor(): void {
+    this.#close();
+  }
+
   #track(): void {
     const { scope, coordinator } = draftScopeFor<string | null>(this, {
       id: this,

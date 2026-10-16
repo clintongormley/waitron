@@ -2256,6 +2256,12 @@ describe("till-app retrieving a held order", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -2274,6 +2280,12 @@ describe("till-app retrieving a held order", () => {
     const snapshot: TillProduct = { ...cafe, id: "retired", name: "Antiguo", unitPrice: "4.00" };
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
         id: "wo-1",
         orderNumber: 5,
         label: null,
@@ -2725,7 +2737,13 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not load a retrieved order into the next operator's basket", async () => {
-    let answer!: (order: { id: string; orderNumber: number; label: null; lines: [] }) => void;
+    let answer!: (order: {
+      id: string;
+      orderNumber: number;
+      label: null;
+      lines: [];
+      kitchenNote: import("./api/client.js").KitchenNoteSnapshot;
+    }) => void;
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn(() => new Promise((resolve) => (answer = resolve))),
     });
@@ -2737,7 +2755,13 @@ describe("till-app logout while a request is waiting for the server", () => {
 
     emit(shell(el)!, "logout");
     await flush(el);
-    answer({ id: "wo-1", orderNumber: 1, label: null, lines: [] });
+    answer({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
+      id: "wo-1",
+      orderNumber: 1,
+      label: null,
+      lines: [],
+    });
     await flush(el);
 
     expect(c.store.id).toBe(basketId);
@@ -4701,6 +4725,12 @@ describe("department transfers across operator lifetimes", () => {
       ).toHaveProperty("snapshot.sent.0.status", "accepted"),
     );
     answer({
+      kitchenNote: {
+        scope: { workingOrderId: "tab-1" },
+        note: null,
+        revision: 0,
+        ownerRevision: 7,
+      },
       id: "tab-1",
       orderNumber: 12,
       label: "Moved lunch",
@@ -4743,6 +4773,12 @@ describe("department transfers across operator lifetimes", () => {
       ).toHaveProperty("snapshot.sent.0.status", "accepted"),
     );
     answer({
+      kitchenNote: {
+        scope: { workingOrderId: "different-tab" },
+        note: null,
+        revision: 0,
+        ownerRevision: 7,
+      },
       id: "different-tab",
       orderNumber: 13,
       label: "Different lunch",
@@ -4858,6 +4894,12 @@ describe("till-app when the server reports another build", () => {
     const { el } = await mountApp(
       {
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          kitchenNote: {
+            scope: { workingOrderId: "wo-1" },
+            note: null,
+            revision: 0,
+            ownerRevision: 0,
+          },
           id: "wo-1",
           orderNumber: 5,
           label: null,

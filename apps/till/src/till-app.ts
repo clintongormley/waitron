@@ -46,6 +46,7 @@ import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { trimQuantity } from "./widgets/dish-format.js";
+import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
@@ -4550,6 +4551,7 @@ export class TillApp extends LitElement {
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     const payload = this.#basketPayload();
@@ -4564,17 +4566,31 @@ export class TillApp extends LitElement {
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
-      if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (
+        !(await this.#syncIfDirty(id, lines, label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
       if (session !== this.#operatorSession) return;
       reachedFiscal = true;
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        language !== undefined
-          ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
-          : invoice
-            ? await this.api.recordSale(lines, tender, id, undefined, invoice)
-            : await this.api.recordSale(lines, tender, id);
+        this.#store.kitchenNote !== null
+          ? await this.api.recordSale(
+              lines,
+              tender,
+              id,
+              undefined,
+              invoice,
+              language,
+              this.#store.kitchenNote,
+            )
+          : language !== undefined
+            ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
+            : invoice
+              ? await this.api.recordSale(lines, tender, id, undefined, invoice)
+              : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -4661,6 +4677,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     this.#cancelledDemoReaderOrders.delete(id);
     const demoAttemptId = this.activeReaders.some(
       (reader) => reader.id === detail.readerId && reader.provider === "simulator",
@@ -4681,7 +4698,11 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     let paid = false;
     try {
-      if (!(await this.#syncIfDirty(id, lines, label))) return;
+      if (
+        !(await this.#syncIfDirty(id, lines, label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
       if (session !== this.#operatorSession) return;
       if (this.#cancelledDemoReaderOrders.has(id)) return;
       reachedFiscal = true;
@@ -4692,6 +4713,7 @@ export class TillApp extends LitElement {
           this.api.pay({
             id,
             lines,
+            ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
@@ -4929,6 +4951,166 @@ export class TillApp extends LitElement {
     void this.#askCounterDeadEnds("pay").then(resolve);
   }
 
+  #counterKitchenNoteAttempt?: {
+    generation: number;
+    session: number;
+    key: string;
+    note: string | null;
+    revision: number;
+    ownerRevision: number;
+    submissionId: string;
+  };
+
+  #counterKitchenNoteSave?: {
+    generation: number;
+    session: number;
+    pending: boolean;
+    result: Promise<boolean>;
+  };
+
+  #onCounterKitchenNote(event: CustomEvent<SaveKitchenNoteDetail>): void {
+    event.stopPropagation();
+    const editor = event
+      .composedPath()
+      .find(
+        (node) => node instanceof HTMLElement && node.localName === "till-order-kitchen-note",
+      ) as TillOrderKitchenNote | undefined;
+    void this.#startCounterKitchenNote(event.detail, editor);
+  }
+
+  #startCounterKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const generation = this.#store.loadGeneration;
+    const session = this.#operatorSession;
+    const previous = this.#counterKitchenNoteSave;
+    if (previous?.generation === generation && previous.session === session && previous.pending)
+      return previous.result;
+    const write = {
+      generation,
+      session,
+      pending: true,
+      result: this.#saveCounterKitchenNote(detail, editor),
+    };
+    this.#counterKitchenNoteSave = write;
+    void write.result.then(() => {
+      write.pending = false;
+    });
+    return write.result;
+  }
+
+  async #saveCounterKitchenNote(
+    detail: SaveKitchenNoteDetail,
+    editor?: TillOrderKitchenNote,
+  ): Promise<boolean> {
+    const store = this.#store;
+    if (
+      !store.persisted ||
+      detail.scopeKey !== store.kitchenNoteScopeKey ||
+      detail.visit !== store.loadGeneration ||
+      store.sending ||
+      store.editsLocked
+    )
+      return false;
+    if (editor?.busy) return false;
+    const generation = store.loadGeneration;
+    const session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      session === this.#operatorSession &&
+      generation === store.loadGeneration &&
+      detail.scopeKey === store.kitchenNoteScopeKey;
+    const prior = this.#counterKitchenNoteAttempt;
+    const attempt =
+      prior?.generation === generation &&
+      prior.session === session &&
+      prior.key === detail.scopeKey &&
+      prior.note === detail.note &&
+      prior.revision === detail.revision
+        ? prior
+        : {
+            generation,
+            session,
+            key: detail.scopeKey,
+            note: detail.note,
+            revision: detail.revision,
+            ownerRevision: detail.scopeKey.startsWith("party:")
+              ? store.kitchenNoteOwnerRevision
+              : store.revision,
+            submissionId: crypto.randomUUID(),
+          };
+    this.#counterKitchenNoteAttempt = attempt;
+    const party = detail.scopeKey.startsWith("party:");
+    const scope = party ? { partyId: detail.scopeKey.slice(6) } : { workingOrderId: store.id };
+    if (editor) {
+      editor.refusal = "";
+    }
+    try {
+      const saved = await this.api.setKitchenNote(scope, {
+        submissionId: attempt.submissionId,
+        expectedNoteRevision: detail.revision,
+        note: detail.note,
+        ...(party
+          ? { expectedPartyRevision: attempt.ownerRevision }
+          : { expectedOrderRevision: attempt.ownerRevision, partyId: null }),
+      });
+      if (!current()) return false;
+      store.acceptKitchenNote(saved);
+      this.#counterKitchenNoteAttempt = undefined;
+      if (!store.dirty) this.#commitBasket(this.#basketPayload());
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      const code = (error as { code?: string }).code;
+      if (
+        ["kitchen_note.out_of_date", "working_order.out_of_date", "party.out_of_date"].includes(
+          code ?? "",
+        )
+      ) {
+        try {
+          const latest = await this.api.getKitchenNote(scope);
+          if (!current()) return false;
+          store.acceptKitchenNote(latest);
+          editor?.closeEditor();
+          this.errorKey = "held.changed_elsewhere";
+          this.#counterKitchenNoteAttempt = undefined;
+        } catch {
+          if (current() && editor) editor.refusal = codeMessage(code!);
+        }
+      } else if (editor) editor.refusal = codeMessage(code ?? "server.internal");
+      return false;
+    }
+  }
+
+  async #flushCounterKitchenNote(): Promise<boolean> {
+    const noteSave = this.#counterKitchenNoteSave;
+    const generation = this.#store.loadGeneration;
+    const noteSession = this.#operatorSession;
+    if (noteSave?.generation === generation && noteSave.session === noteSession) {
+      if (
+        !(await noteSave.result) ||
+        generation !== this.#store.loadGeneration ||
+        noteSession !== this.#operatorSession
+      )
+        return false;
+    }
+    if (this.#store.persisted && this.#store.kitchenNoteDirty) {
+      if (
+        !(await this.#startCounterKitchenNote({
+          scopeKey: this.#store.kitchenNoteScopeKey,
+          revision: this.#store.kitchenNoteRevision,
+          visit: generation,
+          note: this.#store.kitchenNote,
+        }))
+      )
+        return false;
+      if (generation !== this.#store.loadGeneration || noteSession !== this.#operatorSession)
+        return false;
+    }
+    return true;
+  }
+
   /**
    * Saves an edited retrieved order before a pay or place. A fresh basket has no server row, and an
    * unedited one has nothing to save.
@@ -4937,6 +5119,7 @@ export class TillApp extends LitElement {
    * backlog follow-up (docs/backlog.md, "A re-sent "place" on an already-placed order answers 409").
    */
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
+    if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
     const payload = this.#basketPayload();
@@ -4976,6 +5159,7 @@ export class TillApp extends LitElement {
     this.#counterSends++;
     const session = this.#operatorSession;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
@@ -4990,9 +5174,18 @@ export class TillApp extends LitElement {
       const label = this.#store.label;
       const payload = this.#basketPayload();
       if (this.#store.persisted) {
-        if (!(await this.#syncIfDirty(id, lines, label))) return;
+        if (
+          !(await this.#syncIfDirty(id, lines, label)) ||
+          basketVisit !== this.#store.loadGeneration
+        )
+          return;
       } else {
-        await this.api.parkOrder({ id, lines, label });
+        await this.api.parkOrder({
+          id,
+          lines,
+          label,
+          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+        });
         if (session !== this.#operatorSession) return;
         this.#store.markPersisted();
         this.#commitBasket(payload);
@@ -5506,6 +5699,7 @@ export class TillApp extends LitElement {
     // Read the id and map the lines BEFORE the await: a successful clear() re-mints the id, so the
     // values sent must be captured against the basket as it stands now.
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
     this.errorKey = undefined;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
@@ -5515,6 +5709,7 @@ export class TillApp extends LitElement {
     let inactiveChoice = false;
     try {
       if (this.#store.persisted) {
+        if (!(await this.#flushCounterKitchenNote()) || session !== this.#operatorSession) return;
         if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
           const saved = await this.api.setWorkingOrderLabel(id, {
             label,
@@ -5522,9 +5717,18 @@ export class TillApp extends LitElement {
           });
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
-        } else if (!(await this.#syncIfDirty(id, lines, label ?? this.#store.label))) return;
+        } else if (
+          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label)) ||
+          basketVisit !== this.#store.loadGeneration
+        )
+          return;
       } else {
-        await this.api.parkOrder({ id, lines, label });
+        await this.api.parkOrder({
+          id,
+          lines,
+          label,
+          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+        });
       }
       if (session !== this.#operatorSession) return;
       try {
@@ -5712,7 +5916,13 @@ export class TillApp extends LitElement {
     if (droppedAProduct) this.errorKey = "held.product_gone";
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
-    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision, {
+      ...order.kitchenNote,
+      scopeKey:
+        "partyId" in order.kitchenNote.scope
+          ? `party:${order.kitchenNote.scope.partyId}`
+          : `order:${order.kitchenNote.scope.workingOrderId}`,
+    });
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
@@ -10031,9 +10241,14 @@ export class TillApp extends LitElement {
     if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
     this.#counterSends++;
     const id = this.#store.id;
+    const basketVisit = this.#store.loadGeneration;
     const session = this.#operatorSession;
     try {
-      if (!(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label))) return;
+      if (
+        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label)) ||
+        basketVisit !== this.#store.loadGeneration
+      )
+        return;
     } catch (error) {
       if (!this.#hasLeftCounterOrder(id, session))
         this.errorKey = counterError(error, "sale.error");
@@ -11034,6 +11249,7 @@ export class TillApp extends LitElement {
         @clock-in=${() => void this.#onClockAction(new CustomEvent("clock-action", { detail: { action: "in" } }))}
         @cancel-clock-in=${() => void this.#cancelClockIn()}
         @retry-clock-read=${() => void this.#clocking?.refresh()}
+        @save-kitchen-note=${(event: CustomEvent<SaveKitchenNoteDetail>) => void this.#onCounterKitchenNote(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
         @choose-invoice=${() => this.#askInvoiceRecipientForOrder()}
         @choose-receipt-language=${() => {

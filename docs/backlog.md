@@ -1848,7 +1848,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [whole-order kitchen notes](superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
   The editor, storage, guarded note API, order/party read projections and initial counter-request
   persistence, note copying/combining during bill and party moves, paper headings and atomic
-  kitchen corrections are on the feature branch. Till integration and station/pass screen
+  kitchen corrections are on the feature branch. The counter forwards initial notes with cash,
+  card, Hold and Place, restores saved note ownership, and saves retrieved notes separately from
+  dishes. Table and Waiting integration, card decline/recovery, and station/pass screen
   headings/correction wording remain open. Add a whole-order note
   ("all together, they have a train at 14:30") alongside the existing line notes: a row at the top of the order
   on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at

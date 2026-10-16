@@ -844,6 +844,7 @@ describe("TillApi", () => {
     // The server sends `quantity` as a three-place decimal string ("2.000"); the client passes it
     // through as sent.
     const order = {
+      kitchenNote: { scope: { workingOrderId: "wo1" }, note: null, revision: 0, ownerRevision: 0 },
       id: "wo1",
       orderNumber: 7,
       label: "Mesa 4",
@@ -1343,7 +1344,14 @@ describe("TillApi", () => {
   });
 
   it("retrievePlacedOrder GETs the addressed sent order with a caller's abort signal", async () => {
-    const order = { id: "wo1", orderNumber: 7, label: null, revision: 2, lines: [] };
+    const order = {
+      kitchenNote: { scope: { workingOrderId: "wo1" }, note: null, revision: 0, ownerRevision: 2 },
+      id: "wo1",
+      orderNumber: 7,
+      label: null,
+      revision: 2,
+      lines: [],
+    };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(order));
     const signal = new AbortController().signal;
 

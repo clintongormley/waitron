@@ -2589,6 +2589,7 @@ export class TillApi {
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
     },
     receiptLanguage?: string,
+    kitchenNote?: string | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2597,6 +2598,7 @@ export class TillApi {
       zoneId: zoneId ?? this.#serviceZoneId,
       ...invoice,
       receiptLanguage,
+      kitchenNote,
     });
   }
 
@@ -2619,6 +2621,7 @@ export class TillApi {
     readerId?: string;
     demoAttemptId?: string;
     receiptLanguage?: string;
+    kitchenNote?: string | null;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -2784,7 +2787,13 @@ export class TillApi {
    * Park a working order to pay later → `POST /api/working-orders`. `id` is client-minted so a
    * lost-response retry is idempotent against the primary key; `lines` carry no price.
    */
-  parkOrder(req: { id: string; lines: SaleLine[]; zoneId?: string; label?: string }): Promise<{
+  parkOrder(req: {
+    id: string;
+    lines: SaleLine[];
+    zoneId?: string;
+    label?: string;
+    kitchenNote?: string | null;
+  }): Promise<{
     id: string;
     orderNumber: number;
   }> {
@@ -2792,6 +2801,32 @@ export class TillApi {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });
+  }
+
+  getKitchenNote(scope: KitchenNoteScope, options: ReadOptions = {}): Promise<KitchenNoteSnapshot> {
+    const path =
+      "partyId" in scope
+        ? `/api/parties/${scope.partyId}`
+        : `/api/working-orders/${scope.workingOrderId}`;
+    return this.#request(`${path}/kitchen-note`, "GET", undefined, options.signal);
+  }
+
+  setKitchenNote(
+    scope: KitchenNoteScope,
+    request: {
+      submissionId: string;
+      expectedNoteRevision: number;
+      note: string | null;
+      expectedPartyRevision?: number;
+      expectedOrderRevision?: number;
+      partyId?: null;
+    },
+  ): Promise<KitchenNoteSnapshot> {
+    const path =
+      "partyId" in scope
+        ? `/api/parties/${scope.partyId}`
+        : `/api/working-orders/${scope.workingOrderId}`;
+    return this.#request(`${path}/kitchen-note`, "PUT", request);
   }
 
   setOrderInvoiceChoice(
