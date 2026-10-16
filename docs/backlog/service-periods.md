@@ -331,6 +331,17 @@ not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
 3. **The Staffing month marks a special day's dates in its colour**, as one run the way the season
    bar marks a season. Today each date only carries the name in coloured text.
 
+## Two holidays with one name in one year's list
+
+**Two holidays with one name in one year's list** (retro review of #1603). The holiday dates a
+save reads keep only each name's first date in the year (`readHolidayDates`,
+`packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
+no holiday name, unless another holiday shares that day, and repeats on its month and day; in
+a later year a name with two dates is followed to the first of them, a rule nobody chose. No
+shipped list has one: a probe on 2026-10-13 over every province and area of
+`packages/country-es/src/data/es-2026.ts` read 729 holidays in 61 lists and found no name twice.
+Re-check when a new year's list is added.
+
 ## Decisions and deliberate limits
 
 - **No Week button and no "Open this week" in the day box until A722 (A720, 2026-10-15).** The

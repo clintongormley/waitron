@@ -1433,32 +1433,27 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   role, with "plus N more" past 5 or 10, whichever reads better.
   [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
 
-- **For the owner: the Business day card's actions with a scheduled change** — left open by A755
-  (#1809). The mock-up draws only "Change start". As built, a change that can still be
-  altered shows "Replace change" and "Cancel scheduled change"; one past its lock shows no action
-  and the locked note. [Mockups](backlog/mockups/a755-venue-settings/)
+- **Loose ends left by A755 (#1809).**
+  - For the owner: the Business day card's actions with a scheduled change. The mock-up draws only
+    "Change start". As built, a change that can still be altered shows "Replace change" and "Cancel
+    scheduled change"; one past its lock shows no action and the locked note.
+  - For the owner: the Venue card's lock wording. The mock-up's foot names the field ("The time
+    zone is locked because the venue has recorded sales."); as built it says one sentence per
+    reason ("Locked: the venue has recorded sales."), and the "· locked" marker beside a field
+    names it.
+  - The Venue card says nothing about a time zone locked by a past business-day change. The server
+    gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
+    `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
+  - For the owner: who sees the Defaults card. As built, only a session holding `venue.configure`;
+    a supervisor (who holds `venue.view` alone) sees the other three cards read-only and no
+    Defaults card.
+  - For the owner: the legal paragraph beside setup's fixed receipt language, which A755 took out of
+    Venue settings. The setup wizard still shows it (`fixedReceiptLocale.reason`,
+    `apps/setup/src/screens/venue-screen.ts`). Should it go there too?
+  - For the owner: Province on the Venue card. The mock-up draws it editable; the server refuses
+    every province change, so it shows as a locked row until _Province edits in Venue details_
+    below is decided. Is that right?
 
-- **For the owner: the Venue card's lock wording** — left open by A755 (#1809). The mock-up's
-  foot names the field ("The time zone is locked because the venue has recorded sales."); as built
-  it says one sentence per reason ("Locked: the venue has recorded sales."), and the "· locked"
-  marker beside a field names it. [Mockups](backlog/mockups/a755-venue-settings/)
-
-- **The Venue card says nothing about a time zone locked by a past business-day change** — left open
-  by A755 (#1809). The server gives the reason `business_day_history`
-  (`apps/server/src/venue-details.ts`); `REASONS` in `apps/dashboard/src/screens/venue-details-panel.ts`
-  has no sentence for it.
-
-- **For the owner: who sees the Defaults card** — left open by A755 (#1809). As built, only a
-  session holding `venue.configure`; a supervisor (who holds `venue.view` alone) sees the other three
-  cards read-only and no Defaults card.
-
-- **For the owner: the legal paragraph beside setup's fixed receipt language** — left open by A755
-  (#1809), which took it out of Venue settings. The setup wizard still shows it
-  (`fixedReceiptLocale.reason`, `apps/setup/src/screens/venue-screen.ts`). Should it go there too?
-
-- **For the owner: Province on the Venue card** — left open by A755 (#1809). The mock-up draws
-  it editable; the server refuses every province change, so it shows as a locked row until
-  _Province edits in Venue details_ below is decided. Is that right?
   [Mockups](backlog/mockups/a755-venue-settings/)
 
 - **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
@@ -1477,35 +1472,31 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
   column and field go until A504. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **Look at a picked, focused today in the Month.** `--wt-focus-offset` and
-  `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so on
-  today, picked and focused, the focus ring covers the outer half of the wider picked ring
-  (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
-  themes that this combination reads well. Left open by A720.
-
-- **The day box should re-place itself when its content changes.** `calendar-day-box` measures its content
-  only in `show()` and on a scroll or resize, so each host (Opening hours' `placeDayBox`, Staffing's month) must
-  wait for every pending redraw first; A720 Part 5's first version placed it one redraw early, off
-  screen. Have the box re-place itself while open whenever its own content changes. Left open by A720.
-
-- **An ignored `to` stays in the address bar.** A special-day address whose `to` is earlier than
-  its date, malformed, or more than 365 days after it opens the new day on its first date alone
-  (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`. Left
-  open by A720.
-
-- **Try the Calendar's long press on a real phone.** The long press that opens the special-day
-  editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only under
-  headless Chromium's touch emulation. Check on an Android and an iOS phone that the page stops
-  scrolling, no number is selected, and no click or menu follows the lift. Left open by A720.
-
-- **Add `to` to Opening hours' address words.** `apps/dashboard/src/navigation.ts` does not list the
-  special-day address's new `to`. Nothing breaks, because that list keeps words it does not name,
-  but adding it changes an exact-match check in `navigation.test.ts`. Left open by A720.
-
-- **Move the pointer-gesture commands' type declarations into `packages/ui`.** They live in
-  `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
-  themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
-  uses the commands. Left open by A720.
+- **Loose ends left by A720.**
+  - Look at a picked, focused today in the Month. `--wt-focus-offset` and
+    `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
+    on today, picked and focused, the focus ring covers the outer half of the wider picked ring
+    (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
+    themes that this combination reads well.
+  - The day box should re-place itself when its content changes. `calendar-day-box` measures its
+    content only in `show()` and on a scroll or resize, so each host (Opening hours'
+    `placeDayBox`, Staffing's month) must wait for every pending redraw first; A720 Part 5's first
+    version placed it one redraw early, off screen. Have the box re-place itself while open
+    whenever its own content changes.
+  - An ignored `to` stays in the address bar. A special-day address whose `to` is earlier than its
+    date, malformed, or more than 365 days after it opens the new day on its first date alone
+    (`HOURS_RANGE_MAX_DAYS`, `opening-hours-screen.ts`), but the address still shows the `to`.
+  - Try the Calendar's long press on a real phone. The long press that opens the special-day
+    editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
+    under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
+    stops scrolling, no number is selected, and no click or menu follows the lift.
+  - Add `to` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not list the
+    special-day address's new `to`. Nothing breaks, because that list keeps words it does not name,
+    but adding it changes an exact-match check in `navigation.test.ts`.
+  - Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
+    `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
+    themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
+    uses the commands.
 
 - **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
@@ -1528,49 +1519,41 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **No test gives a second department its own paint on the same special day** — left open by
   A506-1, #1577.
 
-- **The Business day start dialog repeats the server's conflict-counting rule** (`rangeKey`,
-  `business-day-start-editor.ts`), so a server change would make it miscount unnoticed — left open
-  by A506-3, #1591. [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
+- **Loose ends left by A506-3 (#1591).**
+  - The Business day start dialog repeats the server's conflict-counting rule (`rangeKey`,
+    `business-day-start-editor.ts`), so a server change would make it miscount unnoticed.
+    [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
+  - A venue with no seasons cannot edit a week from the dashboard. Believed unreachable, read in the
+    code, not run.
+    [Detail](backlog/service-periods.md#a-venue-with-no-seasons-cannot-edit-a-week-from-the-dashboard)
 
-- **A venue with no seasons cannot edit a week from the dashboard** — left open by A506-3, #1591.
-  Believed unreachable, read in the code, not run.
-  [Detail](backlog/service-periods.md#a-venue-with-no-seasons-cannot-edit-a-week-from-the-dashboard)
-
-- **A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses
-  the new start"** (`packages/venue-service/src/business-day-schedule.ts`, season lines too) — left
-  open by A506-4, #1597.
-
-- **A special-day line in the Business day start dialog shows its date unformatted
-  ("2026-11-03")** — left open by A506-4, #1597.
-
-- **`assertOwnPeriods` and `skippedSlot` name a refused slot by its sorted position, not its
-  position in the request** (`packages/venue-service/src/menu-timetable.ts`; read in the code, not
-  run) — left open by A506-4, #1597.
-
-- **The clock-skip check runs before touching ranges are joined**: two halves of one period meeting
-  at a skipped 02:30 are refused, while the joined range is accepted — left open by A506-4, #1597.
-
-- **The special-day-then-season rule is written out in several places**, and special-day paint is
-  read by four separately written queries; each could collapse to one place — left open by A506-4,
-  #1597. [Detail](backlog/service-periods.md#the-special-day-then-season-rule-is-written-out-in-several-places)
-
-- **`business-day-schedule.ts` copies the changeover lookup of
-  `packages/shared/src/business-day-clock.ts`** (`oldCutoverOn`) to avoid validating the clock on
-  every day; a lookup exported from `shared` that validates once would remove the copy — left open
-  by A506-4, #1597.
+- **Loose ends left by A506-4 (#1597).**
+  - A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses
+    the new start" (`packages/venue-service/src/business-day-schedule.ts`, season lines too).
+  - A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
+  - `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
+    (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).
+  - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
+    at a skipped 02:30 are refused, while the joined range is accepted.
+  - The special-day-then-season rule is written out in several places, and special-day paint is
+    read by four separately written queries; each could collapse to one place.
+    [Detail](backlog/service-periods.md#the-special-day-then-season-rule-is-written-out-in-several-places)
+  - `business-day-schedule.ts` copies the changeover lookup of
+    `packages/shared/src/business-day-clock.ts` (`oldCutoverOn`) to avoid validating the clock on
+    every day; a lookup exported from `shared` that validates once would remove the copy.
 
 - **A department or zone delete's preview never counts a special day's painted hours**, yet the
   delete removes them — left open by A506-5, #1603.
   [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
-- **The Opening hours Year page does not show the warning that two special days share a date**;
-  only the Departments screen's readiness list does — left open by A577, #1702.
-
-- **Between two special-day dates that both stand on their own terms, the earlier STORED date
-  wins**: a yearly "Feria" saved on 26 March 2026 beats a one-off "Cena de empresa" on 26 March
-  2027, though a person may expect the one-off to win (`standingInYear`,
-  `packages/venue-service/src/repeat-rules.ts`). Saving refuses such a pair, so it arises only
-  from rows written another way — left open by A577, #1702.
+- **Loose ends left by A577 (#1702).**
+  - The Opening hours Year page does not show the warning that two special days share a date; only
+    the Departments screen's readiness list does.
+  - Between two special-day dates that both stand on their own terms, the earlier STORED date
+    wins: a yearly "Feria" saved on 26 March 2026 beats a one-off "Cena de empresa" on 26 March
+    2027, though a person may expect the one-off to win (`standingInYear`,
+    `packages/venue-service/src/repeat-rules.ts`). Saving refuses such a pair, so it arises only
+    from rows written another way.
 
 - **The readiness line for a repeating holiday date names the official holiday**, not the special
   day's own name, and the Year's missing-holiday warning does the same — left open by A506-5,
@@ -1587,9 +1570,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The period dialog keeps the End offset field although mockup 7 leaves it out**, because nothing
   else edits a period's end offset. Owner to confirm; removing it is one field — left open by
   A506-11, #1694.
-
-- **The period dialog draws Delete… last in its body, not at the footer's left as mockup 7 does**,
-  because `wt-form-actions` has no left-hand slot — left open by A506-11, #1694.
 
 - **A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year,
   not back to the Periods page**, so a manager loses their place — left open by A506-11, #1694.
@@ -1694,11 +1674,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Two holidays with one name in one year's list** (retro review of #1603). The holiday dates a
   save reads keep only each name's first date in the year (`readHolidayDates`,
-  `packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
-  no holiday name, unless another holiday shares that day, and repeats on its month and day; in
-  a later year a name with two dates is followed to the first of them, a rule nobody chose. No shipped list has one: a probe on 2026-10-13 over
-  every province and area of `packages/country-es/src/data/es-2026.ts` read 729 holidays in 61
-  lists and found no name twice. Re-check when a new year's list is added.
+  `packages/venue-service/src/holidays.ts`). No shipped list has one. Re-check when a new year's
+  list is added.
+  [Detail](backlog/service-periods.md#two-holidays-with-one-name-in-one-years-list)
 
 - **Re-check that each Departments screen recovery case fails when its recovery step is deleted.**
   An unresolved assertion finding from A366 slice 6 Part C (#1510); A493 relocated its owner.
@@ -1716,6 +1694,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Service-policy import completeness** — run a real import with department or zone policy
   rows omitted. If it commits, reject or repair that incomplete shape before service begins.
   The review's import probes stopped before these tables; reachability remains unverified.
+
 - **Concurrent department settings edits** — decide whether two managers editing the same
   department need stale-write protection. The form sends its whole draft; a runtime overlap
   probe remains to be run before choosing a conflict policy.
@@ -1738,6 +1717,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   end offset survives a later period's extension or the business-day changeover; two real-store
   probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
   approved slice 3 decision 4. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
+
 - **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before
   adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)
@@ -1751,8 +1731,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   undefined name** — left open by A261-2d (#1274).
 
 - **Smaller notes from the Hours reviews** — left open by the reviews of A261 step 5 (Hours, #1298):
-  the participant-failure route case checks the status but not the body's code; repeated-midnight
-  clock choices still need checking; …
+  repeated-midnight clock choices still need checking.
   [Detail](backlog/service-periods.md#smaller-notes-from-the-hours-reviews)
 
 - **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
@@ -1773,7 +1752,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the area names "Arán" and "Lleida, fuera del territorio de Arán" are Spanish data labels shown
   untranslated in English; …
   [Detail](backlog/service-periods.md#smaller-notes-from-the-public-holidays-reviews)
-
 
 ### The kitchen and preparation
 
