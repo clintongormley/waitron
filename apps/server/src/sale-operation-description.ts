@@ -40,7 +40,10 @@ export async function readSaleOperationDescription(
       ? await VENUE_SERVICE.readRetainedDepartmentReceipt(tx, scope, departmentId)
       : await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
   if (receipt.operationDescription === undefined || receipt.operationDescription.trim() === "") {
-    if (cfg.operationDescriptionDefault !== undefined) {
+    if (
+      cfg.operationDescriptionDefault !== undefined &&
+      cfg.operationDescriptionDefault.trim() !== ""
+    ) {
       return cfg.operationDescriptionDefault;
     }
     throw new AppError("department.operation_description_required", { departmentId });
