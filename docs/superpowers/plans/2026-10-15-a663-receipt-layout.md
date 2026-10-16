@@ -33,7 +33,7 @@ the picture is kept as drawn.
 
 ## How the work is cut
 
-Seven pull requests (an eighth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
+Eight pull requests (a ninth, Part 4, was withdrawn by the owner on 2026-10-15): Part 1 is split in
 two (1a and 1b) so that the half that touches no file of lane A's A661 branch (landed 2026-10-15,
 #1745) could start before it. Each leaves `main` green and correct on its own; none needs
 a later one. The task numbers are not changed by the split; the table says which tasks each pull
@@ -47,6 +47,7 @@ request holds.
 | 2b | A one-rate simplified receipt prints «Base imponible» and «IVA» under TOTAL instead of «IVA 10% incluido» (owner, Q11) | Written at the start of the part | After Part 2 has landed |
 | 2c | Each sale line stores its price before any discount, so every line prints its own price and discount (owner, Q9); the whole-bill discount prints once per VAT rate at the end of the table (owner, Q10). A database change | 2c.1, 2c.2, 2c.3a, 2c.3b, 2c.4, 2c.5, 2c.6, 2c.7, 2c.8 (nine dispatches) | After Part 2b has landed (#1772) |
 | 2d | Extras only on a dish sold by the unit: the server refuses them on a dish whose unit has a scale or decimals, and the till stops offering them (owner, 2026-10-15: "we don't offer half portions"). No migration | 2d.1, 2d.2, 2d.3 | After Part 2c has landed |
+| 2e | Every printed price before discounts comes from the stored price: the fallback that worked it back from the line's total is deleted, and the shared fixture and the tests that relied on it carry stored prices (owner, 2026-10-16). No migration | 2e.1, 2e.2, 2e.3 | After Part 2d has landed (#1779) |
 | 3 | Guests and the amount per person | 3 | After Parts 1a and 1b have merged (A661, which also edits `receipt-print.ts`, landed 2026-10-15, #1745); uses owner question Q2's default unless answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
@@ -82,7 +83,8 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 - **Work in a worktree**: `python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`.
   Branch names: `feat/a663-1-receipt-layout` (Part 1a), `feat/a663-1b-receipt-layout`,
   `feat/a663-2-full-invoice-layout`, `feat/a663-2b-one-rate-vat-lines`,
-  `feat/a663-2c-price-before-discount`, `feat/a663-2d-whole-dish-extras`, `feat/a663-3-guests`.
+  `feat/a663-2c-price-before-discount`, `feat/a663-2d-whole-dish-extras`,
+  `feat/a663-2e-stored-list-price`, `feat/a663-3-guests`.
   Every commit `git commit -s`.
 - **Test first.** Every task writes its failing test, runs it and sees it fail for the stated
   reason, then writes the code.
@@ -98,7 +100,9 @@ since 2026-10-06/08 per `git log -S"sale.operationDate !== issueDay"`, commits `
 - **Review path: FULL for every part that changes what prints** (CLAUDE.md §5 — a printed invoice
   is a legal document): per-task reviews, then `/finish-branch` with the Codex run-it seat run twice
   (the second told to set this plan's checklist aside and test what it does not name). Part 2d
-  prints nothing and touches no risk trigger: LIGHT (see Part 2d).
+  prints nothing and touches no risk trigger: LIGHT (see Part 2d). Part 2e is LIGHT on the owner's
+  instruction: it changes no print on a venue set up since #1777 and touches no fiscal record (see
+  Part 2e).
 - **Keep existing behavioural assertions.** Many suites read the printed receipt back as text
   (`apps/server/src/testing/decode-ticket.ts`). When a layout change moves a line, update the test's
   expectation of WHERE or HOW it prints, never delete the fact it checks (that the NIF, the TOTAL,
@@ -3330,6 +3334,160 @@ Line numbers read on `main` at `20db8418f`; re-check them on Part 2d's base.
   no decimals (ml): by `pricing.ts:319-323` the extra's quantity is multiplied by the dish's 250 ml
   (left open by A663 Part 2d)."
 - [ ] **Step 3: Commit, then `/finish-branch`** (LIGHT).
+
+---
+
+# Part 2e — every printed list price comes from the stored price
+
+Branch `feat/a663-2e-stored-list-price`, from `main` after Part 2d has landed (#1779). Its own small
+pull request. The owner (2026-10-16 00:58, via the watcher): a fallback for rows saved before #1777
+is the backwards-compatibility code CLAUDE.md §3 rules out before go-live; move the shared fixture
+and every test that relies on it to stored prices, delete the fallback, and do NOT record it as a
+deliberate limit. Part 2d recorded it anyway; this part deletes that bullet.
+
+**The fallback.** `beforeVatFigures` (`apps/server/src/receipt-figures.ts:39-51`) prices a full
+invoice's line before discounts from `listUnitGrossOf` (`:54-61`): the stored
+`listUnitPriceGross` when present (`:55`), else the line's total before discounts × price quantity
+÷ quantity (`:60`), or nothing under one priced unit (`:59`).
+
+## What was found (2026-10-16, on `main` at `6d9e88e33`)
+
+1. **No real path relies on the fallback, so no producer needs fixing.** `beforeVatFigures` has one
+   caller, `buildReceiptDocument` (`apps/server/src/receipt-document.ts:277`), and figures only
+   lines with filed figures (`isFiled`, `:242`, `:309`). The only production code that gives a
+   receipt line filed figures is `receiptLines` (`apps/server/src/receipt-adjustments.ts:69`; the
+   other `net:` hits of a `git grep` over `apps/server/src` are tests, `testing/` and
+   `category-sales-page.ts`'s unrelated report rows), and only for a sale with a customer (`:56`).
+   There it deletes the `listGross` that `ticketLinesFrom` set (`:62`; `ticketLinesFrom` spreads
+   `listGrossOf` alone, `apps/server/src/receipt-lines.ts:61`) and sets both list figures from the
+   `sale_lines` row, the price only beside the total (`:65-68`). Lines without filed figures (a
+   simplified receipt) never reach `beforeVatFigures`. Measured:
+   with the fallback replaced by "no stored price → filed figures", all 62 receipt suites (the
+   command in Task 2e.3) and the 5 other files naming `listGross` or the fixture ran; every failure
+   was in a hand-built fixture (item 3), none in a test that pays a real sale.
+2. **The two stored figures are written together.** Every till path files its lines through
+   `withReceiptListPrices` (`bill-payments.ts:706`, `till-sale.ts:930`, `:1533`, `:1695`,
+   `working-order.ts:6142`), which adds `listUnitPriceGross` exactly when it adds `listGross`
+   (`receipt-lines.ts:73-75`; `listGrossOf` adds nothing without a price, `:84`); the one other
+   `recordSale` caller, `fiscal-readiness-runner.ts:138`, files a line with neither. A whole-invoice
+   credit copies the original row's pair (`cancel-credit.ts:106-108`). `saleLineRows` stores each
+   when present (`packages/core/src/sale-line-rows.ts:46-49`). The scripts that call `recordSale`
+   set neither (`git grep listGross -- apps/server/scripts` finds only `receipt-look.ts`). Only a
+   row saved before #1777 has a total and no price: migration `0159_furry_beyonder.sql` adds the
+   column with no backfill.
+   **Choice: such a line prints its filed figures, with no discount row.** Making the pair one type
+   is not small: `listGross` is also the simplified receipt's and the till's display field
+   (`receipt-document.ts:336`, `:352`; `apps/till/src/api/client.ts:817`), set on every receipt line
+   by `ticketLinesFrom`, while the price exists only on a full invoice's line.
+3. **Tests relying on the fallback** — measured by making `listUnitGrossOf` return null without a
+   stored price and running the Task 2e.3 receipt command: `Tests 52 failed | 3206 passed (3258)`;
+   the same five files with the fallback kept: `Tests 342 passed (342)`. All 52 are hand-built
+   inputs with a total before discounts and no stored price:
+   - the shared fixture's Menú line (`apps/server/src/testing/full-invoice-fixture.ts:41`): 8 in
+     `invoice-language.test.ts`, 3 in `invoice-pdf.test.ts`, and in `receipt-document.test.ts` the
+     two captured-bytes cases and «lists a full invoice's items one row each, before VAT, with the
+     discount as its own row». Adding `listUnitPriceGross: "12.10"` alone made all 14 pass under the
+     probe, the byte-file cases included: **the two `.bin` files do not change**;
+   - `receipt-document.test.ts`'s own inputs: `ownerMenu` (`:473`), the whole-bill case (`:598`,
+     `:611`) and `burgerAndBread` (`:646`, `:660`) — 6 cases;
+   - `receipt-ticket.test.ts:262` and `:276` — the 10 «prints F1 reductions before VAT, at their
+     rate» cases;
+   - `receipt-figures.test.ts` — 21 cases, every `filed(...)` with `listGross` and no stored price.
+   Two passed under the probe for a different reason and are handled too: `:129` (meant to
+   reach the negative-discount check, `receipt-figures.ts:49`, it would stop at the missing price),
+   and `:69` (its subject, the guard at `:59`, is deleted). A real-sale guard already exists:
+   «reads back a weighed F1 line's stored price before its discount»
+   (`receipt-adjustments.test.ts:272`) failed when the reader also dropped the price (control run,
+   `Tests 2 failed | 3107 passed`).
+   `apps/server/scripts/receipt-look.ts` has four such inputs (`:132`, `:210`, `:222`, `:247`; a
+   fifth, `:265`, is under one kilo and never used the fallback): without moving them, 15 of its PNGs
+   differ (`cmp`) from those printed with the fallback; two runs of the same code differ in none.
+4. **A venue reset is not needed.** Nothing stored changes and nothing refuses to start. A full
+   invoice reprinted from a sale saved before #1777 (`dadff042b`, 2026-10-16) prints each discounted
+   line at its filed price and amount, with no discount rows and the same base, VAT and TOTAL; on
+   `main` it prints the price before discounts and a discount row, except under one priced unit.
+   Reset a dev venue only to see those old invoices' discount rows.
+5. **No fiscal record or hash input is touched.** Followed: `receipt-figures.ts` is imported only
+   by `receipt-document.ts:23` (`git grep 'receipt-figures.js'`); `receipt-document.ts`'s importers
+   are the renderers and delivery code in `apps/server/src`; no other package's `package.json`
+   names `@waitron/server`. The
+   change reads no database and writes nothing; `recordSale`, `saleLineRows` and the alta builders
+   are untouched, and the QR text is an input to the document (`result.qr`), built elsewhere.
+   **Review path: LIGHT.** No print on a venue set up since #1777 changes (Task 2e.3 checks it by
+   `cmp`).
+
+## Tasks
+
+### Task 2e.1: Every test input and LOOK picture carries its stored price
+
+The fallback stays in this task, so every check stays green before and after.
+
+**Files:** `apps/server/src/testing/full-invoice-fixture.ts`, `receipt-document.test.ts`,
+`receipt-ticket.test.ts`, `receipt-figures.test.ts` (all `apps/server/src/`),
+`apps/server/scripts/receipt-look.ts`
+
+- [ ] **Step 0:** `pnpm --filter @waitron/server exec tsx scripts/receipt-look.ts /tmp/a663-2e-look-base`.
+- [ ] **Step 1: The failing run.** Temporarily make `listUnitGrossOf` return `null` when
+  `line.listUnitPriceGross` is undefined; run the five files `invoice-language`, `invoice-pdf`,
+  `receipt-document`, `receipt-ticket`, `receipt-figures` (`.test.ts`) — expect `52 failed`.
+- [ ] **Step 2:** Give each input listed in finding 3 its `listUnitPriceGross`: the total before
+  discounts × `net.priceQuantity` ÷ quantity, the value the fallback computed, so no expected value
+  changes. Quantity-one lines take their `listGross`; the croquetas (`receipt-figures.test.ts:60`,
+  `:193`, `:262`, `:287`) take `"3.33"`; the extra at `:143` takes `"1.50"`; `:129` takes `"10.00"`;
+  the look script's water (`:132`) `"6.00"`. Leave `receipt-figures.test.ts:69` and the look
+  script's `full-comped-weighed` (`:265`) without one: neither used the fallback (`:59`), and the
+  probe changed neither. `receipt-document.test.ts:713` deletes `listUnitPriceGross` beside
+  `listGross`.
+- [ ] **Step 3:** The five files under the probe — `0 failed`. Remove the probe (`git diff
+  apps/server/src/receipt-figures.ts` prints nothing), run them again — pass, and
+  `pnpm --filter @waitron/server exec tsc --noEmit`. **Commit.**
+
+### Task 2e.2: The fallback is deleted
+
+**Files:** `apps/server/src/receipt-figures.ts`, `apps/server/src/receipt-figures.test.ts`
+
+- [ ] **Step 1: Failing test** in `receipt-figures.test.ts`'s `beforeVatFigures` block: «prints
+  the filed figures, and no discount, when a line has a list total but no stored price» —
+  `filed({ quantity: "2", gross: "6.00", listGross: "6.66", net: net("2.48", "4.96", "21.00") })`
+  → `{ price: "2.48", amount: "4.96", discount: "0.00" }`. Run the file: it FAILS, printing
+  `{ price: "2.75", amount: "5.50", discount: "0.54" }` (the fallback divides 6,66 by 2).
+- [ ] **Step 2: Code.** `beforeVatFigures` returns the filed figures when `listGross` or
+  `listUnitPriceGross` is undefined, and prices from the stored one; delete `listUnitGrossOf` and the
+  now-unused `MONEY_SCALE` import (`divideDecimal`, `multiplyDecimal` and `ONE` stay for
+  `quantityText`).
+- [ ] **Step 3: Rename the checks whose subject went** (expected values unchanged):
+  `:55` «divides a counted line's list total back to its unit price» → «prices a counted line at its
+  stored unit price»; `:69` «keeps the filed price and base for less than one priced unit» →
+  «prints a weighed line with no stored price at its filed figures»; `:138` «prices an extra per its
+  portion» → «prices an extra at its stored price per portion».
+- [ ] **Step 4:** Run `receipt-figures.test.ts` and `receipt-adjustments.test.ts` — pass. Proof by
+  deletion: drop the price in `receipt-adjustments.ts:66-68` and see «reads back a weighed F1
+  line's stored price before its discount» fail; restore it. `tsc --noEmit`. **Commit.**
+
+### Task 2e.3: Gates, LOOK by comparison, backlog, PR
+
+- [ ] **Step 1:** Check memory (`memory_pressure | grep free`), then the receipt suites, reading
+  the `Tests` count:
+  ```bash
+  cd <worktree> && git grep -l -E "decodeTicket|printedLines|printedCommands|layoutInvoicePages|renderInvoicePdf|renderInvoiceRaster|buildReceiptDocument|formatReceipt|beforeVatFigures|invoiceDiscounts" -- 'apps/server/src/*.test.ts' | sed 's#^apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run
+  ```
+  and the five files that name `listGross` or the fixture but that command misses
+  (`cancel-invoiced-order`, `invoice-delivery`, `invoice-email`, `receipt-lines`,
+  `unpaid-invoice-delivery`, each `src/<name>.test.ts`). Every branch left in `beforeVatFigures` has
+  a case in `receipt-figures.test.ts` (no list total `:49`; no stored price, Task 2e.2's new case; a
+  negative discount `:113` and `:129`); CI's `apps/server` coverage job on the PR's head holds the
+  98/98/98/95 bar.
+- [ ] **Step 2: The fiscal gate, UNEDITED:**
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/sale-amount.huella.test.ts src/money-conversion.huella.test.ts src/correction-amount.huella.test.ts`.
+- [ ] **Step 3: LOOK by comparison.** Run `receipt-look.ts` into `/tmp/a663-2e-look-after` and `cmp`
+  every PNG with `/tmp/a663-2e-look-base`: expect no difference. If one differs, open both pictures
+  and say why in the PR.
+- [ ] **Step 4: Backlog.** Delete the `docs/backlog/printers.md` bullet «A full invoice still works a
+  line's unit price back from its total…» under "Decisions and deliberate limits"; record no limit.
+- [ ] **Step 5: `/finish-branch`** (LIGHT). The PR's first line: "No venue reset needed: a full
+  invoice reprinted from a sale saved before #1777 prints its lines' filed figures, with no discount
+  rows." Its "Changed test checks" section lists Task 2e.1's moved inputs by file and line (no
+  expected value changes), Task 2e.2's three renames and the one new case.
 
 ---
 
