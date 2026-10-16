@@ -314,10 +314,11 @@ Before A751, each of the three runs failed 30–33 tests in 8–10 files. On A75
 
 `brand-build` (`status: null` after 10 s), `run-with-deadline` and `write-path-tables` failed the
 same load before A751 and passed it on the branch; whether that is A751's lighter `ci-workflow` and
-upgrade walk or chance was not measured. `fiscal-allocation-migration` went the other way: it
-passed the load before A751 and failed it in all three runs on the branch. Before A751 the walk
-was cut off at 173 s; on the branch it ran for about 15 minutes beside the other files, which may
-explain it — not measured. None of these failed with the root project and 16 spinning
+upgrade walk or chance was not measured. `fiscal-allocation-migration` passed the load before A751
+(7.1–7.5 s) and failed it in all three runs on the branch. It failed the same way, `Hook timed out
+in 60000ms`, on `main`'s code (`b81f1481c`) in the run where the load was kept up for 20 minutes
+(`a751-receipts/heavy3-lifted/root1.json`), so it fails under sustained load without A751. On the
+branch the load lasts longer because each root's upgrade walk is no longer cut off at 173 s. None of these failed with the root project and 16 spinning
 loops alone (`a751-receipts/loaded16-full-root.json`), nor in lane G's failing push of 2026-10-16.
 Each needs the same treatment A751 gave its own four files: what the bound waits for, its worst case under
 this load with the bound lifted, and whether the case can be made cheaper.

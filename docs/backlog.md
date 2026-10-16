@@ -5728,8 +5728,9 @@ the tree. What remains, largest first:
 - **At a load average near 60, five more root guard files fail on time (left open by A751).**
   With three root projects and eight spinning shell loops on the 18-core Mac, A751's branch passed
   the four files it fixed and still failed `fiscal-allocation-migration`, `guarded-teardowns`,
-  `menu-sections-upgrade`, `mutation-shard` and `pre-push`; `fiscal-allocation-migration` passed
-  the same load before the change, and three others failed it before and passed it after.
+  `menu-sections-upgrade`, `mutation-shard` and `pre-push`. `fiscal-allocation-migration` also
+  fails on `main`'s code when the load is kept up for 20 minutes; three others failed the load
+  before the change and passed it after.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
 
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
