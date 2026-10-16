@@ -11,7 +11,9 @@ import {
   fitScale,
   gridExtent,
   resizeCursor,
+  outward,
   resizeFrom,
+  resizeFromCorner,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -221,11 +223,8 @@ describe("floor plan geometry", () => {
   });
 
   describe("stepInside", () => {
-    const at = (x: number, y: number, width: number, height: number, rotation: number) =>
-      table(x, y, width, height, rotation);
-
     it.each([0, 15, 30, 45, 90, 180, 225])("leaves a table inside the plan alone at %i°", (r) => {
-      const p = at(10, 10, 8, 8, r);
+      const p = table(10, 10, 8, 8, r);
       expect(stepInside(p)).toEqual(p);
       expect(stepInside(p, table(0, 0, 8, 8))).toEqual(p);
     });
@@ -238,8 +237,8 @@ describe("floor plan geometry", () => {
       [8, 4, 90, 0, 2],
       [99, 99, 45, 21, 21],
     ])("steps a %i × %i table turned %i° to the fewest squares in", (w, h, r, x, y) => {
-      const q = stepInside(at(0, 0, w, h, r), table(0, 0, w, h));
-      expect(q).toEqual(at(x, y, w, h, r));
+      const q = stepInside(table(0, 0, w, h, r), table(0, 0, w, h));
+      expect(q).toEqual(table(x, y, w, h, r));
       const drawn = rotatedRect(q);
       expect(drawn.x).toBeGreaterThanOrEqual(0);
       expect(drawn.y).toBeGreaterThanOrEqual(0);
@@ -248,19 +247,23 @@ describe("floor plan geometry", () => {
     });
 
     it("keeps the gap of a turned table whose drawn outline is narrower than its unturned box", () => {
-      expect(rotatedRect(stepInside(at(0, 0, 8, 4, 90), table(0, 0, 8, 4))).x).toBe(2);
+      expect(rotatedRect(stepInside(table(0, 0, 8, 4, 90), table(0, 0, 8, 4))).x).toBe(2);
     });
 
     it("lets a table that began poking out stay as far out as it began, no further", () => {
-      const out = at(0, 0, 8, 8, 45);
-      expect(stepInside(at(1, 0, 8, 8, 45), out)).toEqual(at(1, 0, 8, 8, 45));
-      expect(stepInside(at(1, 0, 8, 8, 45), table(0, 0, 8, 8))).toEqual(at(2, 2, 8, 8, 45));
+      const out = table(0, 0, 8, 8, 45);
+      expect(stepInside(table(1, 0, 8, 8, 45), out)).toEqual(table(1, 0, 8, 8, 45));
+      expect(stepInside(table(1, 0, 8, 8, 45), table(0, 0, 8, 8))).toEqual(table(2, 2, 8, 8, 45));
     });
 
     it("raises a negative x or y to 0 even where the drawn outline is already inside", () => {
       // Turned 90°, an 8 × 4 is drawn 2 squares right of x and a 4 × 8 2 squares below y.
-      expect(stepInside(at(-1, 5, 8, 4, 90), table(0, 5, 8, 4, 90))).toEqual(at(0, 5, 8, 4, 90));
-      expect(stepInside(at(5, -1, 4, 8, 90), table(5, 0, 4, 8, 90))).toEqual(at(5, 0, 4, 8, 90));
+      expect(stepInside(table(-1, 5, 8, 4, 90), table(0, 5, 8, 4, 90))).toEqual(
+        table(0, 5, 8, 4, 90),
+      );
+      expect(stepInside(table(5, -1, 4, 8, 90), table(5, 0, 4, 8, 90))).toEqual(
+        table(5, 0, 4, 8, 90),
+      );
     });
   });
 
@@ -324,7 +327,7 @@ describe("floor plan geometry", () => {
     });
 
     it("grows a turned table at the drawn edge, then steps it in", () => {
-      // Without the step in, the rounded answer (2, 1) is drawn from y -0.04.
+      // Without the step in, the rounded answer (2, 1) is drawn from y -0.031.
       expect(resizeFrom(table(2, 2, 6, 6, 30), "top", 1)).toEqual(table(2, 2, 6, 7, 30));
       // Turned 90°, an 8 × 4 at (0, 5) is drawn from x 2; its bottom side faces left.
       const p = table(0, 5, 8, 4, 90);
@@ -424,6 +427,137 @@ describe("floor plan geometry", () => {
     });
   });
 
+  describe("outward", () => {
+    const half = Math.SQRT1_2;
+
+    it.each([
+      ["top-left", -half, -half],
+      ["top-right", half, -half],
+      ["bottom-right", half, half],
+      ["bottom-left", -half, half],
+    ] as const)("points the unturned %s corner diagonally out", (corner, x, y) => {
+      const out = outward(corner, 0);
+      expect(out.x).toBeCloseTo(x, 9);
+      expect(out.y).toBeCloseTo(y, 9);
+    });
+
+    it("turns a corner's direction with the table", () => {
+      const out = outward("top-left", 90);
+      expect(out.x).toBeCloseTo(half, 9);
+      expect(out.y).toBeCloseTo(-half, 9);
+    });
+  });
+
+  describe("resizeFromCorner", () => {
+    const corners = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+    const opposite = {
+      "top-left": "bottom-right",
+      "top-right": "bottom-left",
+      "bottom-right": "top-left",
+      "bottom-left": "top-right",
+    } as const;
+
+    /** Where `corner` is drawn, in squares, with the table turned round its centre. */
+    function cornerAt(p: PlanPlacement, corner: (typeof corners)[number]) {
+      const a = (p.rotation * Math.PI) / 180;
+      const u = (corner.endsWith("left") ? -p.width : p.width) / 2;
+      const v = (corner.startsWith("top") ? -p.height : p.height) / 2;
+      return {
+        x: p.x + p.width / 2 + u * Math.cos(a) - v * Math.sin(a),
+        y: p.y + p.height / 2 + u * Math.sin(a) + v * Math.cos(a),
+      };
+    }
+
+    it("moves the two sides that meet at the corner and keeps the opposite corner", () => {
+      const p = table(20, 20, 8, 4);
+      expect(resizeFromCorner(p, "bottom-right", 2, 1)).toEqual(table(20, 20, 10, 5));
+      expect(resizeFromCorner(p, "top-left", 2, 1)).toEqual(table(18, 19, 10, 5));
+      expect(resizeFromCorner(p, "top-right", 2, 1)).toEqual(table(20, 19, 10, 5));
+      expect(resizeFromCorner(p, "bottom-left", 2, 1)).toEqual(table(18, 20, 10, 5));
+      expect(resizeFromCorner(p, "top-left", 0, 0)).toBe(p);
+    });
+
+    it("keeps the opposite corner within half a square at every turn", () => {
+      for (let r = 0; r < 360; r += 15) {
+        const p = table(20, 20, 8, 4, r);
+        for (const corner of corners) {
+          for (let across = -3; across <= 3; across++) {
+            for (let down = -3; down <= 3; down++) {
+              const q = resizeFromCorner(p, corner, across, down);
+              const where = `${r}°, ${corner}, ${across}, ${down}`;
+              expect(q.width, where).toBe(8 + across);
+              expect(q.height, where).toBe(4 + down);
+              const before = cornerAt(p, opposite[corner]);
+              const after = cornerAt(q, opposite[corner]);
+              // An exact half square can come out a hair over 0.5 in floating point.
+              expect(Math.abs(after.x - before.x), where).toBeLessThanOrEqual(0.5 + 1e-9);
+              expect(Math.abs(after.y - before.y), where).toBeLessThanOrEqual(0.5 + 1e-9);
+            }
+          }
+        }
+      }
+    });
+
+    it("undoes a corner resize with the opposite one away from the edge", () => {
+      for (let r = 0; r < 360; r += 15) {
+        const p = table(20, 20, 8, 4, r);
+        for (const corner of corners) {
+          for (const [across, down] of [
+            [1, 1],
+            [2, -1],
+            [-3, 2],
+            [3, 3],
+          ] as const) {
+            const there = resizeFromCorner(p, corner, across, down);
+            expect(resizeFromCorner(there, corner, -across, -down), `${r}°, ${corner}`).toEqual(p);
+          }
+        }
+      }
+    });
+
+    it("holds the size to 1–99 squares", () => {
+      expect(resizeFromCorner(table(20, 20, 8, 4), "bottom-right", -20, -20)).toMatchObject({
+        width: 1,
+        height: 1,
+      });
+      expect(resizeFromCorner(table(20, 20, 98, 4), "bottom-right", 5, 200)).toMatchObject({
+        width: 99,
+        height: 99,
+      });
+    });
+
+    it("grows each side the edge leaves room for, then steps the table in", () => {
+      // Growing the left side would cross the edge; the top has room for both squares.
+      expect(resizeFromCorner(table(0, 5, 8, 4), "top-left", 2, 2)).toEqual(table(0, 3, 8, 6));
+      // Turned 90°, the bottom side faces left and is drawn at x 2; x cannot go below 0.
+      const turned = table(0, 2, 8, 4, 90);
+      expect(resizeFromCorner(turned, "bottom-right", 2, 2)).toEqual(table(0, 2, 10, 6, 90));
+      // Turned 90°, the left side faces up and is drawn at y 0, so only the top side grows.
+      expect(resizeFromCorner(turned, "top-left", 2, 2)).toEqual(table(1, 1, 8, 6, 90));
+      expect(resizeFromCorner(table(0, 0, 8, 4), "top-left", -2, -1)).toEqual(table(2, 1, 6, 3));
+    });
+
+    it("takes the growth that adds the most squares, not the most width", () => {
+      // Turned 30° at (3, 3), 10 × 5 fits (3 squares more, 2 of them width), but 9 × 7 adds 4.
+      const p = table(3, 3, 8, 4, 30);
+      expect(resizeFromCorner(p, "bottom-left", 3, 3)).toEqual(table(2, 3, 9, 7, 30));
+    });
+
+    it("breaks a tie between growths of as many squares by taking more width", () => {
+      // Turned 15° at (2, 2), growing both sides would cross the edge; 9 × 4 and 8 × 5 each fit.
+      const p = table(2, 2, 8, 4, 15);
+      expect(resizeFromCorner(p, "top-left", 0, 1)).toEqual(table(2, 1, 8, 5, 15));
+      expect(resizeFromCorner(p, "top-left", 1, 1)).toEqual(table(1, 2, 9, 4, 15));
+    });
+
+    it("keeps x and y at 999 or less", () => {
+      // Turned 90°, the top side faces right: one more square would put x at 1000.
+      const p = table(999, 10, 8, 4, 90);
+      expect(resizeFromCorner(p, "top-left", 0, 1)).toEqual(p);
+      expect(resizeFromCorner(p, "bottom-right", 0, -1)).toEqual(table(999, 11, 8, 3, 90));
+    });
+  });
+
   describe("resizeCursor", () => {
     const sides = ["top", "right", "bottom", "left"] as const;
     const cursorsAt = (rotation: number) => sides.map((side) => resizeCursor(side, rotation));
@@ -458,6 +592,15 @@ describe("floor plan geometry", () => {
       expect(cursorsAt(112.5)).toEqual(cursorsAt(135));
       expect(cursorsAt(157.5)).toEqual(cursorsAt(180));
       expect(cursorsAt(-22.5)).toEqual(cursorsAt(157.5));
+    });
+
+    it("gives each corner the diagonal arrow it drags along, turning with the table", () => {
+      const corners = ["top-left", "top-right", "bottom-right", "bottom-left"] as const;
+      const at = (rotation: number) => corners.map((corner) => resizeCursor(corner, rotation));
+      expect(at(0)).toEqual(["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resize"]);
+      // Turned 45° clockwise, the top-left corner points straight up.
+      expect(at(45)).toEqual(["ns-resize", "ew-resize", "ns-resize", "ew-resize"]);
+      expect(at(90)).toEqual(["nesw-resize", "nwse-resize", "nesw-resize", "nwse-resize"]);
     });
   });
 });

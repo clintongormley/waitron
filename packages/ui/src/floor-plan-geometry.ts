@@ -8,8 +8,8 @@ const GRID_MAX = 999;
 const CROP_MARGIN = 2;
 const EXTENT_MARGIN = 8;
 const FREE_SPOT_COLUMNS = 40;
-const OVERLAP_EPSILON = 1e-9;
-const EDGE_EPSILON = 1e-9;
+// Floating-point noise allowed when comparing positions in grid squares.
+const EPSILON = 1e-9;
 
 export type PlanShape = "rect" | "round";
 
@@ -70,7 +70,7 @@ export function stepInside(p: PlanPlacement, from: PlanPlacement = p): PlanPlace
   const start = rotatedRect(from);
   const drawn = rotatedRect(p);
   const step = (floor: number, edge: number) =>
-    Math.max(0, Math.ceil(Math.min(0, floor) - edge - EDGE_EPSILON));
+    Math.max(0, Math.ceil(Math.min(0, floor) - edge - EPSILON));
   return {
     ...p,
     x: Math.max(0, p.x + step(start.x, drawn.x)),
@@ -79,20 +79,25 @@ export function stepInside(p: PlanPlacement, from: PlanPlacement = p): PlanPlace
 }
 
 export type PlanSide = "top" | "right" | "bottom" | "left";
+export type PlanCorner = "top-left" | "top-right" | "bottom-right" | "bottom-left";
 
 const SIZE_MIN = 1;
 const SIZE_MAX = 99;
 
-const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
+const OUTWARDS: Record<PlanSide | PlanCorner, { x: number; y: number }> = {
   top: { x: 0, y: -1 },
   right: { x: 1, y: 0 },
   bottom: { x: 0, y: 1 },
   left: { x: -1, y: 0 },
+  "top-left": { x: -Math.SQRT1_2, y: -Math.SQRT1_2 },
+  "top-right": { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
+  "bottom-right": { x: Math.SQRT1_2, y: Math.SQRT1_2 },
+  "bottom-left": { x: -Math.SQRT1_2, y: Math.SQRT1_2 },
 };
 
-/** The unit direction `side` faces on screen, with the table turned `rotation` degrees. */
-export function outward(side: PlanSide, rotation: number): { x: number; y: number } {
-  const { x, y } = OUTWARDS[side];
+/** The unit direction `handle` faces on screen, with the table turned `rotation` degrees. */
+export function outward(handle: PlanSide | PlanCorner, rotation: number): { x: number; y: number } {
+  const { x, y } = OUTWARDS[handle];
   const radians = (rotation * Math.PI) / 180;
   const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
   return { x: x * cos - y * sin, y: x * sin + y * cos };
@@ -101,10 +106,10 @@ export function outward(side: PlanSide, rotation: number): { x: number; y: numbe
 const RESIZE_CURSORS = ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"] as const;
 export type ResizeCursor = (typeof RESIZE_CURSORS)[number];
 
-/** The resize arrow nearest the way `side` drags on screen; exactly halfway takes the next one
+/** The resize arrow nearest the way `handle` drags on screen; exactly halfway takes the next one
  *  clockwise. */
-export function resizeCursor(side: PlanSide, rotation: number): ResizeCursor {
-  const { x, y } = outward(side, rotation);
+export function resizeCursor(handle: PlanSide | PlanCorner, rotation: number): ResizeCursor {
+  const { x, y } = outward(handle, rotation);
   // Rounded so that a turn exactly halfway between two arrows is not split by floating-point noise.
   const degrees = Math.round(((Math.atan2(y, x) * 180) / Math.PI) * 1e6) / 1e6;
   return RESIZE_CURSORS[((Math.round(degrees / 45) % 4) + 4) % 4]!;
@@ -117,34 +122,86 @@ function roundShift(squares: number): number {
   return Math.sign(clean) * Math.round(Math.abs(clean));
 }
 
+function sizeChange(size: number, squares: number): number {
+  return Math.min(SIZE_MAX, Math.max(SIZE_MIN, size + squares)) - size;
+}
+
+/** Each growth this many squares or fewer, most squares first; a shrink is never cut. */
+function candidates(width: number, height: number): [number, number][] {
+  const steps = (squares: number) =>
+    squares > 0 ? Array.from({ length: squares + 1 }, (_, i) => squares - i) : [squares];
+  // Built with more width first; the sort is stable, so a tie keeps that order.
+  return steps(width)
+    .flatMap((w) => steps(height).map((h): [number, number] => [w, h]))
+    .sort((a, b) => b[0] + b[1] - (a[0] + a[1]));
+}
+
+/**
+ * `p` with its `across` side (left or right) moved `width` squares outwards and its `down` side
+ * (top or bottom) `height` squares, as `resizeFrom` and `resizeFromCorner` promise.
+ */
+function resizeSides(
+  p: PlanPlacement,
+  across: "left" | "right",
+  width: number,
+  down: "top" | "bottom",
+  height: number,
+): PlanPlacement {
+  const outAcross = outward(across, p.rotation);
+  const outDown = outward(down, p.rotation);
+  const start = rotatedRect(p);
+  const placed = (w: number, h: number, round: (squares: number) => number) => ({
+    ...p,
+    width: p.width + w,
+    height: p.height + h,
+    x: p.x + round((outAcross.x * w) / 2 + (outDown.x * h) / 2 - w / 2),
+    y: p.y + round((outAcross.y * w) / 2 + (outDown.y * h) / 2 - h / 2),
+  });
+  const options = candidates(sizeChange(p.width, width), sizeChange(p.height, height));
+  // The last option grows neither side, so nothing refuses it.
+  const [w, h] = options.pop()!;
+  for (const [growW, growH] of options) {
+    const q = placed(growW, growH, roundShift);
+    const ideal = rotatedRect(placed(growW, growH, (squares) => squares));
+    const crosses =
+      ideal.x < Math.min(0, start.x) - EPSILON || ideal.y < Math.min(0, start.y) - EPSILON;
+    if (!crosses && q.x <= GRID_MAX && q.y <= GRID_MAX) return stepInside(q, p);
+  }
+  if (w === 0 && h === 0) return p;
+  const q = placed(w, h, roundShift);
+  return stepInside({ ...q, x: Math.min(GRID_MAX, q.x), y: Math.min(GRID_MAX, q.y) }, p);
+}
+
 /**
  * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
  * side's midpoint's x and y each within half a square of where it is drawn; where that would put
  * the table past the plan's top or left edge, or x or y below 0, the table steps right or down by
  * the fewest whole squares that keep it inside, or no further past the edge than `p` already is
  * (`stepInside`). The size stays 1–99 and x and y at 999 or less. A growth whose exact placement
- * would cross that line stops at the largest that does not; a shrink is always taken.
+ * would be drawn past the plan's edge, or further past it than `p` already is, stops at the
+ * largest that would not; a shrink is always taken.
  */
 export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
-  const across = side === "left" || side === "right" ? "width" : "height";
-  const wanted = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares)) - p[across];
-  const out = outward(side, p.rotation);
-  const start = rotatedRect(p);
-  for (let growth = wanted; growth !== 0; growth -= Math.sign(growth)) {
-    const grown = across === "width" ? { width: p.width + growth } : { height: p.height + growth };
-    const shiftX = (out.x * growth) / 2 - (across === "width" ? growth / 2 : 0);
-    const shiftY = (out.y * growth) / 2 - (across === "height" ? growth / 2 : 0);
-    const x = p.x + roundShift(shiftX);
-    const y = p.y + roundShift(shiftY);
-    if (growth < 0)
-      return stepInside({ ...p, ...grown, x: Math.min(GRID_MAX, x), y: Math.min(GRID_MAX, y) }, p);
-    const ideal = rotatedRect({ ...p, ...grown, x: p.x + shiftX, y: p.y + shiftY });
-    const crosses =
-      ideal.x < Math.min(0, start.x) - EDGE_EPSILON ||
-      ideal.y < Math.min(0, start.y) - EDGE_EPSILON;
-    if (!crosses && x <= GRID_MAX && y <= GRID_MAX) return stepInside({ ...p, ...grown, x, y }, p);
-  }
-  return p;
+  return side === "left" || side === "right"
+    ? resizeSides(p, side, squares, "bottom", 0)
+    : resizeSides(p, "right", 0, side, squares);
+}
+
+/**
+ * `p` with the two sides that meet at `corner` moved outwards (inwards when negative): the left or
+ * right side `across` squares and the top or bottom side `down`, keeping the opposite corner's x and
+ * y each within half a square of where it is drawn, with `resizeFrom`'s edge, size and 999 rules.
+ * Where the edge leaves no room for the whole growth, the table takes the growth with the most
+ * squares that fits, a tie keeping more width; a side that shrinks always shrinks.
+ */
+export function resizeFromCorner(
+  p: PlanPlacement,
+  corner: PlanCorner,
+  across: number,
+  down: number,
+): PlanPlacement {
+  const [vertical, horizontal] = corner.split("-") as ["top" | "bottom", "left" | "right"];
+  return resizeSides(p, horizontal, across, vertical, down);
 }
 
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null {
@@ -197,10 +254,10 @@ export function gridExtent(
 
 function overlaps(a: PlanRect, b: PlanRect): boolean {
   return (
-    a.x < b.x + b.width - OVERLAP_EPSILON &&
-    b.x < a.x + a.width - OVERLAP_EPSILON &&
-    a.y < b.y + b.height - OVERLAP_EPSILON &&
-    b.y < a.y + a.height - OVERLAP_EPSILON
+    a.x < b.x + b.width - EPSILON &&
+    b.x < a.x + a.width - EPSILON &&
+    a.y < b.y + b.height - EPSILON &&
+    b.y < a.y + a.height - EPSILON
   );
 }
 
@@ -234,7 +291,7 @@ function scanFree(
       const hit = boxes.find((b) => overlaps(grown, b));
       if (hit === undefined) return { x, y };
       // Every x short of a square's gap past the hit box's right edge still overlaps it.
-      x = Math.max(x + 1, Math.ceil(hit.x + hit.width + 1 - OVERLAP_EPSILON));
+      x = Math.max(x + 1, Math.ceil(hit.x + hit.width + 1 - EPSILON));
     }
   }
   return null;
