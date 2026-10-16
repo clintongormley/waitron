@@ -8130,7 +8130,7 @@ describe("mounted public department dialogs", () => {
         .textContent,
     ).toBe("This department no longer exists.");
   });
-  it("the receipt row menu navigates to its department without a picker", async () => {
+  it("the department's Receipt link navigates to its department without a picker", async () => {
     const app = await mountDepartments(
       "/manage/venue-operations",
       ["venue_service.manage", "layout.configure"],
