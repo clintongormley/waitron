@@ -32,7 +32,7 @@ export function formatViolations(violations: axe.Result[]): string {
 }
 
 // The reasons in axe's colour-contrast messages (`locales/_template.json`) counted as being about
-// the colours themselves. axe 4.13.0 never sets `fgAlpha`.
+// the colours themselves. axe 4.14.0 never sets `fgAlpha`.
 const UNDECIDED_COLOUR_READINGS = new Set(["equalRatio", "fgAlpha", "colorParse"]);
 
 function undecidedColourReadings(incomplete: axe.Result[]): string[] {

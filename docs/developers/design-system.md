@@ -3557,9 +3557,9 @@ have caught the defect it's named after.
 `*.a11y.test.ts` files. `expectNoA11yViolations` fails on a contrast violation, and on a contrast
 check axe left undecided for a reason about the colours themselves (`equalRatio`, `fgAlpha`,
 `colorParse` — text the same colour as its background is one; its helper tests show it failing;
-axe 4.13.0 never sets `fgAlpha`). A check axe left undecided for any other reason (among them an
-overlapping element, such as an empty `wt-input`, a background image or gradient, and content too
-short or not text) still passes, so contrast there is not checked. As of
+axe 4.14.0 never sets `fgAlpha`). A check axe left undecided for any other reason (among them an
+overlapping element (`bgOverlap`), an empty field such as an empty `wt-input` (`emptyValue`), a
+background image or gradient, and content too short or not text) still passes, so contrast there is not checked. As of
 this writing axe reports zero contrast violations for any `--wt-color-*`
 pairing actually used by every primitive in the table above, in either theme, across every documented state except the disabled `wt-combobox` rows below, which axe does not score (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
