@@ -183,7 +183,7 @@ screen.
    appears only when the area has slots or shifts for it that week.
 2. **Two rows of controls.** The Calendar switch stays; one bar holds `‹ week ›`, Show, then on the
    right the week's state, what needs attention and the one action. The week title keeps a fixed
-   width and links back to Staffing → Month for that month, as A722's Week title does (service-periods.md, A722 point 3).
+   width and links back to Staffing → Month for that month, as A722's Week title is to (service-periods.md, A722 point 3).
 3. **"People this week" goes.** Hours show where a choice is made — in the picker — and under each
    name in Show: Everyone. The picker opens beside the slot that was clicked, not in a side panel.
 4. **No "Add shift" in every cell.** In an area, a dashed slot is the place to fill; a shift beyond

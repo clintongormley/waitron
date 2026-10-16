@@ -2175,6 +2175,41 @@ describe("Month view", () => {
       await drawnWithoutFocus(el, release);
     });
 
+    it("forgets the month to focus when the year link's navigation is refused", async () => {
+      const { el, view, holdYears } = await monthMount(
+        "/manage/opening-hours/view/month/month/2026-03",
+      );
+      const month = await shown(view, "2026-03");
+      const guard = new NavigationGuard(window, {
+        isDirty: () => true,
+        request: async () => "kept",
+      });
+      onTestFinished(() => guard.dispose());
+      const release = holdYears();
+      yearLink(month)!.focus();
+      await userEvent.keyboard("{Enter}");
+      await el.updateComplete;
+      expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-03");
+      expect(focused()).toBe(yearLink(month));
+      guard.dispose();
+      history.pushState(null, "", "/manage/opening-hours/view/year/year/2026");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await expect.poll(() => year(el)).not.toBeNull();
+      await drawnWithoutFocus(el, release);
+    });
+
+    it("the year link pressed without focus leaves focus alone once the Year draws", async () => {
+      const { el, view, holdYears } = await monthMount(
+        "/manage/opening-hours/view/month/month/2026-03",
+      );
+      const month = await shown(view, "2026-03");
+      const release = holdYears();
+      yearLink(month)!.click();
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2026");
+      await expect.poll(() => year(el)).not.toBeNull();
+      await drawnWithoutFocus(el, release);
+    });
+
     it("leaves focus alone when Back or Forward changes the view", async () => {
       const { el, view } = await monthMount("/manage/opening-hours/view/year/year/2026");
       await expect.poll(() => year(el)?.model).toBeDefined();

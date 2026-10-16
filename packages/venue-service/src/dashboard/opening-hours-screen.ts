@@ -1135,8 +1135,8 @@ export class OpeningHoursScreen extends LitElement {
       navigation: this.navigations + 1,
       armed: false,
     };
-    // Listens from the press, not from the arming: focus that moved away and fell back to the
-    // page in between ends where it would have been had it never moved.
+    // Listens from the press, not from the arming: focus that moves away and falls back to the
+    // page before the Year's read arrives has still moved.
     if (handOff) {
       this.focusHandOff = handOff;
       document.addEventListener("focusin", this.endFocusHandOff, true);
