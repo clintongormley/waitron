@@ -677,18 +677,27 @@ you set spacing without replacing its error and folding behaviour.
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
 | `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, name, groupName, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null, `name` optional, the table's name for today, `groupName` optional, the merge's name for today, the same on every member), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
-`wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid of 12 px squares that fills its
+`wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid, initially 12 px per square, that fills its
 box and reaches at least 8 squares past the furthest table. Above and left of the plan it always
-keeps a margin of `(--wt-tap-min + --wt-space-1) × √2`, rounded up to whole squares (6 with today's
-tokens) and read from the tokens outside a drag, so a selected table's handles stay inside the grid
+keeps a margin of `(--wt-tap-min + --wt-space-1) × √2`, rounded up to whole squares and enlarged
+when zoomed out, so a selected table's handles stay inside the grid
 at x 0 and y 0, and selecting a table moves nothing. A turned table reaching past the top or left
 edge gets extra squares on top of that margin, so it can be scrolled wholly into view. Each table is a button at its true
 size and angle, so a small one is below `--wt-tap-min`; its name is drawn only when its shorter side
-is at least 28 px, and is always its accessible name, with ", Fixed" (`copy.fixed`) added for a fixed table. A
+at the original scale is at least 28 px, and is always its accessible name, with ", Fixed" (`copy.fixed`) added for a fixed table. A
 click on a table or on empty grid sends `wt-table-select`, and the parent decides by setting
 `selected`. Dragging a table, or an arrow key on a focused one, sends `wt-table-move`
 (`{ key, x, y }`) once, in whole squares, never below 0; the grid grows while a table is dragged
 right or down.
+
+On a touch screen or with a pen, tap a table to select it before dragging it. Dragging an
+unselected table or empty grid pans the view. Two fingers zoom about their moving midpoint;
+adding a second finger cancels a table edit before zooming. A mouse drags a table immediately.
+The wheel pans, and Ctrl+wheel zooms about the pointer, from half to four times the original
+12-pixel squares. Moving, resizing and turning still use the plan's grid coordinates at every
+zoom. Zooming out preserves the turn handle's `--wt-tap-min` target, its symbol, the resize handles'
+token sizes and a one-pixel grid stroke on screen; zooming in enlarges them with the plan. A mouse can also drag empty grid to pan;
+its release click clears the selection. These gestures share `Gestures` with `wt-floor-map`.
 
 The selected table's handles sit in a frame with its box and turn, so they turn with it. The turn
 arrow (`rotate-handle`, named by `copy.rotate`) is a bare `--wt-color-text` icon in a
