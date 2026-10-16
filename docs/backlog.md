@@ -343,13 +343,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   another password grant. The owner's exact 22:10 fiscal-check permission is applied, including
   the owned production-readiness fixture. Browser-session preparation, automatic Demo/Preparation,
   owned development Live and production certificate boot cases have local checks; unowned Live is
-  refused when the host offers owned setup. Full boot still has two unchanged configuration-error
-  failures, with `boot.ts` reserved by lane F's A737 branch. Real-server configuration-import checks
+  refused when the host offers owned setup. Earlier full-boot checks returned two configuration-error
+  failures; lane F's current A764 branch also changes `boot.ts`. Real-server configuration-import checks
   now cover fresh hour names/counters, both taxpayer choices, replacement refusal and restart.
   The owner's exact 2026-10-17 import-fixture permission is applied; all eight retained import
   cases pass with hour preparation. The preparation journal and bound facts scope now live in
-  provisioning, with focused checks through the shared host and the wizard. Complete wizard and
-  CLI admission remain unfinished.
+  provisioning, with focused checks through the shared host and the wizard. The provisioning command
+  now checks retained setup claims before opening the store, and checks again after opening;
+  interrupted-claim tests use the real opener and require the original directory to remain intact.
+  Complete wizard and CLI admission remain unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

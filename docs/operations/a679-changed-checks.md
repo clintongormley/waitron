@@ -353,3 +353,33 @@ Independent installed omissions of the scope, post-read scope check, replacement
 durable write, ordinary-action routing and assignment-freshness check each fail their behavioral
 assertions, then pass after restoration. The moved journal's 40 original matcher expressions and
 its non-import implementation statements match the starting commit.
+
+
+## Task 4 provisioning command before-open check, 2026-10-17
+
+The command now checks first-setup admission before opening the venue store, retaining its
+check after opening. Two new interrupted-claim cases use the real store opener. Before the fix,
+each returned `setup.attempt_invalid` but added `venue.db`, `node.db` and `venue.lock` to the
+original directory. After the fix, only the unchanged claim file remains. A positive control
+opens an unclaimed directory; another case introduces a claim during open and requires refusal
+before stamping or applying the venue, with the opened store closed.
+
+One existing resource assertion changes in `packages/provisioning/src/cli.test.ts`, in the
+parameterised “does not ignore the fixed venue claim” case: close count **1 → 0**, plus a new
+assertion that the opener was never called. The two parameter values and their domain-error,
+no-stamp and no-apply assertions remain. This is a generic CLI resource-lifecycle check using
+probe modules, not a fiscal, permission, login or money check. The hour plan's pre-open guarantee
+and interrupted provisioning-command qualification require refusing before any store exists to
+close. No other original matcher changes; no fiscal test, writer, SQL or guard changes.
+
+The eight focused provisioning files pass 217 cases; the unchanged fiscal pair passes 20 and
+four relevant root guard files pass 3,050. Types, scoped lint and source formatting pass.
+An independent installed checkout passes all 65 CLI cases. Deleting the pre-open check fails
+both directory-preservation cases; deleting the post-open check fails the during-open case.
+Each restored control and the final 65-case run pass. Receipts remain in the lane's local
+`a679-cli-lifecycle-20261017` directory. The first root invocation mistakenly selected a project
+named `root`, which this config does not declare; the corrected command ran the counted cases.
+
+This completes the command's before-open prerequisite, not Task 4. Its authenticated hour
+selection, activation and publication integration remains unfinished, along with the earlier
+recorded setup/PDF qualification. No current-head product CI, final review or landing is claimed.

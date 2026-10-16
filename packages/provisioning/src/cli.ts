@@ -377,6 +377,7 @@ async function withVenueState(
   deps: CliDeps,
   body: (target: Database) => Promise<number>,
 ): Promise<number> {
+  await assertVenueFirstSetupAllowed(venueDir);
   let store: VenueDatabase;
   try {
     store = await deps.openVenue(venueDir);
