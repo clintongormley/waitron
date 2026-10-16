@@ -70,6 +70,10 @@ async function open(el: ProductEditor) {
     await userEvent.click(fold.shadowRoot!.querySelector("button")!);
     await fold.updateComplete;
   }
+  // A moving section can carry a chip away between pointer-down and pointer-up.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const body = fold.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await Promise.all(body.getAnimations().map((animation) => animation.finished));
   const picker = el.shadowRoot!.querySelector<ProductNutritionPicker>(
     "dashboard-product-nutrition-picker",
   );
@@ -81,7 +85,8 @@ async function pick(el: ProductEditor, choice: string) {
   const picker = await open(el);
   const button = picker.shadowRoot!.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`);
   expect(button, choice).not.toBeNull();
-  await userEvent.click(button!);
+  // Exercise a press long enough for an unfinished opening animation to move the target.
+  await userEvent.click(button!, { delay: 150 });
   await el.updateComplete;
   await picker.updateComplete;
 }
