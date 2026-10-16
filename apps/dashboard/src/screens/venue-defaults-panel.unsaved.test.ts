@@ -103,7 +103,10 @@ it("Discard on leaving with a changed draft restores the saved values without a 
   await choose(app, "discard");
   expect(await request).toBe("proceeded");
   await panel.updateComplete;
-  expect(field(panel, "receiptLanguage")?.value ?? "es-ES").toBe("es-ES");
+  await expect.poll(() => viewing(panel)).toBe(true);
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-receiptLanguage]")!.textContent!.trim(),
+  ).toBe("Spanish");
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);
 });
