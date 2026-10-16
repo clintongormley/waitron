@@ -1556,7 +1556,8 @@ Owner, 2026-09-20: ship screens written in code rather than a designer venues dr
 Owner, 2026-10-08: "delete the canvases functionality. we provide prebuilt screens with
 configuration settings." Delete the designer before redesigning its default workflows. Menu
 Device Home Page and its Handheld/Till displays, receipt configuration and the floor-plan editor
-remain separate. A182 part 2 implements the retirement; part 1's redesign remains open.
+remain separate. Part 2 landed in [#1800](https://github.com/clintongormley/waitron/pull/1800) on 2026-10-16; part 1's redesign
+remains open.
 [Retirement design](../superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md) and
 [plan](../superpowers/plans/2026-10-16-a182-2-retire-canvases.md).
 

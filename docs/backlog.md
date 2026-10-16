@@ -95,8 +95,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 2. **Design the fixed screens for each kind of device** (A182 part 1, under _The till,
    devices and table service_, owner 2026-10-01). The counter redesign is A738–A740. The handheld,
-   kitchen screen and pass still need their own designs. A182 part 2 removes the screen designer;
-   new work starts from the fixed screens.
+   kitchen screen and pass still need their own designs. A182 part 2 retired the screen designer in
+   [#1800](https://github.com/clintongormley/waitron/pull/1800); new work starts from the fixed screens.
 
 3. **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
    upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
@@ -2267,7 +2267,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   printing and kitchen routing. The counter's zone dropdown goes: Counter is a tab, or a list with
   several counter zones; Floor shows only with a table zone, its floor plans as pills; ☰ → Settings
   → Zones on this device picks which of the profile's zones the device shows and where it starts.
-  The menu follows the service period and is remembered per zone within it. After A182 part 2.
+  The menu follows the service period and is remembered per zone within it.
   **Added 2026-10-16 (owner):** Floor's pills hold no counter zone (today Counter is one), and List
   and ⋮ sit on the same row as the pills.
   [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
@@ -3159,8 +3159,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Counter design and implementation remain A738–A740; the handheld, kitchen screen and pass need
-  their own designs. A737 Part 2 retains the post-invoice Refund work. A182 part 2 removes the
-  screen designer without redesigning those workflows.
+  their own designs. A737 Part 2 retains the post-invoice Refund work. The screen designer was
+  retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 
 - **What W105b left open (#1248, a disabled device coming back as itself)** — left open by A268
