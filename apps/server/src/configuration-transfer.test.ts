@@ -2534,7 +2534,17 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     ]);
     const preview = await previewMenu(tx, menu!.id);
     expect(preview.document.home.shortcuts[0]).toEqual({ kind: "empty" });
-    expect(preview.warnings).toEqual([{ kind: "shortcut_missing", name: "Missing slots › Beer" }]);
+    const [water] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.catalogueId, menu!.id), eq(products.name, "Water")));
+    expect(preview.warnings).toEqual([
+      { kind: "shortcut_missing", name: "Missing slots › Beer" },
+      {
+        kind: "allergens_unreviewed",
+        products: [{ id: water!.id, name: "Water", parentName: null }],
+      },
+    ]);
   });
 });
 

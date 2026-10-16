@@ -216,10 +216,12 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         unitPrice: null,
         available: true,
         active: true,
+        allergensInherited: true,
         effective: {
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
+          allergens: { sulphites: {} },
         },
       },
       {
@@ -231,10 +233,12 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         unitPrice: "5.50",
         available: true,
         active: true,
+        allergensInherited: false,
         effective: {
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.wines,
+          allergens: { milk: {} },
         },
       },
     ]);
@@ -253,6 +257,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
+          allergens: { sulphites: {} },
         },
       },
       {
@@ -262,6 +267,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.wines,
+          allergens: { milk: {} },
         },
       },
     ]);
