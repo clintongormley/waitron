@@ -2304,6 +2304,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   several counter zones; Floor shows only with a table zone, its floor plans as pills; ☰ → Settings
   → Zones on this device picks which of the profile's zones the device shows and where it starts.
   The menu follows the service period and is remembered per zone within it.
+  [Implementation plan](superpowers/plans/2026-10-16-a740-zones-on-device.md) records the device-selection migration and tests; implementation remains open.
   **Added 2026-10-16 (owner):** Floor's pills hold no counter zone (today Counter is one), and List
   and ⋮ sit on the same row as the pills.
   [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
