@@ -1450,7 +1450,6 @@ describe("startServer, against a migrated venue directory", () => {
     const venue = await freshVenue();
     const check = venue.store.venue;
     try {
-      const initialOperations = await initialSetupInput(stateDir, provisionVenueBody("60000009R"));
       await withMockedKill(async (kills) => {
         const server = await startServer({
           WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
@@ -1473,7 +1472,6 @@ describe("startServer, against a migrated venue directory", () => {
           const body = {
             mode: "demo",
             venue: provisionVenueBody("60000009R"),
-            initialOperations,
           };
           const response = await fetch(`https://127.0.0.1:${port}/setup-api/provision`, {
             ...via,

@@ -24,6 +24,7 @@ import { request, PASSWORD, MODULE } from "./first-fiscal.js";
 export const publicDigest = (value: unknown) =>
   createHash("sha256").update(declaredHistoryBytes(value)).digest("hex");
 export async function declaredFirstFiscalFixture(options?: {
+  environment?: FirstSetupFrozen["environment"];
   modules?: readonly WaitronModule[];
   serials?: readonly number[];
   workspace?: { root: string; stateDir: string; venueDir: string };
@@ -70,7 +71,10 @@ export async function declaredFirstFiscalFixture(options?: {
     };
     const owner = createFirstSetupOwner(ownerOptions),
       nonce = randomBytes(32).toString("base64url");
-    const claim = await owner.claimFirstSetup({ environment: "production", request }, nonce);
+    const claim = await owner.claimFirstSetup(
+      { environment: options?.environment ?? "production", request },
+      nonce,
+    );
     let state = (await store.read())!;
     let context = firstSetupModuleContext(state, MODULE);
     const selected = FISCAL_INITIAL_SETUP.candidates(context, { serials: options?.serials ?? [1] });

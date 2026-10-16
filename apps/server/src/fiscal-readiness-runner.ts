@@ -133,7 +133,7 @@ export async function submitFiscalReadiness(args: {
   try {
     const venue = await testVenue(db, request, modules, initial);
     const secret = args.contribution.provisioningSecret;
-    if (secret !== undefined)
+    if (secret !== undefined && (args.secret !== undefined || secret.required("preproduction")))
       await secret.seal({ db, ring: args.ring, nodeId: venue.nodeId }, args.secret);
 
     const existing = await db.execute<{ count: number }>(sql`

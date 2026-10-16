@@ -75,3 +75,37 @@ The generic candidate route now awaits preparation and gives durable writes a la
 check. Existing pure validation still runs before consuming the grant; a new route test requires
 an invalid reconfirmation to leave no hour ledger. Another new test restores an older module value
 and requires the selector to retain the newer spent hour from host revisions.
+
+
+## Hour-plan Task 4 checkpoint — 2026-10-16
+
+Existing assertion expressions stay unchanged. The Demo case in `apps/server/src/boot.test.ts`
+removes its supplied `initialOperations` fixture so it takes automatic preparation, as Task 4
+requires. Its response, stored venue, environment, membership and restart checks remain.
+The focused case first returned 400 against its retained 200 assertion, then passed with the
+automatic fixture. A TypeScript token comparison retains all 293 assertion calls in the file;
+that syntax check does not establish semantic equivalence.
+
+`apps/server/test/declared-first-fiscal.ts` gains an optional environment, defaulting to production.
+Only new cases request preproduction. Existing calls keep their former inputs. New checks use
+this fixture's current declared-paper delivery to isolate readiness admission; they do not qualify
+the unfinished hour naming or key-only PDF journey.
+
+The new certificate-free readiness route exercises the actual fiscal contribution and retained
+sample database. It records an uncertain preproduction result without credentials. Owned
+preproduction publication proceeds without an authority-acceptance receipt; production still
+requires its certificate and accepted readiness. This follows the existing ordinary setup route's
+production gate and `FiscalContribution.activationReadiness`'s production-only contract.
+
+The new disposable hour allocator has focused writer checks, but the configured default is still
+the historical allocator. An independently installed candidate switching that default reports
+13 old-check failures across five files. Lane E's 2026-10-16 18:55 question proposes the exact
+literal replacements and date fixture. That patch is not applied; it changes no golden suite,
+numeric counter expectation or root guard.
+
+The broader Task 4 run also reports the supplied-production case in
+`fiscal-readiness-first-setup.test.ts`: its unowned provision returns `setup.owner_required`
+instead of its retained success expectation. An independently installed candidate with every
+tracked file restored to Task 4 base `54405e998f492442ecf00ccf14dc1b46a4cd79f6` reproduces that
+same case and response. The fixture still needs the owned Live journey; its assertions remain.
+This is an incomplete Task 4 checkpoint, with no final branch qualification or landing claim.

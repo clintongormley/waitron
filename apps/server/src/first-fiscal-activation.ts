@@ -200,13 +200,15 @@ export async function activateFirstFiscal(
   };
   let checked: Awaited<ReturnType<typeof checkedFirstFiscalCommit>>;
   if (state.status === "consumption-intent") {
-    if (deps.assertFiscalReady === undefined)
-      throw new AppError("setup.fiscal_test_required", { module: payload.contribution.id });
-    await deps.assertFiscalReady({
-      request: req,
-      contribution: payload.contribution,
-      secret: body.aeatCert,
-    });
+    if (state.frozen.environment === "production") {
+      if (deps.assertFiscalReady === undefined)
+        throw new AppError("setup.fiscal_test_required", { module: payload.contribution.id });
+      await deps.assertFiscalReady({
+        request: req,
+        contribution: payload.contribution,
+        secret: body.aeatCert,
+      });
+    }
     try {
       await deps.provision(req, async () => {
         if (state.inputs.$publication === undefined)
