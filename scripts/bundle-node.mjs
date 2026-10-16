@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { writeBundledNpmNotices } from "./npm-bundle-notices.mjs";
+import { readBuildHourRelease } from "./generate-hour-release.mjs";
 
 /** sharp is a native addon: esbuild bundles it without complaint and the bundle then cannot load
  * (docs/developers/ci-and-gates.md, "sharp and the server bundle"). */
@@ -32,10 +33,20 @@ export function parsePairs(argv) {
   });
 }
 
-export function bundle(pairs, { run = execFileSync, writeNotices = noticeForBundle } = {}) {
+export function bundle(
+  pairs,
+  { run = execFileSync, writeNotices = noticeForBundle, release } = {},
+) {
   for (const { entry, outfile } of pairs) {
+    const args = esbuildArgs(entry, outfile);
+    if (release !== undefined) {
+      const literal = JSON.stringify(release);
+      args.push("--define:__WAITRON_HOUR_RELEASE__=__waitronHourReleaseProvenance");
+      const banner = args.findIndex((arg) => arg.startsWith("--banner:js="));
+      args[banner] += `\nconst __waitronHourReleaseProvenance = Object.freeze(${literal});`;
+    }
     // Found on PATH: each caller keeps esbuild in its devDependencies and runs this via `pnpm run`.
-    run("esbuild", esbuildArgs(entry, outfile), { stdio: "inherit" });
+    run("esbuild", args, { stdio: "inherit" });
     writeNotices(outfile);
   }
 }
@@ -54,7 +65,7 @@ function noticeForBundle(outfile) {
 /* v8 ignore start */
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    bundle(parsePairs(process.argv.slice(2)));
+    bundle(parsePairs(process.argv.slice(2)), { release: readBuildHourRelease() });
   } catch (error) {
     console.error(error.message);
     process.exitCode = typeof error.status === "number" ? error.status : 1;

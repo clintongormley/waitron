@@ -258,6 +258,17 @@ initial activation, recovery, re-registration and exact replay through the uncha
 an operation changed from restore to re-registration. This does not qualify the wizard
 or clock/history policy; those remain later tasks in the replacement plan.
 
+**Hour-plan Task 2 checkpoint, 2026-10-16:** focused clock tests compare every usable source,
+request uncertainty and UTC-hour boundaries. Confirmation is bound to the displayed observations;
+it cannot lower a release floor or admit the box's own ambiguous hour. Internet requests use
+the module's AEAT configuration and one five-second deadline, with certificate verification.
+The Node bundler embeds a pinned source commit's timestamp and generator provenance. Docker's
+Git-less build stage obtains that timestamp through a bounded fetch of the pinned commit;
+an unpinned development image carries no floor. Generator tests rebuild each declared server and
+provisioning entry with two source revisions, then run the artifacts with changed runtime settings
+and file times. These are component checks; source-mode setup, complete image/CLI qualification,
+durable selection and the wizard/recovery paths remain later tasks.
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the
