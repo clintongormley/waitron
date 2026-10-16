@@ -1568,20 +1568,18 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
   and sidebar entry go; the window lists periods by department and opens the period dialog, whose
   Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
-  column and field go until A504. After A720. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
-- **A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
-  (owner, 2026-10-15).** Clicking a day opens a floating box with its hours instead of a panel that
-  makes the page jump; drag or shift-click picks days and double-click opens the special-day editor;
-  the Staffing month follows. Points
-  1, 2, 3, 5 and 6 landed in #1765, #1770 and #1784, and point 4 in #1802; the Year | Month
-  switch goes (A759), "Seasons…" and the chips' ✎ A721's; 7 remains. [Detail](backlog/service-periods.md#a720-the-calendars-year-and-month-views-one-toolbar-a-day-box-days-picked-on-the-grid), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  column and field go until A504. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **Look at a picked, focused today in the Month.** `--wt-focus-offset` and
   `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so on
   today, picked and focused, the focus ring covers the outer half of the wider picked ring
   (`opening-hours-month.ts`). A720 Part 4's LOOK shot focus only on other days; check in both
   themes that this combination reads well. Left open by A720.
+
+- **The day box should re-place itself when its content changes.** `calendar-day-box` measures its content
+  only in `show()` and on a scroll or resize, so each host (Opening hours' `placeDayBox`, Staffing's month) must
+  wait for every pending redraw first; A720 Part 5's first version placed it one redraw early, off
+  screen. Have the box re-place itself while open whenever its own content changes. Left open by A720.
 
 - **An ignored `to` stays in the address bar.** A special-day address whose `to` is earlier than
   its date, malformed, or more than 365 days after it opens the new day on its first date alone
@@ -1608,7 +1606,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
   and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  Reached from the day box's "Open this week", with no Week button (A759). After A720. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  Reached from the day box's "Open this week", with no Week button (A759). [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
@@ -4818,7 +4816,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   replaces the Area picker and the By area | By person switch; two rows of controls; no "Add shift"
   in every cell — click an empty day for its open slots; the people panel goes; an empty week says
   why and offers the painter; one day at a time on a phone; the Staffing month's Monday rota link
-  moves into the day box (after A724). Before A586–A588.
+  goes, since its day box already offers it. Before A586–A588.
   [Detail](backlog/workforce.md#a763-the-rota-view-redesigned-one-show-menu-no-button-per-cell-an-empty-week-that-says-why), [mockups](backlog/mockups/a763-rota/)
 
 - **A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
@@ -4827,11 +4825,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   many beside it, and `[Cancel] [Delete] … [Save]`, saving only on Save.
   [Detail](backlog/workforce.md#a761-the-staffing-grid-a-drag-paints-unless-a-block-is-picked-and-a-wide-block-editor)
 
-- **A724. Staffing: reach special days and standard weeks from the month day box (owner,
-  2026-10-15).** After all of A720 lands, use its day box to open the special day's staffing or the
-  season's standard week, with no seasons or special-days row.
-  [Detail](backlog/workforce.md#a724-staffing-special-days-reached-from-the-day-box), [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png)
-
+- **Staffing's day box: each area's staff roles and times.** The box lists each area's number; the
+  mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
+  block. Decision 13 of the [A720 plan](superpowers/plans/2026-10-15-a720-calendar-year-month.md),
+  [mockup](backlog/mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
   hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
@@ -4911,10 +4908,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
   (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
   second read.
-- **A702. Opening hours' season chips may widen the page on a long season name.** The Staffing
-  month's chips grew a 390 px view to 1098 px on an 80-character unbroken name until A585-3 gave
-  them `max-width: 100%; overflow-wrap: anywhere`; `packages/venue-service/src/dashboard/season-chips.ts`
-  has no width rule either, untried at phone width. Next: try it at 390 px and wrap the same way.
+- **A702. Opening hours' season chips may widen the page on a long season name.**
+  `packages/venue-service/src/dashboard/season-chips.ts` has no width rule, untried at phone width.
+  Next: try it at 390 px and wrap it with `max-width: 100%; overflow-wrap: anywhere`.
 - **A703. Keeping a Calendar view's address words is a special case named in the app.**
   `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
   (`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself

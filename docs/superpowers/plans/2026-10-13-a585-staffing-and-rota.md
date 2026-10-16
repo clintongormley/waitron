@@ -9,6 +9,9 @@
 > Use its [Part 1 plan](2026-10-16-a724-staffing-guide-bands.md) for that work; the historical
 > A585 steps below retain their original contract. The month’s day-box work stays open.
 
+> 2026-10-16: A720 Part 5 removes the Staffing month’s season chips and legend; every day opens the
+> shared day box. See design-system.md, the Staffing view.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.

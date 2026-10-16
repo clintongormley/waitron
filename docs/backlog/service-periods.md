@@ -214,26 +214,14 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
 
 Its button goes on the Year view's season row.
 
-## A720. The Calendar's Year and Month views: one toolbar, a day box, days picked on the grid
-
-**A720 (owner, 2026-10-15).** Mockups: [Year](mockups/a718-a727-calendar-and-stations/01-year-view.png),
-[Month](mockups/a718-a727-calendar-and-stations/03-month-view.png). Files: `packages/venue-service/src/dashboard/opening-hours-screen.ts`,
-`opening-hours-year.ts`, `opening-hours-month.ts`; for point 7,
-`packages/staffing/src/dashboard/staffing-month.ts`.
-
-7. **The Staffing view's month follows**: no seasons or special-days row, and the same day box,
-   offering "Edit {special day} staffing" or "Edit {season}'s standard week" (A724).
-
-Season colours come from A721; until it lands the views keep today's tints.
-
 ## A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
 
 **A721 (owner, 2026-10-15).** Mockup: [the Seasons window](mockups/a718-a727-calendar-and-stations/02-seasons-window.png). Files:
 `packages/venue-service/src/dashboard/season-chips.ts`, the season dialog, `season-tint.ts`, and
 the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
 
-1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row
-   (A720 left it to A721), replaces the existing addressable chooser at `window/seasons` and lists every season in the order it
+1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row,
+   replaces the existing addressable chooser at `window/seasons` and lists every season in the order it
    starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
@@ -246,7 +234,7 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 ## A722. A Week view in the Calendar
 
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
-[on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png). Depends on A720.
+[on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
 
 Register the new view in venue-service's search destinations when it exists; A727 deliberately
 keeps `/view/week` out of search while it still means the old season painter.
@@ -268,7 +256,8 @@ keeps `/view/week` out of search while it still means the old season painter.
    buttons are whatever its host puts in its slot.
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
    department that sends it dishes, from each period's start to its last orders — what A725 retires
-   with the Times tab. The same reading as A724 point 2.
+   with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,
+   "Named staffing guide bands").
 
 ## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
 
@@ -361,7 +350,7 @@ Adjustment reasons tabs away, leaving Venue settings one page with no tabs.
 **A759 (owner, 2026-10-16).** Owner: "i'm not sure whether we need the Year|Month … it is now obvious
 that the month names in the annual calendar are clickable, and with the < February 2026 > we can
 just make 2026 an obvious link to get back to the annual view". Files: the Calendar toolbar in
-`packages/venue-service/src/dashboard/opening-hours-screen.ts` (A720 points 1–3, landed), and A722
+`packages/venue-service/src/dashboard/opening-hours-screen.ts`, and A722
 before it is built.
 
 1. **The Year | Month switch goes**, and A722 adds no Week button to it.
@@ -371,7 +360,7 @@ before it is built.
 3. **The "‹ title ›" has a fixed width**, so the arrows do not move as the title changes: wide
    enough for the longest month-and-year title in every interface language, with digits of equal
    width. The Week view's longer title ("28 September – 4 October 2026") takes its own fixed width.
-4. **The Staffing month follows** (A720 point 7).
+4. **The Staffing month follows** (`packages/staffing/src/dashboard/staffing-month.ts`).
 
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
@@ -392,6 +381,39 @@ not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
    bar marks a season. Today each date only carries the name in coloured text.
 
 ## Decisions and deliberate limits
+
+- **No Week button and no "Open this week" in the day box until A722 (A720, 2026-10-15).** The
+  Calendar switches between Year and Month only, and today's `/view/week` addresses still open the
+  season painter. A disabled button would do nothing. A722 adds both, and then deletes this note.
+
+- **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
+  (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.
+  A721 replaces them, and then deletes this note.
+
+- **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it
+  offers "Show {season}'s standard week", which opens the read-only painter. In Staffing a viewer's
+  box offers "Show {special day} staffing" and "Show {season}'s standard week".
+
+- **The Calendar's keys (A720, 2026-10-15).** The arrow keys move and pick one day, Shift with an
+  arrow stretches the run, Enter opens the special-day editor and Space opens the day box; for a
+  viewer both open the box. In a screen reader's reading mode Enter arrives as a click and opens the
+  box, whose special-day action opens the editor for that day; a run is picked with Shift and the
+  arrows in its focus mode.
+
+- **Picking a run on a phone (A720, 2026-10-15).** A tap picks a day and opens its box, and a finger
+  that moves at once scrolls the page. A long press starts a run, a move after it stretches the run,
+  and a lift with no move opens the editor on the day or on the run that holds it. The owner may
+  overrule this.
+
+- **A run that crosses another special day's date (A720, 2026-10-15)** opens a new special day
+  holding every date of the run, and its Save is refused for the held date
+  (`special_day.date_taken`). A double-click or long press on a held date opens that special day
+  instead.
+
+- **Staffing's month (A720, 2026-10-15)** has no Year / Month switch, since Staffing has no Year or
+  Week view, and no legend. Its day box lists each area's number of people; role names and times
+  wait for the month read to carry each block (backlog: "Staffing's day box: each area's staff
+  roles and times").
 
 - **The Calendar's day box does not add a date to an existing special day (A720, 2026-10-15).** The
   ordinary-date dialog it replaced offered that; a date is added from the special day's own editor,

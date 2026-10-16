@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -28,6 +28,17 @@ async function view(
   return el;
 }
 const root = (el: StaffingMonthView) => el.shadowRoot!;
+async function openBox(canWrite: boolean) {
+  const el = await view();
+  el.canWrite = canWrite;
+  el.canOpenRota = true;
+  await el.updateComplete;
+  root(el).querySelector<HTMLButtonElement>("td[data-date='2026-12-24'] button.day")!.click();
+  await el.updateComplete;
+  const box = root(el).querySelector("calendar-day-box")!;
+  await vi.waitFor(() => expect(box.shown).toBe(true));
+  expect(box.querySelectorAll("wt-button").length).toBeGreaterThan(0);
+}
 
 const states: Record<string, () => Promise<void>> = {
   loading: async () => {
@@ -56,7 +67,13 @@ const states: Record<string, () => Promise<void>> = {
     el.canWrite = true;
     await el.updateComplete;
     expect(root(el).querySelector("button.day")).not.toBeNull();
-    expect(root(el).querySelector("[data-test=season] button")).not.toBeNull();
+    expect(root(el).querySelector("td[data-date='2026-12-03'] button.day")).not.toBeNull();
+  },
+  "the day box, a writer": async () => {
+    await openBox(true);
+  },
+  "the day box, a viewer": async () => {
+    await openBox(false);
   },
   "a read failure": async () => {
     const el = await view(() => Promise.reject({ code: "connection.failed" }));
