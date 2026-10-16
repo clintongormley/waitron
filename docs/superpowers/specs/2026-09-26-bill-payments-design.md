@@ -775,6 +775,10 @@ A refund never runs on an invoiced bill through this path (§6, "after the invoi
 **Outside Task 14:** the reconciler's reversal, and any future post-invoice refund route, still go
 through `reverseViaStripe` as it is; a backlog item records that they should take this rule.
 
+**2026-10-16 — post-invoice extension.** [A737 Part 2](../plans/2026-10-15-a737-post-invoice-refund.md)
+adds a separate durable `tender_refunds` path for payment-only returns after an invoice. The
+reconciler reversal remains the open caller of the older reversal path.
+
 ### 6a. A reduction on a bill that already has contributions
 
 A €60.00 bill with €50.00 contributed takes a €20.00 comp; it would total €40.00 with €50.00

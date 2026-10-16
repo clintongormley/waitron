@@ -55,6 +55,10 @@ Source checks for this revision: `ReadOptions` is `{signal?:AbortSignal}` (`apps
 
 Keep joins in the server, using exported db/identity/payments schemas and `VENUE_SERVICE` from `apps/server/src/modules.ts`; no reporting/db/venue-service dependency on payments and no server imports in the till.
 
+**2026-10-16 — Part 2 extension.** The [separate refund plan](2026-10-15-a737-post-invoice-refund.md#task-4-actual-refund-rows-and-separate-payment-acknowledgments)
+adds the refund transaction type, nullable refund identity, separate acknowledgment and durable
+payment-only refund action. The interfaces and completed checklist below record Part 1's scope.
+
 ## Task 1: Pin the wire contract, date windows and zone expression
 
 **Files:** Create the three contract/date/query server files and `apps/till/src/api/find-bill-types.ts`; modify the three contribution files in the map. Test: new `find-bill-dates.test.ts`, `find-bill-query.test.ts`; extend `packages/venue-service/src/operations.test.ts`, `service.test.ts`.

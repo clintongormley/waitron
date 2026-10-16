@@ -2618,7 +2618,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Counter design and implementation remain A738–A740; the handheld, kitchen screen and pass need
-  their own designs. A737 Part 2 retains the post-invoice Refund work. The screen designer was
+  their own designs. A737 Part 2 adds the separate
+  durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
 

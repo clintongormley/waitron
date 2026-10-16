@@ -1821,7 +1821,7 @@ are.
 
 Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
 ☰, with Back to the counter (board 4). [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778) covers the page, lists and receipt printing; the
-post-invoice Refund action remains Part 2. The approved page contract is:
+post-invoice Refund action belongs to Part 2. The approved page contract is:
 
 - **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
   total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
@@ -1846,6 +1846,11 @@ post-invoice Refund action remains Part 2. The approved page contract is:
 The move moves the bill's revision on, open or presented, without `bumpRevision`'s refusal of
 money in flight, since a move changes no amount (plan P19). Stated at its site in
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
+
+**2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
+with the original invoice reference, Reprint and access to the original invoice. Refund is offered
+from the original invoice while supported money remains. The durable attempt and recovery contract
+is in the [Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
