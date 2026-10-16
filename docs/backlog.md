@@ -1967,61 +1967,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A737 Part 2 — refund a paid sale after its invoice (owner, 2026-10-15; open).**
-  In progress on `feat/a737-post-invoice-refund`: guarded storage, refundable-balance reads and
-  internal reservation, authorization and drawer-audit helpers. The local command
-  completes confirmed cash/manual returns with attendance and cash-only drawer auditing. The
-  connected command commits send evidence, keeps one attempt key and resolves
-  provider outcomes with bounded responses and ownership through late settlement. Recovery now
-  scans due connected returns in stable batches of 50, persists lookup backoff and raises an alert
-  after an hour unresolved. Shutdown gives active provider resolutions two seconds to finish,
-  then logs unresolved ids and leaves pending attempts for restart recovery.
-  Till APIs now expose scoped refundable-money reads, creation, status and same-attempt retry;
-  their reads remain available to admitted staff who need a PIN approval to refund.
-  Management APIs now list unresolved connected returns for this location and resolve them from
-  provider evidence; a manager can record a provider-confirmed outcome with their own PIN and note.
-  Operational reporting now subtracts completed returns on their completion business day,
-  recorded device/source and node, including returned tips. The reporting cases keep prior
-  closes frozen and the original invoice's VAT and counts unchanged. Typed browser clients and
-  the Payments screen's post-invoice recovery section now show the original invoice/provider
-  reference and offer scoped provider checks or a manager's PIN-and-note confirmation.
-  The standalone till refund form now covers original tender selection, amounts, reason, handover
-  confirmation and pending outcomes. A device/person-scoped browser journal retains the same
-  non-secret request across lost answers and reopen, and uses status or same-attempt retry after
-  learning the refund id. The historical receipt now opens this form, sends an authorized
-  operator's request first and asks for an approver's PIN when required. Manual-terminal returns
-  always ask for a PIN. You can reopen an unknown attempt, check a pending return or retry its
-  existing identity. With browser storage available, logout clears this person's local request
-  metadata; an ordinary reload
-  retains it, and an authorized return to the receipt can discover a server-side pending refund.
-  Completion closes the form before refreshing balances and keeps the invoice, basket and
-  Transactions query/page. The server Transactions source now includes completed refund rows
-  with their own identity, completion date and negative payment-plus-tip amount. Scoped read and
-  reprint adapters provide a separate payment acknowledgment with the original invoice reference;
-  document jobs retain a copy-request audit without entering invoice delivery or opening a drawer.
-  Typed browser clients expose those adapters. The till's refund-row navigation, acknowledgment
-  screen and its reprint controls remain, followed by final integration, the two required
-  whole-branch reviews and delivery gates.
-  Add Refund to the transaction receipt for returning a correct charge, without changing its
-  invoice. The page, lists and receipt printing are [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778).
-  [Detail](backlog/till.md#a737-part-2-refund-a-paid-sale-after-its-invoice),
-  [plan](superpowers/plans/2026-10-15-a737-post-invoice-refund.md)
-
-- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
-  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands. The owner has requested
-  answers to [six illustrated choices](backlog/mockups/a773-1-open-points/README.md) before
-  the affected A773-1 tasks continue; the plan's defaults are not approved.
-  [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
-  [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [mockups](backlog/mockups/a773-courses-and-groups/)
-
-- **Later, after A773: a station waits for another station's part of a group (owner,
-  2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
-  rather than when the waiter fires the group. A773 starts both parts together and marks the bar's
-  part "Goes with kitchen food". Try it once a venue has run with that.
-  [Spec §5](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
-
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
   and Kitchen only under Testing. After A668's data shape. How a later addition to a table is
@@ -3351,9 +3296,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Product decision to take before production:** The orphan drift gate holds a customer's money
   pending a human, unbounded — nothing re-sweeps a closed period.
 
-- **The card refund path records only after the provider call, with a fresh key each time.** **Next
-  action:** give the reconciler's reversal, and any post-invoice refund route when one is built, the
-  same durable-attempt rule. Left open by the service, ordering and billing plan.
+- **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
+  action:** give the reconciler's reversal the same durable-attempt rule.
+  Post-invoice returns use the durable `tender_refunds` path (A737 Part 2). The reversal remains
+  open from the service, ordering and billing plan.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
 - **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**

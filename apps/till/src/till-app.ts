@@ -92,6 +92,7 @@ import "./widgets/attendance-day-dialog.js";
 import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
+import "./screens/till-refund-acknowledgment.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import type { FloorRefreshDetail } from "./screens/till-floor-screen.js";
@@ -165,6 +166,7 @@ import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 import type {
   RefundableTender,
   TenderRefundView,
+  TenderRefundAcknowledgment,
   TenderRefundRequest,
 } from "./api/tender-refund-types.js";
 import {
@@ -2253,11 +2255,18 @@ export class TillApp extends LitElement {
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
   #findBillRead?: AbortController;
-  @state() private historicalReceipt: {
-    saleId: string;
-    workingOrderId: string | null;
-    returnTo: "find-bill";
-  } | null = null;
+  @state() private historicalReceipt:
+    | { kind: "invoice"; saleId: string; workingOrderId: string | null; returnTo: "find-bill" }
+    | {
+        kind: "refund";
+        refundId: string;
+        saleId: string;
+        acknowledgment: TenderRefundAcknowledgment;
+        returnTo: "find-bill";
+      }
+    | null = null;
+  @state() private refundPrintBusy = false;
+  #refundPrint?: object;
   readonly #tenderRefundAttempts = new TenderRefundAttempts();
   #tenderRefundScope?: TenderRefundScope;
   #tenderRefundSession?: TenderRefundSession;
@@ -2428,6 +2437,7 @@ export class TillApp extends LitElement {
     workingOrderId: string;
     filedLanguage?: string;
     transaction?: boolean;
+    refundId?: string;
   } | null = null;
   @state() private formFactor?: FormFactor;
   @state() private capabilities: CapabilityFlag[] = [];
@@ -2750,6 +2760,10 @@ export class TillApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) {
+      this.#cancelFindBillRead();
+      this.#refundPrint = undefined;
+      this.refundPrintBusy = false;
+      if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
       this.#closeTenderRefund();
       if (this.#tenderRefundScope !== undefined)
         this.#tenderRefundSession = new TenderRefundSession(
@@ -5847,44 +5861,95 @@ export class TillApp extends LitElement {
   }
 
   async #onFindTransactionOpen(event: CustomEvent<{ row: TransactionRow }>): Promise<void> {
-    if (this.drill?.kind !== "find-bill" || this.findBillBusy) return;
+    if (this.drill?.kind !== "find-bill") return;
+    const row = event.detail.row;
+    await this.#openHistoricalReceipt({
+      saleId: row.saleId,
+      workingOrderId: row.workingOrderId,
+      refundId: row.type === "refund" ? row.refundId : null,
+    });
+  }
+
+  async #openHistoricalReceipt(row: {
+    saleId: string;
+    workingOrderId: string | null;
+    refundId: string | null;
+  }): Promise<void> {
+    if (this.findBillBusy) return;
     this.#cancelFindBillRead();
     const controller = (this.#findBillRead = new AbortController());
     const session = this.#operatorSession;
+    const api = this.api;
     const visit = this.#invoiceRecoveryVisit;
+    const origin = this.historicalReceipt;
     const current = () =>
       this.isConnected &&
-      this.drill?.kind === "find-bill" &&
+      (this.drill?.kind === "find-bill" ||
+        (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
+      api === this.api &&
       session === this.#operatorSession &&
       visit === this.#invoiceRecoveryVisit;
     this.findBillBusy = true;
     this.errorKey = undefined;
-    const { saleId, workingOrderId } = event.detail.row;
+    const { saleId, workingOrderId, refundId } = row;
     try {
-      const result = await this.api.getTransactionReceipt(saleId, { signal: controller.signal });
-      if (!current()) return;
-      this.result = result;
-      if (workingOrderId !== null) this.#showTicket(workingOrderId, false);
-      else {
+      if (refundId !== null) {
+        const acknowledgment = await api.getTenderRefundAcknowledgment(refundId, {
+          signal: controller.signal,
+        });
+        if (!current()) return;
         this.ticketWorkingOrderId = undefined;
         this.originalReceiptAvailable = false;
         this.#receiptPrintVisit++;
         this.#stopDeliveryReread();
+        this.historicalReceipt = {
+          kind: "refund",
+          refundId,
+          saleId,
+          acknowledgment,
+          returnTo: "find-bill",
+        };
+      } else {
+        const result = await api.getTransactionReceipt(saleId, { signal: controller.signal });
+        if (!current()) return;
+        this.result = result;
+        if (workingOrderId !== null) this.#showTicket(workingOrderId, false);
+        else {
+          this.ticketWorkingOrderId = undefined;
+          this.originalReceiptAvailable = false;
+          this.#receiptPrintVisit++;
+          this.#stopDeliveryReread();
+        }
+        this.historicalReceipt = { kind: "invoice", saleId, workingOrderId, returnTo: "find-bill" };
       }
-      this.historicalReceipt = { saleId, workingOrderId, returnTo: "find-bill" };
       this.refundableTenders = [];
+      this.#refundPrint = undefined;
+      this.refundPrintBusy = false;
       this.#pushDrill({ kind: "ticket" });
-      void this.#readRefundableTenders();
+      if (refundId === null) void this.#readRefundableTenders();
     } catch {
-      if (current()) this.errorKey = "find_bill.invoice_load_failed";
+      if (current())
+        this.errorKey =
+          refundId === null ? "find_bill.invoice_load_failed" : "refund_ack.load_failed";
     } finally {
       if (visit === this.#invoiceRecoveryVisit && session === this.#operatorSession)
         this.findBillBusy = false;
     }
   }
 
+  async #openRefundOriginal(): Promise<void> {
+    const receipt = this.historicalReceipt;
+    if (receipt?.kind !== "refund" || this.drill?.kind !== "ticket" || this.refundPrintBusy) return;
+    await this.#openHistoricalReceipt({
+      saleId: receipt.saleId,
+      workingOrderId: null,
+      refundId: null,
+    });
+  }
+
   #hasRefundableTenders(): boolean {
-    if (this.historicalReceipt === null || this.#tenderRefundSession === undefined) return false;
+    if (this.historicalReceipt?.kind !== "invoice" || this.#tenderRefundSession === undefined)
+      return false;
     try {
       if (this.#tenderRefundSession.read(this.historicalReceipt.saleId) !== null) return true;
     } catch {
@@ -5900,7 +5965,7 @@ export class TillApp extends LitElement {
 
   async #readRefundableTenders(afterRefund = false): Promise<void> {
     const receipt = this.historicalReceipt;
-    if (receipt === null) return;
+    if (receipt?.kind !== "invoice") return;
     const session = this.#operatorSession;
     const api = this.api;
     const read = ++this.#tenderRefundRead;
@@ -5944,7 +6009,7 @@ export class TillApp extends LitElement {
     if (
       !this.isConnected ||
       this.drill?.kind !== "ticket" ||
-      !receipt ||
+      receipt?.kind !== "invoice" ||
       !session ||
       this.tenderRefunding ||
       !this.#hasRefundableTenders()
@@ -6175,6 +6240,8 @@ export class TillApp extends LitElement {
     if (this.historicalReceipt === null) return;
     this.#cancelFindBillRead();
     this.historicalReceipt = null;
+    this.#refundPrint = undefined;
+    this.refundPrintBusy = false;
     this.#closeTenderRefund();
     this.refundableTenders = [];
     this.reprintAsking = null;
@@ -6763,6 +6830,16 @@ export class TillApp extends LitElement {
    * another, which the counter store cannot identify.
    */
   async #onReprint(): Promise<void> {
+    if (this.historicalReceipt?.kind === "refund") {
+      if (this.refundPrintBusy || this.findBillBusy || this.reprintAsking !== null) return;
+      if (this.receiptLanguages.length > 1)
+        this.reprintAsking = {
+          workingOrderId: this.historicalReceipt.saleId,
+          refundId: this.historicalReceipt.refundId,
+        };
+      else await this.#sendRefundReprint(this.historicalReceipt.refundId);
+      return;
+    }
     if (this.historicalReceipt !== null) {
       await this.#reprint(this.historicalReceipt.saleId, this.result?.locale, true);
       return;
@@ -6810,8 +6887,44 @@ export class TillApp extends LitElement {
   async #onReprintLanguage(event: CustomEvent<ReprintLanguageDetail>): Promise<void> {
     const asking = this.reprintAsking;
     this.reprintAsking = null;
-    if (asking !== null)
+    if (asking?.refundId !== undefined) {
+      if (
+        this.historicalReceipt?.kind === "refund" &&
+        this.historicalReceipt.refundId === asking.refundId &&
+        this.receiptLanguages.includes(event.detail.language)
+      )
+        await this.#sendRefundReprint(asking.refundId, event.detail.language);
+    } else if (asking !== null)
       await this.#sendReprint(asking.workingOrderId, event.detail.language, asking.transaction);
+  }
+
+  async #sendRefundReprint(refundId: string, language?: string): Promise<void> {
+    const receipt = this.historicalReceipt;
+    if (
+      receipt?.kind !== "refund" ||
+      receipt.refundId !== refundId ||
+      this.refundPrintBusy ||
+      this.drill?.kind !== "ticket"
+    )
+      return;
+    const operation = (this.#refundPrint = {});
+    const api = this.api,
+      session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      this.api === api &&
+      session === this.#operatorSession &&
+      this.historicalReceipt === receipt &&
+      this.#refundPrint === operation;
+    this.refundPrintBusy = true;
+    this.errorKey = undefined;
+    try {
+      await api.reprintTenderRefund(refundId, language);
+    } catch {
+      if (current()) this.errorKey = "reprint.error";
+    } finally {
+      if (current()) this.refundPrintBusy = false;
+    }
   }
 
   /** The languages a copy may print in: the offered ones, and the sale's own when it is not one. */
@@ -11930,11 +12043,23 @@ export class TillApp extends LitElement {
         ></till-table-order-screen>`;
       }
       case "ticket":
+        if (this.historicalReceipt?.kind === "refund")
+          return html`<till-refund-acknowledgment
+            slot="drill"
+            .acknowledgment=${this.historicalReceipt.acknowledgment}
+            .busy=${this.findBillBusy || this.refundPrintBusy}
+            .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
+            @refund-original=${(event: Event) => {
+              event.stopPropagation();
+              void this.#openRefundOriginal();
+            }}
+            @back-to-find-bill=${() => this.#backToFindBill()}
+          ></till-refund-acknowledgment>`;
         return html`<till-ticket-view
           .refundable=${this.#hasRefundableTenders()}
           @tender-refund-open=${() => this.#openTenderRefund()}
           .historical=${this.historicalReceipt !== null}
-          .historicalDelivery=${this.historicalReceipt?.workingOrderId != null}
+          .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.historicalReceipt.workingOrderId != null}
           @back-to-find-bill=${() => this.#requestLeave(() => this.#backToFindBill())}
           slot="drill"
           .result=${this.result}

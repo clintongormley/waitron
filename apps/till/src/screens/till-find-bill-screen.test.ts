@@ -673,3 +673,42 @@ it.each([
     expect(grid.serverPaging?.total).toBe(1);
   },
 );
+
+it("filters actual completed refund rows without changing their identity, sign or original invoice", async () => {
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage()
+          : {
+              ...listPage([
+                transactionRow({
+                  transactionId: "refund:refund-1",
+                  refundId: "refund-1",
+                  type: "refund",
+                  amount: "-13.75",
+                }),
+              ]),
+              dates: resolvedDates,
+            },
+    ),
+  );
+  const { el, fetcher } = await mount(source);
+  await ready(el);
+  await switchTab(el, "transactions");
+  const grid = await ready(el, "transactions");
+  expect(grid.columns.find((c) => c.key === "type")!.filter!.options).toContainEqual({
+    value: "refund",
+    label: "Refund",
+  });
+  grid.chooseFilter("type", ["refund"]);
+  await vi.waitFor(() =>
+    expect(requests(fetcher, "/api/transactions").at(-1)?.searchParams.get("type")).toBe("refund"),
+  );
+  await vi.waitFor(() => expect(grid.loading).toBe(false));
+  expect(grid.shadowRoot!.querySelector('[data-row-key="refund:refund-1"]')!.textContent).toContain(
+    "F/0012",
+  );
+  expect(grid.shadowRoot!.textContent).toContain("-€13.75");
+});

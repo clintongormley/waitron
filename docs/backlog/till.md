@@ -1878,20 +1878,6 @@ the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading.
 the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
 order off a short screen.
 
-### A737 Part 2. Refund a paid sale after its invoice
-
-Add Refund to the transaction receipt for returning money when the original charge was right.
-The invoice keeps its original fiscal record. A wrong charge still needs the separate correction
-workflow and is outside this item.
-
-Before calling a card provider, store the attempt with one stable idempotency key. Resume an
-interrupted attempt as the [bill-payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)
-§6b describes. Keep the existing permission and manager-PIN checks, manual-terminal confirmation
-and cash-drawer rule. Close only the post-invoice half of the
-[durable-refund follow-up](payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time);
-the reconciler's reversal remains separate. Follow the
-[Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
-
 ### A738. The counter screen: fewer distractions
 
 Board 1 is the target; board 2 the windows.

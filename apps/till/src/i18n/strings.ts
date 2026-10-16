@@ -2,6 +2,17 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "refund_ack.title": "Payment refund acknowledgment",
+  "refund_ack.reference": "Refund reference",
+  "refund_ack.invoice": "Original invoice",
+  "refund_ack.date": "Returned at",
+  "refund_ack.applied": "Payment returned",
+  "refund_ack.tip": "Tip returned",
+  "refund_ack.total": "Total returned",
+  "refund_ack.original": "Open original invoice",
+  "refund_ack.load_failed": "The refund acknowledgment could not be opened. Try again.",
+  "find_page.refund": "Refund",
+
   "tender_refund.title": "Refund a payment",
   "tender_refund.refresh_failed":
     "The refund was recorded, but the payment balances could not be refreshed. Reopen the receipt to check them.",
@@ -1536,6 +1547,16 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "refund_ack.title": "Justificante de devolución del pago",
+  "refund_ack.reference": "Referencia de la devolución",
+  "refund_ack.invoice": "Factura original",
+  "refund_ack.date": "Fecha de devolución",
+  "refund_ack.applied": "Pago devuelto",
+  "refund_ack.tip": "Propina devuelta",
+  "refund_ack.total": "Total devuelto",
+  "refund_ack.original": "Abrir factura original",
+  "refund_ack.load_failed": "No se pudo abrir el justificante de devolución. Inténtalo de nuevo.",
+  "find_page.refund": "Devolución",
   "tender_refund.title": "Devolver un pago",
   "tender_refund.refresh_failed":
     "La devolución se ha registrado, pero no se han podido actualizar los saldos. Vuelve a abrir el recibo para consultarlos.",

@@ -20728,6 +20728,222 @@ describe("A737 Find a bill page", () => {
     expect(getTransactionReceipt.mock.calls[1]![0]).toBe("sale-2");
   });
 
+  const refundRow = () =>
+    transactionRow({
+      transactionId: "refund:refund-1",
+      type: "refund",
+      refundId: "refund-1",
+      amount: "-13.75",
+    });
+  const acknowledgment = {
+    refund: {
+      id: "refund-1",
+      saleId: "sale-1",
+      tenderId: "tender-1",
+      state: "completed",
+      appliedAmount: "12.50",
+      tipAmount: "1.25",
+      createdAt: "2026-10-16T10:00:00Z",
+      completedAt: "2026-10-16T10:01:00Z",
+    },
+    invoiceNumber: "F/0012",
+    issuer: { venueName: "Original issuer", nif: "61000002T" },
+    customerName: null,
+    method: "card",
+    last4: "0091",
+  };
+  const refundView = (el: TillApp) => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+  it("opens a refund as its own payment acknowledgment, with no invoice reads or refund-on-refund", async () => {
+    const getTenderRefundAcknowledgment = vi.fn().mockResolvedValue(acknowledgment);
+    const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult),
+      getRefundableTenders = vi.fn().mockResolvedValue([]);
+    const { el, counter, view } = await open({
+      getTenderRefundAcknowledgment,
+      getTransactionReceipt,
+      getRefundableTenders,
+    });
+    counter.store.addProduct(cafe, "2");
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    expect(getTenderRefundAcknowledgment.mock.calls[0]![0]).toBe("refund-1");
+    expect(getTransactionReceipt).not.toHaveBeenCalled();
+    expect(getRefundableTenders).not.toHaveBeenCalled();
+    expect(ticket(el)).toBeNull();
+    emit(refundView(el)!, "tender-refund-open");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    emit(refundView(el)!, "back-to-find-bill");
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+    expect(counter.store.lines[0]!.quantity).toBe("2");
+  });
+  it("opens the refund's original fiscal receipt through its sale identity and leaves its filed totals unchanged", async () => {
+    const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult);
+    const { el, view } = await open({
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      getTransactionReceipt,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    emit(refundView(el)!, "refund-original");
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    expect(getTransactionReceipt.mock.calls[0]![0]).toBe("sale-1");
+    expect(ticket(el)!.result).toEqual(saleResult);
+    expect(refundView(el)).toBeNull();
+    emit(ticket(el)!, "back-to-find-bill");
+    await flush(el);
+    expect(pageOf(el)).toBe(view);
+  });
+  it.each(["back", "api", "detach", "logout"])(
+    "ignores a refund acknowledgment that answers after %s",
+    async (departure) => {
+      let answer!: (value: unknown) => void;
+      const getTenderRefundAcknowledgment = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el, view } = await open({ getTenderRefundAcknowledgment });
+      emit(view, "find-transaction-open", { row: refundRow() });
+      await vi.waitFor(() => expect(getTenderRefundAcknowledgment).toHaveBeenCalledOnce());
+      if (departure === "back") emit(view, "find-bill-back");
+      else if (departure === "api") el.api = { ...el.api } as unknown as TillApi;
+      else if (departure === "detach") el.remove();
+      else emit(shell(el)!, "logout");
+      await flush(el);
+      answer(acknowledgment);
+      await flush(el);
+      await new Promise(requestAnimationFrame);
+      await flush(el);
+      expect(refundView(el)).toBeNull();
+      expect(ticket(el)).toBeNull();
+    },
+  );
+  it("reprints the acknowledgment with its refund identity and chosen language, never an invoice", async () => {
+    const reprintTenderRefund = vi.fn().mockResolvedValue(undefined),
+      reprintTransaction = vi.fn(),
+      reprint = vi.fn();
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES", "ca-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund,
+      reprintTransaction,
+      reprint,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    emit(refundView(el)!, "reprint");
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    expect(chooser).not.toBeNull();
+    emit(chooser, "reprint-language-confirm", { language: "ca-ES" });
+    await vi.waitFor(() =>
+      expect(reprintTenderRefund).toHaveBeenCalledExactlyOnceWith("refund-1", "ca-ES"),
+    );
+    expect(reprintTransaction).not.toHaveBeenCalled();
+    expect(reprint).not.toHaveBeenCalled();
+  });
+  it("keeps a refund load failure on the list and lets the same row be retried", async () => {
+    const getTenderRefundAcknowledgment = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(acknowledgment);
+    const { el, view } = await open({ getTenderRefundAcknowledgment });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(t("refund_ack.load_failed")),
+    );
+    expect(pageOf(el)).toBe(view);
+    expect(refundView(el)).toBeNull();
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+  });
+
+  it("an API replacement releases the old refund read so a new context can open the same row", async () => {
+    let answer!: (value: unknown) => void;
+    const oldRead = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el, view } = await open({ getTenderRefundAcknowledgment: oldRead });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(oldRead).toHaveBeenCalledOnce());
+    const nextRead = vi.fn().mockResolvedValue(acknowledgment);
+    el.api = { ...el.api, getTenderRefundAcknowledgment: nextRead } as unknown as TillApi;
+    await flush(el);
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    expect(nextRead).toHaveBeenCalledOnce();
+    answer({ ...acknowledgment, invoiceNumber: "OLD CONTEXT" });
+    await flush(el);
+    await new Promise(requestAnimationFrame);
+    await flush(el);
+    expect(refundView(el)!.acknowledgment.invoiceNumber).toBe("F/0012");
+  });
+  it("a refund print is sent once while busy and its late refusal cannot replace a new visit's error", async () => {
+    let refuse!: (error: unknown) => void;
+    const reprintTenderRefund = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const old = refundView(el)!;
+    emit(old, "reprint");
+    emit(old, "reprint");
+    await flush(el);
+    expect(reprintTenderRefund).toHaveBeenCalledExactlyOnceWith("refund-1", undefined);
+    expect(old.busy).toBe(true);
+    emit(old, "back-to-find-bill");
+    await flush(el);
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    refuse(new Error("late offline"));
+    await flush(el);
+    await new Promise(requestAnimationFrame);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(".error[role=alert]")).toBeNull();
+    expect(refundView(el)!.busy).toBe(false);
+  });
+  it("Back cancels an original-invoice read from a refund and a late invoice cannot replace Transactions", async () => {
+    let answer!: (value: TillSaleResult) => void;
+    const getTransactionReceipt = vi.fn<TillApi["getTransactionReceipt"]>(
+      () =>
+        new Promise<TillSaleResult>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el, view } = await open({
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      getTransactionReceipt,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const old = refundView(el)!;
+    emit(old, "refund-original");
+    await vi.waitFor(() => expect(getTransactionReceipt).toHaveBeenCalledOnce());
+    emit(old, "back-to-find-bill");
+    await flush(el);
+    expect(getTransactionReceipt.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    answer(saleResult);
+    await flush(el);
+    await new Promise(requestAnimationFrame);
+    await flush(el);
+    expect(ticket(el)).toBeNull();
+    expect(refundView(el)).toBeNull();
+    expect(pageOf(el)).toBe(view);
+  });
+
   it("freshens a bill by ID before showing the selected unpaid-invoice collector", async () => {
     let resolve!: (value: ReturnType<typeof billRow>) => void;
     const getFindBill = vi.fn<TillApi["getFindBill"]>(
