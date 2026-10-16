@@ -9,6 +9,7 @@ const CROP_MARGIN = 2;
 const EXTENT_MARGIN = 8;
 const FREE_SPOT_COLUMNS = 40;
 const OVERLAP_EPSILON = 1e-9;
+const EDGE_EPSILON = 1e-9;
 
 export type PlanShape = "rect" | "round";
 
@@ -60,6 +61,23 @@ export function rotatedRect(p: PlanPlacement): PlanRect {
   return { x: centreX - width / 2, y: centreY - height / 2, width, height };
 }
 
+/**
+ * `p` moved right and down by the fewest whole squares that put x and y at 0 or more and its drawn
+ * outline's left and top at or past the floor: 0, or, where the drawn outline at `from` already
+ * poked out past the edge, how far it poked out there.
+ */
+export function stepInside(p: PlanPlacement, from: PlanPlacement = p): PlanPlacement {
+  const start = rotatedRect(from);
+  const drawn = rotatedRect(p);
+  const step = (floor: number, edge: number) =>
+    Math.max(0, Math.ceil(Math.min(0, floor) - edge - EDGE_EPSILON));
+  return {
+    ...p,
+    x: Math.max(0, p.x + step(start.x, drawn.x)),
+    y: Math.max(0, p.y + step(start.y, drawn.y)),
+  };
+}
+
 export type PlanSide = "top" | "right" | "bottom" | "left";
 
 const SIZE_MIN = 1;
@@ -101,20 +119,30 @@ function roundShift(squares: number): number {
 
 /**
  * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
- * side's midpoint's x and y each within half a square of where it is drawn. The size stays 1–99;
- * at the grid's edge a growth stops where x and y fit, and a shrink lets the opposite side move
- * instead.
+ * side's midpoint's x and y each within half a square of where it is drawn; where that would put
+ * the table past the plan's top or left edge, or x or y below 0, the table steps right or down by
+ * the fewest whole squares that keep it inside, or no further past the edge than `p` already is
+ * (`stepInside`). The size stays 1–99 and x and y at 999 or less. A growth whose exact placement
+ * would cross that line stops at the largest that does not; a shrink is always taken.
  */
 export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
   const across = side === "left" || side === "right" ? "width" : "height";
   const wanted = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares)) - p[across];
   const out = outward(side, p.rotation);
+  const start = rotatedRect(p);
   for (let growth = wanted; growth !== 0; growth -= Math.sign(growth)) {
     const grown = across === "width" ? { width: p.width + growth } : { height: p.height + growth };
-    const x = p.x + roundShift((out.x * growth) / 2 - (across === "width" ? growth / 2 : 0));
-    const y = p.y + roundShift((out.y * growth) / 2 - (across === "height" ? growth / 2 : 0));
-    if (growth < 0 || (x === clampToGrid(x) && y === clampToGrid(y)))
-      return { ...p, ...grown, x: clampToGrid(x), y: clampToGrid(y) };
+    const shiftX = (out.x * growth) / 2 - (across === "width" ? growth / 2 : 0);
+    const shiftY = (out.y * growth) / 2 - (across === "height" ? growth / 2 : 0);
+    const x = p.x + roundShift(shiftX);
+    const y = p.y + roundShift(shiftY);
+    if (growth < 0)
+      return stepInside({ ...p, ...grown, x: Math.min(GRID_MAX, x), y: Math.min(GRID_MAX, y) }, p);
+    const ideal = rotatedRect({ ...p, ...grown, x: p.x + shiftX, y: p.y + shiftY });
+    const crosses =
+      ideal.x < Math.min(0, start.x) - EDGE_EPSILON ||
+      ideal.y < Math.min(0, start.y) - EDGE_EPSILON;
+    if (!crosses && x <= GRID_MAX && y <= GRID_MAX) return stepInside({ ...p, ...grown, x, y }, p);
   }
   return p;
 }
