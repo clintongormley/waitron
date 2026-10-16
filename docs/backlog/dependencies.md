@@ -10,8 +10,6 @@ their full text.
 - **#1181 (stripe 22.6.2 → 23.0.0, a major)** is lane F's A776: `packages/payments-stripe` is
   mid-change there. Map each breaking change to its call sites; test through the real client as well
   as a fake (CLAUDE.md §4). Payments: full review path.
-- **#1299 and #1423 (sharp 0.35.5 alone)** are superseded by #1760, which carries sharp 0.35.5, and are
-  closed when it lands.
 - **axe-core 4.13 → 4.14 — held back in #1760 (A775, 2026-10-16).** 4.14.0's changelog: "**label-content-name-mismatch:** Enable rule by default (#5421)" — in 4.13.0 the
   rule carried the `experimental` tag, which axe skips by default. On #1760's CI (run 38956342330)
   it failed every package with accessibility tests that ran, except ui-core, whose only failure was

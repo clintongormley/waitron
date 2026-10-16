@@ -5590,8 +5590,7 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   mutation first (the entry below, _A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it_).
 
 - **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner); #1181 (stripe 23, a
-  major) is lane F's A776; #1299 and #1423 (sharp 0.35.5 alone) are superseded by #1760 and are
-  closed when it lands. **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
+  major) is lane F's A776. **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
   accessibility rule our screens fail, so it moves in its own PR with the fixes (A775).
   [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
 
