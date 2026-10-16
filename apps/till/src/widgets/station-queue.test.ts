@@ -18,6 +18,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 // One item in each of the three kitchen states, so the kanban columns and the rail cards can be
 // asserted from a single mount.
 const groupA: StationQueueGroup = {
+  kitchenNote: null,
   orderId: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
@@ -47,6 +48,7 @@ const groupA: StationQueueGroup = {
 };
 
 const groupB: StationQueueGroup = {
+  kitchenNote: null,
   orderId: "wo-2",
   orderNumber: 6,
   label: null,
@@ -415,6 +417,7 @@ describe("till-station-queue", () => {
 
   it("renders the dish name verbatim, with no locale resolution left to fall back from", async () => {
     const group: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-9",
       orderNumber: 9,
       label: null,
@@ -444,6 +447,7 @@ describe("till-station-queue", () => {
 
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the dish", () => {
     const withModifiers: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-9",
       orderNumber: 9,
       label: null,
@@ -543,6 +547,7 @@ describe("till-station-queue", () => {
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
     const withCustomisation: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-c",
       orderNumber: 12,
       label: null,
@@ -624,6 +629,7 @@ describe("till-station-queue", () => {
 
   describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
     const withAllergens: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-a",
       orderNumber: 11,
       label: null,
@@ -645,6 +651,7 @@ describe("till-station-queue", () => {
     };
 
     const pendingItem: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-p",
       orderNumber: 12,
       label: null,
@@ -706,6 +713,7 @@ describe("till-station-queue", () => {
 
   describe("as-served diet badges", () => {
     const veganItem: StationQueueGroup = {
+      kitchenNote: null,
       orderId: "wo-v",
       orderNumber: 21,
       label: null,
@@ -1102,6 +1110,7 @@ describe("till-station-queue", () => {
 // then a fired middle course, then the fired null (bread) course — so a passing grouping test proves the
 // widget re-orders (null, then by display_order) rather than echoing the item order.
 const coursedOrder: StationQueueGroup = {
+  kitchenNote: null,
   orderId: "wo-c",
   orderNumber: 7,
   label: "Mesa 2",
@@ -1719,6 +1728,7 @@ describe("till-station-queue — kitchen notices strip", () => {
 // A seated party's bill: listed out of position order, with a line moved in from another bill (no
 // group) and each item still carrying a course, so a passing test proves the card sections by GROUP.
 const partyOrder: StationQueueGroup = {
+  kitchenNote: null,
   orderId: "wo-p",
   orderNumber: 9,
   label: "Mesa 4",
@@ -2134,6 +2144,7 @@ describe("till-station-queue — a merged queue's station labels", () => {
 
 describe("till-station-queue — moving a dish to another station", () => {
   const order: StationQueueGroup = {
+    kitchenNote: null,
     orderId: "wo-m",
     orderNumber: 8,
     label: "Mesa 3",
@@ -2284,6 +2295,7 @@ describe("till-station-queue — where Move sits", () => {
     firedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
+    kitchenNote: null,
     orderId: "wo-g",
     orderNumber: 9,
     label: null,

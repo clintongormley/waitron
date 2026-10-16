@@ -1844,23 +1844,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A743 — a note for the whole order, to the kitchen (owner, 2026-10-15; open).** Plan:
-  [whole-order kitchen notes](superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
-  The editor, storage, guarded note API, order/party read projections and initial counter-request
-  persistence, note copying/combining during bill and party moves, paper headings and atomic
-  kitchen corrections are on the feature branch. The counter forwards initial notes with cash,
-  card, Hold and Place, restores saved note ownership, and saves retrieved notes separately from
-  dishes. Table and Waiting note editors, pending-note barriers before sending or paying,
-  fresh card decline/recovery and atomic note persistence while seating are also on the branch.
-  Station/pass screen headings and correction wording, the final output audit and branch gates
-  remain open. Add a whole-order note
-  ("all together, they have a train at 14:30") alongside the existing line notes: a row at the top of the order
-  on the till and handheld ("+ Note for the kitchen" when empty, a small window to edit), printed at
-  the top of every kitchen ticket the order sends and shown on the kitchen screens. A change after
-  sending reaches the kitchen as the other corrections do (kitchen notices). Needs a migration. A669's
-  table allergy note belongs in the same place, so whichever lands second reuses it. Drawn on
-  [board 1](backlog/mockups/a737-a740-till-counter-redesign/1-counter-screen.png).
-
 - **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
   station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup

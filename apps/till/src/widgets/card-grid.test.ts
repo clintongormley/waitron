@@ -339,6 +339,7 @@ const barra: HeldOrderSummary = {
 };
 
 const stationGroup: StationQueueGroup = {
+  kitchenNote: null,
   orderId: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",

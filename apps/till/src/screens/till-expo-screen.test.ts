@@ -33,6 +33,7 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 /** The null (auto-fired) course, a FIRED all-ready course (the away lever) and a HELD later course (the
  *  fire lever). Each item carries a distinct station so the cross-station labelling is visible. */
 const threeCourseOrder: ExpoOrder = {
+  kitchenNote: null,
   orderId: "wo-1",
   orderNumber: 5,
   tableLabel: "Mesa 4",
@@ -114,6 +115,7 @@ const deviceBoard = (
 });
 
 const firedNotReadyOrder: ExpoOrder = {
+  kitchenNote: null,
   orderId: "wo-2",
   orderNumber: 6,
   openedMinutes: 7,
@@ -144,6 +146,7 @@ const firedNotReadyOrder: ExpoOrder = {
 };
 
 const withAwayCourse: ExpoOrder = {
+  kitchenNote: null,
   orderId: "wo-3",
   orderNumber: 8,
   openedMinutes: 12,
@@ -1540,6 +1543,7 @@ describe("till-expo-screen", () => {
 
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the item", () => {
     const orderWithModifiers: ExpoOrder = {
+      kitchenNote: null,
       orderId: "wo-9",
       orderNumber: 9,
       openedMinutes: 1,
@@ -1592,6 +1596,7 @@ describe("till-expo-screen", () => {
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the item", () => {
     const orderWithCustomisation: ExpoOrder = {
+      kitchenNote: null,
       orderId: "wo-c",
       orderNumber: 12,
       openedMinutes: 1,
@@ -1668,6 +1673,7 @@ describe("till-expo-screen", () => {
 
   describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
     const orderWithAllergens: ExpoOrder = {
+      kitchenNote: null,
       orderId: "wo-a",
       orderNumber: 11,
       openedMinutes: 1,
@@ -1745,6 +1751,7 @@ describe("till-expo-screen", () => {
       asServedDiet,
     });
     const orderWithDiet = (item: ExpoItem): ExpoOrder => ({
+      kitchenNote: null,
       orderId: "wo-d",
       orderNumber: 31,
       openedMinutes: 1,
@@ -1931,6 +1938,7 @@ describe("till-expo-screen", () => {
     queuedAt: string,
   ): ExpoOrder {
     return {
+      kitchenNote: null,
       orderId,
       orderNumber,
       openedMinutes: 999, // deliberately absurd — proves the accent ignores it
@@ -2168,6 +2176,7 @@ describe("till-expo-screen — a seated party's groups", () => {
 
   // Listed out of position order, with a course on none of them, so the card must section by group.
   const partyOrder: ExpoOrder = {
+    kitchenNote: null,
     orderId: "wo-p",
     orderNumber: 9,
     tableLabel: "Mesa 4",
@@ -2596,6 +2605,7 @@ describe("Spanish split extra wording on pass", () => {
 
 describe("till-expo-screen — a pass monitor", () => {
   const partyOrder: ExpoOrder = {
+    kitchenNote: null,
     orderId: "wo-p",
     orderNumber: 9,
     tableLabel: "Mesa 7",

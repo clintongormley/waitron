@@ -186,6 +186,12 @@ list does not exist.
 
 ## Decisions and deliberate limits
 
+- **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
+  instruction above a counter order or a table party's dishes, alongside each dish's own note.
+  It appears on kitchen paper and station/pass screens; later edits and removals use acknowledged
+  kitchen notices. The shared order-heading region also belongs to A669's table allergy information.
+  Implementation choices and checks: [plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md).
+
 - **Routes has no Expand/Collapse control, and closing a category closes everything inside it
   (A726, owner 2026-10-15, replacing A656's one Expand/Collapse button).** A closed category shows
   only the rows with a route of their own below it, at any depth, with their path; opening a

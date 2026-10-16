@@ -2,6 +2,10 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "kitchen_note.changed": "Kitchen note changed",
+  "kitchen_note.removed": "Kitchen note removed",
+  "kitchen_note.before": "Before",
+  "kitchen_note.after": "Now",
   "kitchen_note.add": "+ Note for the kitchen",
   "kitchen_note.heading": "For the kitchen",
   "kitchen_note.title": "Note for the kitchen",
@@ -1482,6 +1486,10 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "kitchen_note.changed": "Nota para cocina cambiada",
+  "kitchen_note.removed": "Nota para cocina eliminada",
+  "kitchen_note.before": "Antes",
+  "kitchen_note.after": "Ahora",
   "kitchen_note.add": "+ Nota para cocina",
   "kitchen_note.heading": "Para cocina",
   "kitchen_note.title": "Nota para cocina",

@@ -1393,6 +1393,7 @@ export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved" | "rer
  * copied as it stood when the notice was recorded.
  */
 export interface KitchenNotice {
+  orderNoteChange?: { before: string | null; after: string | null };
   id: string;
   stationId: string;
   workingOrderId: string;
@@ -1436,6 +1437,7 @@ export interface StationQueue {
  * group's ordering key and the age-colouring anchor.
  */
 export interface StationQueueGroup {
+  kitchenNote: string | null;
   orderId: string;
   orderNumber: number;
   label: string | null;
@@ -1708,6 +1710,7 @@ export interface ExpoGroup {
  * (via {@link ExpoCourse.away} and {@link ExpoGroup.away}).
  */
 export interface ExpoOrder {
+  kitchenNote: string | null;
   orderId: string;
   tableLabel?: string;
   orderNumber: number;

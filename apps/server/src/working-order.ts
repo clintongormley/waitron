@@ -6795,6 +6795,7 @@ export interface ElsewhereItem {
 
 /** One order's lines at a station. `queuedAt` is its OLDEST line's. */
 export interface StationQueueGroup {
+  kitchenNote: string | null;
   orderId: string;
   orderNumber: number;
   label: string | null;
@@ -7083,6 +7084,7 @@ export async function listStationQueues(
   );
 
   const orderIds = [...new Set(rows.map((row) => row.orderId))];
+  const kitchenNotes = await readOrderKitchenNotes(tx, orderIds);
   const restOrderIds = [
     ...new Set(rows.filter((row) => row.showsRestOfOrder).map((row) => row.orderId)),
   ];
@@ -7117,6 +7119,7 @@ export async function listStationQueues(
     if (group === undefined) {
       group = {
         orderId: row.orderId,
+        kitchenNote: kitchenNotes.get(row.orderId)!.note,
         orderNumber: row.orderNumber,
         label: row.label,
         queuedAt: row.queuedAt,
@@ -7252,6 +7255,7 @@ export interface ExpoGroup {
 /** One order on the cross-station expo board. `tableLabel` is absent for an unlabelled walk-up. A
  *  seated party's bill is sectioned by `groups` and has no `courses`; any other bill the reverse. */
 export interface ExpoOrder {
+  kitchenNote: string | null;
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
@@ -7377,6 +7381,10 @@ export async function readPassBoard(
     tx,
     rows.map((row) => row.orderId),
   );
+  const kitchenNotes = await readOrderKitchenNotes(
+    tx,
+    rows.map((row) => row.orderId),
+  );
   const tableLabels = await orderTableLabels(
     tx,
     locationId,
@@ -7400,6 +7408,7 @@ export async function readPassBoard(
     if (order === undefined) {
       order = {
         orderId: row.orderId,
+        kitchenNote: kitchenNotes.get(row.orderId)!.note,
         orderNumber: row.orderNumber,
         ...optional("formerNumbers", former.get(row.orderId)),
         openedMinutes: minutesSince(row.openedAt, nowMs),
