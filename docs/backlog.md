@@ -5747,12 +5747,6 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
-- **Opening hours Year date box: investigate the placement failure on main.** Main CI
-  `38937129949` failed its real-Year case at a measured 276 px offset against a 1 px bound; the
-  same shard passed on PR #1800. Reproduce with viewport, scroll and placement timing retained
-  before changing the product or the check. Attribution to canvas retirement is unverified.
-  [Receipt](backlog/ci.md#opening-hours-year-date-box-placement-failed-on-main-2026-10-16).
-
 - **The simulator suite lost its worker to the venue watchdog during A739a investigation
   (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
   `provisioning.database_holder_frozen` after 15 passing cases; the isolated expiry case passed.

@@ -1029,6 +1029,13 @@ describe("Year view", () => {
   it("a date opens its box over the real Year, from that date's month", async () => {
     await useViewport(1280, 800);
     const { el, view, months } = await yearMount("/manage/opening-hours/view/year/year/2026");
+    // December is the Year's last row, too near the page's foot for the filled box below it on CI's
+    // fonts (A771). The room lets the date sit mid-window; a box at the page's foot is "keeps a box
+    // near the bottom on screen when its month arrives".
+    const room = document.createElement("div");
+    room.style.height = `${innerHeight}px`;
+    hosts.push(room);
+    document.body.append(room);
     const year = await shownYear(view);
     const button = yearDate(year, "2026-12-10");
     button.scrollIntoView({ block: "center" });
@@ -1037,10 +1044,12 @@ describe("Year view", () => {
     const box = dayBox(el)!;
     expect(button.getRootNode()).toBe(year.shadowRoot);
     expect(box.getRootNode()).toBe(el.shadowRoot);
+    expect(box.heading).toBe(formatDate("2026-12-10"));
+    // Placed again once the month's hours arrive, so measured after them.
+    await expect.poll(() => box.line).toBe("Winter standard hours");
+    await box.updateComplete;
     const placed = box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
     expect(Math.abs(placed.top - button.getBoundingClientRect().bottom)).toBeLessThanOrEqual(1);
-    expect(box.heading).toBe(formatDate("2026-12-10"));
-    await expect.poll(() => box.line).toBe("Winter standard hours");
     expect(box.rows.length).toBeGreaterThan(0);
     expect(box.message).toBe("");
     expect(months).toEqual(["2026-12"]);

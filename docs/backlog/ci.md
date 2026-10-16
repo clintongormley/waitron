@@ -3,26 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Opening hours Year date box placement failed on main (2026-10-16)
-
-[Main CI 38937129949, venue-service shard 1](https://github.com/clintongormley/waitron/actions/runs/38937129949/job/117095541416), on
-`28e74463d500d76fbe7110938b915542a12a709d`, failed `Year view > a date opens its box over the real
-Year, from that date's month` at `packages/venue-service/src/dashboard/opening-hours-screen.test.ts:1035`.
-The absolute distance between the popover's top and the date button's bottom was 276 px; the
-assertion permits at most 1 px. The shard reported 1 failed and 1,564 passed tests in 129.81 seconds.
-The same shard passed in PR #1800's exact-head CI `38935767141`.
-
-Attribution to canvas retirement is unverified. `git diff 28e74463d^ 28e74463d --name-only --
-packages/venue-service packages/ui packages/ui-core` printed no paths. The test's most recent
-change is A720 Part 3, #1784 (`git log -3 -- packages/venue-service/src/dashboard/opening-hours-screen.test.ts`);
-that history does not explain this failure. No rerun or repair was attempted. The job log is
-retained in Lane G's local `receipts/a182-2/resume-main-venue-service-1.log`; the run also retained
-`venue-service-diagnostics-1` (artifact `12060974677`).
-
-Next: reproduce in real Chromium while retaining viewport, scroll, the anchor and popover
-rectangles, and the placement lifecycle. Determine whether the position is wrong or the check
-reads it too early. Preserve the geometry assertion and its real-Year control.
-
 ## The upgrade walk's total time limit can expire while phases still advance
 
 On 2026-10-16, A182-2's normal push at local commit

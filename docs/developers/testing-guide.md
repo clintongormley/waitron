@@ -1451,6 +1451,25 @@ first frame. Open it synchronously, then measure and position it; the first-fram
 `packages/ui/src/components/wt-row-actions.test.ts`; the dashboard wrapper retains its compatibility
 tests.
 
+## A placement check measures a box at its final size, with room for CI's fonts
+
+The Calendar's day box is placed again when its content changes, and on CI's fonts it was taller
+than on macOS. On 2026-10-16 the Year view's date-box check
+(`a date opens its box over the real Year, from that date's month` in
+`packages/venue-service/src/dashboard/opening-hours-screen.test.ts`) failed 3 of the 7 main runs
+that ran it between 15:53 and 18:46 UTC, each at 276 px against a 1 px bound. PR #1814's logging
+on CI showed the filled box 232 px tall; the same box was 185 px tall on macOS and 191 px in
+`mcr.microsoft.com/playwright:v1.63.0-noble`. 10 December sits on the page's last row with 197 px
+below it, so the filled box rightly opened above the date (`placePopover`'s flip). In the same CI
+log the "Loading…" box (116 px) was first placed below the date and the filled one 10 ms later,
+before the click command returned; the check measured whichever placement had run, so it raced the
+month's answer.
+
+So: wait for the content that sizes the box before measuring it, and give the trigger room, on the
+side the check expects the box, that a larger font still fits, or the check measures font metrics
+and timing rather than placement. A control that forced the box to 240 px only once filled (wrapping `show`) failed the
+reordered check five times in five without the added room, and passed five times in five with it.
+
 **Guards that read the whole tree**
 
 ## Source scanners check filesystem type as well as the filename suffix — select files, not just paths ending in `.ts`.
