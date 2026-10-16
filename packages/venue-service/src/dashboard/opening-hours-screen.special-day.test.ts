@@ -490,6 +490,15 @@ describe("a run picked on the Year", () => {
     expect(chips(single)).toEqual(["2026-01-01"]);
   });
 
+  it("a run of 367 dates read from an address opens on its first date alone", async () => {
+    const { el } = await mount(
+      "/manage/opening-hours/view/special-day/date/2026-01-01/to/2027-01-02",
+    );
+    const painter = await shownPainter(el);
+    expect([painter.date, painter.lastDate]).toEqual(["2026-01-01", null]);
+    expect(chips(painter)).toEqual(["2026-01-01"]);
+  });
+
   it("a direct load of a run's address opens it", async () => {
     const { el } = await mount(
       "/manage/opening-hours/view/special-day/date/2026-10-20/to/2026-10-23",
@@ -520,6 +529,22 @@ describe("a run picked on the Month", () => {
       "/manage/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
     );
     expect(chips(painter)).toEqual(run);
+    await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("a double-click on a special day's date in the Month opens that day", async () => {
+    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    await expect.poll(() => monthOf(el)?.model?.month).toBe("2026-12");
+    await monthOf(el).updateComplete;
+    const button = monthOf(el).shadowRoot!.querySelector<HTMLButtonElement>(
+      `[data-date="2026-12-14"] button`,
+    )!;
+    button.scrollIntoView({ block: "center" });
+    await userEvent.dblClick(button);
+    const painter = await shownPainter(el);
+    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/company");
+    expect(painter.specialDayId).toBe("company");
     await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
     expect(writes).toEqual([]);
   });

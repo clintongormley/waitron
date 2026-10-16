@@ -412,9 +412,8 @@ export class SpecialDayPainter extends LitElement {
   @state() private month = "";
   @state() private taken: ReadonlyMap<LocalDate, string> = new Map();
   @state() private deleting?: { busy: boolean; message: string };
-  /** The same-named special day offered before a new day on a public holiday, until answered,
-   *  with the holiday's date. */
-  @state() private offered?: { id: string; date: LocalDate };
+  /** The same-named special day offered before a new day on a public holiday, until answered. */
+  @state() private offered?: { id: string };
   /** Replaced by an edit and by Save: the offer is about the new day only as it opened. */
   private offerToken = {};
   /** A new day pre-filled from a public holiday can be saved as it opened. */
@@ -552,7 +551,7 @@ export class SpecialDayPainter extends LitElement {
       const date = this.date && isLocalDate(this.date) ? this.date : undefined;
       const name = date ? holidayDateName(this.holidays, date, "") : "";
       this.adopt(undefined, this.newDates(), name);
-      if (date && name) this.offerExisting(name, date);
+      if (name) this.offerExisting(name);
       return;
     }
     this.read(id, this.addDate && isLocalDate(this.addDate) ? [this.addDate] : []);
@@ -660,16 +659,16 @@ export class SpecialDayPainter extends LitElement {
     this.scope?.commit(copyDraft(baseline));
   }
   /** A list that fails or lands late offers nothing: the pre-filled new day stands. */
-  private offerExisting(name: string, date: LocalDate) {
+  private offerExisting(name: string) {
     const generation = this.generation;
     const token = (this.offerToken = {});
     this.api.specialDays.listSpecialDays().then((days) => {
       if (generation !== this.generation || token !== this.offerToken) return;
       const id = offerMatch(days, name);
-      this.offered = id === undefined ? undefined : { id, date };
+      this.offered = id === undefined ? undefined : { id };
     }, ignore);
   }
-  private addTo({ id }: { id: string; date: LocalDate }) {
+  private addTo({ id }: { id: string }) {
     const dates = this.newDates();
     this.generation = {};
     this.seedToken = {};
@@ -1417,7 +1416,7 @@ export class SpecialDayPainter extends LitElement {
       <p class="explain" data-test="explain">${t("special.explain")}</p>
     </section>`;
   }
-  private offer(offered: { id: string; date: LocalDate }) {
+  private offer(offered: { id: string }) {
     const name = this.draft.name;
     return html`<section class="panel" data-test="offer">
       <p>${format("special.offer", { name })}</p>
