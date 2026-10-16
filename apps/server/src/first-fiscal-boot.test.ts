@@ -259,7 +259,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
           const finish = () => clearTimeout(timeout);
           child.stdout.on("data", (chunk) => {
             output += String(chunk);
-            if (output.includes('"event":"server.listening"')) {
+            if (output.includes('"event":"recovery.listening"')) {
               finish();
               resolveReady();
             }
@@ -277,7 +277,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
           dispatcher: agent,
         } as RequestInit);
         expect(childStatus.status).toBe(200);
-        expect(await childStatus.json()).toEqual({ claimed: true });
+        expect(await childStatus.json()).toEqual({ claimed: true, resolution: true });
       } finally {
         if (child.pid !== undefined && child.exitCode === null) child.kill("SIGTERM");
         await closed;

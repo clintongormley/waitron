@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, mkdir, cp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,7 +14,28 @@ import { loadBoxEnv } from "./box-env.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { initialSetupInput } from "./testing/allocated-provision.js";
 import { freePorts } from "./testing/free-ports.js";
-import { request, firstFiscalFixture } from "../test/first-fiscal.js";
+import { request, firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
+import { publicFirstFiscalInput } from "../test/first-fiscal-public.js";
+
+vi.mock("@waitron/composition", async (original) => {
+  const actual = await original<typeof import("@waitron/composition")>();
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name !== "fiscal-verifactu"
+        ? module
+        : {
+            ...module,
+            fiscal: {
+              ...module.fiscal!,
+              // Qualify local owner activation and evidence retention without an AEAT submission.
+              activationReadiness: "not-applicable",
+              activationReadinessTarget: undefined,
+            },
+          },
+    ),
+  };
+});
 
 const dirs: string[] = [];
 function runCli(args: string[], env: NodeJS.ProcessEnv) {
@@ -35,7 +57,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function launchFixture() {
+async function launchFixture(ownerSetup = false) {
   const root = await mkdtemp(join(tmpdir(), "fiscal-launch-"));
   dirs.push(root);
   const stateDir = join(root, "state");
@@ -65,14 +87,14 @@ async function launchFixture() {
     WAITRON_HTTP_PORT: String(port),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
+    WAITRON_ENV: ownerSetup ? "dev" : "preproduction",
   };
   return { root, stateDir, input, evidenceEnv, base, port };
 }
 it.each(["direct", "supervised"])(
-  "%s launch uses its passed/file-merged fiscal evidence despite conflicting process.env",
+  "%s launch retains its passed/file-merged fiscal evidence and activates owner setup despite conflicting process.env",
   async (kind) => {
-    const f = await launchFixture();
+    const f = await launchFixture(true);
     let server: StartedServer | undefined;
     const killed = vi.spyOn(process, "kill").mockReturnValue(true);
     let agent: Agent | undefined;
@@ -105,11 +127,90 @@ it.each(["direct", "supervised"])(
       }
       expect(server).toBeDefined();
       agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls", "ca.crt")) } });
+      let capability = "";
+      let state: { attemptId: string; revision: number; ownerGeneration: number };
+      const headers = () =>
+        capability
+          ? {
+              "X-Waitron-Setup-Owner": capability,
+              "X-Waitron-Setup-Attempt": state.attemptId,
+              "X-Waitron-Setup-Revision": String(state.revision),
+              "X-Waitron-Setup-Generation": String(state.ownerGeneration),
+            }
+          : {};
+      const post = async (action: string, body: unknown) => {
+        const response = await fetch(
+          `https://127.0.0.1:${f.port}/setup-api/first-setup/${action}`,
+          {
+            dispatcher: agent,
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers() },
+            body: JSON.stringify(body),
+          } as RequestInit,
+        );
+        const result = await response.json();
+        expect({ status: response.status, body: result }).toEqual({
+          status: 200,
+          body: expect.any(Object),
+        });
+        if (result.state !== undefined) state = result.state;
+        return result;
+      };
+      const claim = await post("claim", {
+        clientClaimNonce: randomBytes(32).toString("base64url"),
+        venue: request,
+      });
+      capability = claim.capability;
+      await post("candidates", {
+        module: MODULE,
+        proposal: { serials: [1] },
+        ...(await post("reconfirm", { password: PASSWORD, purpose: "block-use" })),
+      });
+      const exported = await fetch(`https://127.0.0.1:${f.port}/setup-api/first-setup/request`, {
+        dispatcher: agent,
+        headers: headers(),
+      } as RequestInit);
+      expect(exported.status).toBe(200);
+      const signed = publicFirstFiscalInput((await exported.json()).modules[0].request);
+      f.input.nodeId = claim.state.nodeId;
+      await post("input", { module: MODULE, input: signed.input });
+      await post("enrol", {
+        module: MODULE,
+        publicKey: signed.key,
+        comparison: signed.key.fingerprint,
+      });
+      await post("current-master", {
+        module: MODULE,
+        statement: signed.current,
+        ...(await post("reconfirm", { password: PASSWORD, purpose: "activation" })),
+      });
+      const outside = [signed.key, signed.current].map((value) => JSON.stringify(value));
+      for (const [index, key] of [
+        "WAITRON_FISCAL_CUSTODIAN_FILE",
+        "WAITRON_FISCAL_CONFIRMATION_FILE",
+      ].entries())
+        await writeFile(f.evidenceEnv[key]!, outside[index]!);
+      const inspected = await fetch(
+        `https://127.0.0.1:${f.port}/setup-api/first-setup/resolution`,
+        { dispatcher: agent } as RequestInit,
+      );
+      expect(inspected.status).toBe(200);
+      expect(
+        (await inspected.json()).artifacts.filter((entry: { name: string }) =>
+          entry.name.startsWith("outside-evidence-"),
+        ),
+      ).toEqual(
+        outside.map((bytes, index) => ({
+          name: `outside-evidence-${index}`,
+          status: "present",
+          digest: createHash("sha256").update(bytes).digest("hex"),
+        })),
+      );
       const response = await fetch(`https://127.0.0.1:${f.port}/setup-api/provision`, {
         dispatcher: agent,
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "prepare", venue: request, initialOperations: f.input }),
+        headers: { "content-type": "application/json", ...headers() },
+        body: JSON.stringify({ mode: "live" }),
       } as RequestInit);
       const result = await response.json();
       expect({ status: response.status, body: result }).toEqual({
