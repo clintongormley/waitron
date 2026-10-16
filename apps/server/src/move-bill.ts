@@ -111,7 +111,7 @@ export async function moveBill(
   let held: string[] = [];
   if (destination.kind === "counter") {
     if (source === null) throw new AppError("management.request_invalid", { field: "to" });
-    await inheritKitchenNote(tx, noteScope, { workingOrderId: billId }, "copy");
+    await inheritKitchenNote(tx, cfg, noteScope, { workingOrderId: billId }, "copy");
     await tx
       .update(workingOrders)
       .set({
@@ -128,7 +128,7 @@ export async function moveBill(
       operatorId: options.operatorId,
       tableId: destination.tableId,
     });
-    await inheritKitchenNote(tx, noteScope, { partyId }, "copy");
+    await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
     ({ held } = await groupArrivingDishes(
       tx,
@@ -142,7 +142,7 @@ export async function moveBill(
     result = { partyId, billId, merged: false };
   } else {
     const partyId = destination.partyId;
-    await inheritKitchenNote(tx, noteScope, { partyId }, "combine");
+    await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.

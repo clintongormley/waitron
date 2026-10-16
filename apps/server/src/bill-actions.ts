@@ -148,7 +148,13 @@ export async function splitBill(
     copyServiceContextFrom: billId,
   });
   if (path.partyId === null)
-    await inheritKitchenNote(tx, { workingOrderId: billId }, { workingOrderId: newBillId }, "copy");
+    await inheritKitchenNote(
+      tx,
+      cfg,
+      { workingOrderId: billId },
+      { workingOrderId: newBillId },
+      "copy",
+    );
   const before = await readSentWork(tx, billId);
   const { splitFrom } = await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,

@@ -28,6 +28,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { KitchenNoteChange } from "@waitron/module";
 import {
   AppError,
   partyTablesName,
@@ -48,6 +49,7 @@ import {
   movedPlaceText,
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
 import {
   readOrderPlaces,
@@ -524,6 +526,7 @@ async function planKitchenTickets(
       : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
   const order = await readOrderHeader(tx, cfg, orderId);
   const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
+  const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
   const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
@@ -585,6 +588,7 @@ async function planKitchenTickets(
         ...new Set(rest.map((item) => item.workingOrderLineId)),
       ]);
   const head = {
+    kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
     reprint,
     mark,
     from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
@@ -742,7 +746,63 @@ type CorrectionChange =
   | { kind: "VOID" | "RECALLED" }
   | { kind: "TO STATION"; toStation: string; locale: string }
   | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
+  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
   | HoldCorrection;
+
+export async function enqueueOrderKitchenNoteChange(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderIds: readonly string[],
+  change: KitchenNoteChange,
+): Promise<void> {
+  if (orderIds.length === 0 || change.before === change.after) return;
+  const rows = await tx
+    .select({
+      orderId: ticketItems.workingOrderId,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      quantity: firedQuantity,
+      state: ticketItems.state,
+      group: orderGroups.position,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(
+      and(
+        inArray(ticketItems.workingOrderId, [...orderIds]),
+        eq(workingOrders.locationId, cfg.locationId),
+        ne(workingOrders.status, "abandoned"),
+        isNull(workingOrders.collectedAt),
+        eq(ticketItems.madeHere, false),
+        isNull(ticketItems.awayAt),
+        isNull(workingOrderLines.servedAt),
+        sql`${workingOrderLines.servedQuantity} < ${workingOrderLines.quantity}`,
+        or(
+          isNotNull(ticketItems.firedAt),
+          and(eq(orderGroups.state, "held"), isNotNull(orderGroups.holdPrintedAt)),
+        ),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo, ticketItems.id);
+  const byOrder = new Map<string, CorrectionItem[]>();
+  for (const { orderId, group, state, ...row } of rows) {
+    const items = byOrder.get(orderId) ?? [];
+    items.push({ ...row, wasStarted: isStarted(state), ...(group === null ? {} : { group }) });
+    byOrder.set(orderId, items);
+  }
+  for (const [orderId, items] of byOrder) {
+    await VENUE_SERVICE.recordKitchenNotices(tx, cfg, orderId, items.map(toNoticeItem), "changed", {
+      orderNoteChange: change,
+    });
+    await printCorrectionSlips(tx, cfg, orderId, items, {
+      kind: "ORDER NOTE CHANGED",
+      orderNoteChange: change,
+      locale: cfg.locale,
+    });
+  }
+}
 
 /** A change to held work on a queued HOLD ticket: quantity `added` or `removed`, or cancelled. */
 export type HoldCorrection =
@@ -963,6 +1023,7 @@ async function printCorrectionSlips(
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
   const stationNames = await readStations(tx, stationIds);
   const header = await readOrderHeader(tx, cfg, orderId);
+  const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
   for (const mapping of mappingRows) {
@@ -987,6 +1048,7 @@ async function printCorrectionSlips(
       const bytes = formatCorrectionSlip(
         {
           ...change,
+          kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
           stationName: stationNames.get(target.stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
@@ -1208,6 +1270,10 @@ async function notifyMoved(
     cfg,
     told.flatMap((move) => move.items),
   );
+  const kitchenNotes = await readOrderKitchenNotes(
+    tx,
+    printing === null ? [] : told.map((move) => move.to),
+  );
   for (const { before, to, after, items } of told) {
     const texts = movedTexts(before.places, after.places, cfg.locale);
     // The station screen words the counter itself, in the screen's own language.
@@ -1219,6 +1285,10 @@ async function notifyMoved(
     const partyName = after.partyId === null ? before.places.partyName : after.sittingWith;
     const toNumber = after.places.orderNumber;
     await printMovedSlips(tx, cfg, printing, items, {
+      kitchenNote:
+        kitchenNotes.get(to)!.note === null
+          ? undefined
+          : { text: kitchenNotes.get(to)!.note!, locale: cfg.locale },
       fromNumber: String(before.places.orderNumber),
       ...(toNumber === before.places.orderNumber ? {} : { toNumber: String(toNumber) }),
       ...(partyName === null ? {} : { partyName }),
@@ -1295,7 +1365,10 @@ async function printMovedSlips(
   cfg: TillConfig,
   { byStation, itemsByLine, stationNames, grouping }: MovedSlipPrinting,
   items: readonly MovedItem[],
-  slip: Pick<MovedSlip, "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText">,
+  slip: Pick<
+    MovedSlip,
+    "fromNumber" | "toNumber" | "partyName" | "fromText" | "toText" | "kitchenNote"
+  >,
 ): Promise<void> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const printCfg: PrintConfig = { locationId: cfg.locationId };

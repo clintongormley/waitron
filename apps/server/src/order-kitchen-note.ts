@@ -10,7 +10,8 @@ import {
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { checkAndBumpParty, runServiceCommand } from "./parties.js";
+import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
+import { checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import type { Database } from "@waitron/db";
@@ -18,9 +19,11 @@ import "./errors.js";
 
 export async function inheritKitchenNote(
   tx: Transaction,
+  cfg: TillConfig,
   from: KitchenNoteScope,
   into: KitchenNoteScope,
   mode: "copy" | "combine",
+  arrivingOrderIds?: readonly string[],
 ): Promise<void> {
   const fromKey = VENUE_SERVICE.kitchenNoteKey(from);
   const intoKey = VENUE_SERVICE.kitchenNoteKey(into);
@@ -32,6 +35,31 @@ export async function inheritKitchenNote(
       ? source.note
       : [...new Set([target.note, source.note].filter((text) => text !== null))].join("; ") || null;
   await VENUE_SERVICE.writeKitchenNote(tx, into, target.revision, note);
+  if (mode === "combine") {
+    if (target.note !== note)
+      await enqueueOrderKitchenNoteChange(tx, cfg, await kitchenNoteOrders(tx, into), {
+        before: target.note,
+        after: note,
+      });
+    if (source.note !== note)
+      await enqueueOrderKitchenNoteChange(
+        tx,
+        cfg,
+        arrivingOrderIds ?? (await kitchenNoteOrders(tx, from)),
+        { before: source.note, after: note },
+      );
+  }
+}
+
+async function kitchenNoteOrders(tx: Transaction, scope: KitchenNoteScope): Promise<string[]> {
+  if ("workingOrderId" in scope) return [scope.workingOrderId];
+  const family = await partyFamily(tx, scope.partyId);
+  return (
+    await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(inArray(workingOrders.partyId, family))
+  ).map((order) => order.id);
 }
 
 export async function readOrderKitchenNotes(
@@ -163,12 +191,7 @@ export async function setOrderKitchenNote(
             partyId: scope.partyId,
             revision: current.ownerRevision,
           });
-        orderIds = (
-          await tx
-            .select({ id: workingOrders.id })
-            .from(workingOrders)
-            .where(eq(workingOrders.partyId, scope.partyId))
-        ).map((o) => o.id);
+        orderIds = await kitchenNoteOrders(tx, scope);
       } else {
         const order = await requireKitchenNoteOrder(tx, cfg, scope.workingOrderId);
         if (order.partyId !== null || order.revision !== args.expectedOwnerRevision)
@@ -206,6 +229,11 @@ export async function setOrderKitchenNote(
         "partyId" in scope && next.revision !== current.revision
           ? await checkAndBumpParty(tx, scope.partyId, args.expectedOwnerRevision, "open")
           : current.ownerRevision;
+      if (next.revision !== current.revision)
+        await enqueueOrderKitchenNoteChange(tx, cfg, orderIds, {
+          before: current.note,
+          after: next.note,
+        });
       return { ...next, scope, ownerRevision };
     },
   );

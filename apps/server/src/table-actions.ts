@@ -242,7 +242,7 @@ export async function combineParties(
   const partyOf = (partyId: string) => mains.find((party) => party.id === partyId)!;
   const fromMain = partyOf(from).mainBillId;
   const intoMain = partyOf(into).mainBillId;
-  await inheritKitchenNote(tx, { partyId: from }, { partyId: into }, "combine");
+  await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await moveGroupsToParty(tx, from, into);
   await moveDraftsToParty(
     tx,
@@ -355,7 +355,7 @@ export async function splitTable(
       operatorId: options.operatorId,
       tableId,
     });
-    await inheritKitchenNote(tx, { partyId }, { partyId: newParty }, "copy");
+    await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
     let mainBillId: string | null = null;
     if (billId === null) {
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
