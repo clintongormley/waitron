@@ -1967,6 +1967,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
+- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
+  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
+  firing and the pass, is planned from the spec once A773-1 lands. The owner has requested
+  answers to [six illustrated choices](backlog/mockups/a773-1-open-points/README.md) before
+  the affected A773-1 tasks continue; the plan's defaults are not approved.
+  [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
+  [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
+  [mockups](backlog/mockups/a773-courses-and-groups/)
+
+- **Later, after A773: a station waits for another station's part of a group (owner,
+  2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
+  rather than when the waiter fires the group. A773 starts both parts together and marks the bar's
+  part "Goes with kitchen food". Try it once a venue has run with that.
+  [Spec §5](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
+
 - **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
   counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
   and Kitchen only under Testing. After A668's data shape. How a later addition to a table is
@@ -4952,13 +4967,6 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
-
-- **The step-watch guard received an undefined held-thread result.** A737 Part 2's
-  normal pre-push run after A751 reported 6,838 passing root cases and one failure at
-  `scripts/step-watch.test.mjs:557`: `seenWhileHeld` was undefined. The isolated case passed;
-  the cause and the feature branch's contribution remain unverified. Retain the failure and
-  diagnose it before another unchanged push.
-  [Detail](backlog/ci.md#the-step-watch-guard-received-an-undefined-held-thread-result).
 
 - **The simulator suite lost its worker to the venue watchdog during A739a investigation
   (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged

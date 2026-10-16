@@ -403,10 +403,10 @@ the cause or excludes a contribution from the feature branch. The normal push st
 uploading objects; no hook was bypassed. Raw logs remain in Lane F's local
 `receipts/a737-after-a751/push.log` and `step-watch-focused.log`.
 
-Next: capture the orchestration outcome and phase events before the missing-value assertion,
-reproduce the full-run failure, then repair the responsible side without weakening the held-call
-or phase-history checks. The phase waits exceeding the 100 ms no-progress limit are a hypothesis,
-not a measured cause. An unchanged retry or the isolated pass is not a repair.
+2026-10-17: A770 landed in [#1816](https://github.com/clintongormley/waitron/pull/1816),
+`d2f9bc3de08c2a3c0d2284a03efcc342319809a1`. Its controlled 200 ms thread pause reproduced this
+failure, and the revised test limits passed the same pause. The original run's delay remains
+unobserved. See [the retained experiment](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in).
 
 ## The simulator suite lost its worker to the venue watchdog
 

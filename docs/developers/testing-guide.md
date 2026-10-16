@@ -299,6 +299,10 @@ whatever opens it, and weaker than their name: they fake the clock only the way
 
 ## A database test keeps the watchdog's monotonic clock real
 
+2026-10-17: A769 ([#1815](https://github.com/clintongormley/waitron/pull/1815)) now captures the
+watchdog's clock and interval before a test can fake them. The experiment below records the
+previous behavior; see [the current mechanism](#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
+
 When you fake time beside an open venue store, name only the timer APIs your test needs. For a
 refund response deadline, use `vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] })`.
 The venue watchdog runs in a separate worker and compares its real monotonic clock with the

@@ -1841,16 +1841,16 @@ post-invoice Refund action belongs to Part 2. The approved page contract is:
   plus the total count ("51–100 of 2,314"). `wt-data-table` gains a server-paged mode; every other
   table keeps loading everything.
 
+**2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
+with the original invoice reference, Reprint and access to the original invoice. Refund is offered
+from the original invoice while supported money remains. The durable attempt and recovery contract
+is in the [Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
+
 ### A pending card payment does not stop a bill moving (table actions plan P19)
 
 The move moves the bill's revision on, open or presented, without `bumpRevision`'s refusal of
 money in flight, since a move changes no amount (plan P19). Stated at its site in
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
-
-**2026-10-16 — Part 2 extension.** Completed refund rows open a separate payment acknowledgment
-with the original invoice reference, Reprint and access to the original invoice. Refund is offered
-from the original invoice while supported money remains. The durable attempt and recovery contract
-is in the [Part 2 plan](../superpowers/plans/2026-10-15-a737-post-invoice-refund.md).
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
