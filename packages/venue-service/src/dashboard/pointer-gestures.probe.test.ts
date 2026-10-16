@@ -77,6 +77,53 @@ describe("pointer gesture commands", () => {
     expect(moves.map((s) => s.buttons)).toEqual(moves.map(() => 0));
   });
 
+  it("mouseDrag scrolls a first element below the window into view before pressing it", async () => {
+    page.style.paddingTop = "2000px";
+    window.scrollTo(0, 0);
+
+    await commands.mouseDrag(["#one", "#two"]);
+
+    expect(seen.find((s) => s.type === "pointerdown")?.target).toBe("one");
+    expect(seen.find((s) => s.type === "pointerup")?.target).toBe("two");
+  });
+
+  it("touchGesture scrolls an `at` element below the window into view before touching it", async () => {
+    page.style.paddingTop = "2000px";
+    window.scrollTo(0, 0);
+
+    await commands.touchGesture({ at: "#one", holdMs: 100 });
+
+    expect(seen.find((s) => s.type === "pointerdown")?.target).toBe("one");
+  });
+
+  it("neither command scrolls when its first element is already wholly on screen", async () => {
+    // Low enough in the window that scrolling it to the middle would move the page.
+    page.style.paddingTop = "700px";
+    window.scrollTo(0, 0);
+    expect(document.querySelector("#two")!.getBoundingClientRect().bottom).toBeLessThan(
+      window.innerHeight,
+    );
+
+    await commands.mouseDrag(["#one", "#two"]);
+    expect(window.scrollY).toBe(0);
+    await commands.touchGesture({ at: "#two", holdMs: 100 });
+    expect(window.scrollY).toBe(0);
+    expect(seen.filter((s) => s.type === "pointerdown").map((s) => s.target)).toEqual([
+      "one",
+      "two",
+    ]);
+  });
+
+  it("mouseDrag whose first element is hidden says which one and presses nothing", async () => {
+    const hidden = document.createElement("button");
+    hidden.id = "hidden";
+    hidden.style.display = "none";
+    page.append(hidden);
+
+    await expect(commands.mouseDrag(["#hidden", "#two"])).rejects.toThrow(/#hidden/);
+    expect(types()).not.toContain("pointerdown");
+  });
+
   it("touchGesture with a hold sends touch pointer events", async () => {
     await commands.touchGesture({ at: "#one", holdMs: 100 });
 

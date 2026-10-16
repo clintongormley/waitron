@@ -8,7 +8,10 @@ interface Box {
 }
 
 interface PlaywrightFrame {
-  locator(selector: string): { boundingBox(): Promise<Box | null> };
+  locator(selector: string): {
+    boundingBox(): Promise<Box | null>;
+    scrollIntoViewIfNeeded(): Promise<void>;
+  };
   evaluate(script: string): Promise<unknown>;
 }
 
@@ -46,9 +49,22 @@ interface Point {
 const MOVE_STEPS = 5;
 
 /** The centre of the test page's element, in the outer page's coordinates, which is what the
- * mouse and the DevTools input events use. Playwright's CSS reaches into open shadow roots. */
-async function centreOf(context: PlaywrightCommandContext, selector: string): Promise<Point> {
-  const box = await (await context.frame()).locator(selector).boundingBox();
+ * mouse and the DevTools input events use. Playwright's CSS reaches into open shadow roots.
+ *
+ * With `reveal`, an element not wholly on screen is scrolled into view first, so a gesture's
+ * press does not depend on where an earlier test left the page scrolled; Playwright leaves a
+ * wholly visible one where it is. */
+async function centreOf(
+  context: PlaywrightCommandContext,
+  selector: string,
+  { reveal = false } = {},
+): Promise<Point> {
+  const locator = (await context.frame()).locator(selector);
+  let box = await locator.boundingBox();
+  if (box !== null && reveal) {
+    await locator.scrollIntoViewIfNeeded();
+    box = await locator.boundingBox();
+  }
   if (box === null) throw new Error(`no visible element for ${selector}`);
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
@@ -58,8 +74,9 @@ export interface MouseDragOptions {
   wheel?: { after: number; deltaY: number };
 }
 
-/** Presses the real mouse on the first element's centre, moves through each next centre in
- * several steps, and releases on the last. */
+/** Presses the real mouse on the first element's centre, scrolled into view if it is not wholly
+ * on screen, moves through each next centre in several steps, and releases on the last. Later
+ * elements are not scrolled to: their positions are read as the pointer reaches each. */
 export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDragOptions]> = async (
   context,
   selectors,
@@ -68,7 +85,7 @@ export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDrag
   const ctx = context as unknown as PlaywrightCommandContext;
   const [first, ...rest] = selectors;
   if (first === undefined) throw new Error("mouseDrag needs at least one selector");
-  const start = await centreOf(ctx, first);
+  const start = await centreOf(ctx, first, { reveal: true });
   await ctx.page.mouse.move(start.x, start.y);
   await ctx.page.mouse.down();
   try {
@@ -98,11 +115,12 @@ export interface TouchGesture {
   moveBy?: { x: number; y: number };
 }
 
-/** One finger, through Chromium's DevTools input: down on `at`'s centre, held `holdMs` of real
+/** One finger, through Chromium's DevTools input: down on `at`'s centre (scrolled into view if it
+ * is not wholly on screen), held `holdMs` of real
  * time, then moved in steps to `moveTo`'s centre or by `moveBy`, then lifted. */
 export const touchGesture: BrowserCommand<[gesture: TouchGesture]> = async (context, gesture) => {
   const ctx = context as unknown as PlaywrightCommandContext;
-  const start = await centreOf(ctx, gesture.at);
+  const start = await centreOf(ctx, gesture.at, { reveal: true });
   const end =
     gesture.moveTo !== undefined
       ? await centreOf(ctx, gesture.moveTo)
