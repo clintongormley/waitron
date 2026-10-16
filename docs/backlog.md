@@ -1538,6 +1538,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
+- **The Month's year link: its focus ring nearly touches the month's name.** The ring sits in the
+  space before the year ("September[2026]"), readable but tight (A759's look, #1812). A margin on
+  the link must also go on the hidden width copies in `fixed-title.ts`, or the arrows move again.
+  Left open by A759.
+
 - **A753. Calendar colours: more of them, one shared picker, and who holds each staff role (owner,
   2026-10-16).** Periods, staff roles and menus pick from six colours; the palette grows (the
   owner sees a swatch board first), every place picking one uses A725's shared colour popup — the
