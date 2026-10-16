@@ -1160,6 +1160,22 @@ PATH with neither `gtimeout` nor `timeout`, and a `packageManager` that is not a
 run under a stubbed npm by `scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted
 by it.
 
+#### Give a healthy version check its normal allowance
+
+When you simulate a stalled command, shorten the deadline only for that case. The pnpm setup
+suite lets healthy version checks use the script's ten-second default; only its deliberately
+hanging version check sets a one-second limit. The install-hang and ignored-stop cases retain
+their own short install limits, and every child still has the thirty-second outer bound.
+
+A746's controlled probe delays the first successful version check by two seconds. With the former
+blanket one-second version limit, `pnpm exec vitest run scripts/ci-setup-pnpm.test.mjs -t 'slow
+successful first version'` failed: installation succeeded on attempt 2 rather than the required
+attempt 1. For this probe, a temporary wrapper on `PATH` invoked the real `gtimeout` with
+`--verbose` and logged each call's exit status. That wrapper recorded TERM and exit 124 for the
+first version check. The same added case in the full root run failed beside 6,694 passing cases. The unchanged root
+baseline had passed all 6,694 cases, so this probe establishes the short-limit failure mechanism;
+it does not establish why A737's original intermittent first check was delayed.
+
 ### The GHA cache is a shared per-repository budget, evicted least-recently-used
 
 A new `cache-to: type=gha,mode=max` exporter does not merely cost its own bytes — it competes for
