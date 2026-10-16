@@ -672,3 +672,75 @@ The discovery caption uses the announced server hostname, with the local suffix 
 available. It falls back to the routing address when no server name was announced; it does not
 construct a friendly computer name from a printer label. See the
 [identity map and plan](../superpowers/plans/2026-10-14-a576-ipp-queue-identity.md).
+
+## A sweep in flight keeps connecting after the discovery window closes
+
+- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
+  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer capability
+  queries that follow the scan have no deadline either: at most eight at a time, each up to
+  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
+- **The office-printer check and the check of addresses typed into the dashboard still run inside
+  the poll** — left open by C117 (#955), so the job pull still waits for them. The agent puts no
+  limit of its own on a scan pass; read, not run: the whole sweep across several networks and the
+  USB reads have no overall limit.
+
+## Printer lists that still read as empty while loading or after a failed read
+
+- **Printer lists that still read as empty while loading or after a failed read** — left open by
+  A428, which fixed the reprint dialog, the device profile window's printer section and the
+  Printers list's loading line. Still open: the Printers screen's printers, agents and jobs tables
+  say "No printers yet.", "No print agents yet." and "No print jobs yet." after a FAILED read,
+  beside the screen's refresh-failed message (sibling tables pass `errorMessage`); the devices
+  screen's device editor is believed, from reading only, to offer just "Use default (None)" while
+  its printer list loads; the device profile window, after its first printer read failed and before
+  a later one succeeds, shows no printer section and no loading line, even while the next read is
+  under way; after an empty printer list loaded and a later refresh failed, that window shows the
+  failure but still says "Add a printer first.", because the shared query code does not say which
+  read failed; and Cancel in that window clears the
+  screen's message without putting back a read failure that is still standing (read, not run).
+
+## Loose ends left by C107 (#974)
+
+- **Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts, category
+  pages and the test page send is not measured.** The calibration ruler page sends a print area of
+  576 dots whatever the printer. Left open by C107 (#974).
+
+- **At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12); it
+  keeps 30 and 42.** Left open by C107 (#974).
+
+- **The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at least
+  one dot that was half inside the letter, most of them accented capitals losing the top of the
+  accent.** Measured 2026-10-01 with a copy of the generator: a 30-dot line with the baseline 24
+  dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3. Left open by C107 (#974).
+
+- **The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed line,
+  feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut short at any
+  width.** The deep-tree case in `apps/server/src/category-sales-page.test.ts` printed about 14,500
+  lines on 58mm paper once rows carried their whole path (W73). Left open by C107 (#974).
+
+- **What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
+  measured.** The preview shrinks a picture wider than the job's line instead of cutting it, so on
+  the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every printer.
+  Left open by C107 (#974).
+
+## A552. Invoices on the owner's office printer are unchecked with the committed code
+
+- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Owed on
+  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
+  with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
+  from the Printers tab; and what Waitron reports with the tray empty and when the printer is
+  switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
+  A231q changed how a job the printer is holding is reported. Left open by A231q.
+
+## A wt-dialog holding hinted fields is taller inside than it shows
+
+- **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
+  by A662; predates it).** Each `wt-input`/`wt-textarea` hint (`p.hint`, visually hidden) is
+  positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
+  hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
+  Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
+  plain dialog of 16 hinted fields 953/864, the same fields without hints none. A
+  `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
+  the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
+  removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
+  hint.

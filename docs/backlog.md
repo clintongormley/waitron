@@ -3060,16 +3060,15 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** **The setup page's HTML says nothing about Bluetooth availability** — only `/status.json` and the log do. [Detail](backlog/printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 
-- **The office-printer check and the check of addresses typed into the dashboard still run inside the poll** — left open by C117 (#955), so the job pull still waits for them (see "A sweep in flight keeps connecting" below). The agent puts no limit of its own on a scan pass; read, not run: the whole sweep across several networks and the USB reads have no overall limit.
+- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
+  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer check and
+  the check of addresses typed into the dashboard still run inside the poll, so the job pull waits
+  for them (C117, #955).
+  [Detail](backlog/printers.md#a-sweep-in-flight-keeps-connecting-after-the-discovery-window-closes)
 
 - **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](backlog/printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
 
 - **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](backlog/printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
-
-- **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
-  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer capability
-  queries that follow the scan have no deadline either: at most eight at a time, each up to
-  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
 
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
@@ -3100,17 +3099,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
 - **Printer lists that still read as empty while loading or after a failed read** — left open by
-  A428, which fixed the reprint dialog, the device profile window's printer section and the
-  Printers list's loading line. Still open: the Printers screen's printers, agents and jobs tables
-  say "No printers yet.", "No print agents yet." and "No print jobs yet." after a FAILED read,
-  beside the screen's refresh-failed message (sibling tables pass `errorMessage`); the devices
-  screen's device editor is believed, from reading only, to offer just "Use default (None)" while
-  its printer list loads; the device profile window, after its first printer read failed and before
-  a later one succeeds, shows no printer section and no loading line, even while the next read is
-  under way; after an empty printer list loaded and a later refresh failed, that window shows the
-  failure but still says "Add a printer first.", because the shared query code does not say which
-  read failed; and Cancel in that window clears the
-  screen's message without putting back a read failure that is still standing (read, not run).
+  A428. Still open: the Printers screen's printers, agents and jobs tables say "No printers yet.",
+  "No print agents yet." and "No print jobs yet." after a FAILED read, beside the screen's
+  refresh-failed message (sibling tables pass `errorMessage`).
+  [Detail](backlog/printers.md#printer-lists-that-still-read-as-empty-while-loading-or-after-a-failed-read)
 
 - Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
   migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
@@ -3125,34 +3117,25 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   fails to compile until its captions exist.
   [Detail](backlog/printers.md#adding-a-language-to-the-venue-also-means-adding-its-printer-captions-and-a-language-written-outside-the-latin-letters-means-widening-the-font-table)
 
-- **Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts, category
-  pages and the test page send is not measured.** The calibration ruler page sends a print area of
-  576 dots whatever the printer. Left open by C107 (#974).
+- **Loose ends left by C107 (#974).** [Detail](backlog/printers.md#loose-ends-left-by-c107-974)
+  - Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts, category
+    pages and the test page send is not measured.
+  - At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12);
+    it keeps 30 and 42.
+  - The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at least
+    one dot that was half inside the letter, most of them accented capitals losing the top of the
+    accent.
+  - The preview reads at most 4 MiB of a job and shows at most 2,048 blocks, so a job of more than
+    about 2,040 lines is cut short at any width.
+  - What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
+    measured.
 
-- **At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12); it
-  keeps 30 and 42.** Left open by C107 (#974).
-
-- **The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at least
-  one dot that was half inside the letter, most of them accented capitals losing the top of the
-  accent.** Measured 2026-10-01 with a copy of the generator: a 30-dot line with the baseline 24
-  dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3. Left open by C107 (#974).
-
-- **The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed line,
-  feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut short at any
-  width.** The deep-tree case in `apps/server/src/category-sales-page.test.ts` printed about 14,500
-  lines on 58mm paper once rows carried their whole path (W73). Left open by C107 (#974).
-
-- **What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
-  measured.** The preview shrinks a picture wider than the job's line instead of cutting it, so on
-  the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every printer.
-  Left open by C107 (#974).
-
-- **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt.
-  A possible fix is to carry the link alongside the print job so the preview can still show it as
-  text.
-
-- **Deferred (ruling H): decide whether to warn when no legal QR dot size exists.** Re-check
-  the valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
+- **Loose ends left by #367.**
+  - Follow-up (ruling C): the preview no longer shows the QR link as text for a raster receipt. A
+    possible fix is to carry the link alongside the print job so the preview can still show it as
+    text.
+  - Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
+    valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
 
 - **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
   throwaway cases and not pinned.
@@ -3166,9 +3149,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Shared office-printer queues need physical qualification after A576.** From the shipped
   print-agent container, discover two queues on one computer, add both and print distinguishable
-  pages to each. Record the advertised server name, both paths and which printer receives each
-  page; repeat with one queue unavailable and a saved single-queue printer. Local HTTP and browser
-  fixtures do not establish this hardware result. [Detail](backlog/printers.md#shared-office-printer-queues)
+  pages to each. [Detail](backlog/printers.md#shared-office-printer-queues)
 
 - **Office-printer detection is proven on one office printer only.** The owner's HP Color LaserJet
   MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
@@ -3176,11 +3157,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
 
 - **A552. Invoices on the owner's office printer are unchecked with the committed code.** Owed on
-  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
-  with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
-  from the Printers tab; and what Waitron reports with the tray empty and when the printer is
-  switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
-  A231q changed how a job the printer is holding is reported. Left open by A231q.
+  the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR
+  measured with a ruler and scanned with a phone. Left open by A231q.
+  [Detail](backlog/printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
 
 - **A553. How long the box takes to draw one A4 raster page, and its peak memory, at 300 and
   600 dpi, are not measured.** The server draws each page (`renderInvoicePage`,
@@ -3210,84 +3189,65 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
   [mockups](backlog/mockups/a405-printer-details/)
 
-- **Owner's call: the receipt logo's Remove is a ghost button, where the mockup shows blue link
-  text (left open by A662).** The plan chose a ghost `wt-button`;
-  [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
+- **Loose ends left by A662 (#1803).**
+  - Owner's call: the receipt logo's Remove is a ghost button, where the mockup shows blue link
+    text. The plan chose a ghost `wt-button`;
+    [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
+  - Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
+    With Veri\*Factu always offering a default description, the Departments readiness list is empty
+    either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
+    only `packages/venue-service/src/routes.test.ts` covers "required, no default".
 
 - **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
-  by A662; predates it).** Each `wt-input`/`wt-textarea` hint (`p.hint`, visually hidden) is
-  positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
-  hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
-  Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
-  plain dialog of 16 hinted fields 953/864, the same fields without hints none. A
-  `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
-  the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
-  removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
-  hint.
-
-- **Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes
-  (left open by A662).** With Veri\*Factu always offering a default description, the Departments
-  readiness list is empty either way, so `apps/server/src/boot.departments-readiness.test.ts` no
-  longer sees that flag; only `packages/venue-service/src/routes.test.ts` covers "required, no
-  default".
+  by A662; predates it).** Each `wt-input`/`wt-textarea` hint is positioned absolutely, and the
+  dialog's scrolling `.body` is not its positioning parent, so the hint counts towards the native
+  `<dialog>`'s scroll height. `.body { position: relative }` removed the excess in the probe.
+  [Detail](backlog/printers.md#a-wt-dialog-holding-hinted-fields-is-taller-inside-than-it-shows)
 
 - **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
   the till's choice to change or leave out the guests line when printing a receipt (Part 3b,
   waits for owner question Q12). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
   [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
 
-- **A661's six wording and behaviour choices were built on the recommended defaults (left open by
-  A661, 2026-10-15).** The owner's questions Q1–Q6 of 2026-10-15 are unanswered; change the build
-  if the owner answers any of them otherwise.
+- **Loose ends left by A661 (#1745).**
+  - A661's six wording and behaviour choices were built on the recommended defaults. The owner's
+    questions Q1–Q6 of 2026-10-15 are unanswered; change the build if the owner answers any of them
+    otherwise.
+  - The payment-time choice could offer a receipt invoice printer. At payment only an A4 invoice
+    printer is offered, as "A4 on {printer}" (`/api/invoice-delivery-options`,
+    `apps/server/src/till-api.ts`); a receipt one is reached from the sale's print button. Offering
+    it as its own choice needs the payment path changed.
+  - The till's payment-time options and a staged A4 choice resolve the device's invoice printer
+    without the sale's location. Both call `resolveInvoicePrinter` with no `at`
+    (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
+    another location is believed refused when the delivery is reserved; untested.
+  - The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
+    refuses to resend an original a print request sent, when that printer is not the till's invoice
+    printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
+    dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
+    not apply that rule. Decide whether a manager's resend should.
 
-- **The payment-time choice could offer a receipt invoice printer (left open by A661).** At payment
-  only an A4 invoice printer is offered, as "A4 on {printer}" (`/api/invoice-delivery-options`,
-  `apps/server/src/till-api.ts`); a receipt one is reached from the sale's print button. Offering
-  it as its own choice needs the payment path changed.
-
-- **The till's payment-time options and a staged A4 choice resolve the device's invoice printer
-  without the sale's location (left open by A661).** Both call `resolveInvoicePrinter` with no `at`
-  (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
-  another location is believed refused when the delivery is reserved; untested.
-
-- **The print queue's Resend does not follow the till's rule for a full invoice's printer (left open
-  by A661).** A till refuses to resend an original a print request sent, when that printer is not
-  the till's invoice printer (`receiptPrinterWithdrawn`,
-  `apps/server/src/invoice-delivery-status.ts`). The dashboard's
-  `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply
-  that rule. Decide whether a manager's resend should.
-
-- **The till's on-screen receipt is a second copy of the layout (left open by A663 Part 1a).** It
-  prints its own unit-price line, rates as «21.00%», «4 ud» where paper prints «4», «Base» where
-  paper prints «Base imponible», and a full invoice's discounts with VAT: each discount of a dish
-  under the dish and a whole-bill discount once, where a printed full invoice shows a dish's own
-  discount under it and the whole-bill discount once per rate at the end, all before VAT. It also
-  leaves out the guests and per-person line paper prints. So A663's changes do not reach it; bring
-  it into line with the printed receipt.
-  [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
-
-- **On an A4 full invoice, a caption and its amount can split across pages (left open by A663
-  Part 2).** A caption too long to share its line with the amount prints, then the amount moves to
-  the next page when the page is full (`apps/server/src/invoice-page.ts:266-270`).
-  [Detail](backlog/printers.md#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages)
-
-- **The A4 item table's header can sit alone at a page foot, and later pages repeat no header (left
-  open by A663 Part 2).** Each row checks only its own room (`apps/server/src/invoice-page.ts:248`).
-  [Detail](backlog/printers.md#the-a4-item-tables-header-can-sit-alone-at-a-page-foot)
-
-- **Quantities print with "." whatever the receipt language (left open by A663 Part 1a)**
-  («0.35 kg» on a Spanish receipt).
-  [Detail](backlog/printers.md#quantities-print-with--whatever-the-receipt-language)
-
-- **Equipment labels draw their double-size heading by hand (left open by A663 Part 1a).**
-  `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
-  now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check its
-  layout, which uses a different grid.
-
-- **Receipt test tidy-ups (left open by A663 Part 1b, #1756).** Six receipt test sites repeat the
-  same filter that skips dashed rule lines; give them one shared helper beside `printedLines`
-  (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
-  `nif()` can be plain constants.
+- **Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768).**
+  - The till's on-screen receipt is a second copy of the layout (Part 1a). A663's changes do not
+    reach it; bring it into line with the printed receipt.
+    [Detail](backlog/printers.md#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout)
+  - On an A4 full invoice, a caption and its amount can split across pages (Part 2). A caption too
+    long to share its line with the amount prints, then the amount moves to the next page when the
+    page is full (`apps/server/src/invoice-page.ts:266-270`).
+    [Detail](backlog/printers.md#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages)
+  - The A4 item table's header can sit alone at a page foot, and later pages repeat no header
+    (Part 2). Each row checks only its own room (`apps/server/src/invoice-page.ts:248`).
+    [Detail](backlog/printers.md#the-a4-item-tables-header-can-sit-alone-at-a-page-foot)
+  - Quantities print with "." whatever the receipt language (Part 1a) («0.35 kg» on a Spanish
+    receipt). [Detail](backlog/printers.md#quantities-print-with--whatever-the-receipt-language)
+  - Equipment labels draw their double-size heading by hand (Part 1a).
+    `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
+    now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check
+    its layout, which uses a different grid.
+  - Receipt test tidy-ups (Part 1b). Six receipt test sites repeat the same filter that skips dashed
+    rule lines; give them one shared helper beside `printedLines`
+    (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
+    `nif()` can be plain constants.
 
 - Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
   though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
@@ -3450,11 +3410,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
   category warns about exactly what will go, #1196).
 
-- **A freshly added printer's wizard opens with a blue Save** — the campaign runner's ruling of
-  2026-10-08, for the owner to confirm. Left open by A331 batch 3b (#1415).
-
-- **The printer name dialog is titled "Add a printer" when its button says Enable** — seen and not
-  changed. Left open by A331 batch 3b (#1415).
+- **Loose ends left by A331 batch 3b (#1415).**
+  - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
+    2026-10-08, for the owner to confirm.
+  - The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
+    changed.
 
 ### Payments and card readers
 
