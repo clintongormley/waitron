@@ -419,6 +419,7 @@ export class DashboardApp extends LitElement {
         border-inline-start: 3px solid transparent;
         border-radius: 0;
         background: transparent;
+        color: var(--wt-color-text);
       }
 
       .icon-button.strip-button:hover {

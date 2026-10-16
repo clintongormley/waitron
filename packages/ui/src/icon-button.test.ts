@@ -3,6 +3,7 @@ import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { cdp, commands, userEvent } from "vitest/browser";
 import { iconButtonStyles, trackIconTooltip } from "./icon-button.js";
 import { applyTokens } from "./tokens/index.js";
+import { registerIcons } from "./components/wt-icon.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -167,3 +168,28 @@ test("a disabled icon button is drawn faded, with no pointer cursor", () => {
   expect(Number(getComputedStyle(button).opacity)).toBeCloseTo(Number(faded), 5);
   expect(getComputedStyle(button).cursor).toBe("default");
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const attribute of ["aria-pressed", "aria-expanded"]) {
+    test(`the ${attribute} icon follows its button's tokens (${theme})`, async () => {
+      const { button, icon } = iconButton();
+      const host = button.parentElement!;
+      host.setAttribute("data-theme", theme);
+      host.style.setProperty("--wt-color-text", "rgb(31, 32, 33)");
+      host.style.setProperty("--wt-color-primary-text", "rgb(14, 15, 16)");
+      registerIcons({ "button-colour-test": "M2 2h12v12H2z" });
+      const glyph = document.createElement("wt-icon");
+      glyph.name = "button-colour-test";
+      icon.replaceWith(glyph);
+      await glyph.updateComplete;
+      const fill = () => getComputedStyle(glyph.shadowRoot!.querySelector("svg")!).fill;
+      expect(fill()).toBe("rgb(31, 32, 33)");
+      button.setAttribute(attribute, "true");
+      expect(fill()).toBe("rgb(14, 15, 16)");
+      host.style.setProperty("--wt-color-primary-text", "rgb(41, 42, 43)");
+      expect(fill()).toBe("rgb(41, 42, 43)");
+      button.setAttribute(attribute, "false");
+      expect(fill()).toBe("rgb(31, 32, 33)");
+    });
+  }
+}
