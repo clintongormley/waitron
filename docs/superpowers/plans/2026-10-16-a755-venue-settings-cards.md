@@ -845,6 +845,9 @@ is a **throwaway**, never committed and never run by CI.
 | `catalogue-manage-permission.test.ts:56` | VAT default PUT gated by `catalogue.manage` | row gone; `venue-defaults-permission.test.ts` gates on `venue.configure` | spec 5 (permission) |
 | `catalogue-api.test.ts:6463`, `:6478`, `:6497` | on `PUT /catalogue-settings` | on `PUT /venue-defaults` | spec 5 |
 | `location-settings-api.test.ts:405-534` (PUT), `location-settings-api.orders-open.test.ts` | on `PUT /receipt-language` `{language}` | on `PUT /venue-defaults` `{receiptLanguage}` | one Save, one transaction |
+| `receipt-language-panel.test.ts:144` (as of `7d9df4199`) | a pick made while a save was in flight was kept, and stayed changed after the save | the pick is ignored: both fields are disabled while saving, and a successful save returns to view mode | one Save for both fields (spec 1, 4) |
+| `receipt-language-panel.test.ts:233` (as of `7d9df4199`) | a live update that fixed the language dropped the staged choice and its changed state | it moves the staged choice to the fixed language and keeps the VAT draft, so the draft stays changed | header point 6 |
+| `dashboard-app.settings-panels.test.ts:249`, `:258`; `dashboard-app.test.ts:3030` (as of `34a9ffabb`) | checked that `dashboard-catalogue-settings-panel` and `dashboard-catalogue-defaults-screen` were absent | removed: both elements were deleted on this branch, so the checks could not fail | spec 5 |
 | deleted: `catalogue-defaults-screen*.test.ts`, `catalogue-settings-panel*.test.ts`, `receipt-language-panel*.test.ts` | — | each case named as covered, ported or retired in T7/T8 | spec 4, 5 |
 
 ## Risks
