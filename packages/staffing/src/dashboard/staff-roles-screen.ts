@@ -368,6 +368,7 @@ export class StaffRolesScreen extends LitElement {
               .api=${this.api}
               .staffRole=${this.editing ?? undefined}
               .open=${this.editing !== undefined}
+              .staffRoles=${this.staffRoles ?? []}
               @staff-role-close=${(event: CustomEvent<{ wrote: boolean }>) => {
                 this.editing = undefined;
                 if (event.detail.wrote) void this.#afterWrite();

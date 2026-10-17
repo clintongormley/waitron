@@ -422,6 +422,7 @@ export class StaffingSpecialDayPainter extends LitElement {
           : staffRoleDialog(
               this.api,
               this.dialogOpen,
+              this.staffRoles,
               (saved) => {
                 if (!this.staffRoles.some(({ id }) => id === saved.id))
                   this.staffRoles = [...this.staffRoles, saved];

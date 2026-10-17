@@ -387,6 +387,23 @@ describe("the staff roles page", () => {
     expect(dialog().staffRole).toEqual(listed(cook));
   });
 
+  it("hands a new staff role's dialog the staff roles, so it starts on a colour none uses", async () => {
+    await mount(fakeRequest(() => [waiter, cook, runner]));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!);
+    await settle();
+    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map(listed));
+    const colour = dialog().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+      "wt-colour-chooser[name=colour]",
+    )!;
+    expect(colour.value).toBe("amber");
+  });
+
+  it("hands an edited staff role's dialog every staff role, its own included", async () => {
+    await mount(fakeRequest(() => [waiter, cook, runner]));
+    await choose("edit-role-c");
+    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map(listed));
+  });
+
   it("does not read the list again when the dialog is cancelled", async () => {
     const request = await mount(fakeRequest(() => [waiter]));
     await choose("edit-role-w");
@@ -876,8 +893,8 @@ describe("the staff roles page", () => {
     expect(
       request.mock.calls.filter(([, method]) => method === "POST").map(([, , body]) => body),
     ).toEqual([
-      { name: "Runner", colour: "blue" },
-      { name: "Cook", colour: "blue" },
+      { name: "Runner", colour: "red" },
+      { name: "Cook", colour: "red" },
     ]);
     expect(request.mock.calls.filter(([, method]) => method === "PUT")).toEqual([]);
   });

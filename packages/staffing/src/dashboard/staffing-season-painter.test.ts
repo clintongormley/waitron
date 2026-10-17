@@ -269,6 +269,7 @@ it("+ New staff role opens the staff role dialog beside the frame, and a saved o
   )!;
   expect(dialog.open).toBe(true);
   expect(dialog.staffRole).toBeUndefined();
+  expect(dialog.staffRoles).toEqual(STAFF_ROLES);
   const created = {
     id: "dw",
     name: "Dishwasher",

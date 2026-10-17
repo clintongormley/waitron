@@ -157,7 +157,6 @@ export class StaffRoleDialog extends LitElement {
     ownIds: readonly (string | undefined)[];
     users: readonly ColourUser[];
   };
-  /** The staff roles other than this one, which may be the one this dialog has just created. */
   private others(): readonly ColourUser[] {
     const ownIds = [this.staffRole?.id, this.savedId];
     const known = this.othersFor;

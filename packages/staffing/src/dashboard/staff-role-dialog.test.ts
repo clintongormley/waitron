@@ -703,6 +703,16 @@ describe("staff-role dialog", () => {
     expect(chooser().value).toBe("red");
   });
 
+  it("a new staff role keeps its starting colour when the roles arrive after it opened", async () => {
+    await mountWith([]);
+    expect(chooser().value).toBe("red");
+    el.staffRoles = [{ id: "role-w", name: "Waiter", colour: "red" }];
+    await el.updateComplete;
+    expect(chooser().value).toBe("red");
+    expect(usedBy().red).toEqual(["Waiter"]);
+    expect(save().disabled).toBe(true);
+  });
+
   it("a colour chosen through the panel is the one created", async () => {
     const api = await mountWith(roles);
     await typeName("Host");

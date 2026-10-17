@@ -235,6 +235,7 @@ it("+ New staff role opens the staff role dialog beside the frame, and a saved o
     "painter-frame + staff-role-dialog",
   )!;
   expect(dialog.open).toBe(true);
+  expect(dialog.staffRoles).toEqual(STAFF_ROLES);
   const created = {
     id: "dw",
     name: "Dishwasher",
