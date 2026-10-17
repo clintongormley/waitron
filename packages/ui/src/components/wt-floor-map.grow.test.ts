@@ -279,7 +279,7 @@ it("a drag out and back, released on the same tables, returns to the tables' rat
 });
 
 /** Drags T1 3 squares right (ratio 15 / 8), then 2 down: the drag's crop is 15 × 10, ratio 3 / 2
- * again, so the host keeps its size while the view is fitted to that crop. */
+ * again, so the host is back to its first size while the view is fitted to that crop. */
 async function dragAnL(el: WtFloorMap): Promise<{ x: number; y: number }> {
   const { to } = await holdAndMove(el, "t1", 3, 0);
   expect(widthOf(el, "t1")).toBe(192);

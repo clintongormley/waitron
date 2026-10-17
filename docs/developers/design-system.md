@@ -812,7 +812,7 @@ wheel event since its last fit, even one at a limit that moved nothing; a new `t
 the view. While a movable table is dragged on a view not panned or zoomed since its last fit (by
 gesture, wheel or keyboard), what it fits and the ratio it publishes are the tables' crop united
 with the crop of the tables as the drag has drawn them at each move so far: the plan only grows
-during a drag, and a drag back inward does not shrink it. A move does not refit the view itself: a
+during a drag unless `tables` is replaced, and a drag back inward does not shrink it. A move does not refit the view itself: a
 changed ratio resizes a host whose CSS reads it, and the resize refits the view, so a host of fixed
 size keeps its view through a drag unless `fitKey` changes. A `tables` replaced during the drag restarts that union from
 the new tables. A pan or zoom during the drag stops the growth and keeps the shape grown so far

@@ -408,8 +408,9 @@ export class WtFloorMap extends LitElement {
 
   #tablesCrop: PlanRect | null = null;
 
-  /** Every crop this drag has drawn while the view was untouched, united, so a drag back inward
-   * does not shrink the plan; null until such a drag of a movable group moves. */
+  /** The crops this drag has drawn while the view was untouched, since it started or since
+   * `tables` last changed, united, so a drag back inward does not shrink the plan; null until such
+   * a drag of a movable group moves. */
   #dragCrop: PlanRect | null = null;
 
   /** Set by a fit to a drag's crop, cleared by the next fit. Ending a hold then refits an untouched
