@@ -52,6 +52,19 @@ it("says the change could not be saved for a season refusal it cannot word", () 
   ).toBe("A period’s end offset would run into Autumn on Sunday.");
 });
 
+it("words an end-offset clash on a date with no special day by the date alone", () => {
+  expect(
+    seasonRefusalText(
+      {
+        code: "season.invalid",
+        params: { field: "seasons", reason: "end_offset", date: "2026-12-24" },
+      },
+      seasons,
+      [],
+    ),
+  ).toBe("A period’s end offset would run into Thu, 24 Dec 2026.");
+});
+
 it("is empty for a refusal that names a field", () => {
   expect(
     seasonRefusalText(

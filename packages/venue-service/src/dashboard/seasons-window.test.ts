@@ -591,6 +591,13 @@ it.each([
     },
     "A period’s end offset would run into Wed, 24 Dec 2031.",
   ],
+  [
+    {
+      code: "season.invalid",
+      params: { field: "seasons", reason: "end_offset", date: "2026-12-24" },
+    },
+    "A period’s end offset would run into Thu, 24 Dec 2026.",
+  ],
   [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
   [
     { code: "hours.clock_change_pending" },
@@ -624,10 +631,12 @@ it.each([
   },
 );
 
-it("while saving, Save shows busy, nothing else acts, and Escape does not close", async () => {
+it("while saving, Save shows busy, nothing else acts, and Escape does not close until the save ends", async () => {
   const { answer, reject } = held();
   const saveSeasons = vi.fn(() => answer);
   const el = await mount(false, { saveSeasons });
+  const guard = vi.fn(async () => true);
+  el.beforeClose = guard;
   await change(el, "season-0-name", "Deep winter");
   await press(el, save(el));
   expect(save(el).loading).toBe(true);
@@ -646,9 +655,18 @@ it("while saving, Save shows busy, nothing else acts, and Escape does not close"
   await userEvent.keyboard("{Escape}");
   await el.updateComplete;
   expect(modal.open).toBe(true);
+  expect(guard).not.toHaveBeenCalled();
   reject({ code: "hours.clock_changed" });
   await expect.poll(() => save(el).loading).toBe(false);
   expect(field(el, "season-0-name").hasAttribute("disabled")).toBe(false);
+  const closed = new Promise<void>((resolve) =>
+    modal.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  field(el, "season-0-name").focus();
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(guard).toHaveBeenCalledTimes(1);
+  expect(guard).toHaveBeenCalledWith("escape");
 });
 
 it("Enter in a field presses Save", async () => {
@@ -874,11 +892,16 @@ it("binning a stored season says where its days go and what is lost", async () =
   expect(readSeasonDeleteImpact).toHaveBeenCalledTimes(1);
   expect(readSeasonDeleteImpact).toHaveBeenCalledWith("autumn");
   expect(notes(el)).toEqual(["Saving deletes Autumn; its days join Summer."]);
-  autumn.resolve({ departments: [{ id: "r", name: "Restaurant" }] });
+  autumn.resolve({
+    departments: [
+      { id: "b", name: "Bar" },
+      { id: "k", name: "Kitchen" },
+    ],
+  });
   await expect
     .poll(() => notes(el))
     .toEqual([
-      "Saving deletes Autumn; its days join Summer. The hours of Restaurant in it are lost.",
+      "Saving deletes Autumn; its days join Summer. The hours of Bar and Kitchen in it are lost.",
     ]);
 
   await press(el, bins(el)[1]!);
@@ -888,7 +911,7 @@ it("binning a stored season says where its days go and what is lost", async () =
   await expect
     .poll(() => notes(el))
     .toEqual([
-      "Saving deletes Autumn; its days join Winter. The hours of Restaurant in it are lost.",
+      "Saving deletes Autumn; its days join Winter. The hours of Bar and Kitchen in it are lost.",
       "Saving deletes Spring; its days join Winter. No department has hours in it.",
       "Saving deletes Summer; its days join Winter. Which departments lose hours could not be read.",
     ]);
@@ -930,8 +953,9 @@ it("a newer impact read's answer wins over an older one", async () => {
 it("Spanish: the bin and the delete note", async () => {
   try {
     setLocale("es");
+    const impact = heldImpact();
     const el = await mount(false, {
-      readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+      readSeasonDeleteImpact: vi.fn(() => impact.answer),
     });
     el.seasons = [
       { id: "spring", name: "Primavera", startsOn: "03-01", colour: "green" },
@@ -943,9 +967,22 @@ it("Spanish: the bin and the delete note", async () => {
     expect(bins(el)[3]!.getAttribute("aria-label")).toBe("Eliminar Otoño");
     await press(el, bins(el)[3]!);
     expect(notes(el)).toEqual(["Al guardar se elimina Otoño; sus días pasan a Verano."]);
+    impact.resolve({
+      departments: [
+        { id: "b", name: "Bar" },
+        { id: "k", name: "Kitchen" },
+      ],
+    });
+    await expect
+      .poll(() => notes(el))
+      .toEqual([
+        "Al guardar se elimina Otoño; sus días pasan a Verano. Se pierden los horarios de Bar y Kitchen en ella.",
+      ]);
     await press(el, button(el, "add-season")!);
     for (let count = 0; count < 3; count += 1) await press(el, bins(el)[0]!);
-    expect(notes(el)[0]).toBe("Al guardar se elimina Otoño.");
+    expect(notes(el)[0]).toBe(
+      "Al guardar se elimina Otoño. Se pierden los horarios de Bar y Kitchen en ella.",
+    );
   } finally {
     setLocale("en");
   }

@@ -793,10 +793,11 @@ describe("Opening hours month", () => {
   });
 
   it("passes the seasons the month touches to the chips", async () => {
-    const el = await mount(
-      { ...stationModel(), clockRevision: 4 },
-      { readOnly: true, stationMode: true, departments: STATION },
-    );
+    const el = await mount(stationModel(), {
+      readOnly: true,
+      stationMode: true,
+      departments: STATION,
+    });
     const chips = root(el).querySelector("season-chips")!;
     expect(chips.seasons.map((season) => season.id)).toEqual(["autumn", "winter"]);
   });

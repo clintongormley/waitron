@@ -894,6 +894,7 @@ describe("the Calendar window address", () => {
     await userEvent.click(button);
     await seasonsWindow(el);
     expect(pushes()).toEqual(["/manage/opening-hours/view/year/window/seasons"]);
+    expect(painterOf(el)).toBeNull();
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
