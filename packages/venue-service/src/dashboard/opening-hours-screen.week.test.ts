@@ -10,10 +10,13 @@ import {
 import { applyTokens, NavigationGuard } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
+import { addDays } from "../hours-rules.js";
 import { frame } from "../testing/season-painter-fixture.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import type { StationShow } from "./station-show.js";
+import { weekDates } from "./week-rows.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -79,16 +82,75 @@ afterEach(async () => {
   history.replaceState(null, "", originalUrl);
 });
 
+const STATIONS = [
+  { id: "s2", name: "Default", active: true, isDefault: true, displayOrder: 0 },
+  { id: "s1", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
+];
+/** The Grill's days from `from` to `to`: the Restaurant sends it lunch, the Bar all day. The
+ *  default station is always open. */
+function stationTimes(stationId: string, from: string, to: string) {
+  if (stationId === "s2") return { always: "default", days: [] };
+  const days = [];
+  for (let date = from; date <= to; date = addDays(date, 1))
+    days.push({
+      date,
+      departments: [
+        {
+          departmentId: "rest",
+          ranges: [{ periodId: "lunch", startsAt: "13:00", endsAt: "15:30" }],
+        },
+        {
+          departmentId: "bar",
+          ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
+        },
+      ],
+    });
+  return { always: null, days };
+}
+interface Answers {
+  /** Thrown by the station list read, or by every station-times read. */
+  stationsFail?: unknown;
+  /** The station list never answers. */
+  holdStations?: boolean;
+  timesFail?: unknown;
+  /** Month reads that never answer. */
+  holdMonths?: readonly string[];
+  /** Station-times reads answer December's dates, whatever they asked for. */
+  timesAsDecember?: boolean;
+  readOnly?: boolean;
+}
+const REFUSED = { code: "authorization.not_permitted", status: 403 };
+
 /** Every month read is answered with the fixture's December, which holds 30 November to
  *  3 January, so it serves each week these tests draw; with `hold`, the opening-hours read never
- *  answers. */
-async function mount(address: string, calendar?: Screen["calendar"], hold = false) {
+ *  answers. The station list holds the Grill and the default station. */
+async function mount(
+  address: string,
+  calendar?: Screen["calendar"],
+  hold = false,
+  answers: Answers = {},
+) {
   history.replaceState(null, "", address);
   const months: string[] = [];
+  const paths: string[] = [];
   const request = (async (path: string) => {
+    paths.push(path);
+    if (path === "/management-api/stations") {
+      if (answers.stationsFail) throw answers.stationsFail;
+      if (answers.holdStations) return new Promise(() => {});
+      return STATIONS;
+    }
+    const times = /\/stations\/([^/]+)\/service-times\?from=([\d-]+)&to=([\d-]+)$/.exec(path);
+    if (times) {
+      if (answers.timesFail) throw answers.timesFail;
+      return answers.timesAsDecember
+        ? stationTimes(times[1]!, "2026-11-30", "2027-01-03")
+        : stationTimes(times[1]!, times[2]!, times[3]!);
+    }
     const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
     if (month) {
       months.push(month[1]!);
+      if (answers.holdMonths?.includes(month[1]!)) return new Promise(() => {});
       return monthModel({ month: month[1]! });
     }
     const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
@@ -98,6 +160,7 @@ async function mount(address: string, calendar?: Screen["calendar"], hold = fals
   }) as DashboardRequest;
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(request);
+  el.readOnly = answers.readOnly ?? false;
   if (calendar) el.calendar = { ...calendar, ctx: { request } };
   applyTokens(el);
   hosts.push(el);
@@ -105,7 +168,7 @@ async function mount(address: string, calendar?: Screen["calendar"], hold = fals
   if (hold) await expect.poll(() => el.shadowRoot?.querySelector("h1")).not.toBeNull();
   else await expect.poll(() => week(el)?.model).toBeDefined();
   await el.updateComplete;
-  return { el, months };
+  return { el, months, paths };
 }
 const week = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-week");
 const painter = (el: Screen) => el.shadowRoot!.querySelector("season-painter");
@@ -169,6 +232,7 @@ describe("the Week at its address", () => {
   it("says when the week's month cannot be read", async () => {
     history.replaceState(null, "", "/manage/opening-hours/view/week/week/2026-12-09");
     const request = (async (path: string) => {
+      if (path === "/management-api/stations") return [];
       if (/\/opening-hours\/month\?/.test(path)) throw { code: "connection.failed" };
       return model();
     }) as DashboardRequest;
@@ -526,6 +590,7 @@ describe("Open this week from the day box", () => {
   ) {
     history.replaceState(null, "", address);
     const request = (async (path: string) => {
+      if (path === "/management-api/stations") return [];
       const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
       if (month && monthGate) await monthGate;
       if (month) return holdMonths ? new Promise(() => {}) : monthModel({ month: month[1]! });
@@ -703,5 +768,233 @@ describe("Open this week from the day box", () => {
     await week(el)!.updateComplete;
     expect(week(el)!.date).toBe("2026-12-10");
     expect(dayNames(el)).toEqual(["2026-12-10"]);
+  });
+});
+
+describe("a prep station in the Calendar", () => {
+  const grillWeek = "/manage/opening-hours/view/week/station/s1/week/2026-12-09";
+  const showValues = (el: Screen) =>
+    week(el)!
+      .shadowRoot!.querySelector("wt-combobox")!
+      .options.map(({ value }) => value);
+  const rowKeys = (el: Screen, date: string) =>
+    [
+      ...week(el)!.shadowRoot!.querySelectorAll<HTMLElement>(`section[data-date="${date}"] .row`),
+    ].map((row) => row.dataset["row"]);
+  const timesReads = (paths: readonly string[]) =>
+    paths.filter((path) => path.includes("/service-times"));
+  const LOAD_ERROR = "Opening hours could not be loaded. It will be tried again.";
+
+  it("choosing a station in the Week's Show writes it and draws its rows", async () => {
+    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    await expect.poll(() => showValues(el)).toContain("station:s1");
+    chooseShown(el, "station:s1");
+    await expect.poll(() => location.pathname).toBe(grillWeek);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    await week(el)!.updateComplete;
+    expect(rowKeys(el, "2026-12-09")).toEqual(["rest", "bar"]);
+    expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
+  });
+
+  it("the Month keeps the station", async () => {
+    const { el, paths } = await mount(grillWeek);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    const pushed = pushedPaths();
+    monthLink(el, "2026-12").click();
+    await expect.poll(() => monthView(el)?.station?.state).toBe("ready");
+    expect(pushed()).toEqual(["/manage/opening-hours/view/month/station/s1/month/2026-12"]);
+    await monthView(el)!.updateComplete;
+    expect(monthView(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
+    expect(timesReads(paths)).toEqual([
+      "/management-api/venue-service/stations/s1/service-times?from=2026-11-30&to=2027-01-03",
+    ]);
+  });
+
+  it("choosing a department clears the station", async () => {
+    const { el } = await mount(grillWeek);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    chooseShown(el, "bar");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/bar/week/2026-12-09");
+    await expect.poll(() => week(el)!.station).toBeUndefined();
+    expect(week(el)!.departmentId).toBe("bar");
+  });
+
+  it("an unknown station shows All departments and is never read", async () => {
+    const { el, paths } = await mount(
+      "/manage/opening-hours/view/week/station/gone/week/2026-12-09",
+    );
+    await expect.poll(() => showValues(el)).toContain("station:s1");
+    await week(el)!.updateComplete;
+    expect(week(el)!.station).toBeUndefined();
+    expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("all");
+    expect(timesReads(paths)).toEqual([]);
+  });
+
+  it.each([
+    ["a station", grillWeek],
+    [
+      "a station named beside a department",
+      "/manage/opening-hours/view/week/department/rest/station/s1/week/2026-12-09",
+    ],
+  ])("the day box over %s still lists every department's hours", async (_, address) => {
+    const { el } = await mount(address);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    await week(el)!.updateComplete;
+    await userEvent.click(dayName(el, "2026-12-09"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await expect
+      .poll(() => dayBox(el)!.rows.map((row) => row.name))
+      .toEqual(["Restaurant", "Terrace", "Bar"]);
+  });
+
+  it("a station waits for the station list before drawing anything", async () => {
+    const { el, paths } = await mount(grillWeek, undefined, false, { holdStations: true });
+    await expect.poll(() => paths).toContain("/management-api/stations");
+    await week(el)!.updateComplete;
+    expect(week(el)!.station).toEqual({ id: "s1", state: "loading" });
+    expect(week(el)!.shadowRoot!.querySelector("section")).toBeNull();
+    expect(timesReads(paths)).toEqual([]);
+  });
+
+  it("the default station reads Always open", async () => {
+    const { el } = await mount("/manage/opening-hours/view/week/station/s2/week/2026-12-09");
+    await expect.poll(() => week(el)!.station?.state).toBe("always");
+    await week(el)!.updateComplete;
+    expect(week(el)!.shadowRoot!.querySelector("[data-test=always-open]")).not.toBeNull();
+  });
+
+  it.each([
+    ["fails", { code: "connection.failed" }],
+    ["is refused", REFUSED],
+  ])("a station-times read that %s shows the load error above the view", async (_, error) => {
+    const { el } = await mount(grillWeek, undefined, false, { timesFail: error });
+    const alert = () => el.shadowRoot!.querySelector("[data-test=station-read-error]");
+    await expect.poll(() => alert()?.textContent).toBe(LOAD_ERROR);
+    expect(alert()!.getAttribute("role")).toBe("alert");
+    expect(alert()!.nextElementSibling).toBe(week(el));
+    expect(week(el)!.station?.state).toBe("loading");
+  });
+
+  it.each([
+    ["fails", { code: "connection.failed" }],
+    ["is refused", REFUSED],
+  ])(
+    "a station list that %s leaves Show with departments only, and the page works",
+    async (_, error) => {
+      const { el, paths } = await mount(grillWeek, undefined, false, { stationsFail: error });
+      await expect.poll(() => paths).toContain("/management-api/stations");
+      await week(el)!.updateComplete;
+      expect(showValues(el)).toEqual(["all", "rest", "bar"]);
+      expect(week(el)!.station).toBeUndefined();
+      expect(rowKeys(el, "2026-12-09")).toEqual(["rest", "bar"]);
+      expect(
+        week(el)!.shadowRoot!.querySelector(
+          'section[data-date="2026-12-09"] .row[data-row="rest"]',
+        )!.textContent,
+      ).toContain("Lunch 13:00–16:00");
+      expect(timesReads(paths)).toEqual([]);
+      chooseShown(el, "bar");
+      await expect.poll(() => week(el)!.departmentId).toBe("bar");
+    },
+  );
+
+  it("a read-only Calendar offers no stations and reads none", async () => {
+    const { el, paths } = await mount(grillWeek, undefined, false, { readOnly: true });
+    await week(el)!.updateComplete;
+    // Gives a station list a chance to have been asked for, had the screen wanted one.
+    await new Promise((settled) => setTimeout(settled, 50));
+    await week(el)!.updateComplete;
+    expect(showValues(el)).toEqual(["all", "rest", "bar"]);
+    expect(week(el)!.stations).toEqual([]);
+    expect(week(el)!.station).toBeUndefined();
+    expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("all");
+    expect(paths.some((path) => path.startsWith("/management-api/stations"))).toBe(false);
+    expect(paths.some((path) => path.includes("/service-times"))).toBe(false);
+  });
+
+  it.each(["pointer", "keyboard"] as const)(
+    "a painter opened from a station's Week closes back onto the station's address (%s)",
+    async (by) => {
+      const press = async (target: HTMLElement) => {
+        if (by === "pointer") return userEvent.click(target);
+        target.focus();
+        await userEvent.keyboard("{Enter}");
+      };
+      const { el } = await mount(grillWeek);
+      await expect.poll(() => week(el)!.station?.state).toBe("ready");
+      await week(el)!.updateComplete;
+      await press(dayName(el, "2026-12-09"));
+      await expect.poll(() => boxOpen(el)).toBe(true);
+      const boxClosed = closed(dayBox(el)!, "calendar-day-box-close");
+      await press(dayBox(el)!.querySelector<HTMLElement>("[data-test=edit-week]")!);
+      await boxClosed;
+      await expect.poll(() => painter(el)).not.toBeNull();
+      const shown = painter(el)!;
+      await shown.updateComplete;
+      await expect
+        .poll(() => frame(shown).shadowRoot?.querySelector("[data-test=cancel]"))
+        .toBeTruthy();
+      const close = closed(shown, "painter-close");
+      await press(frame(shown).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!);
+      await close;
+      await expect.poll(() => location.pathname).toBe(grillWeek);
+      await expect.poll(() => painter(el)).toBeNull();
+      expect(week(el)!.station?.state).toBe("ready");
+    },
+  );
+
+  it("a station read for the next month, beside the last month's read, draws as loading", async () => {
+    const { el, paths } = await mount(
+      "/manage/opening-hours/view/week/station/s1/week/2026-12-28",
+      undefined,
+      false,
+      { holdMonths: ["2027-01"], timesAsDecember: true },
+    );
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+    await expect.poll(() => week(el)!.date).toBe("2027-01-04");
+    await expect
+      .poll(() => timesReads(paths))
+      .toContain(
+        "/management-api/venue-service/stations/s1/service-times?from=2026-12-28&to=2027-01-31",
+      );
+    await new Promise((settled) => setTimeout(settled, 50));
+    await el.updateComplete;
+    expect(week(el)!.model?.month).toBe("2026-12");
+    expect(week(el)!.station?.state).toBe("loading");
+  });
+
+  it("a week across two months draws the station on every one of its days", async () => {
+    const { el } = await mount("/manage/opening-hours/view/week/station/s1/week/2026-12-28");
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    await week(el)!.updateComplete;
+    const dates = weekDates("2026-12-28");
+    expect(dates).toEqual([
+      "2026-12-28",
+      "2026-12-29",
+      "2026-12-30",
+      "2026-12-31",
+      "2027-01-01",
+      "2027-01-02",
+      "2027-01-03",
+    ]);
+    for (const date of dates) expect(rowKeys(el, date), date).toEqual(["rest", "bar"]);
+    const station = week(el)!.station as Extract<StationShow, { state: "ready" }>;
+    const read = monthModel();
+    for (const date of dates) {
+      const day = station.model.days.find((row) => row.date === date)!;
+      const { endMinute, dayCutover, holidays, specialDay, seasonId, closedAllDay } =
+        read.days.find((row) => row.date === date)!;
+      expect(day, date).toMatchObject({
+        endMinute,
+        dayCutover,
+        holidays,
+        specialDay,
+        seasonId,
+        closedAllDay,
+      });
+    }
   });
 });

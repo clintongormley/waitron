@@ -92,17 +92,20 @@ function model(): OpeningHoursModel {
   };
 }
 
-/** Answers the special-day painter's season read with no season hours; the rest goes to `request`. */
+/** Answers the special-day painter's season read with no season hours and the station list with
+ *  no stations; the rest goes to `request`. */
 function withSeasonDays(request: DashboardRequest): DashboardRequest {
   return (async (path, method, body, options) =>
-    method === "GET" && path.includes("/opening-hours/season-days?")
-      ? {
-          days: new URL(path, "http://x").searchParams
-            .get("dates")!
-            .split(",")
-            .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
-        }
-      : request(path, method, body, options)) as DashboardRequest;
+    method === "GET" && path === "/management-api/stations"
+      ? []
+      : method === "GET" && path.includes("/opening-hours/season-days?")
+        ? {
+            days: new URL(path, "http://x").searchParams
+              .get("dates")!
+              .split(",")
+              .map((date) => ({ date, seasonId: null, dayCutover: "06:00", departments: [] })),
+          }
+        : request(path, method, body, options)) as DashboardRequest;
 }
 /** A special-day write's answer as the server gives it: the stored day the request describes. */
 function savedDay(path: string, method: string, body: unknown): SpecialDayDetail {
