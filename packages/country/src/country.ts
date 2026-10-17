@@ -118,6 +118,7 @@ export interface CountryPack {
   /** Keyed by invoice locale. */
   readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;
   readonly officialLocales?: readonly string[];
+  readonly requiredContentLocales?: readonly string[];
   readonly moduleIds: readonly string[];
   /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */
   readonly availableForVenueSetup: boolean;
@@ -246,7 +247,9 @@ export function contentLanguageRules(
 ): ContentLocaleRules {
   const area = areaValue == null ? undefined : findAdministrativeArea(pack, areaValue);
   return {
-    required: area?.requiredContentLocales ?? [],
+    required: [
+      ...new Set([...(area?.requiredContentLocales ?? []), ...(pack.requiredContentLocales ?? [])]),
+    ],
     official: pack.officialLocales ?? [],
     ...(area?.defaultContentLocale === undefined
       ? {}

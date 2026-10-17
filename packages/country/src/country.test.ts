@@ -159,6 +159,17 @@ describe("contentLanguageRules", () => {
       });
   });
 
+  it("unions the country floor with regional requirements without duplicating or reordering regional choices", () => {
+    const floored = { ...ruled, requiredContentLocales: ["xy-XY", "country-XY"] };
+    expect(contentLanguageRules(floored, "North").required).toEqual([
+      "north-XY",
+      "xy-XY",
+      "country-XY",
+    ]);
+    for (const area of ["East", "missing", null, undefined])
+      expect(contentLanguageRules(floored, area).required).toEqual(["xy-XY", "country-XY"]);
+  });
+
   it("names no official locale for a pack that declares none", () => {
     expect(contentLanguageRules(pack, "01")).toStrictEqual({ required: [], official: [] });
   });

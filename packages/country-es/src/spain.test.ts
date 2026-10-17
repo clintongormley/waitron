@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   RECEIPT_LABEL_KEYS,
+  contentLanguageRules,
   findAdministrativeAreaByPostalCode,
   receiptLanguageRules,
   resolveFiscalJurisdiction,
@@ -149,6 +150,14 @@ describe("regional content languages", () => {
   const BASQUE_COUNTRY_AND_NAVARRE = ["01", "20", "48", "31"];
   const area = (code: string) => SPAIN.administrativeAreas.find((entry) => entry.code === code)!;
 
+  it.each([null, undefined, "", "missing", "99"])(
+    "keeps Spanish enabled without a recognized province: %s",
+    (province) => {
+      expect(contentLanguageRules(SPAIN, province).required).toEqual(["es-ES"]);
+      expect(contentLanguageRules(SPAIN, province).defaultContentLocale).toBeUndefined();
+    },
+  );
+
   it("names Spain's official languages", () => {
     expect(SPAIN.officialLocales).toEqual(["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"]);
   });
@@ -192,9 +201,9 @@ describe("regional content languages", () => {
     },
   );
 
-  it("requires nothing in the Basque Country and Navarre", () => {
+  it("keeps Spanish enabled in the Basque Country and Navarre without choosing a regional default", () => {
     for (const code of BASQUE_COUNTRY_AND_NAVARRE) {
-      expect(area(code).requiredContentLocales, code).toBeUndefined();
+      expect(contentLanguageRules(SPAIN, code).required, code).toEqual(["es-ES"]);
       expect(area(code).defaultContentLocale, code).toBeUndefined();
       expect(area(code).foreignLanguageNotice, code).toBeUndefined();
     }

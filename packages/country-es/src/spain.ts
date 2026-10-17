@@ -256,9 +256,8 @@ function languageRulesFor(code: string): LanguageRules {
   if (VALENCIAN_PROVINCES.has(code)) return VALENCIAN_COMMUNITY;
   if (GALICIAN.has(code)) return GALICIA;
   if (BALEARIC_PROVINCES.has(code)) return BALEARIC_ISLANDS;
-  // No content language is required in the Basque Country or Navarre (owner;
-  // docs/developers/products.md → "Content languages per region").
-  if (BASQUE.has(code) || NAVARRE_PROVINCES.has(code)) return {};
+  if (BASQUE.has(code) || NAVARRE_PROVINCES.has(code))
+    return { requiredContentLocales: SPANISH.requiredContentLocales };
   return SPANISH;
 }
 
@@ -294,6 +293,7 @@ export const SPAIN: CountryPack = {
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   receiptLabels: SPAIN_RECEIPT_LABELS,
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
+  requiredContentLocales: ["es-ES"],
   moduleIds: ["workforce-es"],
   availableForVenueSetup: true,
   administrativeAreas,
