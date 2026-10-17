@@ -88,6 +88,8 @@ Everything not listed here needs more spec work first.
 1. **A773 — courses, groups and the pass** (_The till, devices and table service_). A773-1, the
    table screen's unsent list, has a plan; A773-2, firing and the pass, is planned once A773-1
    lands.
+   **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
+   slices wait for A773-2.
 2. **A504 — floor plan sets, one per service period** (_The till,
    devices and table service_).
 3. **A682 — translations: nothing required, every missing name reported, all languages side by
@@ -1901,6 +1903,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
 ### The till, devices and table service
+
+- **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
+  2026-10-18).** Designed, not built; follows A773-1. Every order line holds one portion with its
+  own extras ("2 ×" is display only); bills can be named and the name reaches kitchen tickets and
+  the pass; the main bill and the Tab button go; every device shows one "Bill 1 of 3 ▾" switcher
+  with Bill ⋯ and Table ⋯ menus; Move dishes… replaces Split by item and Transfer items; Split a
+  table takes any mix of bills and dishes in one step, waiting courses included; one payment pays
+  one bill; "Give back" becomes "Refund". The pre-bill part waits for the asesor (S2, A446).
+  [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
+  [mockups](backlog/mockups/a803-bills-and-tables/).
 
 - **A752. Device profile form: an empty starting-zone list and errors that cannot be cleared
   (owner, 2026-10-16).** On Santet, "Every zone in this department" is on, the Starting zone list
