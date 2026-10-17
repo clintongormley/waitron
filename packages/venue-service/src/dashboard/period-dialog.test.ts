@@ -1101,7 +1101,7 @@ it("adding, the chooser names the periods that use each colour, and the new peri
 
 it("with two departments, no colour is marked until one is chosen, then the chosen department's periods are", async () => {
   const el = await mountAdd(departments);
-  expect(chooser(el).choices.every((choice) => !choice.usedBy?.length)).toBe(true);
+  expect(usedBy(el)).toEqual({ red: [], amber: [], grey: [], green: [], blue: [], purple: [] });
   await change(el, "departmentId", { value: "restaurant" });
   expect(usedBy(el).red).toEqual(["Lunch"]);
   expect(usedBy(el).amber).toEqual(["Dinner"]);
@@ -1138,4 +1138,11 @@ it("typing in another field keeps the chooser's choices; a language change rebui
   } finally {
     setLocale("en");
   }
+});
+
+it("typing a name before a department is chosen keeps the chooser's choices", async () => {
+  const el = await mountAdd(departments);
+  const before = chooser(el).choices;
+  await change(el, "name", { value: "Brunch" });
+  expect(chooser(el).choices).toBe(before);
 });

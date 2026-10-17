@@ -39,6 +39,7 @@ type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   departmentId: string;
 };
 type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
+const NO_USERS: readonly ColourUser[] = [];
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
@@ -217,7 +218,9 @@ export class PeriodDialog extends LitElement {
   }
   private get shownColourUsers(): readonly ColourUser[] {
     if (!this.choosesDepartment) return this.colourUsers;
-    return this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ?? [];
+    return (
+      this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ?? NO_USERS
+    );
   }
   private choicesFor?: { users: readonly ColourUser[]; locale: string; choices: ColourChoice[] };
   private colourChoices(): ColourChoice[] {
