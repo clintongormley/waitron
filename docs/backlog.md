@@ -1336,6 +1336,18 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `packages/venue-service/drizzle/`). Recolour them in the Seasons window, or reset the venue.
   Left open by A721.
 
+- **A season reads two shades of its colour**: the Seasons window's colour chooser paints the solid
+  palette colour (Winter `rgb(47, 85, 212)`), while the season chips, the Year's days and a viewer's
+  swatches paint the paler station tint (`rgb(220, 230, 251)`); a period shows one solid colour
+  everywhere. It follows from A721's Decision 10 (seasons take the station tints) meeting the shared
+  `wt-colour-chooser`. Owner's call: keep, or have the chooser show the tint for seasons. Measured in
+  A721's LOOK, 2026-10-18 (#1843). Left open by A721.
+
+- **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"): below 480 px
+  each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
+  (`seasons-window.ts`, #1843). 1280 px is unchanged. Owner's call whether the cut is acceptable or the
+  row should stack on a phone. Left open by A721.
+
 - **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
   name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
   height with about 300 px blank above Close, because it is the unsized `wt-modal`. Both measured
