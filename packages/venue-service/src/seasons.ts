@@ -16,7 +16,6 @@ import {
 import {
   readDepartmentSeasonWeeks,
   readZoneSeasonWeeks,
-  seasonsNaming,
   targetSeasons,
   writeDepartmentSeasonWeeks,
   writeZoneSeasonWeeks,
@@ -55,22 +54,6 @@ const invalid = (params: ErrorParams["season.invalid"]): never => {
   throw new AppError("season.invalid", params);
 };
 
-/** The trimmed name and the start, refused by code before the unique indexes would throw. */
-function parseSeasonInput(
-  all: readonly Season[],
-  input: { name: string; startsOn: string },
-  ownId: string | null,
-): { name: string; startsOn: string } {
-  const name = typeof input.name === "string" ? input.name.trim() : "";
-  if (name === "") invalid({ field: "name" });
-  const startsOn = parseSeasonStart(input.startsOn) ?? invalid({ field: "startsOn" });
-  const others = all.filter((season) => season.id !== ownId);
-  if (others.some((season) => season.name === name)) invalid({ field: "name", reason: "taken" });
-  if (others.some((season) => season.startsOn === startsOn))
-    invalid({ field: "startsOn", reason: "taken" });
-  return { name, startsOn };
-}
-
 /** MM-DD values the starts CHECK accepts and no real start can equal. */
 const TEMPORARY_STARTS = Array.from({ length: 20 * 40 }, (_, i) => {
   const mm = String(Math.floor(i / 40)).padStart(2, "0");
@@ -85,66 +68,9 @@ export function temporaryStart(index: number): string {
 }
 
 /** Every department, since a season change moves days under all of them. */
-async function checkScheduleAfterSeasonWrite(
-  tx: Transaction,
-  cfg: VenueScope,
-  field: "startsOn" | "seasonId" | "seasons",
-): Promise<void> {
+async function checkScheduleAfterSeasonWrite(tx: Transaction, cfg: VenueScope): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg);
-  if (clash !== null) invalid({ field, reason: "end_offset", ...clash });
-}
-
-/** Renames or moves a season. A rename alone changes no times, so it skips the clock check. */
-export async function saveSeason(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-  input: { name: string; startsOn: string },
-  at: Date,
-  expectedClockRevision: number,
-): Promise<Season> {
-  const { all, own } = await seasonsNaming(tx, cfg, id);
-  const parsed = parseSeasonInput(all, input, id);
-  const moved = parsed.startsOn !== own.startsOn;
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    moved ? "time" : "metadata",
-    at,
-    expectedClockRevision,
-  );
-  await tx.update(seasons).set(parsed).where(eq(seasons.id, id));
-  if (moved) await checkScheduleAfterSeasonWrite(tx, cfg, "startsOn");
-  return { id, ...parsed, colour: own.colour };
-}
-
-/** Adds a season holding a copy of the department and zone weeks of the season it splits, so
- *  its two new boundaries each pair copies of one week. */
-export async function addSeason(
-  tx: Transaction,
-  cfg: VenueScope,
-  input: { name: string; startsOn: string },
-  at: Date,
-  expectedClockRevision: number,
-): Promise<Season> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
-  const all = await ensureDefaultSeasons(tx, cfg);
-  const parsed = parseSeasonInput(all, input, null);
-  const split = seasonOn(all, `2001-${parsed.startsOn}`)!;
-  const [added] = await tx
-    .insert(seasons)
-    .values({ ...parsed, colour: "grey", locationId: cfg.locationId })
-    .returning(SEASON_COLUMNS);
-  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
-  const only = { seasonIds: [split.id], weekdays: [0, 1, 2, 3, 4, 5, 6] };
-  const departmentWeeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover, only);
-  for (const [departmentId, weeks] of departmentWeeks)
-    await writeDepartmentSeasonWeeks(tx, departmentId, [added!.id], weeks.get(split.id)!);
-  const zoneWeeks = await readZoneSeasonWeeks(tx, cfg, undefined, dayCutover, only);
-  for (const [zoneId, weeks] of zoneWeeks)
-    await writeZoneSeasonWeeks(tx, zoneId, [added!.id], weeks.get(split.id)!);
-  await checkScheduleAfterSeasonWrite(tx, cfg, "startsOn");
-  return added!;
+  if (clash !== null) invalid({ field: "seasons", reason: "end_offset", ...clash });
 }
 
 /** Applies a change to the venue's seasons and answers them by start. A changed season keeps its
@@ -257,24 +183,8 @@ export async function saveSeasons(
       if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
     }
   }
-  if (timed) await checkScheduleAfterSeasonWrite(tx, cfg, "seasons");
+  if (timed) await checkScheduleAfterSeasonWrite(tx, cfg);
   return readSeasons(tx, cfg);
-}
-
-/** Deletes a season; its days go to the season before it, and its weeks go with it
- *  (`ON DELETE CASCADE`). */
-export async function deleteSeason(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-  at: Date,
-  expectedClockRevision: number,
-): Promise<void> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
-  const { all } = await seasonsNaming(tx, cfg, id);
-  if (all.length === 1) invalid({ field: "seasonId", reason: "last" });
-  await tx.delete(seasons).where(eq(seasons.id, id));
-  await checkScheduleAfterSeasonWrite(tx, cfg, "seasonId");
 }
 
 /** The departments whose painted ranges deleting the season would lose; a department holding

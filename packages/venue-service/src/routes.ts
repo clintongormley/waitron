@@ -346,7 +346,8 @@ import {
   readOpeningHoursYear,
   readSeasonDays,
 } from "./opening-hours-calendar.js";
-import { addSeason, deleteSeason, saveSeason, seasonDeleteImpact } from "./seasons.js";
+import { saveSeasons, seasonDeleteImpact } from "./seasons.js";
+import type { SeasonChange, SeasonEntry } from "./season-rules.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
 import type { ClosedRange } from "./service-day.js";
 
@@ -392,6 +393,43 @@ function requireWeekList(
     seen.add(id);
     return { id, days: record.days };
   });
+}
+
+/** A season change's shape: absent lists are empty, and every id is a uuid sent once, a repeat
+ *  named at its later place. The entries' values are the writer's to check. */
+function requireSeasonChange(body: Record<string, unknown>): SeasonChange {
+  const list = (field: "save" | "delete"): unknown[] => {
+    const value = body[field];
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) throw new AppError("management.request_invalid", { field });
+    return value;
+  };
+  const seen = new Set<string>();
+  const once = (value: unknown, field: string): string => {
+    const id = requireBodyUuid(value, field);
+    if (seen.has(id)) throw new AppError("management.request_invalid", { field });
+    seen.add(id);
+    return id;
+  };
+  const save = list("save").map((entry: unknown, index): SeasonEntry => {
+    const at = `save.${index}`;
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+      throw new AppError("management.request_invalid", { field: at });
+    const extra = Object.keys(entry).find(
+      (key) => !["id", "name", "startsOn", "colour"].includes(key),
+    );
+    if (extra !== undefined)
+      throw new AppError("management.request_invalid", { field: `${at}.${extra}` });
+    const { id, name, startsOn, colour } = entry as Record<string, unknown>;
+    return {
+      ...(id === undefined ? {} : { id: once(id, `${at}.id`) }),
+      name: name as string,
+      startsOn: startsOn as string,
+      colour: colour as SeasonEntry["colour"],
+    };
+  });
+  const deleted = list("delete").map((id, index) => once(id, `delete.${index}`));
+  return { save, delete: deleted };
 }
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
@@ -473,51 +511,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    const SEASON_KEYS = ["name", "startsOn", "expectedClockRevision"] as const;
-    const seasonInput = (body: Record<string, unknown>) => {
-      onlyKeys(body, SEASON_KEYS);
-      return {
-        input: { name: body.name as string, startsOn: body.startsOn as string },
-        revision: requireClockRevision(body),
-      };
-    };
-
-    app.post("/management-api/venue-service/seasons", (c) =>
+    app.put("/management-api/venue-service/seasons", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const added = await gated(sessionId, (tx) => {
-          const { input, revision } = seasonInput(body);
-          return addSeason(tx, ctx.cfg, input, new Date(), revision);
-        });
-        return c.json(added, 201);
-      }),
-    );
-
-    app.put("/management-api/venue-service/seasons/:seasonId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         return c.json(
           await gated(sessionId, (tx) => {
-            const { input, revision } = seasonInput(body);
-            return saveSeason(tx, ctx.cfg, id, input, new Date(), revision);
+            onlyKeys(body, ["save", "delete", "expectedClockRevision"]);
+            const change = requireSeasonChange(body);
+            const revision = requireClockRevision(body);
+            return saveSeasons(tx, ctx.cfg, change, new Date(), revision);
           }),
         );
-      }),
-    );
-
-    app.delete("/management-api/venue-service/seasons/:seasonId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        await gated(sessionId, (tx) => {
-          onlyKeys(body, ["expectedClockRevision"]);
-          return deleteSeason(tx, ctx.cfg, id, new Date(), requireClockRevision(body));
-        });
-        return c.body(null, 204);
       }),
     );
 

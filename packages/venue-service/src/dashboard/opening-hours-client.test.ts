@@ -157,6 +157,16 @@ describe("OpeningHoursApi", () => {
     ]);
   });
 
+  it("sends the season changes in one request with the clock revision", async () => {
+    const request = vi.fn(async () => []);
+    const api = new OpeningHoursApi(request as unknown as DashboardRequest);
+    const entry = { id: "s/2", name: "Winter", startsOn: "12-01", colour: "blue" as const };
+    expect(await api.saveSeasons({ save: [entry], delete: ["s/1"] }, 3)).toEqual([]);
+    expect(request.mock.calls).toEqual([
+      [`${base}/seasons`, "PUT", { save: [entry], delete: ["s/1"], expectedClockRevision: 3 }],
+    ]);
+  });
+
   it("reads season days passively in lists of at most 62 dates, answering them in the order asked", async () => {
     const request = vi.fn(async (path: string) => ({
       days: new URL(path, "http://x").searchParams

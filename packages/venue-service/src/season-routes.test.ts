@@ -326,17 +326,33 @@ describe("the season days read route", () => {
 });
 
 describe("the season routes", () => {
-  it("PUT renames and moves a season, answering it", async () => {
+  const put = (r: Routed, cookie: string, body: unknown) => r.send("PUT", "/seasons", cookie, body);
+  const change = (sent: Record<string, unknown>) => ({
+    save: [],
+    delete: [],
+    expectedClockRevision: 0,
+    ...sent,
+  });
+  const invalid = (field: string) => ({
+    error: { code: "management.request_invalid", params: { field } },
+  });
+
+  it("PUT /seasons renames and moves a season, answering the seasons", async () => {
     const r = await routed();
-    await answers(
-      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, {
-        name: " Verano ",
-        startsOn: "06-15",
-        expectedClockRevision: 0,
+    const response = await put(
+      r,
+      r.manager,
+      change({
+        save: [{ id: r.seasons.Summer, name: " Verano ", startsOn: "06-15", colour: "amber" }],
       }),
-      200,
-      { id: r.seasons.Summer, name: "Verano", startsOn: "06-15", colour: "amber" },
     );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toContainEqual({
+      id: r.seasons.Summer,
+      name: "Verano",
+      startsOn: "06-15",
+      colour: "amber",
+    });
     expect(await stored(r)).toContainEqual({
       id: r.seasons.Summer,
       name: "Verano",
@@ -345,16 +361,18 @@ describe("the season routes", () => {
     });
   });
 
-  it("POST adds a season and answers 201 with it", async () => {
+  it("PUT /seasons adds a season", async () => {
     const r = await routed();
-    const response = await r.send("POST", "/seasons", r.manager, {
-      name: "Feria",
-      startsOn: "04-20",
-      expectedClockRevision: 0,
-    });
-    expect(response.status).toBe(201);
-    const added = (await response.json()) as { id: string };
-    expect(added).toEqual({ id: added.id, name: "Feria", startsOn: "04-20", colour: "grey" });
+    const response = await put(
+      r,
+      r.manager,
+      change({ save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }] }),
+    );
+    expect(response.status).toBe(200);
+    const answered = (await response.json()) as { id: string; name: string }[];
+    const feria = answered.find((season) => season.name === "Feria")!;
+    expect(feria).toEqual({ id: feria.id, name: "Feria", startsOn: "04-20", colour: "teal" });
+    expect(await stored(r)).toEqual(answered);
     expect((await stored(r)).map(({ name }) => name)).toEqual([
       "Spring",
       "Feria",
@@ -364,14 +382,10 @@ describe("the season routes", () => {
     ]);
   });
 
-  it("DELETE removes a season and answers 204", async () => {
+  it("PUT /seasons deletes a season", async () => {
     const r = await routed();
-    await answers(
-      await r.send("DELETE", `/seasons/${r.seasons.Autumn}`, r.manager, {
-        expectedClockRevision: 0,
-      }),
-      204,
-    );
+    const response = await put(r, r.manager, change({ delete: [r.seasons.Autumn] }));
+    expect(response.status).toBe(200);
     expect((await stored(r)).map(({ name }) => name)).toEqual(["Spring", "Summer", "Winter"]);
   });
 
@@ -384,74 +398,67 @@ describe("the season routes", () => {
     );
   });
 
-  it("refuses a viewer every write, writing nothing", async () => {
+  it("refuses a viewer, writing nothing", async () => {
     const r = await routed();
     const before = await stored(r);
-    const body = { name: "X", startsOn: "07-01", expectedClockRevision: 0 };
-    for (const response of [
-      await r.send("POST", "/seasons", r.supervisor, body),
-      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.supervisor, body),
-      await r.send("DELETE", `/seasons/${r.seasons.Summer}`, r.supervisor, {
-        expectedClockRevision: 0,
+    const response = await put(
+      r,
+      r.supervisor,
+      change({
+        save: [{ id: r.seasons.Summer, name: "X", startsOn: "07-01", colour: "red" }],
+        delete: [r.seasons.Autumn],
       }),
-    ]) {
-      expect(response.status).toBe(403);
-      expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
-        "authorization.not_permitted",
-      );
-    }
+    );
+    expect(response.status).toBe(403);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe(
+      "authorization.not_permitted",
+    );
     expect(await stored(r)).toEqual(before);
   });
 
-  it("answers season.invalid with 400, naming the field", async () => {
+  it("answers season.invalid with 400, naming the path", async () => {
     const r = await routed();
     await answers(
-      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, {
-        name: "Winter",
-        startsOn: "06-01",
-        expectedClockRevision: 0,
-      }),
+      await put(
+        r,
+        r.manager,
+        change({
+          save: [{ id: r.seasons.Summer, name: "Winter", startsOn: "06-01", colour: "amber" }],
+        }),
+      ),
       400,
-      { error: { code: "season.invalid", params: { field: "name", reason: "taken" } } },
+      { error: { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } } },
     );
     await answers(
-      await r.send("POST", "/seasons", r.manager, {
-        name: "Leap",
-        startsOn: "02-29",
-        expectedClockRevision: 0,
-      }),
+      await put(
+        r,
+        r.manager,
+        change({ save: [{ name: "Leap", startsOn: "02-29", colour: "red" }] }),
+      ),
       400,
-      { error: { code: "season.invalid", params: { field: "startsOn" } } },
+      { error: { code: "season.invalid", params: { field: "save.0.startsOn" } } },
     );
     await answers(
-      await r.send("POST", "/seasons", r.manager, {
-        name: 7,
-        startsOn: "04-10",
-        expectedClockRevision: 0,
-      }),
+      await put(r, r.manager, change({ save: [{ name: 7, startsOn: "04-10", colour: "red" }] })),
       400,
-      { error: { code: "season.invalid", params: { field: "name" } } },
+      { error: { code: "season.invalid", params: { field: "save.0.name" } } },
     );
   });
 
-  it("answers season.not_found with 404 for a season it does not hold", async () => {
+  it("answers season.not_found with 404 for an id it does not hold", async () => {
     const r = await routed();
     const missing = randomUUID();
     const error = { error: { code: "season.not_found", params: { seasonId: missing } } };
     await answers(
-      await r.send("PUT", `/seasons/${missing}`, r.manager, {
-        name: "X",
-        startsOn: "07-01",
-        expectedClockRevision: 0,
-      }),
+      await put(
+        r,
+        r.manager,
+        change({ save: [{ id: missing, name: "X", startsOn: "07-01", colour: "red" }] }),
+      ),
       404,
       error,
     );
-    await answers(
-      await r.send("DELETE", `/seasons/${missing}`, r.manager, { expectedClockRevision: 0 }),
-      404,
-      error,
-    );
+    await answers(await put(r, r.manager, change({ delete: [missing] })), 404, error);
     await answers(await r.send("GET", `/seasons/${missing}/delete-impact`, r.manager), 404, error);
   });
 
@@ -464,33 +471,53 @@ describe("the season routes", () => {
 
   it("refuses a key it does not take", async () => {
     const r = await routed();
-    const body = { name: "X", startsOn: "07-01", expectedClockRevision: 0, colour: "red" };
-    const error = { error: { code: "management.request_invalid", params: { field: "colour" } } };
-    await answers(await r.send("POST", "/seasons", r.manager, body), 400, error);
-    await answers(await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, body), 400, error);
+    await answers(await put(r, r.manager, change({ name: "X" })), 400, invalid("name"));
+    await answers(
+      await put(
+        r,
+        r.manager,
+        change({ save: [{ name: "X", startsOn: "07-01", colour: "red", lastDay: "08-01" }] }),
+      ),
+      400,
+      invalid("save.0.lastDay"),
+    );
   });
 
-  it("refuses every write with no clock revision, a rename included, writing nothing", async () => {
+  it("refuses a malformed body", async () => {
     const r = await routed();
     const before = await stored(r);
-    const error = { error: { code: "hours.clock_changed", params: {} } };
+    const summer = { id: r.seasons.Summer, name: "Summer", startsOn: "06-01", colour: "amber" };
+    for (const [body, field] of [
+      [change({ save: { name: "X" } }), "save"],
+      [change({ save: null }), "save"],
+      [change({ delete: null }), "delete"],
+      [change({ save: ["X"] }), "save.0"],
+      [change({ save: [null] }), "save.0"],
+      [change({ save: [[]] }), "save.0"],
+      [change({ save: [{ ...summer, id: "not-a-uuid" }] }), "save.0.id"],
+      [change({ save: [{ ...summer, id: 7 }] }), "save.0.id"],
+      [change({ delete: r.seasons.Autumn }), "delete"],
+      [change({ delete: ["not-a-uuid"] }), "delete.0"],
+      [change({ delete: [7] }), "delete.0"],
+      [change({ delete: [null] }), "delete.0"],
+      [change({ save: [summer, { ...summer, name: "Verano" }] }), "save.1.id"],
+      [change({ delete: [r.seasons.Autumn, r.seasons.Autumn] }), "delete.1"],
+      [change({ save: [summer], delete: [r.seasons.Autumn, r.seasons.Summer] }), "delete.1"],
+    ] as const)
+      await answers(await put(r, r.manager, body), 400, invalid(field));
+    expect(await stored(r)).toEqual(before);
+  });
+
+  it("refuses a call with no clock revision, a rename included, writing nothing", async () => {
+    const r = await routed();
+    const before = await stored(r);
     await answers(
-      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, {
-        name: "Verano",
-        startsOn: "06-01",
+      await put(r, r.manager, {
+        save: [{ id: r.seasons.Summer, name: "Verano", startsOn: "06-01", colour: "amber" }],
+        delete: [],
       }),
       409,
-      error,
-    );
-    await answers(
-      await r.send("POST", "/seasons", r.manager, { name: "Feria", startsOn: "04-20" }),
-      409,
-      error,
-    );
-    await answers(
-      await r.send("DELETE", `/seasons/${r.seasons.Summer}`, r.manager, {}),
-      409,
-      error,
+      { error: { code: "hours.clock_changed", params: {} } },
     );
     expect(await stored(r)).toEqual(before);
   });
@@ -503,30 +530,26 @@ describe("the season routes", () => {
     const before = await stored(r);
     const error = { error: { code: "hours.clock_changed", params: {} } };
     await answers(
-      await r.send("PUT", `/seasons/${r.seasons.Summer}`, r.manager, {
-        name: "Summer",
-        startsOn: "06-15",
-        expectedClockRevision: 0,
-      }),
+      await put(
+        r,
+        r.manager,
+        change({
+          save: [{ id: r.seasons.Summer, name: "Summer", startsOn: "06-15", colour: "amber" }],
+        }),
+      ),
       409,
       error,
     );
     await answers(
-      await r.send("POST", "/seasons", r.manager, {
-        name: "Feria",
-        startsOn: "04-20",
-        expectedClockRevision: 0,
-      }),
+      await put(
+        r,
+        r.manager,
+        change({ save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }] }),
+      ),
       409,
       error,
     );
-    await answers(
-      await r.send("DELETE", `/seasons/${r.seasons.Summer}`, r.manager, {
-        expectedClockRevision: 0,
-      }),
-      409,
-      error,
-    );
+    await answers(await put(r, r.manager, change({ delete: [r.seasons.Summer] })), 409, error);
     expect(await stored(r)).toEqual(before);
   });
 });
