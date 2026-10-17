@@ -36,6 +36,40 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  it.each(["open", "presented"] as const)(
+    "carries the bill edit observation when paying a %s table bill in full",
+    async (state) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ invoiceNumber: "A/7" }));
+      const api = new TillApi("", fetchStub);
+      const expectedEdit = {
+        billId: "wo-4",
+        editorVersion: 8,
+        draftId: null,
+        draftRevision: null,
+      };
+      const tender = { method: "cash" as const, amount: "120.00" };
+      if (state === "open")
+        await api.recordSale(
+          [],
+          tender,
+          "wo-4",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          4,
+          expectedEdit,
+        );
+      else await api.collectOrder("wo-4", tender, undefined, 4, expectedEdit);
+
+      expect(JSON.parse(fetchStub.mock.calls[0]![1].body)).toEqual({
+        ...(state === "open" ? { lines: [], workingOrderId: "wo-4" } : {}),
+        tender,
+        guests: 4,
+        expectedEdit,
+      });
+    },
+  );
   it("allows a background profile setup read to be aborted with its owning scope read", async () => {
     const controller = new AbortController();
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ capabilities: ["take-orders"] }));
@@ -391,6 +425,7 @@ describe("TillApi", () => {
     it("with a bill payment", async () => {
       const fetchStub = stub();
       const billPayment: BillPaymentRequest = {
+        expectedEdit: null,
         kind: "share",
         shareOf: 2,
         method: "cash",
@@ -5096,7 +5131,12 @@ describe("TillApi: a bill's payments", () => {
   });
 
   it("previewBillPayment POSTs the ask to the preview route and answers the choices the server offers", async () => {
-    const ask: BillPaymentAsk = { kind: "items", lines: [{ lineNo: 1 }], method: "card" };
+    const ask: BillPaymentAsk = {
+      expectedEdit: null,
+      kind: "items",
+      lines: [{ lineNo: 1 }],
+      method: "card",
+    };
     const preview: AllocationPreview = {
       kind: "choose",
       options: [
@@ -5114,6 +5154,7 @@ describe("TillApi: a bill's payments", () => {
 
   it("takeBillPayment POSTs the request under the caller's signal and answers the outcome, balance and invoice", async () => {
     const request: BillPaymentRequest = {
+      expectedEdit: null,
       kind: "share",
       shareOf: 2,
       method: "card",
@@ -5188,6 +5229,7 @@ describe("TillApi: a bill's payments", () => {
 
     await expect(
       new TillApi("", fetchStub).takeBillPayment("wo-1", {
+        expectedEdit: null,
         kind: "contribution",
         amount: "30.00",
         method: "cash",

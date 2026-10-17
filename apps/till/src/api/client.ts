@@ -1079,6 +1079,7 @@ export type AllocationChoice = "full_with_tip" | "use_pool";
 
 /** What a bill payment asks for, before the operator has seen its allocation. */
 export interface BillPaymentAsk {
+  expectedEdit: BillEditExpected | null;
   kind: "items" | "contribution" | "share";
   /** `items` only: parent lines; a line with no `quantity` is paid whole. */
   lines?: { lineNo: number; quantity?: string }[];
@@ -2764,6 +2765,7 @@ export class TillApi {
     receiptLanguage?: string,
     kitchenNote?: string | null,
     guests?: number | null,
+    expectedEdit?: BillEditExpected,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2774,6 +2776,7 @@ export class TillApi {
       receiptLanguage,
       kitchenNote,
       ...(guests === undefined ? {} : { guests }),
+      ...(expectedEdit === undefined ? {} : { expectedEdit }),
     });
   }
 
@@ -3134,11 +3137,13 @@ export class TillApi {
     tender: Tender,
     receiptLanguage?: string,
     guests?: number | null,
+    expectedEdit?: BillEditExpected,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
       ...(guests === undefined ? {} : { guests }),
+      ...(expectedEdit === undefined ? {} : { expectedEdit }),
     });
   }
 

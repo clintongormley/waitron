@@ -424,6 +424,7 @@ export class TillBillPayDialog extends LitElement {
   /** Set after each refund made from the bill's payments list. */
   @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) confirmationLocked = false;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
   @property({ type: Boolean }) tipsEnabled = true;
@@ -613,7 +614,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #back(): void {
-    if (!this.isConnected || !this.#active || this.busy) return;
+    if (!this.isConnected || !this.#active || this.busy || this.confirmationLocked) return;
     const proceed = () => {
       this.#tip?.dispose();
       this.#tip = undefined;
@@ -1060,14 +1061,14 @@ export class TillBillPayDialog extends LitElement {
       name=${name}
       decimal-locale=${name !== "externalRef" && name !== "people" ? currentLocale() : nothing}
       autocomplete="off"
-      .disabled=${this.busy}
+      .disabled=${this.busy || this.confirmationLocked}
       .label=${label}
       .value=${value}
       .required=${opts.required === true}
       .error=${opts.error ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        if (!this.isConnected || !this.#active || this.busy) return;
+        if (!this.isConnected || !this.#active || this.busy || this.confirmationLocked) return;
         set(event.detail.value);
         this.#changedDraft();
         if (name !== "externalRef") this.#changed(name);
@@ -1393,6 +1394,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #pickTip(mode: TipMode, asked: PayRequest, cash: Cash): void {
+    if (this.confirmationLocked) return;
     this.tipMode = mode;
     this.tipAttempted = false;
     if (mode === "none") this.#askWithTip(asked, cash.pay, undefined);
@@ -1449,14 +1451,20 @@ export class TillBillPayDialog extends LitElement {
 
   #onGuestsChange(event: Event): void {
     event.stopPropagation();
-    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
+    if (
+      !this.isConnected ||
+      !(event.currentTarget as HTMLElement).isConnected ||
+      this.busy ||
+      this.confirmationLocked
+    )
+      return;
     this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
   #guests(error: string | undefined): TemplateResult {
     return guestsStepper({
       text: this.#guestsText(),
-      disabled: this.busy,
+      disabled: this.busy || this.confirmationLocked,
       error: error ?? "",
       onChange: (event) => this.#onGuestsChange(event),
     });
@@ -1545,7 +1553,7 @@ export class TillBillPayDialog extends LitElement {
       slot="cancel"
       variant="secondary"
       data-pay-back
-      .disabled=${this.busy}
+      .disabled=${this.busy || this.confirmationLocked}
       @click=${() => this.#back()}
     >
       ${t("action.back")}
@@ -1617,7 +1625,11 @@ export class TillBillPayDialog extends LitElement {
       { mode: "all", label: "bill_pay.tip_all" },
       { mode: "part", label: "bill_pay.tip_part" },
     ];
-    return html`<fieldset class="choice" data-leave-tip ?disabled=${this.busy}>
+    return html`<fieldset
+        class="choice"
+        data-leave-tip
+        ?disabled=${this.busy || this.confirmationLocked}
+      >
         <legend>${t("bill_pay.leave_tip")}</legend>
         <div class="options">
           ${options.map(({ mode, label }) =>

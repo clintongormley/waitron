@@ -25,6 +25,7 @@ describe("paymentAsk", () => {
         { method: "card" },
       ),
     ).toEqual({
+      expectedEdit: null,
       kind: "items",
       lines: [{ lineNo: 1 }, { lineNo: 3, quantity: "2" }],
       method: "card",
@@ -34,11 +35,18 @@ describe("paymentAsk", () => {
   it("asks for a contribution with the cash handed over", () => {
     expect(
       paymentAsk({ kind: "contribution", amount: "25.00" }, { method: "cash", tendered: "50.00" }),
-    ).toEqual({ kind: "contribution", amount: "25.00", method: "cash", tendered: "50.00" });
+    ).toEqual({
+      expectedEdit: null,
+      kind: "contribution",
+      amount: "25.00",
+      method: "cash",
+      tendered: "50.00",
+    });
   });
 
   it("asks for an equal share by how many people are still to pay, leaving the share to the server", () => {
     expect(paymentAsk({ kind: "share", shareOf: 3 }, { method: "card" })).toEqual({
+      expectedEdit: null,
       kind: "share",
       shareOf: 3,
       method: "card",
@@ -52,6 +60,7 @@ describe("paymentAsk", () => {
         { method: "cash", tendered: "50.00", addedTip: "10.00" },
       ),
     ).toEqual({
+      expectedEdit: null,
       kind: "contribution",
       amount: "40.00",
       method: "cash",
@@ -60,7 +69,13 @@ describe("paymentAsk", () => {
     });
     expect(
       paymentAsk({ kind: "items", picks: [{ lineNo: 2 }] }, { method: "card", addedTip: "10.00" }),
-    ).toEqual({ kind: "items", lines: [{ lineNo: 2 }], method: "card", addedTip: "10.00" });
+    ).toEqual({
+      expectedEdit: null,
+      kind: "items",
+      lines: [{ lineNo: 2 }],
+      method: "card",
+      addedTip: "10.00",
+    });
   });
 });
 
@@ -140,7 +155,7 @@ describe("the submission id of a confirmation", () => {
     const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
 
     expect(sent.request).toEqual({ ...tenEuros, submissionId: "sub-1" });
-    expect(sent.key).toBe(JSON.stringify(["wo-1", tenEuros]));
+    expect(sent.key).toBe(JSON.stringify(["wo-1", { ...tenEuros, expectedEdit: undefined }]));
   });
 
   it("is reused when the same confirmation is sent again after it got no answer", () => {
@@ -210,16 +225,61 @@ describe("the submission id of a confirmation", () => {
     );
   });
 
-  it("is fresh for a different confirmation, even while an earlier one is unanswered", () => {
+  it("reconciles the original unknown payment before using a different confirmation", () => {
     const unanswered = unansweredAfter(
       submissionFor("wo-1", tenEuros, null, ids("sub-1")),
       noAnswer,
     );
     const moreCash = { ...tenEuros, tendered: "20.00" };
 
-    expect(submissionFor("wo-1", moreCash, unanswered, ids("sub-2")).request.submissionId).toBe(
-      "sub-2",
-    );
+    expect(submissionFor("wo-1", moreCash, unanswered, ids("sub-2")).request).toEqual({
+      ...tenEuros,
+      submissionId: "sub-1",
+    });
+  });
+
+  it("retains the complete unknown payment across an ownership and guest-count refresh", () => {
+    const original = {
+      ...tenEuros,
+      expectedEdit: { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
+      guests: 4,
+    };
+    const first = submissionFor("wo-1", original, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, noAnswer);
+    const refreshed = {
+      ...original,
+      expectedEdit: { billId: "wo-1", editorVersion: 4, draftId: null, draftRevision: null },
+      guests: 9,
+      amount: "30.00",
+      applied: "30.00",
+    };
+
+    expect(submissionFor("wo-1", refreshed, unanswered, ids("sub-2")).request).toEqual({
+      ...original,
+      submissionId: "sub-1",
+    });
+    expect(submissionFor("wo-1", refreshed, null, ids("sub-2")).request).toEqual({
+      ...refreshed,
+      submissionId: "sub-2",
+    });
+  });
+
+  it("retains the original complete body when ownership changes after an authorization refusal", () => {
+    const original = {
+      ...tenEuros,
+      expectedEdit: { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
+    };
+    const first = submissionFor("wo-1", original, null, ids("sub-1"));
+    const refused = unansweredAfter(first, { code: "session.expired", status: 401 });
+    const refreshed = {
+      ...original,
+      expectedEdit: { billId: "wo-1", editorVersion: 4, draftId: null, draftRevision: null },
+    };
+
+    expect(submissionFor("wo-1", refreshed, refused, ids("sub-2")).request).toEqual({
+      ...original,
+      submissionId: "sub-1",
+    });
   });
 
   it("is fresh for the same confirmation on another bill", () => {
@@ -233,6 +293,50 @@ describe("the submission id of a confirmation", () => {
     );
   });
 
+  it.each([
+    "draft.out_of_date",
+    "draft.taken_over",
+    "bill.unsent_dishes",
+    "bill.allocation_changed",
+  ])(
+    "uses a fresh explicit payment after an initial %s refusal or a confirmed refusal of its unknown retry",
+    (code) => {
+      const original = {
+        ...tenEuros,
+        expectedEdit: {
+          billId: "wo-1",
+          editorVersion: 2,
+          draftId: null,
+          draftRevision: null,
+        },
+      };
+      const first = submissionFor("wo-1", original, null, ids("sub-1"));
+      const refused = unansweredAfter(first, { code, status: 409 });
+      expect(refused).toBeNull();
+      const refreshed = {
+        ...original,
+        expectedEdit: {
+          billId: "wo-1",
+          editorVersion: 4,
+          draftId: null,
+          draftRevision: null,
+        },
+      };
+      expect(submissionFor("wo-1", refreshed, refused, ids("sub-2")).request).toEqual({
+        ...refreshed,
+        submissionId: "sub-2",
+      });
+
+      const unknown = unansweredAfter(first, noAnswer)!;
+      const refusedRetry = unansweredAfter(unknown, { code, status: 409 });
+      expect(refusedRetry).toBeNull();
+      expect(submissionFor("wo-1", refreshed, refusedRetry, ids("sub-2")).request).toEqual({
+        ...refreshed,
+        submissionId: "sub-2",
+      });
+    },
+  );
+
   it("is a new random id each time when no minting is given", () => {
     const first = submissionFor("wo-1", tenEuros, null).request.submissionId;
     const second = submissionFor("wo-1", tenEuros, null).request.submissionId;
@@ -241,6 +345,24 @@ describe("the submission id of a confirmation", () => {
     expect(second).not.toBe(first);
   });
 });
+
+it.each(["draft.out_of_date", "draft.taken_over", "bill.unsent_dishes"])(
+  "retains a refund submission after an unrelated ownership refusal %s",
+  (code) => {
+    const sent = refundSubmissionFor(
+      "wo-1",
+      "payment-1",
+      {
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Wrong bill",
+      },
+      null,
+      () => "refund-sub-1",
+    );
+    expect(unansweredAfter(sent, { code, status: 409 })).toEqual(sent);
+  },
+);
 
 describe("refusalOf", () => {
   it("keeps the code, and the field and most chargeable when the refusal names them as text", () => {

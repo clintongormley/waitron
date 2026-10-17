@@ -382,6 +382,8 @@ async function toTableOrder(el: TillApp): Promise<TillTableOrderScreen> {
 beforeEach(() => {
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+  for (const billId of ["wo-7", "wo-8", "wo-9", "wo-new", "order-a", "order-b"])
+    drafts.bills.add(billId);
 });
 const initialUrl = location.href;
 afterEach(() => {
@@ -1109,7 +1111,17 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
     await flush(el);
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "3.00" }, "wo-7");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "3.00" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
   });
 
   it("empties the floor the table actions pick from when the re-read after a move fails", async () => {
@@ -2597,8 +2609,14 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
-    expect(call).toHaveLength(8);
+    expect(call).toHaveLength(9);
     expect(call[7]).toBeNull();
+    expect(call[8]).toEqual({
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
   });
 
   it("a bill with a full invoice shows no field and sends no guests", async () => {
@@ -2617,7 +2635,17 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     await payCash(el);
 
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "5" }, "wo-7");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "5" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
   });
 });
 

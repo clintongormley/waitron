@@ -16,6 +16,7 @@ import {
   type AllocationChoice,
   type AllocationPreview,
   type BillBalance,
+  type BillEditExpected,
   type BillPaymentAsk,
   type BillPaymentRequest,
   type BillPaymentView,
@@ -64,6 +65,7 @@ export function paymentAsk(
   choice: PayChoice,
   pay: PayMethod,
   allocation?: AllocationChoice,
+  expectedEdit: BillEditExpected | null = null,
 ): BillPaymentAsk {
   const ask: BillPaymentAsk =
     choice.kind === "items"
@@ -75,10 +77,11 @@ export function paymentAsk(
               : { lineNo: pick.lineNo, quantity: String(pick.units) },
           ),
           method: pay.method,
+          expectedEdit,
         }
       : choice.kind === "contribution"
-        ? { kind: "contribution", amount: choice.amount, method: pay.method }
-        : { kind: "share", shareOf: choice.shareOf, method: pay.method };
+        ? { kind: "contribution", amount: choice.amount, method: pay.method, expectedEdit }
+        : { kind: "share", shareOf: choice.shareOf, method: pay.method, expectedEdit };
   if (pay.method === "cash") ask.tendered = pay.tendered;
   if (pay.addedTip !== undefined) ask.addedTip = pay.addedTip;
   if (allocation !== undefined) ask.choice = allocation;
@@ -118,10 +121,11 @@ export function confirmationOf(
 interface Sent<Body> {
   key: string;
   request: Body & { submissionId: string };
+  unconfirmed?: boolean;
 }
 
 /** A confirmation as sent, keyed by its bill and its body. */
-export type Submission = Sent<Confirmation>;
+export type Submission = Sent<Confirmation> & { billId: string };
 
 /** The request for `body`, keyed by `key`. Its submission id is the one `unanswered` was sent with
  * when that has the same key, and fresh otherwise. */
@@ -136,18 +140,19 @@ function sentAs<Body extends object>(
   return { key, request: { ...body, submissionId } };
 }
 
-/**
- * The request for a confirmation about to be sent. Its submission id is the one `unanswered` was
- * sent with when this is that same confirmation on that same bill, so the server answers a payment
- * that did arrive as it answered the first time and never takes it twice; otherwise it is fresh.
- */
 export function submissionFor(
   billId: string,
   confirmation: Confirmation,
   unanswered: Submission | null,
   mint: () => string = () => crypto.randomUUID(),
 ): Submission {
-  return sentAs(JSON.stringify([billId, confirmation]), confirmation, unanswered, mint);
+  const payment: Partial<Confirmation> = { ...confirmation };
+  delete payment.expectedEdit;
+  delete payment.guests;
+  const key = JSON.stringify([billId, payment]);
+  if (unanswered?.billId === billId && (unanswered.unconfirmed === true || unanswered.key === key))
+    return unanswered;
+  return { key, billId, request: structuredClone({ ...confirmation, submissionId: mint() }) };
 }
 
 /** `submission.id_reused`: the id belongs to another request. The rest can be raised at the
@@ -161,20 +166,25 @@ const FRESH_ID_AFTER: ReadonlySet<string> = new Set([
   "reader.payment_in_progress",
 ]);
 
-/**
- * What is left unanswered once a send ends: nothing once the server answered it with a result, and
- * the submission otherwise. A refusal does not say what became of an earlier send of it: the server
- * refuses the session, device, reader or approver before it looks the id up (the payment and
- * refund routes, `apps/server/src/bill-payments-api.ts`; `refundBillPayment`,
- * `apps/server/src/bill-refunds.ts`), except the start refusals {@link FRESH_ID_AFTER} names, which
- * can also come after.
- * Sending the id again is safe, since the server answers an id it recorded with that record; only
- * the {@link FRESH_ID_AFTER} refusals start a fresh one.
- */
-export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
+export function paymentNotRecorded(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return (
+    code === "draft.out_of_date" ||
+    code === "draft.taken_over" ||
+    code === "bill.unsent_dishes" ||
+    code === "bill.allocation_changed"
+  );
+}
+
+export function unansweredAfter<S extends { unconfirmed?: boolean }>(
+  sent: S,
+  error?: unknown,
+): S | null {
   if (error === undefined) return null;
   const code = (error as { code?: unknown }).code;
-  return typeof code === "string" && FRESH_ID_AFTER.has(code) ? null : sent;
+  if (typeof code === "string" && FRESH_ID_AFTER.has(code)) return null;
+  if ("billId" in sent && paymentNotRecorded(error)) return null;
+  return isNetworkFailure(error) ? { ...sent, unconfirmed: true } : sent;
 }
 
 /** A refusal's code and the request field it names, as the refund and unpaid departure dialogs

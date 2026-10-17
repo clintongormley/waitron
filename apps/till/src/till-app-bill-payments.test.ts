@@ -805,6 +805,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(dirtyAtRead).toEqual([false]);
     expect(sent()).toEqual([
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "items",
         lines: [{ lineNo: 1 }],
         method: "cash",
@@ -884,12 +885,40 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "80.00", "40.00"));
 
     expect(previewBillPayment.mock.calls.map(([billId, ask]) => [billId, ask])).toEqual([
-      ["wo-4", { kind: "items", lines: [{ lineNo: 1 }], method: "cash", tendered: "50" }],
-      ["wo-4", { kind: "contribution", amount: "20", method: "cash", tendered: "20" }],
-      ["wo-4", { kind: "share", shareOf: 3, method: "cash", tendered: "20" }],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          kind: "items",
+          lines: [{ lineNo: 1 }],
+          method: "cash",
+          tendered: "50",
+        },
+      ],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          kind: "contribution",
+          amount: "20",
+          method: "cash",
+          tendered: "20",
+        },
+      ],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          kind: "share",
+          shareOf: 3,
+          method: "cash",
+          tendered: "20",
+        },
+      ],
     ]);
     expect(sent()).toEqual([
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "items",
         lines: [{ lineNo: 1 }],
         method: "cash",
@@ -899,6 +928,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         submissionId: expect.any(String),
       },
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "contribution",
         amount: "20",
         method: "cash",
@@ -908,6 +938,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         submissionId: expect.any(String),
       },
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "share",
         shareOf: 3,
         method: "cash",
@@ -950,6 +981,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(previewBillPayment.mock.calls[1]![1]).toEqual({
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
       amount: "40",
       method: "cash",
@@ -992,12 +1024,14 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(previewBillPayment).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
       amount: "40",
       method: "card",
       addedTip: "10",
     });
     expect(sent()[0]).toEqual({
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
       amount: "40",
       method: "card",
@@ -1036,6 +1070,266 @@ describe("till-app: a device that does not take cash", () => {
 });
 
 describe("till-app: a bill payment's refusals and retries", () => {
+  it("allows a new confirmed allocation after replaying an unknown payment is refused", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const original = structuredClone(sent()[0]);
+    const before = sent().length;
+    takeBillPayment.mockRejectedValueOnce({
+      code: "bill.allocation_changed",
+      status: 409,
+      preview: cash("30.00", "20.00"),
+    });
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(before + 1);
+    expect(sent().at(-1)).toEqual(original);
+    expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money("30.00"));
+    expect(inDialog(el, "[data-pay-back]")!.disabled).toBe(false);
+    takeBillPayment.mockResolvedValueOnce(takenOf({ applied: "30.00", change: "20.00" }, {}));
+    await press(el, "[data-pay-confirm]");
+    expect(sent().at(-1)).toMatchObject({ applied: "30.00", tip: "0.00" });
+    expect(sent().at(-1)!.submissionId).not.toBe(original!.submissionId);
+  });
+
+  it.each(["open", "placed"] as const)(
+    "releases a %s bill's unknown whole-payment request after its authenticated editing refusal",
+    async (status) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 })
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status })]),
+        ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
+      });
+      const order = await openTable(el);
+      emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+      await flush(el);
+      const original = structuredClone(send.mock.calls[0]);
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guests: 9 });
+      await flush(el);
+      expect(send.mock.calls[1]).toEqual(original);
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 6 });
+      await flush(el);
+      expect(send.mock.calls[2]![1]).toEqual({
+        method: "cash",
+        amount: "140.00",
+      });
+      expect(send.mock.calls[2]![status === "open" ? 7 : 3]).toBe(6);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it("locks the receipt guest field while reconciling the original final payment", async () => {
+    const { el } = await mountApp({
+      previewBillPayment: vi.fn().mockResolvedValue(cash("120.00", "30.00")),
+      takeBillPayment: vi.fn(async () => {
+        vi.mocked(api.getTablesState).mockResolvedValue([mesa({ guestCount: 9 })]);
+        throw new TypeError("Failed to fetch");
+      }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "120");
+    await type(el, "tendered", "150");
+    await press(el, "[data-pay-continue]");
+    const guests = inDialog(el, '[name="guests"]')!;
+    expect(guests.shadowRoot!.querySelector("input")!.disabled).toBe(false);
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    expect(guests.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+    await expect.poll(() => guests.shadowRoot!.querySelector("input")!.value).toBe("4");
+    expect(sent()[0]).toHaveProperty("guests", 4);
+  });
+
+  it("keeps the original confirmation visible when Edit is pressed on an unknown payment", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+
+    expect(inDialog(el, "[data-pay-back]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      true,
+    );
+    expect(inDialog(el, '[data-leave-tip] input[value="all"]')!.matches(":disabled")).toBe(true);
+    await press(el, "[data-pay-back]");
+    emit(dialog(el)!, "bill-pay-edit");
+    await flush(el);
+
+    expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    expect(inDialog(el, "wt-form-actions")?.error).toBe(t("bill_pay.unconfirmed"));
+    expect(api.previewBillPayment).toHaveBeenCalledOnce();
+    takeBillPayment.mockResolvedValueOnce(takenOf({}, {}));
+    await press(el, "[data-pay-confirm]");
+    expect(sent().at(-1)).toEqual(sent()[0]);
+  });
+
+  it("retains one bill's unknown request while another bill's payment is answered", async () => {
+    const takeBillPayment = vi.fn().mockImplementation(async (billId: string) => {
+      if (billId === "wo-4") throw new TypeError("Failed to fetch");
+      return takenOf({}, { workingOrderId: billId });
+    });
+    const { el } = await mountApp({
+      takeBillPayment,
+      getPartyBills: vi.fn().mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check" })]),
+    });
+    await openTable(el);
+    const contribute = async () => {
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      await type(el, "tendered", "50");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+    };
+    await contribute();
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const original = structuredClone(sent()[0]);
+    emit(dialog(el)!, "bill-pay-close");
+    emit(tableOrder(el), "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    await contribute();
+    expect(sent().at(-1)).toMatchObject({ expectedEdit: { billId: "wo-check" } });
+    expect(sent().at(-1)!.submissionId).not.toBe(original!.submissionId);
+    emit(dialog(el)!, "bill-pay-close");
+    emit(tableOrder(el), "take-payment", { workingOrderId: "wo-4" });
+    await flush(el);
+    takeBillPayment.mockResolvedValueOnce(takenOf({}, {}));
+    await openDialog(el, "contribution");
+    expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money("40.00"));
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().at(-1)).toEqual(original);
+  });
+
+  it.each(["open", "placed"] as const)(
+    "retains the original full-payment body for a %s bill after an unknown answer and ownership refresh",
+    async (status) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValueOnce({ code: "session.expired", status: 401 })
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status })]),
+        ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
+      });
+      const order = await openTable(el);
+      emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+      await flush(el);
+      expect(send).toHaveBeenCalledOnce();
+      const original = structuredClone(send.mock.calls[0]);
+      const expectedEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
+      expect(original).toEqual(
+        status === "open"
+          ? [
+              [],
+              { method: "cash", amount: "120.00" },
+              "wo-4",
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              4,
+              expectedEdit,
+            ]
+          : ["wo-4", { method: "cash", amount: "120.00" }, undefined, 4, expectedEdit],
+      );
+
+      const priorEdit = drafts.edit;
+      drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+      window.dispatchEvent(new Event("focus"));
+      await flush(el);
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guests: 9 });
+      await flush(el);
+
+      expect(send.mock.calls[1]).toEqual(original);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 6 });
+      await flush(el);
+      expect(send.mock.calls[2]).toEqual(original);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it("carries the observed bill editor in the payment preview and accepted request", async () => {
+    const { el } = await mountApp({
+      takeBillPayment: vi.fn().mockResolvedValue(takenOf({}, {})),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    const expectedEdit = {
+      billId: "wo-4",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    };
+    expect(api.previewBillPayment).toHaveBeenCalledWith("wo-4", {
+      kind: "contribution",
+      amount: "40",
+      method: "cash",
+      tendered: "50",
+      expectedEdit,
+    });
+    expect(sent()[0]).toMatchObject({ expectedEdit, applied: "40.00", tip: "0.00" });
+  });
+
+  it("resends the original payment body after ownership refreshes while its answer is unknown", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    emit(dialog(el)!, "bill-pay-confirm", { guests: 4 });
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const original = structuredClone(sent()[0]);
+    expect(original).toMatchObject({
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      guests: 4,
+    });
+
+    const priorEdit = drafts.edit;
+    drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    takeBillPayment.mockResolvedValueOnce(takenOf({}, {}));
+    emit(dialog(el)!, "bill-pay-confirm", { guests: 9 });
+    await flush(el);
+
+    expect(sent().at(-1)).toEqual(original);
+    expect(text(inDialog(el, "[data-pay-taken]"))).not.toBe("");
+  });
+
   it("reopens the confirmation with the new amounts when the bill changed, and sends nothing on its own", async () => {
     const changed = cash("30.00", "20.00");
     const takeBillPayment = vi
@@ -1951,8 +2245,10 @@ describe("till-app: a partly paid order at the counter", () => {
   async function payTheRest(el: TillApp): Promise<void> {
     payRest(el)!.click();
     await flush(el);
-    await type(el, "tendered", "70");
-    await press(el, "[data-pay-continue]");
+    if (inDialog(el, "[data-pay-confirm]") === null) {
+      await type(el, "tendered", "70");
+      await press(el, "[data-pay-continue]");
+    }
     await press(el, "[data-pay-confirm]");
   }
 
@@ -2371,7 +2667,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(sent()[0]).toHaveProperty("guests", null);
   });
 
-  it("sends a payment that got no answer again under the same submission id after the guests count changed, carrying the new count", async () => {
+  it("sends a payment that got no answer again under the same complete request after the guests count changed", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await retrieved({ takeBillPayment });
     payRest(el)!.click();
@@ -2408,7 +2704,7 @@ describe("till-app: a partly paid order at the counter", () => {
         .slice(0, first)
         .map((request) => request.guests),
     ).toEqual(Array(first).fill(null));
-    expect(sent()[first]).toHaveProperty("guests", 3);
+    expect(sent()[first]).toHaveProperty("guests", null);
   });
 
   it("asks no guests and sends no guests key on a counter order with a full invoice chosen", async () => {
@@ -2855,11 +3151,23 @@ describe("till-app: the steak's two choices", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(previewBillPayment.mock.calls.map(([, ask]) => ask)).toEqual([
-      { kind: "items", lines: [{ lineNo: 6 }], method: "card" },
-      { kind: "items", lines: [{ lineNo: 6 }], method: "card", choice: "full_with_tip" },
+      {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        kind: "items",
+        lines: [{ lineNo: 6 }],
+        method: "card",
+      },
+      {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        kind: "items",
+        lines: [{ lineNo: 6 }],
+        method: "card",
+        choice: "full_with_tip",
+      },
     ]);
     expect(sent()).toEqual([
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "items",
         lines: [{ lineNo: 6 }],
         method: "card",
@@ -2900,6 +3208,7 @@ describe("till-app: the steak's two choices", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(previewBillPayment.mock.calls[1]![1]).toEqual({
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "items",
       lines: [{ lineNo: 6 }],
       method: "cash",
@@ -2946,6 +3255,7 @@ describe("till-app: a venue that takes no tips", () => {
     await press(el, "[data-pay-continue]");
 
     expect(previewBillPayment).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
       amount: "150",
       method: "card",
@@ -3114,6 +3424,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(sent()).toEqual([
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "contribution",
         amount: "40",
         method: "card",
@@ -3356,6 +3667,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(sent()).toEqual([
       {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "contribution",
         amount: "40",
         method: "card",
