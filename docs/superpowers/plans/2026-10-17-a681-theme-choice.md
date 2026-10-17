@@ -2,18 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The dashboard, the till and setup each get a Theme menu (Light, Dark, Follow device — the
-default). The choice is saved in that browser, so it belongs to the device, not the person and not
-the venue's database, and every screen and the dashboard's logo follow it.
+**Goal:** The dashboard, the till and setup each get a Theme choice (Light, Dark, Follow device —
+the default). The choice is saved in that browser, so it belongs to the device, not the person and
+not the venue's database, and every screen and the dashboard's logo follow it.
 
 **Architecture:** One small module in `@waitron/ui` (`packages/ui/src/theme-choice.ts`) owns the
 saved choice: it reads and writes one `localStorage` key and sets or removes `data-theme` on the
-page's theme root (`document.documentElement`). Each app's `main.ts` applies the saved choice right
-after `applyTokens`, before anything renders. A new `wt-theme-chooser` primitive draws an icon
-trigger and a menu of three `menuitemradio` options; it never applies anything itself, it sends
+page's theme root (`document.documentElement`). Each app's `main.ts` applies the saved choice on
+the line after `applyTokens`, before anything renders. A new `wt-theme-chooser` primitive draws an
+icon trigger and a menu of three `menuitemradio` options; it never applies anything itself, it sends
 `wt-theme-selected`, and each app's root element saves and applies it through a Lit controller from
 the same module. The menu mechanics (`popover` placement, outside press, Escape, arrow keys) move out
-of `wt-language-chooser` into one shared helper both choosers use.
+of `wt-language-chooser` into one shared helper both choosers use. On the signed-in dashboard, where
+the banner has no room for another button, the choice lives in the account menu instead.
 
 **Tech Stack:** TypeScript, Lit 3, Vitest 4.1.11 in browser mode (real headless Chromium through
 Playwright) for `packages/ui`, `apps/dashboard`, `apps/setup` and `apps/till`.
@@ -40,17 +41,22 @@ the meaning allows.
 ### Decisions (state these in the PR description)
 
 1. **Placement.** A new primitive `wt-theme-chooser` sits **immediately before** (on the leading
-   side of) `wt-language-chooser` everywhere that chooser appears in product UI. Verified with
+   side of) `wt-language-chooser` in these places, found with
    `grep -rln wt-language-chooser apps packages --include='*.ts'` on e52c997c0:
-   - dashboard banner, signed in and signed out — `apps/dashboard/src/dashboard-app.ts:1719`;
+   - the dashboard banner **while nobody is signed in** — `apps/dashboard/src/dashboard-app.ts:1719`
+     (signed in, see decision 1a);
    - setup's card header — `apps/setup/src/setup-app.ts:1481`;
-   - till shell bar, and the kitchen-display / kiosk corner — `apps/till/src/widgets/till-shell.ts:504-509`
+   - the till shell bar, and its kitchen-display / kiosk corner — `apps/till/src/widgets/till-shell.ts:504-509`
      (`#chooser()`, rendered at `:721` and `:767`);
-   - till sign-in screen — `apps/till/src/screens/till-lock-screen.ts:311`;
-   - till join screen — `apps/till/src/screens/till-enrol-screen.ts:188`;
-   - till counter screen's own header — `apps/till/src/screens/till-counter-screen.ts:461`;
-   - the UI workbench — `packages/ui/demo/main.ts:273` (not product UI; the primitive is added
-     there because design-system.md → "Adding a primitive" step 7 asks for it).
+   - the till sign-in screen — `apps/till/src/screens/till-lock-screen.ts:311`;
+   - the till join screen — `apps/till/src/screens/till-enrol-screen.ts:188`;
+   - the UI workbench — `packages/ui/demo/main.ts:273` (not product UI; design-system.md →
+     "Adding a primitive" step 7 asks for it).
+
+   **Not** added to the till counter screen's own header (`till-counter-screen.ts:461`): the till
+   only ever mounts that screen `embedded` (`apps/till/src/till-app.ts:12636-12637`), and an
+   embedded counter screen draws no header of its own, so its language chooser is never on screen in
+   the product; the shell's bar carries both choosers above it. Consistency does not need it.
 
    "Before", not "after", so every existing check that the language chooser is at the trailing
    edge, or just before the operator's name, still holds (`apps/setup/src/setup-app.test.ts:2700-2727`,
@@ -59,33 +65,75 @@ the meaning allows.
    The trigger is a `wt-button variant="secondary"` (the language chooser's trigger,
    `packages/ui/src/components/wt-language-chooser.ts:298-306`, so the two read as a pair) holding
    one `wt-icon size="lg"` for the current choice, named by `aria-label` "Theme: Dark" (the label,
-   a colon, the choice). No tooltip, like the alerts bell and account menu beside it in the
-   dashboard banner. No suitable icons exist (a grep for sun, moon, contrast or theme icons in
-   `apps/*/src` and `packages/*/src` found none), so the component registers three drawings of its
-   own at module load, the way `wt-data-table` does (`packages/ui/src/components/wt-data-table.ts:22`):
-   `theme-light` (a sun), `theme-dark` (a crescent), `theme-device` (a half-filled circle). They are
-   drawn for this change, not copied from an icon set, so no licence notice is owed.
+   a colon, the choice). No tooltip, like the dashboard banner's other icon buttons. Focus handling
+   follows the language chooser: no `delegatesFocus` of its own; the trigger is a `wt-button`, which
+   delegates focus to its inner `<button>` (`packages/ui-core/src/components/wt-button.ts:17`).
+   No suitable icons exist (a grep for sun, moon, contrast or theme icons in `apps/*/src` and
+   `packages/*/src` found none), so the component registers three drawings of its own at module
+   load, the way `wt-data-table` does (`packages/ui/src/components/wt-data-table.ts:22`):
+   `theme-light` (a sun), `theme-dark` (a crescent), `theme-device` (a half-filled circle). They
+   are drawn for this change, not copied from an icon set, so no licence notice is owed.
+
+   **1a. Signed-in dashboard: Theme lives in the account menu, at every width (driver's decision,
+   2026-10-17, owner away).** The banner has no room for a second button beside the alerts bell
+   and the account menu at phone width: the plan review measured a 52 px stand-in in the signed-in
+   banner and the lockup fell to 15 px at 360 px and 45 px at 390 px, failing
+   `apps/dashboard/src/dashboard-app.test.ts:5584`'s 60 px floor in all 8 cases, with the Spanish
+   text wrapping. So, signed in, the account menu (`wt-row-actions`, `dashboard-app.ts:1747-1768`)
+   gains a "Theme" group of three choices with the current one marked, between Account settings and
+   Log out — not width-dependent, so the banner's signed-in item lists and every signed-in banner-fit
+   test stay exactly as they are.
+
+   What `wt-row-actions` supports (`packages/ui/src/components/wt-row-actions.ts`): an icon trigger
+   with `aria-label` and `aria-expanded`; a native auto `popover` holding slotted content in a
+   column; light dismiss; Escape closes it and returns focus to the trigger (`:185-192`); a click on
+   a slotted `button`, `a[href]` or `wt-button` closes it unless that element is inside
+   `[data-keep-open]` (`:147-164`). It sets no `menu` role and moves focus with no arrow keys, so
+   menu or radio roles inside it would promise keys it does not have. The group is therefore a
+   `<div role="group" aria-labelledby=…>` with a visible "Theme" label and three native
+   `<button type="button" aria-pressed>` toggle buttons (Light, Dark, Follow device), each with its
+   `theme-*` icon; the current one is `aria-pressed="true"` and drawn with the border the language
+   chooser uses for its checked option. Tab moves through them as through the menu's other actions;
+   a pick closes the menu like any other action. Native buttons, because `wt-button` forwards no
+   `aria-pressed` (`wt-button.ts:140-144`) and changing it means changing `@waitron/ui-core`; the
+   buttons are styled in `dashboard-app.ts` from tokens to match the menu's ghost `wt-button`s. (A
+   native button is not one of the field elements `scripts/native-form-fields.test.ts` holds back.)
+
+   **Signed out, the banner has room — measured, not estimated.** On 2026-10-17, in this worktree on
+   e52c997c0, a scratch browser test (deleted after; never committed) mounted `dashboard-app` signed
+   out (`getMe` refusing with `management_session.required`), gave the host the 24 px padding the
+   banner-fit tests use, and inserted a `wt-button variant="secondary"` holding a
+   `wt-icon size="lg"` — the planned trigger, 52 px wide — before the language chooser. Across
+   intents `prepare` and `live`, `en-GB` and `es-ES`, and widths 320, 360 and 390 px (24 runs, with
+   and without the stand-in): the lockup stayed at its full 128 px in every case, the banner's
+   `scrollWidth` equalled its `clientWidth` (272 / 312 / 342), and the stand-in's and the language
+   trigger's tops equalled each other on the lockup's row. What a failure would have printed: a
+   lockup narrower than 128 px, or a `scrollWidth` above `clientWidth`. Spare room by subtraction:
+   about 3 px at 320, 43 at 360, 73 at 390. Task 4b pins this with its own fit test.
 
    **Shared menu mechanics: yes, through a helper.** The menu code moves out of
    `wt-language-chooser` into `packages/ui/src/menu-popover.ts`, on the condition that
    `wt-language-chooser.test.ts` and `wt-language-chooser.a11y.test.ts` stay byte-identical and
-   pass before and after (Task 2 checks this with `git diff --exit-code`). Why: the alternative is a
-   second copy of about 120 lines (placement, scroll and resize following, outside press, Escape,
-   arrow keys) that would need its own copy of the language chooser's ~30 placement, keyboard and
-   dismissal tests to survive `packages/ui`'s mutation floor of 90. With the helper those tests
-   already exercise the shared code, and the theme chooser's tests cover only its wiring. Backlog
-   item A781 (`docs/backlog.md:3548-3552`) asks for exactly this kind of helper across the pop-up
-   `wt-*` fields; this change is its first slice, and Task 8 narrows A781 to what is left
-   (`wt-combobox`, `wt-colour-chooser`). **Fallback:** if Task 2 cannot keep both language-chooser
-   test files unedited and green, revert Task 2's changes, and Task 3 builds the theme chooser with
-   its own copy of the mechanics plus the placement, keyboard and dismissal tests listed in Task 3's
-   fallback note. Record which path was taken in the ledger and the PR.
+   pass before and after with the same count — 62 tests in 2 files, measured 2026-10-17 on
+   e52c997c0 (Task 2 checks both). Why: the alternative is a second copy of about 120 lines
+   (placement, scroll and resize following, outside press, Escape, arrow keys) that would need its
+   own copy of the language chooser's ~30 placement, keyboard and dismissal tests to hold
+   `packages/ui`'s mutation floor of 90. With the helper those tests already exercise the shared
+   code, and the theme chooser's tests cover only its wiring. Backlog item A781
+   (`docs/backlog.md:3548-3552`) asks for this kind of helper across the pop-up `wt-*` fields; this
+   change does not take A781 on, and Task 8 only notes there that the language chooser now uses
+   `menu-popover.ts`. **Fallback:** if Task 2 cannot keep both language-chooser test files unedited
+   and green, revert Task 2's changes, and Task 3 builds the theme chooser with its own copy of the
+   mechanics plus the tests listed in Task 3's fallback note. Record which path was taken in the
+   ledger and the PR.
 
-2. **Storage and application.** Home: `@waitron/ui`, as `packages/ui/src/theme-choice.ts`, not
-   `@waitron/ui-core`: ui-core is the published package (`packages/ui-core/package.json` has a
-   `build`, `prepack` and a `test:package` consumer test), and a product storage key does not belong
-   in its public surface; `@waitron/ui` is private and is what every app's `main.ts` already
-   imports `applyTokens` from. One key, `waitron-theme` (the dashboard's spelling,
+2. **Storage and application.** Home: `@waitron/ui`, as `packages/ui/src/theme-choice.ts`. Not
+   `@waitron/ui-core`: that package is private too, but it is built into a tarball for another
+   repository and checked by `pnpm --filter @waitron/ui-core test:package`, and its stated boundary
+   is account-form controls plus tokens, with "Venue controls … stay in `packages/ui`"
+   (`docs/developers/design-system.md:8-12`). A product storage key and a top-bar control are this
+   repository's venue concerns. `@waitron/ui` is also what every app's `main.ts` already imports
+   `applyTokens` from. One key, `waitron-theme` (the dashboard's spelling,
    `apps/dashboard/src/dashboard-app.ts:151`, `apps/dashboard/src/login-preference.ts:15`), holding
    `light` or `dark`; Follow device REMOVES the key, so "nothing saved" and "Follow device" are the
    same state. Light and Dark set `data-theme` on the theme root; Follow device removes it, and the
@@ -96,19 +144,25 @@ the meaning allows.
    `apps/setup/src/main.ts:6`, `apps/till/src/main.ts:16`). Blocked storage, a refused write and a
    garbage value all fall back to Follow device without throwing, in the
    `apps/dashboard/src/login-preference.ts` pattern (storage getter and each call in `try`). A pick
-   whose save is refused still applies to the open page.
+   whose save is refused still applies to the open page. Because `startThemeChoice` removes
+   `data-theme` when nothing is saved, a screenshot script must save `waitron-theme` rather than set
+   the attribute before `main.ts` runs (Task 8 updates the testing guide).
 
-   **Same origin, verified by reading:** on a box the till and the dashboard are served by one
-   server on one port — the dashboard at `/manage`, the till at `/`
-   (`apps/server/src/boot.ts:2280-2290`), both through `startListening` on `config.httpPort`
-   (`boot.ts:575-588`, trading via `startTradingListener`, `boot.ts:631-637`). Setup is served by
-   setup mode at `/` (`apps/server/src/setup-api.ts:1410`) on the same `startListening` and port
-   (`boot.ts:1223-1224`). So on a box all three share one origin, and one saved choice, as long as
-   the browser uses the same host name. Consequences, stated as limits in design-system.md (Task 8),
-   not fixed: the same box reached by two names (its IP address and `waitron.local`) keeps two
-   choices; in the dev stack the three apps are three Vite servers on three ports (5190 till, 5191
-   dashboard, 5192 setup — `apps/*/vite.config.ts`, `docs/developers/workflow-guide.md` § the dev
-   stack), so in dev each app keeps its own choice. Task 9 sets the choice per port for that reason.
+   **Same origin — read, not run.** An origin is scheme, host and port. On a box the till and the
+   dashboard are served by one server on one port — the dashboard at `/manage`, the till at `/`
+   (`apps/server/src/boot.ts:2280-2290`), through `startListening` on `config.httpPort`
+   (`boot.ts:575-588`) with `resolveTradingTls` (`boot.ts:631-637`, `apps/server/src/trading-tls.ts:10-11`:
+   the operator's TLS, else the box's minted leaf, else none). Setup mode serves setup at `/`
+   (`apps/server/src/setup-api.ts:1410`) through the same `startListening` and port, but with its own
+   TLS choice: the operator's, else the leaf `ensureBoxSecrets` just made (`boot.ts:954`,
+   `:1223-1224`), so setup is always HTTPS. So the three share one origin on a box only when the
+   trading listener also serves HTTPS (operator TLS, or the leaf setup minted being found by
+   `mintedBoxLeaf`) and the browser uses the same host name. Not run on a box. Consequences, stated
+   as limits in design-system.md (Task 8), not fixed: one box reached by two names (its IP address
+   and `waitron.local`) keeps two choices; a trading listener without a leaf serves HTTP and keeps a
+   separate choice from setup; in the dev stack the three apps are three Vite servers on three ports
+   (5190 till, 5191 dashboard, 5192 setup — `docs/ui-review.md:11-13`), so in dev each app keeps its
+   own choice. Task 9 sets the choice per port for that reason.
 
    **Other open tabs follow, through the `storage` event: included.** It is a few lines in the
    module and testable by dispatching a `StorageEvent` on `window` (Task 1).
@@ -117,13 +171,14 @@ the meaning allows.
    Found with `grep -rn "prefers-color-scheme\|matchMedia\|color-scheme\|light-dark("` over the
    tree (excluding `node_modules`, `dist`, `docs`):
    - the dashboard banner's `<picture>` — `apps/dashboard/src/dashboard-app.ts:1701-1704`,
-     `<source media="(prefers-color-scheme: dark)">`. **In scope** (Task 4): the source's `media`
+     `<source media="(prefers-color-scheme: dark)">`. **In scope** (Task 4a): the source's `media`
      becomes `all` for Dark, `not all` for Light and stays `(prefers-color-scheme: dark)` for Follow
      device, so Follow device still tracks the operating system with no script.
    - the dashboard's printable node recovery page — `apps/dashboard/src/screens/node-recovery-print.ts:30`,
      `:root { color-scheme: light dark }`. It copies its colours from the screen's tokens (which
      follow the choice) but lets the browser draw native parts (scrollbars) from the operating
-     system. **In scope** (Task 4): it takes the `color-scheme` the source element resolves to.
+     system. **In scope** (Task 4a): its first `:root` rule takes the `color-scheme` the source
+     element resolves to. Its `@media print` rule (`:38`, `color-scheme: light`) stays.
    - setup's logo already follows the tokens (`apps/setup/src/setup-app.ts:457-465` paints the inlined
      lockup from `--wt-color-primary` and `--wt-color-text`): no change.
    - every other `matchMedia` in app and package code reads reduced motion, pointer, hover or a
@@ -145,20 +200,19 @@ the meaning allows.
    | `theme.device` | `shell.theme.device` | Follow device | Según el dispositivo |
 
    "Según el dispositivo" matches the dashboard's existing "Según su rol" for "follows role"
-   (`apps/dashboard/src/i18n/strings.ts:5258`).
+   (`apps/dashboard/src/i18n/strings.ts:5258`). The dashboard's account-menu group uses the same
+   four keys.
 
 5. **LIGHT review path; no migration; no server change.**
 
-**Points where the code differs from the brief this plan was written from:** the brief named only
-the dashboard logo as an app-side reader of the operating system's setting; the printable recovery
-page is a second one (decision 3). The brief's "all three apps are served from the same origin"
-holds on a box under one host name, not in the dev stack and not across host names (decision 2).
-The till shell also draws the language chooser in a corner on a kitchen display and a kiosk, not
-only in its bar (`till-shell.ts:719-721`). Some existing APP tests pin the exact contents of a bar
-and must be extended, not left untouched: `apps/dashboard/src/dashboard-app.test.ts:5432-5436` (the
-banner's children in order), `apps/till/src/widgets/till-shell.test.ts:815-833` (the session row
-in order) and `:662` (the Tab key's path through the phone bar). Backlog A781 already asks for the
-shared helper decision 1 introduces.
+**Points where the code differs from the brief this plan was first written from:** the dashboard's
+printable recovery page is a second app-side reader of the operating system's setting (decision 3).
+"All three apps are served from the same origin" holds on a box only under one host name and with
+the trading listener on HTTPS, not in the dev stack (decision 2). The till shell also draws the
+language chooser in a corner on a kitchen display and a kiosk (`till-shell.ts:719-721`). The till
+counter screen's own header never shows in the product (decision 1). The signed-in dashboard banner
+has no room for the button (decision 1a). Some existing app tests pin the exact contents of the till
+bar and must change; each task lists them under "Changed test checks".
 
 ## Global Constraints
 
@@ -168,14 +222,24 @@ shared helper decision 1 introduces.
 - The trigger's accessible name is `${labels.theme}: ${labels[active]}` ("Theme: Follow device",
   "Tema: Oscuro"). Menu order: Light, Dark, Follow device.
 - `data-test` hooks: `theme-trigger`, `theme-light`, `theme-dark`, `theme-device` inside the
-  component; `theme-chooser` on each app's element.
+  component; `theme-chooser` on each app's element; on the dashboard's account menu,
+  `theme-choices` on the group and `theme-choice-light`, `theme-choice-dark`, `theme-choice-device`
+  on its buttons.
 - Every colour, spacing, radius and font reads a `--wt-*` token; no literal breakpoint in
   `packages/ui` (`packages/ui/src/no-hardcoded-chrome.test.ts`).
 - No server, database, migration or fiscal change.
-- Coverage holds `98/98/98/95` in every package touched: `@waitron/ui`, `@waitron/dashboard`,
-  `@waitron/setup`, `@waitron/till`. `@waitron/ui-core` is not touched. `main.ts` is excluded from
-  coverage in all three apps (`apps/*/vitest.config.ts`), so the one line each task adds there is
-  verified by Task 9, not by a test.
+- **Coverage:** every package touched (`@waitron/ui`, `@waitron/dashboard`, `@waitron/setup`,
+  `@waitron/till`) holds `98/98/98/95`, and CI's coverage and `-merge` jobs are the gate. No
+  implementer task runs a package's whole `test:coverage`. A task that CREATES a source file checks
+  that file's coverage from its own tests:
+  `pnpm --filter <pkg> exec vitest run --coverage --coverage.include=<new file> <its test files>`,
+  reading the per-file row. A task that only changes an existing file relies on its focused tests
+  and on CI. `main.ts` is excluded from coverage in all three apps (`apps/*/vitest.config.ts`), so
+  the line each app's task adds there is checked by Task 9's probe, not by a test.
+- **Changed test checks.** Any task that changes an EXISTING test's assertion, selector, count or
+  title lists it under a "Changed test checks" note — `file:line`, before → after, and why — and the
+  implementer copies that list into its commit body for the PR. Adding a new test needs no note.
+  An existing assertion is never removed or loosened.
 - Every commit `git commit -s`, staging explicit paths only. One commit per task at least.
 - Every implementer runs focused tests only (`pnpm --filter <pkg> exec vitest run <file>`), plus
   `pnpm format:check`, `pnpm --filter <pkg> typecheck` and `pnpm --filter <pkg> lint` for the
@@ -196,11 +260,12 @@ shared helper decision 1 introduces.
    changes the other without a reload, and a cleared storage (`localStorage.clear()`, key `null`)
    returns the other to Follow device. → Task 1, "follows a choice made in another tab…".
 3. **The operating system switches between light and dark while a page is open:** on Follow device
-   the page and the dashboard logo follow at once; on Light or Dark nothing changes. → Task 4,
+   the page and the dashboard logo follow at once; on Light or Dark nothing changes. → Task 4a,
    the three logo cases flip `emulateColorScheme` inside one test.
-4. **Phone width (360 and 390 px):** the dashboard banner, setup's header and the till bar still
-   fit on one row with nothing overlapping and the lockup at least 60 px wide. → Task 4 extends
-   the existing banner-fit tests; Task 5 and Task 7 add phone-width cases.
+4. **Phone width (320, 360 and 390 px):** the signed-out dashboard banner, setup's header and the
+   till bar still fit with nothing overlapping, the dashboard lockup at full width signed out; the
+   signed-in banner is unchanged. → Task 4b's signed-out fit test (the existing signed-in fit tests
+   untouched), Task 5's and Task 7's phone-width cases.
 5. **A pick while the till has an unsent order open:** unlike a language change on the till
    (`apps/till/src/till-app.ts:13222-13225`, which asks before leaving unsaved work), a theme pick
    asks nothing and loses nothing. → Task 7, "picking a theme with an unsent order open…".
@@ -215,13 +280,13 @@ shared helper decision 1 introduces.
 | `packages/ui/src/components/wt-theme-chooser.ts` (new) | the primitive and its three icons |
 | `packages/ui/src/index.ts` | exports the new module and component |
 | `packages/ui/demo/main.ts` | workbench entry |
-| `apps/{dashboard,setup,till}/src/main.ts` | `startThemeChoice(document.documentElement)` after `applyTokens` |
-| `apps/dashboard/src/dashboard-app.ts` | banner placement, applies picks, logo `media` |
-| `apps/dashboard/src/screens/node-recovery-print.ts` | `color-scheme` from the source |
+| `apps/{dashboard,setup,till}/src/main.ts` | `startThemeChoice(document.documentElement)` on the line after `applyTokens` |
+| `apps/dashboard/src/dashboard-app.ts` | logo `media` (4a); signed-out banner chooser, account-menu group, applies picks (4b) |
+| `apps/dashboard/src/screens/node-recovery-print.ts` | `color-scheme` from the source (4a) |
 | `apps/setup/src/setup-app.ts` | header placement, applies picks |
 | `apps/till/src/widgets/theme-chooser.ts` (new) | `themeChooser()`: the till's one way to draw the chooser with its labels |
 | `apps/till/src/till-app.ts` | applies picks |
-| `apps/till/src/screens/till-{lock,enrol,counter}-screen.ts`, `apps/till/src/widgets/till-shell.ts` | placement |
+| `apps/till/src/screens/till-{lock,enrol}-screen.ts`, `apps/till/src/widgets/till-shell.ts` | placement |
 | `apps/till/src/widgets/language-chooser-styles.ts` | `.language-corner` spaces two choosers |
 | string tables in each app | the four labels |
 
@@ -232,7 +297,7 @@ shared helper decision 1 introduces.
 **Files:**
 - Create: `packages/ui/src/theme-choice.ts`
 - Create: `packages/ui/src/theme-choice.test.ts`
-- Modify: `packages/ui/src/index.ts` (export block beside `ContentLanguageController`, `:113-118`)
+- Modify: `packages/ui/src/index.ts` (the export block holding `ContentLanguageController`, `:102-107`)
 
 **Interfaces:**
 - Produces (all exported from `@waitron/ui`):
@@ -242,8 +307,8 @@ shared helper decision 1 introduces.
   - `const THEME_SELECTED_EVENT = "wt-theme-selected"`
   - `function isThemeChoice(value: unknown): value is ThemeChoice`
   - `function startThemeChoice(root: HTMLElement): void` — remembers `root` as the theme root, reads
-    the saved choice, applies it, and installs ONE `window` `storage` listener however often it is
-    called.
+    the saved choice, applies it, **notifies subscribers when the saved choice differs from the
+    current one**, and installs ONE `window` `storage` listener however often it is called.
   - `function currentThemeChoice(): ThemeChoice`
   - `function chooseTheme(choice: ThemeChoice): void` — saves (Light/Dark write the word, Follow
     device removes the key; a refused write is swallowed), applies to the remembered root (or
@@ -267,6 +332,10 @@ shared helper decision 1 introduces.
   - `it.each(["light", "dark"])("applies a saved %s choice to the root as it starts")` —
     `localStorage.setItem(THEME_STORAGE_KEY, choice)`; `startThemeChoice(root)`;
     `root.getAttribute("data-theme")` is `choice`; `currentThemeChoice()` is `choice`.
+  - `starting tells subscribers when the saved choice differs, and only then` — subscribe first;
+    with `"dark"` saved, `startThemeChoice(root)` calls the listener once; a second
+    `startThemeChoice(root)` with `"dark"` still saved calls it no more; with nothing saved after
+    `chooseTheme("device")` reset, `startThemeChoice(root)` does not call it.
   - `it.each(["Dark", "", "auto", "device", '{"theme":"dark"}'])("treats a saved %j as Follow device")`
     — no attribute, `"device"`.
   - `reading blocked storage falls back to Follow device without throwing` — run twice: once with
@@ -323,21 +392,26 @@ shared helper decision 1 introduces.
   Run: `pnpm --filter @waitron/ui exec vitest run src/theme-choice.test.ts`
   Expected: PASS, with the `Tests` count equal to the number of cases written.
 
-- [ ] **Step 5: Prove the fallback guards by deletion.** (a) Remove the `try`/`catch` from
-  `readSaved` and re-run: "reading blocked storage…" must FAIL with `SecurityError: Denied` thrown
-  out of `startThemeChoice`. (b) Make `readSaved` return any stored string unchecked: "treats a
-  saved … as Follow device" must FAIL with `data-theme` `"Dark"`, `""` or `"auto"` present.
-  (c) Remove the `try` around the write in `chooseTheme`: "a save the browser refuses…" must FAIL
-  with `QuotaExceededError`. Restore each and re-run to PASS. Write the three outcomes in the commit
-  message.
+- [ ] **Step 5: Prove the guards by deletion.** (a) Remove the `try`/`catch` from `readSaved` and
+  re-run: "reading blocked storage…" must FAIL with `SecurityError: Denied` thrown out of
+  `startThemeChoice`. (b) Make `readSaved` return any stored string unchecked: "treats a saved … as
+  Follow device" must FAIL with `data-theme` `"Dark"`, `""` or `"auto"` present. (c) Remove the
+  `try` around the write in `chooseTheme`: "a save the browser refuses…" must FAIL with
+  `QuotaExceededError`. (d) Remove the notify from `startThemeChoice`: "starting tells subscribers…"
+  must FAIL with the listener called 0 times. Restore each and re-run to PASS. Write the four
+  outcomes in the commit message.
 
-- [ ] **Step 6: Typecheck, lint, format, commit**
+- [ ] **Step 6: Coverage of the new file, typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/ui typecheck && pnpm --filter @waitron/ui lint && pnpm format:check`
+  Run: `pnpm --filter @waitron/ui exec vitest run --coverage --coverage.include=src/theme-choice.ts src/theme-choice.test.ts`
+  (the `theme-choice.ts` row at or above 98/98/98/95), then
+  `pnpm --filter @waitron/ui typecheck && pnpm --filter @waitron/ui lint && pnpm format:check`.
   ```bash
   git add packages/ui/src/theme-choice.ts packages/ui/src/theme-choice.test.ts packages/ui/src/index.ts
   git commit -s -m "Add the saved theme choice: one browser setting that sets or clears data-theme (A681)"
   ```
+
+Changed test checks: none.
 
 ---
 
@@ -375,7 +449,8 @@ shared helper decision 1 introduces.
 
 - [ ] **Step 1: Record the baseline.** Run:
   `pnpm --filter @waitron/ui exec vitest run src/components/wt-language-chooser.test.ts src/components/wt-language-chooser.a11y.test.ts`
-  Expected: PASS. Write the `Tests` count down; it must be identical after Step 3.
+  Expected: PASS, `Test Files 2 passed (2)`, `Tests 62 passed (62)` (measured 2026-10-17 on
+  e52c997c0). If the count differs, write the new count in the ledger before going on.
 
 - [ ] **Step 2: Move the mechanics** into `packages/ui/src/menu-popover.ts` with the interface
   above, and make `wt-language-chooser.ts` use it (`static styles = [baseStyles, menuPopoverStyles, css`…its remaining rules…`]`).
@@ -387,8 +462,8 @@ shared helper decision 1 introduces.
 
   Run: `git diff --exit-code e52c997c0 -- packages/ui/src/components/wt-language-chooser.test.ts packages/ui/src/components/wt-language-chooser.a11y.test.ts`
   Expected: exit 0, no output.
-  Run the Step 1 command again. Expected: PASS with the same `Tests` count.
-  Also run every other `packages/ui` suite that mounts the language chooser:
+  Run the Step 1 command again. Expected: `Tests 62 passed (62)`.
+  Also run the `packages/ui` guards that mount every component:
   `pnpm --filter @waitron/ui exec vitest run src/tap-target-and-focus.test.ts src/no-hardcoded-chrome.test.ts`
   Expected: PASS.
 
@@ -402,15 +477,18 @@ shared helper decision 1 introduces.
   note "fallback: separate copy" in the ledger, and go on to Task 3, which then follows its
   fallback note.
 
-- [ ] **Step 6: Typecheck, lint, format, commit**
+- [ ] **Step 6: Coverage of the new file, typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/ui typecheck && pnpm --filter @waitron/ui lint && pnpm format:check`
+  Run: `pnpm --filter @waitron/ui exec vitest run --coverage --coverage.include=src/menu-popover.ts src/components/wt-language-chooser.test.ts`
+  (the `menu-popover.ts` row at or above 98/98/98/95), then the three checks.
   ```bash
   git add packages/ui/src/menu-popover.ts packages/ui/src/components/wt-language-chooser.ts
-  git commit -s -m "Move the language chooser's menu placement, dismissal and arrow keys into a shared helper (A681, first slice of A781)"
+  git commit -s -m "Move the language chooser's menu placement, dismissal and arrow keys into a shared helper (A681)"
   ```
   The commit body states: the two language-chooser test files are unchanged (the `git diff
-  --exit-code` command, verbatim) and their `Tests` count before and after.
+  --exit-code` command, verbatim) and their `Tests` count before and after (62 and 62).
+
+Changed test checks: none (that is the point of this task).
 
 ---
 
@@ -420,7 +498,7 @@ shared helper decision 1 introduces.
 - Create: `packages/ui/src/components/wt-theme-chooser.ts`
 - Create: `packages/ui/src/components/wt-theme-chooser.test.ts`
 - Create: `packages/ui/src/components/wt-theme-chooser.a11y.test.ts`
-- Modify: `packages/ui/src/index.ts` (beside `WtLanguageChooser`, `:142`), `packages/ui/demo/main.ts`
+- Modify: `packages/ui/src/index.ts` (beside `WtLanguageChooser`, `:135`), `packages/ui/demo/main.ts`
   (import beside `:43`; draw it beside the language chooser at `:273`)
 
 **Interfaces:**
@@ -433,7 +511,7 @@ shared helper decision 1 introduces.
     `@property({ attribute: false }) labels: WtThemeLabels` defaulting to
     `{ theme: "Theme", light: "Light", dark: "Dark", device: "Follow device" }`.
   - Event `wt-theme-selected`, `detail: { choice: ThemeChoice }` (Global Constraints).
-  - Icons registered at module load:
+  - Icons registered at module load (the dashboard's account-menu group draws them too):
     - `theme-light`: `M8 5a3 3 0 1 1 0 6a3 3 0 1 1 0-6Z M7.25 .5h1.5V3h-1.5Z M7.25 13h1.5v2.5h-1.5Z M.5 7.25H3v1.5H.5Z M13 7.25h2.5v1.5H13Z M11.78 10.72 13.27 12.21 12.21 13.27 10.72 11.78Z M4.22 5.28 2.73 3.79 3.79 2.73 5.28 4.22Z M11.78 5.28 13.27 3.79 12.21 2.73 10.72 4.22Z M4.22 10.72 2.73 12.21 3.79 13.27 5.28 11.78Z`
     - `theme-dark`: `M6.82 1.61A6.5 6.5 0 1 0 14.39 9.18A5.5 5.5 0 0 1 6.82 1.61Z`
     - `theme-device`: `M8 1a7 7 0 1 1 0 14A7 7 0 1 1 8 1Z M8 2.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11Z M8 2.5v11a5.5 5.5 0 0 1 0-11Z`
@@ -446,7 +524,8 @@ shared helper decision 1 introduces.
   `<button type="button" class="option" role="menuitemradio" aria-checked data-test="theme-<choice>">`
   per entry of `THEME_CHOICES`, each holding `<wt-icon name="theme-<choice>">` then the label. A pick
   stops the click, closes, focuses the trigger, then dispatches. No loading state: the menu opens on
-  the first press.
+  the first press. No `shadowRootOptions` override — focus delegation follows the language chooser
+  (decision 1).
 
 - [ ] **Step 1: Write the failing behaviour tests** in `wt-theme-chooser.test.ts`, mounting with
   `mount` / `mountInShadowRoot` from `../test-helpers.js` the way `wt-language-chooser.test.ts:13-63`
@@ -522,114 +601,190 @@ shared helper decision 1 introduces.
 - [ ] **Step 6: Prove the a11y test can fail.** Remove the trigger's `aria-label`: the a11y test
   must FAIL with axe's `button-name` rule. Restore; PASS.
 
-- [ ] **Step 7: Coverage for the package**
+- [ ] **Step 7: Coverage of the new file, typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/ui test:coverage`
-  Expected: thresholds met; read the per-file rows for `theme-choice.ts`, `menu-popover.ts`,
-  `wt-theme-chooser.ts` and `wt-language-chooser.ts` (each at or above 98/98/98/95).
-
-- [ ] **Step 8: Typecheck, lint, format, commit**
-
+  Run: `pnpm --filter @waitron/ui exec vitest run --coverage --coverage.include=src/components/wt-theme-chooser.ts src/components/wt-theme-chooser.test.ts src/components/wt-theme-chooser.a11y.test.ts`
+  (that row at or above 98/98/98/95), then the three checks.
   ```bash
   git add packages/ui/src/components/wt-theme-chooser.ts packages/ui/src/components/wt-theme-chooser.test.ts packages/ui/src/components/wt-theme-chooser.a11y.test.ts packages/ui/src/index.ts packages/ui/demo/main.ts
   git commit -s -m "Add wt-theme-chooser: an icon trigger and a Light, Dark, Follow device menu (A681)"
   ```
 
+Changed test checks: none.
+
 ---
 
-### Task 4: The dashboard
+### Task 4a: The dashboard follows the choice — start-up, logo, recovery page
 
 **Files:**
 - Modify: `apps/dashboard/src/main.ts:17` (`startThemeChoice(document.documentElement)` on the line
   after `applyTokens`)
-- Modify: `apps/dashboard/src/dashboard-app.ts` — import `@waitron/ui/src/components/wt-theme-chooser.js`
-  beside `:53`; `#theme = new ThemeChoiceController(this, { applies: true })`; in `#banner`
-  (`:1718`) draw `<wt-theme-chooser data-test="theme-chooser" .active=${this.#theme.choice} .labels=${…}>`
-  just before the language chooser; the logo source (`:1702`) takes `media=${darkLogoMedia(this.#theme.choice)}`
+- Modify: `apps/dashboard/src/dashboard-app.ts` — `#theme = new ThemeChoiceController(this)`; the
+  logo source (`:1702`) takes `media=${darkLogoMedia(this.#theme.choice)}`
 - Modify: `apps/dashboard/src/screens/node-recovery-print.ts:30`
-- Modify: `apps/dashboard/src/i18n/strings.ts` (the four keys in `en` near `nav.account_menu`, `:775`,
-  and in `es`, `:3744`)
 - Create: `apps/dashboard/src/dashboard-app.theme.test.ts`
-- Modify: `apps/dashboard/src/dashboard-app.test.ts` (`:5432-5436`, and the two banner-fit tests at
-  `:5439` and `:5534`), `apps/dashboard/src/screens/node-recovery-print.test.ts`
+- Modify: `apps/dashboard/src/screens/node-recovery-print.test.ts` (a new case)
 
 **Interfaces:**
-- Consumes: Task 1's `startThemeChoice`, `ThemeChoiceController`, `THEME_STORAGE_KEY`,
-  `chooseTheme`; Task 3's element and `WtThemeLabels`.
+- Consumes: Task 1's `startThemeChoice`, `chooseTheme`, `ThemeChoiceController`, `THEME_STORAGE_KEY`.
 - Produces: `function darkLogoMedia(choice: ThemeChoice): string` in `dashboard-app.ts` (module
-  scope, not exported unless a test needs it): `"all"` for dark, `"not all"` for light,
-  `"(prefers-color-scheme: dark)"` for device.
+  scope): `"all"` for dark, `"not all"` for light, `"(prefers-color-scheme: dark)"` for device.
 
-- [ ] **Step 1: Write the failing tests** in `apps/dashboard/src/dashboard-app.theme.test.ts`
-  (mount with `mountWidget` from `./widgets/test-helpers.js`, stub the api as
-  `dashboard-app.test.ts` does; `afterEach`: `chooseTheme("device")`,
-  `localStorage.removeItem(THEME_STORAGE_KEY)`, `commands.emulateColorScheme(null)`, cleanup):
-  - `puts the theme chooser in the banner just before the language chooser, signed out and signed in`.
-  - `shows the saved choice` — `localStorage.setItem(THEME_STORAGE_KEY, "dark")`,
-    `startThemeChoice(host)` before mounting → the chooser's `active` is `"dark"`.
-  - `a pick turns the dashboard dark and is kept for the next visit` — `startThemeChoice(host)`;
-    open `theme-trigger`, click `theme-dark` → `getComputedStyle(host).getPropertyValue("--wt-color-bg").trim()`
-    is `"#101216"` (the dark value, `packages/ui-core/src/tokens/colors.css:127`), stored `"dark"`,
-    the chooser's `active` `"dark"`; then pick Follow device → the attribute is gone and nothing is
-    stored.
-  - `labels the chooser in Spanish` — `setLocale("es-ES")` (restored after): the trigger's name is
-    `"Tema: Según el dispositivo"` and the options read `["Claro", "Oscuro", "Según el dispositivo"]`.
-  - Logo, reusing `dashboard-app.test.ts:761-785`'s `drawing` / `served` comparison (copy the two
-    helpers): `with Dark chosen the banner shows the dark lockup, whatever the computer is set to`
-    (emulate `"light"`, then `"dark"`: dark drawing both times); `with Light chosen it shows the
-    light lockup, whatever the computer is set to`; `on Follow device it follows the computer, and
-    picks change it at once` (emulate dark → dark drawing; pick Light → light drawing with the OS
-    still dark; pick Follow device → dark drawing again). Use `expect.poll`.
-  - In `node-recovery-print.test.ts`: `gives the printed page the colour scheme of the screen it
-    copies its colours from` — a source `div` with `applyTokens` and `data-theme="dark"` → the
-    rendered string contains `color-scheme: dark`; `"light"` → `color-scheme: light`; a plain
-    `document.body` source (no theme root, computed `normal`) → `color-scheme: light dark`.
+- [ ] **Step 1: Write the failing tests.** In `apps/dashboard/src/dashboard-app.theme.test.ts`
+  (mount with `mountWidget` from `./widgets/test-helpers.js`, which makes the host a theme root;
+  stub the api as `dashboard-app.test.ts:104-206` does — copy what is needed; `afterEach`:
+  `chooseTheme("device")`, `localStorage.removeItem(THEME_STORAGE_KEY)`,
+  `commands.emulateColorScheme(null)`, cleanup). Reuse `dashboard-app.test.ts:761-785`'s `drawing` /
+  `served` comparison (copy the two helpers), and use `expect.poll`:
+  - `with Dark chosen the banner shows the dark lockup, whatever the computer is set to` —
+    `chooseTheme("dark")` after mounting; emulate `"light"` → dark drawing; emulate `"dark"` → dark drawing.
+  - `with Light chosen it shows the light lockup, whatever the computer is set to`.
+  - `on Follow device it follows the computer, and a change of choice applies at once` — emulate
+    dark → dark drawing; `chooseTheme("light")` → light drawing with the OS still dark;
+    `chooseTheme("device")` → dark drawing again.
+  - `a choice saved before the page started is what the logo shows` — mount, then
+    `localStorage.setItem(THEME_STORAGE_KEY, "dark")` and `startThemeChoice(host)` (which notifies,
+    Task 1) with the OS light → dark drawing.
 
-- [ ] **Step 2: Extend the existing banner tests (adding, never removing an assertion):** at
-  `dashboard-app.test.ts:5432-5436` the expected children become
-  `["theme-chooser", "language-chooser", "alerts-bell", "account-menu"]`; in both banner-fit tests
-  append `"[data-test=theme-chooser]"` as the LAST entry of `items`, so the index destructuring
-  (`:5481`, `:5579`, `:5597-5598`) still points at the same items, and add
-  `expect(items.at(-1)!.box.top, "the theme chooser shares the lockup's row").toBeLessThan(logo.bottom)`.
-  Leave the existing logo test at `:761` exactly as it is: with nothing saved it is the Follow
-  device case.
+  In `node-recovery-print.test.ts`, add `gives the printed page the colour scheme of the screen it
+  copies its colours from`: parse the returned HTML with `DOMParser`, take the `<style>` text, load
+  it into `const sheet = new CSSStyleSheet(); sheet.replaceSync(text)`, take the FIRST top-level
+  rule that is a `CSSStyleRule` with `selectorText === ":root"` (so the `@media print` rule at `:38`
+  is never the one read), and assert `rule.style.getPropertyValue("color-scheme")` EXACTLY:
+  - source a `div` with `applyTokens` and `data-theme="dark"` → `"dark"`;
+  - the same with `data-theme="light"` → `"light"`;
+  - source `document.body`, which is no theme root (computed `color-scheme` `normal`) → `"light dark"`.
 
-- [ ] **Step 3: Run to see the new and extended tests fail**
+  What each would print against code that is wrong: today's code gives `"light dark"` in the first
+  two cases; an implementation that copies the computed value unchecked gives `"normal"` in the third.
 
-  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts src/dashboard-app.test.ts src/screens/node-recovery-print.test.ts`
-  Expected: FAIL in the new cases and the extended ones (no `theme-chooser`); the rest PASS.
+- [ ] **Step 2: Run to see them fail**
 
-- [ ] **Step 4: Implement** per the Files list: the four strings; the controller; the chooser in
-  `#banner` with labels from `t("theme.label")` … `t("theme.device")`; `darkLogoMedia`; and in
-  `renderNodeRecoveryPack` read `getComputedStyle(source).colorScheme` and write it when it is
-  `light` or `dark`, else `light dark`.
+  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts src/screens/node-recovery-print.test.ts`
+  Expected: FAIL in the Dark, Light and saved-choice logo cases and the first two colour-scheme
+  cases; the Follow device logo case's first step passes and its Light step fails.
 
-- [ ] **Step 5: Run to see them pass**, then every dashboard suite that mounts the whole app or the banner:
+- [ ] **Step 3: Implement**: `startThemeChoice` in `main.ts`; the controller and `darkLogoMedia` in
+  `dashboard-app.ts`; in `renderNodeRecoveryPack`, read `getComputedStyle(source).colorScheme` and
+  write it in the first `:root` rule when it is exactly `light` or `dark`, else `light dark`.
 
-  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts src/dashboard-app.test.ts src/screens/node-recovery-print.test.ts src/dashboard-app.a11y.test.ts src/dashboard-app.sidebar-fold.test.ts src/dashboard-app.touch.test.ts`
-  Expected: PASS. If a 360 px banner-fit case fails because the lockup falls under 60 px, do NOT
-  lower the bar or drop the item: stop and report it in the handover as a layout decision for the
-  owner, with the measured widths.
+- [ ] **Step 4: Run to see them pass**, plus the existing logo test, which must pass UNCHANGED (with
+  nothing saved it is the Follow device case):
 
-- [ ] **Step 6: Prove the logo case by deletion.** Put the literal `"(prefers-color-scheme: dark)"`
+  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts src/screens/node-recovery-print.test.ts src/screens/node-recovery-panel.test.ts`
+  and `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "dark-theme lockup"`.
+  Expected: PASS.
+
+- [ ] **Step 5: Prove the logo case by deletion.** Put the literal `"(prefers-color-scheme: dark)"`
   back in place of `darkLogoMedia(...)`: "with Dark chosen the banner shows the dark lockup…" must
   FAIL, showing the light drawing while the OS is light. Restore; PASS.
 
-- [ ] **Step 7: Coverage, typecheck, lint, format, commit**
+- [ ] **Step 6: Typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/dashboard test:coverage` (thresholds met) and
-  `pnpm --filter @waitron/dashboard typecheck && pnpm --filter @waitron/dashboard lint && pnpm format:check`
   ```bash
-  git add apps/dashboard/src/main.ts apps/dashboard/src/dashboard-app.ts apps/dashboard/src/screens/node-recovery-print.ts apps/dashboard/src/i18n/strings.ts apps/dashboard/src/dashboard-app.theme.test.ts apps/dashboard/src/dashboard-app.test.ts apps/dashboard/src/screens/node-recovery-print.test.ts
-  git commit -s -m "Dashboard: a Theme menu in the banner, and the logo and recovery page follow it (A681)"
+  git add apps/dashboard/src/main.ts apps/dashboard/src/dashboard-app.ts apps/dashboard/src/screens/node-recovery-print.ts apps/dashboard/src/dashboard-app.theme.test.ts apps/dashboard/src/screens/node-recovery-print.test.ts
+  git commit -s -m "Dashboard: the logo and the printable recovery page follow the saved theme (A681)"
   ```
+
+Changed test checks: none (the existing logo test at `dashboard-app.test.ts:761` is kept as is).
+
+---
+
+### Task 4b: The dashboard's Theme choice — signed-out banner and signed-in account menu
+
+**Files:**
+- Modify: `apps/dashboard/src/dashboard-app.ts` — import `@waitron/ui/src/components/wt-theme-chooser.js`
+  beside `:53`; the controller from Task 4a becomes `new ThemeChoiceController(this, { applies: true })`;
+  in `#banner` (`:1718`), when `authenticated` is false, `<wt-theme-chooser data-test="theme-chooser" .active=${this.#theme.choice} .labels=${…}>`
+  just before the language chooser; when it is true, no theme chooser in the banner, and inside the
+  account menu's `wt-row-actions` (`:1747-1768`), between the `profile` and `logout` buttons:
+  ```html
+  <div class="theme-choices" role="group" aria-labelledby="theme-choices-label" data-test="theme-choices">
+    <span id="theme-choices-label" class="theme-choices-label">${t("theme.label")}</span>
+    <!-- one per THEME_CHOICES entry -->
+    <button type="button" class="theme-choice" aria-pressed=${String(choice === this.#theme.choice)}
+            data-test="theme-choice-${choice}" @click=${() => chooseTheme(choice)}>
+      <wt-icon name="theme-${choice}"></wt-icon>${label}
+    </button>
+  </div>
+  ```
+  CSS, tokens only: `.theme-choices` a column with `gap: var(--wt-space-1)`; `.theme-choices-label`
+  in `--wt-color-text-muted`, `--wt-font-size-sm`, padded like the menu's buttons;
+  `.theme-choice` drawn like the menu's `wt-button variant="ghost" align="start"` (min height
+  `--wt-tap-min`, padding `var(--wt-space-2) var(--wt-space-4)`, `--wt-radius-md`, bold, start
+  aligned, transparent 1 px border, `--wt-color-primary-text` border on hover, `--wt-focus-ring`
+  on `:focus-visible`), and `[aria-pressed="true"]` with a `--wt-color-border` border.
+- Modify: `apps/dashboard/src/i18n/strings.ts` (the four keys in `en` near `nav.account_menu`, `:775`,
+  and in `es`, `:3744`)
+- Modify: `apps/dashboard/src/dashboard-app.theme.test.ts` (new cases)
+
+**Interfaces:** Consumes Task 1, Task 3 (element, `WtThemeLabels`, and its registered icons).
+
+- [ ] **Step 1: Write the failing tests** in `apps/dashboard/src/dashboard-app.theme.test.ts`:
+  - `signed out, puts the theme chooser in the banner just before the language chooser` — the
+    `.banner-actions` children's `data-test`s are `["theme-chooser", "language-chooser"]`.
+  - `signed in, the banner has no theme chooser and the account menu holds the Theme choices
+    between Account settings and Log out` — no `[data-test=theme-chooser]`; the menu's slotted
+    children in order are `profile`, `theme-choices`, `logout`; the group has accessible name
+    `"Theme"` (`toHaveAccessibleName` on the `role="group"` element) and three buttons named
+    `"Light"`, `"Dark"`, `"Follow device"` with `aria-pressed` `["false", "false", "true"]`.
+  - `signed out, a pick in the banner turns the dashboard dark and is kept` — `startThemeChoice(host)`;
+    open `theme-trigger`, click `theme-dark` → `getComputedStyle(host).getPropertyValue("--wt-color-bg").trim()`
+    is `"#101216"` (the dark value, `packages/ui-core/src/tokens/colors.css:127`), stored `"dark"`,
+    the chooser's `active` `"dark"`; pick Follow device → no attribute, nothing stored.
+  - `signed in, a pick in the account menu turns the dashboard dark, closes the menu, and is marked
+    next time` — open the account menu, click `theme-choice-dark` → dark `--wt-color-bg`, stored
+    `"dark"`, the popover closed; reopen → `theme-choice-dark` is `aria-pressed="true"`, the other two `"false"`.
+  - `labels the Theme choices in Spanish` — `setLocale("es-ES")` (restored after): signed out, the
+    trigger's name is `"Tema: Según el dispositivo"` and the menu reads
+    `["Claro", "Oscuro", "Según el dispositivo"]`; signed in, the group is named `"Tema"` and its
+    buttons read the same three words.
+  - `it.each` over intents `prepare` and `live`, `en-GB` and `es-ES`, widths 320, 360 and 390:
+    `signed out, fits the banner at %ipx with the theme and language choosers on the lockup's row`
+    — with the host padded 24 px as `dashboard-app.test.ts:5396-5407`'s `atViewport` does (copy it):
+    the lockup is at least 60 px wide, the banner's `scrollWidth <= clientWidth`, neither chooser
+    overlaps the lockup or the other, and both choosers' tops are above the lockup's bottom.
+  - `has no accessibility violations with the account menu open, in both themes` — mount signed in
+    with `"light"`, then `"dark"` (the `mountWidget` theme argument), open the account menu,
+    `await expectNoA11yViolations(host)` (from `./widgets/test-helpers.js`).
+
+- [ ] **Step 2: Run to see them fail**
+
+  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts`
+  Expected: FAIL in the new cases; Task 4a's cases still PASS.
+
+- [ ] **Step 3: Implement** per the Files list: the four strings; `applies: true`; the banner
+  chooser signed out with labels from `t("theme.label")` … `t("theme.device")`; the account-menu group.
+
+- [ ] **Step 4: Run to see them pass**, then every dashboard suite that mounts the whole app, the
+  banner or the account menu — the signed-in banner tests must pass with no edit:
+
+  Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.theme.test.ts src/dashboard-app.test.ts src/dashboard-app.a11y.test.ts src/dashboard-app.sidebar-fold.test.ts src/dashboard-app.touch.test.ts src/dashboard-app.profile-unsaved.test.ts src/dashboard-app.backup-unsaved.test.ts src/dashboard-app.schedule-unsaved.test.ts`
+  Expected: PASS, and `git diff e52c997c0 -- apps/dashboard/src/dashboard-app.test.ts` empty. If a
+  signed-out fit case fails, do NOT lower the bar or drop the case: stop and report the measured
+  widths in the handover.
+
+- [ ] **Step 5: Prove the account-menu mark can fail.** Hard-code `aria-pressed="false"` on every
+  `theme-choice` button: "signed in, a pick in the account menu … is marked next time" must FAIL.
+  Restore; PASS.
+
+- [ ] **Step 6: Typecheck, lint, format, commit**
+
+  ```bash
+  git add apps/dashboard/src/dashboard-app.ts apps/dashboard/src/i18n/strings.ts apps/dashboard/src/dashboard-app.theme.test.ts
+  git commit -s -m "Dashboard: Theme in the banner while signed out, and in the account menu while signed in (A681)"
+  ```
+
+Changed test checks: none. The signed-in banner's item lists and fit tests
+(`dashboard-app.test.ts:5425-5437`, `:5439-5490`, `:5534-5604`) and the title at `:5425` stay true
+and untouched, because signed in the banner gains nothing.
 
 ---
 
 ### Task 5: Setup
 
 **Files:**
-- Modify: `apps/setup/src/main.ts:6` (`startThemeChoice(document.documentElement)` after `applyTokens`)
+- Modify: `apps/setup/src/main.ts:6` (`startThemeChoice(document.documentElement)` on the line after `applyTokens`)
 - Modify: `apps/setup/src/setup-app.ts` — import the component beside `:25`;
   `#theme = new ThemeChoiceController(this, { applies: true })`; in the header (`:1477-1485`) wrap
   the two choosers in `<div class="header-controls">` (theme chooser first); CSS beside
@@ -640,22 +795,22 @@ shared helper decision 1 introduces.
 - Create: `apps/setup/src/setup-app.theme.test.ts`
 - Modify: `apps/setup/src/setup-app.chooser-clearance.test.ts` (add the theme chooser's cases)
 
-**Interfaces:** Consumes Task 1 and Task 3, as in Task 4.
+**Interfaces:** Consumes Task 1 and Task 3.
 
 - [ ] **Step 1: Write the failing tests** in `apps/setup/src/setup-app.theme.test.ts` (mount as
-  `setup-app.test.ts:57-70` does; same `afterEach` as Task 4):
+  `setup-app.test.ts:57-70` does; `afterEach` as in Task 4a):
   - `it.each([1280, 390])("puts the theme chooser just before the language chooser at the trailing end of the header, %ipx wide")`
     — the theme trigger's right edge is left of the language trigger's left edge, the gap between
     them is `--wt-space-1` (4 px, within 1 px), their vertical middles match the logo's within 1 px,
     and the language trigger's right edge still meets the header's (within 1 px).
-  - `a pick applies and keeps the choice` — as in Task 4 (dark `--wt-color-bg` on the host, stored `"dark"`).
+  - `a pick applies and keeps the choice` — as in Task 4b (dark `--wt-color-bg` on the host, stored `"dark"`).
   - `labels the chooser in Spanish` — `"Tema: Según el dispositivo"`.
   - In `setup-app.chooser-clearance.test.ts`, add `describe("the theme chooser in the card's header", …)`
     with the same `cases` and the same two checks the language chooser has (`:63-84` "covers
     nothing interactive…" and `:86-125` "opens its menu on screen and over…"), read from
-    `[data-test=theme-trigger]` in `wt-theme-chooser`. Extend the "covers nothing interactive" list
-    of things a trigger must not cover with the OTHER chooser, so the two never overlap. A
-    `describe.each` over the two choosers is fine if every existing assertion survives.
+    `[data-test=theme-trigger]` in `wt-theme-chooser`, and in "covers nothing interactive" also
+    check that the theme trigger does not overlap the language chooser. A `describe.each` over the
+    two choosers is allowed only if every existing assertion survives unchanged.
 
 - [ ] **Step 2: Run to see them fail**
 
@@ -669,31 +824,34 @@ shared helper decision 1 introduces.
   Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app.theme.test.ts src/setup-app.chooser-clearance.test.ts src/setup-app.test.ts src/setup-app.a11y.test.ts src/i18n/strings.test.ts`
   Expected: PASS, the existing header cases at `setup-app.test.ts:2700-2755` unedited.
 
-- [ ] **Step 5: Coverage, typecheck, lint, format, commit**
+- [ ] **Step 5: Typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/setup test:coverage` and the three checks.
   ```bash
   git add apps/setup/src/main.ts apps/setup/src/setup-app.ts apps/setup/src/i18n/strings/shell.ts apps/setup/src/setup-app.theme.test.ts apps/setup/src/setup-app.chooser-clearance.test.ts
   git commit -s -m "Setup: a Theme menu beside the language menu (A681)"
   ```
 
+Changed test checks: none, unless the `describe.each` route is taken; then list each moved case
+with its old and new line.
+
 ---
 
-### Task 6: The till — start, apply picks, the sign-in, join and counter screens
+### Task 6: The till — start, apply picks, the sign-in and join screens
 
 **Files:**
-- Modify: `apps/till/src/main.ts:16` (`startThemeChoice(document.documentElement)` after `applyTokens`)
+- Modify: `apps/till/src/main.ts:16` (`startThemeChoice(document.documentElement)` on the line after
+  `applyTokens`, at top level, before `void bootTill()`)
 - Create: `apps/till/src/widgets/theme-chooser.ts`
 - Modify: `apps/till/src/till-app.ts` (`new ThemeChoiceController(this, { applies: true })` as a field)
-- Modify: `apps/till/src/screens/till-lock-screen.ts:309-315`, `till-enrol-screen.ts:186-192`,
-  `till-counter-screen.ts:461-464` — `${themeChooser()}` just before each `wt-language-chooser`,
-  and `new ThemeChoiceController(this)` in each class
+- Modify: `apps/till/src/screens/till-lock-screen.ts:309-315`, `till-enrol-screen.ts:186-192` —
+  `${themeChooser()}` just before each `wt-language-chooser`, and `new ThemeChoiceController(this)`
+  in each class
 - Modify: `apps/till/src/widgets/language-chooser-styles.ts` — `.language-corner` gains
   `align-items: center; gap: var(--wt-space-1);`
 - Modify: `apps/till/src/i18n/strings.ts` (the four `theme.*` keys in `en` and `es`)
 - Create: `apps/till/src/till-app.theme.test.ts`
-- Modify: `apps/till/src/screens/till-lock-screen.test.ts`, `till-enrol-screen.test.ts`,
-  `till-counter-screen.test.ts` (add cases)
+- Modify: `apps/till/src/screens/till-lock-screen.test.ts`, `till-enrol-screen.test.ts` (new
+  cases; two titles)
 
 **Interfaces:**
 - Consumes: Task 1, Task 3.
@@ -701,42 +859,50 @@ shared helper decision 1 introduces.
   — imports `@waitron/ui/src/components/wt-theme-chooser.js` and returns
   `<wt-theme-chooser data-test="theme-chooser" .active=${currentThemeChoice()} .labels=${{ theme: t("theme.label"), light: t("theme.light"), dark: t("theme.dark"), device: t("theme.device") }}>`.
   Every till screen draws the chooser through it (Task 7 too). A host that calls it must hold a
-  `ThemeChoiceController` (to redraw on a change) and a `LocaleChangeController` (each of the four
-  already does — `till-shell.ts:6`, `till-lock-screen.ts:6`, `till-enrol-screen.ts:14`,
-  `till-counter-screen.ts:9`).
+  `ThemeChoiceController` (to redraw on a change) and a `LocaleChangeController` (each one does
+  already — `till-shell.ts:6`, `till-lock-screen.ts:6`, `till-enrol-screen.ts:14`).
 
 - [ ] **Step 1: Write the failing tests.**
   - `till-lock-screen.test.ts`: `shows the theme chooser just before the language chooser, at the top right`
     (same parent `.language-corner`, `nextElementSibling` is the language chooser, the corner's right
     edge holds the language chooser); `labels the theme chooser in Spanish`
     (`"Tema: Según el dispositivo"` after `setLocale("es-ES")`, restored after).
-  - `till-enrol-screen.test.ts` and `till-counter-screen.test.ts`: the same two cases for their
-    placements (the counter one only where its own header is drawn, as its existing language cases
-    at `:469-536` do).
+  - `till-enrol-screen.test.ts`: the same two cases.
   - `apps/till/src/till-app.theme.test.ts` (mount `till-app` the way `till-app.test.ts` reaches the
-    lock screen; `afterEach` as in Task 4): `a pick on the sign-in screen turns the till dark and
+    lock screen; `afterEach` as in Task 4a): `a pick on the sign-in screen turns the till dark and
     keeps it, with nobody signed in` (`startThemeChoice(host)`; pick Dark in the lock screen's
     chooser → host `--wt-color-bg` `#101216`, stored `"dark"`, and the lock screen's chooser shows
     `active` `"dark"`); `a pick on the join screen does the same`.
 
 - [ ] **Step 2: Run to see them fail**
 
-  Run: `pnpm --filter @waitron/till exec vitest run src/till-app.theme.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts src/screens/till-counter-screen.test.ts`
+  Run: `pnpm --filter @waitron/till exec vitest run src/till-app.theme.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts`
   Expected: FAIL in the new cases only.
 
-- [ ] **Step 3: Implement** per the Files list.
+- [ ] **Step 3: Implement** per the Files list, and retitle the two tests below (titles only).
 
 - [ ] **Step 4: Run to see them pass**, plus the suites that check those screens' layout and names:
 
-  Run: `pnpm --filter @waitron/till exec vitest run src/till-app.theme.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts src/screens/till-counter-screen.test.ts src/screens/device-screens.phone-margin.test.ts src/till-app.a11y.test.ts src/i18n/strings.test.ts`
+  Run: `pnpm --filter @waitron/till exec vitest run src/till-app.theme.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts src/screens/device-screens.phone-margin.test.ts src/till-app.a11y.test.ts src/i18n/strings.test.ts`
   Expected: PASS.
 
-- [ ] **Step 5: Typecheck, lint, format, commit** (`till` coverage runs at the end of Task 7)
+- [ ] **Step 5: Coverage of the new file, typecheck, lint, format, commit**
 
+  Run: `pnpm --filter @waitron/till exec vitest run --coverage --coverage.include=src/widgets/theme-chooser.ts src/screens/till-lock-screen.test.ts`
+  (that row at or above 98/98/98/95), then the three checks.
   ```bash
-  git add apps/till/src/main.ts apps/till/src/widgets/theme-chooser.ts apps/till/src/till-app.ts apps/till/src/screens/till-lock-screen.ts apps/till/src/screens/till-enrol-screen.ts apps/till/src/screens/till-counter-screen.ts apps/till/src/widgets/language-chooser-styles.ts apps/till/src/i18n/strings.ts apps/till/src/till-app.theme.test.ts apps/till/src/screens/till-lock-screen.test.ts apps/till/src/screens/till-enrol-screen.test.ts apps/till/src/screens/till-counter-screen.test.ts
-  git commit -s -m "Till: a Theme menu on the sign-in, join and counter screens; the app applies picks (A681)"
+  git add apps/till/src/main.ts apps/till/src/widgets/theme-chooser.ts apps/till/src/till-app.ts apps/till/src/screens/till-lock-screen.ts apps/till/src/screens/till-enrol-screen.ts apps/till/src/widgets/language-chooser-styles.ts apps/till/src/i18n/strings.ts apps/till/src/till-app.theme.test.ts apps/till/src/screens/till-lock-screen.test.ts apps/till/src/screens/till-enrol-screen.test.ts
+  git commit -s -m "Till: a Theme menu on the sign-in and join screens; the app applies picks (A681)"
   ```
+
+Changed test checks (titles only, no assertion changes — the language chooser is no longer alone
+in its corner):
+- `apps/till/src/screens/till-lock-screen.test.ts:301` — "puts the language chooser at the top
+  right on its own, above the sign-in content" → "puts the language chooser at the top right, after
+  the theme chooser, above the sign-in content".
+- `apps/till/src/screens/till-enrol-screen.test.ts:489` — "puts the language chooser at the top
+  right on its own, above the join form" → "puts the language chooser at the top right, after the
+  theme chooser, above the join form".
 
 ---
 
@@ -748,14 +914,13 @@ shared helper decision 1 introduces.
   appear in the bar (`:767`) and the corner (`:721`); `#settled` (`:453-458`) also waits for
   `.head wt-theme-chooser`; add `new ThemeChoiceController(this)`. The ResizeObserver on the
   language chooser (`:426-431`) needs no twin: the theme chooser's width never changes.
-- Modify: `apps/till/src/widgets/till-shell.test.ts` (`:815-833` order, `:662` tab path, new cases)
+- Modify: `apps/till/src/widgets/till-shell.test.ts` (the checks listed below, and new cases)
 - Modify: `apps/till/src/till-app.theme.test.ts` (Review Focus 5)
 
 **Interfaces:** Consumes `themeChooser()` (Task 6).
 
-- [ ] **Step 1: Extend the existing shell tests (adding, never removing an assertion):** at
-  `:815-833` insert `"wt-theme-chooser"` just before `"wt-language-chooser"` in the expected row;
-  at `:662` add one `await userEvent.tab(); // the theme chooser` before the language chooser's.
+- [ ] **Step 1: Make the existing shell checks expect the new element** (the "Changed test checks"
+  below, exactly as listed).
 
 - [ ] **Step 2: Write the failing new tests** in `till-shell.test.ts`:
   - `places the theme chooser in the bar, just before the language chooser` (same parent
@@ -763,86 +928,110 @@ shared helper decision 1 introduces.
   - `keeps the theme chooser beside the language chooser on a kitchen display, at the top right`
     (mirrors `:473-489`).
   - `omits the theme chooser with the language chooser when loadLocales is not supplied` (mirrors `:332-338`).
-  - `at 390 wide the bar is one row holding the tabs, both choosers and More, with nothing overlapping`
-    — header height ≤ one row (compare with the 1280 px header's height, within 1 px), no two of
-    `.tab`, `wt-theme-chooser`, `wt-language-chooser` and `[data-test=more-menu]` overlap, and
-    `header.scrollWidth <= header.clientWidth`.
   - In `till-app.theme.test.ts`: `picking a theme with an unsent order open asks nothing and keeps
     the order` — with a basket line added on the counter (reuse the setup of an unsaved-changes case
     in `till-app.unsaved-changes.test.ts`), pick Dark in the shell's chooser: no unsaved-changes
-    dialog appears (`wt-unsaved-changes` not open), the basket still holds the line, and the theme
-    is dark. Contrast it in the same test with a language pick, which does ask (the existing
-    behaviour at `till-app.ts:13222-13225`), so the test shows the two differ.
+    dialog opens, the basket still holds the line, and the theme is dark. In the same test, a
+    language pick then does ask (the existing behaviour at `till-app.ts:13222-13225`), so the test
+    shows the two differ.
 
 - [ ] **Step 3: Run to see them fail**
 
   Run: `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/till-app.theme.test.ts`
-  Expected: FAIL in the new and extended cases.
+  Expected: FAIL in the new cases and in the changed checks.
 
 - [ ] **Step 4: Implement** per the Files list.
 
 - [ ] **Step 5: Run to see them pass**, plus everything that measures or walks the bar:
 
   Run: `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/widgets/till-shell.a11y.test.ts src/till-app.theme.test.ts src/till-app.test.ts src/till-app-boot-and-counter.test.ts`
-  Expected: PASS. A bar-fitting case that now moves an item into More one step earlier at a pinned
-  width is a real consequence of a wider bar: widen that case's viewport by the theme chooser's
-  measured width rather than change its expected items, and say so in the commit. If a case fails
-  for any other reason, stop and report it.
+  Expected: PASS. If any other existing check fails, stop and report it with its output; do not
+  change its viewport, its counts or its expected items.
 
-- [ ] **Step 6: Coverage, typecheck, lint, format, commit**
+- [ ] **Step 6: Typecheck, lint, format, commit**
 
-  Run: `pnpm --filter @waitron/till test:coverage` (thresholds met) and the three checks.
   ```bash
   git add apps/till/src/widgets/till-shell.ts apps/till/src/widgets/till-shell.test.ts apps/till/src/till-app.theme.test.ts
   git commit -s -m "Till: the Theme menu in the shell's bar and on the kitchen display (A681)"
   ```
+
+Changed test checks (each a deliberate consequence of one more control in the bar; none loosened):
+- `apps/till/src/widgets/till-shell.test.ts:409-434` ("fits the header, every button on screen, at
+  phone width…") — selector `"wt-row-actions, .tab, wt-button, wt-language-chooser, .operator"` →
+  the same plus `", wt-theme-chooser"`; expected count `formFactor === "till" ? 12 : 11` →
+  `13 : 12`. Why: the theme chooser is a new control in the bar, and its own `wt-button` sits in
+  its shadow root where the selector does not reach, so it must be named.
+- `apps/till/src/widgets/till-shell.test.ts:565-596` ("keeps the header to one row at most 64 px
+  tall") — `expect(visible.length).toBe(4)` → `toBe(5)`. Why: `header .session > *` now also
+  matches the theme chooser; the row-height and inside-the-header checks are unchanged.
+- `apps/till/src/widgets/till-shell.test.ts:662` ("reaches every action by keyboard") — one
+  `await userEvent.tab(); // the theme chooser` added before the language chooser's. Why: one more
+  stop on the Tab path.
+- `apps/till/src/widgets/till-shell.test.ts:815-833` (the session row in order) — `"wt-theme-chooser"`
+  inserted just before `"wt-language-chooser"`.
+- `apps/till/src/widgets/till-shell.test.ts:473` — title "keeps the language chooser on a kitchen
+  display, at the top right on its own, above the body" → "keeps the language chooser on a kitchen
+  display, at the top right after the theme chooser, above the body" (title only).
 
 ---
 
 ### Task 8: Docs and backlog
 
 **Files:**
-- Modify: `docs/developers/design-system.md`
+- Modify: `docs/developers/design-system.md`, `docs/developers/testing-guide.md`
 - Modify: `docs/backlog.md`, `docs/backlog/dashboard.md`
 
 - [ ] **Step 1: design-system.md.**
   - "Themes" (`:59-90`): the selection order gains the product's own step — each app applies this
     browser's saved choice (`startThemeChoice`, `packages/ui/src/theme-choice.ts`) to
-    `document.documentElement` before its first render; Light and Dark set `data-theme`, Follow device
-    (the default, and the state with nothing saved) leaves the operating system's setting in charge.
-    State the key, that other open tabs follow, that a refused save still applies to the open page,
-    and the origin limits from decision 2 (two host names for one box keep two choices; the dev
-    stack's three ports keep three).
+    `document.documentElement` before its first render; Light and Dark set `data-theme`, Follow
+    device (the default, and the state with nothing saved) removes it and leaves the operating
+    system's setting in charge. State the key, that other open tabs follow, that a refused save
+    still applies to the open page, and decision 2's origin limits (two host names for one box keep
+    two choices; a trading listener on HTTP keeps a separate one from setup; the dev stack's three
+    ports keep three), labelled as read from the code, not tried on a box.
   - Primitives table: a `wt-theme-chooser` row after `wt-language-chooser` (`:691`), in that row's
     style: `active`, `labels`, the trigger's icon and name, the menu order, that it shares the
     language chooser's menu mechanics (`packages/ui/src/menu-popover.ts`) and behaviour (placement,
-    Escape, outside press, arrow keys), the `data-test` hooks, and the event column
-    `wt-theme-selected — detail: { choice }`.
-  - "Dashboard banner" (`:3055`): the theme chooser sits just before the language chooser.
-  - "Navigation and language controls" (`:4539-4581`): each place the language chooser is listed,
-    the theme chooser sits just before it; on the till's bar it stays on the bar with the tabs and
-    the language chooser; a theme pick never asks about unsaved work, unlike a language pick on the
-    till; the dashboard logo's `media` rule and the recovery page's `color-scheme` follow the choice.
+    Escape, outside press, arrow keys), focus as the language chooser's, the `data-test` hooks, and
+    the event column `wt-theme-selected — detail: { choice }`.
+  - "Dashboard banner" (`:3042-3060`): signed out, the theme chooser sits just before the language
+    chooser; signed in, Theme is a group of three pressed-state buttons in the account menu, between
+    Account settings and Log out, because the banner has no room at phone width (decision 1a, with
+    its measurement).
+  - "Navigation and language controls" (`:4539-4581`): the theme chooser sits just before the
+    language chooser in setup's header, the till's bar and corner, and the till's sign-in and join
+    screens; on the till's bar it stays on the bar with the tabs and the language chooser; a theme
+    pick never asks about unsaved work, unlike a language pick on the till; the dashboard logo's
+    `media` rule and the recovery page's `color-scheme` follow the choice.
   - Check every other sentence the change makes false: `grep -n "prefers-color-scheme\|data-theme\|follows the device\|language chooser" docs/developers/*.md`
     and read each hit.
-- [ ] **Step 2: backlog.** Delete A681's item 7 from "What to work on next" (`docs/backlog.md:101-102`)
+- [ ] **Step 2: testing-guide.md `:1673-1677`.** The dashboard capture instruction says to set
+  `data-theme` on `document.documentElement`. `startThemeChoice` now removes that attribute when
+  nothing is saved, so a capture that sets it before `main.ts` runs is undone. Rewrite it: save the
+  choice before the page loads (Playwright `addInitScript(() => localStorage.setItem("waitron-theme", "dark"))`
+  on the app's origin), or set the attribute only after the page has started; keep the existing rule
+  to read the computed colours and reject a capture whose light and dark colours match.
+- [ ] **Step 3: backlog.** Delete A681's item 7 from "What to work on next" (`docs/backlog.md:101-102`)
   and replace the count in "they now come after the eight above" with words that do not go stale
   ("after the list above"); delete the A681 entry under "Users, sign-in and the dashboard shell"
   (`:3554-3558`) and the `## A681…` section in `docs/backlog/dashboard.md` (`:1141-1149`); grep
-  `a681` afterwards and fix any anchor left pointing at it. Narrow A781 (`docs/backlog.md:3548-3552`):
-  `wt-language-chooser` and `wt-theme-chooser` now share `packages/ui/src/menu-popover.ts`;
-  what is left is `wt-combobox` and `wt-colour-chooser` (whose grid keys differ). Add one short entry
-  in the same area: **the box's own pages and the favicon still follow the device's setting** —
-  the trust page (`apps/server/src/trust-page.ts`, `trust-page-logo.ts`) and the other
-  server-rendered pages cannot read a browser's saved choice before any app script runs, and the
-  favicon is drawn by the browser from the operating system's setting; open. Add any other point the
-  tasks left open (for example a 360 px layout question from Task 4 Step 5) as its own short entry.
-- [ ] **Step 3: Check and commit.** `docs/` is ignored by prettier, so no format check applies
+  `a681` afterwards and fix any anchor left pointing at it. In A781 (`docs/backlog.md:3548-3552`)
+  add one sentence only: `wt-language-chooser`'s menu placement, dismissal and arrow keys now live
+  in `packages/ui/src/menu-popover.ts`, which `wt-theme-chooser` also uses. Do not otherwise change
+  A781's scope. Add one short entry in the same area: **the box's own pages and the favicon still
+  follow the device's setting** — the trust page (`apps/server/src/trust-page.ts`,
+  `trust-page-logo.ts`) and the other server-rendered pages cannot read a browser's saved choice
+  before any app script runs, and the favicon is drawn by the browser from the operating system's
+  setting; open. Add any other point the tasks left open as its own short entry.
+- [ ] **Step 4: Commit.** `docs/` is ignored by prettier, so no format check applies
   (CLAUDE.md §2). This branch is not docs-only, so it goes in the PR.
   ```bash
-  git add docs/developers/design-system.md docs/backlog.md docs/backlog/dashboard.md
-  git commit -s -m "Docs: the Theme menu, its saved choice and its limits; A681 done, A781 narrowed"
+  git add docs/developers/design-system.md docs/developers/testing-guide.md docs/backlog.md docs/backlog/dashboard.md
+  git commit -s -m "Docs: the Theme choice, where it sits, its saved setting and its limits; A681 done"
   ```
+
+Changed test checks: none.
 
 ---
 
@@ -852,32 +1041,42 @@ shared helper decision 1 introduces.
 (outside the worktree; nothing committed).
 
 - [ ] **Step 1: Start the stack.** `wa-wt demo waitron-feat-a681-theme-choice` (the worktree's
-  directory name; `wa-wt ls` shows its URLs — till, dashboard `/manage/`, setup; first slot
-  5190, 5191, 5192). Before a `wa-wt reset`, `lsof` the venue folder and port 8080. Dashboard
-  sign-in: `owner@demo.waitron.local` / `dashPass123`; till PIN `5555`
-  (`docs/ui-review.md:11-16`). If the till shows the dev device picker, pick a till device.
+  directory name; `wa-wt ls` shows its URLs — first slot: till 5190, dashboard 5191 at `/manage/`,
+  setup 5192). Before a `wa-wt reset`, `lsof` the venue folder and port 8080. Dashboard sign-in
+  `owner@demo.waitron.local` / `dashPass123`; till PIN `5555` (`docs/ui-review.md:13-16`). If the
+  till shows the dev device picker, pick a till device.
 - [ ] **Step 2: Write `look.mjs` there**, loading Playwright from the worktree:
   `createRequire("/Users/clintongormley/workspace/worktrees/waitron-feat-a681-theme-choice/packages/ui/package.json")("playwright")`.
-  For each surface — dashboard signed out, dashboard signed in, setup, till sign-in screen — at
-  1280×800 and 390×844, take one screenshot per case:
-  - Light with the OS dark (`colorScheme: "dark"` context, saved `light` through `addInitScript`
-    on that app's origin),
+  For each surface — dashboard signed out, dashboard signed in (with the account menu open once),
+  setup, till sign-in screen, till shell after sign-in — at 1280×800 and 390×844, take one
+  screenshot per case:
+  - Light with the OS dark (`colorScheme: "dark"` context, `waitron-theme` = `light` saved through
+    `addInitScript` on that app's origin),
   - Dark with the OS light,
   - Follow device with the OS light, and again with the OS dark,
   - the menu open (one per surface, 390 wide),
-  - one pick made through the menu (open, click Dark), screenshotted after the pick.
+  - one pick made through the UI (the menu, or the account menu signed in), shot after the pick.
   Name files `<surface>-<width>-<choice>-os<scheme>.png`. Each app is its own origin in dev
-  (decision 2), so set the saved choice per origin.
-- [ ] **Step 3: Look at every screenshot** and check: the whole page, not only the chrome, takes
+  (decision 2), so save the choice per origin.
+- [ ] **Step 3: The no-flash probe (it can fail).** For each app, with `light` OS and `dark` saved,
+  install before navigation (`addInitScript`) a `MutationObserver` on `document.documentElement`
+  watching `attributes`, which pushes, per callback, the list of attribute names changed in that
+  callback into `window.__themeBatches`. After load, read it. PASS: `data-wt-theme-root` and
+  `data-theme` appear in the SAME callback batch, so they were set in one task with no rendering
+  opportunity between them. What failure prints: the two names in separate batches — which is what
+  a `startThemeChoice` placed after an `await` (for example inside the till's `bootTill`, after
+  `isTrustBroken`) would give. Control: run the probe once against a page where the attribute is
+  set after a `setTimeout(…, 0)` (a one-off `addInitScript` that does so on a blank page served by
+  the same Vite server is enough) and confirm it reports two batches.
+- [ ] **Step 4: Look at every screenshot** and check: the whole page, not only the chrome, takes
   the chosen theme (no light card on a dark page); the dashboard logo matches the theme; the three
-  icons read as sun, moon and half-circle at both widths and in both themes; the trigger and the
-  language trigger are the same height and spaced like their neighbours; nothing overlaps or
-  wraps at 390; the menu opens below its trigger and on screen; no flash of the wrong theme on load
-  (record the page once with `page.screenshot` immediately after `domcontentloaded` with Dark saved
-  and the OS light: it must already be dark).
-- [ ] **Step 4: Report.** Fix any defect in the task that owns it (with a test where one can
-  catch it), then re-shoot. Note in the ledger what was looked at, on which commit, and the
-  directory of screenshots. Stop the stack with `wa-wt down waitron-feat-a681-theme-choice`.
+  icons read as sun, moon and half-circle at both widths and in both themes; the theme trigger and
+  the language trigger are the same height and spaced like their neighbours; the account menu's
+  Theme group reads as one labelled group with the current choice marked; nothing overlaps or wraps
+  at 390; each menu opens on screen.
+- [ ] **Step 5: Report.** Fix any defect in the task that owns it (with a test where one can catch
+  it), then re-shoot. Note in the ledger what was looked at, on which commit, the probe's output and
+  the directory of screenshots. Stop the stack with `wa-wt down waitron-feat-a681-theme-choice`.
 
 ---
 
