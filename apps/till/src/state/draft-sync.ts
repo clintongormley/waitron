@@ -9,6 +9,7 @@ import {
   type DraftLineInput,
   type TillApi,
   type TillProduct,
+  type WorkingOrderStatus,
 } from "../api/client.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import { WorkingOrderStore, type LineSelection, type OrderLine } from "./working-order.js";
@@ -27,6 +28,22 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
 
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
+  #billStatus: WorkingOrderStatus = "open";
+
+  get billStatus(): WorkingOrderStatus {
+    return this.#billStatus;
+  }
+
+  set billStatus(status: WorkingOrderStatus) {
+    if (status === this.#billStatus) return;
+    this.#billStatus = status;
+    this.emit("changed");
+  }
+
+  override get editsLocked(): boolean {
+    return this.#billStatus !== "open" || super.editsLocked;
+  }
+
   declare placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
   cancelSource?: (line: OrderLine, quantity: string) => void;
 
@@ -217,7 +234,7 @@ function sameLines(till: readonly DraftLineInput[], saved: readonly DraftLine[])
 }
 
 /**
- * One person's draft on one bill, kept on the server. Every edit to {@link store} is saved after
+ * One person's draft on one bill, kept on the server. On an open bill each edit is saved after
  * {@link DRAFT_SAVE_DELAY_MS}; saves go one at a time, and edits made while one is out go in the
  * next. Each save names the draft id and revision the last one answered.
  */
@@ -258,6 +275,33 @@ export class DraftSync {
     this.billId = options.billId;
     this.personId = options.personId;
     this.#unsubscribe = this.store.subscribe(() => this.#onChange());
+  }
+
+  get billStatus(): WorkingOrderStatus {
+    return this.store.billStatus;
+  }
+
+  set billStatus(status: WorkingOrderStatus) {
+    if (status === this.store.billStatus) return;
+    this.#cancelTimer();
+    this.store.billStatus = status;
+    if (status === "open" && this.#unsaved && !this.#ended)
+      this.#timer = setTimeout(() => {
+        this.#timer = undefined;
+        void this.#save();
+      }, DRAFT_SAVE_DELAY_MS);
+  }
+
+  get #billRefusal(): DraftRefused | undefined {
+    if (this.billStatus === "open") return undefined;
+    return {
+      refused:
+        this.billStatus === "placed"
+          ? "bill.presented"
+          : this.billStatus === "settled"
+            ? "bill.paid"
+            : "tab.not_open",
+    };
   }
 
   get draftId(): string | null {
@@ -354,6 +398,8 @@ export class DraftSync {
    */
   async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
     if (this.#commanding || this.#recoveryRequired) return "failed";
+    const refusal = this.#billRefusal;
+    if (refusal !== undefined) return refusal;
     const locked = this.store.sending;
     this.store.sending = true;
     try {
@@ -367,6 +413,8 @@ export class DraftSync {
     const saved = await this.flush();
     if (this.#ended) return "failed";
     if (saved !== "saved") return "unsaved";
+    const refusal = this.#billRefusal;
+    if (refusal !== undefined) return refusal;
     const read = this.#reads;
     const limit = limited(this.#options.requestLimitMs);
     let taken: Draft;
@@ -481,6 +529,11 @@ export class DraftSync {
   async #saveNow(signal: AbortSignal | undefined, closing: boolean): Promise<DraftSaveOutcome> {
     if (this.#dropped || (this.#closed && !closing)) return "failed";
     if (!this.#unsaved) return "saved";
+    const refusal = this.#billRefusal;
+    if (refusal !== undefined) {
+      this.#options.onRefused(refusal.refused);
+      return refusal;
+    }
     const read = this.#reads;
     const pending = [...this.store.lines];
     const lines = pending.map((line) => toDraftLineInput(line));

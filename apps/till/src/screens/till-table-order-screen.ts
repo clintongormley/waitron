@@ -2618,7 +2618,7 @@ export class TillTableOrderScreen extends LitElement {
     if (this.menuSelectionRequired && menu === undefined) return html``;
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${store.sending || !this.orderingAllowed}
+      ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}

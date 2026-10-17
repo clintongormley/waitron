@@ -1242,3 +1242,94 @@ describe("resendUnanswered", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 });
+
+describe("A773 drafts on a bill that is no longer open", () => {
+  it.each(["placed", "settled", "abandoned"] as const)(
+    "%s refuses edits and saves without losing the pending dishes",
+    async (status) => {
+      const s = sync();
+      s.store.addProduct(beer, "1");
+      s.billStatus = status;
+      s.store.addProduct(steak, "1");
+      s.store.setLineQuantity(0, "2");
+      s.store.setLineModifiers(0, { note: "changed" });
+      s.store.setLineCourse(0, "mains");
+      s.store.setLineMakeAt(0, "grill");
+      s.store.setLinePlaces([0], { kind: "new", slot: 2 });
+      s.store.removeLine(0);
+      await settle();
+      expect(
+        s.store.lines.map((line) => [
+          line.product.name,
+          line.quantity,
+          line.note,
+          line.courseId,
+          line.makeAt,
+          line.place,
+        ]),
+      ).toEqual([["Beer", "1", undefined, undefined, undefined, undefined]]);
+      expect(server.drafts).toEqual([]);
+      expect(await s.flush()).toEqual({
+        refused:
+          status === "placed"
+            ? "bill.presented"
+            : status === "abandoned"
+              ? "tab.not_open"
+              : "bill.paid",
+      });
+      expect(server.drafts).toEqual([]);
+      expect(s.store.lines[0]!.product.name).toBe("Beer");
+      s.drop();
+    },
+  );
+
+  it("an authoritative read cannot clear the bill's edit restriction", async () => {
+    seed("p1", beer);
+    const s = sync();
+    s.billStatus = "settled";
+    expect(await s.load()).toBe(true);
+    s.store.addProduct(steak, "1");
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(s.store.editsLocked).toBe(true);
+    s.drop();
+  });
+
+  it("a bill reopening permits retained edits to save without clearing a separate read lock", async () => {
+    const s = sync();
+    s.store.addProduct(beer, "1");
+    s.billStatus = "placed";
+    const unlock = s.store.lockEdits();
+    s.billStatus = "open";
+    s.store.addProduct(steak, "1");
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    unlock();
+    s.store.addProduct(steak, "1");
+    expect(await s.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+      ["offer-steak", "1"],
+    ]);
+    s.drop();
+  });
+
+  it("cannot take over a colleague's draft on a presented bill", async () => {
+    const theirs = seed("p2", steak);
+    const s = sync();
+    await s.load();
+    s.billStatus = "placed";
+    expect(await s.takeOver(theirs.id, theirs.revision)).toEqual({ refused: "bill.presented" });
+    expect(server.drafts[0]!.ownerId).toBe("p2");
+    expect(s.store.lines).toEqual([]);
+    s.drop();
+  });
+
+  it("sign-out does not write pending dishes onto a paid bill", async () => {
+    const s = sync();
+    s.store.addProduct(beer, "1");
+    s.billStatus = "settled";
+    expect(await s.close()).toEqual({ refused: "bill.paid" });
+    expect(server.drafts).toEqual([]);
+    expect(s.store.lines[0]!.product.name).toBe("Beer");
+    s.drop();
+  });
+});

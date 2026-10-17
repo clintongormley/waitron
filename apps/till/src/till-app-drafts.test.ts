@@ -7141,9 +7141,10 @@ describe("A773 Pay saves the bill's New order before payment", () => {
     async ({ status, tender, method }) => {
       const pending = saveGate();
       const save = server.saveDraft.getMockImplementation()!;
-      const getPartyBills = vi.fn().mockResolvedValue(bills().map((bill) => ({ ...bill, status })));
+      const getPartyBills = vi.fn().mockResolvedValue(bills());
       const { el } = await mountApp({
         getPartyBills,
+        mergeBills: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
         saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
           await pending.promise;
           return save(...args);
@@ -7153,6 +7154,12 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       });
       const order = await openMesa(el);
       await tap(el, "Beer");
+      if (status === "placed") {
+        await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
+        getPartyBills.mockResolvedValue(bills().map((bill) => ({ ...bill, status })));
+        emit(order, "merge-bills", { fromBillId: "wo-check" });
+        await flush(el);
+      }
       emit(order, "pay-tab", tender);
       await flush(el);
       try {
@@ -7347,5 +7354,92 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       "Send or remove the bill's unsent dishes before paying",
     );
     expect(tableOrder(el)!.orderId).toBe("wo-4");
+  });
+});
+
+describe("A773 non-open bill draft restrictions", () => {
+  const bill = (status: "open" | "placed" | "settled" | "abandoned") => ({
+    workingOrderId: "wo-4",
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
+    partyId: "v1",
+    label: null,
+    status,
+    total: "3.00",
+    outstanding: "3.00",
+    hasPayments: false,
+    receiptAvailable: status !== "open",
+  });
+
+  it.each(["placed", "settled", "abandoned"] as const)(
+    "opening a %s bill keeps its Sent reads but accepts no fresh dishes",
+    async (status) => {
+      const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([bill(status)]) });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      expect(rows(el)).toEqual([]);
+      expect(browser(el)!.inert).toBe(true);
+      expect(order.orderId).toBe("wo-4");
+      expect(order.bills[0]!.status).toBe(status);
+      expect(api.getTabLines).toHaveBeenCalledWith("wo-4");
+      expect(server.saveDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a refreshed presented bill freezes unsaved dishes and a failed later read cannot unlock it", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([bill("open")]);
+    const { el } = await mountApp({
+      getPartyBills,
+      mergeBills: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
+      markServed: vi.fn().mockResolvedValue({ revision: 4 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    getPartyBills.mockResolvedValue([bill("placed")]);
+    emit(tableOrder(el)!, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.bills[0]!.status).toBe("placed");
+    await tap(el, "Steak");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    const count = server.saveDraft.mock.calls.length;
+    getPartyBills.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    emit(tableOrder(el)!, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.bills).toEqual([]);
+    emit(tableOrder(el)!, "serve-lines", { items: [{ lineId: "sent-line", quantity: "1" }] });
+    await flush(el);
+    expect(api.markServed).toHaveBeenCalledOnce();
+    await tap(el, "Flan");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledTimes(count);
+    expect(draft(el).editsLocked).toBe(true);
+  });
+});
+
+describe("A773 known bill draft switch restrictions", () => {
+  it("switching to a known paid bill cannot open an editable draft", async () => {
+    const bills = ["wo-4", "wo-check"].map((id) => ({
+      workingOrderId: id,
+      revision: 0,
+      invoiceType: "F2",
+      recipient: null,
+      partyId: "v1",
+      label: null,
+      status: id === "wo-4" ? "open" : "settled",
+      total: "3.00",
+      outstanding: id === "wo-4" ? "3.00" : "0.00",
+      hasPayments: false,
+      receiptAvailable: id !== "wo-4",
+    }));
+    const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue(bills) });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    await tap(el, "Beer");
+    expect(rows(el)).toEqual([]);
+    expect(browser(el)!.inert).toBe(true);
+    expect(server.saveDraft).not.toHaveBeenCalled();
   });
 });

@@ -9304,6 +9304,7 @@ export class TillApp extends LitElement {
       void this.#openSourceCancellation(sync, line, quantity);
     };
     this.#draftSync = sync;
+    this.#syncDraftBillStatus();
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {
       if (sync === this.#draftSync) {
@@ -9312,6 +9313,14 @@ export class TillApp extends LitElement {
       }
     });
     return { sync, read: read ? await sync.load() : true };
+  }
+
+  #syncDraftBillStatus(): void {
+    const sync = this.#draftSync;
+    const bill = this.partyBills.find(
+      (row) => row.partyId === sync?.partyId && row.workingOrderId === sync.billId,
+    );
+    if (sync !== undefined && bill !== undefined) sync.billStatus = bill.status;
   }
 
   #resumeOrderDraft(): void {
@@ -9489,6 +9498,7 @@ export class TillApp extends LitElement {
       const bills = await this.api.getPartyBills(party.id);
       if (read === this.#partyBillsRead) {
         this.partyBills = bills;
+        this.#syncDraftBillStatus();
         void this.#loadBillBalance(balance);
       }
       return { read, partyId: party.id, bills };

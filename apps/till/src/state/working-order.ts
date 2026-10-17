@@ -385,7 +385,7 @@ export class WorkingOrderStore {
   }
 
   get #refusesEdits(): boolean {
-    return this.#sending || this.#editLock !== null;
+    return this.#sending || this.editsLocked;
   }
 
   /** No `"changed"` notification: not a rendering concern. */
