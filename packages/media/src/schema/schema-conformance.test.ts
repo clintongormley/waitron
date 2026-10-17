@@ -2,12 +2,7 @@
 // (`@waitron/db/testing/schema-conformance.js`), which is where the machinery, what it compares and
 // each of its limits are described. What is here is what is true of the media set in particular.
 //
-// Three facts the factory cannot state for a set it has not seen. Both check constraints in
-// `drizzle/0000_baseline.sql` are written with a `CONSTRAINT <name>` clause, so `checksInDdl`'s
-// blindness to an anonymous check reaches nothing here. The one `unique()` declaration in
-// `images.ts` is given a name, so the unnamed-constraint refusal reaches nothing either. And the
-// factory never reads a trigger, so the ones the media migrations create are outside this suite;
-// their guard is `../image-references.test.ts`.
+// Trigger behaviour is covered separately by `../image-references.test.ts`.
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
@@ -19,8 +14,7 @@ import * as declarations from "./images.js";
 describeSchemaConformance({
   subjectName: "media",
   // Core, then catalogue: `drizzle/0001_image_references.sql` creates triggers ON core's `products`
-  // and catalogue's `category_details`, and a trigger on a table that does not exist yet is refused
-  // when the migration runs. Neither media table has a key into another set.
+  // and catalogue's `category_details`; those tables must exist when the triggers are installed.
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: MEDIA_MIGRATIONS,
   declarations,

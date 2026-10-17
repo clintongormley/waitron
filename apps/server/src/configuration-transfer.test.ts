@@ -40,7 +40,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadKeyRing } from "@waitron/credentials";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { uploadImage, readImageBytes } from "@waitron/media";
+import {
+  uploadImage,
+  readImageBytes,
+  readCurrentImage,
+  readImage,
+  saveImage,
+  mediaImages,
+  mediaImageEdits,
+  mediaImageBlobs,
+  renderRendition,
+} from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
@@ -162,6 +172,197 @@ import { stageConfigurationImport } from "./configuration-import.js";
 // target the bundle is imported into.
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const targetSuite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+
+it("transfers two photo identities sharing replacement bytes with framing, names and printable logos", async () => {
+  const originalA = await samplePreparedImage({ width: 31 });
+  const originalB = await samplePreparedImage({ width: 37 });
+  const replacement = await samplePreparedImage({ width: 41 });
+  const frames = [
+    { x: 1000, y: 8000, zoom: 175 },
+    { x: 9000, y: 2500, zoom: 225 },
+  ];
+  const pictures: Awaited<ReturnType<typeof drawLogoRasters>>[] = [];
+  for (const frame of frames)
+    pictures.push(
+      await drawLogoRasters(await renderRendition(replacement.bytes, "display", frame)),
+    );
+  const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const originals = await withTransaction(suite.db, async (tx) => {
+    const a = (
+      await uploadImage(tx, {
+        image: originalA,
+        names: { es: "Primera" },
+        originalFilename: "first.webp",
+      })
+    ).image;
+    const b = (
+      await uploadImage(tx, {
+        image: originalB,
+        names: { es: "Segunda" },
+        originalFilename: "second.webp",
+      })
+    ).image;
+    const department = await createDepartment(
+      tx,
+      { locationId: brandLocationId(source.locationId) },
+      { name: "Photo receipt" },
+    );
+    await tx.insert(departmentReceipts).values({
+      departmentId: department.id,
+      receipt: { logo: a.filename, phone: "+34 600 111 222" },
+    });
+    for (const [index, image] of [a, b].entries())
+      await saveImage(
+        tx,
+        image.id,
+        {
+          names: image.names,
+          framing: frames[index]!,
+          expectedRevision: 1,
+          originalFilename: "replacement.webp",
+        },
+        replacement,
+        pictures[index],
+        "es",
+      );
+    return [a, b];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-17T10:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.media_image_blobs).toHaveLength(1);
+  expect(transferred.tables.media_image_edits).toHaveLength(2);
+  const originalBundle = structuredClone(transferred);
+  const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  expect(transferred).toEqual(originalBundle);
+  const rows = await targetSuite.db.select().from(mediaImages);
+  expect(rows).toHaveLength(2);
+  const edits = await targetSuite.db.select().from(mediaImageEdits);
+  expect(edits).toHaveLength(2);
+  expect(await targetSuite.db.select().from(mediaImageBlobs)).toEqual([
+    { hash: replacement.filename.slice(0, 64), bytes: replacement.bytes },
+  ]);
+  for (const [index, original] of originals.entries()) {
+    const imported = rows.find((row) => row.filename === original!.filename)!;
+    expect(imported.id).not.toBe(original!.id);
+    expect(imported.names).toEqual(original!.names);
+    expect(edits.find((row) => row.imageId === imported.id)).toMatchObject({
+      sourceHash: replacement.filename.slice(0, 64),
+      focusX: frames[index]!.x,
+      focusY: frames[index]!.y,
+      zoom: frames[index]!.zoom,
+      revision: 2,
+      originalFilename: "replacement.webp",
+    });
+    expect(await readCurrentImage(targetSuite.db, imported.filename)).toEqual({
+      imageId: imported.id,
+      revision: 2,
+      sourceFilename: replacement.filename,
+      framing: frames[index]!,
+      bytes: replacement.bytes,
+    });
+    expect((await readImage(targetSuite.db, imported.id)).originalFilename).toBe(
+      "replacement.webp",
+    );
+    expect((await readImageBytes(targetSuite.db, imported.filename))?.bytes).toEqual(
+      index === 0 ? originalA.bytes : originalB.bytes,
+    );
+  }
+  const { readPrintedDepartmentReceipt } = await import("@waitron/venue-service");
+  const [department] = await targetSuite.db
+    .select()
+    .from(departments)
+    .where(eq(departments.name, "Photo receipt"));
+  const scope = { locationId: brandLocationId(target.locationId), receiptLanguages: ["es-ES"] };
+  for (const paper of ["58mm", "80mm"] as const) {
+    const printed = await readPrintedDepartmentReceipt(
+      targetSuite.db,
+      scope,
+      department!.id,
+      paper,
+    );
+    expect(printed.logo).toEqual({
+      widthDots: pictures[0]![paper].widthDots,
+      heightDots: pictures[0]![paper].heightDots,
+      bits: new Uint8Array(Buffer.from(pictures[0]![paper].data, "base64")),
+    });
+    expect(printed.receipt.phone).toBe("+34 600 111 222");
+  }
+});
+
+it("refuses corrupt photo override configuration before writing any target rows", async () => {
+  const original = await samplePreparedImage({ width: 31 });
+  const replacement = await samplePreparedImage({ width: 41 });
+  const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: original, names: { es: "Foto" } });
+    await saveImage(
+      tx,
+      image.id,
+      { names: image.names, framing: { x: 2000, y: 8000, zoom: 175 }, expectedRevision: 1 },
+      replacement,
+      undefined,
+      "es",
+    );
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-17T10:00:00Z"),
+    versions,
+  );
+  for (const fault of ["bytes", "source", "revision", "framing", "duplicate"] as const) {
+    const corrupt = structuredClone(bundle);
+    if (fault === "bytes") corrupt.tables.media_image_blobs![0]!.bytes = "\\x0001";
+    if (fault === "source") corrupt.tables.media_image_edits![0]!.source_hash = "a".repeat(64);
+    if (fault === "revision")
+      corrupt.tables.media_image_edits![0]!.revision = Number.MAX_SAFE_INTEGER + 1;
+    if (fault === "framing") corrupt.tables.media_image_edits![0]!.focus_x = 0.5;
+    if (fault === "duplicate")
+      corrupt.tables.media_image_blobs!.push({ ...corrupt.tables.media_image_blobs![0]! });
+    expect(() => validateConfigurationBundle(corrupt, ALL_MODULES, versions)).toThrow(
+      expect.objectContaining({ code: "image.invalid_metadata" }),
+    );
+    await expect(
+      withTransaction(targetSuite.db, (tx) =>
+        importConfigurationTables(
+          tx,
+          corrupt,
+          { locationId: crypto.randomUUID() },
+          ALL_MODULES,
+          versions,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "image.invalid_metadata" });
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from media_images`)).rows,
+    ).toEqual([{ n: 0 }]);
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows,
+    ).toEqual([{ n: 0 }]);
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from media_image_edits`)).rows,
+    ).toEqual([{ n: 0 }]);
+  }
+});
 
 function venue(taxId: string): VenueRequest {
   return {

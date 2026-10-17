@@ -7,6 +7,13 @@ export interface ImageFraming {
   zoom: number;
 }
 
+export interface ImageEditInput {
+  names: Record<string, string>;
+  framing: ImageFraming;
+  expectedRevision: number;
+  originalFilename?: string | null;
+}
+
 export const DEFAULT_FRAMING: Readonly<ImageFraming> = Object.freeze({
   x: 5000,
   y: 5000,

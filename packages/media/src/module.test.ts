@@ -17,7 +17,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { locationId } from "@waitron/shared";
 import { uploadImage } from "./images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
-import { MEDIA_MODULE } from "./module.js";
+import { MEDIA_CLASSIFICATION, MEDIA_CONFIGURATION_TRANSFER, MEDIA_MODULE } from "./module.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
 // Boot hands every descriptor seat to generic code (`apps/server/src/boot.ts`), so each case goes
@@ -31,6 +31,30 @@ const suite = useVenueDb({
     VENUE_SERVICE_MIGRATIONS,
     MEDIA_MIGRATIONS,
   ],
+});
+
+it("exports durable edits after their picture identities and source bytes", () => {
+  expect(
+    MEDIA_CLASSIFICATION.filter((row) =>
+      ["media_image_blobs", "media_image_edits"].includes(row.table),
+    ),
+  ).toEqual([
+    expect.objectContaining({ table: "media_image_blobs", class: "state" }),
+    expect.objectContaining({ table: "media_image_edits", class: "state" }),
+  ]);
+  expect(MEDIA_CONFIGURATION_TRANSFER.tables).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        name: "media_images",
+        before: expect.arrayContaining(["media_image_edits"]),
+      }),
+      expect.objectContaining({
+        name: "media_image_blobs",
+        before: expect.arrayContaining(["media_image_edits"]),
+      }),
+      expect.objectContaining({ name: "media_image_edits" }),
+    ]),
+  );
 });
 
 describe("the media module descriptor", () => {

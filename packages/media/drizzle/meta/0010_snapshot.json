@@ -1,0 +1,266 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "a462e306-90d4-4b92-9839-0448b2f3d30d",
+  "prevId": "8dec0c42-d682-4dc2-be6d-653dbaf72569",
+  "tables": {
+    "media_image_blobs": {
+      "name": "media_image_blobs",
+      "columns": {
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "media_image_blobs_hash_ck": {
+          "name": "media_image_blobs_hash_ck",
+          "value": "length(\"media_image_blobs\".\"hash\") = 64 and \"media_image_blobs\".\"hash\" not glob '*[^0-9a-f]*' and instr(\"media_image_blobs\".\"hash\", char(0)) = 0"
+        }
+      }
+    },
+    "media_image_data": {
+      "name": "media_image_data",
+      "columns": {
+        "image_id": {
+          "name": "image_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "media_image_data_image_fk": {
+          "name": "media_image_data_image_fk",
+          "tableFrom": "media_image_data",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "image_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "media_image_edits": {
+      "name": "media_image_edits",
+      "columns": {
+        "image_id": {
+          "name": "image_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "focus_x": {
+          "name": "focus_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 5000
+        },
+        "focus_y": {
+          "name": "focus_y",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 5000
+        },
+        "zoom": {
+          "name": "zoom",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "original_filename": {
+          "name": "original_filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "media_image_edits_image_fk": {
+          "name": "media_image_edits_image_fk",
+          "tableFrom": "media_image_edits",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "image_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "media_image_edits_source_fk": {
+          "name": "media_image_edits_source_fk",
+          "tableFrom": "media_image_edits",
+          "tableTo": "media_image_blobs",
+          "columnsFrom": [
+            "source_hash"
+          ],
+          "columnsTo": [
+            "hash"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "media_image_edits_focus_x_ck": {
+          "name": "media_image_edits_focus_x_ck",
+          "value": "typeof(\"media_image_edits\".\"focus_x\") = 'integer' and \"media_image_edits\".\"focus_x\" between 0 and 10000"
+        },
+        "media_image_edits_focus_y_ck": {
+          "name": "media_image_edits_focus_y_ck",
+          "value": "typeof(\"media_image_edits\".\"focus_y\") = 'integer' and \"media_image_edits\".\"focus_y\" between 0 and 10000"
+        },
+        "media_image_edits_zoom_ck": {
+          "name": "media_image_edits_zoom_ck",
+          "value": "typeof(\"media_image_edits\".\"zoom\") = 'integer' and \"media_image_edits\".\"zoom\" between 100 and 400"
+        },
+        "media_image_edits_revision_ck": {
+          "name": "media_image_edits_revision_ck",
+          "value": "typeof(\"media_image_edits\".\"revision\") = 'integer' and \"media_image_edits\".\"revision\" between 1 and 9007199254740991"
+        },
+        "media_image_edits_filename_ck": {
+          "name": "media_image_edits_filename_ck",
+          "value": "\"media_image_edits\".\"original_filename\" is null or (length(\"media_image_edits\".\"original_filename\") <= 255 and instr(\"media_image_edits\".\"original_filename\", char(0)) = 0 and instr(\"media_image_edits\".\"original_filename\", char(10)) = 0 and instr(\"media_image_edits\".\"original_filename\", char(13)) = 0)"
+        }
+      }
+    },
+    "media_images": {
+      "name": "media_images",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "names": {
+          "name": "names",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "media_images_date_idx": {
+          "name": "media_images_date_idx",
+          "columns": [
+            "created_at",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "media_images_filename_key": {
+          "name": "media_images_filename_key",
+          "columns": [
+            "filename"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "media_images_filename_ck": {
+          "name": "media_images_filename_ck",
+          "value": "substr(\"media_images\".\"filename\", 1, 64) not glob '*[^0-9a-f]*' and (substr(\"media_images\".\"filename\", 65) glob '.jpg' or substr(\"media_images\".\"filename\", 65) glob '.png' or substr(\"media_images\".\"filename\", 65) glob '.webp')"
+        },
+        "media_images_names_ck": {
+          "name": "media_images_names_ck",
+          "value": "json_type(\"media_images\".\"names\") = 'object'"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

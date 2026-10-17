@@ -23,11 +23,13 @@ import {
   textSearch,
   type SearchRank,
 } from "@waitron/shared";
-import { and, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { mediaImageData, mediaImages } from "./schema/images.js";
+import { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/images.js";
 import { IMAGE_LIST_COLUMNS, datedImagePageQuery } from "./image-page-query.js";
 import type { PreparedImage } from "./prepare.js";
+import type { ImageFraming } from "./framing.js";
+import { normalizeUploadFilename, saveImage } from "./image-edits.js";
 import "./errors.js";
 
 export interface ImageMetadataInput {
@@ -38,6 +40,10 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
+  framing: ImageFraming;
+  revision: number;
+  sourceFilename: string;
+  originalFilename: string | null;
   /** How many products (variants among them), sections, include folders, live or queued menu
    * versions and receipt logos reference this photo. `readImage` uses `listImageUsagesForFilename`
    * and `listImages` uses `countUsages`; the counters must stay in step or the library shows a free
@@ -134,7 +140,7 @@ export function normalizeImageMetadata(input: ImageMetadataInput): ImageMetadata
   return { names: normalizeTranslations(input.names, 200) };
 }
 
-async function metadata(
+export async function validateImageMetadata(
   tx: Transaction,
   input: ImageMetadataInput,
   fallbackLanguage: string,
@@ -280,43 +286,52 @@ async function listImageUsagesForFilename(
 }
 
 export async function readImage(tx: Transaction, imageId: string): Promise<ImageRecord> {
-  const [row] = await tx.select().from(mediaImages).where(eq(mediaImages.id, imageId));
+  const [row] = await tx
+    .select(IMAGE_LIST_COLUMNS)
+    .from(mediaImages)
+    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
+    .where(eq(mediaImages.id, imageId));
   if (!row) throw new AppError("image.not_found", { imageId });
   return {
-    id: row.id,
-    filename: row.filename,
-    names: row.names,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    ...row,
     usageCount: (await listImageUsagesForFilename(tx, row.filename)).length,
   };
 }
 
-/**
- * Adds a photo to the library, or returns the existing entry when one already stores these exact
- * bytes. Takes a `PreparedImage`, so every photo stored through here has been through
- * `prepareImage`. Configuration import copies the media image rows as they are and does not
- * shrink them.
- */
 export async function uploadImage(
   tx: Transaction,
-  input: ImageMetadataInput & { image: PreparedImage },
+  input: ImageMetadataInput & { image: PreparedImage; originalFilename?: string | null },
   options: UploadImageOptions = {},
 ): Promise<{ created: boolean; image: ImageRecord }> {
   const { filename, bytes } = input.image;
-  const values = await metadata(tx, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
-  // Inside a `withTransaction` body nothing can insert between this read and the insert below: it
-  // holds the venue file's one write lock.
-  const [existing] = await tx
+  const values = await validateImageMetadata(
+    tx,
+    input,
+    options.fallbackLanguage ?? FALLBACK_LOCALE,
+  );
+  const originalFilename = normalizeUploadFilename(input.originalFilename);
+  const immutable = await readImageBytes(tx, filename);
+  if (immutable && !Buffer.from(immutable.bytes).equals(bytes))
+    throw new AppError("image.hash_conflict", { filename });
+  const [current] = await tx
+    .select({ id: mediaImages.id })
+    .from(mediaImages)
+    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id))
+    .where(eq(IMAGE_LIST_COLUMNS.sourceFilename, filename))
+    .orderBy(asc(mediaImages.createdAt), asc(mediaImages.id))
+    .limit(1);
+  if (current) return { created: false, image: await readImage(tx, current.id) };
+  const [occupied] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
     .where(eq(mediaImages.filename, filename));
-  if (existing) return { created: false, image: await readImage(tx, existing.id) };
+  if (occupied) throw new AppError("image.reference_conflict", { imageId: occupied.id });
   const [row] = await tx
     .insert(mediaImages)
     .values({ filename, ...values })
     .returning({ id: mediaImages.id });
   await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
+  await tx.insert(mediaImageEdits).values({ imageId: row!.id, originalFilename });
   return { created: true, image: await readImage(tx, row!.id) };
 }
 
@@ -337,7 +352,14 @@ export async function readImageBytes(
     .from(mediaImages)
     .innerJoin(mediaImageData, eq(mediaImages.id, mediaImageData.imageId))
     .where(eq(mediaImages.filename, filename));
-  if (!row) return null;
+  if (!row) {
+    if (!/^[a-f0-9]{64}\.webp$/.test(filename)) return null;
+    const [blob] = await tx
+      .select({ bytes: mediaImageBlobs.bytes })
+      .from(mediaImageBlobs)
+      .where(eq(mediaImageBlobs.hash, filename.slice(0, 64)));
+    return blob ? { bytes: blob.bytes, contentType: "image/webp" } : null;
+  }
   const contentType = filename.endsWith(".jpg")
     ? "image/jpeg"
     : filename.endsWith(".png")
@@ -352,13 +374,15 @@ export async function updateImage(
   input: ImageMetadataInput,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<ImageRecord> {
-  await readImage(tx, imageId);
-  const values = await metadata(tx, input, fallbackLanguage);
-  await tx
-    .update(mediaImages)
-    .set({ ...values, updatedAt: new Date() })
-    .where(eq(mediaImages.id, imageId));
-  return readImage(tx, imageId);
+  const current = await readImage(tx, imageId);
+  return saveImage(
+    tx,
+    imageId,
+    { ...input, framing: current.framing, expectedRevision: current.revision },
+    null,
+    undefined,
+    fallbackLanguage,
+  );
 }
 
 export async function listImageTranslationGaps(
@@ -453,7 +477,10 @@ export async function listImages(
     };
   }
 
-  const rows = await tx.select(IMAGE_LIST_COLUMNS).from(mediaImages);
+  const rows = await tx
+    .select(IMAGE_LIST_COLUMNS)
+    .from(mediaImages)
+    .leftJoin(mediaImageEdits, eq(mediaImageEdits.imageId, mediaImages.id));
 
   const matched: { row: (typeof rows)[number]; rank: SearchRank | undefined }[] = [];
   for (const row of rows) {

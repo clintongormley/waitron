@@ -375,8 +375,12 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   expect(Object.keys(image).sort()).toEqual([
     "createdAt",
     "filename",
+    "framing",
     "id",
     "names",
+    "originalFilename",
+    "revision",
+    "sourceFilename",
     "updatedAt",
     "usageCount",
   ]);
@@ -392,7 +396,7 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   });
   expect(edited.status).toBe(200);
   expect(await edited.json()).toEqual({
-    image: { ...image, names: { fr: "Baguette" }, updatedAt: expect.any(String) },
+    image: { ...image, names: { fr: "Baguette" }, revision: 2, updatedAt: expect.any(String) },
   });
   const stale = new FormData();
   stale.set(
@@ -415,8 +419,12 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
   expect(Object.keys(stored).sort()).toEqual([
     "createdAt",
     "filename",
+    "framing",
     "id",
     "names",
+    "originalFilename",
+    "revision",
+    "sourceFilename",
     "updatedAt",
     "usageCount",
   ]);

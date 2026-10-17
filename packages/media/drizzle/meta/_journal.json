@@ -71,6 +71,13 @@
       "when": 1791385312943,
       "tag": "0009_include_folder_image_references",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792222863316,
+      "tag": "0010_photo_framing",
+      "breakpoints": true
     }
   ]
 }

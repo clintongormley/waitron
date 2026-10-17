@@ -1,6 +1,8 @@
 import { AppError, contentLanguageCode, resolveContentText } from "@waitron/shared";
 import { normalizeImageMetadata, type ImageMetadataInput } from "./images.js";
 import { imageFilename } from "./stored-filename.js";
+import { validateFraming } from "./framing.js";
+import { normalizeUploadFilename } from "./image-edits.js";
 import "./errors.js";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -38,8 +40,13 @@ export function validateMediaConfiguration(
     if (remaining.has(row.image_id)) invalid();
     remaining.set(row.image_id, row);
   }
+  const imageIds = new Set<string>();
+  const filenames = new Set<string>();
   for (const image of images) {
     if (typeof image.id !== "string" || typeof image.filename !== "string") invalid();
+    if (imageIds.has(image.id) || filenames.has(image.filename)) invalid();
+    imageIds.add(image.id);
+    filenames.add(image.filename);
     const row = remaining.get(image.id);
     if (
       !row ||
@@ -59,5 +66,46 @@ export function validateMediaConfiguration(
     const language = contentLanguageCode(config.default_language);
     if (resolveContentText(metadata.names, language, language) === "") invalid();
     remaining.delete(image.id);
+  }
+  const hashes = new Set<string>();
+  for (const blob of tables.media_image_blobs ?? []) {
+    if (typeof blob.hash !== "string" || !/^[a-f0-9]{64}$/.test(blob.hash) || hashes.has(blob.hash))
+      invalid();
+    if (
+      typeof blob.bytes !== "string" ||
+      blob.bytes.length > MAX_BYTES * 2 + 2 ||
+      !/^\\x(?:[a-fA-F0-9]{2})+$/.test(blob.bytes)
+    )
+      invalid();
+    const bytes = Buffer.from(blob.bytes.slice(2), "hex");
+    try {
+      if (imageFilename(bytes) !== `${blob.hash}.webp`) invalid();
+    } catch {
+      invalid();
+    }
+    hashes.add(blob.hash);
+  }
+  const edited = new Set<string>();
+  for (const row of tables.media_image_edits ?? []) {
+    if (typeof row.image_id !== "string" || !imageIds.has(row.image_id) || edited.has(row.image_id))
+      invalid();
+    if (
+      row.source_hash !== null &&
+      (typeof row.source_hash !== "string" || !hashes.has(row.source_hash))
+    )
+      invalid();
+    if (!Number.isSafeInteger(row.revision) || (row.revision as number) < 1) invalid();
+    try {
+      validateFraming({ x: row.focus_x, y: row.focus_y, zoom: row.zoom });
+      if (
+        row.original_filename !== null &&
+        (typeof row.original_filename !== "string" ||
+          normalizeUploadFilename(row.original_filename) !== row.original_filename)
+      )
+        invalid();
+    } catch {
+      invalid();
+    }
+    edited.add(row.image_id);
   }
 }

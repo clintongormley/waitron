@@ -161,6 +161,18 @@ registerCodeMessages({
     en: "Adjust the photo framing again.",
     es: "Vuelve a ajustar el encuadre de la foto.",
   },
+  "image.changed": {
+    en: "This photo has changed. Reload it before saving again.",
+    es: "Esta foto ha cambiado. Vuelve a cargarla antes de guardar de nuevo.",
+  },
+  "image.reference_conflict": {
+    en: "This photo's original file already belongs to another library entry. Edit that photo or choose another file.",
+    es: "El archivo original de esta foto ya pertenece a otra entrada de la biblioteca. Edita esa foto o elige otro archivo.",
+  },
+  "image.hash_conflict": {
+    en: "The stored photo does not match its file. Choose another file.",
+    es: "La foto almacenada no coincide con su archivo. Elige otro archivo.",
+  },
   "image.too_many_pixels": {
     en: "The photo has too many pixels. Export a smaller copy and try again.",
     es: "La foto tiene demasiados píxeles. Exporta una copia más pequeña e inténtalo de nuevo.",
