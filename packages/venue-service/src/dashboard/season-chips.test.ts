@@ -607,3 +607,40 @@ it("as a key only, draws each chip's name and dates with no button to press", as
   await el.updateComplete;
   expect(asked).toEqual([]);
 });
+
+it("slotted content follows + Season on the chips' row", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = [spring, winter];
+  el.api = fakeApi();
+  const extra = document.createElement("button");
+  extra.textContent = "Periods…";
+  el.append(extra);
+  applyTokens(el);
+  document.body.append(el);
+  await el.updateComplete;
+  const add = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!
+    .getBoundingClientRect();
+  const box = extra.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.left).toBeGreaterThanOrEqual(add.right);
+  expect(box.top).toBeLessThan(add.bottom);
+  expect(box.bottom).toBeGreaterThan(add.top);
+});
+
+it("as a key only, still draws slotted content after the chips", async () => {
+  el = document.createElement("season-chips");
+  el.seasons = [spring, winter];
+  el.api = fakeApi();
+  el.keyOnly = true;
+  const extra = document.createElement("span");
+  extra.textContent = "after";
+  el.append(extra);
+  document.body.append(el);
+  await el.updateComplete;
+  const last = chips()[1]!.getBoundingClientRect();
+  const box = extra.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.left).toBeGreaterThanOrEqual(last.right);
+  expect(box.top).toBeLessThan(last.bottom);
+});

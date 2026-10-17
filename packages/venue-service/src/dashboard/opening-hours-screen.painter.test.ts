@@ -1028,6 +1028,21 @@ describe("the Calendar window address", () => {
     ).not.toBeNull();
     expect(location.pathname).toBe("/manage/opening-hours/view/year/window/periods");
   });
+  it("Periods… on the Year pushes window/periods and Back closes it", async () => {
+    const el = await mount("/manage/opening-hours/view/year");
+    const pushes = pushedPaths();
+    const year = el.shadowRoot!.querySelector("opening-hours-year")!;
+    const button = year.shadowRoot!.querySelector<HTMLElement>(
+      "season-chips [data-test=open-periods]",
+    )!;
+    await userEvent.click(button);
+    await periodsWindow(el);
+    expect(pushes()).toEqual(["/manage/opening-hours/view/year/window/periods"]);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    expect(drawnView(el)).toBe("year");
+  });
 });
 
 it("closing the Seasons window protects its own season draft while retaining the painter draft", async () => {

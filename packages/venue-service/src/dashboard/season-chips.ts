@@ -266,6 +266,7 @@ export class SeasonChips extends LitElement {
                 >${t("season.add")}</wt-button
               >`
         }
+        <slot></slot>
       </div>
       ${this.dialog()}`;
   }
