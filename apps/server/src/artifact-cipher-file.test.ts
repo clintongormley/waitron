@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fileIo from "./artifact-file-io.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { decryptArtifactFile, encryptArtifactFile } from "./artifact-cipher-file.js";
+import { createHash } from "node:crypto";
 const dirs: string[] = [];
 async function scratch() {
   const dir = await mkdtemp(join(tmpdir(), "cipher-file-"));
@@ -15,9 +16,41 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
+it.each([0, 196625])(
+  "returns the digest of the exact authenticated input for %i payload bytes",
+  async (size) => {
+    const dir = await scratch();
+    const artifact = encryptArtifact(Buffer.alloc(size, 193), "right");
+    await writeFile(join(dir, "artifact"), artifact);
+    const digest = await decryptArtifactFile(join(dir, "artifact"), join(dir, "out"), "right");
+    expect(digest).toBe(createHash("sha256").update(artifact).digest("hex"));
+    expect(await readFile(join(dir, "out"))).toEqual(Buffer.alloc(size, 193));
+  },
+);
 async function* chunks(bytes: Buffer) {
   for (let off = 0; off < bytes.length; off += 32768) yield bytes.subarray(off, off + 32768);
 }
+
+it("digests the authenticated descriptor when the archive pathname is replaced during decryption", async () => {
+  const dir = await scratch();
+  const artifact = encryptArtifact(Buffer.alloc(196625, 193), "right");
+  const replacement = encryptArtifact(Buffer.alloc(196625, 194), "right");
+  const path = join(dir, "artifact");
+  await writeFile(path, artifact);
+  const real = fileIo.readExactly;
+  vi.spyOn(fileIo, "readExactly").mockImplementation(async (...args) => {
+    const bytes = await real(...args);
+    if (args[2] === 0) {
+      await rename(path, join(dir, "original"));
+      await writeFile(path, replacement);
+    }
+    return bytes;
+  });
+  const digest = await decryptArtifactFile(path, join(dir, "out"), "right");
+  expect(digest).toBe(createHash("sha256").update(artifact).digest("hex"));
+  expect(await readFile(path)).toEqual(replacement);
+  expect(await readFile(join(dir, "out"))).toEqual(Buffer.alloc(196625, 193));
+});
 
 describe("file artifact cipher", () => {
   it.each([0, 196625])("cross-opens byte and file codecs for %i bytes", async (size) => {

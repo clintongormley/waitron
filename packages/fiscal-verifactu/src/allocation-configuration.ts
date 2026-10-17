@@ -1,5 +1,6 @@
 import { hostedHourPreparation } from "./hour-preparation.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
+import { readHourRecoveryState } from "./hour-recovery-state.js";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
@@ -50,6 +51,7 @@ function configuredOperations(
 ): ModuleOperationPreparation {
   const setup = host === undefined ? FISCAL_INITIAL_SETUP : FISCAL_INITIAL_SETUP.configure!(host);
   return {
+    readRecoveryState: readHourRecoveryState,
     async recovery(operation, proposal) {
       if (host === undefined)
         throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
@@ -254,6 +256,7 @@ function configuredOperations(
   };
 }
 export const FISCAL_OPERATIONS: ModuleOperationPreparation = {
+  readRecoveryState: readHourRecoveryState,
   configure(host) {
     return configuredOperations(Object.freeze({ ...host.environment }), host);
   },

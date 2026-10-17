@@ -403,8 +403,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and the existing restore runner, including a validated archive preview. Checked committed replay
   retains its hour and counters after a new host is constructed, without another clock comparison.
   The selected-source service uses the runner's database for key checks and gives that handle to
-  its facts reader. Default HTTP/CLI composition, validation before destructive placement and
-  source-specific staged recovery remain part of Task 7.
+  its facts reader. The selected runner now reads module-owned bases/history from that database
+  and checks admission before archive/file/bucket placement. Local cases preserve recovered counters,
+  reject changed sources and retain exact committed archive replay after service reconstruction.
+  These cases supply the selected runner explicitly; default HTTP/CLI composition, surviving-target
+  history capture and source-specific staged recovery remain part of Task 7.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

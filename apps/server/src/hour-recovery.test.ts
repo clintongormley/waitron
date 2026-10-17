@@ -103,6 +103,14 @@ function deps(artifact: Uint8Array) {
   };
 }
 
+it("binds archive preview to its validated snapshot when the caller changes the request buffer", async () => {
+  const f = await archive();
+  const expected = createHash("sha256").update(f.artifact).digest("hex");
+  const reading = previewRecoveryArchive(deps(f.artifact));
+  f.artifact.fill(0);
+  expect((await reading).sourceId).toBe(expected);
+});
+
 it("derives archive recovery geography and filing selection from the selected database and module evidence", async () => {
   const f = await archive();
   const original = await readFile(f.database);

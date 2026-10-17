@@ -960,3 +960,41 @@ These are preparation-service and restore-hook checks, including durable host re
 They do not qualify default recovery HTTP/CLI composition, validation before database replacement,
 actual staged-placement restart or bucket/managed-Cloud restoration. Task 7 remains open. No
 protected writer, restore hook, SQL, schema, guard or existing fiscal assertion changes here.
+
+## Actual recovery facts and admission before placement (2026-10-17)
+
+Existing expectation expressions and fiscal fixture values changed: none. The new module reader
+reuses the existing bases, active-result, complete-history and committed-restore readers. It owns
+the database facts; the generic selected-source service supplies isolation checks and durable state.
+The new cases cover repeated purposes, exact base spelling, retired names on another node, source
+and target mismatches, missing scope, active-series inconsistency and exact committed results.
+
+The selected runner now checks the source, named key, clocks, history and isolation before replacing
+the destination or setting aside its identity. It checks a canonical private database copy under
+the destination hold. A successful archive or bucket placement preserves recovered counters and
+retires the recovered active series through the unchanged restore hook. An exact archive replay
+after service reconstruction retains its current counters without another clock comparison.
+These cases explicitly supply the selected runner. Default HTTP/CLI composition, surviving-target
+history capture, real staged restart and managed-Cloud placement remain unqualified.
+
+Two retained test utilities need these specific changes:
+
+- `apps/server/src/restore.test.ts`, “a pre-existing VALID identity”: the old fixture makes the
+  target's parent a file. At starting commit `9545dccd4`, `pnpm --filter @waitron/server exec vitest run
+  src/restore.test.ts -t 'pre-existing VALID identity' --maxWorkers=1` fails with
+  `setup.attempt_uncertain` before placement. The revised fixture provides a readable target and
+  injects `ENOENT` at the placement's `mkdir`. Every original expectation remains unchanged,
+  including no migration, the absent live identity and the exact set-aside bytes. In an installed
+  starting checkout, removing the identity set-aside still fails the original absent-file assertion.
+  No invoice, fiscal identity, money, permission or authentication fixture value changes.
+- `apps/server/src/testing/s3-archive-scenario.ts`, `refusedDecrypt`: its callback's return type
+  becomes `Promise<unknown>` because file decryption now returns the digest of its authenticated
+  ciphertext. The callback's result was already discarded. Its two refusal assertions and all
+  fixture values remain unchanged. The rehearsal itself is not run by this change's local checks.
+
+New file-cipher cases check empty and multi-chunk digests and replace the archive pathname after
+the descriptor opens. The digest and plaintext must still describe the authenticated descriptor.
+Archive preview now uses validation's captured digest; its new case changes the caller's request
+buffer while validation is suspended and still expects the original source. Bucket preview uses
+the exact-point digest returned by validation rather than hashing the same file a second time.
+No protected writer, restore hook, existing SQL, schema, guard or existing fiscal assertion changes.

@@ -1,7 +1,7 @@
 import { lockVenueDatabase, readBreakGlassKeyName, type Database } from "@waitron/db";
 import {
   configureModuleOperations,
-  type ModuleOperationHost,
+  type ModuleRecoveryFacts,
   type OperationBinding,
   type ProvisionedNode,
   type WaitronModule,
@@ -21,7 +21,7 @@ import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import "./errors.js";
 
-interface Options {
+interface BaseOptions {
   stateDir: string;
   venueDir: string;
   coordinator: FirstSetupCoordinator;
@@ -32,11 +32,22 @@ interface Options {
   secret: unknown;
   database(): Database;
   selected: RecoveryBackupPreview;
-  readRecoveryFacts(
-    binding: OperationBinding,
-    db: Database,
-  ): ReturnType<NonNullable<ModuleOperationHost["readRecoveryFacts"]>>;
 }
+type Isolation = Pick<
+  ModuleRecoveryFacts,
+  "oldMachineOffline" | "oldMachineAbsent" | "noParallelRecovery"
+>;
+type Options = BaseOptions &
+  (
+    | {
+        readRecoveryFacts(binding: OperationBinding, db: Database): Promise<ModuleRecoveryFacts>;
+        readIsolation?: never;
+      }
+    | {
+        readRecoveryFacts?: never;
+        readIsolation(binding: OperationBinding, db: Database): Promise<Isolation>;
+      }
+  );
 export function createSelectedRecoveryPreparation(options: Options): {
   readonly modules: readonly WaitronModule[];
   prepare(proposal: unknown): Promise<unknown>;
@@ -85,7 +96,28 @@ export function createSelectedRecoveryPreparation(options: Options): {
     },
     readRecoveryFacts: async (held, check) => {
       checkSelection();
-      const current = await options.readRecoveryFacts(held, database());
+      const current = await (async () => {
+        const db = database();
+        if (options.readRecoveryFacts !== undefined) return options.readRecoveryFacts(held, db);
+        const reader = options.modules.find((module) => module.name === binding.module)?.operations
+          ?.readRecoveryState;
+        if (reader === undefined) return refuse();
+        const stored = await reader(db, node, held);
+        const isolation = await options.readIsolation(held, db);
+        return {
+          ...stored,
+          oldMachineAbsent: isolation.oldMachineAbsent,
+          oldMachineOffline: isolation.oldMachineOffline,
+          noParallelRecovery: isolation.noParallelRecovery,
+          contextKey: JSON.stringify([
+            binding,
+            stored.country,
+            stored.taxId,
+            stored.environment,
+            stored.bases,
+          ]),
+        };
+      })();
       check();
       if (
         current.country !== selected.fiscalSelection!.country ||
@@ -128,7 +160,13 @@ export function createSelectedRecoveryPreparation(options: Options): {
     runner(input) {
       checkSelection();
       const runner = createRecoveryRestoreRunner(modules, { binding, input }, secret);
-      return (context, run) => databases.run(context.db, () => runner(context, run));
+      const scoped: RestoreOperationRunner = (context, run) =>
+        databases.run(context.db, () => runner(context, run));
+      scoped.checkBeforePlacement = async (context) => {
+        if (context.sourceId !== binding.sourceId) return refuse();
+        await scoped(context, async () => ({ seriesId: "", reports: [] }));
+      };
+      return scoped;
     },
   };
 }

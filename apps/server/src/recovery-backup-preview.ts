@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { eq } from "drizzle-orm";
 import { locations, openVenueDatabase, readTenant, readBreakGlassKeyName } from "@waitron/db";
@@ -15,7 +14,6 @@ import {
 } from "./restore.js";
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import "./errors.js";
-import { recoveryStreamSourceId } from "./recovery-source.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { readModuleRecoveryEvidence } from "./backup-sources.js";
 import {
@@ -101,11 +99,7 @@ export async function readRecoveryCopyPreview(
 export async function previewRecoveryArchive(deps: ValidationDeps): Promise<RecoveryBackupPreview> {
   const copy = await validateArtifact(deps);
   try {
-    return await readRecoveryCopyPreview(
-      copy,
-      createHash("sha256").update(deps.artifact).digest("hex"),
-      deps,
-    );
+    return await readRecoveryCopyPreview(copy, copy.sourceId, deps);
   } finally {
     await copy.discard();
   }
@@ -117,10 +111,7 @@ export async function previewRecoveryStream(
   const prepared = await prepareStreamRestore(deps);
   try {
     const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, deps);
-    const activationSourceId = await recoveryStreamSourceId(
-      prepared.databasePath,
-      prepared.entries,
-    );
+    const activationSourceId = copy.sourceId;
     const preview = await readRecoveryCopyPreview(
       copy,
       `stream:${deps.kit.venueId}:${prepared.generation}`,

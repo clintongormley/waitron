@@ -198,7 +198,10 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
 }
 
 /** A decryption that must be refused as a wrong passphrase, leaving nothing at `out`. */
-async function refusedDecrypt(out: string, decrypt: (out: string) => Promise<void>): Promise<void> {
+async function refusedDecrypt(
+  out: string,
+  decrypt: (out: string) => Promise<unknown>,
+): Promise<void> {
   const error = await decrypt(out).then(
     () => undefined,
     (thrown: unknown) => thrown,

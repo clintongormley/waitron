@@ -1,6 +1,8 @@
 import type { OperationBinding } from "./operation-authority.js";
 import type { InitialSetupContext } from "./initial-setup.js";
 import type { WaitronModule } from "./module.js";
+import type { Database } from "@waitron/db";
+import type { ProvisionedNode } from "./provisioning.js";
 import { AppError } from "@waitron/shared";
 import {
   moduleOperationFor,
@@ -76,6 +78,16 @@ export function configureModuleOperations(
 
 export interface ModuleOperationPreparation {
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
+  readRecoveryState?(
+    db: Database,
+    node: ProvisionedNode,
+    binding: OperationBinding,
+  ): Promise<
+    Pick<
+      ModuleRecoveryFacts,
+      "country" | "taxId" | "environment" | "bases" | "history" | "priorActivation"
+    >
+  >;
   recovery?(
     operation: Pick<ModuleOperationInput, "binding" | "authority">,
     proposal: unknown,
