@@ -162,3 +162,19 @@ protected fiscal group passed 20. Configuration exports use version 4 and versio
 refused with and without the old column. The native execution ledger and campaign receipts retain
 RED/GREEN commands, assertion changes and independent installed controls. Final authenticated-app
 LOOK, whole-branch review, hook/current-head CI and authorised landing complete Task 5.
+
+
+### Review ruling — 2026-10-17
+
+The completed Claude run-it review found raw database character order differed from browser
+alphabetical order. Within A725's name-order requirement, the driver chose one explicit Spanish
+comparison for every station surface, independent of interface language. This is an implementation
+choice, not a new owner decision. Literal accent/lowercase/ñ tests failed before the fix; the shared
+comparison now covers readers, Calendar, device choices, staffing, alerts and shared kitchen paper.
+All fifteen installed sort/locale omission controls failed their intended assertions; restored
+candidate checks passed and all 6666 compared source paths matched. The redundant retired-field
+Omit was removed. The same whole-branch review is retained; no second review was run.
+
+Authenticated native checks and capture inspection cover EN/ES × light/dark × 390/1280 for
+Stations/Routes, Add/Edit and colour popups, used colours, long names, refusals, invalid fields,
+Calendar choices and Unicode ordering. Final hook/current-head CI and landing remain pending.

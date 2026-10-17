@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { kitchenStations, ticketItems, workingOrderLines, type Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
-import { thousandthsToDecimal } from "@waitron/shared";
+import { thousandthsToDecimal, compareStationNames } from "@waitron/shared";
 import type { TicketState } from "./kitchen-print.js";
 
 export interface RestOfOrderItem {
@@ -56,7 +56,9 @@ export async function readRestOfOrder(
 ): Promise<Map<string, RestOfOrderItem[]>> {
   if (orderIds.length === 0) return new Map();
   const result = new Map(orderIds.map((id) => [id, [] as RestOfOrderItem[]]));
-  for (const row of await restOfOrderQuery(tx, orderIds)) {
+  const rows = await restOfOrderQuery(tx, orderIds);
+  rows.sort((a, b) => compareStationNames(a.stationName, b.stationName));
+  for (const row of rows) {
     result.get(row.orderId)!.push({
       ticketItemId: row.ticketItemId,
       orderId: row.orderId,

@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
 import type { TillConfig } from "./till-config.js";
@@ -96,7 +96,12 @@ export async function stationPrintersDown(
 ): Promise<DownPrinter[]> {
   if (stationIds?.length === 0) return [];
   const rows = await stationPrintersDownQuery(tx, locationId, now, stationIds, options);
-  return rows.map((r) => ({ ...r, since: r.since! }));
+  return rows
+    .sort(
+      (a, b) =>
+        compareStationNames(a.stationName, b.stationName) || a.stationId.localeCompare(b.stationId),
+    )
+    .map((r) => ({ ...r, since: r.since! }));
 }
 
 export function waitingDishesQuery(
@@ -185,11 +190,13 @@ export async function stationScreensDark(
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, [...waiting]))
     .orderBy(kitchenStations.name, kitchenStations.id);
-  return stations.map((station) => ({
-    stationId: station.id,
-    stationName: station.name,
-    lastSeenAt: darkSince.get(station.id)!,
-  }));
+  return stations
+    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
+    .map((station) => ({
+      stationId: station.id,
+      stationName: station.name,
+      lastSeenAt: darkSince.get(station.id)!,
+    }));
 }
 
 /** Active kitchen displays running a pass screen or pass monitor, unseen for `SCREEN_DARK_MS`,

@@ -1,7 +1,7 @@
 // Side-effect import: registers the `station.*`/`course.*` codes this file throws (errors.ts).
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import {
   fireControlMode,
   isUniqueViolation,
@@ -142,18 +142,20 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(kitchenStations.name, kitchenStations.id);
-  return stations.map((station) => ({
-    ...station,
-    timingDefaults: defaults,
-    timingOverrides: {
-      warmAfterMinutes: station.warmAfterMinutes,
-      overdueAfterMinutes: station.overdueAfterMinutes,
-      forgottenAfterMinutes: station.forgottenAfterMinutes,
-    },
-    warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
-    overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
-    forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
-  }));
+  return stations
+    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
+    .map((station) => ({
+      ...station,
+      timingDefaults: defaults,
+      timingOverrides: {
+        warmAfterMinutes: station.warmAfterMinutes,
+        overdueAfterMinutes: station.overdueAfterMinutes,
+        forgottenAfterMinutes: station.forgottenAfterMinutes,
+      },
+      warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+    }));
 }
 
 /** The active stations, each with how it stands today. */

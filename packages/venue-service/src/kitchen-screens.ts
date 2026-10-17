@@ -10,7 +10,12 @@ import type {
   ResolvedKitchenScreen,
   ScreenSlot,
 } from "@waitron/module";
-import { AppError, locationId as brandLocationId, type ErrorParams } from "@waitron/shared";
+import {
+  AppError,
+  compareStationNames,
+  locationId as brandLocationId,
+  type ErrorParams,
+} from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import {
   deviceKitchenScreenRemovals,
@@ -73,6 +78,7 @@ async function readStored(
       profileId: deviceProfileKitchenScreenStations.deviceProfileId,
       screen: deviceProfileKitchenScreenStations.screen,
       id: kitchenStations.id,
+      name: kitchenStations.name,
     })
     .from(deviceProfileKitchenScreenStations)
     .innerJoin(
@@ -89,6 +95,7 @@ async function readStored(
       ),
     )
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   const zones = await tx
     .select({
       profileId: deviceProfileKitchenScreenZones.deviceProfileId,
@@ -110,7 +117,7 @@ async function readStored(
 
   const byProfile = new Map<string, MutableScreens>();
   for (const row of rows) {
-    const of = (list: typeof stations) =>
+    const of = (list: readonly { profileId: string; screen: KitchenScreenKind; id: string }[]) =>
       list
         .filter((entry) => entry.profileId === row.deviceProfileId && entry.screen === row.screen)
         .map((entry) => entry.id);
@@ -375,6 +382,7 @@ async function placesHere(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
     .from(floorZones)

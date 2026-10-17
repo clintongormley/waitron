@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, or, type SQL } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError, locationId, compareStationNames } from "@waitron/shared";
 import {
   departments,
   readDayPlan,
@@ -50,6 +50,7 @@ export async function listStaffingAreas(tx: Transaction, cfg: Cfg): Promise<Staf
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  stationRows.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   return [
     ...departmentRows.map((row) => ({
       area: { kind: "department", id: row.id } as AreaRef,

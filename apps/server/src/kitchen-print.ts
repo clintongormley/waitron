@@ -31,6 +31,7 @@ import type { Transaction } from "@waitron/db";
 import type { KitchenNoteChange } from "@waitron/module";
 import {
   AppError,
+  compareStationNames,
   partyTablesName,
   perDishOptionQuantity,
   thousandthsToDecimal,
@@ -554,7 +555,7 @@ async function planKitchenTickets(
         grouping,
       ),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareStationNames(a.name, b.name));
   const stationById = new Map(stations.map((station) => [station.id, station]));
 
   const jobs: KitchenJob[] = [];
@@ -1754,7 +1755,7 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
   return [...problems.values()].sort(
     (a, b) =>
       a.since.localeCompare(b.since) ||
-      a.stationName.localeCompare(b.stationName) ||
+      compareStationNames(a.stationName, b.stationName) ||
       a.workingOrderId.localeCompare(b.workingOrderId),
   );
 }

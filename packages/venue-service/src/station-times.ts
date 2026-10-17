@@ -1,7 +1,7 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock, venueMomentAt, type VenueMoment } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import { stationDayStates } from "./schema/station-times.js";
 import { routingModel } from "./routing-store.js";
@@ -105,7 +105,9 @@ export async function stationDestinations(
   const open = new Set(
     model.stationTimes.filter((row) => row.status.open).map((row) => row.stationId),
   );
-  return stations.filter((station) => open.has(station.id));
+  return stations
+    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
+    .filter((station) => open.has(station.id));
 }
 
 export async function closeStationForToday(

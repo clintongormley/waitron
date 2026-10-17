@@ -1314,16 +1314,16 @@ describe("Device API — the device-guarded routes", () => {
       const { venue, app, fria, items } = await seed();
       await suite.db
         .update(kitchenStations)
-        .set({ name: "Zulu" })
+        .set({ name: "Cocina" })
         .where(eq(kitchenStations.id, venue.defaultStationId));
       await suite.db
         .update(kitchenStations)
-        .set({ name: "Alpha" })
+        .set({ name: "Ásador" })
         .where(eq(kitchenStations.id, fria));
       const { jar } = await enrolStationScreen(app, venue, null);
       await switchStationOff(fria);
       const rows = await read(app, jar);
-      expect(rows.map(({ name }) => name)).toEqual(["Alpha", "Zulu"]);
+      expect(rows.map(({ name }) => name)).toEqual(["Ásador", "Cocina"]);
       expect(rows[0]).toMatchObject({ id: fria, available: false, switchedOff: true });
       expect(queued(rows[0]!)).toEqual([items[1]]);
     });

@@ -164,3 +164,18 @@ it("A725 offers active stations alphabetically without changing their identity o
   expect(ordered[2]!.isDefault).toBe(true);
   expect(input).toEqual([zulu, hidden, bar, alpha]);
 });
+
+it("A725 uses Spanish alphabetical station names independently of the browser language", () => {
+  const stations = ["Ñandú", "barra", "Cocina", "Ásador", "Níspero", "Naranja"].map((name) => ({
+    name,
+    active: true,
+  }));
+  expect(activeStationsInOrder(stations).map(({ name }) => name)).toEqual([
+    "Ásador",
+    "barra",
+    "Cocina",
+    "Naranja",
+    "Níspero",
+    "Ñandú",
+  ]);
+});

@@ -78,6 +78,20 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 describe("kitchen-station config", () => {
+  it("A725 lower-case accents and enyes use Spanish alphabetical station order", async () => {
+    const cfg = await setupVenue();
+    for (const name of ["Ñandú", "barra", "Cocina", "Ásador", "Níspero", "Naranja"])
+      await asApp(cfg, (tx) => createStation(tx, cfg, { name }));
+    expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual([
+      "Ásador",
+      "barra",
+      "Cocina",
+      "Naranja",
+      "Níspero",
+      "Ñandú",
+    ]);
+  });
+
   it("A725 backend station lists use names and keep the default among them", async () => {
     const cfg = await setupVenue();
     await asApp(cfg, async (tx) => {
@@ -99,10 +113,10 @@ describe("kitchen-station config", () => {
   it("A725 timing refuses the alphabetically first invalid station override", async () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Zulu", thresholds: { warmAfterMinutes: 7 } }),
+      createStation(tx, cfg, { name: "barra", thresholds: { warmAfterMinutes: 7 } }),
     );
     const alpha = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Alpha", thresholds: { warmAfterMinutes: 6 } }),
+      createStation(tx, cfg, { name: "Ásador", thresholds: { warmAfterMinutes: 6 } }),
     );
     await expect(
       asApp(cfg, (tx) =>
@@ -115,7 +129,7 @@ describe("kitchen-station config", () => {
     ).rejects.toMatchObject({
       code: "station.thresholds_invalid",
       params: {
-        name: "Alpha",
+        name: "Ásador",
         stationId: alpha.id,
         field: "overdueAfterMinutes",
       },

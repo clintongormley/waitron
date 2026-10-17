@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   devices,
+  kitchenStations,
   deviceProfiles,
   passItemMarks,
   printJobs,
@@ -801,6 +802,10 @@ describe("passScreensDark", () => {
 
 it("A725 down printers and dark station screens use station and printer names", async () => {
   const f = await setup();
+  await suite.db
+    .update(kitchenStations)
+    .set({ name: "Ásador" })
+    .where(eq(kitchenStations.id, f.bar));
   const z = await f.printer(f.bar, "Zulu printer");
   const a = await f.printer(f.bar, "Alpha printer");
   const k = await f.printer(f.grill, "Kitchen printer");
@@ -810,8 +815,8 @@ it("A725 down printers and dark station screens use station and printer names", 
       ({ stationName, printerName }) => [stationName, printerName],
     ),
   ).toEqual([
-    ["Bar", "Alpha printer"],
-    ["Bar", "Zulu printer"],
+    ["Ásador", "Alpha printer"],
+    ["Ásador", "Zulu printer"],
     ["Cocina", "Kitchen printer"],
   ]);
   const profileId = await profile("kds");
@@ -830,5 +835,5 @@ it("A725 down printers and dark station screens use station and printer names", 
     (await stationScreensDark(suite.db, f.venue.cfg.locationId, at)).map(
       ({ stationName }) => stationName,
     ),
-  ).toEqual(["Bar", "Cocina"]);
+  ).toEqual(["Ásador", "Cocina"]);
 });

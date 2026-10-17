@@ -14,7 +14,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { classifyBand, worstBand } from "@waitron/shared";
+import { classifyBand, worstBand, compareStationNames } from "@waitron/shared";
 import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
@@ -113,7 +113,8 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
     const byStation = [...ready.values()]
       .sort(
         (a, b) =>
-          a.stationName.localeCompare(b.stationName) || a.stationId.localeCompare(b.stationId),
+          compareStationNames(a.stationName, b.stationName) ||
+          a.stationId.localeCompare(b.stationId),
       )
       .map(({ stationId, stationName, count }) => ({ stationId, stationName, count }));
     signals.push({ kind: "ready", byStation });

@@ -613,19 +613,19 @@ describe("station today controls", () => {
       const f = await fixture(tx);
       await setStationToday(tx, f.cfg, f.downstairs, "closed", at);
       await tx.insert(kitchenStations).values([
-        { ...f.cfg, name: "Beta", id: "00000000-0000-4000-8000-000000000003" },
-        { ...f.cfg, name: "Zulu", id: "00000000-0000-4000-8000-000000000001" },
-        { ...f.cfg, name: "Alpha", id: "00000000-0000-4000-8000-000000000002" },
+        { ...f.cfg, name: "barra", id: "00000000-0000-4000-8000-000000000003" },
+        { ...f.cfg, name: "Ñandú", id: "00000000-0000-4000-8000-000000000001" },
+        { ...f.cfg, name: "Ásador", id: "00000000-0000-4000-8000-000000000002" },
       ]);
       return f;
     });
     expect(
       await db.transaction((tx) => stationTimes.stationDestinations(tx, f.cfg, f.upstairs, at)),
     ).toEqual([
-      { id: "00000000-0000-4000-8000-000000000002", name: "Alpha", isDefault: false },
-      { id: "00000000-0000-4000-8000-000000000003", name: "Beta", isDefault: false },
+      { id: "00000000-0000-4000-8000-000000000002", name: "Ásador", isDefault: false },
+      { id: "00000000-0000-4000-8000-000000000003", name: "barra", isDefault: false },
       { id: f.kitchen, name: "Kitchen", isDefault: true },
-      { id: "00000000-0000-4000-8000-000000000001", name: "Zulu", isDefault: false },
+      { id: "00000000-0000-4000-8000-000000000001", name: "Ñandú", isDefault: false },
     ]);
   });
 

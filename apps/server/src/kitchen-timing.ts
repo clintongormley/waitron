@@ -2,7 +2,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { kitchenStations, kitchenStationTiming, kitchenTimingDefaults } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import type { StationThresholds } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 
@@ -117,6 +117,7 @@ export async function assertKitchenTimingStations(
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(kitchenStations.name, kitchenStations.id);
+  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   for (const station of stations) {
     assertStationTiming(station, defaults, station);
   }

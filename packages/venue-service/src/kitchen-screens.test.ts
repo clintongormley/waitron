@@ -2221,13 +2221,13 @@ describe("deleted zone bounds", () => {
 
 it("A725 profile and device station choices use names and preserve removed slots", async () => {
   const v = await seedVenue();
-  await db.update(kitchenStations).set({ name: "Zulu" }).where(eq(kitchenStations.id, v.cold));
+  await db.update(kitchenStations).set({ name: "Ásador" }).where(eq(kitchenStations.id, v.cold));
   await set(v, v.kds, { station: { stationIds: [v.pastry, v.grill, v.cold], zoneIds: null } });
-  expect((await screensOf(v, v.kds))!.station!.stationIds).toEqual([v.grill, v.pastry, v.cold]);
+  expect((await screensOf(v, v.kds))!.station!.stationIds).toEqual([v.cold, v.grill, v.pastry]);
   const device = await seedDevice(v, v.kds, "Names");
   await choose(v, device, v.kds, [{ kind: "station", ...every }]);
   await recordRemoval(device, "station", { stationId: v.pastry });
   const rows = (await shown(v, device))[0]!.stations;
-  expect(rows.map(({ id }) => id)).toEqual([v.grill, v.pastry, v.cold]);
-  expect(rows.map(({ available }) => available)).toEqual([true, false, true]);
+  expect(rows.map(({ id }) => id)).toEqual([v.cold, v.grill, v.pastry]);
+  expect(rows.map(({ available }) => available)).toEqual([true, true, false]);
 });

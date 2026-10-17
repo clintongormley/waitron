@@ -135,10 +135,18 @@ async function switchOff(area: AreaRef, active: boolean) {
 describe("listStaffingAreas", () => {
   it("A725 lists active departments, then active stations by name", async () => {
     const v = await venue();
+    await suite.db
+      .update(kitchenStations)
+      .set({ name: "Ásador" })
+      .where(eq(kitchenStations.id, v.stationId));
+    await suite.db
+      .update(kitchenStations)
+      .set({ name: "barra" })
+      .where(eq(kitchenStations.id, v.passId));
     expect(await inTx((tx) => listStaffingAreas(tx, v.cfg))).toEqual([
       { area: dept(v), name: "Dining room" },
-      { area: grill(v), name: "Grill" },
-      { area: { kind: "station", id: v.passId }, name: "Pass" },
+      { area: grill(v), name: "Ásador" },
+      { area: { kind: "station", id: v.passId }, name: "barra" },
     ]);
   });
 });
