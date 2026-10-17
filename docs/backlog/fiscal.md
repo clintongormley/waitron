@@ -882,6 +882,18 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
   today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
   asesor Q31 (2026-09-30), not decided.
+- **A802, owner 2026-10-18: ready to queue — "what are we waiting for?"** Nothing technical
+  blocks it. Scope for the spec:
+  - A server route that issues a partial correction through `recordCorrection`
+    (`packages/core/src/record-correction.ts`), filing by differences as today.
+  - A till action on a paid receipt, where staff already find one (the find-a-bill page, beside
+    Refund): pick the wrong lines and how many, or enter an amount; the amount entered is what the
+    customer gets back, VAT included (owner, 2026-09-29); print the corrective receipt.
+  - Settle in the spec how a correction and the existing Refund relate, by reading the code paths:
+    whether money goes back in the same step, and what each files.
+  - Asesor Q31 (difference vs. substitution) changes only the filing type; build for differences.
+  - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
+    line; a correction then picks portions the same way staff pick dishes to move.
 
 ## "No tax (0%)" is an open fiscal question, and it must be answered before the first live filing
 

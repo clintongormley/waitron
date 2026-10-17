@@ -99,6 +99,9 @@ Everything not listed here needs more spec work first.
 6. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 
+**Ready to queue when a lane is free (owner, 2026-10-18), not ranked against the list above:**
+**A802 — correct part of a paid invoice** (_Fiscal records, invoices and the asesor_).
+
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
 come after the list above:
 
@@ -438,10 +441,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `apps/till/src/state/working-order.ts`) that no screen shows.
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
-- **Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT
-  error on an issued simplified invoice.** — left open by the menus plan. The owner also needs a way
-  to correct an issued invoice when a customer spots an error after payment, regardless of the
-  future Tabs · Bill choice (2026-10-04, A261 step 2 decision).
+- **A802 — correct part of a paid invoice: READY TO QUEUE (owner, 2026-10-18).** Nothing in the
+  product can issue a corrective invoice (R5, _factura rectificativa_) for part of an issued
+  simplified invoice: the engine exists and only the whole-order cancel uses it. Staff need an easy
+  way to correct a paid receipt when a customer spots an error afterwards. Build on today's
+  filing-by-differences now; asesor Q31 may switch the filing type later without changing the
+  screens. Needs a spec first; fiscal, so owner sign-off at land.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
