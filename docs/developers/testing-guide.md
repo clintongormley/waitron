@@ -1670,10 +1670,14 @@ and LOOK, in both themes and at phone width. A browser-mode package has the harn
 `apps/server`'s string-rendered pages have none, so write the rendered string to a file and open it
 with the workspace's playwright Chromium.
 
-Before calling a capture dark-theme evidence, check the rendered colours. In the dashboard,
-`apps/dashboard/src/main.ts` applies tokens to `document.documentElement`; set `data-theme` on
-that root, then read the dialog's computed background and text colours. Setting it only on
-`#app` does not select the root's dark tokens. Record the computed colours beside the measured
+Before calling a capture dark-theme evidence, check the rendered colours. Each app's `main.ts`
+applies tokens to `document.documentElement` and then calls `startThemeChoice`, which sets or
+removes `data-theme` on that root from the saved choice — so an attribute set before `main.ts`
+runs is removed when nothing is saved. Save the choice before the page loads instead, on the
+app's own origin: in Playwright, `page.addInitScript(() => localStorage.setItem("waitron-theme",
+"dark"))`. Or set `data-theme` on `document.documentElement` only after the app has started. Then
+read the dialog's computed background and text colours. Setting the attribute only on `#app` does
+not select the root's dark tokens. Record the computed colours beside the measured
 viewport size, and reject the capture if light and dark resolve to the same colours.
 
 A435-1's first details-panel captures on 2026-10-09 set the attribute on `#app` and reported white
