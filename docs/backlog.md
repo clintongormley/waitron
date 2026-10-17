@@ -1136,8 +1136,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   populated-unit upgrade reset declaration for required staff fields. Existing venue folders must
   be reset/reseeded before using the completed change; no reset is authorised by that declaration.
   The feature branch has checkpointed unit foundations, optional ordinary catalogue writers,
-  free default choice and customer-form fallback. Obsolete boot callback cleanup waits for lane E;
-  the multilingual editor, missing-value report and automatic-translation review remain unfinished.
+  free default choice and customer-form fallback. The shared missing-value queries now include
+  default-language blanks, unnamed extras lists and unit abbreviations, with a count-only read.
+  Obsolete boot callback cleanup waits for lane E. Bounded multilingual cell reads, the editor,
+  automatic-translation review and their remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

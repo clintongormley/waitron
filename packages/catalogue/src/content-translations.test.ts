@@ -190,7 +190,7 @@ async function snapshot(tx: Transaction) {
 
 describe("atomic content translations", () => {
   it.each(["product", "variant", "option_list", "option_label", "menu", "section"] as const)(
-    "%s with no customer-facing name takes a default-language save, though that page leaves it out",
+    "%s with no customer-facing name is listed and takes a default-language save",
     async (kind) => {
       const ids = await fixture();
       await app(async (tx) => {
@@ -223,7 +223,7 @@ describe("atomic content translations", () => {
         } while (after !== undefined);
         return rows;
       });
-      expect(listed.some((row) => row.kind === kind && row.id === ids[kind])).toBe(false);
+      expect(listed.some((row) => row.kind === kind && row.id === ids[kind])).toBe(true);
       const request = await batch(ids, [kind], "es");
       const result = await app((tx) => saveContentTranslations(tx, "es", request, context));
       expect(result.saved[0]).toMatchObject({

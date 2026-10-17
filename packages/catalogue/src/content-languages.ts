@@ -8,6 +8,8 @@ import {
 } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { contentLanguages } from "./schema/menu.js";
+import { liveTranslationRows } from "./content-translation-candidates.js";
+import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
 import "./errors.js";
 
 /**
@@ -78,54 +80,21 @@ export type ContentTranslationCandidate = {
   id: string;
   product_id: string | null;
   translations: string;
+  abbreviations: string | null;
 };
 
 /** Every row {@link listContentTranslationGaps} checks, with the map it checks, whatever the language. */
 export async function readContentTranslationCandidates(
   tx: Transaction,
 ): Promise<ContentTranslationCandidate[]> {
-  // `product`, `variant`, `option_list`, `option_label`, `extra_list`, `menu_section` and
-  // `menu_include` are the kinds whose customer-facing name is optional, so the query filters a
-  // wholly-absent one (null or {}) out of them: absent is not a gap, only a partly filled map is.
-  // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
-  // drizzle column mapping runs over the result.
-  // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
-  // rows and the variant branch to the rest; otherwise each variant would be counted twice. A
-  // disabled variant is on no menu offer.
-  // A `menu_include` is the folder an include shows: the included menu's names with the ones the
-  // include fixes in their place. It counts while the include shows its sections directly too,
-  // because switching the folder back on restores the fixed names. An include fixing no name
-  // patches with null, which `json_patch` answers with null, so it is left to the included menu's
-  // own row. A map that is blank throughout shows no customer name, so like an absent one it is no
-  // gap. `materialized` makes the engine patch each include's names once: a plain subquery is
-  // flattened, which writes the patch out again in the filter.
   const result = await tx.execute<ContentTranslationCandidate>(sql`
-    with include_folders as materialized (
-      select m.id, json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations
-        from section_members m join sections s on s.id = m.child_section_id
-          join sections owner on owner.id = m.section_id
-          join catalogues c on c.id = owner.owner_menu_id
-        where s.role = 'menu_root' and c.active = 1
-    )
-    select 'product' as kind, id, null as product_id, customer_name as translations from products
-      where parent_id is null and active = 1 and customer_name is not null and customer_name <> '{}'
-    union all select 'unit' as kind, id, null, name as translations from units
-    union all select 'variant' as kind, id, parent_id, customer_name as translations from products
-      where parent_id is not null and active = 1
-        and exists (select 1 from products parent where parent.id = products.parent_id and parent.active = 1)
-        and customer_name is not null and customer_name <> '{}'
-    union all select 'option_list' as kind, id, null, customer_name as translations
-      from option_lists where active = 1 and customer_name is not null and customer_name <> '{}'
-    union all select 'option_label' as kind, id, null, customer_name as translations
-      from option_labels where customer_name is not null and customer_name <> '{}'
-        and exists (select 1 from option_lists l where l.id = option_labels.list_id and l.active = 1)
-    union all select 'extra_list' as kind, id, null, customer_name as translations
-      from extra_lists where active = 1 and customer_name is not null and customer_name <> '{}'
-    union all select 'menu_section' as kind, id, null, names as translations
-      from sections where role in ('section', 'menu_root') and names <> '{}'
-        and exists (select 1 from catalogues c where c.id = sections.owner_menu_id and c.active = 1)
-    union all select 'menu_include' as kind, id, null, translations from include_folders
-      where exists (select 1 from json_each(translations) where trim(value) <> '')
+    select case when kind in ('menu', 'section') then 'menu_section'
+      when kind = 'included_menu' then 'menu_include' else kind end as kind,
+      id, case when kind = 'variant' then owner else null end as product_id,
+      coalesce(case when kind = 'included_menu' then json_patch(inherited, names)
+        else names end, '{}') as translations, abbreviations
+    from (${liveTranslationRows(TRANSLATION_GAP_KINDS)})
+    where kind <> 'included_menu' or exists (select 1 from json_each(names))
   `);
   return result.rows;
 }
@@ -139,7 +108,13 @@ export function contentTranslationGapsIn(
     .filter(
       (row) =>
         resolveContentText(JSON.parse(row.translations) as Record<string, string>, code, code) ===
-        "",
+          "" ||
+        (row.kind === "unit" &&
+          resolveContentText(
+            JSON.parse(row.abbreviations ?? "{}") as Record<string, string>,
+            code,
+            code,
+          ) === ""),
     )
     .map(({ kind, id, product_id }) =>
       product_id === null ? { kind, id } : { kind, id, productId: product_id },

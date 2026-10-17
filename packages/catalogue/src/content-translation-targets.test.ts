@@ -81,7 +81,10 @@ async function fixture(tx: Transaction) {
     .insert(extraLists)
     .values({ name: "STAFF Sides", customerName: { es: "CLIENT Guarnición" } })
     .returning();
-  await tx.insert(extraLists).values({ name: "STAFF Omitted absent extras" });
+  const [absentExtra] = await tx
+    .insert(extraLists)
+    .values({ name: "STAFF Omitted absent extras" })
+    .returning();
   const [section] = await tx
     .insert(sections)
     .values({ internalName: "STAFF Mains", names: { es: "CLIENT Platos" }, ownerMenuId: menu.id })
@@ -118,6 +121,7 @@ async function fixture(tx: Transaction) {
     section: section!.id,
     included_menu: member.id,
     unit: unit!.id,
+    absentExtra: absentExtra!.id,
     menuId: menu.id,
     root,
     childRoot,
@@ -154,13 +158,15 @@ describe("inline translation targets", () => {
         { kind: "variant", id: ids.variant },
         { kind: "option_list", id: ids.option_list },
         { kind: "option_label", id: ids.option_label },
-        { kind: "extra_list", id: ids.extra_list },
+        ...[ids.extra_list, ids.absentExtra].sort().map((id) => ({ kind: "extra_list", id })),
         { kind: "menu", id: ids.menu },
         { kind: "section", id: ids.section },
         { kind: "included_menu", id: ids.included_menu },
         { kind: "unit", id: ids.unit },
       ]);
-      const byKind = Object.fromEntries(page.rows.map((row) => [row.kind, row]));
+      const byKind = Object.fromEntries(
+        page.rows.filter((row) => row.id !== ids.absentExtra).map((row) => [row.kind, row]),
+      );
       expect(byKind.product).toMatchObject({
         name: "STAFF Bread",
         reason: "absent",
@@ -191,7 +197,7 @@ describe("inline translation targets", () => {
         },
       });
       expect(page).toMatchObject({
-        total: 9,
+        total: 10,
         next: null,
         config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
         required: ["es"],
@@ -468,7 +474,7 @@ describe("inline translation targets", () => {
     });
   });
 
-  it("empty units remain partial gaps and whitespace default labels use a nonblank name", async () => {
+  it("empty units and whitespace default labels retain their independent staff name", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       const [empty] = await tx
@@ -494,12 +500,12 @@ describe("inline translation targets", () => {
       const page = await listTranslationTargets(tx, "es", {}, context);
       expect(page.rows.find((row) => row.id === empty!.id)).toMatchObject({
         reason: "partial",
-        name: "",
+        name: "Staff unit",
         defaultRequired: true,
       });
       expect(page.rows.find((row) => row.id === blank!.id)).toMatchObject({
         reason: "partial",
-        name: "racció",
+        name: "Staff unit",
         defaultRequired: true,
       });
     });

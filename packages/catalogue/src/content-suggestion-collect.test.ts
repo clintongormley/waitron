@@ -213,7 +213,7 @@ describe("what counts as still there", () => {
       const copa = await variant(tx, lunch, vi, "Copa", null);
       const punt = await optionList(tx, "Punt", null);
       const poc = await optionLabel(tx, punt, "Poc", {});
-      await extraList(tx, "Salses", null);
+      const sauces = await extraList(tx, "Salses", null);
       await tx.insert(units).values({
         staffName: "Staff unit",
         staffAbbreviation: "su",
@@ -247,6 +247,7 @@ describe("what counts as still there", () => {
           `variant:${copa}`,
           `option_list:${punt}`,
           `option_label:${poc}`,
+          `extra_list:${sauces}`,
           `menu:${barRoot}`,
           `section:${plats}`,
         ]),
@@ -330,8 +331,11 @@ describe("the gaps a run starts from", () => {
         es: "  ",
         en: "CLIENT-EN Salt",
       });
-      // The listing's blank test is SQLite's trim, which removes spaces only.
-      await product(tx, lunch, "Mel", { ca: "CLIENT-CA Mel", es: "\t", en: "CLIENT-EN Honey" });
+      const honey = await product(tx, lunch, "Mel", {
+        ca: "CLIENT-CA Mel",
+        es: "\t",
+        en: "CLIENT-EN Honey",
+      });
       await product(tx, lunch, "Vi", {
         ca: "CLIENT-CA Vi",
         es: "CLIENT-ES Vino",
@@ -344,7 +348,7 @@ describe("the gaps a run starts from", () => {
       const glass = await variant(tx, lunch, noEn, "Pa gran", { en: "CLIENT-EN Big bread" });
       const doneness = await optionList(tx, "Punt", null);
       const rare = await optionLabel(tx, doneness, "Poc", { ca: "CLIENT-CA Poc" });
-      await extraList(tx, "Salses", null);
+      const sauces = await extraList(tx, "Salses", null);
       const sides = await extraList(tx, "Guarnició", { ca: "CLIENT-CA Guarnició" });
       const [portion] = await tx
         .insert(units)
@@ -378,11 +382,13 @@ describe("the gaps a run starts from", () => {
         [`product:${noEn}`]: ["en"],
         [`product:${noDefault}`]: ["ca"],
         [`product:${spaces}`]: ["es"],
+        [`product:${honey}`]: ["es"],
         [`product:${nameless}`]: ["ca", "es", "en"],
         [`product:${empty}`]: ["ca", "es", "en"],
         [`variant:${glass}`]: ["ca", "es"],
         [`option_list:${doneness}`]: ["ca", "es", "en"],
         [`option_label:${rare}`]: ["es", "en"],
+        [`extra_list:${sauces}`]: ["ca", "es", "en"],
         [`extra_list:${sides}`]: ["es", "en"],
         [`menu:${drinksRoot}`]: ["en"],
         [`section:${mains}`]: ["ca", "es", "en"],
@@ -405,22 +411,22 @@ describe("the gaps a run starts from", () => {
     });
   });
 
-  it("counts a name of tabs or newlines as entered, as the listing does, when the item is blank in another language", async () => {
+  it("treats tabs and newlines as missing text when collecting suggestions", async () => {
     await inVenue(THREE, async (tx, lunch) => {
       const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", es: "\t" });
       const oli = await product(tx, lunch, "Oli", { ca: "\n", es: "CLIENT-ES Aceite" });
       expect(await missingByRef(tx)).toEqual({
-        [`product:${pa}`]: ["en"],
-        [`product:${oli}`]: ["en"],
+        [`product:${pa}`]: ["es", "en"],
+        [`product:${oli}`]: ["ca", "en"],
       });
       const items = await collectSuggestionItems(tx, context, new Set());
       expect(items.map(({ ref, existing, missing }) => ({ ref, existing, missing }))).toEqual(
         inListOrder([
-          { ref: `product:${pa}`, existing: { ca: "CLIENT-CA Pa", es: "\t" }, missing: ["en"] },
+          { ref: `product:${pa}`, existing: { ca: "CLIENT-CA Pa" }, missing: ["es", "en"] },
           {
             ref: `product:${oli}`,
-            existing: { ca: "\n", es: "CLIENT-ES Aceite" },
-            missing: ["en"],
+            existing: { es: "CLIENT-ES Aceite" },
+            missing: ["ca", "en"],
           },
         ]),
       );
@@ -597,7 +603,7 @@ describe("collecting what is missing", () => {
           kind: "unit",
           family: `unit:${racio!.id}`,
           category: null,
-          staffName: "CLIENT-CA Ració",
+          staffName: "Staff unit",
           existing: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
           missing: ["en"],
         },
@@ -630,7 +636,7 @@ describe("collecting what is missing", () => {
       const glass = await variant(tx, lunch, named, "Copa", null);
       const doneness = await optionList(tx, "Punt", null);
       const rare = await optionLabel(tx, doneness, "Poc", {});
-      await extraList(tx, "Salses", null);
+      const sauces = await extraList(tx, "Salses", null);
       const bar = await createCatalogue(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
       const barRoot = await rootOf(tx, bar.id);
       await tx.update(sections).set({ names: {} }).where(eq(sections.id, barRoot));
@@ -656,6 +662,7 @@ describe("collecting what is missing", () => {
           expected("variant", glass, `product:${named}`, "STAFF Copa"),
           expected("option_list", doneness, `option_list:${doneness}`, "STAFF Punt"),
           expected("option_label", rare, `option_list:${doneness}`, "STAFF Poc"),
+          expected("extra_list", sauces, `extra_list:${sauces}`, "STAFF Salses"),
           expected("menu", barRoot, `menu:${barRoot}`, "STAFF Bar"),
           expected("section", mains, `menu:${lunch.rootId}`, "STAFF Plats"),
         ]),
@@ -675,17 +682,23 @@ describe("collecting what is missing", () => {
     });
   });
 
-  it("leaves out an extras list with no customer-facing name and keeps a partly named one", async () => {
+  it("collects absent and partly named extras lists with each missing language", async () => {
     await inVenue(THREE, async (tx) => {
-      await extraList(tx, "Salses", null);
-      await extraList(tx, "Postres", {});
+      const sauces = await extraList(tx, "Salses", null);
+      const desserts = await extraList(tx, "Postres", {});
       const sides = await extraList(tx, "Guarnició", { ca: "CLIENT-CA Guarnició" });
       expect(
         (await collectSuggestionItems(tx, context, new Set())).map(({ ref, missing }) => ({
           ref,
           missing,
         })),
-      ).toEqual([{ ref: `extra_list:${sides}`, missing: ["es", "en"] }]);
+      ).toEqual(
+        inListOrder([
+          { ref: `extra_list:${sauces}`, missing: ["ca", "es", "en"] },
+          { ref: `extra_list:${desserts}`, missing: ["ca", "es", "en"] },
+          { ref: `extra_list:${sides}`, missing: ["es", "en"] },
+        ]),
+      );
     });
   });
 

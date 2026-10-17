@@ -115,7 +115,7 @@ describe("the missing-translations report", () => {
     });
   });
 
-  it("lists something with no customer-facing name under every language but the default", async () => {
+  it("lists something with no customer-facing name under every enabled language", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
@@ -124,11 +124,11 @@ describe("the missing-translations report", () => {
       const spanish = await report(tx);
       expect(spanish("ca")).toEqual([listed]);
       expect(spanish("en")).toEqual([listed]);
-      expect(spanish("es")).toEqual([]);
+      expect(spanish("es")).toEqual([listed]);
       const catalan = await report(tx, CATALAN_DEFAULT);
       expect(catalan("es")).toEqual([listed]);
       expect(catalan("en")).toEqual([listed]);
-      expect(catalan("ca")).toEqual([]);
+      expect(catalan("ca")).toEqual([listed]);
     });
   });
 
@@ -146,7 +146,7 @@ describe("the missing-translations report", () => {
     });
   });
 
-  it("lists each kind with what holds it, and leaves out a removed variant and an extras list with no customer-facing name", async () => {
+  it("lists each kind with what holds it, including an unnamed extras list, and leaves out a removed variant", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
@@ -197,7 +197,7 @@ describe("the missing-translations report", () => {
         .insert(extraLists)
         .values({ name: "STAFF Sides", customerName: { es: "CLIENT-ES Guarnición" } })
         .returning({ id: extraLists.id });
-      await tx.insert(extraLists).values({ name: "STAFF Sauces" });
+      const [sauces] = await tx.insert(extraLists).values({ name: "STAFF Sauces" }).returning();
       const [section] = await tx
         .insert(sections)
         .values({
@@ -252,6 +252,7 @@ describe("the missing-translations report", () => {
           reason: "partial",
           parent: { id: list!.id, name: "STAFF Doneness" },
         },
+        { kind: "extra_list", id: sauces!.id, name: "STAFF Sauces", reason: "absent" },
         { kind: "extra_list", id: extras!.id, name: "STAFF Sides", reason: "partial" },
         { kind: "menu", id: details!.root, name: "Lunch", reason: "partial", parent: menuParent },
         {
@@ -261,7 +262,7 @@ describe("the missing-translations report", () => {
           reason: "partial",
           parent: menuParent,
         },
-        { kind: "unit", id: unit!.id, name: "ración", reason: "partial" },
+        { kind: "unit", id: unit!.id, name: "Staff unit", reason: "partial" },
       ]);
       expect(english.map((gap) => gap.id)).not.toContain(large!.id);
     });
@@ -319,7 +320,7 @@ describe("the missing-translations report", () => {
           reason: "partial",
           parent: lunchParent,
         },
-        { kind: "unit", id: unit!.id, name: "ración", reason: "partial" },
+        { kind: "unit", id: unit!.id, name: "Staff unit", reason: "partial" },
       ]);
       expect(gaps("es")).toEqual([]);
       expect(gaps("en").map((gap) => gap.kind)).toEqual(["section", "unit"]);
@@ -361,7 +362,7 @@ describe("the missing-translations report", () => {
     });
   });
 
-  it("names a unit with no text in the default language by the text it has", async () => {
+  it("names a unit with no text in the default language by its staff name", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, SPANISH_DEFAULT);
       const [unit] = await tx
@@ -375,12 +376,12 @@ describe("the missing-translations report", () => {
         })
         .returning({ id: units.id });
       expect((await report(tx))("es")).toEqual([
-        { kind: "unit", id: unit!.id, name: "racció", reason: "partial" },
+        { kind: "unit", id: unit!.id, name: "Staff unit", reason: "partial" },
       ]);
     });
   });
 
-  it("lists a unit whose name has no text at all with an empty name", async () => {
+  it("lists a unit whose name has no text at all with its staff name", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, SPANISH_DEFAULT);
       const [unit] = await tx
@@ -394,7 +395,7 @@ describe("the missing-translations report", () => {
         })
         .returning({ id: units.id });
       expect((await report(tx))("es")).toEqual([
-        { kind: "unit", id: unit!.id, name: "", reason: "partial" },
+        { kind: "unit", id: unit!.id, name: "Staff unit", reason: "partial" },
       ]);
     });
   });
@@ -426,13 +427,15 @@ describe("the missing-translations report", () => {
     });
   });
 
-  it("leaves the default-change check's own list as it was: no customer-facing name is still no gap there", async () => {
+  it("keeps the shared gap read aligned with the report for an absent name", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const product = await bread(tx, menu.id, null);
       expect((await report(tx))("ca").map((gap) => gap.id)).toEqual([product.id]);
-      expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+      expect(await listContentTranslationGaps(tx, "ca")).toEqual([
+        { kind: "product", id: product.id },
+      ]);
     });
   });
 
@@ -501,6 +504,7 @@ describe("the missing-translations report", () => {
           "es",
         );
         expect(await listContentTranslationGaps(tx, "ca")).toEqual([
+          { kind: "product", id: product.id },
           { kind: "variant", id: variant!.id, productId: product.id },
         ]);
         await tx.update(products).set({ active: false }).where(eq(products.id, product.id));

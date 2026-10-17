@@ -38,7 +38,10 @@ describe("site content languages", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      const catalogue = await createCatalogue(tx, {
+        name: "Bar",
+        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
+      });
       const unit = await createUnit(
         tx,
         {
@@ -46,16 +49,15 @@ describe("site content languages", () => {
           staffAbbreviation: "su",
           name: { en: "each", fr: "unité" },
           precision: 0,
-          abbreviation: { en: "u" },
+          abbreviation: { en: "u", fr: "u" },
         },
         "en",
       );
-      // The product has only a staff name (no customer name), so it never gaps; the variant carries a
-      // partial customer name and is the sole gap until it is completed.
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT Café" },
         description: { en: "Freshly roasted" },
         unitPrice: "9.00",
         unitId: unit.id,
@@ -96,11 +98,15 @@ describe("site content languages", () => {
     await seedTenant(suite.db);
     const { productId, kept } = await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const catalogue = await createCatalogue(tx, { name: "Bar" });
+      const catalogue = await createCatalogue(tx, {
+        name: "Bar",
+        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
+      });
       const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
+        customerName: { en: "CLIENT Coffee", fr: "CLIENT Café" },
         unitPrice: "9.00",
         pricingUnit: "each",
         vatClass: "reduced",
@@ -147,7 +153,7 @@ describe("site content languages", () => {
       expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
     });
   });
-  it("counts a partial customer name as a gap but a blank one as none", async () => {
+  it("counts partial and absent customer names as gaps without copying fallback", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Bar" });
@@ -181,7 +187,6 @@ describe("site content languages", () => {
         customerName: { en: "Fresh Coffee" },
         unitPrice: "2.00",
       });
-      // A variant with no customer name → not a gap.
       const variants = await setProductVariants(
         tx,
         partial.id,
@@ -207,9 +212,9 @@ describe("site content languages", () => {
       );
       const esGaps = await listContentTranslationGaps(tx, "es");
       expect(esGaps).toContainEqual({ kind: "product", id: partial.id });
-      expect(esGaps).not.toContainEqual({ kind: "product", id: plain.id });
-      for (const v of variants) expect(esGaps).not.toContainEqual({ kind: "variant", id: v.id });
-      // In en, even the partial customer name is complete → no product/variant gap.
+      expect(esGaps).toContainEqual({ kind: "product", id: plain.id });
+      for (const v of variants)
+        expect(esGaps).toContainEqual({ kind: "variant", id: v.id, productId: partial.id });
       const enGaps = await listContentTranslationGaps(tx, "en");
       expect(enGaps).not.toContainEqual({ kind: "product", id: partial.id });
     });
@@ -255,9 +260,8 @@ describe("site content languages", () => {
 
       expect(gaps).toContainEqual({ kind: "option_list", id: named });
       expect(gaps).toContainEqual({ kind: "option_label", id: namedLabel });
-      // Both names are optional and fall back to the staff name, so a wholly-absent one is no gap.
-      expect(gaps).not.toContainEqual({ kind: "option_list", id: plain });
-      expect(gaps).not.toContainEqual({ kind: "option_label", id: plainLabel });
+      expect(gaps).toContainEqual({ kind: "option_list", id: plain });
+      expect(gaps).toContainEqual({ kind: "option_label", id: plainLabel });
     });
   });
 
@@ -277,14 +281,12 @@ describe("site content languages", () => {
       const gaps = await listContentTranslationGaps(tx, "fr");
 
       expect(gaps).toContainEqual({ kind: "extra_list", id: named });
-      // The customer name is optional and falls back to the staff `name`, so a wholly-absent one —
-      // null or an empty map — is no gap, the same split the option kinds above make.
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain });
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank });
+      expect(gaps).toContainEqual({ kind: "extra_list", id: plain });
+      expect(gaps).toContainEqual({ kind: "extra_list", id: blank });
     });
   });
 
-  it("reports a menu section's partly filled customer names as a gap, and an empty map as none", async () => {
+  it("reports partial and empty section maps, leaving out an unmatched menu root", async () => {
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Lunch" });
       const section = async (
@@ -308,11 +310,12 @@ describe("site content languages", () => {
       const root = await section({ es: "Carta" }, "menu_root");
 
       const gaps = await listContentTranslationGaps(tx, "en");
-
+      const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menu.id));
+      expect(gaps).toContainEqual({ kind: "menu_section", id: details!.rootSectionId });
       expect(gaps).toContainEqual({ kind: "menu_section", id: spanishOnly });
-      expect(gaps).not.toContainEqual({ kind: "menu_section", id: none });
+      expect(gaps).toContainEqual({ kind: "menu_section", id: none });
       expect(gaps).not.toContainEqual({ kind: "menu_section", id: both });
-      expect(gaps).toContainEqual({ kind: "menu_section", id: root });
+      expect(gaps).not.toContainEqual({ kind: "menu_section", id: root });
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
@@ -352,21 +355,24 @@ describe("site content languages", () => {
       await tx.update(sections).set({ names: drinksNames }).where(eq(sections.id, drinks));
       const lunchRoot = await rootOf(tx, lunch.id);
       const member = await addMember(tx, lunchRoot, { kind: "section", sectionId: drinks });
-      return { lunchRoot, member: member.id };
+      return { lunchRoot, member: member.id, drinksRoot: drinks };
     }
 
     it("keeps folder gaps visible after selecting an incomplete default", async () => {
       await withTransaction(suite.db, async (tx) => {
-        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        const { lunchRoot, member, drinksRoot } = await lunchIncludingDrinks(tx, {});
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
           overrides: { names: { en: "FOLDER-EN Bar" } },
         });
 
         expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
           { kind: "menu_include", id: member },
         ]);
-        expect(await listContentTranslationGaps(tx, "en")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "en")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
+        ]);
         await expect(
           writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
         ).resolves.toBeUndefined();
@@ -375,6 +381,7 @@ describe("site content languages", () => {
           languages: ["es", "en"],
         });
         expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
           { kind: "menu_include", id: member },
         ]);
 
@@ -389,7 +396,7 @@ describe("site content languages", () => {
 
     it("still counts the fixed names while the include shows its sections directly", async () => {
       await withTransaction(suite.db, async (tx) => {
-        const { lunchRoot, member } = await lunchIncludingDrinks(tx, {});
+        const { lunchRoot, member, drinksRoot } = await lunchIncludingDrinks(tx, {});
         await setIncludeFolder(tx, lunchRoot, member, {
           showAsFolder: true,
           overrides: { names: { en: "FOLDER-EN Bar" } },
@@ -397,6 +404,7 @@ describe("site content languages", () => {
         await setIncludeFolder(tx, lunchRoot, member, { showAsFolder: false });
 
         expect(await listContentTranslationGaps(tx, "es")).toEqual([
+          { kind: "menu_section", id: drinksRoot },
           { kind: "menu_include", id: member },
         ]);
       });

@@ -24,7 +24,7 @@ describe("stored Valencian content", () => {
           staffName: "Staff unit",
           staffAbbreviation: "su",
           name: { es: "Spanish", ca: "Catalan", [valencian]: "Valencian" },
-          abbreviation: { es: "u" },
+          abbreviation: { es: "u", ca: "u", [valencian]: "u" },
           precision: 0,
         })
         .returning()

@@ -65,9 +65,8 @@ export function isLiveTarget(entry: ResolvedTranslationTarget): entry is LiveTar
   );
 }
 
-/** Blank as the listing judges a stored name: SQLite's one-argument `trim` removes spaces only. */
 export function blankName(text: string | null | undefined): boolean {
-  return /^ *$/.test(text ?? "");
+  return !(text ?? "").trim();
 }
 
 function fits(text: string): boolean {

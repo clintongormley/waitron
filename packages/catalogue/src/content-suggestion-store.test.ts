@@ -179,7 +179,7 @@ it("a name entered during the job is not overwritten or suggested", async () => 
   expect((await app(allJobs))[0]).toMatchObject({ dropped: 1, done: 1, failed: 2 });
 });
 
-it("counts a name of tabs saved during the job as entered, as the listing does", async () => {
+it("accepts a suggestion over tabs saved during the job because whitespace remains a gap", async () => {
   const venue = await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
   await app(async (tx) => {
@@ -208,14 +208,8 @@ it("counts a name of tabs saved during the job as entered, as the listing does",
   );
   expect(await app(suggestionRows)).toEqual(
     inOrder([
+      text(venue.bread, "es", "CLIENT-ES Pan"),
       text(venue.bread, "en", "CLIENT-EN Bread"),
-      {
-        itemId: venue.cheese,
-        language: "es",
-        text: null,
-        placeholder: false,
-        fix: { field: "es", wrong: "Queso", right: "Quesos" },
-      },
       text(venue.cheese, "en", "CLIENT-EN Cheese"),
     ]),
   );

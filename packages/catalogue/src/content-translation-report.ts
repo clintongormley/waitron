@@ -1,154 +1,53 @@
 import type { Transaction } from "@waitron/db";
-import { resolveContentText, type ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { TRANSLATION_GAP_KINDS as KIND_ORDER } from "./content-translation-kinds.js";
-import { contentTranslationGapsIn, readContentTranslationCandidates } from "./content-languages.js";
+import { translationGapsQuery } from "./content-translation-candidates.js";
 import type {
   LanguageTranslationGaps,
+  LanguageTranslationGapCount,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
 } from "./content-translation-report-types.js";
 export type {
   LanguageTranslationGaps,
+  LanguageTranslationGapCount,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
 } from "./content-translation-report-types.js";
 
-/** One row of a table the report names; `absent` uses the gap query's own test, null or `'{}'`. */
-type NamedRow = {
-  source:
-    | "product"
-    | "option_list"
-    | "option_label"
-    | "extra_list"
-    | "section"
-    | "menu"
-    | "included_menu"
-    | "unit";
+type GapRow = {
+  language: string;
+  kind: TranslationGapKind;
   id: string;
   name: string;
-  /** A product's parent product, an option's list, a section's menu, an include's including menu. */
   owner: string | null;
-  active: number;
-  absent: number;
+  owner_name: string | null;
+  reason: TranslationGapReason;
 };
 
-/**
- * For each enabled language, in the configuration's order, what has no customer-facing name in it.
- * A `partial` gap is one {@link listContentTranslationGaps} reports for that language; a
- * non-default language also lists what has no customer-facing name at all
- * (`absent`), which shows the staff name there. An extras list's own name reaches no order or
- * receipt, so an absent one is never listed, and a unit has no staff name to stand in for its own.
- * An include's folder is never `absent`: fixing no name, it shows the included menu's own, listed
- * under that menu. Left out: a deleted product, a removed variant or any variant of a deleted product, a switched-off
- * options or extras list or its options, or what a switched-off menu owns.
- */
 export async function listTranslationGapReport(
   tx: Transaction,
   config: ContentLanguages,
 ): Promise<LanguageTranslationGaps[]> {
-  const candidates = await readContentTranslationCandidates(tx);
-  const named = await tx.execute<NamedRow>(sql`
-    select 'product' as source, id, name, parent_id as owner, active,
-        (customer_name is null or customer_name = '{}') as absent
-      from products
-    union all select 'option_list', id, name, null, active,
-        (customer_name is null or customer_name = '{}') from option_lists
-    union all select 'option_label', id, name, list_id, 1,
-        (customer_name is null or customer_name = '{}') from option_labels
-    union all select 'extra_list', id, name, null, active,
-        (customer_name is null or customer_name = '{}') from extra_lists
-    union all select case role when 'menu_root' then 'menu' else 'section' end, id, internal_name,
-        owner_menu_id, 1, names = '{}'
-      from sections where role in ('section', 'menu_root')
-    union all select 'included_menu', m.id, s.internal_name, l.owner_menu_id, 1, 0
-      from section_members m join sections s on s.id = m.child_section_id
-        join sections l on l.id = m.section_id
-      where s.role = 'menu_root'
-    union all select 'catalogue', id, name, null, active, 0 from catalogues
-    union all select 'unit', id, name, null, 1, 0 from units
-  `);
-  const rows = new Map<string, NamedRow>();
-  for (const row of named.rows) rows.set(`${row.source}:${row.id}`, row);
-  const row = (source: string, id: string | null) => rows.get(`${source}:${id}`);
-  const menuOf = (section: NamedRow) => row("catalogue", section.owner)!;
-
-  const gap = (
-    kind: TranslationGapKind,
-    id: string,
-    reason: TranslationGapReason,
-  ): TranslationGap | null => {
-    switch (kind) {
-      case "product": {
-        const product = row("product", id)!;
-        return product.active ? { kind, id, name: product.name, reason } : null;
-      }
-      case "variant": {
-        const variant = row("product", id)!;
-        const parent = row("product", variant.owner)!;
-        return variant.active && parent.active
-          ? { kind, id, name: variant.name, reason, parent: { id: parent.id, name: parent.name } }
-          : null;
-      }
-      case "option_list":
-      case "extra_list": {
-        const list = row(kind, id)!;
-        return list.active ? { kind, id, name: list.name, reason } : null;
-      }
-      case "option_label": {
-        const label = row("option_label", id)!;
-        const list = row("option_list", label.owner)!;
-        return list.active
-          ? { kind, id, name: label.name, reason, parent: { id: list.id, name: list.name } }
-          : null;
-      }
-      case "menu":
-      case "section":
-      case "included_menu": {
-        const section = row(kind, id)!;
-        const menu = menuOf(section);
-        return menu.active
-          ? { kind, id, name: section.name, reason, parent: { id: menu.id, name: menu.name } }
-          : null;
-      }
-      case "unit": {
-        const names = JSON.parse(row("unit", id)!.name) as Record<string, string>;
-        const name =
-          resolveContentText(names, config.defaultLanguage, config.defaultLanguage) ||
-          (Object.values(names).find((value) => value.trim() !== "") ?? "");
-        return { kind, id, name, reason };
-      }
-    }
-  };
-
-  const absent = named.rows.flatMap((entry): { kind: TranslationGapKind; id: string }[] => {
-    if (!entry.absent) return [];
-    switch (entry.source) {
-      case "product":
-        return [{ kind: entry.owner === null ? "product" : "variant", id: entry.id }];
-      case "option_list":
-      case "option_label":
-      case "menu":
-      case "section":
-        return [{ kind: entry.source, id: entry.id }];
-      default:
-        return [];
-    }
-  });
-
+  const result = await tx.execute<GapRow>(sql`${translationGapsQuery(config)}
+    select language, kind, id, name, owner, owner_name,
+      case when kind not in ('unit', 'included_menu') and (names is null or names = '{}')
+        then 'absent' else 'partial' end as reason from gaps`);
   return config.languages.map((language) => {
-    const partial = contentTranslationGapsIn(candidates, language).map(({ kind, id }) =>
-      gap(candidateKind(kind, id, row), id, "partial"),
-    );
-    const missing =
-      language === config.defaultLanguage
-        ? []
-        : absent.map(({ kind, id }) => gap(kind, id, "absent"));
-    const gaps = [...partial, ...missing].filter(
-      (entry): entry is TranslationGap => entry !== null,
-    );
+    const gaps: TranslationGap[] = result.rows
+      .filter((row) => row.language === language)
+      .map(({ kind, id, name, reason, owner, owner_name }) => ({
+        kind,
+        id,
+        name,
+        reason,
+        ...(owner !== null && kind !== "product"
+          ? { parent: { id: owner, name: owner_name ?? "" } }
+          : {}),
+      }));
     gaps.sort(
       (a, b) =>
         KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
@@ -159,15 +58,19 @@ export async function listTranslationGapReport(
   });
 }
 
-/** The gap query names a menu's root and its sections alike `menu_section`. */
-function candidateKind(
-  kind: string,
-  id: string,
-  row: (source: string, id: string) => NamedRow | undefined,
-): TranslationGapKind {
-  if (kind === "menu_section") return row("menu", id) ? "menu" : "section";
-  if (kind === "menu_include") return "included_menu";
-  return kind as TranslationGapKind;
+export async function listTranslationGapCounts(
+  tx: Transaction,
+  config: ContentLanguages,
+): Promise<LanguageTranslationGapCount[]> {
+  const result = await tx.execute<{
+    language: string;
+    count: number;
+  }>(sql`${translationGapsQuery(config)}
+    select enabled.value as language, count(gaps.id) as count
+    from json_each(${JSON.stringify(config.languages)}) as enabled
+      left join gaps on gaps.language = enabled.value
+    group by enabled.key order by enabled.key`);
+  return result.rows;
 }
 
 function compare(a: string, b: string): number {

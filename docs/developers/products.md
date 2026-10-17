@@ -283,63 +283,49 @@ name or the wrong one. Cost: a report reading the diner's wording, recorded abov
 
 ## The translation gap report
 
-`listContentTranslationGaps` (`packages/catalogue/src/content-languages.ts`) is what refuses to let
-you switch your default content language while text is still missing. A product's and a variant's
-customer-facing name is **optional** — absent, what is shown is the staff name
-(`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`) — so a wholly absent
-one (`null` or `{}`) is never a gap. Only a partly filled one is: fill in Spanish and leave English
-blank, and that is a gap, because you clearly meant to translate it and stopped. An options list's,
-an options label's and an extras list's customer-facing name is optional in the same way and is left
-out of the report for the same reason. Two of those three now reach a surface: an options list's and
-an options label's customer-facing name are what the printed receipt puts under the dish
-(`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`), which is also where
-the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
-name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
-PRODUCT's names, and nothing copies the list's name onto it. A menu section's customer-facing names
-(`sections.names`, kind `menu_section`) are optional too, and only a partly filled map is reported.
-The report reads owned sections and menu roots; a menu's customer-facing names are its root's. It
-also reads each include of a menu that fixes a customer-facing name of its own (kind `menu_include`,
-listed as `included_menu`, "Included menu folder"): the names that include's folder shows, which are
-the included menu's own names with the ones the include fixes laid over them
-(`readContentTranslationCandidates`, `packages/catalogue/src/content-languages.ts`). An include that
-fixes no name yields no row, because `json_patch` with a null patch answers null, so a gap in the
-names its folder shows is reported on the included menu's own row. As for a section, only a
-partly filled map is a gap. An include is counted while it shows its sections directly too, because
-switching the folder back on shows those names again. Its row shows the included menu root's staff
-name, under the menu that includes it. One kind the query reports, `unit`, has no optional
-customer-facing name to fall back from and stays required. A category has one plain internal name
-and is not in the report. An options list contributes two of the report's kinds and not one, both
-of them in the optional group: the list's own name (`option_list`) and each of its labels
-(`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
-second one: each of its items names a product and carries no name of its own, so `extra_list_items`
-holds no map for the report to read.
+When you leave a translation blank, it remains a gap even if a staff name makes the item
+readable. The report includes every enabled language, including the default. A product with
+staff name “STAFF Product” and no customer-facing text appears once under each enabled language.
+Null, empty, whitespace-only and disabled-language-only maps all leave those languages missing.
+Changing the default remains independent of completeness.
 
-A content-language save that leaves out a language Waitron keeps enabled for the venue's area (its
-area's `requiredContentLocales` in the country pack) is refused (`content.language_required`,
-`writeContentLanguages` in `packages/catalogue/src/content-languages.ts`), but nothing makes that
-language's text complete. On the dashboard's Content languages page, **Edit translations** in a
-language's row menu opens the translations dialog (headed **Edit translations** and the language's name), which reads its rows 50 at a time
-through `GET /management-api/content-translations/:language` (`listTranslationTargets`,
-`packages/catalogue/src/content-translation-targets.ts`). The count on each language's row of the
-page comes from the gap report instead (`listTranslationGapReport`,
-`packages/catalogue/src/content-translation-report.ts`, read through
-`GET /management-api/content-translation-gaps`). For each enabled language the dialog lists the report's own
-gaps for that language, marked **Partly translated** (only these stop that language becoming the
-default), and, for every language except the default, what has no customer-facing name at all,
-marked **No customer-facing name**, because there the staff name is shown in its place (an absent
-extras list name is never listed: it reaches no receipt). Under the default language an absent name
-is not listed, because the staff name stands as that language's text. Each row shows the staff name
-— a unit, which has none, shows its name in the default language, or any text it has — and links to
-the screen that edits it. Both the list and the default-change check leave out an archived product, an archived variant and every
-variant of an archived product, a disabled options or extras list and its options, and what a
-switched-off menu owns. Image names (the media module's contribution) are checked on a change
-of default but are not in the list.
+The report covers products, variants, options lists, options labels, extras lists, menu roots,
+owned sections, included-menu folders and units. A unit is missing a language when either its
+name or its abbreviation is blank, and counts once when both are missing. Its row uses its
+separate staff name. The staff pair never becomes translated text. Categories carry a plain
+staff name and have no translated field to report.
+
+An included-menu folder with no name override leaves the missing text on the included menu's
+root row. With overrides, its own entries replace the root's entries in those languages, and
+other languages still inherit their text. Clearing an override through the normal folder editor
+removes that entry and reveals the root's text. The include remains eligible while it shows
+sections directly, because it can show its folder again.
+
+`content-translation-candidates.ts` shares the ownership and activity query across the full
+report, count summary and translation target reads. Discovery excludes archived products and
+variants, variants under archived products, disabled lists and their labels, and sections or
+includes whose owners, roles or root identities do not match. Direct translation reads still
+allow archived products and variants. The stored text's blank check uses JavaScript's trim
+character set in SQL as well, so tabs and nonbreaking spaces remain missing text. Translate all
+uses that same whitespace rule when collecting and storing name suggestions.
+
+`listTranslationGapReport` returns the full per-language gap lists, with staff names and parent
+identities. `listTranslationGapCounts` returns only `{language, count}` rows, including zero counts,
+in one database read. Both use the same gap query and count an item at most once per language.
+`listContentTranslationGaps` retains its catalogue-specific identifiers and a variant's product id
+for its internal callers, with the same discovery rules.
+
+The dashboard's Content languages page currently reads the full report through
+`GET /management-api/content-translation-gaps`. Edit translations opens a single-language dialog
+and reads its rows 50 at a time through `GET /management-api/content-translations/:language`.
+These rows now include absent default-language names and absent extras-list names. The approved
+[A682 plan](../superpowers/plans/2026-10-17-a682-translations.md) still has to replace those HTTP
+reads with count summaries and bounded multilingual cell projections, then replace the dialog.
 
 Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled
 language in which an item has no customer-facing text, the default language included. Its
 results are suggestions: they fill empty fields as drafts and reach no diner until someone saves
-them. A default-language suggestion for an item with no customer-facing name in any language is
-shown as a row of its own, although the dialog's own default-language list still leaves such a name out.
+them. Units receive suggestions for their names; abbreviations remain manual.
 
 ## Content languages per region
 
