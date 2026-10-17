@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -23,7 +24,7 @@ import { moveGuests } from "./testing/table-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { splitPartyBill } from "./testing/serve-line.js";
-import { addTabRound, createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order.js";
 import "./errors.js";
 
 const suite = useVenueDb({

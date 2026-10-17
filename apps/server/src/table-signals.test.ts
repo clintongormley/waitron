@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
@@ -54,7 +55,6 @@ import {
 import { serveLine } from "./testing/serve-line.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import {
-  addTabRound,
   advanceTicketItem,
   listHeldOrders,
   markServed,

@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -15,8 +16,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { createCourse, listCourses, requireCourse, updateCourse } from "./kitchen.js";
 import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
-
-import { addTabRound } from "./working-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

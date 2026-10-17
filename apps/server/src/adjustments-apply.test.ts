@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   recallLines,
@@ -50,7 +51,6 @@ import {
   type TillSaleResult,
 } from "./till-sale.js";
 import {
-  addTabRound,
   advanceTicketItem,
   parkOrder,
   readOrderRevision,

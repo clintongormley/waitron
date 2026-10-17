@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -36,7 +37,7 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   recordTillSaleOrchestration as recordTillSale,
 } from "./till-sale.js";
-import { addTabRound, parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

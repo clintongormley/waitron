@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
@@ -29,7 +30,7 @@ import {
 } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { addTabRound, fireCourse, listExpoQueue, parkOrder } from "./working-order.js";
+import { fireCourse, listExpoQueue, parkOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";

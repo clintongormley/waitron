@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { describe, expect, it } from "vitest";
 import { and, eq, isNotNull } from "drizzle-orm";
@@ -36,7 +37,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 
 import { createTable } from "./testing/live-table.js";
-import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
+import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";

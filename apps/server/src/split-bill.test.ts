@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
 import { randomUUID } from "node:crypto";
@@ -35,7 +36,6 @@ import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-confi
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import {
-  addTabRound,
   advanceTicketItem,
   createOpenOrder,
   listExpoQueue,

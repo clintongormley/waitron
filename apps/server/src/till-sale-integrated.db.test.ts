@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -66,7 +67,6 @@ import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.j
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
-  addTabRound,
   createOpenOrder,
   listStationQueue,
   listTablesWithState,

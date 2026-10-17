@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -30,7 +31,7 @@ import {
 } from "./testing/split-extras-venue.js";
 import { routeCategoryTo } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { addTabRound, fireLines, unsentDishLines } from "./working-order.js";
+import { fireLines, unsentDishLines } from "./working-order.js";
 import { routingCells, setRoutingCell } from "@waitron/venue-service";
 import { setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";

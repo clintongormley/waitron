@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -19,7 +21,7 @@ import {
   type BillVenue,
   partyRevisionOf,
 } from "./testing/bill-venue.js";
-import { addTabRound } from "./working-order.js";
+
 import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -919,6 +921,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       venue.cookie,
       "DELETE",
       `/api/working-orders/${billId}`,
+      { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)) },
     );
     const otherLines = await send(
       venue.app,
@@ -931,7 +934,11 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       venue.cookie,
       "PUT",
       `/api/working-orders/${otherBill}/lines/1`,
-      { revision: otherLines.json.revision, note: "sin espuma" },
+      {
+        revision: otherLines.json.revision,
+        note: "sin espuma",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, otherBill)),
+      },
     );
     card.release();
     await card.answer;

@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { recallLines } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import { cancelLine } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
-import { addTabRound } from "./working-order.js";
+
 import "./errors.js";
 
 const suite = useVenueDb({

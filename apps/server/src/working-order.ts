@@ -1,4 +1,5 @@
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
+import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   readLineCancellations,
@@ -2731,10 +2732,11 @@ export async function addTabRound(
   cfg: TillConfig,
   tabId: string,
   lines: TabRoundLine[],
-  // Written on every row the round inserts, extras children included.
-  stamp: { groupId?: string; creditedTo?: string } = {},
+  stamp: { groupId?: string; creditedTo?: string } & OrderEditAuthority,
 ): Promise<void> {
-  const round = await priceTabRound(tx, cfg, tabId, lines);
+  await assertPartyBillOpen(tx, cfg, tabId);
+  await requireOrderBillEditor(tx, tabId, stamp);
+  const round = await priceTabRound(tx, cfg, tabId, lines, "checked");
   const appendedLines = await insertTabRound(
     tx,
     cfg,
@@ -6357,6 +6359,7 @@ export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
+  authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   void cfg;
@@ -6372,9 +6375,11 @@ export async function abandonHeldOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await requireOrderBillEditor(tx, id, authority);
     await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
     await refusePaymentInFlight(tx, [id]);
     await refuseBillHoldingMoney(tx, [id]);
+    await assertBillHasNoUnsent(tx, id);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
     await captureOrderEdit(

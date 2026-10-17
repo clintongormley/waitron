@@ -1,3 +1,4 @@
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
@@ -95,7 +96,7 @@ import {
   reprintSale,
 } from "./till-sale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import { abandonHeldOrder, moveOrderLines } from "./working-order.js";
+import { moveOrderLines } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";

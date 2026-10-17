@@ -1,3 +1,4 @@
+import { addTabRound } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -38,7 +39,7 @@ import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
-import { addTabRound, listTablesWithState, parkOrder } from "../working-order.js";
+import { listTablesWithState, parkOrder } from "../working-order.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 import { deviceRequestCfg, openTillSession } from "./session-device.js";

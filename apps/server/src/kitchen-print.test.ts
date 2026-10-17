@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
@@ -40,7 +41,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
-import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
+import { createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import {
   listStationNotices,
   writeKitchenTicketGrouping,

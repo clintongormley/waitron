@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
@@ -25,7 +26,6 @@ import {
 } from "./kitchen.js";
 
 import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { addTabRound } from "./working-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

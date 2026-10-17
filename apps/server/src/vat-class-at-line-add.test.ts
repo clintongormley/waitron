@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
@@ -52,7 +53,6 @@ import {
 } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import {
-  addTabRound,
   createOpenOrder,
   parkOrder,
   priceStoredOrder,

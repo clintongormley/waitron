@@ -1,3 +1,4 @@
+import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
   sendLines,
@@ -59,8 +60,6 @@ import {
 } from "@waitron/shared";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
-  abandonHeldOrder,
-  addTabRound,
   advanceTicket,
   advanceTicketItem,
   bumpCourseReady,

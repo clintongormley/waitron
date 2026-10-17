@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -16,7 +17,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { openTillSession } from "./testing/session-device.js";
-import { addTabRound } from "./working-order.js";
+
 import "./errors.js";
 import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
 

@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -43,7 +44,6 @@ import {
   readTabLines,
   listExpoQueue,
   advanceTicketItem,
-  addTabRound,
 } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
@@ -66,6 +66,7 @@ it("keeps retained draft, group, course and ready station history through manage
     const createdCourse = await createCourse(tx, v.cfg, {
       name: "Recorded dessert",
       displayOrder: 3,
+      heldUntilFired: true,
     });
     const station = {
       ...(await createStation(tx, v.cfg, { name: "Recorded pastry" })),
@@ -162,7 +163,12 @@ it("keeps retained draft, group, course and ready station history through manage
   expect(retained!.lines).toEqual([
     {
       ...draft.lines[0],
-      course: { id: course.id, name: course.name, displayOrder: course.displayOrder },
+      course: {
+        id: course.id,
+        name: course.name,
+        displayOrder: course.displayOrder,
+        heldUntilFired: true,
+      },
     },
   ]);
   const submitted = await inTx(v, async (tx) =>

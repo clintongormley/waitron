@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { recallLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -51,7 +52,7 @@ import {
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
 import { seatTable } from "./parties.js";
-import { addTabRound, markGroupServed, markServed, unmarkServed } from "./working-order.js";
+import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";

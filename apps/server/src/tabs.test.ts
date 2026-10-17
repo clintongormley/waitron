@@ -1,3 +1,4 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
   sendLines,
@@ -53,7 +54,6 @@ import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-l
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import { createTable } from "./testing/live-table.js";
 import {
-  addTabRound,
   advanceTicketItem,
   createOpenOrder,
   fireCourse,

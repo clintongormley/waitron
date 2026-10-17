@@ -11,6 +11,8 @@ import {
   setOrderReceiptLanguage as language,
   setOrderInvoiceChoice as invoice,
   placeOrder as place,
+  addTabRound as add,
+  abandonHeldOrder as abandon,
 } from "../working-order.js";
 import type { OrderAttendance, UpdateHeldOrderRequest } from "../working-order.js";
 
@@ -163,4 +165,24 @@ export async function placeOrder(
 ) {
   const observed = await withTransaction(deps.db, (tx) => authority(tx, id, operatorId));
   return place(deps, cfg, id, operatorId, observed.expectedEdit);
+}
+
+export async function addTabRound(
+  tx: Transaction,
+  cfg: Parameters<typeof add>[1],
+  id: string,
+  lines: Parameters<typeof add>[3],
+  stamp: { groupId?: string; creditedTo?: string } = {},
+) {
+  return add(tx, cfg, id, lines, { ...stamp, ...(await authority(tx, id, stamp.creditedTo)) });
+}
+
+export async function abandonHeldOrder(
+  deps: Parameters<typeof abandon>[0],
+  cfg: Parameters<typeof abandon>[1],
+  id: string,
+  attendance?: Parameters<typeof abandon>[4],
+) {
+  const observed = await withTransaction(deps.db, (tx) => authority(tx, id, attendance?.personId));
+  return abandon(deps, cfg, id, observed, attendance);
 }

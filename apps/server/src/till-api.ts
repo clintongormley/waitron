@@ -2030,10 +2030,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ expectedEdit: BillEditExpected | null }>(c);
       await abandonHeldOrder(
         { db: deps.db },
         cfg,
         id,
+        { operatorId: session.personId, expectedEdit: body.expectedEdit },
         deps.attendance === undefined
           ? undefined
           : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },

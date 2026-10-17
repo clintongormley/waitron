@@ -1,3 +1,4 @@
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -7,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, parties, saleLines, sales, workingOrders } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order.js";
 
 import { placeGroups, submitGroups } from "./testing/group-submit-fixture.js";
 import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";

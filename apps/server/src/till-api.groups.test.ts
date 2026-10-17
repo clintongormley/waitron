@@ -1,3 +1,5 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
 import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
@@ -22,7 +24,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { addTabRound } from "./working-order.js";
+
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
@@ -904,6 +906,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
 
     const refused = await call("POST", `/api/working-orders/${party.tabId}/lines/send`, {
       lineNos: [lineNo],
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(refused.status).toBe(409);
@@ -1012,6 +1015,7 @@ describe("the line-editing routes act as the session's operator", () => {
     const changed = await call("PUT", `/api/working-orders/${party.tabId}/lines/${cana.lineNo}`, {
       quantity: "2",
       revision: tab.revision,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(changed.status).toBe(200);
@@ -1036,6 +1040,7 @@ describe("the line-editing routes act as the session's operator", () => {
       lines: [...kept, dish("Pulpo")],
       revision: tab.revision,
       operatorId: venue.adminId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
     });
 
     expect(saved.status).toBe(200);

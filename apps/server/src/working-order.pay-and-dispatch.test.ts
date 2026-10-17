@@ -1,3 +1,4 @@
+import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
   sendLines,
@@ -53,8 +54,6 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
-  abandonHeldOrder,
-  addTabRound,
   advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
