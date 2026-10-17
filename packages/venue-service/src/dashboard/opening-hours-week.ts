@@ -51,6 +51,9 @@ function titleCandidates(): TemplateResult[] {
 }
 
 const TIP_EDGE = 8;
+/** How long an unpinned tip outlasts the pointer leaving its block or itself: long enough for a
+ *  path from any point of the block to reach the tip, which the bridge alone does not cover. */
+const TIP_LEAVE_DELAY = 300;
 
 /** Shows `tip` and places it in the same call, so it never paints where it was last: above
  *  `block` when it fits below the top of the area the block scrolls in, else below; its left lined
@@ -239,6 +242,7 @@ export class OpeningHoursWeekView extends LitElement {
         background: var(--wt-color-text);
         color: var(--wt-color-bg);
         font-size: var(--wt-font-size-sm);
+        overflow-wrap: anywhere;
       }
       /* Bridges the gap between the tip and its block, so the pointer crossing it never leaves
          both (WCAG 1.4.13). */
@@ -274,6 +278,8 @@ export class OpeningHoursWeekView extends LitElement {
   #pinned: HTMLElement | null = null;
   #shownFor: HTMLElement | null = null;
   #scrollTargets: EventTarget[] = [];
+  #hideLater: ReturnType<typeof setTimeout> | undefined;
+  #size = "";
 
   #tip(): HTMLElement | null {
     return this.renderRoot.querySelector<HTMLElement>('[data-test="block-tip"]');
@@ -282,6 +288,7 @@ export class OpeningHoursWeekView extends LitElement {
   #showTip(block: HTMLElement, label: string, pinned: boolean): void {
     const tip = this.#tip();
     if (!tip) return;
+    this.#stayShown();
     tip.textContent = label;
     this.#shownFor = block;
     this.#pinned = pinned ? block : null;
@@ -294,6 +301,7 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #hideTip(): void {
+    this.#stayShown();
     this.#pinned = null;
     this.#shownFor = null;
     for (const target of this.#scrollTargets.splice(0))
@@ -302,11 +310,15 @@ export class OpeningHoursWeekView extends LitElement {
     if (tip?.matches(":popover-open")) tip.hidePopover();
   }
 
-  #leave(event: PointerEvent, keepOn: Element | null): void {
+  #leave(): void {
     if (this.#pinned || !this.#shownFor) return;
-    if (keepOn && event.relatedTarget instanceof Node && keepOn.contains(event.relatedTarget))
-      return;
-    this.#hideTip();
+    clearTimeout(this.#hideLater);
+    this.#hideLater = setTimeout(() => this.#hideTip(), TIP_LEAVE_DELAY);
+  }
+
+  #stayShown(): void {
+    clearTimeout(this.#hideLater);
+    this.#hideLater = undefined;
   }
 
   #onWindowClick = (event: MouseEvent): void => {
@@ -341,7 +353,13 @@ export class OpeningHoursWeekView extends LitElement {
     if (changed.has("model") || changed.has("date") || changed.has("departmentId")) this.#hideTip();
   }
 
-  #resizes = new ResizeObserver(() => this.#fitRuler());
+  /** A change of size moves the blocks, so a shown tip is hidden as a scroll hides it. */
+  #resizes = new ResizeObserver(([entry]) => {
+    const size = `${entry!.contentRect.width}x${entry!.contentRect.height}`;
+    if (this.#size && size !== this.#size) this.#hideTip();
+    this.#size = size;
+    this.#fitRuler();
+  });
 
   override updated(): void {
     this.#fitRuler();
@@ -460,7 +478,8 @@ export class OpeningHoursWeekView extends LitElement {
         class="tip"
         data-test="block-tip"
         aria-hidden="true"
-        @pointerleave=${(event: PointerEvent) => this.#leave(event, this.#shownFor)}
+        @pointerenter=${() => this.#stayShown()}
+        @pointerleave=${() => this.#leave()}
       ></div>`;
   }
 
@@ -550,7 +569,7 @@ export class OpeningHoursWeekView extends LitElement {
                         if (event.pointerType === "mouse" && !this.#pinned)
                           this.#showTip(event.currentTarget as HTMLElement, block.label, false);
                       }}
-                      @pointerleave=${(event: PointerEvent) => this.#leave(event, this.#tip())}
+                      @pointerleave=${() => this.#leave()}
                       @click=${(event: MouseEvent) => {
                         const target = event.currentTarget as HTMLElement;
                         if (this.#pinned === target) this.#hideTip();

@@ -4071,8 +4071,9 @@ Opening hours' Year.
   labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
   when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
-  hides it, leaving the block or the tip hides an unpinned one, and a click elsewhere, Escape or a
-  scroll hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
+  hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can
+  reach the tip from any point of the block, and a click elsewhere, Escape, a scroll or a change of
+  the Week's size hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
   is the one button per day and opens the day box (below). Nothing is painted in the Week.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and

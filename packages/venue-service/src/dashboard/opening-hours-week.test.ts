@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -413,7 +413,7 @@ describe("Opening hours week: a block's label", () => {
     expect(painted.borderTopWidth).toBe("0px");
     expect(painted.boxShadow).toBe("none");
     await commands.parkPointer();
-    expect(open(el)).toBe(false);
+    await vi.waitFor(() => expect(open(el)).toBe(false));
 
     const spacer = document.createElement("div");
     spacer.style.height = "3000px";
@@ -434,10 +434,16 @@ describe("Opening hours week: a block's label", () => {
   it("a click pins it, and leaving does not hide a pinned tip", async () => {
     const el = await mount({ model: sliverModel() });
     const lunch = block(el, "2026-12-02", "rest", 2);
-    await userEvent.click(lunch);
-    expect(open(el)).toBe(true);
-    await commands.parkPointer();
-    expect(open(el)).toBe(true);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.click(lunch);
+      expect(open(el)).toBe(true);
+      await commands.parkPointer();
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
     await userEvent.click(lunch);
     expect(open(el)).toBe(false);
   });
@@ -551,7 +557,7 @@ describe("Opening hours week: a block's label", () => {
     expect(tip(el).dataset.side).toBe("above");
     expect(open(el)).toBe(true);
     await commands.parkPointer();
-    expect(open(el)).toBe(false);
+    await vi.waitFor(() => expect(open(el)).toBe(false));
 
     const spacer = document.createElement("div");
     spacer.style.height = "3000px";
@@ -566,6 +572,105 @@ describe("Opening hours week: a block's label", () => {
     });
     expect(tip(el).dataset.side).toBe("below");
     expect(open(el)).toBe(true);
+  });
+
+  it("a diagonal path from a wide block's centre to its tip's keeps the tip", async () => {
+    const el = await mount({ departmentId: "bar" });
+    const bar = block(el, "2026-12-02", "bar", 1);
+    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
+    await userEvent.hover(bar);
+    expect(bar.getBoundingClientRect().width).toBeGreaterThan(
+      3 * tip(el).getBoundingClientRect().width,
+    );
+    await commands.parkPointer();
+    const onto: (EventTarget | null)[] = [];
+    bar.addEventListener("pointerleave", (event) => onto.push(event.relatedTarget));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await commands.mouseMove([blockSelector("2026-12-02", "bar", 1), tipSelector], { steps: 30 });
+      expect(onto).toHaveLength(1);
+      expect(onto[0]).not.toBe(tip(el));
+      expect(open(el)).toBe(true);
+      expect(text(tip(el))).toBe("Bar · All day 10:00–02:00");
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(true);
+      await commands.parkPointer();
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a diagonal path from a narrow block to a tip shifted left by its long label keeps the tip", async () => {
+    const departments = structuredClone(DEPARTMENTS);
+    departments[0]!.name =
+      "Restaurant with a very long descriptive department name for the main dining room";
+    const model = monthModel();
+    const rest = model.days.find((d) => d.date === "2026-12-02")!.departments[0]!;
+    rest.ranges = rest.ranges.map((r) =>
+      r.periodId === "dinner" ? { ...r, startsAt: "04:30", endsAt: "05:00" } : r,
+    );
+    const el = await mount({ model, departments });
+    const late = block(el, "2026-12-02", "rest", 3);
+    const tipSelector = 'opening-hours-week [data-test="block-tip"]';
+    await userEvent.hover(late);
+    const shifted = tip(el).getBoundingClientRect();
+    expect(shifted.left + shifted.width / 2).toBeLessThan(late.getBoundingClientRect().left);
+    await commands.parkPointer();
+    const onto: (EventTarget | null)[] = [];
+    late.addEventListener("pointerleave", (event) => onto.push(event.relatedTarget));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await commands.mouseMove([blockSelector("2026-12-02", "rest", 3), tipSelector], {
+        steps: 30,
+      });
+      expect(onto).toHaveLength(1);
+      expect(onto[0]).toBe(track(el, "2026-12-02", "rest"));
+      expect(open(el)).toBe(true);
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(true);
+      await commands.mouseMove([blockSelector("2026-12-02", "rest", 3)]);
+      await commands.parkPointer();
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a long unbroken label wraps inside the window", async () => {
+    await page.viewport(1024, 800);
+    expect(window.innerWidth).toBe(1024);
+    const departments = structuredClone(DEPARTMENTS);
+    departments[0]!.name = "W".repeat(100);
+    const el = await mount({ departments });
+    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toContain(departments[0]!.name);
+    const pen = document.createElement("canvas").getContext("2d")!;
+    pen.font = getComputedStyle(tip(el)).font;
+    expect(pen.measureText(departments[0]!.name).width).toBeGreaterThan(1024);
+    const words = document.createRange();
+    words.selectNodeContents(tip(el));
+    const box = words.getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(8);
+    expect(box.right).toBeLessThanOrEqual(1024 - 8);
+    expect(tip(el).getBoundingClientRect().right).toBeLessThanOrEqual(1024 - 8);
+  });
+
+  it("a resize hides and unpins the tip", async () => {
+    const el = await mount();
+    await userEvent.click(block(el, "2026-12-02", "rest", 3));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    await page.viewport(900, 800);
+    expect(window.innerWidth).toBe(900);
+    await frames();
+    expect(open(el)).toBe(false);
+    await userEvent.hover(block(el, "2026-12-02", "rest", 1));
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
   });
 
   it("a tip shown again is placed afresh", async () => {
