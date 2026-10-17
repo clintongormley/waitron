@@ -1024,3 +1024,28 @@ change adds no separate durable journal for them. The shared preparation journal
 durable selected-hour authority. Actual historical invoice-row preservation, managed-Cloud
 placement and the remaining Task 7 entry-path work remain open. No protected writer, restore
 hook, SQL, schema, existing fiscal fixture/assertion or guard changes are part of this unit.
+
+## Default restore admission, 2026-10-18
+
+No existing assertion or fixture changes. Four cases are added inside the existing
+`hour-recovery-host.test.ts` archive fixture. They exercise the restore command, staged archive
+and staged bucket entry with a wrong node key, and direct archive restoration with a valid key
+but no configured module preparation. Each checks that the original destination database and
+identity remain intact. The command case forwards to the real file restore adapter with source
+migrations.
+
+Before the fix, all four database-preservation assertions failed: the destination contained a
+SQLite database instead of its original bytes. The runner now exposes the existing pre-placement
+check to every caller of `createRecoveryRestoreRunner`. It authenticates and prepares without invoking a restore hook;
+the ordinary hook transaction still authenticates and prepares again before activation.
+
+You can run these checks with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
+  -t 'the default|without module preparation'
+```
+
+This qualifies refusal before placement. Default hour-preparation composition, fresh restart
+clock comparisons, historical invoice preservation and managed-Cloud placement remain open in
+Task 7. Protected fiscal writers, SQL, schemas and earlier fiscal assertions are unchanged.

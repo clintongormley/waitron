@@ -33,6 +33,8 @@ import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
+import { runRestore } from "./restore-command.js";
+import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq } from "drizzle-orm";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -970,6 +972,107 @@ describe("selected-hour admission before archive placement", () => {
               });
             })();
       await expect(attempt).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+      expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+        "original destination database",
+      );
+      expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+        "original destination identity",
+      );
+    },
+  );
+
+  it("the default restore command refuses a wrong node key before replacing the destination", async () => {
+    const f = await archiveHost();
+    const artifactPath = join(root, "command.backup.enc");
+    const operationPath = join(root, "command-operation.json");
+    await writeFile(artifactPath, f.restore.artifact);
+    await writeFile(
+      operationPath,
+      JSON.stringify({ binding: f.options.binding, input: f.outcome.input }),
+    );
+    await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
+    await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
+    const output: string[] = [];
+    expect(
+      await runRestore({
+        argv: ["restore", artifactPath, "--confirm-old-box-gone"],
+        env: {
+          WAITRON_ENV: "dev",
+          WAITRON_STATE_DIR: f.roots.stateDir,
+          WAITRON_VENUE_DIR: f.roots.venueDir,
+          WAITRON_BACKUP_RECOVERY_KEY: "archive password",
+          WAITRON_RECOVERY_OPERATION_FILE: operationPath,
+          WAITRON_NODE_RECOVERY_KEY: "wrong node key",
+        },
+        out: (line) => output.push(line),
+        restore: (request) => restoreFromArtifactFile({ ...request, migrationsRoot: null }),
+      }),
+    ).toBe(1);
+    expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+      "original destination database",
+    );
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "original destination identity",
+    );
+    expect(output.join("\n")).toContain(
+      "restore failed: promotion.break_glass_invalid — use the selected backup's node recovery key",
+    );
+  });
+
+  it("a valid node key without module preparation refuses before replacing the destination", async () => {
+    const f = await archiveHost();
+    await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
+    await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
+    await expect(
+      restoreFromArtifact({
+        ...f.restore,
+        withModuleOperations: createRecoveryRestoreRunner(
+          ALL_MODULES,
+          { binding: f.options.binding, input: f.outcome.input },
+          key.secret,
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+      "original destination database",
+    );
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "original destination identity",
+    );
+  });
+
+  it.each(["archive", "stream"] as const)(
+    "the default staged %s restore refuses a wrong node key before replacing the destination",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      const recoveryOperation = { binding: f.options.binding, input: f.outcome.input };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? {
+              artifact: f.restore.artifact,
+              recoveryKey: "archive password",
+              environment: "preproduction",
+              recoveryOperation,
+              nodeRecoverySecret: "wrong node key",
+            }
+          : {
+              kind: "stream",
+              databasePath: f.database,
+              entries: f.entries,
+              environment: "preproduction",
+              recoveryOperation,
+              nodeRecoverySecret: "wrong node key",
+            },
+      );
+      await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
+      await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
+      await expect(runStagedRestore(f.restore)).rejects.toMatchObject({
+        code: "promotion.break_glass_invalid",
+      });
       expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
         "original destination database",
       );
