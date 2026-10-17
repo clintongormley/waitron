@@ -223,10 +223,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
           if (pixelsChanged) {
             const source = prepared ?? (await readImageBytes(ctx.db, current.sourceFilename));
             if (!source) throw new AppError("image.not_found", { imageId: id });
-            const display = await renditions.get(
-              renditionUrl(prepared?.filename ?? current.sourceFilename, "display", framing),
-              () => renderRendition(source.bytes, "display", framing),
-            );
+            const display = await renderRendition(source.bytes, "display", framing);
             rasters = await ctx.renderReceiptLogo!(display);
           }
           return c.json({

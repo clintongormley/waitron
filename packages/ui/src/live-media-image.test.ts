@@ -4,8 +4,9 @@ import { liveMediaImage, invalidateMediaImages } from "./live-media-image.js";
 import "./components/wt-data-table.js";
 import type { WtDataTable } from "./components/wt-data-table.js";
 
-const a = `${"a".repeat(64)}.webp`;
-const b = `${"b".repeat(64)}.png`;
+let a: string;
+let b: string;
+let referenceSequence = 0;
 let host: HTMLDivElement;
 let network: ReturnType<typeof vi.fn<typeof fetch>>;
 let visible = true;
@@ -26,6 +27,8 @@ function reply(images: Record<string, ReturnType<typeof entry>>) {
 }
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 beforeEach(() => {
+  a = `${(10_000 + ++referenceSequence).toString(16).padStart(64, "0")}.webp`;
+  b = `${(10_000 + ++referenceSequence).toString(16).padStart(64, "0")}.png`;
   visible = true;
   vi.spyOn(document, "visibilityState", "get").mockImplementation(() =>
     visible ? "visible" : "hidden",
@@ -39,6 +42,54 @@ beforeEach(() => {
     .fn<typeof fetch>()
     .mockImplementation(async () => reply({ [a]: entry("A"), [b]: entry("B") }));
   vi.stubGlobal("fetch", network);
+});
+it("shows the last successful picture on remount while a refresh is pending or fails", async () => {
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  await vi.waitFor(() => expect(src()).toBe("/media/A-square.webp"));
+  render(nothing, host);
+  let fail!: (reason: unknown) => void;
+  network.mockImplementationOnce(() => new Promise((_yes, no) => (fail = no)));
+  render(html`<img src=${liveMediaImage(a, "till")} />`, host);
+  expect(src()).toBe("/media/A-till.webp");
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+  fail(new Error("offline"));
+  await frame();
+  expect(src()).toBe("/media/A-till.webp");
+  network.mockResolvedValueOnce(reply({}));
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(src()).toBeNull());
+  render(nothing, host);
+  render(html`<img src=${liveMediaImage(a, "square")} />`, host);
+  expect(src()).toBeNull();
+});
+it("bounds remembered inactive presentations while retaining all mounted pictures", async () => {
+  const references = Array.from(
+    { length: 257 },
+    (_, i) => `${i.toString(16).padStart(64, "0")}.webp`,
+  );
+  network.mockImplementation(async (url) => {
+    const refs = new URL(String(url), location.origin).searchParams.get("references")!.split(",");
+    return reply(Object.fromEntries(refs.map((ref) => [ref, entry("kept")])));
+  });
+  render(
+    html`${references.map((ref) => html`<img src=${liveMediaImage(ref, "square")} />`)}`,
+    host,
+  );
+  await vi.waitFor(() =>
+    expect(
+      [...host.querySelectorAll("img")].every(
+        (image) => image.getAttribute("src") === "/media/kept-square.webp",
+      ),
+    ).toBe(true),
+  );
+  render(nothing, host);
+  render(
+    html`${references.map((ref) => html`<img src=${liveMediaImage(ref, "square")} />`)}`,
+    host,
+  );
+  const pictures = [...host.querySelectorAll("img")].map((image) => image.getAttribute("src"));
+  expect(pictures.filter((value) => value === null)).toHaveLength(1);
+  expect(pictures.filter((value) => value === "/media/kept-square.webp")).toHaveLength(256);
 });
 afterEach(() => {
   render(nothing, host);
@@ -259,4 +310,27 @@ it("never publishes an in-flight answer while hidden, then retries on visibility
   visible = true;
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.waitFor(() => expect(src()).toBe("/media/A-square.webp"));
+});
+it("finishes an in-flight lookup when another thumbnail arrives, then resolves the new row", async () => {
+  let firstAnswer!: (value: Response) => void;
+  let nextAnswer: ((value: Response) => void) | undefined;
+  network.mockImplementationOnce(() => new Promise<Response>((yes) => (firstAnswer = yes)));
+  network.mockImplementationOnce(() => new Promise<Response>((yes) => (nextAnswer = yes)));
+  const template = (refs: string[]) =>
+    html`${refs.map((ref) => html`<img src=${liveMediaImage(ref, "square")} />`)}`;
+  render(template([a]), host);
+  await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+  try {
+    render(template([a, b]), host);
+    await frame();
+    firstAnswer(reply({ [a]: entry("A") }));
+    await vi.waitFor(() => expect(src()).toBe("/media/A-square.webp"));
+    expect(src(1)).toBeNull();
+    await vi.waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+    nextAnswer!(reply({ [a]: entry("A"), [b]: entry("B") }));
+    await vi.waitFor(() => expect(src(1)).toBe("/media/B-square.webp"));
+  } finally {
+    firstAnswer(reply({ [a]: entry("A") }));
+    nextAnswer?.(reply({ [a]: entry("A"), [b]: entry("B") }));
+  }
 });

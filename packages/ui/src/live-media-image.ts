@@ -7,10 +7,13 @@ type Shape = "source" | "square" | "till" | "display";
 type Presentation = Record<Shape, string> & { id: string; revision: number };
 type Entry = { value?: Presentation; listeners: Set<() => void> };
 const entries = new Map<string, Entry>();
+const remembered = new Map<string, Presentation>();
 let timer: ReturnType<typeof setInterval> | undefined;
 let scheduled = false;
 let generation = 0;
 let controller: AbortController | undefined;
+let refreshing = false;
+let subscribedDuringRefresh = false;
 
 function visible() {
   return document.visibilityState === "visible";
@@ -18,6 +21,12 @@ function visible() {
 function stopTimer() {
   if (timer !== undefined) clearInterval(timer);
   timer = undefined;
+}
+function cancelRefresh() {
+  generation++;
+  controller?.abort();
+  refreshing = false;
+  subscribedDuringRefresh = false;
 }
 function schedule() {
   if (scheduled || !entries.size || !visible()) return;
@@ -33,8 +42,7 @@ function visibilityChanged() {
     startTimer();
     schedule();
   } else {
-    generation++;
-    controller?.abort();
+    cancelRefresh();
   }
 }
 function startTimer() {
@@ -48,17 +56,22 @@ function subscribe(reference: string, listener: () => void) {
   }
   let entry = entries.get(reference);
   if (!entry) {
-    entry = { listeners: new Set() };
+    const value = remembered.get(reference);
+    if (value) {
+      remembered.delete(reference);
+      remembered.set(reference, value);
+    }
+    entry = { value, listeners: new Set() };
     entries.set(reference, entry);
   }
   entry.listeners.add(listener);
-  schedule();
+  if (refreshing) subscribedDuringRefresh = true;
+  else schedule();
   return () => {
     entry.listeners.delete(listener);
     if (!entry.listeners.size) entries.delete(reference);
     if (!entries.size) {
-      generation++;
-      controller?.abort();
+      cancelRefresh();
       stopTimer();
       document.removeEventListener("visibilitychange", visibilityChanged);
       window.removeEventListener("online", schedule);
@@ -82,6 +95,8 @@ function presentation(value: unknown): value is Presentation {
 }
 async function refresh(): Promise<void> {
   const version = ++generation;
+  refreshing = true;
+  subscribedDuringRefresh = false;
   controller?.abort();
   controller = new AbortController();
   const signal = controller.signal;
@@ -116,6 +131,9 @@ async function refresh(): Promise<void> {
             const value: unknown = (images as Record<string, unknown>)[ref];
             if (value !== undefined && !presentation(value)) continue;
             entry.value = value;
+            remembered.delete(ref);
+            if (value) remembered.set(ref, value);
+            while (remembered.size > 256) remembered.delete(remembered.keys().next().value!);
             for (const listener of entry.listeners) listener();
           }
         } catch {
@@ -125,6 +143,10 @@ async function refresh(): Promise<void> {
     );
   }
   await Promise.all(requests);
+  if (version === generation) {
+    refreshing = false;
+    if (subscribedDuringRefresh) schedule();
+  }
 }
 
 export function invalidateMediaImages(): void {

@@ -24,6 +24,7 @@ import { DEFAULT_FRAMING } from "./framing.js";
 import { readImage, readImageBytes, updateImage, uploadImage } from "./images.js";
 import { mediaImageData, mediaImageEdits } from "./schema/images.js";
 import { sampleImage, samplePreparedImage } from "./testing/sample-image.js";
+import * as renditionRendering from "./renditions.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
@@ -350,4 +351,33 @@ it("saves names without needing source bytes or image decoding", async () => {
   expect(await response.json()).toMatchObject({
     image: { names: { en: "Names only" }, revision: 2 },
   });
+});
+it("saves a framed photo while the public rendition queue is full", async () => {
+  const { app, image, edit } = await fixture(async () => rasters);
+  let release!: () => void;
+  const held = new Promise<void>((yes) => (release = yes));
+  const realRender = renditionRendering.renderRendition;
+  const render = vi
+    .spyOn(renditionRendering, "renderRendition")
+    .mockImplementationOnce(async (...args) => {
+      await held;
+      return realRender(...args);
+    });
+  const publicRequests = Array.from({ length: 102 }, (_, i) =>
+    app.request(`/media/renditions/v1/${image.filename}/square/${i}-5000-100.webp`),
+  );
+  try {
+    const refused = await Promise.race(publicRequests);
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ error: { code: "image.busy" } });
+    const saved = await edit({ names: { en: "Still saved" }, framing: frame, expectedRevision: 1 });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({
+      image: { names: { en: "Still saved" }, revision: 2, framing: frame },
+    });
+  } finally {
+    release();
+    await Promise.all(publicRequests);
+    render.mockRestore();
+  }
 });

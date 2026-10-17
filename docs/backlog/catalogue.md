@@ -943,6 +943,8 @@ The old “about 4 MB per page” estimate was not a measurement. Current upload
 matched photo's names/framing; an occupied retired-original alias is refused when no current source
 matches, rather than silently returning a different picture.
 
+The visible-page resolver remembers up to 256 recent presentations across remounts and refreshes them in the background. Newly arriving thumbnails do not cancel a lookup already serving mounted rows. Public rendition requests have their own bounded queue; photo saves prepare the display crop outside that queue and outside the write transaction.
+
 ### A647 — tidy the product editor
 
 Owner, 2026-10-14, decided over a run of screenshots and mock-ups. Boards, in
