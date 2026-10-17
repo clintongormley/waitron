@@ -14,7 +14,7 @@ const t = (id: string, label: string, placement: Partial<PlanPlacement> = {}): F
   description: "Free",
 });
 
-// Its crop is 12 × 8 squares; fitted in 600 × 300 at left 150, top 75, 37.5 px a square.
+// T1 is drawn at left 150, top 75, 37.5 px a square: its 12 × 8 crop fitted in 600 × 300.
 const t1 = t("t1", "T1", { x: 10, y: 5 });
 
 let drops: FloorMapDrop[];
@@ -128,4 +128,36 @@ it("a drag keeps the travel it made before the scale changed", async () => {
   expect(await leftOf(el, "t1")).toBe(zoomed + 2 * 75);
   up(el, 375 + 2 * 75, 150);
   expect(drops).toEqual([{ tableId: "t1", x: 14, y: 5, targetId: null }]);
+});
+
+it("a move that changes no place still counts towards the travel kept when the scale changes", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 357, 150);
+  move(el, 393, 150);
+  zoom(el, 300, 150, -100);
+  move(el, 398, 150);
+  up(el, 398, 150);
+  expect(drops).toEqual([{ tableId: "t1", x: 13, y: 5, targetId: null }]);
+});
+
+it("a second drag starts its travel afresh", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 375, 150);
+  zoom(el, 300, 150, -100);
+  move(el, 525, 150);
+  up(el, 525, 150);
+  await el.updateComplete;
+  const box = button(el, "t1").getBoundingClientRect();
+  const outer = el.getBoundingClientRect();
+  const x = box.left - outer.left + box.width / 2;
+  const y = box.top - outer.top + box.height / 2;
+  hold(el, x, y);
+  move(el, x + 75, y);
+  up(el, x + 75, y);
+  expect(drops).toEqual([
+    { tableId: "t1", x: 14, y: 5, targetId: null },
+    { tableId: "t1", x: 11, y: 5, targetId: null },
+  ]);
 });

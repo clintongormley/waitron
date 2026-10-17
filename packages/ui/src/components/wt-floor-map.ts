@@ -548,18 +548,17 @@ export class WtFloorMap extends LitElement {
   #endDrag(): void {
     this.#clearHeld();
     this.#drag = null;
-    this.#travel = null;
     this.requestUpdate();
   }
 
   readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
-    if (!this.canDrag) return;
     const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
     const members = id === undefined ? undefined : this.#groupOf.get(id)?.members;
     const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
     const squares = this.#travelled(dx, dy);
+    if (!this.canDrag) return;
     // The whole group stays on the grid, as the server holds it when the move lands.
     const { dx: movedX, dy: movedY } = groupStep(
       members!.map((m) => m.placement),
