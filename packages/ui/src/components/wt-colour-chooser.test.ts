@@ -714,12 +714,15 @@ describe("tokens", () => {
     expect(field.getBoundingClientRect().width).toBeLessThanOrEqual(200);
   });
 
-  test("the trigger and every tile are at least --wt-tap-min tall", async () => {
+  test("every tile is at least --wt-tap-min tall, and the trigger, whose floor is --wt-field-height, is too", async () => {
     const { el, trigger, tiles } = await mountChooser();
     // 52px, as wt-combobox's case uses: the trigger's own floor is --wt-field-height (56px).
     host.style.setProperty("--wt-tap-min", "52px");
     await openByClick(el);
     expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      parseFloat(getComputedStyle(trigger).getPropertyValue("--wt-field-height")),
+    );
     expect(tiles()).toHaveLength(CHOICES.length);
     for (const tile of tiles())
       expect(tile.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
@@ -744,7 +747,7 @@ describe("edges", () => {
     expect(() => bare.hide()).not.toThrow();
   });
 
-  test("with no choices, show() opens an empty panel without throwing", async () => {
+  test("with no choices, show() does not throw", async () => {
     const { el, panel } = await mountChooser();
     el.choices = [];
     await el.updateComplete;
@@ -804,7 +807,7 @@ describe("edges", () => {
     );
   });
 
-  test("in a 390px window, long names keep the panel 8px inside both sides", async () => {
+  test("in a 390px window, long names keep the panel no wider than the window less 16px and 8px in from its right", async () => {
     const [width, height] = [innerWidth, innerHeight];
     await page.viewport(390, 700);
     try {
@@ -820,6 +823,31 @@ describe("edges", () => {
       const box = panel.getBoundingClientRect();
       expect(box.width).toBeLessThanOrEqual(innerWidth - 16 + 0.5);
       expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("reopened with longer names, the panel widens to them and still fits the 390px window", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(390, 700);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const { el, trigger, panel } = await mountChooser();
+      el.style.marginLeft = "200px";
+      el.style.width = "160px";
+      await openByClick(el);
+      await userEvent.click(trigger);
+      await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+      el.choices = CHOICES.map((choice) => ({
+        ...choice,
+        label: `${choice.label} with a name long enough to need more room than the window has`,
+      }));
+      await el.updateComplete;
+      await openByClick(el);
+      const box = panel.getBoundingClientRect();
+      expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+      expect(box.width).toBeCloseTo(innerWidth - 16, 0);
     } finally {
       await page.viewport(width, height);
     }
