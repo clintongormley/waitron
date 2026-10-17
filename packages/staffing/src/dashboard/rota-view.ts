@@ -126,7 +126,7 @@ export class RotaView extends LitElement {
         padding: var(--wt-space-1) var(--wt-space-2);
         border: 1px solid transparent;
         border-radius: var(--wt-radius-full);
-        background: var(--wt-color-surface-sunken);
+        background: var(--wt-color-track);
         color: var(--wt-color-text);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);

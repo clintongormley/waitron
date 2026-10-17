@@ -146,7 +146,7 @@ so in the dark theme a sold-out tile sits at the page's own level, below an avai
 `--wt-color-surface`.
 
 `--wt-color-track` is the empty track behind the Opening hours Week's bars, on the page on a wide
-screen and on a card on a phone, and behind the Opening hours Month's bars on each date: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
+screen and on a card on a phone, behind the Opening hours Month's bars on each date, and the fill of the Rota's "Draft" pill on the page: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
 dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--wt-color-text` at
 4.5:1 or more on it (the "bar track" cases in `packages/ui-core/src/tokens/colors.test.ts`).
 

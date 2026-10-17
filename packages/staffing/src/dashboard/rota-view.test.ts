@@ -1946,3 +1946,19 @@ describe("the phone's day strip", () => {
     expect(clashes).toEqual([]);
   });
 });
+
+describe.each(["light", "dark"] as const)("the Rota's Draft pill (%s)", (theme) => {
+  it("is filled in a colour other than the page's behind it", async () => {
+    const el = await mount();
+    const frame = frames[0]!;
+    frame.setAttribute("data-theme", theme);
+    frame.style.background = "var(--wt-color-bg)";
+    await el.updateComplete;
+    const pill = q(el, "[data-test=state]")!;
+    expect(normal(pill.textContent!)).toBe("Draft");
+    const page = getComputedStyle(frame).backgroundColor;
+    expect(page).toBe(tokenColour("--wt-color-bg"));
+    expect(getComputedStyle(pill).backgroundColor).not.toBe(page);
+    expect(getComputedStyle(pill).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  });
+});
