@@ -7,7 +7,7 @@ import {
   type DashboardCalendarView,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, NavigationGuard } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { frame } from "../testing/season-painter-fixture.js";
@@ -152,6 +152,23 @@ describe("the Week at its address", () => {
     expect(months).toEqual(["2026-12"]);
     expect(week(el)!.date).toBe("2026-12-09");
     expect(painter(el)).toBeNull();
+  });
+
+  it("says when the week's month cannot be read", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/week/week/2026-12-09");
+    const request = (async (path: string) => {
+      if (/\/opening-hours\/month\?/.test(path)) throw { code: "connection.failed" };
+      return model();
+    }) as DashboardRequest;
+    const el = document.createElement("dashboard-opening-hours-screen") as Screen;
+    el.api = new OpeningHoursApi(request);
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    const alert = () => el.shadowRoot!.querySelector("[data-test=month-read-error]")?.textContent;
+    await expect.poll(alert).toBe("Opening hours could not be loaded. It will be tried again.");
+    expect(week(el)!.date).toBe("2026-12-09");
+    expect(week(el)!.model).toBeUndefined();
   });
 
   it("/view/week alone draws the week holding the venue's today", async () => {
@@ -444,11 +461,20 @@ describe("from the Week to the Month, the Year and the day box", () => {
 });
 
 describe("Open this week from the day box", () => {
-  /** Mounts the Month or the Year; with `holdMonths`, no month read ever answers. */
-  async function mountView(address: string, { readOnly = false, holdMonths = false } = {}) {
+  /** Mounts the Month or the Year; with `holdMonths`, no month read ever answers, and with
+   *  `monthGate`, a month read answers once the gate settles. */
+  async function mountView(
+    address: string,
+    {
+      readOnly = false,
+      holdMonths = false,
+      monthGate,
+    }: { readOnly?: boolean; holdMonths?: boolean; monthGate?: Promise<void> } = {},
+  ) {
     history.replaceState(null, "", address);
     const request = (async (path: string) => {
       const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
+      if (month && monthGate) await monthGate;
       if (month) return holdMonths ? new Promise(() => {}) : monthModel({ month: month[1]! });
       const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
       if (year) return yearRead(Number(year[1]));
@@ -512,6 +538,88 @@ describe("Open this week from the day box", () => {
       .poll(() => pushed().at(-1))
       .toBe("/manage/opening-hours/view/week/week/2026-12-10");
     await expect.poll(() => week(el)?.date).toBe("2026-12-10");
+  });
+
+  /** Lets every update and animation frame the hand-off could wait on run. */
+  async function settled(el: Screen) {
+    for (let i = 0; i < 3; i++) {
+      await el.updateComplete;
+      await week(el)?.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  }
+
+  it("focus the user moves while the Week's month loads stays where they put it", async () => {
+    let release!: () => void;
+    const monthGate = new Promise<void>((resolve) => (release = resolve));
+    const el = await mountView("/manage/opening-hours/view/year/year/2026", { monthGate });
+    await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect.poll(() => week(el)?.date).toBe("2026-12-10");
+    await week(el)!.updateComplete;
+    expect(week(el)!.model).toBeUndefined();
+    const link = monthLink(el, "2026-12");
+    link.focus();
+    expect(focused()).toBe(link);
+    release();
+    await expect.poll(() => week(el)?.model).toBeDefined();
+    await settled(el);
+    expect(dayName(el, "2026-12-10")).not.toBeNull();
+    expect(focused()).toBe(link);
+  });
+
+  it("Back while the Week's month loads drops the focus hand-off", async () => {
+    let release!: () => void;
+    const monthGate = new Promise<void>((resolve) => (release = resolve));
+    const el = await mountView("/manage/opening-hours/view/year/year/2026", { monthGate });
+    await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect.poll(() => week(el)?.date).toBe("2026-12-10");
+    history.back();
+    await expect.poll(() => yearView(el)).not.toBeNull();
+    await settled(el);
+    history.forward();
+    await expect.poll(() => week(el)?.date).toBe("2026-12-10");
+    release();
+    await expect.poll(() => week(el)?.model).toBeDefined();
+    await settled(el);
+    expect(dayName(el, "2026-12-10")).not.toBeNull();
+    expect(focused()).not.toBe(dayName(el, "2026-12-10"));
+  });
+
+  it("Open this week refused by unsaved changes drops its focus hand-off", async () => {
+    const el = await mountView("/manage/opening-hours/view/month/month/2026-12");
+    await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    let asked = 0;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => true,
+      request: async () => {
+        asked++;
+        return "kept";
+      },
+    });
+    onTestFinished(() => guard.dispose());
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect.poll(() => asked).toBe(1);
+    await settled(el);
+    expect(location.pathname).toBe("/manage/opening-hours/view/month/month/2026-12");
+    guard.dispose();
+    // A later arrival at that week by another way must not take the refused hand-off's focus.
+    history.pushState(null, "", "/manage/opening-hours/view/week/week/2026-12-10");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect.poll(() => week(el)?.model).toBeDefined();
+    await settled(el);
+    expect(dayName(el, "2026-12-10")).not.toBeNull();
+    expect(focused()).not.toBe(dayName(el, "2026-12-10"));
   });
 
   it("a viewer's box offers Open this week too", async () => {

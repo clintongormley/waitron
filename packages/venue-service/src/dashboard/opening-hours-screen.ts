@@ -168,9 +168,10 @@ export class OpeningHoursScreen extends LitElement {
   @state() private boxMonth?: OpeningHoursMonth;
   private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
-  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's or the Week's year link
-   *  held focus as it opened the Year, and the Year draws its month names only once its read arrives. Only
-   *  the address change numbered `navigation` keeps it; `armed` once that change has been followed. */
+  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's or the Week's year
+   *  link held focus as it opened the Year, and the Year draws its month names only once its read
+   *  arrives. Only the address change numbered `navigation` keeps it; `armed` once that change has
+   *  been followed. */
   private focusHandOff?: { month: string; navigation: number; armed: boolean };
   private readonly endFocusHandOff = () => {
     this.focusHandOff = undefined;
