@@ -1132,7 +1132,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   authorizes planning and build. The [executable plan](superpowers/plans/2026-10-17-a682-translations.md)
   covers all five points and Use fix in one future PR. A fresh-context plan read is complete;
   field-specific fallback and additive-upgrade checks are explicit. **OPEN:** implementation and
-  validation, respecting the plan's G/C/E reservations.
+  validation, respecting the plan's G/C/E reservations. The required unit fields need a pre-live
+  reset; declaring their measured refusal in the populated-upgrade guard awaits owner approval.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**
