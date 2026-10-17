@@ -1612,6 +1612,9 @@ importers:
       '@waitron/country-packs':
         specifier: workspace:*
         version: link:../country-packs
+      '@waitron/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
@@ -1624,6 +1627,9 @@ importers:
       '@waitron/layouts':
         specifier: workspace:*
         version: link:../layouts
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../membership
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations

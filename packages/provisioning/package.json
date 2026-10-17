@@ -24,10 +24,12 @@
   "dependencies": {
     "@waitron/composition": "workspace:*",
     "@waitron/country-packs": "workspace:*",
+    "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
+    "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/shared": "workspace:*",

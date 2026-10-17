@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { AppError, isAppError } from "@waitron/shared";
+import { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { formatAppError, runCli } from "./cli.js";
 import { readTenantIdentities } from "./tenant-guard.js";
@@ -51,6 +52,8 @@ async function main(): Promise<number> {
           },
         };
       },
+      firstSetupDeployment: ({ runtime, db }) =>
+        createFirstSetupCommandDeployment({ runtime, db, environment: process.env }),
       applyVenue,
       modules: ALL_MODULES,
       configureFirstSetup: (venueDir) => {

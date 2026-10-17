@@ -988,12 +988,7 @@ declare module "@waitron/shared" {
      * refuses before generating a key.
      */
     "setup.cert_hostnames_empty": Record<string, never>;
-    /**
-     * A setup-mode provision was asked to run on a box that already holds this tenant. A re-run would
-     * add a shop and mint a fresh fiscal chain rather than resume the venue, and a stray chain is
-     * unrecoverable (CLAUDE.md §5), so `provisionVenue` refuses before writing anything.
-     */
-    "setup.already_provisioned": Record<string, never>;
+
     /** A setup or provisioning field cannot be used. Fiscal venue validators and the core and
      * catalogue configuration checks (`packages/db/src/configuration-transfer.ts`,
      * `packages/catalogue/src/configuration-transfer.ts`) also raise this code;

@@ -27,6 +27,10 @@ import {
 import { randomBytes } from "node:crypto";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import {
+  completeFirstSetupCommand,
+  type FirstSetupCommandDeployment,
+} from "./first-setup-command-activation.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
@@ -49,6 +53,10 @@ export interface CliDeps {
   modules: readonly WaitronModule[];
   configureVenueModules?: (directory: string) => readonly WaitronModule[];
   configureFirstSetup?: (directory: string) => ReturnType<typeof createFirstSetupRuntime>;
+  firstSetupDeployment?: (context: {
+    runtime: ReturnType<typeof createFirstSetupRuntime>;
+    db: Database;
+  }) => FirstSetupCommandDeployment;
   initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
@@ -300,7 +308,15 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       const retained = await runtime.store.readForRepair();
       if (retained !== null) {
         const state = retained.state;
-        if (!["claimed", "consumption-intent"].includes(state.status))
+        if (
+          ![
+            "claimed",
+            "consumption-intent",
+            "activation-started",
+            "committed",
+            "publication",
+          ].includes(state.status)
+        )
           throw new AppError("setup.attempt_uncertain", {});
         runtime.assertSelection(state);
         if (
@@ -385,19 +401,33 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
             );
             owner = { ...claim.state, capability: claim.capability };
           }
-          const prepared = await prepareFirstSetupCommand(runtime, owner, deps.io);
-          if (prepared.status !== "ready") return 1;
-          const destination = values["recovery-pdf"];
-          if (destination !== undefined) {
-            const delivered = await runtime.commandDelivery.deliver(
-              prepared.owner,
-              deps.io,
-              destination,
-              invoiceLocales[0]?.startsWith("es") ? "es" : "en",
-            );
-            if (delivered.status !== "ready") return 1;
+          const state = await runtime.owner.authorize(owner);
+          if (["claimed", "consumption-intent"].includes(state.status)) {
+            const prepared = await prepareFirstSetupCommand(runtime, owner, deps.io);
+            if (prepared.status !== "ready") return 1;
+            owner = prepared.owner;
+            const destination = values["recovery-pdf"];
+            if (destination !== undefined) {
+              const delivered = await runtime.commandDelivery.deliver(
+                owner,
+                deps.io,
+                destination,
+                invoiceLocales[0]?.startsWith("es") ? "es" : "en",
+              );
+              if (delivered.status !== "ready") return 1;
+            }
           }
-          throw new AppError("setup.not_ready", {});
+          if (deps.firstSetupDeployment === undefined) throw new AppError("setup.not_ready", {});
+          const result = await completeFirstSetupCommand(
+            runtime,
+            target,
+            owner,
+            deps.firstSetupDeployment({ runtime, db: target }),
+          );
+          deps.io.stdout("");
+          deps.io.stdout(`node:     ${result.nodeId}`);
+          for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
+          return 0;
         }
 
         // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:

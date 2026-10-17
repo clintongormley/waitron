@@ -10,6 +10,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "setup.already_provisioned": Record<string, never>;
     "setup.not_ready": Record<string, never>;
     "setup.operation_conflict": Record<string, never>;
     "setup.already_provisioning": Record<string, never>;

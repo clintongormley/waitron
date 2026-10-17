@@ -361,8 +361,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   terminal preparation stage now checks clock agreement, taxpayer-wide answers, password confirmation,
   retained waits and exact input replay. The actual command now reaches this stage through its owned
   claim and password-recovery path. Built-command checks use a migrated synthetic database and an
-  offline time reply. Without complete checked publication the command still refuses after preparation;
-  a successor workspace without a retired-evidence adapter refuses before clock selection.
+  offline time reply. A successor workspace without a retired-evidence adapter refuses before clock selection.
   Staged recovery keys and public document-delivery bindings now share the provisioning runtime.
   The key-only PDF has a Node adapter sharing the browser renderer; focused checks run its
   English/Spanish output through a standalone bundle with the font embedded. The command now
@@ -372,7 +371,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks for kept consent, exact commits, lost responses, retained verifiers and interrupted publication.
   The server uses these services. Exact Finish and its original-password audit now also share
   the provisioning boundary, with checks for recovered ownership, the publication binding and
-  interrupted publication. The command deployment adapters remain open.
+  interrupted publication. The built preproduction command now has checks through its real deployment
+  adapters, including signed node membership, module/trading publication and exact Finish after an
+  interrupted write without a new hour or changed counters. Inspection samples file fingerprints after
+  its SQLite read, which otherwise creates an empty WAL and invalidates password recovery's snapshot.
+  Production command certificate/email/readiness adapters and retained configuration imports remain open.
+  Twelve retained provision cases
+  still fail at unowned legacy preparation; the same failures were measured at the preceding checkpoint.
+  Package coverage also remains below its gate. Password recovery after selection but before activation
+  still refuses the changed clock/owner context; its authenticated resume exception awaits the owner.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
   Key-only recovery PDF components now have generated-document and transient-delivery checks.
@@ -381,7 +388,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   this replacement delivery path without changing their earlier behavioral assertions.
   Retained interruption, Finish, unused-PDF and empty-selection fixtures now use the hour/key-only
   flow. Their combined local qualification passes, including exact publication after password
-  recovery and whole-hour exclusion across changed bases. Final command composition, the complete
+  recovery and whole-hour exclusion across changed bases. Production command composition, the complete
   wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

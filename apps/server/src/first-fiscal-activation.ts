@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { readMembershipTrustSet, readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
+  firstSetupPublicationDigest,
   finishFirstSetup,
   publishCheckedFirstSetup,
   checkedFirstSetupCommit,
@@ -31,16 +31,7 @@ import "./errors.js";
 function conflict(): never {
   throw new AppError("setup.attempt_uncertain", {});
 }
-function canonical(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null)
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => [k, canonical(v)]),
-    );
-  return value;
-}
+
 export { firstSetupProvisionRequest as firstFiscalProvisionRequest } from "@waitron/provisioning";
 export async function checkedFirstFiscalCommit(
   host: FirstFiscalHost,
@@ -103,25 +94,7 @@ export function firstFiscalPayload(
     body.email === undefined
       ? undefined
       : parseEmailSettings(body.email as Record<string, unknown>);
-  const digest = createHash("sha256")
-    .update(
-      JSON.stringify(
-        canonical({
-          attemptId: state.frozen.attemptId,
-          nodeId: state.frozen.nodeId,
-          administratorId: state.frozen.administratorId,
-          modules: state.frozen.modules,
-          configurationImport: state.frozen.configurationImport ?? null,
-          inputs: Object.fromEntries(
-            Object.entries(state.inputs).filter(([name]) => name !== "$publication"),
-          ),
-          mode: "live",
-          aeatCert: body.aeatCert ?? null,
-          email: email ?? null,
-        }),
-      ),
-    )
-    .digest("hex");
+  const digest = firstSetupPublicationDigest(state, { aeatCert: body.aeatCert, email });
   return { contribution, secret, required, email, digest };
 }
 export async function activateFirstFiscal(

@@ -264,6 +264,23 @@ export function createFirstSetupResolutionInspection(
       }
     },
     async inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
+      let repair: Awaited<ReturnType<FirstSetupStore["readForRepair"]>> | undefined;
+      try {
+        repair = await options.store.readForRepair();
+      } catch {
+        repair = undefined;
+      }
+      // SQLite can create an empty WAL while inspecting a closed WAL-mode database.
+      // Fingerprint the files after that connection closes so its own read does not stale the ID.
+      const { database, emptyDatabase } = await inspectDatabase(
+        options,
+        await artifact(options.venueDir, "venue.db", 128 * 1024 * 1024, false),
+        options.migrationsRoot ?? null,
+        [
+          ...(options.expectedMigrationSets ?? []),
+          ...(repair?.state.frozen.modules.map((entry) => entry.module) ?? []),
+        ],
+      );
       const artifacts: FirstSetupArtifact[] = [];
       const physicalSources: (string | null)[] = [];
       for (const name of [
@@ -340,24 +357,16 @@ export function createFirstSetupResolutionInspection(
       }
       const stateFile = artifacts.find((a) => a.name === "first-setup.json")!;
       const marker = artifacts.find((a) => a.name === "first-setup-claim.json")!;
-      let pair: FirstSetupInspection["pair"],
-        repair = null;
-      try {
-        repair = await options.store.readForRepair();
-        pair = repair === null ? "missing" : repair.repairMarker === null ? "valid" : "repairable";
-      } catch {
-        pair =
-          stateFile.status === "missing" || marker.status === "missing" ? "partial" : "invalid";
-      }
-      const { database, emptyDatabase } = await inspectDatabase(
-        options,
-        artifacts.find((a) => a.name === "venue.db")!,
-        options.migrationsRoot ?? null,
-        [
-          ...(options.expectedMigrationSets ?? []),
-          ...(repair?.state.frozen.modules.map((entry) => entry.module) ?? []),
-        ],
-      );
+      const pair: FirstSetupInspection["pair"] =
+        repair === undefined
+          ? stateFile.status === "missing" || marker.status === "missing"
+            ? "partial"
+            : "invalid"
+          : repair === null
+            ? "missing"
+            : repair.repairMarker === null
+              ? "valid"
+              : "repairable";
       const noOtherEvidence = artifacts.every(
         (a) =>
           ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
@@ -370,7 +379,7 @@ export function createFirstSetupResolutionInspection(
         pair,
         database,
         emptyDatabase,
-        password: repair === null ? ("uncheckable" as const) : ("checkable" as const),
+        password: repair == null ? ("uncheckable" as const) : ("checkable" as const),
         revision: repair?.state.revision ?? null,
         ownerGeneration: repair?.state.ownerGeneration ?? null,
         repairEligible: pair === "repairable" && emptyDatabase && noOtherEvidence,

@@ -135,3 +135,7 @@ export type {
 } from "./first-setup-activation.js";
 
 export { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
+
+export { recoverProvisionedVenue } from "./recover-provisioned-venue.js";
+
+export { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";

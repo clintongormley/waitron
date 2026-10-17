@@ -230,7 +230,7 @@ export async function finishFirstSetup(
   host: FirstSetupActivationHost & Pick<ReturnType<typeof createFirstSetupRuntime>, "resolution">,
   deps: FirstSetupFinishDeps,
   owner: FirstSetupOwnerAttempt,
-  publicationDigest: string | ((state: FirstSetupState) => string),
+  publicationDigest: string | ((state: FirstSetupState) => string | Promise<string>),
   hold: FirstSetupHold,
 ): Promise<VenueResult> {
   let state = await host.owner.authorize(owner);
@@ -242,7 +242,7 @@ export async function finishFirstSetup(
   if (!["activation-started", "committed", "publication"].includes(state.status)) conflict();
   host.assertSelection(state);
   const digest =
-    typeof publicationDigest === "string" ? publicationDigest : publicationDigest(state);
+    typeof publicationDigest === "string" ? publicationDigest : await publicationDigest(state);
   if (!isDeepStrictEqual(state.inputs.$publication, { digest })) conflict();
   const checked = await deps.check(state);
   if (checked === null) conflict();

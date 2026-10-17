@@ -2248,3 +2248,18 @@ refusal must retain the other session's journal; the paired case with no interve
 still releases a fresh refusal. The initial separate freshness read failed that retained-journal
 assertion. Marking creation inside `prepare` passed both cases. This checks that scheduling point,
 not atomic storage across browser tabs.
+
+
+## Fingerprint a WAL database after your inspection opens it
+
+SQLite can keep recent writes in a separate journal file, the WAL. If you fingerprint a closed
+WAL-mode database before inspecting its rows, your own read can invalidate the fingerprint. In A679's built-command retry on Node v26.11.1 (2026-10-17), the first
+read-only inspection created an empty `venue.db-wal`. The next inspection found that file where the
+first had recorded it missing, and password recovery refused with `setup.owner_required`.
+
+The interrupted case in `packages/provisioning/src/cli-owned-entry.test.ts` closes the command after
+its commit, compares two inspections, then starts another command to finish publication. Run it with
+`pnpm --filter @waitron/provisioning exec vitest run src/cli-owned-entry.test.ts -t 'interrupted=true'`.
+Without the ordering change, the comparison reports `venue.db-wal` changing from missing to the hash
+of an empty file. Sample the files after the inspection connection closes; keep the snapshot,
+password and exact-commit checks.
