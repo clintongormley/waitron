@@ -1,3 +1,4 @@
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -24,7 +25,7 @@ import {
 } from "./testing/party-venue.js";
 import { addExtras } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { fireLines, splitLinesWithinOrder, updateOrderLine } from "./working-order.js";
+import { fireLines, splitLinesWithinOrder } from "./working-order.js";
 import "./errors.js";
 
 // ticket_items.sent_order_number: the number of the order a dish the kitchen had seen left.

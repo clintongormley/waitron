@@ -1,3 +1,4 @@
+import { recallLines } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { sql } from "drizzle-orm";
@@ -62,13 +63,7 @@ import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./parties.js";
-import {
-  addTabRound,
-  listTablesWithState,
-  markGroupServed,
-  markServed,
-  recallLines,
-} from "./working-order.js";
+import { addTabRound, listTablesWithState, markGroupServed, markServed } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";

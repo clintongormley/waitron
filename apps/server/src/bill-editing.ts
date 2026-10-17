@@ -186,6 +186,26 @@ function revision(value: unknown, field: string): number {
   return value;
 }
 
+export interface OrderEditAuthority {
+  operatorId: string | undefined;
+  expectedEdit: BillEditExpected | null;
+}
+
+export async function requireOrderBillEditor(
+  tx: Transaction,
+  billId: string,
+  authority: OrderEditAuthority,
+): Promise<void> {
+  const [order] = await tx
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (order?.partyId == null) return;
+  const expected = parseBillEditExpected(authority.expectedEdit);
+  if (typeof authority.operatorId !== "string") throw invalid("operatorId");
+  await requireBillEditor(tx, billId, authority.operatorId, expected);
+}
+
 export async function requireBillEditor(
   tx: Transaction,
   billId: string,

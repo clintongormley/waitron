@@ -1,3 +1,4 @@
+import { sendLines, setLineCourse } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -16,8 +17,6 @@ import {
   fireCourse,
   markCourseAway,
   markServed,
-  sendLines,
-  setLineCourse,
 } from "./working-order.js";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";

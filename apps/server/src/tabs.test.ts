@@ -1,3 +1,10 @@
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { createZone } from "./testing/service-zone.js";
@@ -56,12 +63,7 @@ import {
   listTablesWithState,
   markServed,
   readTabLines,
-  recallLines,
-  sendLines,
-  setLineCourse,
   unmarkServed,
-  updateHeldOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
 import "./errors.js";

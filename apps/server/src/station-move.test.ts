@@ -1,3 +1,4 @@
+import { updateOrderLine, recallLines, sendLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -60,10 +61,7 @@ import {
   createOpenOrder,
   listStationQueue,
   readTabLines,
-  updateOrderLine,
   fireCourse,
-  recallLines,
-  sendLines,
 } from "./working-order.js";
 
 let venue: PartyVenue;

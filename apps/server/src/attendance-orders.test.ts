@@ -1,3 +1,4 @@
+import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { locations, newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
@@ -9,13 +10,7 @@ import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import {
-  abandonHeldOrder,
-  parkOrder,
-  setWorkingOrderLabel,
-  updateHeldOrder,
-  updateOrderLine,
-} from "./working-order.js";
+import { abandonHeldOrder, parkOrder, setWorkingOrderLabel } from "./working-order.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";
 

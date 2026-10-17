@@ -1,3 +1,4 @@
+import { recallLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -38,7 +39,7 @@ import { createTable } from "./testing/live-table.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
-import { listStationQueue, recallLines } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { readPartyBills, seatTable } from "./parties.js";
 import {
   fireGroup,

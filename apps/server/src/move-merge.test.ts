@@ -1,3 +1,4 @@
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -31,12 +32,7 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import {
-  addTabRound,
-  listStationQueues,
-  moveOrderLines,
-  updateHeldOrder,
-} from "./working-order.js";
+import { addTabRound, listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import {
   kitchenNotices,

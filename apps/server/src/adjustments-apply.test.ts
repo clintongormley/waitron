@@ -1,3 +1,4 @@
+import { recallLines, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -48,10 +49,7 @@ import {
   parkOrder,
   placeOrder,
   readOrderRevision,
-  recallLines,
   splitLinesWithinOrder,
-  updateHeldOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import { send } from "./testing/bill-venue.js";
 import { serveLine } from "./testing/serve-line.js";

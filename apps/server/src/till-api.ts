@@ -1,3 +1,4 @@
+import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
@@ -171,8 +172,9 @@ import {
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
-import type { BillEditState } from "./order-drafts.js";
+import type { BillEditState, BillEditExpected } from "./order-drafts.js";
 import {
+  requireOrderBillEditor,
   parseBillEditExpected,
   parseBillEditExpecteds,
   readBillEditState,
@@ -1876,6 +1878,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         } & LineExtras)[];
         label?: string;
         revision?: unknown;
+        expectedEdit: BillEditExpected | null;
       }>(c);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const revision = await updateHeldOrder(
@@ -1887,6 +1890,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           label: body.label,
           revision: requireRevision(body.revision),
           operatorId: personId,
+          expectedEdit: body.expectedEdit,
         },
         { fiscal, saleCfg: sendCfg },
         deps.attendance === undefined
@@ -3606,9 +3610,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      const body = await readJsonBody<{ revision: unknown; lines: Record<string, string | null> }>(
-        c,
-      );
+      const body = await readJsonBody<{
+        revision: unknown;
+        lines: Record<string, string | null>;
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       const copy = requireRevision(body.revision);
       if (body.lines === null || typeof body.lines !== "object" || Array.isArray(body.lines))
         throw invalid("lines");
@@ -3625,7 +3631,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             workingOrderId: id,
             revision: order.revision,
           });
+        await requireOrderBillEditor(tx, id, {
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit,
+        });
         const entries = Object.entries(body.lines);
+        await refuseRecalledWrite(
+          tx,
+          inArray(
+            workingOrderLines.id,
+            entries.map(([id]) => id),
+          ),
+        );
         const unsent = new Set((await unsentDishLines(tx, id)).map((line) => line.id));
         for (const [lineId, stationId] of entries) {
           if (!unsent.has(lineId)) throw invalid("lines");
@@ -3720,7 +3737,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
+      const { revision, expectedEdit, ...patch } = await readJsonBody<
+        OrderLinePatch & { revision?: unknown; expectedEdit: BillEditExpected | null }
+      >(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
@@ -3732,7 +3751,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           lineNo,
           patch,
           copy,
-          personId,
+          { operatorId: personId, expectedEdit },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },
@@ -3750,7 +3769,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      const body = await readJsonBody<{ courseId?: string | null }>(c);
+      const body = await readJsonBody<{
+        courseId?: string | null;
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       const courseId = body.courseId ?? null;
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
@@ -3763,6 +3785,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           id,
           lineNo,
           courseId,
+          { operatorId: session.personId, expectedEdit: body.expectedEdit },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
@@ -3778,7 +3801,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ lineNos?: number[] }>(c);
+      const body = await readJsonBody<{
+        lineNos?: number[];
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await sendLines(
@@ -3786,6 +3812,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           id,
           body.lineNos ?? [],
+          { operatorId: session.personId, expectedEdit: body.expectedEdit },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
@@ -3800,7 +3827,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ lineNos?: number[] }>(c);
+      const body = await readJsonBody<{
+        lineNos?: number[];
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await recallLines(
@@ -3808,6 +3838,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           id,
           body.lineNos ?? [],
+          { operatorId: session.personId, expectedEdit: body.expectedEdit },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },

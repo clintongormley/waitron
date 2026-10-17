@@ -1,3 +1,4 @@
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -38,7 +39,6 @@ import {
   placeOrder,
   readOrderRevision,
   unsentDishLines,
-  updateOrderLine,
 } from "./working-order.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 

@@ -1,3 +1,4 @@
+import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ import { readAttendanceFacts } from "./attendance-facts.js";
 import { submitDraft } from "./order-drafts.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
-import { updateHeldOrder, updateOrderLine, type UpdateHeldOrderRequest } from "./working-order.js";
+import { type UpdateHeldOrderRequest } from "./working-order.js";
 import { provisionBillVenue, seatedWith, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

@@ -1,3 +1,4 @@
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -71,7 +72,6 @@ import {
   listTablesWithState,
   parkOrder,
   placeOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import {

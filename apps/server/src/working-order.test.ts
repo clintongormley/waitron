@@ -1,3 +1,10 @@
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -70,12 +77,7 @@ import {
   readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,
-  recallLines,
-  sendLines,
   sendToPrep,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";

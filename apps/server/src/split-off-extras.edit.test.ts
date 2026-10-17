@@ -1,3 +1,10 @@
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -15,14 +22,7 @@ import { setRoutingCell, setStationToday, writePrintHeldWork } from "@waitron/ve
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import {
-  addTabRound,
-  recallLines,
-  sendLines,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
-} from "./working-order.js";
+import { addTabRound } from "./working-order.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";

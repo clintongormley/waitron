@@ -1,3 +1,11 @@
+import { updateOrderLine as updateOrderLineCommand } from "./working-order.js";
+import { updateHeldOrder } from "./working-order.js";
+import {
+  recallLines,
+  sendLines,
+  updateHeldOrder as updateHeldOrderForTest,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -58,10 +66,6 @@ import {
   listExpoQueue,
   listStationQueue,
   parkOrder,
-  recallLines,
-  sendLines,
-  updateHeldOrder,
-  updateOrderLine,
   splitUnitsWithinOrder,
   splitLinesWithinOrder,
   type TillSaleDeps,
@@ -3027,7 +3031,7 @@ async function saveWhole(
   lines: Awaited<ReturnType<typeof keptLines>> | ReturnType<typeof line>[],
   operatorId: string | undefined,
 ) {
-  return updateHeldOrder({ db }, v.cfg, orderId, {
+  return updateHeldOrderForTest({ db }, v.cfg, orderId, {
     lines,
     revision: await billRevisionOf(orderId),
     operatorId,
@@ -3383,7 +3387,21 @@ describe("edits inside groups (D19)", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => changeLine(v, s.tabId, beer!.lineNo, { quantity: "3" }),
+      () =>
+        inTx(async (tx) =>
+          updateOrderLineCommand(
+            tx,
+            v.cfg,
+            s.tabId,
+            beer!.lineNo,
+            { quantity: "3" },
+            await billRevisionOf(s.tabId),
+            {
+              operatorId: undefined,
+              expectedEdit: await readBillEditState(tx, s.tabId),
+            },
+          ),
+        ),
       { code: "management.request_invalid", params: { field: "operatorId" } },
     );
   });
@@ -3429,7 +3447,7 @@ describe("credit (D5)", () => {
   it("will not type a save that may issue the invoice without naming who saves", () => {
     const cfg = {} as TillConfig;
     const issue = { fiscal: {} as TillSaleDeps, saleCfg: {} as DeviceRequestConfig };
-    const unnamed = { lines: [], revision: 0 };
+    const unnamed = { lines: [], revision: 0, expectedEdit: null };
     expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);
     expectTypeOf(updateHeldOrder).toBeCallableWith(
       { db },

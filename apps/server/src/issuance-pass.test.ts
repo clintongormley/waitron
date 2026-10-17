@@ -1,3 +1,4 @@
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -57,7 +58,6 @@ import {
   placeOrder,
   priceStoredOrderForIssuance,
   readOrderRevision,
-  updateHeldOrder,
 } from "./working-order.js";
 import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";

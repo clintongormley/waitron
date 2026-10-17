@@ -1,3 +1,4 @@
+import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
@@ -75,7 +76,7 @@ import {
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
 } from "./till-sale.js";
-import { addTabRound, createOpenOrder, updateHeldOrder, updateOrderLine } from "./working-order.js";
+import { addTabRound, createOpenOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { recordSale } from "@waitron/core";

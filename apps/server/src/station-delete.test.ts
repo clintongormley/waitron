@@ -1,3 +1,4 @@
+import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -35,7 +36,7 @@ import {
   OPERATOR,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { listStationQueue, updateHeldOrder } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

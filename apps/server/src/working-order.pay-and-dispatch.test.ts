@@ -1,3 +1,9 @@
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  updateHeldOrder,
+} from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
@@ -60,11 +66,7 @@ import {
   parkOrder,
   paysAfterSending,
   placeOrder,
-  recallLines,
-  sendLines,
   sendToPrep,
-  setLineCourse,
-  updateHeldOrder,
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";

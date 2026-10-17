@@ -1,3 +1,4 @@
+import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   readLineCancellations,
@@ -2437,10 +2438,12 @@ export async function sendLines(
   cfg: OriginConfig,
   tabId: string,
   lineNos: number[],
+  authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   const routing = routingOnce(tx, cfg, new Date());
   await assertPartyBillOpen(tx, cfg, tabId);
+  await requireOrderBillEditor(tx, tabId, authority);
   const namedLines =
     lineNos.length === 0
       ? []
@@ -2456,14 +2459,15 @@ export async function sendLines(
   if (namedLines.some((line) => line.parentLineId !== null)) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  if (namedLines.length > 0)
-    await refuseRecalledWrite(
-      tx,
-      inArray(
-        workingOrderLines.id,
-        namedLines.map((line) => line.id),
-      ),
-    );
+  await refuseRecalledWrite(
+    tx,
+    lineNos.length === 0
+      ? eq(workingOrderLines.workingOrderId, tabId)
+      : inArray(
+          workingOrderLines.id,
+          namedLines.map((line) => line.id),
+        ),
+  );
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
@@ -2563,9 +2567,11 @@ export async function recallLines(
   cfg: TillConfig,
   tabId: string,
   lineNos: number[],
+  authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
+  await requireOrderBillEditor(tx, tabId, authority);
   if (lineNos.length === 0) {
     return;
   }
@@ -3204,9 +3210,11 @@ export async function setLineCourse(
   tabId: string,
   lineNo: number,
   courseId: string | null,
+  authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
+  await requireOrderBillEditor(tx, tabId, authority);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
@@ -4950,6 +4958,7 @@ async function readBasketOrder(
  * stored line the basket does not name is removed. The request never supplies a price.
  */
 export interface UpdateHeldOrderRequest {
+  expectedEdit: OrderEditAuthority["expectedEdit"];
   lines: ({
     workingOrderLineId?: string;
     menuItemId: string;
@@ -6213,6 +6222,10 @@ export async function updateHeldOrder(
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
+    await requireOrderBillEditor(tx, id, {
+      operatorId: req.operatorId,
+      expectedEdit: req.expectedEdit,
+    });
     await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
@@ -6295,10 +6308,12 @@ export async function updateOrderLine(
   lineNo: number,
   patch: OrderLinePatch,
   revision: number,
-  operatorId?: string,
+  authority: OrderEditAuthority,
   attendance?: OrderAttendance,
 ): Promise<number> {
   const { locationId } = await requireEditableOrder(tx, orderId, revision);
+  await requireOrderBillEditor(tx, orderId, authority);
+  const operatorId = authority.operatorId;
   const order = await readEditableOrder(tx, cfg, orderId);
   const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
   if (line === undefined) {

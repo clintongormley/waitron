@@ -1,3 +1,4 @@
+import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -40,8 +41,6 @@ import {
   listExpoQueue,
   listStationQueue,
   priceStoredOrder,
-  sendLines,
-  updateOrderLine,
 } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
