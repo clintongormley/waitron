@@ -23,8 +23,12 @@ afterEach(async () => {
   setLocale("en");
 });
 
-async function mount(extra: Partial<OpeningHoursWeekView> = {}): Promise<OpeningHoursWeekView> {
+async function mount(
+  extra: Partial<OpeningHoursWeekView> = {},
+  width?: string,
+): Promise<OpeningHoursWeekView> {
   const el = document.createElement("opening-hours-week");
+  if (width) el.style.width = width;
   Object.assign(el, {
     model: monthModel(),
     date: "2026-12-02",
@@ -691,7 +695,9 @@ describe("Opening hours week: a block's label", () => {
   it("a tip shown again is placed afresh", async () => {
     await page.viewport(390, 800);
     expect(window.innerWidth).toBe(390);
-    const el = await mount();
+    // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
+    // window's, decides when the Week draws a day alone.
+    const el = await mount({}, "600px");
     await userEvent.hover(block(el, "2026-12-02", "rest", 3));
     expect(open(el)).toBe(true);
     const breakfast = block(el, "2026-12-02", "rest", 1);
@@ -737,7 +743,9 @@ describe("Opening hours week: a block's label", () => {
   it("stays on a phone's screen", async () => {
     await page.viewport(390, 800);
     expect(window.innerWidth).toBe(390);
-    const el = await mount();
+    // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
+    // window's, decides when the Week draws a day alone.
+    const el = await mount({}, "600px");
     const dinner = block(el, "2026-12-02", "rest", 3);
     await userEvent.hover(dinner);
     expect(open(el)).toBe(true);
@@ -745,5 +753,131 @@ describe("Opening hours week: a block's label", () => {
     expect(box.right).toBeLessThanOrEqual(390 - 8);
     expect(box.left).toBeGreaterThanOrEqual(8);
     expect(box.left).toBeLessThan(dinner.getBoundingClientRect().left);
+  });
+});
+
+describe("Opening hours week on a phone", () => {
+  beforeEach(async () => {
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+  });
+
+  const card = (el: OpeningHoursWeekView) => testId(el, "day-card")!;
+  const cardRow = (el: OpeningHoursWeekView, key: string) =>
+    card(el).querySelector<HTMLElement>(`.row[data-row="${key}"]`)!;
+  const bold = (node: Element) => Number(getComputedStyle(node).fontWeight) >= 600;
+
+  it("below 560 px it shows the address's day alone", async () => {
+    const el = await mount({ date: "2026-12-01", departmentId: "rest" });
+    expect(root(el).querySelectorAll("section")).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-test="day-name"]')).toHaveLength(0);
+    expect(text(testId(el, "week"))).toBe("Tue 1 Dec");
+    expect([...card(el).querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([
+      "rest",
+      "terrace",
+    ]);
+    const rest = cardRow(el, "rest");
+    expect(text(rest.querySelector(".row-name"))).toBe("Restaurant");
+    expect(bold(rest.querySelector(".row-name")!)).toBe(true);
+    expect(text(rest.querySelector(".words"))).toBe(
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 20:00–23:00",
+    );
+    const terrace = cardRow(el, "terrace");
+    expect(text(terrace.querySelector(".row-name"))).toBe("Terrace");
+    expect(bold(terrace.querySelector(".row-name")!)).toBe(true);
+    expect(text(terrace.querySelector(".words"))).toBe(
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
+    );
+    const terraceTrack = terrace.querySelector<HTMLElement>(".track")!;
+    expect(terraceTrack.getAttribute("aria-hidden")).toBe("true");
+    const blocks = [...terraceTrack.querySelectorAll<HTMLElement>(".block")];
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const b of blocks) expect(text(b)).toBe("");
+    expect(terraceTrack.querySelectorAll(".block[data-faded]")).toHaveLength(2);
+    expect(
+      getComputedStyle(terraceTrack.querySelector('.block[data-kind="closed"]')!).backgroundImage,
+    ).toContain("repeating-linear-gradient");
+    expect(root(el).querySelector(".ruler")).toBeNull();
+    expect(testId(el, "block-tip")).toBeNull();
+
+    el.date = "2026-12-02";
+    await el.updateComplete;
+    const followed = cardRow(el, "terrace");
+    expect(text(followed.querySelector(".words"))).toBe("as Restaurant");
+    expect(bold(followed.querySelector(".row-name")!)).toBe(false);
+  });
+
+  it("names the day's special day or holiday under the head", async () => {
+    const el = await mount({ date: "2026-12-08" });
+    expect(text(root(el).querySelector(".name.holiday"))).toBe("Immaculate Conception");
+    el.date = "2026-12-14";
+    await el.updateComplete;
+    expect(text(root(el).querySelector(".name.special"))).toBe("Company dinners");
+  });
+
+  it("‹ › step a day", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    expect(testId(el, "previous-day")!.getAttribute("aria-label")).toBe("Previous day");
+    expect(testId(el, "next-day")!.getAttribute("aria-label")).toBe("Next day");
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    testId(el, "next-day")!.click();
+    testId(el, "previous-day")!.click();
+    expect(sent).toEqual([{ date: "2026-12-02" }, { date: "2026-11-30" }]);
+    expect(el.shownMonth).toBe("2026-12");
+
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(el.shownMonth).toBe("2026-11"));
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "next-day")).not.toBeNull());
+
+    let monday = "0100-02-01";
+    while (weekdayOf(monday) !== 1) monday = addDays(monday, 1);
+    el.model = undefined;
+    el.date = monday;
+    await el.updateComplete;
+    expect(testId(el, "previous-day")!.hasAttribute("disabled")).toBe(true);
+    expect(testId(el, "next-day")!.hasAttribute("disabled")).toBe(false);
+    await userEvent.click(testId(el, "previous-day")!, { force: true });
+    expect(sent).toHaveLength(2);
+  });
+
+  it("back above 560 px it shows the whole week again", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    expect(card(el)).not.toBeNull();
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(root(el).querySelectorAll("section")).toHaveLength(7));
+    expect(testId(el, "day-card")).toBeNull();
+    expect(testId(el, "next-week")).not.toBeNull();
+    expect(text(testId(el, "week"))).toBe("30 Nov – 6 Dec 2026");
+  });
+
+  it("turning narrow hides and unpins a shown tip", async () => {
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    const el = await mount();
+    await userEvent.click(block(el, "2026-12-02", "rest", 3));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    const shown = tip(el);
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
+    expect(shown.matches(":popover-open")).toBe(false);
+    await userEvent.click(card(el).querySelector<HTMLElement>(".block")!);
+    expect(testId(el, "block-tip")).toBeNull();
+  });
+
+  it("nothing runs off the side", async () => {
+    const el = await mount({ date: "2026-12-01", departmentId: "rest" });
+    await vi.waitFor(() => expect(root(el).querySelector("wt-combobox")).not.toBeNull());
+    const head = root(el).querySelector<HTMLElement>(".head")!;
+    const parts = [...head.children, ...card(el).querySelectorAll("*")];
+    expect(parts.length).toBeGreaterThan(4);
+    for (const part of parts)
+      expect(part.getBoundingClientRect().right, part.className).toBeLessThanOrEqual(390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   });
 });

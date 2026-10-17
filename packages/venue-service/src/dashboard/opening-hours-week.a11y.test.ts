@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -91,6 +91,11 @@ const states: Record<
 };
 
 describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)", (theme) => {
+  beforeEach(async () => {
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+  });
+
   // axe scores no contrast for a shape with no text; light's track against the page, about 1.3,
   // is the bar dark must match.
   test("draws a bar's empty track apart from the page", async () => {
@@ -127,3 +132,31 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     }
   });
 });
+
+const phoneStates: Record<string, { props: Partial<OpeningHoursWeekView>; shown: string[] }> = {
+  "a day on a phone": {
+    props: { date: "2026-12-08" },
+    shown: ['[data-test="day-card"]', ".name.holiday"],
+  },
+  "a day on a phone with a closed zone": {
+    props: { date: "2026-12-01", departmentId: "rest" },
+    shown: [
+      '[data-test="day-card"] .block[data-faded]',
+      '[data-test="day-card"] .block[data-kind="closed"]',
+    ],
+  },
+};
+
+describe.each(["light", "dark"] as const)(
+  "Opening hours week on a phone accessibility (%s)",
+  (theme) => {
+    test.each(Object.keys(phoneStates))("%s", async (state) => {
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
+      const el = await mountWeek(theme, phoneStates[state]!.props);
+      for (const shown of phoneStates[state]!.shown)
+        expect(el.shadowRoot!.querySelector(shown), shown).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+  },
+);

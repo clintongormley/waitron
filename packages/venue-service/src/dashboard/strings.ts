@@ -138,6 +138,8 @@ const en = {
   "week.block_label": "{name} · {text}",
   "week.previous": "Previous week",
   "week.next": "Next week",
+  "week.previous_day": "Previous day",
+  "week.next_day": "Next day",
   "week.month_view_hint": "Whole month",
 
   "opening.title": "Opening hours",
@@ -973,6 +975,8 @@ const es: Record<keyof typeof en, string> = {
   "week.block_label": "{name} · {text}",
   "week.previous": "Semana anterior",
   "week.next": "Semana siguiente",
+  "week.previous_day": "Día anterior",
+  "week.next_day": "Día siguiente",
   "week.month_view_hint": "Todo el mes",
 
   "opening.title": "Horario de apertura",
