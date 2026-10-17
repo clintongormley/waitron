@@ -63,7 +63,9 @@ function yearRead(year: number): OpeningHoursYear {
 
 const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
-beforeEach(() => {
+beforeEach(async () => {
+  await resizeViewport(1280, 800);
+  expect(window.innerWidth).toBe(1280);
   setLocale("en");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-12-02T12:00:00Z"));

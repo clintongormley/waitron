@@ -692,7 +692,7 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
   });
 
-  it("a tip shown again is placed afresh", async () => {
+  it("a tip shown again is placed afresh, in a desktop Week wider than a narrow window", async () => {
     await page.viewport(390, 800);
     expect(window.innerWidth).toBe(390);
     // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
@@ -740,7 +740,7 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Terrace · Lunch 13:00–16:00");
   });
 
-  it("stays on a phone's screen", async () => {
+  it("stays inside a narrow window, in a desktop Week wider than it", async () => {
     await page.viewport(390, 800);
     expect(window.innerWidth).toBe(390);
     // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
@@ -809,10 +809,11 @@ describe("Opening hours week on a phone", () => {
 
   it("names the day's special day or holiday under the head", async () => {
     const el = await mount({ date: "2026-12-08" });
-    expect(text(root(el).querySelector(".name.holiday"))).toBe("Immaculate Conception");
+    const underHead = () => root(el).querySelector<HTMLElement>(".head + .day-names");
+    expect(text(underHead()?.querySelector(".name.holiday"))).toBe("Immaculate Conception");
     el.date = "2026-12-14";
     await el.updateComplete;
-    expect(text(root(el).querySelector(".name.special"))).toBe("Company dinners");
+    expect(text(underHead()?.querySelector(".name.special"))).toBe("Company dinners");
   });
 
   it("‹ › step a day", async () => {
@@ -866,7 +867,14 @@ describe("Opening hours week on a phone", () => {
     expect(window.innerWidth).toBe(390);
     await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
     expect(shown.matches(":popover-open")).toBe(false);
+    const track = card(el).querySelector<HTMLElement>(".track")!;
+    await userEvent.hover(track);
+    expect(testId(el, "block-tip")).toBeNull();
     await userEvent.click(card(el).querySelector<HTMLElement>(".block")!);
+    expect(testId(el, "block-tip")).toBeNull();
+    await commands.touchGesture({
+      at: 'opening-hours-week [data-test="day-card"] .row[data-row="rest"] .track',
+    });
     expect(testId(el, "block-tip")).toBeNull();
   });
 
