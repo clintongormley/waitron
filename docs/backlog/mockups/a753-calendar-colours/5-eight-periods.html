@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>A753 eight periods</title><style>
+  body { margin: 0; background: #f7f7f8; color: #16181d; font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { width: 390px; box-sizing: border-box; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 18px 0 8px; }
+  p { margin: 0 0 8px; color: #5b6070; font-size: 13px; }
+  .card { background: #ffffff; border: 1px solid #d6d9e0; border-radius: 8px; padding: 8px; }
+  .row { display: grid; grid-template-columns: 118px 1fr auto; align-items: center; gap: 10px; padding: 5px 0; }
+  .row + .row { border-top: 1px solid #d6d9e0; }
+  .chip { border-radius: 6px; padding: 7px 8px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name b { display: block; }
+  .name span { color: #5b6070; font-size: 12px; }
+  .ratio { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .ratio small { display: block; font-weight: 400; color: #5b6070; font-size: 11px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; border: 1px solid #d6d9e0; border-radius: 4px; padding: 0 4px; margin-left: 4px; color: #5b6070; }
+  .bar { display: flex; height: 34px; border-radius: 6px; overflow: hidden; margin: 6px 0; }
+  .bar div { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
+  .label { font-size: 12px; color: #5b6070; margin-top: 8px; }
+  .dept b { display: block; font-size: 12px; margin-top: 4px; }
+  .dept .bar { margin: 2px 0 4px; }
+  .dept .bar div { font-size: 11.5px; }
+  .darkpane { background: #101216; color: #eceef2; margin: 16px -16px -16px; padding: 1px 16px 16px; }
+  .darkpane .card { background: #191c22; border-color: #333945; }
+  .darkpane .label { color: #a3a8b5; }
+  .dup { outline: 2px dashed #16181d; outline-offset: -4px; }
+</style></head><body data-theme="light"><main><h1>A venue with eight periods</h1>
+<p>Five restaurant periods and three bar periods. With six colours two pairs have to share: Breakfast and Afternoon both green, Late and Tapas both purple.</p>
+<h2>Light theme</h2>
+<div class="label">Today, six colours: the dashed periods share a colour</div>
+<div class="card"><div class="dept"><b>Restaurant</b><div class="bar"><div class="dup" style="background:#1e7a4f;color:#ffffff">Breakfast</div><div class="" style="background:#f5a623;color:#241500">Lunch</div><div class="dup" style="background:#1e7a4f;color:#ffffff">Afternoon</div><div class="" style="background:#c62828;color:#ffffff">Dinner</div><div class="dup" style="background:#7e3fb8;color:#ffffff">Late</div></div></div>
+<div class="dept"><b>Bar</b><div class="bar"><div class="" style="background:#6b6e78;color:#ffffff">Morning</div><div class="dup" style="background:#7e3fb8;color:#ffffff">Tapas</div><div class="" style="background:#2f55d4;color:#ffffff">Evening</div></div></div></div>
+<div class="label">With the new colours: every period its own</div>
+<div class="card"><div class="dept"><b>Restaurant</b><div class="bar"><div class="" style="background:#1e7a4f;color:#ffffff">Breakfast</div><div class="" style="background:#f5a623;color:#241500">Lunch</div><div class="" style="background:#0c7480;color:#ffffff">Afternoon</div><div class="" style="background:#c62828;color:#ffffff">Dinner</div><div class="" style="background:#3730a3;color:#ffffff">Late</div></div></div>
+<div class="dept"><b>Bar</b><div class="bar"><div class="" style="background:#7a4b2a;color:#ffffff">Morning</div><div class="" style="background:#22b8d8;color:#04161c">Tapas</div><div class="" style="background:#2f55d4;color:#ffffff">Evening</div></div></div></div><div class="darkpane"><h2>Dark theme</h2>
+<div class="label">Today, six colours: the dashed periods share a colour</div>
+<div class="card"><div class="dept"><b>Restaurant</b><div class="bar"><div class="dup" style="background:#4ac08d;color:#06190f">Breakfast</div><div class="" style="background:#f5b34a;color:#241500">Lunch</div><div class="dup" style="background:#4ac08d;color:#06190f">Afternoon</div><div class="" style="background:#ff7a70;color:#2a0705">Dinner</div><div class="dup" style="background:#c39bf0;color:#1d0b33">Late</div></div></div>
+<div class="dept"><b>Bar</b><div class="bar"><div class="" style="background:#8b8d98;color:#101216">Morning</div><div class="dup" style="background:#c39bf0;color:#1d0b33">Tapas</div><div class="" style="background:#7aa2ff;color:#06101f">Evening</div></div></div></div>
+<div class="label">With the new colours: every period its own</div>
+<div class="card"><div class="dept"><b>Restaurant</b><div class="bar"><div class="" style="background:#4ac08d;color:#06190f">Breakfast</div><div class="" style="background:#f5b34a;color:#241500">Lunch</div><div class="" style="background:#1fa596;color:#03201c">Afternoon</div><div class="" style="background:#ff7a70;color:#2a0705">Dinner</div><div class="" style="background:#8b7bff;color:#120c3a">Late</div></div></div>
+<div class="dept"><b>Bar</b><div class="bar"><div class="" style="background:#c9976e;color:#1f1006">Morning</div><div class="" style="background:#8be0f2;color:#04181e">Tapas</div><div class="" style="background:#7aa2ff;color:#06101f">Evening</div></div></div></div></div></main></body></html>
