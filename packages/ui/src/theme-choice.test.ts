@@ -179,23 +179,76 @@ describe("the saved theme choice", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  // Another tab's write lands in this tab's localStorage before its storage event arrives, so
+  // each case writes the shared value first and then dispatches the event that would follow it.
+  function otherTabSaved(key: string | null, newValue: string | null): void {
+    if (key !== null && newValue !== null) localStorage.setItem(key, newValue);
+    else if (key !== null) localStorage.removeItem(key);
+    else localStorage.removeItem(THEME_STORAGE_KEY);
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue, storageArea: localStorage }));
+  }
+
   it("follows a choice made in another tab of this browser", () => {
     startThemeChoice(root);
     const listener = vi.fn();
     const unsubscribe = subscribeThemeChoice(listener);
     const setItem = vi.spyOn(Storage.prototype, "setItem");
-    window.dispatchEvent(new StorageEvent("storage", { key: THEME_STORAGE_KEY, newValue: "dark" }));
+    otherTabSaved(THEME_STORAGE_KEY, "dark");
     expect(root.getAttribute("data-theme")).toBe("dark");
     expect(currentThemeChoice()).toBe("dark");
     expect(listener).toHaveBeenCalledOnce();
-    window.dispatchEvent(new StorageEvent("storage", { key: "other", newValue: "light" }));
+    window.dispatchEvent(
+      new StorageEvent("storage", { key: "other", newValue: "light", storageArea: localStorage }),
+    );
     expect(currentThemeChoice()).toBe("dark");
     expect(listener).toHaveBeenCalledOnce();
-    window.dispatchEvent(new StorageEvent("storage", { key: null }));
+    otherTabSaved(null, null);
     expect(currentThemeChoice()).toBe("device");
     expect(root.hasAttribute("data-theme")).toBe(false);
-    expect(setItem).not.toHaveBeenCalled();
+    expect(setItem.mock.calls).toEqual([[THEME_STORAGE_KEY, "dark"]]);
     unsubscribe();
+  });
+
+  it("a storage event older than this tab's own later choice does not undo it", () => {
+    startThemeChoice(root);
+    chooseTheme("light");
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: THEME_STORAGE_KEY,
+        newValue: "dark",
+        storageArea: localStorage,
+      }),
+    );
+    expect(currentThemeChoice()).toBe("light");
+    expect(root.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("a change to session storage under the theme's key, or a session storage clear, changes nothing", () => {
+    startThemeChoice(root);
+    chooseTheme("dark");
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: THEME_STORAGE_KEY,
+        newValue: "light",
+        storageArea: sessionStorage,
+      }),
+    );
+    expect(currentThemeChoice()).toBe("dark");
+    window.dispatchEvent(new StorageEvent("storage", { key: null, storageArea: sessionStorage }));
+    expect(currentThemeChoice()).toBe("dark");
+    expect(root.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("a storage event when this page cannot reach localStorage changes nothing", () => {
+    startThemeChoice(root);
+    chooseTheme("dark");
+    const storageArea = localStorage;
+    storageArea.setItem(THEME_STORAGE_KEY, "light");
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    window.dispatchEvent(new StorageEvent("storage", { key: THEME_STORAGE_KEY, storageArea }));
+    expect(currentThemeChoice()).toBe("dark");
   });
 
   it("starting twice still follows other tabs only once", () => {
@@ -203,9 +256,7 @@ describe("the saved theme choice", () => {
     startThemeChoice(root);
     const listener = vi.fn();
     const unsubscribe = subscribeThemeChoice(listener);
-    window.dispatchEvent(
-      new StorageEvent("storage", { key: THEME_STORAGE_KEY, newValue: "light" }),
-    );
+    otherTabSaved(THEME_STORAGE_KEY, "light");
     expect(listener).toHaveBeenCalledOnce();
     unsubscribe();
   });

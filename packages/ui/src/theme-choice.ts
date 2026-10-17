@@ -15,13 +15,10 @@ let themeRoot: HTMLElement | undefined;
 let followingOtherTabs = false;
 const listeners = new Set<() => void>();
 
-function parseSaved(value: string | null): ThemeChoice {
-  return value === "light" || value === "dark" ? value : "device";
-}
-
 function readSaved(): ThemeChoice {
   try {
-    return parseSaved(window.localStorage.getItem(THEME_STORAGE_KEY));
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isThemeChoice(saved) ? saved : "device";
   } catch {
     return "device";
   }
@@ -39,9 +36,19 @@ function settle(next: ThemeChoice): void {
   for (const listener of listeners) listener();
 }
 
+function isLocalStorage(area: Storage | null): boolean {
+  try {
+    return area === window.localStorage;
+  } catch {
+    return false;
+  }
+}
+
+// Reads the saved value rather than event.newValue: an event queued before this tab's own later
+// save would otherwise put back the older choice.
 function followOtherTab(event: StorageEvent): void {
-  if (event.key === null) settle("device");
-  else if (event.key === THEME_STORAGE_KEY) settle(parseSaved(event.newValue));
+  if (event.key !== null && event.key !== THEME_STORAGE_KEY) return;
+  if (isLocalStorage(event.storageArea)) settle(readSaved());
 }
 
 export function startThemeChoice(root: HTMLElement): void {
