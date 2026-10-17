@@ -20,39 +20,58 @@ primitive in `packages/ui`, which is mutation-tested). No migration, no route, n
   with `dx` the pointer's px since the press and `scale` the view's px per square. The drawn group
   moves; the crop, the fit and the host's shape do not.
 - On release, `wt-table-drag-end` (`:575`) reaches `#onDrop` (`till-floor-screen.ts:934`), which for a
-  move sets the pending place at once (`#setPending`). The screen re-renders with the table in its new
-  place, the ratio changes, the host resizes, and the `ResizeObserver` (`:405`) refits the view
-  unless the waiter had panned or zoomed (`#touched`). That is the "grows when let go".
+  move sets the pending place at once (`#setPending`, `:897`). The screen re-renders with the table in
+  its new place, the ratio changes, the host resizes, and the `ResizeObserver` (`:405`) refits the
+  view unless the waiter had panned or zoomed (`#touched`). A new `tables` list alone never refits
+  (`willUpdate`, `:731–742`; `design-system.md:809`): the "grows when let go" happens only because
+  the ratio, and so the host's size, changes.
 
 ## Decisions this plan makes that the backlog entry does not
 
+Revised after the plan review (2026-10-17): a first draft refitted the view on every drag move and
+kept the grabbed point under the finger; a model of it ran the table out to x 999 once the finger
+neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` and
+`wt-floor-map.today.test.ts`, whose fixed-size hosts drag tables past the crop.
+
 1. **During a drag the map behaves as though the held group already stood where it is drawn — but
-   only ever GROWS.** The drag's crop is the union of the tables' crop and the crop of every table
-   with the held group moved. Dragging the table at the edge inward does not zoom the plan in
-   mid-drag; on release the plan settles to the true crop exactly as today. Default chosen because a
-   plan that shrinks under the finger zooms in and runs the table away from it, and the owner asked
-   for growth only.
-2. **Both halves of "the plan" grow: the host's shape and the fitted view.** The map publishes its
-   own `--floor-map-ratio` on its host from the effective crop (the drag's crop while a drag is
-   drawn, else the tables'); the till screen stops computing it and keeps reading the variable in
-   its CSS. The fitted view fits the effective crop. One source for the ratio means the shape the
-   screen gives the box and the crop the map fits into it cannot disagree mid-drag.
-3. **The grabbed point stays under the finger.** With the view rescaling under a drag, `dx / scale`
-   no longer says where the finger is on the plan. The drag is computed in plan squares instead: on
-   the drag's first move the map records the plan point under where the press began (from the
-   host's `getBoundingClientRect()` and the view at that moment); each move takes the plan point
-   under the pointer now, from the current host box and view, and moves the group by the rounded
-   difference (through `groupStep`, as today). When the view has not changed this is exactly
-   today's `snapToSquare(dx, scale)`, so a drag that never crosses the edge moves as it does now.
-   When a move grows the crop and the view is refitted, the squares are recomputed against the new
-   view, repeating until they stop changing; growth only ever widens the crop and `groupStep` holds
-   the group within 0–999, so the repetition ends.
-4. **A waiter's own pan or zoom is kept.** While `#touched` is set the view is not refitted, as on
-   release today; only the host's shape follows the drag (and the observer keeps the view on the
-   resize, as it does today). Double-tapping the empty floor still refits.
-5. **A fixed group does not grow the plan.** Its drag draws a copy that can only be dropped on
+   only ever GROWS.** The drag's crop is the union, over every move of this drag, of the tables'
+   crop and the crop of the tables with the held group moved. When `tables` is replaced mid-drag (a
+   live update) the drag's crop restarts from the new tables' crop united with the moved group's.
+   Dragging the edge table inward does not shrink the plan mid-drag.
+2. **The map publishes its own `--floor-map-ratio` on its host**, from the effective crop: the
+   drag's crop while a non-fixed drag is drawn and the view is untouched, else the tables' crop (1
+   with no tables). The till screen stops computing the ratio (its `styleMap` and `cropToTables`
+   imports go with it) and keeps reading the variable in its CSS. The map owns the variable; a
+   parent only reads it (a parent binding `style` as a plain attribute would wipe it — say so in
+   design-system.md).
+3. **The view is refitted only by a resize, as on release today.** `#fitView` fits the effective
+   crop. A host whose CSS reads the ratio (the till) is resized when the ratio changes, and the
+   `ResizeObserver` refits it unless the view was touched. A host of fixed size — every existing
+   suite's 600 × 300 box — is never refitted during a drag, so those suites keep their assertions.
+4. **The drag follows the finger's travel, never a view the drag itself caused.** Today the squares
+   are `snapToSquare(dx, view.scale)`; with the scale changing under a drag that would feed back.
+   The map banks the travel each time the scale changes: it keeps the squares travelled at the scale
+   in force (`banked`, exact, unrounded), the `dx`, `dy` at which that scale took over, and the
+   scale; a move whose scale differs from the kept one first adds the previous move's travel at the
+   kept scale to `banked`. The squares are `banked + (dx − dxAtBank) / scale`, rounded, through
+   `groupStep` as today. While the scale never changes `banked` is 0 and `dxAtBank` is 0, so the
+   squares are exactly today's `round(dx / scale)`. A still finger moves nothing after a refit; the
+   table keeps moving at finger speed on screen. A wheel zoom during a drag is banked the same way
+   (today it rescales the travel already made; no existing test covers it).
+5. **A waiter's own pan or zoom is kept, and turns the growth off.** While `#touched` is set the map
+   publishes the tables' ratio, so nothing changes during the drag; release behaves as today.
+6. **A fixed group does not grow the plan.** Its drag draws a copy that can only be dropped on
    another table (`dropAction`), which is already inside the plan.
-6. **Nothing else changes.** No new event, no change to what `wt-table-drag-end` carries, no change
+7. **Release refits nothing itself.** `#endDrag` only ends the drag. On an outward move the new
+   tables' crop equals the drag's crop, so the ratio does not change and the view stays fitted to
+   it; on a refused drop, or a drag that went out and came back, the ratio returns to the tables'
+   and the observer refits.
+8. **Residuals, recorded as short backlog entries in Task 5:** a crop that grows in proportion (a
+   diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today; and
+   after the view has rescaled during a drag the drawn table lags the finger, while the drop target
+   and its highlight stay the table under the finger (`#targetAt`, unchanged), so the highlight
+   always names the table the drop will use.
+9. **Nothing else changes.** No new event, no change to what `wt-table-drag-end` carries, no change
    to the dashboard editor (`wt-floor-plan-canvas`, whose grid already grows during a drag through
    `gridExtent`; the two share `bounds` and `cropToTables` and nothing else that applies here).
 
@@ -63,19 +82,23 @@ primitive in `packages/ui`, which is mutation-tested). No migration, no route, n
   may gain what it lacks; no assertion changes (queue.md ⚠ THE RULE).
 - Browser tests: `packages/ui` and `apps/till` run in real headless Chromium. Check free memory first
   (`memory_pressure | grep free`). Read the `Tests` count, never only the exit status.
-- `packages/ui` holds a 90 mutation floor: run Stryker over `wt-floor-map.ts` (and any geometry
-  helper added) and kill or explain the surviving mutants of the new code.
+- New grow tests mount the map in a host that reads the ratio, e.g.
+  `style="display: block; width: 600px; aspect-ratio: var(--floor-map-ratio)"`, so a ratio change
+  resizes it as the till's CSS does; a fixed-size host cannot show growth.
+- `packages/ui`'s mutation floor of 90 bites on the nightly merged score
+  (`docs/developers/ci-and-gates.md`); a local run gates nothing but is how survivors are found:
+  `pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-floor-map.ts`.
 - Comments only for an invariant or a non-obvious why (CLAUDE.md §1). Every `wt-*` rule in
   CLAUDE.md §3 holds.
 
 ## Review focus
 
-- The drag still lands where it is drawn: the `wt-table-drag-end` x and y are the drawn place.
-- No feedback loop: a held pointer near the edge settles; a drag back inward does not shrink the
-  plan; release settles to today's fit.
+- The drag lands where it is drawn: the `wt-table-drag-end` x and y are the drawn place.
+- No feedback loop: a still pointer after a refit moves nothing; a drag back inward does not shrink
+  the plan; release settles to today's fit.
 - The fixed-group copy, the drop-target highlight and `#targetAt` still work while the view rescales.
-- A table list replaced mid-drag (a live update) still ends the drag when the held table goes, and
-  the drag crop uses the new list.
+- A table list replaced mid-drag still ends the drag when the held table goes, and the drag's crop
+  restarts from the new list.
 
 ## Tasks
 
@@ -85,57 +108,66 @@ Files: `packages/ui/src/components/wt-floor-map.ts`, a new `packages/ui/src/comp
 `apps/till/src/screens/till-floor-screen.ts`.
 
 - Test first: a map given tables whose crop is W × H squares sets `--floor-map-ratio` on its own host
-  to `W / H` (read with `getComputedStyle(map).getPropertyValue("--floor-map-ratio")` or
-  `map.style`); a map with no tables sets `1`; replacing `tables` updates it.
-- Set it in `willUpdate` from the same crop `#fitView` uses.
-- Till screen: remove the `styleMap` ratio and its `cropToTables` call from `#plannedMap`; keep the
-  CSS that reads the variable. Its existing suites must pass unedited; add one case in
-  `till-floor-screen.map.test.ts` (or the screen suite that renders the plan view) that the rendered
-  `wt-floor-map` has the ratio of its zone's tables.
+  to `W / H` (`map.style.getPropertyValue("--floor-map-ratio")`); a map with no tables sets `1`;
+  replacing `tables` updates it.
+- Set it in `willUpdate` from the tables' crop.
+- Till screen: remove the `styleMap` ratio binding from `#plannedMap`, and the `styleMap` and
+  `cropToTables` imports if nothing else uses them; keep the CSS that reads the variable. The
+  existing case `till-floor-screen.map.test.ts:345` ("sizes the map to a W by H zone") must pass
+  unedited — it is the till-side test; add none.
 - Run: `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map` and
   `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen`.
 
-### Task 2 — The plan grows while a table is dragged past its edge
+### Task 2 — The drag banks its travel when the scale changes
+
+Files: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.grow.test.ts`.
+
+- Test first: hold a table, move it (say 2 squares), Ctrl+wheel to double the scale, send the same
+  pointer position again: the table does not move (today it jumps to 4 squares); move a further
+  `2 × newScale` px: it moves 2 more squares; release sends that place.
+- Implement decision 4. The existing suites (every drag at one scale) pass unedited.
+
+### Task 3 — The plan grows while a table is dragged past its edge
 
 Files: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.grow.test.ts` (and
 `packages/ui/src/floor-plan-geometry.ts` only if a small rectangle-union helper earns its place there,
 with its own tests).
 
-Tests first, each in `wt-floor-map.grow.test.ts`, driving the real pointer gesture the other
-`wt-floor-map` suites use (read `wt-floor-map.test.ts` for the hold-then-move helpers):
+Tests first, in a ratio-reading host, driving the real pointer gesture the other suites use (read
+`wt-floor-map.test.ts` / `wt-floor-map.view.test.ts` for the hold-then-move helpers):
 
-- dragging a table past the right edge, still held: the published ratio grows, the view's scale
-  falls (a table's drawn width shrinks), and the held table is drawn wholly inside the host;
+- dragging a table past the right edge, still held: the published ratio grows, the host resizes, the
+  view refits (a table's drawn width shrinks), and the held table is drawn wholly inside the host;
 - the same past the bottom edge;
-- the grabbed point stays under the pointer: after the grow, the pointer is still over the held
-  table's drawn box (`elementsFromPoint` or the box's rect);
-- on release the `wt-table-drag-end` x and y equal the place drawn on the last move;
-- a drag that stays inside the plan moves exactly as before (same squares for the same px; the
-  existing suites already pin this — they must stay green unedited);
-- dragging the edge table inward does not shrink the plan during the drag; after `#endDrag` with
-  the table list unchanged (a refused drop), the plan returns to the tables' fit and ratio;
-- after a pan (`#touched`), a drag past the edge changes the ratio but not the view's scale;
-- a fixed table's drag (`fixed: true`) changes neither ratio nor scale.
+- dragging the edge table inward does not change the ratio during the drag;
+- releasing an outward move whose new `tables` (the parent sets the moved place, as the till's
+  pending place does) has the drag's crop: the table stays drawn wholly inside the host;
+- a drag out and back, then release with `tables` unchanged (a refused drop): the ratio and the fit
+  return to the tables';
+- after a pan, a drag past the edge changes neither the ratio nor the scale;
+- a fixed table's drag changes neither;
+- `tables` replaced mid-drag with the held table still in it: the drag's crop restarts from the new
+  list (a table removed from the edge in the new list no longer holds the plan wide).
 
-Implementation per decisions 1–5: an effective-crop getter (drag crop while a non-fixed drag is
-drawn, else the tables' crop); `#fitView` and the ratio read it; `#onHoldDrag` records the start
-plan point on the drag's first move and computes the squares from plan coordinates, refitting
-(when untouched) and recomputing until stable; `#endDrag` marks the view for a refit when untouched
-so a drag that does not move the table settles back.
+Implement decisions 1, 2, 3, 5, 6 and 7. Prove by deletion: with the effective crop set back to the
+tables' crop, the grow cases fail; with the banking removed (back to `snapToSquare(dx, scale)`), a
+grow case asserting the drop place fails or the Task 2 case does — say which.
 
-Prove the new behaviour by deletion: with the grow removed (effective crop = tables' crop), the grow
-cases fail; with the anchoring removed (back to `snapToSquare(dx, scale)`), the under-the-pointer
-case fails.
+### Task 4 — Mutation survivors
 
-Run the `wt-floor-map` suites, then Stryker on `wt-floor-map.ts` (`pnpm --filter @waitron/ui mutation`
-scoped as the package's Stryker config allows — read `packages/ui/stryker*.json` and A672's ledger for
-how its canvas run was scoped).
+Run `pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-floor-map.ts`; kill the
+survivors in the new code with tests that assert behaviour, or name each one left and why it is
+equivalent. Record the score in the ledger.
 
-### Task 3 — Look at it, and the docs
+### Task 5 — Look at it, and the docs
 
-- Run the till against a dev stack (`wa-wt demo <worktree-name>`) or the `packages/ui` demo, hold a
-  table and drag it past the right and the bottom edge; screenshots mid-drag before (main) and after
-  (branch), light and dark, 1280 and 390 wide, saved under `~/waitron-campaign-b/a766-shots/`.
-- `docs/backlog.md`: delete the A766 entry; `docs/backlog/till.md`: delete its A766 section.
-- `docs/developers/design-system.md`: if it describes `wt-floor-map`'s sizing or the till map's
-  ratio, update that sentence; otherwise nothing.
+- Run the till against a dev stack (`wa-wt demo <worktree-name>`), hold a table and drag it past the
+  right and the bottom edge; screenshots mid-drag before (main) and after (branch), light and dark,
+  1280 and 390 wide, saved under `~/waitron-campaign-b/a766-shots/`.
+- `docs/developers/design-system.md`: the `wt-floor-map` API row (`:679`) gains that the map sets
+  `--floor-map-ratio` on its own host (width ÷ height of what it fits) for the parent to read and
+  must not be overwritten; the prose at `:806–810` ("Its size is its parent's choice", the fit
+  rules) says that during a drag it fits as if the held table already stood where it is drawn,
+  growing only, and that a pan turns that off.
+- `docs/backlog.md`: delete the A766 entry; `docs/backlog/till.md`: delete its A766 section, and add
+  decision 8's two residuals as short points under A474's follow-ups.
