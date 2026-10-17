@@ -352,6 +352,12 @@ Re-check when a new year's list is added.
   have different changeovers (a scheduled change of when the business day starts) labels the ruler
   from Monday's.
 
+- **On a phone the Week shows one day, below 560 px of its own width, the Month's breakpoint
+  ([A722 Part 2](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 11; plan default, sent to the owner as an FYI, 2026-10-17).**
+  A `ResizeObserver` reads it, because the narrow Week draws different things and its ‹ › step a
+  day. The phone's day title has no year link, following board 5; the Year is one press further,
+  through the Month's year link.
+
 - **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
   (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.
   A721 replaces them, and then deletes this note.

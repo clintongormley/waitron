@@ -366,7 +366,7 @@ export class OpeningHoursWeekView extends LitElement {
 
   /** The read of `weekMonth(date)`. */
   @property({ attribute: false }) model?: OpeningHoursMonth;
-  /** The shown date; the week holding it is drawn. */
+  /** The shown date. */
   @property() date = "";
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
@@ -375,7 +375,7 @@ export class OpeningHoursWeekView extends LitElement {
   /** Whether the Week's own width is below `PHONE_WIDTH`. */
   @state() narrow = false;
 
-  /** The month the Week draws from: the shown date's when narrow, else its week's Monday's. */
+  /** The month the Calendar switch carries from the Week: the shown date's when narrow, else its week's Monday's. */
   get shownMonth(): string {
     return this.narrow ? this.date.slice(0, 7) : weekMonth(this.date);
   }

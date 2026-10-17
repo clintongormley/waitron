@@ -4134,7 +4134,7 @@ Opening hours' Year.
   public holiday, or on the stored day; Edit <season>'s standard week opens the season painter. A
   viewer's box has no special-day button and offers Show <season>'s standard week, read-only. In
   the Year and the Month, a viewer's box included, the last button is Open this week: it opens the
-  Week on that date's week and puts focus on the date's name, unless focus has moved elsewhere by
+  Week on that date's week, or on a phone on that date alone, and puts focus on the date's name, unless focus has moved elsewhere by
   then. A box opened from the Week does not offer it. A
   button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
   the date when focus was inside. A special day is deleted from its painter, which asks first.

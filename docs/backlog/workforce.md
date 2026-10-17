@@ -209,8 +209,8 @@ screen.
    (`packages/staffing/src/rota.ts:231-232`), and a draft whose shifts were all deleted still
    offers it. The warnings dialog is unchanged.
 8. **Phone width: one day at a time** ([board 5](mockups/a763-rota/05-phone.png)), as the Calendar's
-   Week on a phone: a seven-day strip marking days that need attention, the week arrows still
-   stepping a week, the picker as a sheet from the bottom, Publish at the foot. Show: Everyone lists
+   Week on a phone, but with a seven-day strip marking days that need attention and the week
+   arrows still stepping a week; the picker as a sheet from the bottom, Publish at the foot. Show: Everyone lists
    each person with that day's shifts; a tap opens the same open-slots menu.
 9. **Staffing month: the Monday "Rota for this week" link goes**
    ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
