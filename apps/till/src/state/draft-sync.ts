@@ -1,4 +1,7 @@
-import { compareDecimal, decimal } from "@waitron/shared";
+import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
+import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
+import { productUnit } from "../widgets/product-name.js";
+import { trimQuantity } from "../widgets/dish-format.js";
 import {
   isNetworkFailure,
   type Draft,
@@ -25,6 +28,33 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
   declare placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
+  cancelSource?: (line: OrderLine, quantity: string) => void;
+
+  override removeLine(index: number): void {
+    const line = this.lines[index];
+    if (line?.source === undefined) {
+      super.removeLine(index);
+      return;
+    }
+    if (!this.sending && !this.editsLocked) this.cancelSource?.(line, line.quantity);
+  }
+
+  override setLineQuantity(index: number, quantity: string): void {
+    const line = this.lines[index];
+    if (
+      line?.source === undefined ||
+      compareDecimal(decimal(quantity), decimal(line.quantity)) >= 0
+    ) {
+      super.setLineQuantity(index, quantity);
+      return;
+    }
+    if (this.sending || this.editsLocked) return;
+    assertQuantityPrecision(quantity, productUnit(line.product).precision, { positive: true });
+    this.cancelSource?.(
+      line,
+      trimQuantity(subtractDecimal(decimal(line.quantity), decimal(quantity))),
+    );
+  }
 
   override addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     this.addMerging(product, quantity, selection);

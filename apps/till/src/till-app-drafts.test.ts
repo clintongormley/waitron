@@ -5664,6 +5664,337 @@ describe("recalled draft source splitting", () => {
     saved.lines = [reference("source-7", "8.62", "1"), reference("source-9", "8.63", "1")];
   }
 
+  async function cancellationOpening(overrides: Record<string, unknown> = {}) {
+    seedSource();
+    const mounted = await mountApp({
+      listAdjustmentReasons: vi.fn().mockResolvedValue([
+        {
+          id: "mistake",
+          name: "Mistake",
+          actions: ["cancel"],
+          noteRequired: true,
+          maxPercentBp: null,
+          maxAmount: null,
+          applyRole: "staff",
+          approverRole: "manager",
+        },
+      ]),
+      previewAdjustment: vi.fn().mockResolvedValue({
+        reduction: "17.25",
+        nominalValue: "17.25",
+        needsApproval: null,
+        overBillDiscountLimit: false,
+        lines: [],
+      }),
+      applyAdjustment: vi.fn(async () => {
+        server.drafts[0]!.lines = [];
+        server.drafts[0]!.revision += 1;
+        return { adjustmentIds: ["adjustment-1"], party: { id: "v1", revision: 4 } };
+      }),
+      ...overrides,
+    });
+    const order = await openMesa(mounted.el);
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await order.updateComplete;
+    return { ...mounted, order };
+  }
+
+  function adjustment(el: TillApp) {
+    return el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-adjustment-dialog"]>(
+      "till-adjustment-dialog",
+    );
+  }
+
+  async function cancellationPreview(el: TillApp): Promise<void> {
+    draft(el).removeLine(0);
+    await flush(el);
+    emit(adjustment(el)!, "adjust-preview", {
+      action: "cancel",
+      reasonId: "mistake",
+      note: "Wrong dish",
+    });
+    await flush(el);
+  }
+
+  it("source cancellation names its pending operation without announcing an order submission", async () => {
+    let answer!: () => void;
+    const { el } = await cancellationOpening({
+      listAdjustmentReasons: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return [];
+      }),
+    });
+    draft(el).removeLine(0);
+    await flush(el);
+    try {
+      expect(
+        tableOrder(el)!.shadowRoot!.querySelector("[data-round-sending]")?.textContent?.trim(),
+      ).toBe(t("adjust.cancel_title"));
+    } finally {
+      answer();
+    }
+    await flush(el);
+    emit(adjustment(el)!, "adjust-close");
+    await flush(el);
+    expect(draft(el).busyAction).toBeUndefined();
+  });
+
+  it("source cancellation requires the reason's manager PIN and retains a refused source for retry", async () => {
+    const { el } = await cancellationOpening({
+      previewAdjustment: vi.fn().mockResolvedValue({
+        reduction: "17.25",
+        nominalValue: "17.25",
+        needsApproval: "manager",
+        overBillDiscountLimit: false,
+        lines: [],
+      }),
+      listAdjustmentApprovers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
+    });
+    await cancellationPreview(el);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    const prompt = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
+        "[data-adjust-approval]",
+      );
+    expect(prompt()?.authorizers).toEqual([{ personId: "manager-1", displayName: "Marta" }]);
+    api.applyAdjustment!.mockRejectedValueOnce({ code: "pin.invalid" });
+    emit(prompt()!, "override-confirm", { personId: "manager-1", pin: "0000" });
+    await flush(el, 6);
+    expect(prompt()?.error).toBe("pin.invalid");
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
+    emit(prompt()!, "override-confirm", { personId: "manager-1", pin: "7777" });
+    await flush(el, 6);
+    expect(api.applyAdjustment).toHaveBeenCalledTimes(2);
+    expect(api.applyAdjustment!.mock.calls[1]![1]).toMatchObject({
+      lineId: "source-7",
+      action: "cancel",
+      quantity: "2",
+      reasonId: "mistake",
+      note: "Wrong dish",
+      approver: { personId: "manager-1", pin: "7777" },
+    });
+    expect(rows(el)).toEqual([]);
+    expect(adjustment(el)).toBeNull();
+    expect(lock(el)).toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("source cancellation ends its dialog after ownership changes and names the new owner", async () => {
+    const { el } = await cancellationOpening({
+      applyAdjustment: vi.fn(async () => {
+        server.drafts[0]!.ownerId = "p2";
+        server.drafts[0]!.ownerName = "Luis";
+        throw { code: "draft.taken_over", ownerName: "Luis" };
+      }),
+    });
+    await cancellationPreview(el);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(adjustment(el)).toBeNull();
+    expect(rows(el)).toEqual([]);
+    expect(banner(el)?.textContent).toContain("Luis");
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+  });
+
+  it("source cancellation locks a stale draft after a successful write whose recovery read fails", async () => {
+    const { el } = await cancellationOpening();
+    await cancellationPreview(el);
+    server.listDrafts.mockRejectedValueOnce(new Error("Read offline"));
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(adjustment(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+    const store = draft(el);
+    expect(store.editsLocked).toBe(true);
+    store.setLineExtras(0, { note: "Must not restore the cancelled source" });
+    expect(store.lines[0]!.note).toBe("Recorded note");
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+    expect(tableOrder(el)?.party?.revision).toBe(4);
+  });
+
+  it("source cancellation closes a refused confirmation when its recovery read fails", async () => {
+    const { el } = await cancellationOpening({
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.note_required" }),
+    });
+    await cancellationPreview(el);
+    server.listDrafts.mockRejectedValueOnce(new Error("Read offline"));
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(adjustment(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+  });
+
+  it("source cancellation drops a late reasons answer after leaving the table", async () => {
+    let answer!: () => void;
+    const { el } = await cancellationOpening({
+      listAdjustmentReasons: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return [];
+      }),
+    });
+    const old = draft(el);
+    old.removeLine(0);
+    await flush(el);
+    old.removeLine(0);
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    answer();
+    await flush(el, 6);
+    expect(adjustment(el)).toBeNull();
+    expect(old.sending).toBe(false);
+    expect(old.editsLocked).toBe(false);
+    expect(floor(el)).not.toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("source cancellation keeps prior edits when their save fails and sends no money command", async () => {
+    const { el } = await cancellationOpening();
+    draft(el).setLineExtras(0, { note: "No salt" });
+    server.saveDraft.mockRejectedValueOnce(new Error("Offline"));
+    draft(el).removeLine(0);
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).lines[0]!.note).toBe("No salt");
+    expect(adjustment(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(draft(el).sending).toBe(false);
+    expect(draft(el).editsLocked).toBe(false);
+  });
+
+  it("source cancellation ignores late answers after table navigation and releases the command lock", async () => {
+    let answer!: () => void;
+    const { el } = await cancellationOpening({
+      applyAdjustment: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return { adjustmentIds: ["adjustment-1"], party: { id: "v1", revision: 40 } };
+      }),
+    });
+    await cancellationPreview(el);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    const old = draft(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    const nextMessage = banner(el)?.textContent;
+    answer();
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v7");
+    expect(tableOrder(el)?.party?.revision).toBe(9);
+    expect(banner(el)?.textContent).toBe(nextMessage);
+    expect(adjustment(el)).toBeNull();
+    expect(old.sending).toBe(false);
+    expect(old.editsLocked).toBe(false);
+    expect(tableOrder(el)?.groupCommandBusy).toBe(false);
+  });
+
+  it("source removal opens cancellation without dropping or autosaving its recorded charge", async () => {
+    const { el, order } = await cancellationOpening();
+    const basket = order.shadowRoot!.querySelector("till-basket")!;
+    await userEvent.click(basket.shadowRoot!.querySelector<HTMLElement>(".remove")!);
+    await flush(el);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(adjustment(el)?.kind).toBe("cancel");
+    expect(adjustment(el)?.target).toMatchObject({
+      lineId: "source-7",
+      quantity: "2",
+      total: "17.25",
+      unitTotal: null,
+    });
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    emit(adjustment(el)!, "adjust-close");
+    await flush(el);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(false);
+  });
+
+  it("source quantity decrease waits for cancellation and sends only the requested difference", async () => {
+    const { el } = await cancellationOpening({
+      applyAdjustment: vi.fn(async () => {
+        server.drafts[0]!.lines = [reference("source-7", "8.63", "1")];
+        server.drafts[0]!.revision += 1;
+        return { adjustmentIds: ["adjustment-1"], party: { id: "v1", revision: 4 } };
+      }),
+    });
+    draft(el).setLineQuantity(0, "1");
+    await flush(el);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(adjustment(el)?.target?.quantity).toBe("1");
+    const choice = { action: "cancel", reasonId: "mistake", note: "Guest changed their mind" };
+    emit(adjustment(el)!, "adjust-preview", choice);
+    await flush(el);
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
+      ...choice,
+      lineId: "source-7",
+      expectedRevision: 0,
+      quantity: "1",
+    });
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+    expect(api.applyAdjustment!.mock.calls[0]).toEqual([
+      "wo-4",
+      {
+        ...choice,
+        lineId: "source-7",
+        quantity: "1",
+        expectedRevision: 0,
+        submissionId: expect.any(String),
+      },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(rows(el)).toEqual(["Recorded steak ×1"]);
+    expect(draft(el).total).toBe("8.63");
+    expect(adjustment(el)).toBeNull();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft(el).editsLocked).toBe(false);
+  });
+
+  it("source cancellation saves earlier edits before fixing its bill revision and blocks later edits", async () => {
+    const { el } = await cancellationOpening();
+    draft(el).setLineExtras(0, { note: "No salt" });
+    api.getTabLines!.mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+    draft(el).removeLine(0);
+    await flush(el);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft.mock.calls[0]![1].lines[0]).toMatchObject({
+      sourceLineId: "source-7",
+      quantity: "2",
+      note: "No salt",
+    });
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
+    draft(el).setLineExtras(0, { note: "Must not save" });
+    expect(draft(el).lines[0]!.note).toBe("No salt");
+    emit(adjustment(el)!, "adjust-preview", {
+      action: "cancel",
+      reasonId: "mistake",
+      note: "Wrong dish",
+    });
+    await flush(el);
+    expect(api.previewAdjustment!.mock.calls[0]![1]).toMatchObject({ expectedRevision: 8 });
+  });
+
   async function opening(split: ReturnType<typeof vi.fn>) {
     seedSource();
     const mounted = await mountApp({ splitHeldLineIntoUnits: split });

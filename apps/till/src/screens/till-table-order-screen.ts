@@ -3032,7 +3032,9 @@ export class TillTableOrderScreen extends LitElement {
                   ? t("table.taking_over")
                   : draft.busyAction === "split"
                     ? t("table.split_group_line")
-                    : t("table.round_sending")
+                    : draft.busyAction === "cancel"
+                      ? t("adjust.cancel_title")
+                      : t("table.round_sending")
               }
             </p>`
           : nothing

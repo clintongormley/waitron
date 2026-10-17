@@ -25,7 +25,9 @@ import {
   MONEY_SCALE,
   compareDecimal,
   decimal,
+  divideDecimal,
   formatMoney,
+  multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
   tillProviderForReader,
@@ -808,6 +810,12 @@ interface Adjusting {
   busy: boolean;
   /** The banner that offered this cancel, which goes once the cancel is made. */
   offer: CounterError | undefined;
+  source?: {
+    sync: DraftSync;
+    lineId: string;
+    quantity: string;
+    unlock: () => void;
+  };
 }
 
 /** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
@@ -9194,6 +9202,9 @@ export class TillApp extends LitElement {
         ),
       });
     };
+    sync.store.cancelSource = (line, quantity) => {
+      void this.#openSourceCancellation(sync, line, quantity);
+    };
     this.#draftSync = sync;
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {
@@ -9259,6 +9270,7 @@ export class TillApp extends LitElement {
   }
 
   #dropDraft(): void {
+    if (this.adjusting?.source !== undefined) this.#closeAdjust();
     this.#draftSync?.drop();
     this.#draftSync = undefined;
     this.#draftReady = false;
@@ -10333,6 +10345,81 @@ export class TillApp extends LitElement {
     };
   }
 
+  async #openSourceCancellation(sync: DraftSync, line: OrderLine, quantity: string): Promise<void> {
+    const store = sync.store;
+    if (
+      sync !== this.#draftSync ||
+      !store.lines.includes(line) ||
+      line.source === undefined ||
+      this.groupCommandBusy ||
+      this.adjusting !== null ||
+      this.#adjustOpening ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const sourceId = line.source.line.id;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.#adjustOpening = true;
+    this.groupCommandBusy = true;
+    store.busyAction = "cancel";
+    store.sending = true;
+    this.errorKey = undefined;
+    let unlock: (() => void) | undefined;
+    try {
+      if ((await sync.flush()) !== "saved") {
+        if (live()) this.errorKey ??= "table.draft_save_failed";
+        return;
+      }
+      if (!live()) return;
+      await this.#loadTabLines();
+      if (!live()) return;
+      const source = store.lines.find((row) => row.source?.line.id === sourceId)?.source;
+      if (source === undefined) return;
+      const reasons = await this.api.listAdjustmentReasons();
+      if (!live()) return;
+      unlock = store.lockEdits();
+      this.adjusting = {
+        id: ++this.#adjustments,
+        surface: "table",
+        orderId: sync.billId,
+        revision: this.tabRevision,
+        visit,
+        kind: "cancel",
+        target: {
+          lineId: sourceId,
+          name: source.line.name ?? "",
+          quantity,
+          total: divideDecimal(
+            multiplyDecimal(decimal(source.netAmount), decimal(quantity)),
+            decimal(source.line.quantity),
+            MONEY_SCALE,
+          ),
+          unitTotal: null,
+        },
+        reasons,
+        choice: null,
+        preview: null,
+        refusal: null,
+        busy: false,
+        offer: undefined,
+        source: { sync, lineId: sourceId, quantity, unlock },
+      };
+      unlock = undefined;
+    } catch {
+      if (live()) this.errorKey = "adjust.reasons_error";
+    } finally {
+      unlock?.();
+      delete store.busyAction;
+      store.sending = false;
+      this.#adjustOpening = false;
+      this.groupCommandBusy = false;
+    }
+  }
+
   /** The counter's basket still holds the stored order it held when `open` was opened, at the same
    * revision, and still as the basket requires to offer an adjustment: unchanged, and with no pay,
    * place or hold of it out. */
@@ -10368,7 +10455,12 @@ export class TillApp extends LitElement {
   }
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
-    return { expectedRevision: open.revision, lineId: open.target.lineId, ...choice };
+    return {
+      expectedRevision: open.revision,
+      lineId: open.target.lineId,
+      ...choice,
+      ...(open.source === undefined ? {} : { action: "cancel", quantity: open.source.quantity }),
+    };
   }
 
   /** The dialog as it is now, when it is still the one `id` names. */
@@ -10441,6 +10533,10 @@ export class TillApp extends LitElement {
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
+    if (open.source !== undefined) {
+      await this.#applySourceCancellation(open, approver);
+      return;
+    }
     if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
       this.#closeAdjust();
       this.errorKey = "adjust.basket_changed";
@@ -10483,6 +10579,70 @@ export class TillApp extends LitElement {
       await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
     } finally {
       limit.done();
+    }
+  }
+
+  async #applySourceCancellation(
+    open: Adjusting,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    const source = open.source!;
+    const { sync } = source;
+    const live = () => sync === this.#draftSync && !this.#hasLeftAdjusted(open);
+    if (!live() || this.groupCommandBusy) return;
+    const command: AdjustmentCommand = {
+      ...this.#adjustAsk(open, open.choice!),
+      submissionId: crypto.randomUUID(),
+      ...(approver === undefined ? {} : { approver }),
+    };
+    this.adjusting = { ...open, busy: true, refusal: null };
+    this.groupCommandBusy = true;
+    source.unlock();
+    sync.store.busyAction = "cancel";
+    let refusal: unknown;
+    try {
+      const outcome = await sync.runCommand(async (_state, options) => {
+        if (!live() || !sync.store.lines.some((line) => line.source?.line.id === source.lineId))
+          throw { code: "draft.out_of_date" };
+        try {
+          return await this.api.applyAdjustment(open.orderId, command, options);
+        } catch (error) {
+          refusal = error;
+          throw error;
+        }
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#noteBillParty(outcome.applied.party);
+        this.shadowRoot!.querySelector<HTMLElementTagNameMap["till-adjustment-dialog"]>(
+          "till-adjustment-dialog",
+        )?.closeSaved();
+        this.#closeAdjust();
+        await this.#loadTabLines();
+        if (live() && !outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") {
+        this.#closeAdjust();
+        this.errorKey ??= "table.draft_save_failed";
+      } else if (typeof outcome === "object" && DRAFT_REFUSALS.has(outcome.refused)) {
+        this.#closeAdjust();
+        this.errorKey = draftRefusalError(outcome);
+        await this.#loadTabLines();
+      } else if (sync.store.editsLocked) {
+        this.#closeAdjust();
+        this.errorKey = "table.draft_read_failed";
+      } else {
+        if (this.#adjustingNow(open.id) === null) return;
+        await this.#onAdjustRefused(
+          refusal ??
+            (typeof outcome === "object" ? { code: outcome.refused } : new Error("No answer")),
+          approver === undefined ? "apply" : "approved",
+        );
+        if (this.#adjustingNow(open.id) !== null && !sync.store.editsLocked)
+          source.unlock = sync.store.lockEdits();
+      }
+    } finally {
+      delete sync.store.busyAction;
+      this.groupCommandBusy = false;
     }
   }
 
@@ -10578,6 +10738,7 @@ export class TillApp extends LitElement {
   }
 
   #closeAdjust(): void {
+    this.adjusting?.source?.unlock();
     this.adjusting = null;
     this.#closeApprovers();
   }
