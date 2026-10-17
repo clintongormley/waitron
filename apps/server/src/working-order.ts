@@ -6298,6 +6298,7 @@ export async function placeOrder(
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
+    await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
     // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
     // Read before the stamp below. A bill moved here from a table has dishes already sent.
     const lines = await unsentDishLines(tx, id);

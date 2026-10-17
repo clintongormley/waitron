@@ -122,6 +122,7 @@ const edits = {
   "named send": (p: Fixture) =>
     call("POST", `/api/working-orders/${p.tabId}/lines/send`, { lineNos: [p.line.lineNo] }),
   "abandon bill": (p: Fixture) => call("DELETE", `/api/working-orders/${p.tabId}`),
+  "place bill": (p: Fixture) => call("POST", `/api/working-orders/${p.tabId}/place`, {}),
   "group move": async (p: Fixture) =>
     call("POST", `/api/parties/${p.partyId}/groups/move`, {
       ...(await command(p.partyId)),
@@ -170,6 +171,14 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
         .from(workingOrders)
         .where(eq(workingOrders.id, p.tabId));
       expect(bill!.status).toBe("abandoned");
+    }
+    if (operation === "place bill") {
+      const [bill] = await venue.db
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, p.tabId));
+      expect(bill!.status).toBe("placed");
+      expect(answer.json).toEqual({ id: p.tabId, status: "placed" });
     }
   });
 
