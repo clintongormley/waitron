@@ -1385,7 +1385,19 @@ describe("where each submission's groups go (spec §3)", () => {
     noMerge: false,
   });
   const save = (v: Venue, partyId: string, operatorId: string, lines: DraftLineInput[]) =>
-    inTx((tx) => saveDraft(tx, v.cfg, partyId, operatorId, { draftId: null, revision: 0, lines }));
+    inTx(async (tx) => {
+      const [bill] = await tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.partyId, partyId))
+        .limit(1);
+      return saveDraft(tx, v.cfg, partyId, operatorId, {
+        billId: bill!.id,
+        draftId: null,
+        revision: 0,
+        lines,
+      });
+    });
   const submit = async (
     v: Venue,
     partyId: string,

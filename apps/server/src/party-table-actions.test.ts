@@ -928,12 +928,13 @@ describe("drafts when parties combine", () => {
     const [m4, m7] = await tables("Borrador", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
-    for (const [partyId, dish] of [
-      [ana.partyId, "Flan"],
-      [luis.partyId, "Agua"],
+    for (const [partyId, billId, dish] of [
+      [ana.partyId, ana.tabId, "Flan"],
+      [luis.partyId, luis.tabId, "Agua"],
     ] as const) {
       await act((tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId,
           draftId: null,
           revision: 0,
           lines: [{ menuItemId: v.item(dish), quantity: "1" }],

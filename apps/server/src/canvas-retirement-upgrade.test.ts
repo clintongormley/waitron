@@ -186,12 +186,18 @@ async function populatePredecessor(db: Database) {
   const venue = await provisionOrderVenue(db);
   const saleId = await billlessSale(venue);
   const party = await seatedWith(venue, "Tarta");
-  const draft = await send(venue.app, venue.cookie, "PUT", `/api/parties/${party.partyId}/drafts`, {
-    draftId: null,
-    revision: 0,
-    lines: [{ menuItemId: venue.offerFor("Croquetas"), quantity: "1", note: "Draft only" }],
+  const draftId = randomUUID();
+  await withTransaction(db, async (tx) => {
+    await tx.run(
+      sql`insert into order_drafts (id, party_id, owner_id, created_at, updated_at) values (${draftId}, ${party.partyId}, ${venue.operatorId}, '2026-10-16T10:00:00.000Z', '2026-10-16T10:00:00.000Z')`,
+    );
+    await tx.run(
+      sql`insert into order_draft_lines (id, draft_id, position, menu_item_id, quantity, options, extras, note) values (${randomUUID()}, ${draftId}, 1, ${venue.offerFor("Croquetas")}, 1000, '[]', '[]', 'Draft only')`,
+    );
+    expect(
+      await tx.all(sql`select id, party_id, owner_id from order_drafts where id = ${draftId}`),
+    ).toEqual([{ id: draftId, party_id: party.partyId, owner_id: venue.operatorId }]);
   });
-  expect(draft.status).toBe(200);
   const profileId = randomUUID();
   const retiredId = randomUUID();
   const canvasId = randomUUID();

@@ -1295,6 +1295,7 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/parties/${party.partyId}/drafts`,
       {
+        billId: party.tabId,
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],

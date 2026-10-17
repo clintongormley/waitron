@@ -3267,7 +3267,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           partyId,
           personId,
-          { draftId, revision, lines: body.lines },
+          { billId: body.billId, draftId, revision, lines: body.lines },
           deps.attendance,
         );
       });
@@ -3365,7 +3365,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
         ...joinGroupOf(body),
-        ...billOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
       const submitted = await withTransaction(deps.db, async (tx) => {

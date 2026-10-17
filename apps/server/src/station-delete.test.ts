@@ -282,9 +282,10 @@ describe("permanent station deletion", () => {
     const { v, id } = await fixture();
     const first = await food(v, id, { ticket: false });
     const ready = await food(v, id, { state: "ready" });
-    const { partyId } = await seat(v, await v.table("Draft"));
+    const { partyId, tabId } = await seat(v, await v.table("Draft"));
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
         draftId: null,
         revision: 0,
         lines: [
@@ -383,6 +384,7 @@ describe("permanent station deletion", () => {
     await expect(
       inTx(v, (tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId: draft.billId,
           draftId: draft.id,
           revision: draft.revision,
           lines: [],

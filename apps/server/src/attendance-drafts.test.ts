@@ -29,7 +29,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
-let v: PartyVenue, partyId: string, other: string;
+let v: PartyVenue, partyId: string, tabId: string, other: string;
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00.987Z"));
@@ -37,7 +37,7 @@ beforeEach(async () => {
   await suite.db
     .insert(persons)
     .values({ id: OPERATOR, displayName: "Draft author", pinHash: "scrypt$00$00" });
-  ({ partyId } = await seat(v, await v.table("Attendance")));
+  ({ partyId, tabId } = await seat(v, await v.table("Attendance")));
   const [row] = await suite.db
     .insert(persons)
     .values({ displayName: "Actual taker", pinHash: "scrypt$00$00" })
@@ -64,7 +64,12 @@ function save(draft?: Draft, recorder: AttendanceRecorder | undefined = recordAt
       v.cfg,
       partyId,
       OPERATOR,
-      { draftId: draft?.id ?? null, revision: draft?.revision ?? 0, lines: [line()] },
+      {
+        billId: tabId,
+        draftId: draft?.id ?? null,
+        revision: draft?.revision ?? 0,
+        lines: [line()],
+      },
       recorder,
     ),
   );
@@ -270,7 +275,12 @@ describe("accepted draft attendance capture", () => {
   });
   it("callers without a recorder save normally without operational attendance writes", async () => {
     const draft = await run((tx) =>
-      saveDraft(tx, v.cfg, partyId, OPERATOR, { draftId: null, revision: 0, lines: [line()] }),
+      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [line()],
+      }),
     );
     expect(draft.lines.map((l) => l.quantity)).toEqual(["1.000"]);
     expect(await operations()).toEqual([]);

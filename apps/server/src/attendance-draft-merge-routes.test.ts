@@ -65,7 +65,12 @@ async function prepare() {
   const target = await seatedWith(v);
   for (const party of [source, target]) {
     await run((tx) =>
-      saveDraft(tx, v.cfg, party.partyId, v.adminId, { draftId: null, revision: 0, lines: [] }),
+      saveDraft(tx, v.cfg, party.partyId, v.adminId, {
+        billId: party.tabId,
+        draftId: null,
+        revision: 0,
+        lines: [],
+      }),
     );
   }
   return { source, target };
@@ -76,7 +81,7 @@ function command(app: Hono, action: "join" | "move", p: Awaited<ReturnType<typeo
     expectedPartyRevision: p.source.revision,
     otherPartyId: p.target.partyId,
     expectedOtherPartyRevision: p.target.revision,
-    bills: "separate",
+    bills: "merge",
     operatorId: v.adminId,
     at: "2026-01-06T20:00:00Z",
   });
@@ -180,7 +185,10 @@ describe("draft-event attendance in table combines", () => {
           addressLine1: "Other address",
         })
         .returning();
-      await suite.db.update(workingOrders).set({ locationId: elsewhere!.id });
+      await suite.db
+        .update(workingOrders)
+        .set({ locationId: elsewhere!.id })
+        .where(eq(workingOrders.status, "open"));
       const facts = await run((tx) =>
         readAttendanceFacts(tx, {
           locationId: v.cfg.locationId,

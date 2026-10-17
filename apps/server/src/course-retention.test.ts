@@ -181,7 +181,7 @@ async function setup() {
     return request(
       `/api/parties/${partyId}/drafts`,
       "PUT",
-      { draftId: draft?.id ?? null, revision: draft?.revision ?? 0, lines },
+      { billId: seated.tabId, draftId: draft?.id ?? null, revision: draft?.revision ?? 0, lines },
       chosenCookie,
     );
   }

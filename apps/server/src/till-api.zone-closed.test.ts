@@ -306,18 +306,20 @@ describe("existing service in a closed zone", () => {
   });
 
   it.each(["first order", "handheld draft"])(
-    "refuses a %s for an already seated party without leaving a bill",
+    "refuses a %s for an already seated party without creating a bill",
     async (kind) => {
       const v = await venue();
       const seated = await seat(v);
       await withTransaction(suite.db, async (tx) => {
         await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, seated.partyId));
-        await tx.delete(workingOrders).where(eq(workingOrders.id, seated.tabId));
+        if (kind === "first order")
+          await tx.delete(workingOrders).where(eq(workingOrders.id, seated.tabId));
       });
       const before = await orderRows();
       let draft: { id: string; revision: number; lines: { id: string }[] } | undefined;
       if (kind === "handheld draft") {
         const saved = await request(v, "PUT", `/api/parties/${seated.partyId}/drafts`, {
+          billId: seated.tabId,
           draftId: null,
           revision: 0,
           lines: [line(v)],

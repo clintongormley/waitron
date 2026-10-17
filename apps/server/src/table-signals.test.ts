@@ -226,10 +226,16 @@ describe("the floor's attention signals", () => {
 
     // A draft holding no line yet is enough to say someone is taking the order.
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, quiet.partyId, lucia, { draftId: null, revision: 0, lines: [] }),
+      saveDraft(tx, v.cfg, quiet.partyId, lucia, {
+        billId: quiet.tabId,
+        draftId: null,
+        revision: 0,
+        lines: [],
+      }),
     );
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, drafting.partyId, lucia, {
+        billId: drafting.tabId,
         draftId: null,
         revision: 0,
         lines: [draftLine(v, "Burger")],
@@ -534,6 +540,7 @@ describe("the floor's attention signals", () => {
       await askForBill(v, partyId);
       await inTx(v, (tx) =>
         saveDraft(tx, v.cfg, partyId, lucia, {
+          billId: tabId,
           draftId: null,
           revision: 0,
           lines: [draftLine(v, "Agua")],

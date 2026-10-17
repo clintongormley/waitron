@@ -103,6 +103,7 @@ describe("permanent course deletion", () => {
         if (reference === "draft") {
           await inTx(v, (tx) =>
             saveDraft(tx, v.cfg, partyId, OPERATOR, {
+              billId: tabId,
               draftId: null,
               revision: 0,
               lines: [

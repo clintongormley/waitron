@@ -246,16 +246,6 @@ export async function combineParties(
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
-  await moveDraftsToParty(
-    tx,
-    from,
-    into,
-    args.operatorId,
-    attendance === undefined
-      ? undefined
-      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
-  );
-
   const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
   let fromMainState: BillState | undefined;
   for (const billId of await billsTaking(tx, from, ["open", "placed"])) {
@@ -282,6 +272,17 @@ export async function combineParties(
       await setMainBill(tx, into, fromMain);
     }
   }
+
+  await moveDraftsToParty(
+    tx,
+    from,
+    into,
+    args.operatorId,
+    attendance === undefined
+      ? undefined
+      : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+    mergedInto,
+  );
 
   const at = nowIso();
   const tables = await memberTables(tx, from);

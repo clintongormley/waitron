@@ -120,9 +120,10 @@ describe("removing a course", () => {
   it("retains a deleted course only an unsent draft's line names", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
-    const { partyId } = await seat(v, await v.table("Borrador"));
+    const { partyId, tabId } = await seat(v, await v.table("Borrador"));
     const draft = await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        billId: tabId,
         draftId: null,
         revision: 0,
         lines: [

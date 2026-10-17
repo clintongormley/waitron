@@ -130,6 +130,7 @@ it("keeps retained draft, group, course and ready station history through manage
     app.request(`/management-api/${kind}/${id}`, { method: "DELETE", headers: { cookie } });
   const draft = await inTx(v, (tx) =>
     saveDraft(tx, v.cfg, seated.partyId, OPERATOR, {
+      billId: seated.tabId,
       draftId: null,
       revision: 0,
       lines: [

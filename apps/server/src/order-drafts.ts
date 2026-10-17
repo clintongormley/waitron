@@ -26,8 +26,14 @@ import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
-import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
-import { screenNote } from "./working-order.js";
+import {
+  checkAndBumpParty,
+  partyZone,
+  requireBillOfParty,
+  requireOpenParty,
+  runServiceCommand,
+} from "./parties.js";
+import { refusePaymentInFlight, screenNote } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
@@ -56,6 +62,7 @@ export interface DraftLine {
 export interface Draft {
   id: string;
   partyId: string;
+  billId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -70,7 +77,8 @@ export { normaliseDraftLines };
 export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
 
 export interface SaveDraftInput {
-  /** Null asks for the operator's new draft on the party. */
+  billId: unknown;
+  /** Null asks for the operator's new draft on the bill. */
   draftId: string | null;
   revision: number;
   /** Screened by the save before it reads or writes anything. */
@@ -95,12 +103,6 @@ export async function readDrafts(
   return readOpenDrafts(tx, cfg, partyId);
 }
 
-/**
- * Replace the lines of the operator's draft with `input.lines`, added together by
- * {@link normaliseDraftLines}, or start the operator's draft on the party when `draftId` is null. A
- * save to an existing draft moves its revision on; no save moves the party's, and none sends
- * anything to the kitchen.
- */
 export async function saveDraft(
   tx: Transaction,
   cfg: TillConfig,
@@ -112,13 +114,17 @@ export async function saveDraft(
   const at = nowIso();
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
+  const billId = uuid(input.billId, "billId");
   let previous: DraftLine[] = [];
   const draft =
     input.draftId === null ? null : await requireDraft(tx, foldIfUuid(input.draftId), partyId);
   if (draft !== null) {
     await requireOwnDraftAt(tx, draft, operatorId, input.revision);
+    if (draft.billId !== billId) throw invalid("billId");
     previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
   }
+  await requireBillOfParty(tx, partyId, billId);
+  await refusePaymentInFlight(tx, [billId]);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, lines, previous);
   // The lines replace the draft's, so these are every offer the read at the end needs.
@@ -136,12 +142,12 @@ export async function saveDraft(
   }
   let draftId: string;
   if (draft === null) {
-    const [held] = await openDraftsOn(tx, partyId, operatorId);
+    const [held] = await openDraftsOn(tx, partyId, operatorId, billId);
     if (held !== undefined) {
       throw new AppError("draft.out_of_date", { draftId: held.id, revision: held.revision });
     }
     draftId = newId();
-    await tx.insert(orderDrafts).values({ id: draftId, partyId, ownerId: operatorId });
+    await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
     await recordDraftEvents(
       tx,
       attendance === undefined ? undefined : { recorder: attendance, at },
@@ -196,8 +202,8 @@ export async function saveDraft(
 
 /**
  * Make the operator the owner of another person's open draft. Where the operator already has an
- * open draft on the party, the taken lines are added to it, as a save adds lines, and the taken
- * draft is discarded, so no one holds two; the operator's draft is returned. Taking over one's own
+ * open draft on the same bill, the taken lines are added to it and the taken
+ * draft is discarded; the operator's draft is returned. Taking over one's own
  * draft changes nothing and returns it as it is. A draft of another party is not found.
  */
 export async function takeOverDraft(
@@ -212,9 +218,12 @@ export async function takeOverDraft(
   const at = nowIso();
   const draft = await requireDraft(tx, foldIfUuid(draftId), partyId);
   await requireOpenParty(tx, partyId);
+  const billId = uuid(draft.billId, "billId");
+  await requireBillOfParty(tx, partyId, billId);
+  await refusePaymentInFlight(tx, [billId]);
   if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, partyId, draft.id);
   requireDraftRevision(draft, revision);
-  const [own] = await openDraftsOn(tx, partyId, operatorId);
+  const [own] = await openDraftsOn(tx, partyId, operatorId, billId);
   await tx
     .update(orderDrafts)
     .set({
@@ -254,40 +263,33 @@ export async function takeOverDraft(
   return readOpenDraft(tx, cfg, partyId, own.id);
 }
 
-/**
- * A merge's drafts (D2): each open draft on `fromPartyId` moves to `intoPartyId`, unless its owner
- * already has an open draft there; then its lines are added to that draft, as a takeover into the
- * taker's own draft adds them, and it is discarded. Every draft this touches has its revision moved
- * on.
- */
 export async function moveDraftsToParty(
   tx: Transaction,
   fromPartyId: string,
   intoPartyId: string,
   operatorId: string,
   attendance?: { recorder: AttendanceRecorder; at: string },
+  mergedBills: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
   const moving = await openDraftsOn(tx, fromPartyId);
   if (moving.length === 0) return;
-  const held = new Map(
-    (await openDraftsOn(tx, intoPartyId)).map((draft) => [draft.ownerId, draft] as const),
-  );
-  const moved = moving.filter((draft) => !held.has(draft.ownerId));
-  const absorbed = moving.filter((draft) => held.has(draft.ownerId));
-  if (moved.length > 0) {
+  const targetBill = (draft: { billId: string | null }) =>
+    draft.billId === null ? null : (mergedBills.get(draft.billId) ?? draft.billId);
+  const key = (draft: { ownerId: string; billId: string | null }) =>
+    JSON.stringify([draft.ownerId, targetBill(draft)]);
+  const held = new Map((await openDraftsOn(tx, intoPartyId)).map((draft) => [key(draft), draft]));
+  const moved = moving.filter((draft) => !held.has(key(draft)));
+  const absorbed = moving.filter((draft) => held.has(key(draft)));
+  for (const draft of moved) {
     await tx
       .update(orderDrafts)
       .set({
         partyId: intoPartyId,
+        billId: targetBill(draft),
         revision: sql`${orderDrafts.revision} + 1`,
         updatedAt: nowIso(),
       })
-      .where(
-        inArray(
-          orderDrafts.id,
-          moved.map((draft) => draft.id),
-        ),
-      );
+      .where(eq(orderDrafts.id, draft.id));
   }
   await discardDrafts(
     tx,
@@ -297,7 +299,7 @@ export async function moveDraftsToParty(
     await addDiscardedDraft(
       tx,
       draft.id,
-      held.get(draft.ownerId)!,
+      held.get(key(draft))!,
       draft.ownerId,
       operatorId,
       attendance,
@@ -353,8 +355,6 @@ export interface SubmitDraftInput extends PartyCommandArgs {
   groups: { lineIds: string[]; release: GroupRelease }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
-  /** As `submitGroups` takes it: the bill of the party the lines go on. */
-  billId?: string;
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
@@ -388,10 +388,13 @@ export async function submitDraft(
     { kind: "party", partyId },
     input.submissionId,
     "draft.submit",
-    { partyId, draftId: id, operatorId, groups, joinGroupId, billId: input.billId },
+    { partyId, draftId: id, operatorId, groups, joinGroupId },
     async () => {
       const draft = await requireDraft(tx, id, partyId);
       await requireOwnDraftAt(tx, draft, operatorId, input.draftRevision);
+      const billId = uuid(draft.billId, "billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
       const lines = (await storedLines(tx, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
@@ -411,7 +414,7 @@ export async function submitDraft(
           }),
           joinGroupId,
           operatorId,
-          billId: input.billId,
+          billId,
           sourceDraftLineIds: groups.flatMap(({ lineIds }) => {
             const selected = new Set(lineIds);
             return lines.filter((line) => selected.has(line.id)).map((line) => line.id);
@@ -480,7 +483,7 @@ async function captureDraft(
   });
 }
 
-/** Each party's open drafts holding at least one line, oldest first, in one query. */
+/** Each party's unsent rows by owner, in oldest-draft order. */
 export async function readUnsentDrafts(
   tx: Transaction,
   partyIds: readonly string[],
@@ -497,8 +500,8 @@ export async function readUnsentDrafts(
     .innerJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
     .where(and(inArray(orderDrafts.partyId, [...partyIds]), eq(orderDrafts.state, "open")))
-    .groupBy(orderDrafts.id)
-    .orderBy(asc(orderDrafts.createdAt), asc(orderDrafts.id));
+    .groupBy(orderDrafts.partyId, orderDrafts.ownerId)
+    .orderBy(sql`min(${orderDrafts.createdAt})`, sql`min(${orderDrafts.id})`);
   for (const row of rows) {
     unsent.get(row.partyId)!.push({ ownerName: row.ownerName ?? "", lineCount: row.lineCount });
   }
@@ -657,6 +660,7 @@ async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
     .select({
       id: orderDrafts.id,
       partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerId: orderDrafts.ownerId,
       revision: orderDrafts.revision,
       state: orderDrafts.state,
@@ -694,16 +698,21 @@ function requireDraftRevision(draft: { id: string; revision: number }, revision:
   }
 }
 
-/** The party's open drafts; with `ownerId`, only that person's, of which there is at most one. */
-async function openDraftsOn(tx: Transaction, partyId: string, ownerId?: string) {
+async function openDraftsOn(tx: Transaction, partyId: string, ownerId?: string, billId?: string) {
   return tx
-    .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId, revision: orderDrafts.revision })
+    .select({
+      id: orderDrafts.id,
+      billId: orderDrafts.billId,
+      ownerId: orderDrafts.ownerId,
+      revision: orderDrafts.revision,
+    })
     .from(orderDrafts)
     .where(
       and(
         eq(orderDrafts.partyId, partyId),
         eq(orderDrafts.state, "open"),
         ownerId === undefined ? undefined : eq(orderDrafts.ownerId, ownerId),
+        billId === undefined ? undefined : eq(orderDrafts.billId, billId),
       ),
     );
 }
@@ -794,7 +803,7 @@ async function recordDraftEvents(
     const orders = await tx
       .selectDistinct({ locationId: workingOrders.locationId })
       .from(workingOrders)
-      .innerJoin(orderDrafts, eq(orderDrafts.partyId, workingOrders.partyId))
+      .innerJoin(orderDrafts, eq(orderDrafts.billId, workingOrders.id))
       .where(eq(orderDrafts.id, event.draftId));
     if (orders.length !== 1) continue;
     await attendance.recorder(tx, {
@@ -932,6 +941,7 @@ async function readOpenDrafts(
     .select({
       id: orderDrafts.id,
       partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerId: orderDrafts.ownerId,
       ownerName: persons.displayName,
       revision: orderDrafts.revision,
@@ -965,6 +975,7 @@ async function readOpenDrafts(
   );
   return drafts.map((draft) => ({
     ...draft,
+    billId: uuid(draft.billId, "billId"),
     ownerName: draft.ownerName ?? "",
     takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines

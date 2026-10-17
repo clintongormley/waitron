@@ -5,6 +5,7 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
+  parties,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -52,13 +53,18 @@ function save(
   party = partyId,
   attendance: AttendanceRecorder | null = recordAttendanceFact,
 ) {
-  return run((tx) =>
-    saveDraft(
+  return run(async (tx) => {
+    const [row] = await tx
+      .select({ billId: parties.mainBillId })
+      .from(parties)
+      .where(eq(parties.id, party));
+    return saveDraft(
       tx,
       v.cfg,
       party,
       owner,
       {
+        billId: row!.billId!,
         draftId: null,
         revision: 0,
         lines: [
@@ -76,8 +82,8 @@ function save(
         ],
       },
       attendance ?? undefined,
-    ),
-  );
+    );
+  });
 }
 const state = async () => ({
   drafts: await suite.db.select().from(orderDrafts),
@@ -201,10 +207,17 @@ describe("natural draft-event attendance snapshots", () => {
     await save(OPERATOR, target.partyId);
     const before = await state();
     await run((tx) =>
-      moveDraftsToParty(tx, partyId, target.partyId, other, {
-        recorder: recordAttendanceFact,
-        at: "2026-01-05T16:00:00.987Z",
-      }),
+      moveDraftsToParty(
+        tx,
+        partyId,
+        target.partyId,
+        other,
+        {
+          recorder: recordAttendanceFact,
+          at: "2026-01-05T16:00:00.987Z",
+        },
+        new Map([[from.billId, target.tabId]]),
+      ),
     );
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));

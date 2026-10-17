@@ -53,6 +53,7 @@ async function prepare(action: Action) {
   if (action === "submit-draft") {
     const draft = await run((tx) =>
       saveDraft(tx, v.cfg, party.partyId, v.operatorId, {
+        billId: party.tabId,
         draftId: null,
         revision: 0,
         lines: ["Ensalada", "Tarta"].map((name) => ({

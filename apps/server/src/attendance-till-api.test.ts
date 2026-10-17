@@ -91,6 +91,7 @@ describe("till attendance recorder admission", () => {
       const { partyId, tabId } = await seat(v, await v.table("Closing attendance"));
       const draft = await withTransaction(suite.db, (tx) =>
         saveDraft(tx, v.cfg, partyId, OPERATOR, {
+          billId: tabId,
           draftId: null,
           revision: 0,
           lines: [
@@ -355,7 +356,7 @@ describe("till attendance recorder admission", () => {
     );
   });
   it("passes the recorder to the actual draft save route after its admission checks", async () => {
-    const { partyId } = await seat(v, await v.table("Draft attendance"));
+    const { partyId, tabId } = await seat(v, await v.table("Draft attendance"));
     const api = app();
     const opened = await login(api);
     expect(opened.status).toBe(200);
@@ -365,6 +366,7 @@ describe("till attendance recorder admission", () => {
       method: "PUT",
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
+        billId: tabId,
         draftId: null,
         revision: 0,
         lines: [
