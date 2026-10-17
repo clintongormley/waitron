@@ -28,7 +28,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
-import { takeBillPayment, type BillPaymentRequest } from "./bill-payments.js";
+import { takeBillPayment, type BillPaymentRequest } from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";

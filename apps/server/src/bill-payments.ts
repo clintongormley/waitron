@@ -1,3 +1,5 @@
+import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
@@ -110,6 +112,7 @@ export type BillPaymentDeps = TillSaleDeps & { attendance?: AttendanceRecorder }
 
 /** What a payment request asks for, before the operator has seen an allocation. */
 export interface BillPaymentAsk {
+  expectedEdit: BillEditExpected | null;
   kind: "items" | "contribution" | "share";
   /** `items` only. A line's `quantity`, absent, is the whole line. */
   lines?: { lineNo: number; quantity?: string }[];
@@ -931,9 +934,14 @@ export async function previewBillPayment(
   cfg: TillConfig,
   workingOrderId: string,
   ask: BillPaymentAsk,
+  operatorId: string | undefined,
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
     await requireOpenBill(tx, workingOrderId);
+    await requireOrderBillEditor(tx, workingOrderId, {
+      operatorId,
+      expectedEdit: ask.expectedEdit,
+    });
     await assertBillHasNoUnsent(tx, workingOrderId);
     const held = await readPaymentMoney(tx, [workingOrderId]);
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
@@ -975,6 +983,7 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     value === undefined ? undefined : money(decimal(value));
   return {
     ...req,
+    expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
     guests: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
@@ -1055,6 +1064,10 @@ async function beginBillPayment(
   }
 
   await requireOpenBill(tx, workingOrderId);
+  await requireOrderBillEditor(tx, workingOrderId, {
+    operatorId: operator.personId,
+    expectedEdit: req.expectedEdit,
+  });
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseUnavailableFullInvoice(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);

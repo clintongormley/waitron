@@ -21,7 +21,7 @@ import {
   splitBill,
   transferItems,
 } from "./testing/bill-action-fixture.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { refundBillPayment } from "./bill-refunds.js";

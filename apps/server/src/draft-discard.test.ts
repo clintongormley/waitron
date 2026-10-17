@@ -1,3 +1,4 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -44,7 +45,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 afterEach(async () => {
   await watchedOrder();
 });
-import { send } from "./testing/bill-venue.js";
+import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
@@ -761,3 +762,5 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(after.drafts.find((r) => r.id === draft.id)).toMatchObject({ state: "discarded" });
   });
 });
+
+const send = observedPaymentSender(() => venue.db, rawPaymentSend);

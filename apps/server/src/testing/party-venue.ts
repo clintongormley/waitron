@@ -28,7 +28,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import type { VenueResult } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "./bill-action-fixture.js";
-import { takeBillPayment } from "../bill-payments.js";
+import { takeBillPayment } from "./bill-payment-fixture.js";
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 

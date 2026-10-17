@@ -22,7 +22,7 @@ import { listOutstandingSales } from "@waitron/core";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   OPERATOR,
   activeTablesOf,

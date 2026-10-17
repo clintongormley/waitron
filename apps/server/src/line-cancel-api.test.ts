@@ -1,3 +1,4 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -42,7 +43,7 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
-import { send } from "./testing/bill-venue.js";
+import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import { createZone } from "./testing/service-zone.js";
 import {
   watchDerivationsAndLock,
@@ -947,3 +948,5 @@ describe("the public cancellation read and command", () => {
     },
   );
 });
+
+const send = observedPaymentSender(() => venue.db, rawPaymentSend);

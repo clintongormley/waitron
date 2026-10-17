@@ -95,7 +95,7 @@ import {
 } from "./till-sale.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,

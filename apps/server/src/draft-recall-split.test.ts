@@ -1,3 +1,4 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -20,7 +21,7 @@ import { adjustments } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import type { Draft } from "./order-drafts.js";
-import { send } from "./testing/bill-venue.js";
+import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
@@ -374,3 +375,5 @@ describe("splitting a recalled dish through the public group command", () => {
       expect(row).toMatchObject({ quantity: "1.000", joinGroupId: null });
   });
 });
+
+const send = observedPaymentSender(() => venue.db, rawPaymentSend);

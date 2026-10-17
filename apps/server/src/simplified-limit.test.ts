@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1070,4 +1072,17 @@ describe("an edit that does not raise an order already over the limit", () => {
   });
 });
 
-const send = observedGroupSender(() => venue.db, rawGroupSend);
+const paymentSend = observedPaymentSender(() => venue.db, rawGroupSend);
+const send = observedGroupSender(
+  () => venue.db,
+  async (app, cookie, method, path, body) => {
+    const direct = /^\/api\/working-orders\/([^/]+)\/(?:invoice-choice|lines\/\d+)$/.exec(path);
+    if (direct !== null && body !== null && typeof body === "object" && !Array.isArray(body)) {
+      body = {
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, direct[1]!)),
+        ...body,
+      };
+    }
+    return paymentSend(app, cookie, method, path, body);
+  },
+);

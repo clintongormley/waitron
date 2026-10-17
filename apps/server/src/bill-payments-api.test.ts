@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -399,12 +401,34 @@ async function request(
   body?: unknown,
   cookie = venue.cookie,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
+  const gated =
+    /^\/api\/working-orders\/([^/]+)(?:\/(?:invoice-choice|receipt-language|label|place|lines\/\d+))?$/.exec(
+      path,
+    );
+  if (
+    gated !== null &&
+    method !== "GET" &&
+    (body === undefined || (body !== null && typeof body === "object" && !Array.isArray(body)))
+  ) {
+    body = {
+      expectedEdit: await inTx((tx) => readBillEditState(tx, gated[1]!)),
+      ...(body as Record<string, unknown>),
+    };
+  }
   const res = await venue.app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
     ...(body === undefined
       ? {}
-      : { body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)) }),
+      : {
+          body: JSON.stringify(
+            await observedPaymentBody(
+              suite.db,
+              path,
+              await observedGroupSubmitBody(suite.db, path, body),
+            ),
+          ),
+        }),
   });
   const text = await res.text();
   const parsed = res.headers.get("content-type")?.includes("json")
@@ -1515,6 +1539,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const moved = await request("POST", `/api/bills/${billId}/move`, {
       to: { tableId: destination.tableId },
       expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
       otherPartyId: null,
     });
     expect(moved.status).toBe(200);
@@ -1574,6 +1599,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const moved = await request("POST", `/api/bills/${billId}/move`, {
       to: { tableId: destination.tableId },
       expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
       otherPartyId: null,
     });
     expect(moved.status).toBe(200);
@@ -4785,7 +4811,7 @@ describe("a reader payment on a device that changes profile while it is starting
       quiet,
     );
     const billId = await bill120();
-    const pay = (amount: string) =>
+    const pay = async (amount: string) =>
       app.request(`/api/working-orders/${billId}/payments`, {
         method: "POST",
         headers: {
@@ -4794,6 +4820,7 @@ describe("a reader payment on a device that changes profile while it is starting
         },
         body: JSON.stringify({
           submissionId: randomUUID(),
+          expectedEdit: await inTx((tx) => readBillEditState(tx, billId)),
           kind: "contribution",
           amount,
           method: "card",

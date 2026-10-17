@@ -1,3 +1,4 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -56,7 +57,7 @@ import {
   readOrderRevision,
   splitLinesWithinOrder,
 } from "./working-order.js";
-import { send } from "./testing/bill-venue.js";
+import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import {
   billWith,
@@ -3549,3 +3550,5 @@ async function lastKitchenSlip(): Promise<string[]> {
   );
   return printedLines(job!.payload).filter((line) => line.trim() !== "");
 }
+
+const send = observedPaymentSender(() => venue.db, rawPaymentSend);

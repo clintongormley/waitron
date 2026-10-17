@@ -73,10 +73,12 @@ import {
   issueIfFullyPaid,
   readBillBalance,
   readPaymentsByBill,
+} from "./bill-payments.js";
+import {
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
-} from "./bill-payments.js";
+} from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";

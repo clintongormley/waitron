@@ -26,7 +26,7 @@ import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";

@@ -43,7 +43,7 @@ import {
   collectOrderOrchestration as collectOrder,
   settleIssuedOwingNothing,
 } from "./till-sale.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./parties.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";

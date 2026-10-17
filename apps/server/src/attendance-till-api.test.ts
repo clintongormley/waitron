@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -248,6 +249,7 @@ describe("till attendance recorder admission", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "attendance-payment",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         method: "cash",
@@ -306,6 +308,7 @@ describe("till attendance recorder admission", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "payment-rollback",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         method: "cash",
@@ -368,6 +371,7 @@ describe("till attendance recorder admission", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         billId: tabId,
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         draftId: null,
         revision: 0,
         lines: [
@@ -386,7 +390,7 @@ describe("till attendance recorder admission", () => {
       }),
     });
     expect(saved.status).toBe(200);
-    const draft = (await saved.json()) as { id: string; revision: number };
+    const { draft } = (await saved.json()) as { draft: { id: string; revision: number } };
     expect(
       (await suite.db.select().from(attendanceOperationFacts)).map((r) => [
         r.source,
@@ -420,6 +424,7 @@ describe("till refund attendance", () => {
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         submissionId: "refund-source",
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         kind: "contribution",
         amount: "1.00",
         applied: "1.00",

@@ -18,7 +18,8 @@ import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 
 import type { Draft } from "./order-drafts.js";
-import { issueIfFullyPaid, previewBillPayment, type BillPaymentAsk } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payments.js";
+import { previewBillPayment, type BillPaymentAsk } from "./testing/bill-payment-fixture.js";
 import { payWorkingOrder, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import {

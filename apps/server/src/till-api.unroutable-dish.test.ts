@@ -21,7 +21,7 @@ import { hashPin, persons } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
-import { takeBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";

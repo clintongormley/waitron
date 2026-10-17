@@ -36,7 +36,7 @@ import {
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
-} from "./bill-payments.js";
+} from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { deleteDevice, disableDevice } from "./device-delete.js";
 import { ALL_MODULES } from "./modules.js";

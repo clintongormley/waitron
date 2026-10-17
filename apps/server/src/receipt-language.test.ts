@@ -1,3 +1,4 @@
+import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -69,7 +70,7 @@ import {
   inTx,
   provisionBillVenue,
   seatedWith,
-  send,
+  send as rawPaymentSend,
   statusOf,
   tabWith,
   type BillVenue,
@@ -2406,3 +2407,5 @@ describe("a sale files in the receipt language saved on its order", () => {
     );
   });
 });
+
+const send = observedPaymentSender(() => suite.db, rawPaymentSend);
