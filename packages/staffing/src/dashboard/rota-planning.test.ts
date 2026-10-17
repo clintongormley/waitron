@@ -239,7 +239,9 @@ describe("planning warnings and publication", () => {
   it("keeps filling and publishing available without labour rules", async () => {
     const { el, request } = await mount(true);
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("Labour rules are not set up"),
+      expect(el.shadowRoot!.querySelector("[data-test=bar]")!.textContent).toContain(
+        "No labour rules to check against",
+      ),
     );
     click(el.shadowRoot!.querySelector("rota-by-area")!.shadowRoot!, "[data-slot=empty]");
     await el.updateComplete;
@@ -324,7 +326,7 @@ describe("planning request failures", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("Could not load labour warnings"),
     );
-    expect(el.shadowRoot!.textContent).not.toContain("Labour rules are not set up");
+    expect(el.shadowRoot!.textContent).not.toContain("No labour rules to check against");
     expect(
       (
         el.shadowRoot!.querySelector(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { rotaWeek } from "../testing/rota-fixture.js";
-import { EVERYONE, chosenShow, matchesFor } from "./rota-model.js";
+import { EVERYONE, chosenShow, matchesFor, summary, weekCounts } from "./rota-model.js";
+import type { RotaWeek } from "../staffing-types.js";
 
 describe("the Rota's Show choice", () => {
   it("shows the first area when the address names none or an unknown one", () => {
@@ -61,5 +62,70 @@ describe("the matches a Show choice covers", () => {
       day.areas.map((a) => a.match),
     );
     expect(matchesFor(read, { kind: "everyone" }, "2026-01-01")).toEqual([]);
+  });
+});
+
+describe("the week's attention counts and their summary", () => {
+  const kitchen = (read: RotaWeek) => chosenShow(read, "station:kitchen");
+  const everyone = { kind: "everyone" } as const;
+  const allFilled = () => {
+    const read = rotaWeek();
+    for (const day of read.days)
+      for (const a of day.areas) {
+        a.match.over = [];
+        for (const s of a.match.slots)
+          s.status = { kind: "filled", shiftId: "filled", outsideRole: false };
+      }
+    return read;
+  };
+  const noSlots = () => {
+    const read = rotaWeek();
+    for (const day of read.days)
+      for (const a of day.areas) {
+        a.match.over = [];
+        a.match.slots = [];
+      }
+    return read;
+  };
+  it("counts the shown area's unfilled, partly uncovered and over, and every area's for Everyone", () => {
+    const read = rotaWeek();
+    read.days[2]!.areas.push({
+      area: { kind: "department", id: "restaurant" },
+      match: {
+        slots: [
+          {
+            slot: { ...read.days[4]!.areas[0]!.match.slots[0]!.slot, key: "restaurant-empty" },
+            status: { kind: "unfilled" },
+          },
+        ],
+        over: [],
+      },
+    });
+    expect(weekCounts(read, kitchen(read))).toEqual({ unfilled: 1, partly: 1, over: 1 });
+    expect(weekCounts(read, everyone)).toEqual({ unfilled: 2, partly: 1, over: 1 });
+  });
+  it("gives the counts while any is above zero", () => {
+    const read = rotaWeek();
+    expect(summary(read, kitchen(read))).toBe("counts");
+    const overOnly = allFilled();
+    overOnly.days[3]!.areas[0]!.match.over = ["over"];
+    expect(summary(overOnly, kitchen(overOnly))).toBe("counts");
+  });
+  it("says all slots are filled when the scope has a slot and no count", () => {
+    const read = allFilled();
+    expect(weekCounts(read, kitchen(read))).toEqual({ unfilled: 0, partly: 0, over: 0 });
+    expect(summary(read, kitchen(read))).toBe("all_filled");
+    expect(summary(read, everyone)).toBe("all_filled");
+  });
+  it("says there are no shifts yet for Everyone with no slot and no shift", () => {
+    const read = noSlots();
+    read.shifts = [];
+    expect(summary(read, everyone)).toBe("no_shifts");
+    expect(summary(read, kitchen(read))).toBe("nothing_to_fill");
+  });
+  it("says there is nothing to fill with no slot in scope", () => {
+    const read = noSlots();
+    expect(summary(read, kitchen(read))).toBe("nothing_to_fill");
+    expect(summary(read, everyone)).toBe("nothing_to_fill");
   });
 });

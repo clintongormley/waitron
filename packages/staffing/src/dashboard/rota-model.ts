@@ -20,3 +20,26 @@ export function matchesFor(read: RotaWeek, show: Show, businessDay?: string): Ar
         .map((a) => a.match),
     );
 }
+
+export function weekCounts(
+  read: RotaWeek,
+  show: Show,
+): { unfilled: number; partly: number; over: number } {
+  const matches = matchesFor(read, show);
+  const slots = matches.flatMap((m) => m.slots);
+  return {
+    unfilled: slots.filter((s) => s.status.kind === "unfilled").length,
+    partly: slots.filter((s) => s.status.kind === "partly_uncovered").length,
+    over: matches.reduce((n, m) => n + m.over.length, 0),
+  };
+}
+
+export type Summary = "counts" | "all_filled" | "no_shifts" | "nothing_to_fill";
+
+export function summary(read: RotaWeek, show: Show): Summary {
+  const counts = weekCounts(read, show);
+  if (counts.unfilled + counts.partly + counts.over > 0) return "counts";
+  if (matchesFor(read, show).some((m) => m.slots.length > 0)) return "all_filled";
+  if (show.kind === "everyone" && read.shifts.length === 0) return "no_shifts";
+  return "nothing_to_fill";
+}

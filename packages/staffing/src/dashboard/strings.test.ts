@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { codeMessage, setLocale } from "@waitron/dashboard-kit";
 import { droppedNotice } from "./painter-parts.js";
-import { colourName, holderNames, peopleNeeded, STAFFING_STRINGS, tf } from "./strings.js";
+import {
+  colourName,
+  countWords,
+  holderNames,
+  peopleNeeded,
+  STAFFING_STRINGS,
+  tf,
+} from "./strings.js";
 
 afterEach(() => setLocale("en"));
 
@@ -32,6 +39,21 @@ describe("staffing strings", () => {
     expect(peopleNeeded(3, "en")).toBe("3 people");
     expect(peopleNeeded(1, "es")).toBe("1 persona");
     expect(peopleNeeded(3, "es")).toBe("3 personas");
+  });
+
+  it("says the rota's counts in the singular and the plural", () => {
+    expect(countWords("unfilled", 1, "en")).toBe("1 unfilled");
+    expect(countWords("unfilled", 3, "en")).toBe("3 unfilled");
+    expect(countWords("partly", 1, "en")).toBe("1 partly uncovered");
+    expect(countWords("partly", 3, "en")).toBe("3 partly uncovered");
+    expect(countWords("over", 1, "en")).toBe("1 over");
+    expect(countWords("over", 3, "en")).toBe("3 over");
+    expect(countWords("unfilled", 1, "es")).toBe("1 sin cubrir");
+    expect(countWords("unfilled", 3, "es")).toBe("3 sin cubrir");
+    expect(countWords("partly", 1, "es")).toBe("1 parcialmente cubierto");
+    expect(countWords("partly", 3, "es")).toBe("3 parcialmente cubiertos");
+    expect(countWords("over", 1, "es")).toBe("1 sobrante");
+    expect(countWords("over", 3, "es")).toBe("3 sobrantes");
   });
 
   it("says one or several areas and dates were removed", () => {

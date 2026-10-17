@@ -4,15 +4,15 @@ import "./shift-edit-dialog.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { areaKey, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { dateLabel } from "./format.js";
 import { hours } from "./rota-format.js";
-import { EVERYONE, chosenShow, matchesFor } from "./rota-model.js";
+import { EVERYONE, chosenShow, summary, weekCounts, type Show } from "./rota-model.js";
 import { breachText } from "./rota-warnings.js";
-import { t, tf } from "./strings.js";
+import { countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
 import "./rota-by-person.js";
 import "./slot-picker.js";
@@ -44,6 +44,69 @@ export class RotaView extends LitElement {
       }
       .head wt-combobox {
         min-width: calc(var(--wt-tap-min) * 4);
+      }
+      .end {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-inline-start: auto;
+      }
+      .state {
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface-sunken);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .state[data-published] {
+        border-color: var(--wt-color-success);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-success);
+      }
+      .note {
+        color: var(--wt-color-text-muted);
+      }
+      .attention {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: var(--wt-space-1);
+      }
+      .count {
+        min-block-size: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--wt-color-warning);
+        font: inherit;
+        font-weight: var(--wt-font-weight-medium);
+        text-decoration: underline dotted;
+        text-underline-offset: var(--wt-space-1);
+        cursor: pointer;
+      }
+      .summary {
+        color: var(--wt-color-text-muted);
+      }
+      .summary[data-summary="all_filled"] {
+        color: var(--wt-color-success);
+        font-weight: var(--wt-font-weight-medium);
+      }
+      .labour {
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-medium);
+      }
+      .swap {
+        margin: 0 0 var(--wt-space-3);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface-raised);
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
       .layout {
         display: flex;
@@ -105,6 +168,7 @@ export class RotaView extends LitElement {
   @property() week = "";
   @property({ attribute: false }) params: Readonly<Record<string, string>> = {};
   @property({ type: Boolean }) canWrite = false;
+  @property({ type: Boolean }) canWriteStaffing = false;
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
   @state() private read?: RotaWeek;
   @state() private loadError = "";
@@ -283,12 +347,68 @@ export class RotaView extends LitElement {
       if (generation === this.#generation) this.busy = false;
     }
   }
+  #attention(read: RotaWeek, show: Show) {
+    const kind = summary(read, show);
+    if (kind !== "counts") {
+      const words = t(`staffing.rota.${kind}`);
+      return {
+        words,
+        body: html`<span class="summary" data-test="summary" data-summary=${kind}>${words}</span>`,
+      };
+    }
+    const counts = weekCounts(read, show);
+    const kinds = (["unfilled", "partly", "over"] as const).filter((k) => counts[k] > 0);
+    return {
+      words: kinds.map((k) => countWords(k, counts[k])).join(" · "),
+      body: kinds.map(
+        (k, i) =>
+          html`${i ? " · " : nothing}<button type="button" class="count" data-kind=${k}>
+              ${countWords(k, counts[k])}
+            </button>`,
+      ),
+    };
+  }
+  #labour() {
+    if (!this.warnings) return nothing;
+    if (this.warnings.ruleset === null)
+      return html`<span class="note" aria-hidden="true">·</span>
+        <span class="note" role="status" data-test="no-rules"
+          >${t("staffing.rota.no_rules")}</span
+        >`;
+    const count = this.warnings.breaches.length;
+    return html`<span class="labour" role="status" data-test="labour-count"
+      ><span aria-hidden="true">⚠</span>
+      ${count === 1 ? t("staffing.rota.labour_one") : tf("staffing.rota.labour_count", { count: String(count) })}</span
+    >`;
+  }
+  #action(read: RotaWeek) {
+    if (!this.canWrite) return nothing;
+    if (read.version?.status === "published")
+      return html`<wt-button
+        variant="secondary"
+        data-test="change-week"
+        ?disabled=${this.busy}
+        @click=${() => void this.#changeWeek()}
+        >${t("staffing.rota.change_week")}</wt-button
+      >`;
+    const ready = !!this.warnings && read.shifts.length > 0;
+    return html`<wt-button
+      data-test="publish-week"
+      variant=${ready ? "primary" : "secondary"}
+      ?disabled=${this.busy || !ready}
+      @click=${() => {
+        this.publishing = true;
+        this.publishError = "";
+      }}
+      >${t(read.version?.changedSincePublished ? "staffing.rota.publish_changes" : "staffing.rota.publish")}</wt-button
+    >`;
+  }
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
     const show = read ? chosenShow(read, this.params.area) : undefined;
-    const matches = read && show ? matchesFor(read, show) : [];
-    const slots = matches.flatMap((m) => m.slots);
-    return html`<div class="head">
+    const attention = read && show ? this.#attention(read, show) : undefined;
+    const published = read?.version?.status === "published";
+    return html`<div class="head" data-test="bar">
         <wt-button
           variant="secondary"
           data-test="previous-week"
@@ -306,35 +426,39 @@ export class RotaView extends LitElement {
           @click=${() => this.#go(step(this.week, 7))}
           >›</wt-button
         >
-        ${read ? html`<wt-combobox name="area" label=${t("staffing.month.area")} search="never" .value=${show!.kind === "area" ? show!.key : EVERYONE} .options=${[{ value: EVERYONE, label: t("staffing.rota.everyone") }, ...read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))]} @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}></wt-combobox><span data-test="attention" role="status">${tf("staffing.rota.attention", { unfilled: String(slots.filter((s) => s.status.kind === "unfilled").length), partly: String(slots.filter((s) => s.status.kind === "partly_uncovered").length), over: String(matches.reduce((n, m) => n + m.over.length, 0)) })}</span><span class="status">${t(read.version?.status === "published" ? "staffing.rota.published" : "staffing.rota.draft")}${read.version?.changedSincePublished ? ` · ${t("staffing.rota.changed")}` : ""}</span>` : nothing}
+        ${
+          read
+            ? html`<wt-combobox
+                  name="area"
+                  label=${t("staffing.month.area")}
+                  search="never"
+                  .value=${show!.kind === "area" ? show!.key : EVERYONE}
+                  .options=${[{ value: EVERYONE, label: t("staffing.rota.everyone") }, ...read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))]}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}
+                ></wt-combobox>
+                <div class="end">
+                  <span class="state" data-test="state" ?data-published=${published}
+                    >${t(published ? "staffing.rota.published" : "staffing.rota.draft")}</span
+                  >
+                  ${
+                    !published && read.version?.changedSincePublished
+                      ? html`<span class="note" data-test="still-published"
+                          >${t("staffing.rota.still_published")}</span
+                        >`
+                      : nothing
+                  }
+                  <span class="attention" data-test="attention">${attention!.body}</span>
+                  ${this.#labour()} ${this.#action(read)}
+                </div>`
+            : nothing
+        }
       </div>
-      ${
-        read && this.warnings
-          ? this.warnings.ruleset === null
-            ? html`<p role="status">${t("staffing.rota.no_rules")}</p>`
-            : html`<p role="status" data-test="labour-count">
-                ${this.warnings.breaches.length === 1 ? t("staffing.rota.labour_one") : tf("staffing.rota.labour_count", { count: String(this.warnings.breaches.length) })}
-              </p>`
-          : nothing
-      }
-      ${this.swapNotice ? html`<p role="status" data-test="swap-notice">${tf(this.swapNotice === 1 ? "staffing.rota.open_swap_one" : "staffing.rota.open_swaps", { count: String(this.swapNotice) })}</p>` : nothing}
+      <span class="visually-hidden" role="status" data-test="attention-status"
+        >${attention?.words ?? ""}</span
+      >
+      ${this.swapNotice ? html`<p class="swap" role="status" data-test="swap-notice">${tf(this.swapNotice === 1 ? "staffing.rota.open_swap_one" : "staffing.rota.open_swaps", { count: String(this.swapNotice) })}</p>` : nothing}
       ${this.changingError ? html`<p role="alert">${this.changingError}</p>` : nothing}
-      ${read?.version?.status === "published" && this.canWrite ? html`<wt-button data-test="change-week" ?disabled=${this.busy} @click=${() => void this.#changeWeek()}>${t("staffing.rota.change_week")}</wt-button>` : nothing}
       ${this.warningsError ? html`<p role="alert">${this.warningsError}</p>` : nothing}
-      ${
-        read?.version?.status === "draft" && this.canWrite
-          ? html`<wt-button
-              data-test="publish-week"
-              variant=${this.warnings ? "primary" : "secondary"}
-              ?disabled=${this.busy || !this.warnings}
-              @click=${() => {
-                this.publishing = true;
-                this.publishError = "";
-              }}
-              >${t("staffing.rota.publish")}</wt-button
-            >`
-          : nothing
-      }
       ${this.loadError ? html`<p class="error" role="alert" data-test="load-error">${this.loadError}</p>` : nothing}
       ${
         read

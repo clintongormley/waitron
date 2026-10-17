@@ -43,7 +43,7 @@ const en = {
 
   "staffing.rota.labour_count": "{count} labour warnings",
   "staffing.rota.labour_one": "1 labour warning",
-  "staffing.rota.no_rules": "Labour rules are not set up",
+  "staffing.rota.no_rules": "No labour rules to check against",
   "staffing.rota.warnings_error": "Could not load labour warnings: {reason}",
   "staffing.rota.publish": "Publish week",
   "staffing.rota.publish_anyway": "Publish anyway",
@@ -73,7 +73,15 @@ const en = {
   "staffing.rota.hours_no_contract": "{planned} h",
   "staffing.rota.draft": "Draft",
   "staffing.rota.published": "Published",
-  "staffing.rota.changed": "changed since published",
+  "staffing.rota.still_published": "Staff still see the published week",
+  "staffing.rota.publish_changes": "Publish changes",
+  "staffing.rota.partly_count": "{count} partly uncovered",
+  "staffing.rota.partly_one": "1 partly uncovered",
+  "staffing.rota.over_count": "{count} over",
+  "staffing.rota.over_one": "1 over",
+  "staffing.rota.all_filled": "All slots filled",
+  "staffing.rota.nothing_to_fill": "Nothing to fill",
+  "staffing.rota.no_shifts": "No shifts yet",
   "staffing.rota.not_in_slot": "Not in a slot",
   "staffing.rota.previous_week": "belongs to the previous week",
   "staffing.rota.next_week": "belongs to the next week",
@@ -82,7 +90,6 @@ const en = {
   "staffing.rota.uncovered": "uncovered {times}",
   "staffing.rota.unfilled": "+ unfilled",
   "staffing.rota.over": "not needed",
-  "staffing.rota.attention": "{unfilled} unfilled · {partly} partly uncovered · {over} over",
   "staffing.rota.free": "free",
   "staffing.rota.leave": "on leave",
   "staffing.rota.working": "working {times}",
@@ -233,7 +240,7 @@ const es: Record<keyof typeof en, string> = {
 
   "staffing.rota.labour_count": "{count} avisos laborales",
   "staffing.rota.labour_one": "1 aviso laboral",
-  "staffing.rota.no_rules": "Las reglas laborales no están configuradas",
+  "staffing.rota.no_rules": "No hay reglas laborales con las que comprobar",
   "staffing.rota.warnings_error": "No se pudieron cargar los avisos laborales: {reason}",
   "staffing.rota.publish": "Publicar semana",
   "staffing.rota.publish_anyway": "Publicar de todos modos",
@@ -264,7 +271,15 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.hours_no_contract": "{planned} h",
   "staffing.rota.draft": "Borrador",
   "staffing.rota.published": "Publicado",
-  "staffing.rota.changed": "cambiado desde su publicación",
+  "staffing.rota.still_published": "El equipo sigue viendo la semana publicada",
+  "staffing.rota.publish_changes": "Publicar cambios",
+  "staffing.rota.partly_count": "{count} parcialmente cubiertos",
+  "staffing.rota.partly_one": "1 parcialmente cubierto",
+  "staffing.rota.over_count": "{count} sobrantes",
+  "staffing.rota.over_one": "1 sobrante",
+  "staffing.rota.all_filled": "Todos los puestos cubiertos",
+  "staffing.rota.nothing_to_fill": "Nada que cubrir",
+  "staffing.rota.no_shifts": "Aún no hay turnos",
   "staffing.rota.not_in_slot": "Sin puesto",
   "staffing.rota.previous_week": "pertenece a la semana anterior",
   "staffing.rota.next_week": "pertenece a la semana siguiente",
@@ -273,8 +288,6 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.uncovered": "sin cubrir {times}",
   "staffing.rota.unfilled": "+ sin cubrir",
   "staffing.rota.over": "no necesario",
-  "staffing.rota.attention":
-    "{unfilled} sin cubrir · {partly} parcialmente cubiertos · {over} sobrantes",
   "staffing.rota.free": "libre",
   "staffing.rota.leave": "de permiso",
   "staffing.rota.working": "trabajando {times}",
@@ -443,6 +456,16 @@ export function holderNames(names: readonly string[], shown: number, locale?: st
 export function peopleNeeded(count: number, locale?: string): string {
   if (count === 1) return t("staffing.grid.people_one", locale);
   return tf("staffing.grid.people_other", { count: String(count) }, locale);
+}
+
+/** A rota count in words: "1 over", "3 partly uncovered". */
+export function countWords(
+  kind: "unfilled" | "partly" | "over",
+  count: number,
+  locale?: string,
+): string {
+  if (kind !== "unfilled" && count === 1) return t(`staffing.rota.${kind}_one`, locale);
+  return tf(`staffing.rota.${kind}_count`, { count: String(count) }, locale);
 }
 
 const COLOUR_NAMES: NameTable = {
