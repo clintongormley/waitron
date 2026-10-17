@@ -1503,6 +1503,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The Week's title and ruler scroll away with the days**; whether to pin them is open — left open
   by A722 Part 1, #1823.
 
+- **The Month's empty track is a lighter grey than the Week's in light mode.** The Week reads
+  `--wt-color-track` (#cdd0d8, 1.44 against the page); the Month still reads the border grey
+  (#d6d9e0, 1.41 on its card). Switching the Month to the track token would raise it to 1.54 and
+  leave dark unchanged. **Next action:** an owner call — the 2026-10-17 "darken it" covered the
+  Week only — left open by A722's follow-up, #1835.
+
 - **A prep station is drawn by two paths in the Month.** The Times tab works the station's rows out
   itself and hands them over with `stationMode`; the Calendar hands over a `StationShow`. The Month
   and the Week each repeat the loading, "Always open" and ready cases, the "Always open" paragraph
