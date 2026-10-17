@@ -423,7 +423,9 @@ the rebuild rules, including "a rebuild must not also add a column" with drizzle
 the pre-live rule (CLAUDE.md §3, "No backwards-compatibility or data-migration code until Waitron is
 in production") nothing is carried forward: seeds write a "Standard" set per department, and the dev
 venues are reset. **Cost to the owner:** the Santet real-data venue loses its floor plans at that
-reset and is rebuilt with `local/square/reset.sh`.
+reset and is rebuilt with `local/square/reset.sh`. **Alternative:** a small step in the migration
+moves each zone's existing plan into a "Standard" set, so Santet keeps its layouts; it is the kind of
+carry-forward code the pre-live rule otherwise leaves out, so it needs the owner's say-so.
 
 **A760, the migration squash.** The squash plan
 ([2026-10-16-a760-migration-squash.md](../plans/2026-10-16-a760-migration-squash.md)) starts only
