@@ -107,7 +107,8 @@ the phone layout when Part 2 lands, and the lane F note moves with Part 3 wherev
    the same rule: show and place in one call. States: pointing shows the tip; a click (a tap
    included) pins it; a click on the pinned block unpins and hides it; leaving the block or the tip
    hides only an unpinned tip; a click elsewhere, Escape (caught on `window` in the capture phase,
-   going no further) and a scroll hide and unpin it.
+   going no further) and a scroll hide and unpin it. (Added in review: the unpinned hide waits
+   `TIP_LEAVE_DELAY`, and a change of the Week's size also hides and unpins it.)
 5. **Tracks and ruler share one scale: the longest day in the week.** Every block is placed on its
    own business day (`placeOnDay`, that day's own `dayCutover`), at `start / longest` and
    `(end − start) / longest` of the track, where `longest` is the largest `endMinute` of the seven

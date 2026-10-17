@@ -4072,7 +4072,7 @@ Opening hours' Year.
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
   when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
   hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can
-  reach the tip from any point of the block, and a click elsewhere, Escape, a scroll or a change of
+  still reach the tip on a path the bridge does not cover, and a click elsewhere, Escape, a scroll or a change of
   the Week's size hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
   is the one button per day and opens the day box (below). Nothing is painted in the Week.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A

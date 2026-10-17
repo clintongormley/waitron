@@ -42,8 +42,8 @@ export interface DayNameLine {
   kind: OpeningHoursDay["nameKind"];
 }
 
-/** A date's names as the Month and the Week write them: its special day's, unless the holiday's
- *  is the same, then its holiday's. */
+/** A date's names as the Month and the Week write them: its special day's, left out when it is the
+ *  holiday's, then its holiday's. */
 export function dayNameLines(day: Day): DayNameLine[] {
   const holiday = holidayDateName(day.holidays, day.date, "");
   const special = day.specialDay?.name ?? "";

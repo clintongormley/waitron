@@ -53,8 +53,8 @@ function titleCandidates(): TemplateResult[] {
   return widthCandidates;
 }
 
-/** How long an unpinned tip outlasts the pointer leaving its block or itself: long enough for a
- *  path from any point of the block to reach the tip, which the bridge alone does not cover. */
+/** How long an unpinned tip outlasts the pointer leaving its block or itself, so a path from the
+ *  block that the bridge does not cover can still reach the tip. */
 const TIP_LEAVE_DELAY = 300;
 
 /** Shows `tip` and places it in the same call, so it never paints where it was last: above
