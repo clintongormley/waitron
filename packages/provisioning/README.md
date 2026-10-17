@@ -24,10 +24,10 @@ and neither surviving command migrates anything.
 
 ## The two commands
 
-| Command   | What it needs                                 | How often           |
-| --------- | --------------------------------------------- | ------------------- |
-| `keyring` | nothing at all — no venue directory, no files | once per deployment |
-| `venue`   | a migrated venue directory                    | once per venue      |
+| Command   | What it needs                                       | How often           |
+| --------- | --------------------------------------------------- | ------------------- |
+| `keyring` | nothing at all — no venue directory, no files       | once per deployment |
+| `venue`   | a migrated venue directory and host-state directory | once per venue      |
 
 `venue` creates the taxpayer row, a location, a node and its standard, full and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
@@ -51,8 +51,7 @@ usage: waitron-provision <command> [options]
            [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
 ```
 
-Most options are prompted for when omitted, so a bare `waitron-provision venue` is a complete
-interactive session. `--full-series-code` defaults to `FF` without a prompt.
+Most venue options are prompted for when omitted. `--full-series-code` defaults to `FF` without a prompt.
 `--admin-first-names` and `--admin-last-names` are read from flags but never prompted for, so a
 script that already drives `venue` non-interactively is not stopped by those questions.
 
@@ -83,6 +82,17 @@ connection string, no cluster, no role and no grant: the directory IS the databa
 path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
 box's own setting is what stands its venue up), then from a prompt.
 
+Set `WAITRON_STATE_DIR` to this node's host-state directory before you run `venue`.
+It holds the owned setup attempt and durable module preparation. Without it, the command
+refuses with `setup.not_ready` before opening the venue directory. For example:
+
+```bash
+WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
+```
+
+The command's interactive first Live setup flow is still unfinished in A679. Supplying an
+initial-input file does not replace the owned setup and its password confirmation.
+
 The directory must already be **migrated** — boot does that (`apps/server/src/boot.ts` →
 `applyMigrations`), and nothing here does. A directory nothing has migrated is refused
 (`provisioning.database_unmigrated`), which is also what a mistyped path meets: opening a virgin
@@ -102,6 +112,9 @@ directory already stamped for the **other** environment is refused with `deploym
 and nothing is minted, and a directory already stamped for THIS one passes through untouched. It is
 written after the confirmation prompt, never before: a stamp is permanent, so an operator who
 declines leaves the directory exactly as it was found.
+
+**2026-10-17:** the following historical checks predate the required host-state directory and
+owned hour preparation. They do not qualify the current first Live setup flow.
 
 Run against the built bundle on 2026-09-22, each case against its own directory: a virgin one gave
 `provisioning.database_unmigrated`; a migrated, unstamped one printed

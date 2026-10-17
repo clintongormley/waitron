@@ -42,6 +42,7 @@ export interface CliDeps {
   applyVenue: typeof applyVenue;
   /** The composition list (`@waitron/composition`'s `ALL_MODULES`). */
   modules: readonly WaitronModule[];
+  configureVenueModules?: (directory: string) => readonly WaitronModule[];
   initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
@@ -264,7 +265,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         email: adminEmail,
       },
     };
-    const selection = venueFiscalSelection(deps.modules, request.location.fiscalTerritory);
+    const installed = deps.configureVenueModules?.(venueDir) ?? deps.modules;
+    const selection = venueFiscalSelection(installed, request.location.fiscalTerritory);
     const fiscalConfig = selection.config;
     // The regime's own rules on the fields just typed, through the seat the setup wizard uses, before
     // anything is minted (CLAUDE.md §5). A regime that files nothing offers no seat.
@@ -275,7 +277,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       rectificativeSeriesCode: request.rectificativeSeriesCode,
       operationDescription: request.location.operationDescription,
     });
-    const modules = enabledModules(deps.modules, fiscalConfig);
+    const modules = enabledModules(installed, fiscalConfig);
 
     const actions = planVenue(request, modules);
     const requested = resolveEnvironment(deps.env);

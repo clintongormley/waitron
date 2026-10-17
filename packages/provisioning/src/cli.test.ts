@@ -1114,3 +1114,46 @@ it("rechecks a claim that appears while the store is opening", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("configures the module host for the resolved venue before planning and applying", async () => {
+  const h = harness({ env: VENUE_ENV });
+  const configured = [
+    fakeModule("core"),
+    fakeModule("bound-probe", {
+      provisioning: { seed: { summary: "seed the bound module", run: async () => "bound" } },
+    }),
+  ];
+  const configuredPaths: string[] = [];
+  const deps: CliDeps & {
+    configureVenueModules(directory: string): readonly WaitronModule[];
+  } = {
+    ...h.deps,
+    configureVenueModules: (directory) => {
+      configuredPaths.push(directory);
+      return configured;
+    },
+  };
+  expect(await runCli([...VENUE_ARGS, "--yes"], deps)).toBe(0);
+  expect(configuredPaths).toEqual([VENUE_DIR]);
+  expect(h.lines).toContain("  seed module bound-probe: seed the bound module");
+  const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
+  expect(actions.filter((action) => action.kind === "seed-module")).toEqual([
+    { kind: "seed-module", module: "bound-probe", summary: "seed the bound module" },
+  ]);
+  expect(applyDeps.modules).toEqual(configured);
+});
+
+it("refuses an unavailable command preparation host before opening or stamping the venue", async () => {
+  const h = harness({ env: VENUE_ENV });
+  const deps: CliDeps & { configureVenueModules(): readonly WaitronModule[] } = {
+    ...h.deps,
+    configureVenueModules: () => {
+      throw new AppError("setup.not_ready", {});
+    },
+  };
+  expect(await runCli([...VENUE_ARGS, "--yes"], deps)).toBe(1);
+  expect(h.lines).toContain("setup.not_ready {}");
+  expect(h.openVenue).not.toHaveBeenCalled();
+  expect(h.stampEnvironment).not.toHaveBeenCalled();
+  expect(h.applyVenue).not.toHaveBeenCalled();
+});

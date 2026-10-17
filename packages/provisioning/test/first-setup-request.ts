@@ -1,4 +1,5 @@
 export const PASSWORD = "SYNTHETIC-owner-password";
+export const MODULE = "fiscal-verifactu";
 export const request = {
   taxpayerDomicile: "Mayor 1, Madrid",
   country: "ES",

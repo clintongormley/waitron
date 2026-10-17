@@ -11,13 +11,11 @@ import {
   readDeploymentEnvironment,
   setVenueHolderIdentity,
   stampDeployment,
+  type Database,
 } from "@waitron/db";
-import {
-  configureModuleOperations,
-  serializeModuleConfig,
-  type ModuleConfig,
-} from "@waitron/module";
-import { isAppError } from "@waitron/shared";
+import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
+import { AppError, isAppError } from "@waitron/shared";
+import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { formatAppError, runCli } from "./cli.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { applyVenue } from "./venue-apply.js";
@@ -31,6 +29,7 @@ const CLEAR = "\u001B[3J\u001B[H\u001B[2J";
  * its own directory and `keyring` needs none.
  */
 async function main(): Promise<number> {
+  let database: Database | undefined;
   try {
     return await runCli(process.argv.slice(2), {
       io: {
@@ -41,12 +40,30 @@ async function main(): Promise<number> {
         clearScreen: () => void process.stdout.write(CLEAR),
       },
       env: process.env,
-      openVenue: (directory) => openVenueDatabase(directory),
+      openVenue: async (directory) => {
+        const store = await openVenueDatabase(directory);
+        database = store.venue;
+        return {
+          ...store,
+          async close() {
+            database = undefined;
+            await store.close();
+          },
+        };
+      },
       applyVenue,
-      modules: configureModuleOperations(ALL_MODULES, {
-        environment: Object.freeze({ ...process.env }),
-        readPublicEvidence: async () => undefined,
-      }),
+      modules: ALL_MODULES,
+      configureVenueModules: (venueDir) => {
+        const stateDir = process.env.WAITRON_STATE_DIR;
+        if (stateDir === undefined || stateDir === "") throw new AppError("setup.not_ready", {});
+        return createFirstSetupRuntime({
+          environment: Object.freeze({ ...process.env }),
+          stateDir,
+          venueDir,
+          modules: ALL_MODULES,
+          database: () => database,
+        }).modules;
+      },
       // The same variable `apps/server` reads; unset, no `modules.json` is written.
       writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),
       readEnvironment: readDeploymentEnvironment,

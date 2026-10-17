@@ -1,13 +1,9 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
+import { initialSetupFor, type OperationBinding, type WaitronModule } from "@waitron/module";
 import {
-  initialSetupFor,
-  type InitialSetupContext,
-  type OperationBinding,
-  type WaitronModule,
-} from "@waitron/module";
-import {
+  firstSetupModuleContext,
   readDurableHostJson,
   writeDurableHostJson,
   type FirstSetupCoordinator,
@@ -55,35 +51,7 @@ function exact(value: unknown, fields: readonly string[]): value is Record<strin
     fields.every((key) => Object.hasOwn(value, key))
   );
 }
-export function firstSetupModuleContext(
-  state: Pick<FirstSetupState, "frozen">,
-  name: string,
-): InitialSetupContext {
-  const frozen = state.frozen;
-  const module = frozen.modules.find((entry) => entry.module === name);
-  if (module === undefined) refuse();
-  return {
-    attemptId: frozen.attemptId,
-    binding: {
-      module: name,
-      action: "setup",
-      eventId: module.eventId,
-      sourceId: frozen.sourceId,
-      targetNodeId: frozen.nodeId,
-    },
-    administratorId: frozen.administratorId,
-    country: frozen.request.country,
-    taxId: frozen.request.taxId,
-    environment: frozen.environment,
-    recipientVenueId: frozen.sourceId,
-    bases: [
-      { code: frozen.request.seriesCode, purpose: "standard" },
-      { code: frozen.request.fullSeriesCode ?? "FF", purpose: "full" },
-      { code: frozen.request.rectificativeSeriesCode, purpose: "rectificative" },
-    ],
-    request: module.request,
-  };
-}
+export { firstSetupModuleContext } from "@waitron/provisioning";
 function parsePublicEvidenceFile(value: unknown): PublicEvidenceFile {
   if (
     !exact(value, ["version", "modules", "history"]) ||

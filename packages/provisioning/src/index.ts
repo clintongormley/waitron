@@ -99,3 +99,6 @@ export { passwordThrottleBucket, createPasswordThrottle } from "./password-throt
 export type { PasswordThrottle, PasswordThrottleProbe } from "./password-throttle.js";
 export { inTurn, keysInTurn } from "./attempt-turns.js";
 export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";
+
+export { createModuleOperationHost, createFirstSetupRuntime } from "./first-setup-runtime.js";
+export { firstSetupModuleContext } from "./first-setup-module-context.js";

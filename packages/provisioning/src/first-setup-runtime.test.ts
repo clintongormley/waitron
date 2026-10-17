@@ -16,9 +16,9 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
-import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
-import { createFirstSetupModuleHost } from "./module-operation-host.js";
-import { MODULE, PASSWORD, request } from "../test/first-fiscal.js";
+import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { createFirstSetupRuntime as createFirstSetupModuleHost } from "./first-setup-runtime.js";
+import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
@@ -416,4 +416,21 @@ it("a clock provider cannot replace the host's scope or bases", async () => {
       },
     },
   });
+});
+
+it("cannot retain an hour selection without a fresh owner password grant", async () => {
+  const f = await fixture();
+  const preparation = hour.createHostedHourPreparation(f.bound, {
+    monotonicNow: () => 0,
+    readClock: async () => ({ clock: currentClock() }),
+  });
+  await expect(
+    f.host.coordinator.run(() =>
+      withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+        preparation.select({ binding: f.context.binding, authority, answer: "no" }),
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  expect((await f.host.store.read())!.status).toBe("claimed");
+  expect((await f.host.store.read())!.inputs).toEqual({});
 });

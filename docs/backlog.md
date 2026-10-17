@@ -354,7 +354,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The ownership, password, inspection and setup-operation services are now shared through
   provisioning; the server entry points forward to those implementations. Their retained checks
   include password recovery, capability rotation, exact snapshots and interrupted operations.
-  Complete wizard and CLI admission remain unfinished.
+  The browser and command entry now use the shared ownership/preparation runtime. Its frozen-facts
+  checks moved with it, and the built command refuses a missing host-state directory before creating
+  venue files. Complete wizard and CLI claim, delivery and publication remain unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
