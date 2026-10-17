@@ -253,7 +253,8 @@ export class OpeningHoursMonthView extends LitElement {
       .name.holiday {
         color: var(--wt-color-palette-red);
       }
-      td[data-closed] .name {
+      td[data-closed] .name,
+      td[data-closed] .no-orders {
         color: inherit;
       }
       .track {

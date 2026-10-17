@@ -1456,6 +1456,25 @@ describe("Opening hours month, a station shown", () => {
     expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
   });
 
+  it("draws No orders on a date closed all day in the closed date's own colour, as its name", async () => {
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    applyTokens(el);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    applyTokens(probe);
+    el.after(probe);
+    hosts.push(probe);
+    const closed = cell(el, "2026-12-25");
+    const none = closed.querySelector<HTMLElement>('[data-test="no-orders"]')!;
+    const name = closed.querySelector<HTMLElement>('[data-test="name"]')!;
+    expect(text(name)).toBe("Christmas Day · Closed");
+    expect(getComputedStyle(none).color).toBe(getComputedStyle(name).color);
+    expect(getComputedStyle(none).color).toBe(
+      getComputedStyle(closed.querySelector(".day")!).color,
+    );
+    expect(getComputedStyle(none).color).not.toBe(getComputedStyle(probe).color);
+  });
+
   it("loading draws only the head", async () => {
     const el = await mount(monthModel(), {
       stations: STATIONS,
