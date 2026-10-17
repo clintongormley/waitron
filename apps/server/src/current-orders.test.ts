@@ -56,7 +56,7 @@ import {
   unsnoozeReminder,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";

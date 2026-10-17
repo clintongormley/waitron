@@ -1,3 +1,6 @@
+import { readBillEditState } from "./bill-editing.js";
+import { takeOverDraft } from "./order-drafts.js";
+import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -32,8 +35,14 @@ useVenueDb({
   },
 });
 
-function call(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown) {
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await observedGroupCompositionBody(venue.db, path, body),
+  );
 }
 async function command(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
@@ -63,11 +72,10 @@ async function setup(recalled: boolean, release: "hold" | "fire" = "hold") {
     .where(eq(workingOrderLines.workingOrderId, tabId));
   let draft: Draft | undefined;
   if (recalled) {
-    const answer = await call(
-      "POST",
-      `/api/parties/${partyId}/lines/${line!.id}/recall`,
-      await command(partyId),
-    );
+    const answer = await call("POST", `/api/parties/${partyId}/lines/${line!.id}/recall`, {
+      ...(await command(partyId)),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
+    });
     expect(answer.status).toBe(200);
     draft = (answer.json as unknown as { draft: Draft }).draft;
   }
@@ -137,14 +145,35 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
     async (operation) => {
       for (const ownerId of [venue.operatorId, venue.adminId]) {
         const p = await setup(true, operation === "named send" ? "fire" : "hold");
-        await venue.db.update(orderDrafts).set({ ownerId }).where(eq(orderDrafts.id, p.draft!.id));
+        if (ownerId !== venue.operatorId)
+          await inTx(venue, async (tx) =>
+            takeOverDraft(tx, venue.cfg, p.partyId, p.draft!.id, ownerId, {
+              revision: p.draft!.revision,
+              expectedEdit: await readBillEditState(tx, p.tabId),
+              submissionId: randomUUID(),
+            }),
+          );
+        const edit = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
         const before = await frozen();
         const answer = await edits[operation](p);
         expect(answer.json).toMatchObject({
-          code: "management.request_invalid",
-          params: { field: "sourceLineId" },
+          code:
+            operation === "group move" && ownerId !== venue.operatorId
+              ? "draft.taken_over"
+              : "draft.out_of_date",
+          params:
+            operation === "group move" && ownerId !== venue.operatorId
+              ? {
+                  billId: p.tabId,
+                  draftId: p.draft!.id,
+                  ownerId,
+                  ownerName: edit.editorName,
+                  edit,
+                  conflicts: [edit],
+                }
+              : { billId: p.tabId, draftId: p.draft!.id, revision: edit.draftRevision, edit },
         });
-        expect(answer.status).toBe(400);
+        expect(answer.status).toBe(409);
         expect(await frozen()).toEqual(before);
       }
     },

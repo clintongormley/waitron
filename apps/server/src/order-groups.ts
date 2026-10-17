@@ -83,6 +83,13 @@ import { stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
 import { isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
+import {
+  parseBillEditExpected,
+  parseBillEditExpecteds,
+  requireBillEditor,
+  requireBillEditors,
+} from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -934,15 +941,16 @@ export async function moveLinesToGroup(
   partyId: string,
   moves: { lineId: string; quantity: string }[],
   target: { groupId: string } | "new",
-  args: PartyCommandArgs,
+  args: PartyCommandArgs & { expectedEdits: BillEditExpected[] },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
+  const expectedEdits = parseBillEditExpecteds(args.expectedEdits);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     args.submissionId,
     "group.move",
-    { partyId, moves, target, operatorId: args.operatorId },
+    { partyId, moves, target, operatorId: args.operatorId, expectedEdits },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       if (moves.length === 0 || new Set(moves.map((m) => m.lineId)).size !== moves.length) {
@@ -986,6 +994,12 @@ export async function moveLinesToGroup(
           throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
         }
       }
+      const billIds = [...new Set(lines.map((line) => line.workingOrderId))];
+      for (const billId of billIds) {
+        await requireBillOfParty(tx, partyId, billId);
+        await refusePaymentInFlight(tx, [billId]);
+      }
+      await requireBillEditors(tx, billIds, args.operatorId, expectedEdits);
       await refuseRecalledWrite(
         tx,
         inArray(
@@ -1102,26 +1116,26 @@ export async function splitHeldLineIntoUnits(
   cfg: TillConfig,
   partyId: string,
   lineId: string,
-  args: PartyCommandArgs,
+  args: PartyCommandArgs & { expectedEdit: BillEditExpected },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
+  const expectedEdit = parseBillEditExpected(args.expectedEdit);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     args.submissionId,
     "group.split_line",
-    { partyId, lineId, operatorId: args.operatorId },
+    { partyId, lineId, operatorId: args.operatorId, expectedEdit },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       const [source] = await tx
-        .select({ draft: orderDrafts, line: workingOrderLines, ownerName: persons.displayName })
+        .select({ draft: orderDrafts, line: workingOrderLines })
         .from(orderDraftRecalledLines)
         .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
         .innerJoin(
           workingOrderLines,
           eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId),
         )
-        .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
         .where(
           and(eq(orderDraftRecalledLines.sourceLineId, lineId), eq(orderDrafts.state, "open")),
         );
@@ -1132,14 +1146,9 @@ export async function splitHeldLineIntoUnits(
           source.draft.billId !== source.line.workingOrderId
         )
           throw new AppError("group.not_found", { lineId });
-        if (source.draft.ownerId !== args.operatorId)
-          throw new AppError("draft.taken_over", {
-            draftId: source.draft.id,
-            ownerId: source.draft.ownerId,
-            ownerName: source.ownerName ?? "",
-          });
         await requireBillOfParty(tx, partyId, source.line.workingOrderId);
         await refusePaymentInFlight(tx, [source.line.workingOrderId]);
+        await requireBillEditor(tx, source.line.workingOrderId, args.operatorId, expectedEdit);
         if (
           source.line.unitPrecision !== 0 ||
           source.line.quantity < 2000 ||
@@ -1202,7 +1211,9 @@ export async function splitHeldLineIntoUnits(
         throw new AppError("group.not_held", { groupId: line.groupId! });
       if (line.billStatus !== "open")
         throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
+      await requireBillOfParty(tx, partyId, line.workingOrderId);
       await refusePaymentInFlight(tx, [line.workingOrderId]);
+      await requireBillEditor(tx, line.workingOrderId, args.operatorId, expectedEdit);
       await splitUnitsWithinOrder(tx, cfg, line.workingOrderId, line.lineNo);
       await bumpRevision(tx, [line.workingOrderId]);
       await recordGroupEvent(

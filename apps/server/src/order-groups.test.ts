@@ -86,7 +86,7 @@ import {
   submitGroups,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import "./errors.js";
 import { recallToDraft } from "./draft-recall.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -5327,11 +5327,20 @@ describe("Fire now on one held dish", () => {
       }),
     );
     const command = await args(s.partyId);
+    const edit = await inTx((tx) => readBillEditState(tx, steak.workingOrderId));
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
       () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
-      { code: "management.request_invalid", params: { field: "sourceLineId" } },
+      {
+        code: "draft.out_of_date",
+        params: {
+          billId: steak.workingOrderId,
+          draftId: edit.draftId,
+          revision: edit.draftRevision,
+          edit,
+        },
+      },
     );
   });
 

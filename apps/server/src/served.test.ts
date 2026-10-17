@@ -48,7 +48,7 @@ import {
   submitGroups,
   type GroupLine,
   type GroupRelease,
-} from "./order-groups.js";
+} from "./testing/group-composition-fixture.js";
 import { seatTable } from "./parties.js";
 import {
   addTabRound,

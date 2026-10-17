@@ -9,17 +9,25 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
+import { readBillEditState } from "./bill-editing.js";
 import "./errors.js";
 
-/** Legacy edits lack the draft revision; recalled families must use the draft commands. */
+// Reserved families change only through their owning draft's revision-checked commands.
 export async function refuseRecalledWrite(tx: Transaction, scope: SQL): Promise<void> {
   const [source] = await tx
-    .select({ id: workingOrderLines.id })
+    .select({ billId: workingOrderLines.workingOrderId })
     .from(workingOrderLines)
     .where(and(scope, isRecalledDish(tx)))
     .limit(1);
-  if (source !== undefined)
-    throw new AppError("management.request_invalid", { field: "sourceLineId" });
+  if (source !== undefined) {
+    const edit = await readBillEditState(tx, source.billId);
+    throw new AppError("draft.out_of_date", {
+      billId: source.billId,
+      draftId: edit.draftId,
+      revision: edit.draftRevision,
+      edit,
+    });
+  }
 }
 
 /** A recalled parent and its extras remain charged, but are no longer sent work. */

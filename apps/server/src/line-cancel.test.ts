@@ -369,9 +369,15 @@ describe("Cancel item service command", () => {
     const before = await snapshot(order);
     const current = await askFor(order, "remove_charge");
     current.reasonId = venue.reasonId.house;
+    const edit = await inTx(venue, (tx) => readBillEditState(tx, order.parent.workingOrderId));
     await expect(cancel(order, current)).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "sourceLineId" },
+      code: "draft.out_of_date",
+      params: {
+        billId: order.parent.workingOrderId,
+        draftId: edit.draftId,
+        revision: edit.draftRevision,
+        edit,
+      },
     });
     expect(await snapshot(order)).toEqual(before);
   });

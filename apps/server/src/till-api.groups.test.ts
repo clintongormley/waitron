@@ -1,3 +1,4 @@
+import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { sessions, setProfileAdmission } from "@waitron/identity";
@@ -58,8 +59,14 @@ async function seated(): Promise<Seated> {
   return seat.json as unknown as Seated;
 }
 
-function call(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown) {
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await observedGroupCompositionBody(venue.db, path, body),
+  );
 }
 
 async function revisionOf(partyId: string): Promise<number> {

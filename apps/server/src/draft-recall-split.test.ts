@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -37,8 +39,14 @@ useVenueDb({
   },
 });
 
-function call(method: string, path: string, body?: unknown, cookie = venue.cookie.staff) {
-  return send(venue.app, cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown, cookie = venue.cookie.staff) {
+  return send(
+    venue.app,
+    cookie,
+    method,
+    path,
+    await observedGroupCompositionBody(venue.db, path, body),
+  );
 }
 async function revision(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
@@ -76,6 +84,7 @@ async function setup(
   const answer = await call("POST", `/api/parties/${p.partyId}/lines/${line!.id}/recall`, {
     submissionId: randomUUID(),
     expectedPartyRevision: await revision(p.partyId),
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
   });
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return { ...p, line: line!, draft: (answer.json as unknown as { draft: Draft }).draft };
@@ -174,7 +183,11 @@ describe("splitting a recalled dish through the public group command", () => {
     const takeover = await call(
       "POST",
       `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
-      { revision: p.draft.revision },
+      {
+        revision: p.draft.revision,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
+        submissionId: randomUUID(),
+      },
       venue.cookie.manager,
     );
     expect(takeover.status).toBe(200);
@@ -235,10 +248,11 @@ describe("splitting a recalled dish through the public group command", () => {
       billId: p.billId,
       draftId: p.draft.id,
       revision: p.draft.revision,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
       lines: [p.draft.lines[0], { menuItemId: venue.item("Bread"), quantity: "1" }],
     });
     expect(saved.status).toBe(200);
-    const old = saved.json as unknown as Draft;
+    const old = (saved.json as unknown as { draft: Draft }).draft;
     await inTx(venue, (tx) =>
       tx
         .update(orderDrafts)
@@ -266,6 +280,10 @@ describe("splitting a recalled dish through the public group command", () => {
       billId: p.billId,
       draftId: p.draft.id,
       revision: old.revision,
+      expectedEdit: {
+        ...(await inTx(venue, (tx) => readBillEditState(tx, p.billId))),
+        draftRevision: old.revision,
+      },
       lines: old.lines,
     });
     expect(stale.json).toMatchObject({ code: "draft.out_of_date" });

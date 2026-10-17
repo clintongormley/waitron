@@ -3279,7 +3279,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           partyId,
           lineId,
-          command,
+          { ...command, expectedEdit: parseBillEditExpected(body.expectedEdit) },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },
@@ -3307,7 +3307,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           partyId,
           moves,
           target,
-          command,
+          { ...command, expectedEdits: parseBillEditExpecteds(body.expectedEdits) },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },
