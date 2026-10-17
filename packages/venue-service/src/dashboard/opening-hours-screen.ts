@@ -30,7 +30,7 @@ import {
   type CalendarDaysOpen,
 } from "./opening-hours-month.js";
 import "./opening-hours-week.js";
-import { weekMonth } from "./week-rows.js";
+import { weekDates, weekMonth } from "./week-rows.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -730,7 +730,13 @@ export class OpeningHoursScreen extends LitElement {
   };
   private openMonth(month: string) {
     return Promise.resolve(
-      this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
+      this.url.write({
+        dashboard: "opening-hours",
+        view: "month",
+        month,
+        year: null,
+        week: null,
+      }),
     ).then(() => this.followUrl());
   }
   private openYear(year: string) {
@@ -740,6 +746,7 @@ export class OpeningHoursScreen extends LitElement {
         view: "year",
         year: year.padStart(4, "0"),
         month: null,
+        week: null,
         date: null,
         to: null,
       }),
@@ -1138,9 +1145,12 @@ export class OpeningHoursScreen extends LitElement {
   /** A month name pressed while it held focus leaves focus on the Month's year link, since the
    *  name goes with the Year it sat in. */
   private openMonthFromYear(event: CustomEvent<{ date: string }>) {
+    this.openMonthHolding(event, "[data-test=month-name]", event.detail.date.slice(0, 7));
+  }
+  private openMonthHolding(event: Event, selector: string, monthToOpen: string) {
     event.stopPropagation();
-    const held = this.heldFocus(event.currentTarget, "[data-test=month-name]");
-    const opened = this.openMonth(event.detail.date.slice(0, 7));
+    const held = this.heldFocus(event.currentTarget, selector);
+    const opened = this.openMonth(monthToOpen);
     if (!held) return;
     void opened.then(async () => {
       await this.updateComplete;
@@ -1151,11 +1161,15 @@ export class OpeningHoursScreen extends LitElement {
     });
   }
   private openYearFromMonth(event: CustomEvent<{ year: number }>) {
+    this.openYearHolding(event, "[data-test=month-year]", this.shownMonth());
+  }
+  /** `month` is the one whose name in the Year takes focus; it must lie in the year opened. */
+  private openYearHolding(event: CustomEvent<{ year: number }>, selector: string, month: string) {
     event.stopPropagation();
-    const held = this.heldFocus(event.currentTarget, "[data-test=month-year]");
+    const held = this.heldFocus(event.currentTarget, selector);
     this.endFocusHandOff();
     const handOff = held && {
-      month: this.shownMonth(),
+      month,
       navigation: this.navigations + 1,
       armed: false,
     };
@@ -1225,6 +1239,14 @@ export class OpeningHoursScreen extends LitElement {
         }}
       ></opening-hours-month>`;
   }
+  /** A drawn day box would otherwise be shown again over the view a title link opens. */
+  private dropDayBox() {
+    const box = this.dayBox;
+    this.dayBox = undefined;
+    this.dayBoxPlaced = undefined;
+    this.afterDayBox = undefined;
+    if (box) this.shadowRoot?.querySelector("calendar-day-box")?.hide();
+  }
   private week() {
     return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
       <opening-hours-week
@@ -1232,6 +1254,17 @@ export class OpeningHoursScreen extends LitElement {
         .date=${this.shownWeekDate()}
         .departmentId=${this.departmentId}
         .departments=${this.model!.departments}
+        @calendar-day-open=${this.openDayBox}
+        @week-month-open=${(event: CustomEvent<{ month: string }>) => {
+          this.dropDayBox();
+          this.openMonthHolding(event, "[data-test=week-month]", event.detail.month);
+        }}
+        @week-year-open=${(event: CustomEvent<{ year: number }>) => {
+          this.dropDayBox();
+          const year = String(event.detail.year).padStart(4, "0");
+          const first = weekDates(this.shownWeekDate()).find((date) => date.startsWith(year))!;
+          this.openYearHolding(event, "[data-test=week-year]", first.slice(0, 7));
+        }}
         @week-change=${(event: CustomEvent<{ date: string }>) => {
           event.stopPropagation();
           this.writeChanges({ view: "week", week: event.detail.date });

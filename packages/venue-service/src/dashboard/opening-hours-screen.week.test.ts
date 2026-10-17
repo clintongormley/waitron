@@ -9,6 +9,8 @@ import {
 } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import type { OpeningHoursYear } from "../opening-hours-calendar.js";
+import { frame } from "../testing/season-painter-fixture.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -26,9 +28,36 @@ function model(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [],
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [
+      { id: "autumn", name: "Autumn", startsOn: "09-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01" },
+    ],
+    currentSeasonId: "winter",
     departments: DEPARTMENTS,
+  };
+}
+
+function yearRead(year: number): OpeningHoursYear {
+  return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 7,
+    currentBusinessDay: "2026-12-02",
+    pending: null,
+    year,
+    timeZone: "Europe/Madrid",
+    today: "2026-12-02",
+    seasons: [],
+    days: [],
+    publicHolidaysAvailable: true,
+    missingHolidays: [],
+    holidayCoverage: [],
+    area: {
+      addressKey: "fixture-address",
+      readiness: "ready",
+      options: [],
+      required: false,
+      chosen: null,
+    },
   };
 }
 
@@ -49,8 +78,8 @@ afterEach(async () => {
 });
 
 /** Every month read is answered with the fixture's December, which holds 30 November to
- *  3 January, so it serves each week these tests draw. */
-/** With `hold`, the opening-hours read never answers. */
+ *  3 January, so it serves each week these tests draw; with `hold`, the opening-hours read never
+ *  answers. */
 async function mount(address: string, calendar?: Screen["calendar"], hold = false) {
   history.replaceState(null, "", address);
   const months: string[] = [];
@@ -60,7 +89,9 @@ async function mount(address: string, calendar?: Screen["calendar"], hold = fals
       months.push(month[1]!);
       return monthModel({ month: month[1]! });
     }
-    if (hold || path.includes("/opening-hours/year?")) return new Promise(() => {});
+    const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+    if (year) return yearRead(Number(year[1]));
+    if (hold) return new Promise(() => {});
     return model();
   }) as DashboardRequest;
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
@@ -79,6 +110,34 @@ const painter = (el: Screen) => el.shadowRoot!.querySelector("season-painter");
 function pushedPaths() {
   const pushed = vi.spyOn(history, "pushState");
   return () => pushed.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname);
+}
+const dayBox = (el: Screen) => el.shadowRoot!.querySelector("calendar-day-box");
+const boxOpen = (el: Screen) =>
+  dayBox(el)?.shadowRoot?.querySelector("[popover]")?.matches(":popover-open") ?? false;
+const boxButtons = (el: Screen) =>
+  [...(dayBox(el)?.querySelectorAll<HTMLElement>("wt-button") ?? [])].map((button) =>
+    (button.textContent ?? "").trim(),
+  );
+const monthLink = (el: Screen, month: string) =>
+  week(el)!.shadowRoot!.querySelector<HTMLElement>(
+    `[data-test=week-month][data-month="${month}"]`,
+  )!;
+const yearLink = (el: Screen, year: number) =>
+  week(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-test=week-year][data-year="${year}"]`)!;
+const dayName = (el: Screen, date: string) =>
+  week(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-test=day-name][data-date="${date}"]`)!;
+const monthView = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-month");
+const yearView = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-year");
+/** The element holding focus, through every shadow root. */
+function focused() {
+  let at = document.activeElement;
+  while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+  return at;
+}
+function closed(target: EventTarget, name: string) {
+  return new Promise<void>((resolve) =>
+    target.addEventListener(name, () => resolve(), { once: true }),
+  );
 }
 function chooseShown(el: Screen, value: string) {
   const show = week(el)!.shadowRoot!.querySelector("wt-combobox")!;
@@ -241,5 +300,135 @@ describe("the Calendar switch from the Week", () => {
     );
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/staffing");
     expect(errors).toEqual([]);
+  });
+});
+
+describe("from the Week to the Month, the Year and the day box", () => {
+  const twoYears = "/manage/opening-hours/view/week/department/rest/week/2027-01-02";
+
+  it("a month link opens that Month, keeping the department", async () => {
+    const { el } = await mount(twoYears);
+    const pushed = pushedPaths();
+    monthLink(el, "2027-01").click();
+    await expect.poll(() => monthView(el)?.model?.month).toBe("2027-01");
+    expect(pushed()).toEqual(["/manage/opening-hours/view/month/department/rest/month/2027-01"]);
+    expect(week(el)).toBeNull();
+  });
+
+  it("a year link opens that Year", async () => {
+    const { el } = await mount(twoYears);
+    const pushed = pushedPaths();
+    yearLink(el, 2026).click();
+    await expect.poll(() => yearView(el)?.model?.year).toBe(2026);
+    expect(pushed()).toEqual(["/manage/opening-hours/view/year/department/rest/year/2026"]);
+    expect(week(el)).toBeNull();
+  });
+
+  it.each([
+    [2026, "2026-12"],
+    [2027, "2027-01"],
+  ])(
+    "the year link %s pressed with the keyboard leaves focus on the week's month name %s once the Year has drawn it",
+    async (year, month) => {
+      const { el } = await mount(twoYears);
+      yearLink(el, year).focus();
+      expect(focused()).toBe(yearLink(el, year));
+      await userEvent.keyboard("{Enter}");
+      await expect
+        .poll(() => location.pathname)
+        .toBe(`/manage/opening-hours/view/year/department/rest/year/${year}`);
+      const name = () =>
+        yearView(el)?.shadowRoot?.querySelector<HTMLElement>(
+          `[data-month="${month}"] [data-test=month-name]`,
+        );
+      await expect.poll(name).toBeTruthy();
+      await expect.poll(focused).toBe(name());
+    },
+  );
+
+  it("a month link pressed with the keyboard leaves focus on the Month's year link", async () => {
+    const { el } = await mount(twoYears);
+    monthLink(el, "2026-12").focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => monthView(el)?.model?.month).toBe("2026-12");
+    await monthView(el)!.updateComplete;
+    await expect
+      .poll(focused)
+      .toBe(monthView(el)!.shadowRoot!.querySelector("[data-test=month-year]"));
+  });
+
+  // A pointer press light-dismisses the box before the click lands; Enter does not.
+  it.each([
+    ["the Jan link onto the Month", "pointer", (el: Screen) => monthLink(el, "2027-01"), "month"],
+    ["the 2026 link onto the Year", "pointer", (el: Screen) => yearLink(el, 2026), "year"],
+    ["the Jan link onto the Month", "keyboard", (el: Screen) => monthLink(el, "2027-01"), "month"],
+    ["the 2026 link onto the Year", "keyboard", (el: Screen) => yearLink(el, 2026), "year"],
+  ] as const)(
+    "a title link pressed with the day box open closes it for good: %s, by %s",
+    async (_name, press, link, view) => {
+      const { el } = await mount(twoYears);
+      await week(el)!.updateComplete;
+      await userEvent.click(dayName(el, "2026-12-30"));
+      await expect.poll(() => boxOpen(el)).toBe(true);
+      const close = closed(dayBox(el)!, "calendar-day-box-close");
+      if (press === "pointer") await userEvent.click(link(el));
+      else {
+        link(el).focus();
+        expect(boxOpen(el)).toBe(true);
+        await userEvent.keyboard("{Enter}");
+      }
+      await close;
+      if (view === "month") {
+        await expect.poll(() => monthView(el)?.model?.month).toBe("2027-01");
+        await monthView(el)!.updateComplete;
+      } else {
+        await expect.poll(() => yearView(el)?.model?.year).toBe(2026);
+        await yearView(el)!.updateComplete;
+      }
+      await el.updateComplete;
+      expect(dayBox(el)).toBeNull();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await el.updateComplete;
+      expect(dayBox(el)).toBeNull();
+    },
+  );
+
+  it("a day's name opens the day box over the Week, with the Week's department", async () => {
+    const { el } = await mount("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+    await week(el)!.updateComplete;
+    const button = dayName(el, "2026-12-09");
+    await userEvent.click(button);
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const box = dayBox(el)!;
+    await expect.poll(() => box.rows.map((row) => row.name)).toEqual(["Restaurant", "Terrace"]);
+    await box.updateComplete;
+    const popup = () => box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
+    const anchor = button.getBoundingClientRect();
+    expect(
+      Math.abs(popup().top - anchor.bottom) <= 1 || Math.abs(popup().bottom - anchor.top) <= 1,
+    ).toBe(true);
+    expect(boxButtons(el)).toEqual(["Make a special day", "Edit Winter's standard week"]);
+  });
+
+  it("a painter opened from the Week's box closes back onto the Week", async () => {
+    const { el } = await mount("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+    await week(el)!.updateComplete;
+    await userEvent.click(dayName(el, "2026-12-09"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await userEvent.click(dayBox(el)!.querySelector<HTMLElement>("[data-test=edit-week]")!);
+    await expect.poll(() => painter(el)).not.toBeNull();
+    const shown = painter(el)!;
+    await shown.updateComplete;
+    await expect
+      .poll(() => frame(shown).shadowRoot?.querySelector("[data-test=cancel]"))
+      .toBeTruthy();
+    const close = closed(shown, "painter-close");
+    frame(shown).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    await close;
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
+    await expect.poll(() => painter(el)).toBeNull();
+    expect(week(el)!.date).toBe("2026-12-09");
   });
 });

@@ -201,6 +201,45 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
+    ["the Week", false],
+    ["the day box over the Week", true],
+  ] as const)("%s", async (_state, boxed) => {
+    setLocale("en");
+    history.replaceState(
+      null,
+      "",
+      "/manage/opening-hours/view/week/department/rest/week/2026-12-09",
+    );
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    const ready = request("ready");
+    screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked.includes("/opening-hours/month?"))
+        return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
+      const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
+      return { ...read, departments: structuredClone(DEPARTMENTS) };
+    }) as DashboardRequest);
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("opening-hours-week")?.model)
+      .toBeDefined();
+    const week = screen.shadowRoot!.querySelector("opening-hours-week")!;
+    await week.updateComplete;
+    if (boxed) {
+      week
+        .shadowRoot!.querySelector<HTMLElement>('[data-test=day-name][data-date="2026-12-09"]')!
+        .click();
+      await expect
+        .poll(() => screen.shadowRoot!.querySelector("calendar-day-box [data-test=special-add]"))
+        .not.toBeNull();
+      const box = screen.shadowRoot!.querySelector("calendar-day-box")!;
+      await expect.poll(() => box.rows.length).toBeGreaterThan(0);
+      await box.updateComplete;
+      expect(box.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    }
+    await expectNoA11yViolations(host);
+  });
+  test.each([
     ["the day box over the Year", true],
     ["the day box over the Year, while its month loads", false],
   ] as const)("%s", async (_state, answered) => {
