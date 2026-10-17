@@ -156,8 +156,9 @@ export async function saveSeasons(
     await tx
       .delete(seasons)
       .where(and(eq(seasons.locationId, cfg.locationId), inArray(seasons.id, [...deleted])));
-  // Two passes, so a swap of two names or two starts never meets a unique index mid-way: a final
-  // name is trimmed, so never equals a temporary one.
+  // Two passes, so a swap of two names or two starts never meets a unique index mid-way. A stored
+  // season holds a trimmed name and a start `parseSeasonStart` accepts (enforced here and by the
+  // import's `validateSeasonWeeks`), and no temporary name or start is either.
   const moving = changed.filter((entry) => {
     const own = stored.get(entry.id!)!;
     return own.name !== entry.name || own.startsOn !== entry.startsOn;

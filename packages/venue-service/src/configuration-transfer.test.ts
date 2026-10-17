@@ -1307,6 +1307,15 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(blank, clock)).toThrowError(refusal("seasons.name"));
   });
 
+  it.each([" 3f2c1e9a-0000-4000-8000-000000000001", "Winter ", "\tWinter"])(
+    "refuses a season name %j that saving a season would have trimmed",
+    (name) => {
+      const tables = seasonTables();
+      tables.seasons![1]!.name = name;
+      expect(() => validate(tables, clock)).toThrowError(refusal("seasons.name"));
+    },
+  );
+
   it("refuses a season whose colour is not a calendar colour, or has none", () => {
     const mauve = seasonTables();
     mauve.seasons![0]!.colour = "mauve";

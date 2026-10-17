@@ -260,7 +260,12 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
   const starts = new Set<unknown>();
   const names = new Set<unknown>();
   for (const row of tables.seasons ?? []) {
-    if (typeof row.name !== "string" || row.name.trim() === "" || names.has(row.name))
+    if (
+      typeof row.name !== "string" ||
+      row.name === "" ||
+      row.name.trim() !== row.name ||
+      names.has(row.name)
+    )
       refuse("seasons.name");
     if (parseSeasonStart(row.starts_on) === null || starts.has(row.starts_on))
       refuse("seasons.starts_on");
