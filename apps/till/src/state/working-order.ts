@@ -219,7 +219,7 @@ export class WorkingOrderStore {
   #revision = 0;
   #sending = false;
   /** An operation holding the sending lock without submitting the order. */
-  busyAction?: "split" | "cancel";
+  busyAction?: "split" | "cancel" | "recall";
   #editLock: object | null = null;
   #loadGeneration = 0;
   #kitchenNote: string | null = null;

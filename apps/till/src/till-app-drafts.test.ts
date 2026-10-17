@@ -6706,4 +6706,369 @@ describe("recalled draft source splitting", () => {
     expect(draft(el).lines[0]!.note).toBe("No pepper");
     expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
   });
+
+  describe("party Recall into New order", () => {
+    function recalled() {
+      return { ...reference(), joinGroupId: "held-3" };
+    }
+
+    function recordRecall(): import("./api/client.js").Draft {
+      let own = server.drafts.find((each) => each.ownerId === "p1" && each.billId === "wo-4");
+      if (own === undefined)
+        own = server.save("v1", { draftId: null, revision: 0, billId: "wo-4", lines: [] });
+      own.revision += 1;
+      own.lines.push(recalled());
+      api.getTabLines.mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+      return structuredClone(own);
+    }
+
+    async function recallOpening(overrides: Record<string, unknown> = {}) {
+      const source = reference().source.line;
+      const mounted = await mountApp({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [
+            {
+              ...source,
+              sentAt: "2026-10-17T08:00:00Z",
+              firedAt: "2026-10-17T08:00:00Z",
+              state: "queued",
+            },
+          ],
+          revision: 7,
+          editSentLines: true,
+        }),
+        recallLines: vi.fn().mockResolvedValue(undefined),
+        recallToDraft: vi.fn(async () => ({ revision: 4, draft: recordRecall() })),
+        ...overrides,
+      });
+      const order = await openMesa(mounted.el);
+      return { ...mounted, order };
+    }
+
+    it("recalls the recorded family into its bill's draft and reads it before allowing edits", async () => {
+      const { el, order } = await recallOpening();
+      const reads = api.listDrafts.mock.calls.length;
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await order.updateComplete;
+      const button = order.shadowRoot!.querySelector<HTMLElement>("[data-recall-line='7']");
+      expect(button).not.toBeNull();
+      await userEvent.click(button!);
+      await flush(el, 6);
+      expect(api.recallToDraft).toHaveBeenCalledWith(
+        "v1",
+        "source-7",
+        {
+          expectedPartyRevision: 3,
+          submissionId: expect.any(String),
+        },
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(api.recallLines).not.toHaveBeenCalled();
+      expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(draft(el).lines[0]).toMatchObject({
+        workingOrderLineId: "source-7",
+        draftLineId: "reference-source-7",
+        place: { kind: "join", groupId: "held-3" },
+        source: {
+          netAmount: "17.25",
+          line: { unitPriceGross: "7.50" },
+          extras: [{ id: "source-7-extra" }],
+        },
+      });
+      expect(order.lines).toEqual([]);
+      expect(order.party?.revision).toBe(4);
+      expect(draft(el).sending).toBe(false);
+      expect(draft(el).editsLocked).toBe(false);
+    });
+
+    it("saves preceding fresh edits before Recall and sends a repeated press only once", async () => {
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      let release!: () => void;
+      api.saveDraft.mockImplementationOnce(async (partyId, ask) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return structuredClone(server.save(partyId, ask));
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(draft(el).sending).toBe(true);
+      expect(order.groupCommandBusy).toBe(true);
+      release();
+      await flush(el, 6);
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+      expect(rows(el)).toEqual(["Beer ×1", "Recorded steak ×2"]);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(draft(el).sending).toBe(false);
+    });
+
+    it("retains the fresh edit and does not Recall when its preceding save fails", async () => {
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      api.saveDraft.mockRejectedValue(new TypeError("offline"));
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(api.recallLines).not.toHaveBeenCalled();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+      expect(draft(el).sending).toBe(false);
+    });
+    it("retains this owner's fresh dishes and another owner's separate draft", async () => {
+      const other = server.save("v1", { draftId: null, revision: 0, billId: "wo-4", lines: [] });
+      other.ownerId = "p2";
+      other.ownerName = "Luis";
+      other.lines = [reference("luis-source", "8.63", "1")];
+      const frozen = structuredClone(other);
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Beer ×1", "Recorded steak ×2"]);
+      expect(server.drafts.find((each) => each.ownerId === "p2")).toEqual(frozen);
+      expect(order.otherDrafts.map((each) => each.ownerName)).toEqual(["Luis"]);
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    });
+
+    it("recalls onto the shown split bill without following the party's main bill", async () => {
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(async () => {
+          const own = server.save("v1", {
+            draftId: null,
+            revision: 0,
+            billId: "wo-check",
+            lines: [],
+          });
+          own.lines.push(recalled());
+          return { revision: 4, draft: structuredClone(own) };
+        }),
+      });
+      await tap(el, "Beer");
+      emit(order, "take-payment", { workingOrderId: "wo-check" });
+      await flush(el, 6);
+      emit(tableOrder(el)!, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(tableOrder(el)?.orderId).toBe("wo-check");
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(server.drafts.find((each) => each.billId === "wo-4")?.lines).toHaveLength(1);
+      expect(server.drafts.find((each) => each.billId === "wo-check")?.lines[0]?.sourceLineId).toBe(
+        "source-7",
+      );
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+    });
+
+    it("reads a lost Recall answer without sending it again or creating a second source", async () => {
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(async () => {
+          recordRecall();
+          throw new TypeError("answer lost");
+        }),
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+      expect(api.recallLines).not.toHaveBeenCalled();
+      expect(draft(el).editsLocked).toBe(false);
+      expect(banner(el)?.textContent).toContain(t("table.error"));
+    });
+
+    it.each(["ticket.already_started", "ticket.already_fired", "order.payment_in_flight"])(
+      "reloads the bill and preserves the specific %s Recall refusal",
+      async (code) => {
+        const { el, order } = await recallOpening({
+          recallToDraft: vi.fn().mockRejectedValue({ code }),
+        });
+        const reads = api.getTabLines.mock.calls.length;
+        emit(order, "recall-lines", { lineNos: [7] });
+        await flush(el, 6);
+        expect(banner(el)?.textContent).toContain(codeMessage(code));
+        expect(api.getTabLines.mock.calls.length).toBe(reads + 1);
+        expect(rows(el)).toEqual([]);
+        expect(draft(el).editsLocked).toBe(false);
+      },
+    );
+
+    it("keeps a successful Recall locked after a failed draft read until reopening", async () => {
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(async () => {
+          const result = { revision: 4, draft: recordRecall() };
+          api.listDrafts.mockRejectedValueOnce(new TypeError("read offline"));
+          return result;
+        }),
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el, 6);
+      expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+      expect(draft(el).editsLocked).toBe(true);
+      expect(draft(el).sending).toBe(false);
+      expect(order.party?.revision).toBe(4);
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      expect(api.recallToDraft).toHaveBeenCalledOnce();
+      await back(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(draft(el).editsLocked).toBe(false);
+    });
+
+    it("ignores a late Recall refusal after opening another table and releases the command lock", async () => {
+      let reject!: (reason: unknown) => void;
+      let settled!: Promise<unknown>;
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(
+          () =>
+            (settled = new Promise((_resolve, no) => {
+              reject = no;
+            })),
+        ),
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      await back(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el, 6);
+      const message = banner(el)?.textContent;
+      reject({ code: "ticket.already_started" });
+      await settled.catch(() => {});
+      await flush(el, 6);
+      expect(tableOrder(el)?.party?.id).toBe("v7");
+      expect(rows(el)).toEqual([]);
+      expect(banner(el)?.textContent).toBe(message);
+      expect(tableOrder(el)?.groupCommandBusy).toBe(false);
+    });
+
+    it("aborts Recall on sign-out and does not install its late draft", async () => {
+      let answer!: () => void;
+      let signal: AbortSignal | undefined;
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(async (...args: Parameters<TillApi["recallToDraft"]>) => {
+          signal = args[3]?.signal;
+          await new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+          return { revision: 99, draft: recordRecall() };
+        }),
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      try {
+        emit(shell(el), "logout");
+        await flush(el, 6);
+        expect(signal?.aborted).toBe(true);
+        expect(lock(el)).not.toBeNull();
+      } finally {
+        answer();
+      }
+      await flush(el, 6);
+      expect(lock(el)).not.toBeNull();
+      expect(tableOrder(el)?.party?.revision).not.toBe(99);
+    });
+
+    it("does not Recall an omitted, unknown, multiple or child line", async () => {
+      const { el, order } = await recallOpening({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [reference().source.line, reference().source.extras[0]],
+          revision: 7,
+          editSentLines: true,
+        }),
+      });
+      for (const lineNos of [[], [99], [7, 8], [8]]) emit(order, "recall-lines", { lineNos });
+      await flush(el, 6);
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(api.recallLines).not.toHaveBeenCalled();
+      expect(draft(el).sending).toBe(false);
+    });
+
+    it.each([true, false])(
+      "waits for an in-flight kitchen note before Recall (saved: %s)",
+      async (saved) => {
+        let finish!: (value: unknown) => void;
+        let refuse!: (error: unknown) => void;
+        const { el, order } = await recallOpening({
+          setKitchenNote: vi.fn(
+            () =>
+              new Promise((yes, no) => {
+                finish = yes;
+                refuse = no;
+              }),
+          ),
+        });
+        const editor =
+          order.shadowRoot!.querySelector<HTMLElementTagNameMap["till-order-kitchen-note"]>(
+            "till-order-kitchen-note",
+          )!;
+        emit(editor, "save-kitchen-note", {
+          scopeKey: "party:v1",
+          revision: 0,
+          visit: editor.visit,
+          note: "Together",
+        });
+        await flush(el);
+        expect(api.setKitchenNote).toHaveBeenCalledOnce();
+        emit(order, "recall-lines", { lineNos: [7] });
+        await flush(el);
+        try {
+          expect(api.recallToDraft).not.toHaveBeenCalled();
+        } finally {
+          if (saved)
+            finish({ scope: { partyId: "v1" }, revision: 1, ownerRevision: 4, note: "Together" });
+          else refuse(new TypeError("offline note"));
+        }
+        await flush(el, 6);
+        if (saved) {
+          expect(api.recallToDraft).toHaveBeenCalledWith(
+            "v1",
+            "source-7",
+            { expectedPartyRevision: 4, submissionId: expect.any(String) },
+            { signal: expect.any(AbortSignal) },
+          );
+          expect(rows(el)).toEqual(["Recorded steak ×2"]);
+        } else {
+          expect(api.recallToDraft).not.toHaveBeenCalled();
+          expect(editor.refusal).not.toBe("");
+        }
+        expect(order.groupCommandBusy).toBe(false);
+      },
+    );
+
+    it("labels an in-flight Recall as Recall and restores the sending label afterwards", async () => {
+      let answer!: () => void;
+      const { el, order } = await recallOpening({
+        recallToDraft: vi.fn(async () => {
+          await new Promise<void>((resolve) => {
+            answer = resolve;
+          });
+          return { revision: 4, draft: recordRecall() };
+        }),
+      });
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) await userEvent.click(review);
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      try {
+        expect(order.shadowRoot!.querySelector("[data-round-sending]")?.textContent?.trim()).toBe(
+          t("table.recall_line"),
+        );
+      } finally {
+        answer();
+      }
+      await flush(el, 6);
+      expect(draft(el).busyAction).toBeUndefined();
+      draft(el).sending = true;
+      order.requestUpdate();
+      await order.updateComplete;
+      expect(order.shadowRoot!.querySelector("[data-round-sending]")?.textContent?.trim()).toBe(
+        t("table.round_sending"),
+      );
+      draft(el).sending = false;
+    });
+  });
 });

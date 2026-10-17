@@ -1,3 +1,8 @@
+import {
+  current,
+  currentGroup,
+  row as currentRow,
+} from "./till-table-order-screen.current-orders.test-helpers.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
@@ -2077,6 +2082,110 @@ describe("till-table-order-screen", () => {
       menuItemId: null,
       parentProductId: null,
     };
+
+    it.each(["queued", null] as const)(
+      "offers Recall for held work with kitchen state %s",
+      async (state) => {
+        const held = { ...pendingLine, firedAt: null, sentAt: null, state, groupId: "g-held" };
+        const { el } = await mount({ lines: [held], groups: [orderGroup("g-held", "held")] });
+        await openDrawer(el);
+        const recall = el.shadowRoot!.querySelector<HTMLElement>('[data-recall-line="1"]');
+        expect(recall).not.toBeNull();
+        let captured: CustomEvent | undefined;
+        el.addEventListener("recall-lines", (event) => {
+          captured = event as CustomEvent;
+        });
+        recall!.click();
+        expect(captured?.detail).toEqual({ lineNos: [1] });
+      },
+    );
+
+    it("offers Recall for a sent dish that needs no kitchen preparation", async () => {
+      const { el } = await mount({ lines: [{ ...pendingLine, firedAt: null, state: null }] });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+    });
+
+    it.each(["queued", null] as const)(
+      "setting off refuses Recall for held work with state %s",
+      async (state) => {
+        const { el } = await mount({
+          editSentLines: false,
+          lines: [{ ...pendingLine, firedAt: null, sentAt: null, state, groupId: "g-held" }],
+          groups: [orderGroup("g-held", "held")],
+        });
+        await openDrawer(el);
+        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+      },
+    );
+
+    it.each(["settled", "placed"] as const)("offers no Recall on a %s bill", async (status) => {
+      const { el } = await mount({
+        orderId: "wo-4",
+        bills: [bill({ status })],
+        lines: [pendingLine],
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+    });
+
+    it.each(["preparing", "ready"] as const)(
+      "offers no Recall when an extra is %s",
+      async (state) => {
+        const { el } = await mount({
+          lines: [pendingLine, { ...childLine, firedAt: pendingLine.firedAt, state }],
+        });
+        await openDrawer(el);
+        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-recall-line="2"]')).toBeNull();
+      },
+    );
+
+    it.each(["group", "ungrouped"] as const)(
+      "offers no Recall after serving part of a %s dish",
+      async (where) => {
+        const served = currentRow("line-1", "Café", "2.000", { servedQuantity: "1.000" });
+        const { el } = await mount({
+          lines: [{ ...pendingLine, groupId: where === "group" ? "g-fired" : null }],
+          currentOrders: current({
+            groups: where === "group" ? [currentGroup("g-fired", 1, "fired", [served])] : [],
+            ungrouped: where === "ungrouped" ? [served] : [],
+            reminder: null,
+          }),
+        });
+        await openDrawer(el);
+        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+      },
+    );
+
+    it("keeps Recall for an unserved dish beside another partially served dish", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        currentOrders: current({
+          groups: [
+            currentGroup("g-fired", 1, "fired", [
+              currentRow("other-dish", "Steak", "2.000", {
+                servedQuantity: "1.000",
+                workingOrderId: "wo-other",
+              }),
+            ]),
+          ],
+          ungrouped: [currentRow("line-1", "Café", "2.000")],
+          reminder: null,
+        }),
+      });
+      await openDrawer(el);
+      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+    });
+
+    it("disables Recall while another party command is in flight", async () => {
+      const { el } = await mount({ lines: [pendingLine], groupCommandBusy: true });
+      await openDrawer(el);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-recall-line="1"]')
+          ?.disabled,
+      ).toBe(true);
+    });
 
     it("renders no Send, Recall or course picker on a child extras line, only its dish's Cancel", async () => {
       // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.

@@ -2213,9 +2213,7 @@ export interface TabLine {
    * ticket item. A following extra has none; a split-off extra has its own. */
   firedAt: string | null;
   /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A following extra
-   * has none; a split-off extra has its own. A parent line can lack one too. A
-   * RECALLABLE line has `firedAt` set, `state === "queued"`, and the venue allows changes to sent items
-   * (`editSentLines`); "preparing"/"ready" is cancel-only. */
+   * has none; a split-off extra has its own. A parent line can lack one too. */
   state: TicketState | null;
   /** The order group the line is released with; null when it is in none, as on a bill with no party
    * or for a line moved in from another party's bill or from a bill with no party. */

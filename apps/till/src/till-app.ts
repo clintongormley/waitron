@@ -10038,8 +10038,6 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** Sends held lines outside any held group, such as a recalled one. The reload runs on both paths,
-   * as in {@link #onRecallLines}. */
   async #onSendLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const tabId = this.activeTabId;
@@ -10063,20 +10061,56 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /**
-   * The reload runs on both paths: after a raced `ticket.already_started` or `ticket.already_fired`,
-   * re-reading drops the line's Recall and Change.
-   */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    if (this.activeTabId === undefined) return;
+    const sync = this.#draftSync;
+    const line = this.tabLines.find((row) => row.lineNo === lineNos[0]);
+    if (
+      sync === undefined ||
+      this.#tableDraft() !== sync.store ||
+      this.activeTabId !== sync.billId ||
+      lineNos.length !== 1 ||
+      line === undefined ||
+      line.parentLineNo != null ||
+      this.groupCommandBusy ||
+      sync.store.sending ||
+      sync.store.editsLocked
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.groupCommandBusy = true;
+    sync.store.busyAction = "recall";
     this.errorKey = undefined;
     try {
-      await this.api.recallLines(this.activeTabId, lineNos);
-    } catch (error) {
-      this.errorKey = lineWriteError(error);
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      const outcome = await sync.runCommand(async (_state, options) => {
+        const party = this.orderParty;
+        if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
+        return this.api.recallToDraft(
+          party.id,
+          line.id,
+          { submissionId: crypto.randomUUID(), expectedPartyRevision: party.revision },
+          options,
+        );
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+      else if (outcome === "failed") this.errorKey = "table.error";
+      else
+        this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
+          ? draftRefusalError(outcome)
+          : lineWriteError({ code: outcome.refused });
+      await this.#loadTabLines();
+    } finally {
+      delete sync.store.busyAction;
+      this.groupCommandBusy = false;
     }
-    await this.#loadTabLines();
   }
 
   async #onMoveStation(event: Event): Promise<void> {

@@ -2228,11 +2228,21 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #canRecall(line: TabLine): boolean {
+    const served = (row: CurrentOrderRow) =>
+      row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
+    if (
+      this.currentOrders?.ungrouped.some(served) ||
+      this.currentOrders?.groups.some((group) => group.rows.some(served))
+    )
+      return false;
     return (
+      this.editSentLines &&
       !this.#isChild(line) &&
-      line.firedAt !== null &&
-      line.state === "queued" &&
-      !this.#lockedBySetting(line)
+      line.servedAt === null &&
+      !isStarted(line) &&
+      (this.#shownBill === undefined || this.#shownBill.status === "open") &&
+      !this.lines.some((extra) => extra.parentLineNo === line.lineNo && isStarted(extra)) &&
+      (line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!))
     );
   }
 
@@ -2287,6 +2297,7 @@ export class TillTableOrderScreen extends LitElement {
           size="sm"
           variant="secondary"
           data-recall-line=${line.lineNo}
+          .disabled=${this.busy || this.groupCommandBusy || this.#draftStore?.sending || this.#draftStore?.editsLocked}
           aria-label=${label("table.recall_line")}
           @click=${() => this.#recallLine(line.lineNo)}
         >
@@ -3034,7 +3045,9 @@ export class TillTableOrderScreen extends LitElement {
                     ? t("table.split_group_line")
                     : draft.busyAction === "cancel"
                       ? t("adjust.cancel_title")
-                      : t("table.round_sending")
+                      : draft.busyAction === "recall"
+                        ? t("table.recall_line")
+                        : t("table.round_sending")
               }
             </p>`
           : nothing

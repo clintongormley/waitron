@@ -1173,6 +1173,23 @@ it.each([false, true])(
     const note = { ...partyNote, note: "Train", revision: 1, ownerRevision: 0 };
     const { el, server } = await mountedTable(
       {
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          courses: [{ id: "mains", name: "Mains", displayOrder: 0, heldUntilFired: true }],
+        }),
+        listStations: vi.fn().mockResolvedValue([
+          {
+            id: "s1",
+            name: "Grill",
+            displayOrder: 0,
+            isDefault: true,
+            active: true,
+            open: true,
+            byHand: null,
+            sendsTo: null,
+            why: "default",
+          },
+        ]),
         seatTable: vi.fn(async () => {
           vi.mocked(api.getTablesState).mockResolvedValue([tableRow(tableParty(note))]);
           return {
@@ -1193,7 +1210,7 @@ it.each([false, true])(
       draft.setLineCourse(0, "mains");
       draft.setLineMakeAt(0, "s1");
     }
-    const lines = draft.lines;
+    const lines = draft.lines.map((line) => ({ ...line, place: { kind: "new", slot: 1 } }));
     await flush(el);
     emit(tableScreen(el), "open-table", { tableId: "table-four", seated: false, guestCount: 2 });
     await flush(el);

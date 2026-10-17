@@ -281,6 +281,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
+    recallToDraft: vi.fn().mockRejectedValue({ code: "server.internal" }),
     ...adjustmentStubs(),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
@@ -934,6 +935,7 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
+    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
     [
       "adjust",
       {
@@ -982,7 +984,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       },
       "submitDraft",
     ],
-    ["recall-lines", { lineNos: [1] }, "recallLines"],
+    ["recall-lines", { lineNos: [1] }, "recallToDraft"],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },

@@ -9064,13 +9064,41 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("recall-lines un-sends the not-yet-started lines then reloads its lines", async () => {
-        const recallLines = vi.fn().mockResolvedValue(undefined);
+      it("recall-lines puts the bill family into its owner's draft then reloads its lines", async () => {
+        const recallToDraft = vi.fn(async () => {
+          const draft: import("./api/client.js").Draft = {
+            id: "draft-recalled",
+            partyId: "v-2",
+            billId: "wo-7",
+            ownerId: "p1",
+            ownerName: "Ana",
+            revision: 1,
+            takenOverFrom: null,
+            lines: [
+              {
+                id: "reference-line-1",
+                sourceLineId: "line-1",
+                source: { line: tabLine, extras: [], netAmount: "3.00" },
+                quantity: "2.000",
+                note: null,
+                courseId: null,
+                makeAt: null,
+                noMerge: true,
+                unavailable: false,
+                slot: 0,
+                joinGroupId: null,
+                afterGroupId: null,
+              },
+            ],
+          };
+          drafts.drafts.push(draft);
+          return { revision: 4, draft };
+        });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          recallLines,
+          recallToDraft,
           getTabLines,
         });
         const screen = await toTableOrder(el, openTable);
@@ -9078,7 +9106,16 @@ describe("till-app", () => {
         emit(screen, "recall-lines", { lineNos: [1] });
         await flush(el);
 
-        expect(recallLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(recallToDraft).toHaveBeenCalledWith(
+          "v-2",
+          "line-1",
+          {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 3,
+          },
+          { signal: expect.any(AbortSignal) },
+        );
+        expect(tableOrder(el)!.draftStore!.lines[0]!.workingOrderLineId).toBe("line-1");
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -9114,7 +9151,7 @@ describe("till-app", () => {
             getTablesState: vi.fn().mockResolvedValue([openTable]),
             listZones: vi.fn().mockResolvedValue([floorZone]),
             getTabLines,
-            recallLines: vi.fn().mockRejectedValue({ code }),
+            recallToDraft: vi.fn().mockRejectedValue({ code }),
           });
           const screen = await toTableOrder(el, openTable);
           expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -9136,7 +9173,7 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          recallLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+          recallToDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
