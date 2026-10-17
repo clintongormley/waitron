@@ -20,6 +20,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
+import { ServerRouter } from "./api/server-router.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -440,6 +441,44 @@ describe("A768 a held zone's menu", () => {
     api.listZoneOffers.mockClear();
     await reopen(el, "t9");
     expect(api.listZoneOffers).toHaveBeenCalledWith("z2");
+  });
+
+  it("a server switch forgets every held menu", async () => {
+    const data = new Map<string, string>();
+    const router = new ServerRouter({
+      origin: "https://box.deli.test",
+      fetchImpl: vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+      storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
+    });
+    api = stubApi();
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api: api as unknown as TillApi,
+      router,
+    });
+    await openMesa(el);
+    await back(el);
+    router.dispatchEvent(
+      new CustomEvent("server-changed", {
+        detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
+      }),
+    );
+    await flush(el);
+    api.listZoneOffers.mockClear();
+    await openMesa(el, "t7");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+  });
+
+  it("a new api forgets every held menu", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await back(el);
+    const next = stubApi();
+    el.api = next as unknown as TillApi;
+    await flush(el);
+    await reopen(el, "t7");
+    expect(next.listZoneOffers).toHaveBeenCalledWith("z1");
   });
 });
 

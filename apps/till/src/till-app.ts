@@ -2826,6 +2826,7 @@ export class TillApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) {
+      this.#zoneCatalogues.clear();
       this.#cancelFindBillRead();
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
@@ -2899,6 +2900,7 @@ export class TillApp extends LitElement {
 
   /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
   async #boot(from?: KitchenScreenKind): Promise<void> {
+    this.#zoneCatalogues.clear();
     this.#stopClocking();
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
