@@ -568,3 +568,115 @@ it.each([
     expect((await read(source!.id)).guests).toEqual([]);
   },
 );
+
+it("moving a bill copies guests without replacing the destination and moves only its working and open draft ticks", async () => {
+  const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+  const source = await save({ answer: "allergies", guests: [guest] });
+  const target = await save(
+    { answer: "allergies", guests: [{ who: "Already here", allergens: { milk: {} } }] },
+    0,
+    other!.id,
+  );
+  await suite.db
+    .update(allergy.partyAllergyGuests)
+    .set({ position: 7 })
+    .where(eq(allergy.partyAllergyGuests.id, target.guests[0]!.id));
+  const leaving = await workingLine();
+  const staying = await workingLine();
+  const targetLine = await workingLine(other!.id);
+  const [line] = await suite.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, leaving));
+  const fresh = await draftLine();
+  const terminal = await draftLine();
+  const elsewhere = await draftLine();
+  const rows = await suite.db.select().from(orderDraftLines);
+  const draftOf = (id: string) => rows.find((row) => row.id === id)!.draftId;
+  await suite.db
+    .update(orderDrafts)
+    .set({ billId: line!.workingOrderId })
+    .where(eq(orderDrafts.id, draftOf(fresh)));
+  await suite.db
+    .update(orderDrafts)
+    .set({ billId: line!.workingOrderId, state: "discarded" })
+    .where(eq(orderDrafts.id, draftOf(terminal)));
+  await tx((t) =>
+    allergy.setAllergyLineTicks(t, partyId, [
+      { guestId: source.guests[0]!.id, workingLineId: leaving },
+      { guestId: source.guests[0]!.id, workingLineId: staying },
+      { guestId: source.guests[0]!.id, draftLineId: fresh },
+      { guestId: source.guests[0]!.id, draftLineId: elsewhere },
+    ]),
+  );
+  await suite.db
+    .insert(allergy.allergyLineTicks)
+    .values({ guestId: source.guests[0]!.id, draftLineId: terminal });
+  await tx((t) =>
+    allergy.setAllergyLineTicks(t, other!.id, [
+      { guestId: target.guests[0]!.id, workingLineId: targetLine },
+    ]),
+  );
+  await tx((t) =>
+    allergy.VENUE_SERVICE.moveBillAllergies(t, partyId, other!.id, line!.workingOrderId, actor),
+  );
+  const after = await read(other!.id);
+  expect(after.guests[0]).toEqual({ ...target.guests[0], position: 7 });
+  expect(after.guests[1]).toEqual({
+    ...source.guests[0],
+    id: expect.any(String),
+    partyId: other!.id,
+    position: 8,
+  });
+  expect(after.guests.map((g) => [g.who, g.allergens])).toEqual([
+    ["Already here", { milk: {} }],
+    ["Seat three", { gluten: { kinds: ["wheat"] } }],
+  ]);
+  expect(after.ticks).toEqual(
+    expect.arrayContaining([
+      { guestId: target.guests[0]!.id, draftLineId: null, workingLineId: targetLine },
+      { guestId: after.guests[1]!.id, draftLineId: fresh, workingLineId: null },
+      { guestId: after.guests[1]!.id, draftLineId: null, workingLineId: leaving },
+    ]),
+  );
+  expect(after.ticks).toHaveLength(3);
+  expect((await read()).guests).toEqual(source.guests);
+  expect((await read()).ticks).toEqual(
+    expect.arrayContaining([
+      { guestId: source.guests[0]!.id, draftLineId: null, workingLineId: staying },
+      { guestId: source.guests[0]!.id, draftLineId: elsewhere, workingLineId: null },
+      { guestId: source.guests[0]!.id, draftLineId: terminal, workingLineId: null },
+    ]),
+  );
+  expect((await read()).ticks).toHaveLength(3);
+});
+
+it.each(["unanswered", "none", "same party"] as const)(
+  "a bill move keeps allergy snapshots unchanged for %s",
+  async (kind) => {
+    const [other] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
+    const lineId = await workingLine();
+    const [line] = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId));
+    if (kind === "none") await save({ answer: "none", guests: [] });
+    if (kind === "same party") await save({ answer: "allergies", guests: [guest] });
+    await save(
+      { answer: "allergies", guests: [{ who: "Already here", allergens: { milk: {} } }] },
+      0,
+      other!.id,
+    );
+    const before = [await read(), await read(other!.id)];
+    await tx((t) =>
+      allergy.VENUE_SERVICE.moveBillAllergies(
+        t,
+        partyId,
+        kind === "same party" ? partyId : other!.id,
+        line!.workingOrderId,
+        actor,
+      ),
+    );
+    expect([await read(), await read(other!.id)]).toEqual(before);
+  },
+);

@@ -4,6 +4,7 @@ import {
   setAllergyLineTicks,
   moveAllergyDraftTicks,
   mergePartyAllergies,
+  moveBillAllergies,
   splitPartyAllergies,
 } from "./party-allergy.js";
 import {
@@ -133,6 +134,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   setAllergyLineTicks,
   moveAllergyDraftTicks,
   mergePartyAllergies,
+  moveBillAllergies,
   splitPartyAllergies,
   kitchenNoteKey,
   readKitchenNotes,

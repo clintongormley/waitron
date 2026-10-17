@@ -1369,6 +1369,13 @@ export interface VenueServiceContribution {
     into: string,
     operatorId: string,
   ): Promise<void>;
+  moveBillAllergies(
+    tx: Transaction,
+    from: string,
+    into: string,
+    billId: string,
+    operatorId: string,
+  ): Promise<void>;
   splitPartyAllergies(
     tx: Transaction,
     from: string,

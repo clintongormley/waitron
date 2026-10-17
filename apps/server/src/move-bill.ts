@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
   orderGroups,
+  orderDraftRecalledLines,
   parties,
   partyTableLabels,
   workingOrderLines,
@@ -13,6 +14,7 @@ import { AppError, partyDisplayName } from "@waitron/shared";
 import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
+import { moveBillDraftsToParty } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
@@ -129,7 +131,10 @@ export async function moveBill(
       tableId: destination.tableId,
     });
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
+    if (source !== null)
+      await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
+    await moveBillDraftsToParty(tx, billId, partyId);
     ({ held } = await groupArrivingDishes(
       tx,
       partyId,
@@ -143,6 +148,8 @@ export async function moveBill(
   } else {
     const partyId = destination.partyId;
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
+    if (source !== null)
+      await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
@@ -171,6 +178,7 @@ export async function moveBill(
       });
       result = { partyId, billId: main, merged: true };
     } else {
+      await moveBillDraftsToParty(tx, billId, partyId);
       if (main === null && open) await setMainBill(tx, partyId, billId);
       result = { partyId, billId, merged: false };
     }
@@ -381,8 +389,8 @@ export async function takeIntoParty(
 }
 
 /**
- * The bill leaves its party: refused `group.held_leaves_party` while a dish of it is held for the
- * kitchen, and its sent dishes leave their groups, keeping their ticket and served state. Returns,
+ * Active held kitchen work cannot leave its party. Recalled sources travel as unsent draft rows.
+ * Sent dishes leave their groups, keeping their ticket and served state. Returns,
  * by line id, the person or kitchen display that fired each dish's group, for the dishes that were
  * in one.
  */
@@ -396,16 +404,21 @@ export async function leaveParty(
       groupId: workingOrderLines.groupId,
       firedBy: orderGroups.firedBy,
       firedByDeviceId: orderGroups.firedByDeviceId,
+      recalledId: orderDraftRecalledLines.id,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(
+      orderDraftRecalledLines,
+      eq(orderDraftRecalledLines.sourceLineId, workingOrderLines.id),
+    )
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
     );
   await refuseHeldLeavingParty(
     tx,
     billId,
-    lines.map((line) => line.id),
+    lines.filter((line) => line.recalledId === null).map((line) => line.id),
   );
   await clearGroups(
     tx,

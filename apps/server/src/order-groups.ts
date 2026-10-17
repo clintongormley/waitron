@@ -11,6 +11,7 @@ import {
   nowIso,
   orderGroupEvents,
   orderGroups,
+  orderDraftRecalledLines,
   ticketItems,
   parties,
   workingOrderLines,
@@ -1720,6 +1721,12 @@ export async function groupArrivingDishes(
         eq(workingOrderLines.workingOrderId, billId),
         isNull(workingOrderLines.parentLineId),
         isNull(workingOrderLines.groupId),
+        notExists(
+          tx
+            .select({ id: orderDraftRecalledLines.id })
+            .from(orderDraftRecalledLines)
+            .where(eq(orderDraftRecalledLines.sourceLineId, workingOrderLines.id)),
+        ),
       ),
     )
     .orderBy(

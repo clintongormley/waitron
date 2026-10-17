@@ -1,4 +1,5 @@
 import * as orderWrites from "./working-order.js";
+import * as groupWrites from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
@@ -62,7 +63,8 @@ import {
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
 import { mergeBills, splitBill } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables, splitTable } from "./table-actions.js";
+import { moveBill } from "./move-bill.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -3969,6 +3971,414 @@ describe("source-backed draft foundations", () => {
       billId: into.tabId,
     });
     expect(await draftsOf(v, from.partyId)).toEqual([]);
+  });
+
+  async function movingFamily(v: Venue, state: "held" | "fired") {
+    const from = await seated(v);
+    const billId = randomUUID();
+    await inTx((tx) =>
+      orderWrites.createOpenOrder(tx, v.cfg, billId, [], "Moving bill", {
+        partyId: from.partyId,
+        existingService: true,
+        copyServiceContextFrom: from.tabId,
+      }),
+    );
+    const groupId = randomUUID();
+    await db.insert(orderGroups).values({
+      id: groupId,
+      partyId: from.partyId,
+      position: 1,
+      state,
+      submittedBy: ALEX,
+      ...(state === "fired" ? { firedAt: "2026-10-16T20:00:00.000Z", firedBy: ALEX } : {}),
+    });
+    const draft = await billDraft(v, from.partyId, billId);
+    // A stale target must travel unchanged; the next save/send recovers it explicitly.
+    await db
+      .update(orderDraftLines)
+      .set({ slot: 0, joinGroupId: groupId })
+      .where(eq(orderDraftLines.id, draft.lines[0]!.id));
+    await db
+      .update(orderDraftLines)
+      .set({ slot: 2, afterGroupId: groupId })
+      .where(eq(orderDraftLines.id, draft.lines[1]!.id));
+    const frozen = await family(v, billId);
+    await db
+      .update(workingOrderLines)
+      .set({ groupId, sentAt: "2026-10-16T20:00:00.000Z" })
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const id = randomUUID();
+    await db.insert(orderDraftRecalledLines).values({
+      id,
+      draftId: draft.id,
+      sourceLineId: frozen.parentId,
+      position: 3,
+      slot: 2,
+      afterGroupId: groupId,
+    });
+    const allergy = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        from.partyId,
+        await partyRevision(from.partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window", allergens: { milk: {} } },
+            { who: "Door", allergens: { eggs: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, from.partyId, [
+        { guestId: allergy.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+        { guestId: allergy.guests[1]!.id, workingLineId: frozen.parentId },
+      ]),
+    );
+    return { from, billId, draft, groupId, id, allergy, ...frozen };
+  }
+
+  for (const destination of ["free table", "occupied table", "split table"] as const) {
+    it.each(["held", "fired"] as const)(
+      `a bill moving to a ${destination} carries fresh and recalled drafts from a %s group`,
+      async (state) => {
+        const v = await setupVenue();
+        const moving = await movingFamily(v, state);
+        const { from, billId, draft, groupId, id, parentId } = moving;
+        const target = destination === "occupied table" ? await seated(v, "Occupied") : null;
+        const tableId =
+          target?.tableId ??
+          (await inTx(
+            async (tx) =>
+              (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+          ));
+        const own = target === null ? null : await billDraft(v, target.partyId, target.tabId);
+        if (destination === "split table")
+          await inTx(async (tx) =>
+            joinTables(tx, v.cfg, from.partyId, tableId, {
+              bills: "separate",
+              operatorId: SAM,
+              expectedPartyRevision: await partyRevision(from.partyId),
+              otherPartyId: null,
+            }),
+          );
+        const freshBefore = await storedLines(draft.id);
+        const refsBefore = await db.select().from(orderDraftRecalledLines);
+        const familyBefore = await db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId));
+        const originalGuests = (await inTx((tx) => readPartyAllergy(tx, from.partyId))).guests;
+        const result = await inTx(async (tx) =>
+          destination === "split table"
+            ? splitTable(tx, v.cfg, from.partyId, tableId, billId, {
+                expectedPartyRevision: await partyRevision(from.partyId),
+                operatorId: SAM,
+              })
+            : moveBill(
+                tx,
+                v.cfg,
+                billId,
+                { tableId },
+                {
+                  bills: "separate",
+                  operatorId: SAM,
+                  partyId: from.partyId,
+                  expectedPartyRevision: await partyRevision(from.partyId),
+                  otherPartyId: target?.partyId ?? null,
+                  ...(target === null
+                    ? {}
+                    : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
+                },
+              ),
+        );
+        const partyId = result.partyId!;
+        expect(await draftRow(draft.id)).toMatchObject({
+          partyId,
+          billId,
+          ownerId: ALEX,
+          state: "open",
+          revision: draft.revision + 1,
+        });
+        expect(await storedLines(draft.id)).toEqual(freshBefore);
+        expect(await db.select().from(orderDraftRecalledLines)).toEqual(refsBefore);
+        expect(
+          await db
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, billId)),
+        ).toEqual(familyBefore.map((line) => ({ ...line, groupId: null })));
+        expect(await db.select().from(orderGroups).where(eq(orderGroups.partyId, partyId))).toEqual(
+          [],
+        );
+        expect(await db.select().from(ticketItems)).toEqual([]);
+        const reads = await draftsOf(v, partyId);
+        expect(reads).toHaveLength(own === null ? 1 : 2);
+        expect(reads.find((row) => row.id === draft.id)!.lines).toMatchObject([
+          { id: draft.lines[0]!.id, slot: 0, joinGroupId: groupId },
+          { id: draft.lines[1]!.id, slot: 2, afterGroupId: groupId },
+          {
+            id,
+            sourceLineId: parentId,
+            slot: 2,
+            afterGroupId: groupId,
+            source: { netAmount: "12.50" },
+          },
+        ]);
+        expect(await draftsOf(v, from.partyId)).toEqual([]);
+        if (own !== null) expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
+        const staying = await inTx((tx) => readPartyAllergy(tx, from.partyId));
+        const arriving = await inTx((tx) => readPartyAllergy(tx, partyId));
+        expect(staying.guests).toEqual(originalGuests);
+        expect(staying.ticks).toEqual([]);
+        expect(arriving.answer).toBe("allergies");
+        expect(arriving.guests.map((guest) => guest.who)).toEqual(["Window", "Door"]);
+        expect(
+          [...arriving.ticks].sort(
+            (a, b) => Number(a.draftLineId === null) - Number(b.draftLineId === null),
+          ),
+        ).toEqual([
+          { guestId: arriving.guests[0]!.id, draftLineId: draft.lines[0]!.id, workingLineId: null },
+          { guestId: arriving.guests[1]!.id, draftLineId: null, workingLineId: parentId },
+        ]);
+        expect(
+          arriving.guests.every((guest) => !originalGuests.some((old) => old.id === guest.id)),
+        ).toBe(true);
+        await refusedWritingNothing(
+          () =>
+            save(v, partyId, ALEX, draft.id, draft.revision + 1, [
+              { ...item(v, "beer"), id: draft.lines[0]!.id, joinGroupId: groupId },
+              { ...item(v, "fish"), id: draft.lines[1]!.id, slot: 2, afterGroupId: groupId },
+              { ...sourceInput(id, parentId), courseId: v.courseId, afterGroupId: groupId },
+            ]),
+          { code: "group.not_found" },
+        );
+        await refusedWritingNothing(
+          () =>
+            submit(
+              v,
+              partyId,
+              { id: draft.id, revision: draft.revision + 1 },
+              ALEX,
+              [{ lineIds: [draft.lines[0]!.id], release: "hold" }],
+              { joinGroupId: groupId },
+            ),
+          { code: "group.not_found" },
+        );
+      },
+    );
+  }
+
+  it("a party join with separate bills retains recalled sources, groups, ticks and same-owner drafts", async () => {
+    const v = await setupVenue();
+    const moving = await movingFamily(v, "held");
+    const target = await seated(v, "Receiving table");
+    const own = await billDraft(v, target.partyId, target.tabId);
+    const freshBefore = await storedLines(moving.draft.id);
+    const refsBefore = await db.select().from(orderDraftRecalledLines);
+    const familyBefore = await db.select().from(workingOrderLines);
+    const ticksBefore = (await inTx((tx) => readPartyAllergy(tx, moving.from.partyId))).ticks;
+    await inTx(async (tx) =>
+      joinTables(tx, v.cfg, target.partyId, moving.from.tableId, {
+        bills: "separate",
+        operatorId: SAM,
+        expectedPartyRevision: await partyRevision(target.partyId),
+        otherPartyId: moving.from.partyId,
+        expectedOtherPartyRevision: await partyRevision(moving.from.partyId),
+      }),
+    );
+    expect(await draftRow(moving.draft.id)).toMatchObject({
+      partyId: target.partyId,
+      billId: moving.billId,
+      revision: 1,
+    });
+    expect(await storedLines(moving.draft.id)).toEqual(freshBefore);
+    expect(await db.select().from(orderDraftRecalledLines)).toEqual(refsBefore);
+    expect(await db.select().from(workingOrderLines)).toEqual(familyBefore);
+    expect(
+      (await db.select().from(orderGroups).where(eq(orderGroups.id, moving.groupId)))[0],
+    ).toMatchObject({ partyId: target.partyId, state: "held" });
+    const reads = await draftsOf(v, target.partyId);
+    expect(reads).toHaveLength(2);
+    expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
+    expect(reads.find((row) => row.id === moving.draft.id)!.lines[2]).toMatchObject({
+      id: moving.id,
+      sourceLineId: moving.parentId,
+      source: { netAmount: "12.50" },
+    });
+    expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toEqual(ticksBefore);
+  });
+
+  it.each(["free table", "occupied table", "split table"] as const)(
+    "a recalled companion does not let active held work leave for a %s, and refusal changes nothing",
+    async (destination) => {
+      const v = await setupVenue();
+      const moving = await movingFamily(v, "held");
+      const active = await family(v, moving.billId, 3);
+      await db
+        .update(workingOrderLines)
+        .set({ groupId: moving.groupId })
+        .where(eq(workingOrderLines.id, active.parentId));
+      const target = destination === "occupied table" ? await seated(v, "Occupied") : null;
+      const tableId =
+        target?.tableId ??
+        (await inTx(
+          async (tx) =>
+            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+        ));
+      if (destination === "split table")
+        await inTx(async (tx) =>
+          joinTables(tx, v.cfg, moving.from.partyId, tableId, {
+            bills: "separate",
+            operatorId: SAM,
+            expectedPartyRevision: await partyRevision(moving.from.partyId),
+            otherPartyId: null,
+          }),
+        );
+      await refusedWritingNothing(
+        () =>
+          inTx(async (tx) =>
+            destination === "split table"
+              ? splitTable(tx, v.cfg, moving.from.partyId, tableId, moving.billId, {
+                  expectedPartyRevision: await partyRevision(moving.from.partyId),
+                  operatorId: SAM,
+                })
+              : moveBill(
+                  tx,
+                  v.cfg,
+                  moving.billId,
+                  { tableId },
+                  {
+                    bills: "separate",
+                    operatorId: SAM,
+                    partyId: moving.from.partyId,
+                    expectedPartyRevision: await partyRevision(moving.from.partyId),
+                    otherPartyId: target?.partyId ?? null,
+                    ...(target === null
+                      ? {}
+                      : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
+                  },
+                ),
+          ),
+        { code: "group.held_leaves_party", params: { tabId: moving.billId, lineNo: 3 } },
+      );
+    },
+  );
+
+  it.each(["free table", "occupied table", "split table"] as const)(
+    "a failure after arrival at a %s rolls back the party, draft, source family and both tick kinds",
+    async (destination) => {
+      const v = await setupVenue();
+      const moving = await movingFamily(v, "held");
+      const target = destination === "occupied table" ? await seated(v, "Occupied") : null;
+      const tableId =
+        target?.tableId ??
+        (await inTx(
+          async (tx) =>
+            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+        ));
+      if (destination === "split table")
+        await inTx(async (tx) =>
+          joinTables(tx, v.cfg, moving.from.partyId, tableId, {
+            bills: "separate",
+            operatorId: SAM,
+            expectedPartyRevision: await partyRevision(moving.from.partyId),
+            otherPartyId: null,
+          }),
+        );
+      const arrive = groupWrites.groupArrivingDishes;
+      const probe = vi
+        .spyOn(groupWrites, "groupArrivingDishes")
+        .mockImplementation(async (...args) => {
+          await arrive(...args);
+          throw new AppError("management.request_invalid", { field: "arrival_probe" });
+        });
+      try {
+        await refusedWritingNothing(
+          () =>
+            inTx(async (tx) =>
+              destination === "split table"
+                ? splitTable(tx, v.cfg, moving.from.partyId, tableId, moving.billId, {
+                    expectedPartyRevision: await partyRevision(moving.from.partyId),
+                    operatorId: SAM,
+                  })
+                : moveBill(
+                    tx,
+                    v.cfg,
+                    moving.billId,
+                    { tableId },
+                    {
+                      bills: "separate",
+                      operatorId: SAM,
+                      partyId: moving.from.partyId,
+                      expectedPartyRevision: await partyRevision(moving.from.partyId),
+                      otherPartyId: target?.partyId ?? null,
+                      ...(target === null
+                        ? {}
+                        : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
+                    },
+                  ),
+            ),
+          { code: "management.request_invalid", params: { field: "arrival_probe" } },
+        );
+      } finally {
+        probe.mockRestore();
+      }
+    },
+  );
+
+  it("moving a bill into a merged bill absorbs its draft once and retains its original party history", async () => {
+    const v = await setupVenue();
+    const moving = await movingFamily(v, "held");
+    const target = await seated(v, "Receiving table");
+    const own = await billDraft(v, target.partyId, target.tabId);
+    const result = await inTx(async (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        moving.billId,
+        { tableId: target.tableId },
+        {
+          bills: "merge",
+          operatorId: SAM,
+          partyId: moving.from.partyId,
+          expectedPartyRevision: await partyRevision(moving.from.partyId),
+          otherPartyId: target.partyId,
+          expectedOtherPartyRevision: await partyRevision(target.partyId),
+        },
+      ),
+    );
+    expect(result).toEqual({ partyId: target.partyId, billId: target.tabId, merged: true });
+    expect(await draftRow(moving.draft.id)).toMatchObject({
+      state: "discarded",
+      revision: 1,
+      partyId: moving.from.partyId,
+      billId: target.tabId,
+    });
+    expect(await draftRow(own.id)).toMatchObject({
+      state: "open",
+      revision: 1,
+      partyId: target.partyId,
+      billId: target.tabId,
+    });
+    const reads = await draftsOf(v, target.partyId);
+    expect(reads).toHaveLength(1);
+    expect(reads[0]!.lines.map((line) => line.id)).toEqual([
+      ...lineIds(own),
+      ...lineIds(moving.draft),
+      moving.id,
+    ]);
+    expect(reads[0]!.lines[4]).toMatchObject({
+      sourceLineId: moving.parentId,
+      source: { netAmount: "12.50" },
+      slot: 3,
+      afterGroupId: moving.groupId,
+    });
+    expect(await draftsOf(v, moving.from.partyId)).toEqual([]);
+    expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toHaveLength(2);
+    expect(await db.select().from(ticketItems)).toEqual([]);
   });
 
   it("reads fresh and discounted source families in one position order without a live offer", async () => {

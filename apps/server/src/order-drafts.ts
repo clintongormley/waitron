@@ -390,6 +390,21 @@ export async function moveDraftsToBill(
   }
 }
 
+export async function moveBillDraftsToParty(
+  tx: Transaction,
+  billId: string,
+  intoPartyId: string,
+): Promise<void> {
+  await tx
+    .update(orderDrafts)
+    .set({
+      partyId: intoPartyId,
+      revision: sql`${orderDrafts.revision} + 1`,
+      updatedAt: nowIso(),
+    })
+    .where(and(eq(orderDrafts.billId, billId), eq(orderDrafts.state, "open")));
+}
+
 export async function moveDraftsToParty(
   tx: Transaction,
   cfg: TillConfig,

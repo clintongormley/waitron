@@ -15,7 +15,7 @@ import {
 } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
-import { moveDraftsToParty } from "./order-drafts.js";
+import { moveBillDraftsToParty, moveDraftsToParty } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   groupArrivingDishes,
@@ -375,6 +375,7 @@ export async function splitTable(
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
     } else {
       const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+      await moveBillDraftsToParty(tx, billId, newParty);
       const { held } = await groupArrivingDishes(
         tx,
         newParty,
