@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
-import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { currentLocale, setLocale } from "@waitron/dashboard-kit";
 import type { StaffRole, StaffingApi } from "./client.js";
 import type { StaffRoleDialog } from "./staff-role-dialog.js";
@@ -52,6 +52,12 @@ async function rename(value: string) {
   );
   await el.updateComplete;
 }
+async function pick(value: string) {
+  el.shadowRoot!.querySelector("wt-colour-chooser[name=colour]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
 async function state(disabled: boolean, variant: string) {
   const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=save-staff-role]",
@@ -71,10 +77,10 @@ it.each([false, true])(
     await state(false, "primary");
     await rename(editing ? "Waiter" : "");
     await state(true, "secondary");
-    const opened = editing ? "green" : "blue";
-    await chooseOption(box("colour"), "purple");
+    const opened = editing ? "green" : "red";
+    await pick("purple");
     await state(false, "primary");
-    await chooseOption(box("colour"), opened);
+    await pick(opened);
     await state(true, "secondary");
     await chooseOptions(box("people"), ["p-ana"]);
     await state(false, "primary");

@@ -7,6 +7,7 @@ import {
   focusFirstInvalid,
   saveActionState,
   submitOnEnter,
+  type ColourChoice,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -16,14 +17,22 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { codeMessage, codeOf } from "@waitron/dashboard-kit";
-import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
+import "@waitron/ui/src/components/wt-colour-chooser.js";
+import { codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import {
+  calendarColourChoices,
+  firstUnusedCalendarColour,
+  type ColourUser,
+} from "@waitron/venue-service/dashboard/calendar-colours";
 import type { CalendarColour, StaffPerson, StaffRole, StaffingApi } from "./client.js";
 import { colourName, t, tf } from "./strings.js";
 
 type Draft = { name: string; colour: CalendarColour; holderIds: string[] };
 type Refusal = { code: string; params?: Record<string, unknown> };
 type Field = "name" | "colour" | "people";
+type RoleColour = Pick<StaffRole, "id" | "name" | "colour">;
+
+const NO_USERS: readonly ColourUser[] = [];
 
 const sorted = (ids: readonly string[]) => [...ids].sort();
 const copy = (draft: Draft): Draft => ({ ...draft, holderIds: sorted(draft.holderIds) });
@@ -32,10 +41,14 @@ const sameHolders = (a: readonly string[], b: readonly string[]) =>
 const sameDetails = (a: Draft, b: Draft) =>
   a.name.trim() === b.name.trim() && a.colour === b.colour;
 const same = (a: Draft, b: Draft) => sameDetails(a, b) && sameHolders(a.holderIds, b.holderIds);
-const draftOf = (staffRole?: StaffRole): Draft =>
+const draftOf = (staffRole: StaffRole | undefined, others: readonly ColourUser[]): Draft =>
   staffRole
     ? { name: staffRole.name, colour: staffRole.colour, holderIds: sorted(staffRole.holderIds) }
-    : { name: "", colour: "blue", holderIds: [] };
+    : {
+        name: "",
+        colour: firstUnusedCalendarColour(others.map((role) => role.colour)),
+        holderIds: [],
+      };
 
 /**
  * Adds or edits one staff role and who holds it. A new staff role is created first and its people
@@ -61,8 +74,10 @@ export class StaffRoleDialog extends LitElement {
   @property({ attribute: false }) api!: StaffingApi;
   /** The staff role being edited; absent for a new one. */
   @property({ attribute: false }) staffRole?: StaffRole;
+  /** The venue's staff roles, in list order, whose colours the chooser marks as used. */
+  @property({ attribute: false }) staffRoles: readonly RoleColour[] = [];
   @property() createLabel = "";
-  @state() private draft: Draft = draftOf();
+  @state() private draft: Draft = draftOf(undefined, NO_USERS);
   @state() private attempted = false;
   @state() private busy = false;
   @state() private refusal?: Refusal;
@@ -111,7 +126,7 @@ export class StaffRoleDialog extends LitElement {
       this.openedFor = this.staffRole?.id;
       this.savedId = this.staffRole?.id;
       this.wrote = false;
-      this.draft = draftOf(this.staffRole);
+      this.draft = draftOf(this.staffRole, this.others());
       this.baseline = copy(this.draft);
       this.attempted = false;
       this.busy = false;
@@ -137,6 +152,36 @@ export class StaffRoleDialog extends LitElement {
       if (this.people === undefined && this.peopleError === undefined) this.loadPeople();
     }
   }
+  private othersFor?: {
+    roles: readonly RoleColour[];
+    ownIds: readonly (string | undefined)[];
+    users: readonly ColourUser[];
+  };
+  /** The staff roles other than this one, which may be the one this dialog has just created. */
+  private others(): readonly ColourUser[] {
+    const ownIds = [this.staffRole?.id, this.savedId];
+    const known = this.othersFor;
+    if (
+      known?.roles !== this.staffRoles ||
+      known.ownIds.some((id, index) => id !== ownIds[index])
+    ) {
+      const users = this.staffRoles
+        .filter((role) => !ownIds.includes(role.id))
+        .map(({ name, colour }) => ({ name, colour }));
+      this.othersFor = { roles: this.staffRoles, ownIds, users: users.length ? users : NO_USERS };
+    }
+    return this.othersFor!.users;
+  }
+  private choicesFor?: { users: readonly ColourUser[]; locale: string; choices: ColourChoice[] };
+  private colourChoices(): ColourChoice[] {
+    const users = this.others();
+    const locale = currentLocale();
+    if (this.choicesFor?.users !== users || this.choicesFor.locale !== locale)
+      this.choicesFor = { users, locale, choices: calendarColourChoices(colourName, users) };
+    return this.choicesFor.choices;
+  }
+  private readonly usedByLabel = (colour: string, names: string) =>
+    tf("staffing.role.colour_used_by", { colour, names });
   private loadPeople() {
     const generation = this.generation;
     this.api.listPeople().then(
@@ -292,19 +337,19 @@ export class StaffRoleDialog extends LitElement {
             this.change({ ...this.draft, name: event.detail.value }, "name");
           }}
         ></wt-input>
-        <wt-combobox
+        <wt-colour-chooser
           name="colour"
           label=${t("staffing.role.colour")}
-          search="never"
           .value=${this.draft.colour}
-          .options=${CALENDAR_COLOURS.map((colour) => ({ value: colour, label: colourName(colour) }))}
+          .choices=${this.colourChoices()}
+          .usedByLabel=${this.usedByLabel}
           .error=${this.fieldError("colour")}
           ?disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: CalendarColour }>) => {
             event.stopPropagation();
             this.change({ ...this.draft, colour: event.detail.value }, "colour");
           }}
-        ></wt-combobox>
+        ></wt-colour-chooser>
         <wt-combobox
           name="people"
           label=${t("staffing.role.people")}
