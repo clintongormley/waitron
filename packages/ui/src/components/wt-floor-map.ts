@@ -736,6 +736,11 @@ export class WtFloorMap extends LitElement {
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
+      const crop = cropToTables(this.tables.map((t) => t.placement));
+      this.style.setProperty(
+        "--floor-map-ratio",
+        String(crop === null ? 1 : crop.width / crop.height),
+      );
     }
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
