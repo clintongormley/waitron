@@ -383,14 +383,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   shared staging and allowlisted transfer services: both taxpayer choices, bound artifact and schema
   checks, transaction rollback, and exact Finish after staged cleanup. A relocated compiled-command
   check preserves the selected PDF and hour while importing dishes with fresh counters.
-  Twelve retained provision cases still refuse `sif.allocation_invalid`; their failing names and
-  first refusal match the retained baseline.
-  A proposed test-helper conversion to controlled hour preparation passes those unchanged
-  provisioning assertions in a disposable checkout. Its exact fiscal-fixture approval remains
-  pending. Separate new package checks cover staged-import recovery and tampering, transfer
-  boundaries and kitchen defaults; omission controls exercise their refusal and recovery paths.
-  The full provisioning run passes 1,227 cases, but coverage remains below its gate
-  (94.55% statements, 92.38% branches, 97.22% functions, 96.77% lines).
+  The owner's exact 2026-10-17 19:00 fixture approval is applied. The retained direct provisioning
+  and demo-seed cases pass with controlled hour preparation and unchanged assertions. Four HTTP
+  cases still fail in the feature checkout; their separate owned-hour fixture conversion passes
+  all three retained suites in an installed candidate and awaits exact fiscal-check approval.
+  New package checks cover staged-import recovery and tampering, transfer boundaries, kitchen
+  defaults, staged key validation, verifier publication and the complete frozen purpose set.
+  Omission controls exercise their refusal and recovery paths.
+  The full provisioning run passes 1,270 cases, but coverage remains below its gate
+  (94.79% statements, 92.76% branches, 97.51% functions, 96.95% lines).
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

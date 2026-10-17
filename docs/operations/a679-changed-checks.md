@@ -841,3 +841,47 @@ The final installed group passes 95 new cases. The full provisioning run passes 
 97.22% functions and 96.77% lines. Staging and kitchen timing each report 100% in all four
 measures. Transfer reports 92.76% statements, 89.7% branches, 94.44% functions and 93.52% lines.
 These are package-run measurements, not a claim that the remaining setup journeys are complete.
+
+## Retained provisioning and key boundaries (2026-10-17)
+
+The owner approved the exact direct-provisioning fixture conversion at 19:00 on 2026-10-17.
+`apps/server/src/testing/allocated-provision.ts:59` now prepares its input through the real hour
+preparation service, using controlled box/browser clocks and synthetic empty history. It passes
+that prepared module into the direct provisioning call. Its separate `initialSetupInput` function
+is unchanged. The retained provisioning and demo-seed suites pass with every assertion unchanged.
+This fixture does not qualify real host persistence, PDF custody, internet clocks or global
+uniqueness. The permission identifies patch SHA-256
+`280b0086e1b90c282f04228d384a0cf26e01ea62329a3d354cbc7206b37feaae`.
+
+Two new provisioning suites check staged-key shape and binding, transient-secret loss, owner
+rotation, exact committed-state installation, existing-verifier refusal and publication retry.
+The context checks retain every configured purpose and exact base spelling, default `FF` when
+the full base is absent, and refuse a module outside the frozen selection. The database cases
+use the real opener and core migrations. No production source or existing assertion changes in
+this qualification. Nine installed omissions each fail their intended assertion and their
+restored cases pass: staged shape, node binding, transient stage, transient owner, committed node,
+exact state, existing verifier, selected module and full-base default.
+
+The four remaining HTTP setup failures have a separate fixture-only proposal. It uses actual
+owned HTTPS preparation for Live imports and automatic disposable preparation for Demo and
+Preparation, with controlled release/clock observations. Three invalid-import requests move to
+the owned claim boundary, retaining their exact status and error-field checks. Three equality
+expressions replace their obsolete `S000001` installation/series literals with `06RB` at the
+literal 2026-10-16T11:40Z fixture time. Other existing expectation expressions remain.
+The installed proposal passes all 46 retained consumer cases; its server typecheck and scoped
+lint pass. It is not applied in this checkpoint and requires its own exact permission.
+Its public-document helper registers a synthetic PDF digest; actual PDF rendering, download,
+re-upload and owner acceptance remain separate qualifications.
+
+Lane receipts: `a679-provision-http-20261017`. The proposal is
+`proposed-boot-hour-fixtures.patch`, SHA-256
+`b62e30c231c3ddff98eab9588ad00dc65463316b6c63141a6f36173799e9889c`.
+The expectation audit retains 105 of the HTTP suite's 108 expressions; its three changed
+equalities are enumerated above. This comparison does not establish fixture equivalence.
+
+The final configured single-worker provisioning run passes 1,270 cases in 66 files. Coverage
+still fails its unchanged gate at 94.79% statements, 92.76% branches, 97.51% functions and
+96.95% lines. Staged node keys and module context each report 100% in all four measures.
+The 43 new cases pass in the feature tree and the independently installed candidate. The
+unchanged fiscal pair passes 20 cases, and the selected root guards pass 1,756 cases.
+Task 4 and the remaining branch gates stay open.
