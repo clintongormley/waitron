@@ -288,6 +288,54 @@ describe("device zone selection", () => {
     });
   });
 
+  it("refuses a forged profile with the current snapshot without storing its selection", async () => {
+    const f = await fixture();
+    const current = await read(f);
+    await expect(
+      run((tx) =>
+        VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+          profileId: f.secondProfileId,
+          snapshot: current.snapshot,
+          selectedZoneIds: [f.dining],
+          startingZoneId: f.dining,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "device_zones.changed" });
+    expect(
+      await run((tx) =>
+        tx.select().from(deviceZoneSelections).where(eq(deviceZoneSelections.deviceId, f.deviceId)),
+      ),
+    ).toEqual([]);
+    expect(await save(f, [f.dining], f.dining)).toMatchObject({
+      profileId: f.profileId,
+      selectedZoneIds: [f.dining],
+      startingZoneId: f.dining,
+    });
+  });
+
+  it("accepts only one concurrent save from a shared snapshot and refuses the other as changed", async () => {
+    const f = await fixture();
+    const current = await read(f);
+    const results = await Promise.allSettled(
+      [f.dining, f.terrace].map((zoneId) =>
+        run((tx) =>
+          VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, f.deviceId, {
+            profileId: f.profileId,
+            snapshot: current.snapshot,
+            selectedZoneIds: [zoneId],
+            startingZoneId: zoneId,
+          }),
+        ),
+      ),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toEqual([
+      { status: "rejected", reason: expect.objectContaining({ code: "device_zones.changed" }) },
+    ]);
+    const accepted = results.find((result) => result.status === "fulfilled")!;
+    expect(await read(f)).toEqual(accepted.value);
+  });
+
   it("refuses a foreign, deleted or unknown device", async () => {
     const f = await fixture();
     const other = await fixture();

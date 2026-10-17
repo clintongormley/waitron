@@ -295,6 +295,43 @@ describe("live device zones", () => {
     expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
   });
 
+  it("drops the departed operator's pending scope before allowing the new operator's zone", async () => {
+    const { el, api } = await mount(selection(["bar", "shop"], "bar"));
+    const store = counter(el)!.store;
+    const product = counter(el)!.products[0]!;
+    store.addProduct(product, "1");
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["shop"], "shop"),
+      snapshot: "old-pending",
+    });
+    await tick(el);
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    store.setLineQuantity(0, "2");
+    expect(store.lines[0]?.quantity).toBe("1");
+    emit(counter(el)!, "logout");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["bar"], "bar"),
+      profileId: "new-profile",
+      snapshot: "new-session",
+    });
+    emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
+      personId: "other-person",
+      displayName: "Diego",
+      permissions: [],
+      locale: "en-GB",
+    });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
+    await el.updateComplete;
+    store.setLineQuantity(0, "2");
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["coffee", "2", "2.00"]]);
+    expect(shell(el).counterZones.map((zone) => zone.id)).toEqual(["bar"]);
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    expect(api.setDeviceZones).not.toHaveBeenCalled();
+  });
+
   it("retains a real card request and its decline through live narrowing until the order clears", async () => {
     let answer!: (outcome: { outcome: "declined"; failureReason: string }) => void;
     const pending = new Promise<{ outcome: "declined"; failureReason: string }>((resolve) => {

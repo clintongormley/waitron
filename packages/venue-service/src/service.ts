@@ -113,7 +113,6 @@ import {
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
 
-/** The generic server-facing service seat; it owns no transaction and calls no server code. */
 import {
   readDeviceZoneSelection,
   setDeviceZoneSelection,
@@ -121,6 +120,7 @@ import {
   removeDeviceZoneSelections,
 } from "./device-zone-selection.js";
 
+/** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
   readPartyAllergy,
   savePartyAllergy,

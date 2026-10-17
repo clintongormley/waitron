@@ -1055,7 +1055,7 @@ original finding; its four-surface count and five-entry list no longer describe 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
-  Counter's owner-approved redesign remains A738–A740. The handheld, kitchen screen and pass need
+  Counter's remaining owner-approved redesign is A738–A739. The handheld, kitchen screen and pass need
   their own designs. Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
 
@@ -1854,6 +1854,9 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
+
+2026-10-17: A740 implements device zones and period-scoped menu memory. The remaining Counter
+redesign is A738–A739. The dated design and campaign-order notes below retain their original scope.
 
 2026-10-16: A182 part 2 replaces the authored screens described in this design's source snapshot
 with [fixed device screens](../developers/design-system.md#fixed-device-screens). Start A738–A740
