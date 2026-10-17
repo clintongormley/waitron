@@ -1,3 +1,5 @@
+import type { BillUnsent } from "../api/client.js";
+import { billUnsentText } from "../state/bill-unsent.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -59,7 +61,8 @@ export class TillFindBillDialog extends LitElement {
 
   @property({ attribute: false }) bill: BillLookupRow | null = null;
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) error?: StringKey | { overLimit: string } | { code: string };
+  @property({ attribute: false }) error?:
+    StringKey | { overLimit: string } | { code: string } | { unsentBill: BillUnsent };
   @state() private selected: BillLookupRow | null = null;
   @state() private method: "cash" | "card" = "cash";
   @state() private cash = "";
@@ -285,7 +288,9 @@ export class TillFindBillDialog extends LitElement {
               : this.error
                 ? "code" in this.error
                   ? codeMessage(this.error.code)
-                  : overLimitText(this.error.overLimit)
+                  : "unsentBill" in this.error
+                    ? billUnsentText(this.error.unsentBill, bill.label ?? String(bill.orderNumber))
+                    : overLimitText(this.error.overLimit)
                 : this.cashError
                   ? t("form.fix_fields")
                   : ""

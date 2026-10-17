@@ -1126,6 +1126,11 @@ export interface BillPaymentView {
   refunds: BillRefundView[];
 }
 
+export interface BillUnsent {
+  billId: string;
+  owners: { personId: string; name: string; quantity: string }[];
+}
+
 export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";

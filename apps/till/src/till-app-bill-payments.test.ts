@@ -4730,3 +4730,64 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     expect(button().disabled).toBe(false);
   });
 });
+
+describe("A773 named unsent-dish payment refusal", () => {
+  const refused = {
+    code: "bill.unsent_dishes",
+    status: 409,
+    billId: "wo-4",
+    owners: [
+      { personId: "p2", name: "Alex", quantity: "2.500" },
+      { personId: "p3", name: "Bea <chef>", quantity: "1.000" },
+    ],
+  };
+
+  it.each(["preview", "take"])(
+    "keeps the shown bill and names both owners after %s refuses",
+    async (stage) => {
+      const { el } = await mountApp(
+        stage === "preview"
+          ? { previewBillPayment: vi.fn().mockRejectedValue(refused) }
+          : { takeBillPayment: vi.fn().mockRejectedValue(refused) },
+      );
+      const order = await openTable(el);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40.00");
+      await type(el, "tendered", "40.00");
+      await press(el, "[data-pay-continue]");
+      if (stage === "take") await press(el, "[data-pay-confirm]");
+
+      const error = inDialog(el, "wt-form-actions")!.error;
+      expect(error).toContain("Alex: 2.5 unsent dishes");
+      expect(error).toContain("Bea <chef>: 1 unsent dish");
+      expect(error).toContain("4 · Bill 1");
+      expect(dialog(el)!.shadowRoot!.querySelector("chef")).toBeNull();
+      expect(tableOrder(el)).toBe(order);
+      expect(order.orderId).toBe("wo-4");
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    },
+  );
+});
+
+it("A773 keeps named owners when the refused payment's follow-up balance read fails", async () => {
+  const { el } = await mountApp({
+    getBillBalance: vi
+      .fn()
+      .mockResolvedValueOnce(balanceOf())
+      .mockResolvedValueOnce(balanceOf())
+      .mockRejectedValue(new TypeError("offline")),
+    previewBillPayment: vi.fn().mockRejectedValue({
+      code: "bill.unsent_dishes",
+      billId: "wo-4",
+      owners: [{ personId: "alex", name: "Alex", quantity: "2.000" }],
+    }),
+  });
+  await openTable(el);
+  await openDialog(el, "contribution");
+  await type(el, "amount", "40.00");
+  await type(el, "tendered", "40.00");
+  await press(el, "[data-pay-continue]");
+  expect(inDialog(el, "wt-form-actions")!.error).toContain("Alex: 2 unsent dishes");
+});

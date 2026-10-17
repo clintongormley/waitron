@@ -3664,6 +3664,27 @@ describe("till-app: other people's drafts and taking one over", () => {
     await flush(el, 6);
   }
 
+  it("A773 keeps Alex's take-over controls available after Pay names his unsent dishes", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({
+        code: "bill.unsent_dishes",
+        billId: "wo-4",
+        owners: [{ personId: ALEX, name: "Alex", quantity: "2.000" }],
+      }),
+    });
+    savedBy(ALEX, "Alex", "offer-beer", "offer-flan");
+    await openAs(el, SAM, "Sam");
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", tendered: "3.00" });
+    await flush(el, 6);
+    expect(banner(el)!.textContent).toContain("Alex: 2 unsent dishes");
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    await takeOver(el);
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(panels(el)).toEqual([]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(server.drafts.map((draft) => [draft.billId, draft.ownerId])).toEqual([["wo-4", SAM]]);
+  });
+
   it("shows no read-only panel when only the person's own draft is on the party", async () => {
     const { el } = await mountApp();
     savedBy(SAM, "Sam", "offer-flan");
@@ -7070,5 +7091,261 @@ describe("recalled draft source splitting", () => {
       );
       draft(el).sending = false;
     });
+  });
+});
+
+describe("A773 Pay saves the bill's New order before payment", () => {
+  function saveGate() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+  const bills = () => [
+    {
+      workingOrderId: "wo-4",
+      revision: 0,
+      invoiceType: "F2",
+      recipient: null,
+      partyId: "v1",
+      label: null,
+      status: "open",
+      total: "3.00",
+      outstanding: "3.00",
+      hasPayments: false,
+      receiptAvailable: false,
+    },
+  ];
+  const unsent = {
+    code: "bill.unsent_dishes",
+    status: 409,
+    billId: "wo-4",
+    owners: [
+      { personId: "p1", name: "Ana", quantity: "1.000" },
+      { personId: "p2", name: "Alex", quantity: "2.500" },
+    ],
+  };
+
+  it.each([
+    { status: "open", tender: { method: "cash", tendered: "3.00" }, method: "recordSale" },
+    { status: "open", tender: { method: "card", externalRef: "manual-1" }, method: "recordSale" },
+    { status: "placed", tender: { method: "cash", tendered: "3.00" }, method: "collectOrder" },
+    {
+      status: "placed",
+      tender: { method: "card", externalRef: "manual-1" },
+      method: "collectOrder",
+    },
+  ])(
+    "flushes before $status $tender.method Pay and retains the bill and dishes on refusal",
+    async ({ status, tender, method }) => {
+      const pending = saveGate();
+      const save = server.saveDraft.getMockImplementation()!;
+      const getPartyBills = vi.fn().mockResolvedValue(bills().map((bill) => ({ ...bill, status })));
+      const { el } = await mountApp({
+        getPartyBills,
+        saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+          await pending.promise;
+          return save(...args);
+        }),
+        recordSale: vi.fn().mockRejectedValue(unsent),
+        collectOrder: vi.fn().mockRejectedValue(unsent),
+      });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      emit(order, "pay-tab", tender);
+      await flush(el);
+      try {
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+        expect(api[method]).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve();
+      }
+      await flush(el, 8);
+      expect(savedLines()).toEqual(["offer-beer ×1"]);
+      expect(api[method]).toHaveBeenCalledOnce();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(el.shadowRoot!.querySelector("till-ticket-screen")).toBeNull();
+      expect(banner(el)!.textContent).toContain("Ana: 1 unsent dish");
+      expect(banner(el)!.textContent).toContain("Alex: 2.5 unsent dishes");
+      expect(banner(el)!.textContent).toContain("4 · Bill 1");
+      expect(api.submitDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["items", "contribution", "share", "rest"])(
+    "flushes before opening %s payment",
+    async (way) => {
+      const pending = saveGate();
+      const save = server.saveDraft.getMockImplementation()!;
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue(bills()),
+        saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+          await pending.promise;
+          return save(...args);
+        }),
+      });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      emit(order, "bill-pay", { way, lines: [], amount: "3.00" });
+      await flush(el);
+      try {
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+        expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+      } finally {
+        pending.resolve();
+      }
+      await flush(el, 8);
+      expect(savedLines()).toEqual(["offer-beer ×1"]);
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+    },
+  );
+
+  it.each(["pay-tab", "bill-pay"])(
+    "sends no %s when the local draft cannot be saved",
+    async (kind) => {
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue(bills()),
+        saveDraft: vi.fn().mockRejectedValue(new TypeError("offline")),
+        recordSale: vi.fn().mockRejectedValue(unsent),
+        collectOrder: vi.fn().mockRejectedValue(unsent),
+      });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      emit(
+        order,
+        kind,
+        kind === "pay-tab"
+          ? { method: "cash", tendered: "3.00" }
+          : { way: "contribution", lines: [], amount: "3.00" },
+      );
+      await flush(el, 8);
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(tableOrder(el)!.orderId).toBe("wo-4");
+      expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+    },
+  );
+  it.each(["pay-tab", "bill-pay"])(
+    "abandons %s when the API changes while saving",
+    async (kind) => {
+      const pending = saveGate();
+      const save = server.saveDraft.getMockImplementation()!;
+      const recordSale = vi.fn().mockRejectedValue(unsent);
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue(bills()),
+        recordSale,
+        saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+          await pending.promise;
+          return save(...args);
+        }),
+      });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      emit(
+        order,
+        kind,
+        kind === "pay-tab"
+          ? { method: "cash", tendered: "3.00" }
+          : { way: "contribution", lines: [], amount: "3.00" },
+      );
+      await flush(el);
+      const replacement = {
+        ...api,
+        recordSale: vi.fn().mockRejectedValue(unsent),
+        getBillBalance: vi.fn(api.getBillBalance),
+      };
+      el.api = replacement as unknown as TillApi;
+      await flush(el);
+      pending.resolve();
+      await flush(el, 8);
+      expect(recordSale).not.toHaveBeenCalled();
+      expect(replacement.recordSale).not.toHaveBeenCalled();
+      expect(replacement.getBillBalance).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+    },
+  );
+
+  it.each(["pay-tab", "bill-pay"])(
+    "abandons %s after leaving the table during its save",
+    async (kind) => {
+      const pending = saveGate();
+      const save = server.saveDraft.getMockImplementation()!;
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue(bills()),
+        recordSale: vi.fn().mockRejectedValue(unsent),
+        saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+          await pending.promise;
+          return save(...args);
+        }),
+      });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      emit(
+        order,
+        kind,
+        kind === "pay-tab"
+          ? { method: "cash", tendered: "3.00" }
+          : { way: "contribution", lines: [], amount: "3.00" },
+      );
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "counter" });
+      await flush(el);
+      pending.resolve();
+      await flush(el, 8);
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
+      expect(savedLines()).toEqual(["offer-beer ×1"]);
+    },
+  );
+  it("flushes local dishes before Find a bill collects, without sending them", async () => {
+    const pending = saveGate();
+    const save = server.saveDraft.getMockImplementation()!;
+    const { el } = await mountApp({
+      collectOrder: vi.fn().mockRejectedValue(unsent),
+      saveDraft: vi.fn(async (...args: Parameters<typeof save>) => {
+        await pending.promise;
+        return save(...args);
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    emit(shell(el), "find-bill-pay", {
+      workingOrderId: "wo-4",
+      tender: { method: "cash", amount: "3.00" },
+      invoiced: false,
+    });
+    await flush(el);
+    try {
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve();
+    }
+    await flush(el, 8);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps an actionable Pay refusal if owner details are unavailable", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue(bills()),
+      recordSale: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.unsent_dishes", billId: "wo-4", owners: [] }),
+    });
+    const order = await openMesa(el);
+    emit(order, "pay-tab", { method: "cash", tendered: "3.00" });
+    await flush(el, 6);
+    expect(banner(el)!.textContent).toContain(
+      "Send or remove the bill's unsent dishes before paying",
+    );
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
 });

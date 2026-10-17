@@ -1,3 +1,4 @@
+import { billUnsentOf } from "./bill-unsent.js";
 import { parseDecimalInput } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -202,8 +203,10 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     permission?: unknown;
     action?: unknown;
   };
+  const unsent = billUnsentOf(error);
   return {
     code: typeof refused.code === "string" ? refused.code : "server.internal",
+    ...(unsent === undefined ? {} : { unsent }),
     ...(typeof refused.field === "string" ? { field: refused.field } : {}),
     ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
     ...(typeof refused.permission === "string" ? { permission: refused.permission } : {}),

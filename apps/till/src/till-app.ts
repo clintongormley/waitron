@@ -1,3 +1,5 @@
+import type { BillUnsent } from "./api/client.js";
+import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -717,6 +719,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "bill.unsent_dishes",
   "service_zone.closed",
   "device.forbidden_action",
   "device.profile_changed",
@@ -739,14 +742,24 @@ function overLimitOf(error: unknown): { overLimit: string } | undefined {
 }
 
 /** A settle path's refusal shown in its own words rather than the generic `sale.error`. */
-function settleRefusalOf(
-  error: unknown,
-):
+function settleRefusalOf(error: unknown):
   | { overLimit: string }
-  | { code: "department.operation_description_required" | "sale.department_missing" }
+  | { unsentBill: BillUnsent }
+  | {
+      code:
+        | "department.operation_description_required"
+        | "sale.department_missing"
+        | "bill.unsent_dishes";
+    }
   | undefined {
+  const unsent = billUnsentOf(error);
+  if (unsent !== undefined) return { unsentBill: unsent };
   const code = (error as { code?: string } | undefined)?.code;
-  if (code === "department.operation_description_required" || code === "sale.department_missing")
+  if (
+    code === "department.operation_description_required" ||
+    code === "sale.department_missing" ||
+    code === "bill.unsent_dishes"
+  )
     return { code };
   return overLimitOf(error);
 }
@@ -769,6 +782,8 @@ function periodRefusal(error: unknown): CounterError | undefined {
 }
 
 function counterError(error: unknown, fallback: StringKey): CounterError {
+  const unsent = billUnsentOf(error);
+  if (unsent !== undefined) return { unsentBill: unsent };
   const period = periodRefusal(error);
   if (period !== undefined) return period;
   if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
@@ -999,6 +1014,7 @@ type CounterError =
   | { excess: string; lineChange?: true }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
+  | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
@@ -1030,7 +1046,10 @@ function errorText(
   error: CounterError,
   menus: readonly TillZoneMenu[],
   tables: readonly TableState[],
+  billLabel?: string,
 ): string | TemplateResult {
+  if (typeof error === "object" && "unsentBill" in error)
+    return billUnsentText(error.unsentBill, billLabel);
   if (typeof error === "string") return t(error);
   if ("code" in error) {
     if (error.code === "menu_period.not_running") {
@@ -2403,7 +2422,8 @@ export class TillApp extends LitElement {
     approvers?: StaffMember[];
     pinError: string | null;
   } | null = null;
-  @state() private findBillError?: StringKey | { overLimit: string } | { code: string };
+  @state() private findBillError?:
+    StringKey | { overLimit: string } | { code: string } | { unsentBill: BillUnsent };
   /** The waiting orders whose hand over is out, each pressed once until it answers. */
   #handingOver = new Set<string>();
   /** Each Pay pressed on a waiting order; only the latest one's answer may load the basket. */
@@ -6710,10 +6730,17 @@ export class TillApp extends LitElement {
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
     this.submitting = true;
     const session = this.#operatorSession;
+    const api = this.api;
     this.findBillBusy = true;
     this.findBillError = undefined;
     let collected = false;
     try {
+      if (
+        (this.#draftSync !== undefined && !(await this.#flushDraft())) ||
+        session !== this.#operatorSession ||
+        api !== this.api
+      )
+        return;
       const result = await this.api.collectOrder(workingOrderId, tender);
       if (session !== this.#operatorSession) return;
       this.shadowRoot!.querySelector("till-find-bill-dialog")?.closeSaved();
@@ -12449,6 +12476,11 @@ export class TillApp extends LitElement {
     }
   }
 
+  #paymentBillLabel(billId: string): string | undefined {
+    const index = shownBills(this.partyBills).findIndex((bill) => bill.workingOrderId === billId);
+    return index < 0 ? undefined : billName(this.orderParty?.displayName ?? "", index);
+  }
+
   /** Charges another bill of the party from the same screen. */
   async #onTakePayment(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
@@ -12654,11 +12686,18 @@ export class TillApp extends LitElement {
     let paidMeanwhile = false;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
+    const api = this.api;
     try {
       if (
+        !(await this.#flushDraft()) ||
+        visit !== this.#orderVisit ||
+        session !== this.#operatorSession ||
+        api !== this.api ||
+        id !== this.activeTabId ||
         !(await this.#flushPartyKitchenNote()) ||
         visit !== this.#orderVisit ||
         session !== this.#operatorSession ||
+        api !== this.api ||
         id !== this.activeTabId
       )
         return;
@@ -12683,7 +12722,6 @@ export class TillApp extends LitElement {
       this.#showTicket(id, bill?.receiptAvailable !== true);
     } catch (error) {
       paidMeanwhile = isPaymentsReceived(error);
-      // No preliminary save, so any network failure may have filed.
       this.errorKey = paidMeanwhile
         ? "bill.pay_with_bill_payments"
         : isPermanentSaleRefusal(error)
@@ -12709,10 +12747,19 @@ export class TillApp extends LitElement {
     const { way, lines, amount } = (event as CustomEvent<BillPayDetail>).detail;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
+    const api = this.api;
+    const id = this.activeTabId;
     if (
+      !(await this.#flushDraft()) ||
+      visit !== this.#orderVisit ||
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      id !== this.activeTabId ||
       !(await this.#flushPartyKitchenNote()) ||
       visit !== this.#orderVisit ||
-      session !== this.#operatorSession
+      session !== this.#operatorSession ||
+      api !== this.api ||
+      id !== this.activeTabId
     )
       return;
     await this.#openBillPaying(way, lines, amount);
@@ -12981,6 +13028,8 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(id);
     if (now === null) return;
     const refusal = refusalOf(error, stage === "take");
+    if (refusal.unsent !== undefined)
+      refusal.billLabel = this.#paymentBillLabel(refusal.unsent.billId);
     const { preview } = error as { preview?: unknown };
     if (refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
@@ -13841,6 +13890,9 @@ export class TillApp extends LitElement {
           this.errorKey,
           this.#orderScreenShown() ? this.tableMenus : this.menus,
           this.tables,
+          typeof this.errorKey === "object" && "unsentBill" in this.errorKey
+            ? this.#paymentBillLabel(this.errorKey.unsentBill.billId)
+            : undefined,
         )
       : nothing;
     return html`

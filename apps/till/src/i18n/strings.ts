@@ -1364,6 +1364,10 @@ export const en = {
     "This would take the order over {amount}, the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order.",
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
+  "bill_pay.unsent": "Send or remove these dishes before paying",
+  "bill_pay.unsent_one": "{name}: 1 unsent dish",
+  "bill_pay.unsent_many": "{name}: {n} unsent dishes",
+  "bill_pay.unsent_unnamed": "Another person",
   "bill_pay.title": "Pay part of the bill",
   "bill_pay.balance": "This bill",
   "bill_pay.reading": "Reading the bill's payments…",
@@ -2918,6 +2922,10 @@ export const es: Record<StringKey, string> = {
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido.",
   "bill.take_rest": "Cobrar el resto",
+  "bill_pay.unsent": "Envía o quita estos platos antes de cobrar",
+  "bill_pay.unsent_one": "{name}: 1 plato sin enviar",
+  "bill_pay.unsent_many": "{name}: {n} platos sin enviar",
+  "bill_pay.unsent_unnamed": "Otra persona",
   "bill_pay.title": "Cobrar parte de la cuenta",
   "bill_pay.balance": "Esta cuenta",
   "bill_pay.reading": "Leyendo los pagos de la cuenta…",
