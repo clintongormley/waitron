@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
-import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import { parseBlocks } from "../paint-rules.js";
 import type { StaffingBlock } from "../slots.js";
 import type { StaffRole } from "../staffing-types.js";
@@ -112,6 +112,21 @@ function block(el: StaffingGrid, key: string, index = 0) {
 function edge(el: StaffingGrid, key: string, index: number, side: "start" | "end") {
   return block(el, key, index).querySelector<HTMLElement>(`.edge[data-edge="${side}"]`)!;
 }
+function twoFrames() {
+  return new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+/** Clicks a block, which picks it and opens its menu, then closes the menu with Escape. */
+async function pickBlock(el: StaffingGrid, key: string, index = 0) {
+  await userEvent.click(block(el, key, index));
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await twoFrames();
+}
+function picked(el: StaffingGrid) {
+  return el.shadowRoot!.querySelector("[data-picked]");
+}
 function menu(el: StaffingGrid) {
   return el.shadowRoot!.querySelector<HTMLElement>(".menu")!;
 }
@@ -122,6 +137,21 @@ function menuButton(el: StaffingGrid, label: string) {
 }
 function stepper(el: StaffingGrid) {
   return menu(el).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("wt-number-stepper")!;
+}
+async function step(el: StaffingGrid, by: 1 | -1) {
+  stepper(el).shadowRoot!.querySelector<HTMLButtonElement>(`button[data-step="${by}"]`)!.click();
+  await el.updateComplete;
+}
+function roleField(el: StaffingGrid) {
+  return menu(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=staff-role]",
+  )!;
+}
+function save(el: StaffingGrid) {
+  return menu(el).querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save-block"]')!;
+}
+function cancel(el: StaffingGrid) {
+  return menu(el).querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="cancel-block"]')!;
 }
 function columnMenu(el: StaffingGrid, key: string) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
@@ -387,6 +417,7 @@ test("two blocks with the same start are told apart by their place, not their st
 test("dragging a block's bottom edge resizes its end; its top edge resizes its start", async () => {
   const el = await grid({ mon: [headChef, sous] }, { chosen: undefined });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
   point(el, "mon", 720, "pointermove");
   await el.updateComplete;
@@ -395,6 +426,7 @@ test("dragging a block's bottom edge resizes its end; its top edge resizes its s
   );
   point(el, "mon", 720, "pointerup");
   await el.updateComplete;
+  await pickBlock(el, "mon", 1);
   await drag(el, "mon", 180, 120, edge(el, "mon", 1, "start"));
   expect(seen).toEqual([
     { key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }, sous] },
@@ -402,9 +434,179 @@ test("dragging a block's bottom edge resizes its end; its top edge resizes its s
   ]);
 });
 
+test("an unpicked block has no edges, and a drag from its top quarter paints a new block", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  expect(block(el, "mon").querySelector(".edge")).toBeNull();
+  const at = block(el, "mon").getBoundingClientRect();
+  const under = el.shadowRoot!.elementFromPoint(at.left + at.width / 2, at.top + 2)!;
+  expect(under).toBe(block(el, "mon"));
+  await drag(el, "mon", 180, 300, under);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "09:00", endsAt: "11:00" }],
+    },
+  ]);
+});
+
+test("clicking a block picks it: focused, marked, and only its edges resize it", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  const seen = changes(el);
+  await pickBlock(el, "mon", 0);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 0));
+  expect(block(el, "mon", 0).hasAttribute("data-picked")).toBe(true);
+  expect(block(el, "mon", 1).querySelector(".edge")).toBeNull();
+  await drag(el, "mon", 630, 720, edge(el, "mon", 0, "end"));
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }, sous] }]);
+});
+
+test("a picked block stays picked while focus is in its menu, and is unpicked when focus goes anywhere else", async () => {
+  const el = await grid({ mon: [headChef, sous], tue: [] });
+  await userEvent.click(block(el, "mon", 0));
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(block(el, "mon", 0).hasAttribute("data-picked")).toBe(true);
+  await userEvent.click(column(el, "tue"), { position: { x: 5, y: 5 } });
+  await el.updateComplete;
+  await twoFrames();
+  expect(picked(el)).toBeNull();
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  await pickBlock(el, "mon", 0);
+  expect(picked(el)).toBe(block(el, "mon", 0));
+  await userEvent.tab();
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
+  expect(picked(el)).toBeNull();
+});
+
+test("a click on a button outside the grid unpicks the block", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  const outside = document.createElement("button");
+  outside.textContent = "Elsewhere";
+  host.append(outside);
+  await pickBlock(el, "mon", 0);
+  const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
+  await userEvent.click(outside);
+  await el.updateComplete;
+  expect(picked(el)).toBeNull();
+  const under = el.shadowRoot!.elementFromPoint(
+    strip.left + strip.width / 2,
+    strip.top + strip.height / 2,
+  )!;
+  expect(under).toBe(block(el, "mon"));
+  await drag(el, "mon", 630, 720, under);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "16:30", endsAt: "18:00" }],
+    },
+  ]);
+});
+
+test("picking a second block unpicks the first", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  await pickBlock(el, "mon", 0);
+  await pickBlock(el, "mon", 1);
+  expect(picked(el)).toBe(block(el, "mon", 1));
+  expect(el.shadowRoot!.querySelectorAll("[data-picked]")).toHaveLength(1);
+  expect(block(el, "mon", 0).querySelector(".edge")).toBeNull();
+  expect(edge(el, "mon", 1, "end")).not.toBeNull();
+});
+
+test("a resized picked block stays picked once the host echoes it, so a second edge drag resizes again", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  const seen = changes(el);
+  el.addEventListener("staffing-change", (event) => {
+    el.days = new Map([[event.detail.key, event.detail.blocks]]);
+  });
+  await pickBlock(el, "mon", 0);
+  await drag(el, "mon", 630, 720, edge(el, "mon", 0, "end"));
+  expect(picked(el)).toBe(block(el, "mon", 0));
+  await drag(el, "mon", 180, 120, edge(el, "mon", 0, "start"));
+  expect(seen).toEqual([
+    { key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }] },
+    { key: "mon", blocks: [{ ...headChef, startsAt: "08:00", endsAt: "18:00" }] },
+  ]);
+});
+
+test("the host replacing the picked block, a new target, or turning read-only unpicks it; the same block sent again keeps it", async () => {
+  const el = await grid({ mon: [headChef] });
+  await pickBlock(el, "mon", 0);
+  el.days = new Map([["mon", [{ ...headChef }]]]);
+  await el.updateComplete;
+  expect(picked(el)).toBe(block(el, "mon", 0));
+  el.days = new Map([["mon", [{ ...headChef, headcount: 2 }]]]);
+  await el.updateComplete;
+  expect(picked(el)).toBeNull();
+  await pickBlock(el, "mon", 0);
+  el.target = "other";
+  await el.updateComplete;
+  expect(picked(el)).toBeNull();
+  await pickBlock(el, "mon", 0);
+  el.readOnly = true;
+  await el.updateComplete;
+  el.readOnly = false;
+  await el.updateComplete;
+  expect(picked(el)).toBeNull();
+  expect(block(el, "mon", 0).querySelector(".edge")).toBeNull();
+});
+
+test("a focusout while the document has no focus keeps the pick", async () => {
+  const el = await grid({ mon: [headChef] });
+  await pickBlock(el, "mon", 0);
+  vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  block(el, "mon", 0).dispatchEvent(
+    new FocusEvent("focusout", { bubbles: true, composed: true, relatedTarget: null }),
+  );
+  await el.updateComplete;
+  expect(picked(el)).toBe(block(el, "mon", 0));
+});
+
+test("Escape, Cancel and Save each leave the block focused and picked", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  el.addEventListener("staffing-change", (event) => {
+    el.days = new Map([[event.detail.key, event.detail.blocks]]);
+  });
+  await pickBlock(el, "mon", 1);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
+  expect(picked(el)).toBe(block(el, "mon", 1));
+  for (const close of ["Escape", "Cancel", "Save"] as const) {
+    await userEvent.click(block(el, "mon", 1));
+    await el.updateComplete;
+    if (close === "Escape") await userEvent.keyboard("{Escape}");
+    if (close === "Cancel") await userEvent.click(cancel(el));
+    if (close === "Save") {
+      await chooseOption(roleField(el), "dw");
+      await el.updateComplete;
+      await userEvent.click(save(el));
+    }
+    await el.updateComplete;
+    await twoFrames();
+    expect(menu(el).matches(":popover-open"), close).toBe(false);
+    expect(el.shadowRoot!.activeElement, close).toBe(block(el, "mon", 1));
+    expect(picked(el), close).toBe(block(el, "mon", 1));
+  }
+  expect(block(el, "mon", 1).getAttribute("aria-label")).toContain("Dishwasher");
+});
+
+test("a click on the menu's blank text keeps the menu open and the block picked", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  await userEvent.click(block(el, "mon", 1));
+  await el.updateComplete;
+  await userEvent.click(menu(el), { position: { x: 2, y: 2 } });
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(picked(el)).toBe(block(el, "mon", 1));
+});
+
 test("an edge dragged past the other edge leaves the block a quarter hour long", async () => {
   const el = await grid({ mon: [headChef] });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   await drag(el, "mon", 180, 900, edge(el, "mon", 0, "start"));
   expect(seen).toEqual([{ key: "mon", blocks: [{ ...headChef, startsAt: "16:15" }] }]);
 });
@@ -412,6 +614,7 @@ test("an edge dragged past the other edge leaves the block a quarter hour long",
 test("the click that ends a resize does not open the block's menu", async () => {
   const el = await grid({ mon: [headChef] });
   changes(el);
+  await pickBlock(el, "mon", 0);
   const end = edge(el, "mon", 0, "end");
   point(el, "mon", 630, "pointerdown", end);
   point(el, "mon", 720, "pointermove");
@@ -445,6 +648,7 @@ for (const [what, refresh] of [
       refreshed = true;
       refresh(el);
     };
+    await pickBlock(el, "mon", 0);
     const onDown = () => window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerdown", onDown);
     const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
@@ -469,6 +673,7 @@ for (const [what, refresh] of [
 
 test("a dropped resize whose pointer is cancelled leaves the next click on a block opening its menu", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
   point(el, "mon", 720, "pointermove");
   await el.updateComplete;
@@ -481,40 +686,255 @@ test("a dropped resize whose pointer is cancelled leaves the next click on a blo
   expect(menu(el).matches(":popover-open")).toBe(true);
 });
 
-test("clicking a block opens its staff roles, How many and Delete; a staff role changes it", async () => {
+test("clicking a block opens its staff role, How many and Delete; a staff role changes it on Save", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);
   await userEvent.click(block(el, "mon", 1));
   expect(menu(el).matches(":popover-open")).toBe(true);
   expect(menu(el).getAttribute("role")).toBe("dialog");
   expect(block(el, "mon", 1).getAttribute("aria-expanded")).toBe("true");
-  expect(menuButton(el, "Head chef")).toBeDefined();
-  expect(menuButton(el, "Sous chef").disabled).toBe(true);
-  expect(menuButton(el, "Dishwasher")).toBeDefined();
+  expect(roleField(el).value).toBe("sc");
+  expect(roleField(el).options.map(({ value, label }) => [value, label])).toEqual([
+    ["hc", "Head chef"],
+    ["sc", "Sous chef"],
+    ["dw", "Dishwasher"],
+  ]);
   expect(stepper(el).label).toBe("How many");
   expect(stepper(el).name).toBe("headcount");
   expect(stepper(el).value).toBe("2");
   expect(stepper(el).min).toBe(1);
   expect(stepper(el).max).toBe(50);
   expect(menu(el).getAttribute("aria-label")).toBe("Sous chef, 2 people, 09:00–15:00");
-  await userEvent.click(menuButton(el, "Dishwasher"));
+  await chooseOption(roleField(el), "dw");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.click(save(el));
   await el.updateComplete;
   expect(seen).toEqual([{ key: "mon", blocks: [headChef, { ...sous, staffRoleId: "dw" }] }]);
   expect(menu(el).matches(":popover-open")).toBe(false);
   expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
 });
 
-test("How many changes the block's headcount, within 1 to 50, and keeps the menu open", async () => {
+test("How many changes the editor's headcount and keeps the editor open; only Save sends it", async () => {
   const el = await grid({ mon: [sous] });
   const seen = changes(el);
   await userEvent.click(block(el, "mon"));
-  stepper(el).shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!.click();
-  await el.updateComplete;
-  expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 3 }] }]);
+  await step(el, 1);
+  expect(stepper(el).value).toBe("3");
+  expect(seen).toEqual([]);
   expect(menu(el).matches(":popover-open")).toBe(true);
-  el.addEventListener("staffing-change", (event) => {
-    el.days = new Map([[event.detail.key, event.detail.blocks]]);
+  await step(el, 1);
+  expect(seen).toEqual([]);
+  await userEvent.click(save(el));
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 4 }] }]);
+});
+
+test("clicking a block opens a wide editor: Staff role and How many on one row, then Cancel and Delete, and Save alone on the right", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const el = await grid({ mon: [headChef, sous] });
+    await userEvent.click(block(el, "mon", 1));
+    await el.updateComplete;
+    const field = roleField(el);
+    expect(field.label).toBe("Staff role");
+    expect(field.value).toBe("sc");
+    expect(field.required).toBe(true);
+    expect(field.options.map(({ value }) => value)).toEqual(["hc", "sc", "dw"]);
+    expect(stepper(el).value).toBe("2");
+    expect(stepper(el).min).toBe(1);
+    expect(stepper(el).max).toBe(50);
+    const remove = menuButton(el, "Delete");
+    expect(
+      Math.abs(field.getBoundingClientRect().top - stepper(el).getBoundingClientRect().top),
+    ).toBeLessThanOrEqual(1);
+    expect(save(el).getBoundingClientRect().left).toBeGreaterThan(
+      remove.getBoundingClientRect().right,
+    );
+    expect(cancel(el).getBoundingClientRect().right).toBeLessThanOrEqual(
+      remove.getBoundingClientRect().left,
+    );
+    expect(save(el).disabled).toBe(true);
+    expect(save(el).variant).toBe("secondary");
+    expect(el.shadowRoot!.activeElement).toBe(field);
+    expect(cancel(el).variant).toBe("secondary");
+    expect(remove.variant).toBe("danger");
+    const group = cancel(el).parentElement!;
+    expect(group.slot).toBe("cancel");
+    expect([...group.children]).toEqual([cancel(el), remove]);
+    expect(save(el).slot).toBe("");
+    expect(save(el).parentElement!.localName).toBe("wt-form-actions");
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
+test("typing in the role field filters the list", async () => {
+  const el = await grid({ mon: [sous] });
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(roleField(el));
+  await userEvent.keyboard("dis");
+  await roleField(el).updateComplete;
+  const rows = [...roleField(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(rows.map((row) => row.textContent!.trim())).toEqual(["Dishwasher"]);
+});
+
+test("a changed role or How many makes Save loud; changing it back makes it quiet; nothing is sent before Save", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  const quiet = () => [save(el).disabled, save(el).variant];
+  expect(quiet()).toEqual([true, "secondary"]);
+  await chooseOption(roleField(el), "dw");
+  await el.updateComplete;
+  expect(quiet()).toEqual([false, "primary"]);
+  await step(el, 1);
+  expect(quiet()).toEqual([false, "primary"]);
+  await step(el, -1);
+  expect(quiet()).toEqual([false, "primary"]);
+  await chooseOption(roleField(el), "sc");
+  await el.updateComplete;
+  expect(quiet()).toEqual([true, "secondary"]);
+  await step(el, 1);
+  expect(quiet()).toEqual([false, "primary"]);
+  await step(el, -1);
+  expect(quiet()).toEqual([true, "secondary"]);
+  expect(seen).toEqual([]);
+});
+
+test("Save sends the role and How many together, closes the editor, and leaves the block focused and picked", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon", 1));
+  await chooseOption(roleField(el), "dw");
+  await step(el, 1);
+  await userEvent.click(save(el));
+  await el.updateComplete;
+  await twoFrames();
+  expect(seen).toEqual([
+    { key: "mon", blocks: [headChef, { ...sous, staffRoleId: "dw", headcount: 3 }] },
+  ]);
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
+  expect(picked(el)).toBe(block(el, "mon", 1));
+});
+
+for (const how of ["Cancel", "Escape", "a click outside"] as const)
+  test(`${how} throws the editor's change away`, async () => {
+    const el = await grid({ mon: [headChef, sous], tue: [] });
+    const seen = changes(el);
+    await userEvent.click(block(el, "mon", 1));
+    await step(el, 1);
+    expect(stepper(el).value).toBe("3");
+    if (how === "Cancel") await userEvent.click(cancel(el));
+    if (how === "Escape") await userEvent.keyboard("{Escape}");
+    if (how === "a click outside")
+      await userEvent.click(column(el, "tue"), { position: { x: 5, y: 5 } });
+    await el.updateComplete;
+    await twoFrames();
+    expect(menu(el).matches(":popover-open")).toBe(false);
+    expect(seen).toEqual([]);
+    if (how !== "a click outside") {
+      expect(el.shadowRoot!.activeElement).toBe(block(el, "mon", 1));
+      expect(picked(el)).toBe(block(el, "mon", 1));
+    } else expect(picked(el)).toBeNull();
+    await userEvent.click(block(el, "mon", 1));
+    await el.updateComplete;
+    expect(stepper(el).value).toBe("2");
+    expect(roleField(el).value).toBe("sc");
+    expect(save(el).disabled).toBe(true);
   });
+
+test("opening the role list and choosing from it with clicks keeps the editor open", async () => {
+  const el = await grid({ mon: [sous] });
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(roleField(el));
+  await roleField(el).updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  const row = [...roleField(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent!.trim() === "Dishwasher",
+  )!;
+  await userEvent.click(row);
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(roleField(el).value).toBe("dw");
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+});
+
+test("the editor keeps its draft when the host sends the same block back, and closes when another block takes its place", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  await userEvent.click(block(el, "mon", 1));
+  await step(el, 1);
+  el.days = new Map([["mon", [headChef, { ...sous }]]]);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  el.days = new Map([["mon", [headChef, { ...sous, headcount: 5 }]]]);
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  await userEvent.click(block(el, "mon", 1));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("5");
+  expect(save(el).disabled).toBe(true);
+});
+
+test("clicking the block whose editor is open keeps the draft", async () => {
+  const el = await grid({ mon: [sous] });
+  await userEvent.click(block(el, "mon"));
+  await chooseOption(roleField(el), "dw");
+  await step(el, 1);
+  await userEvent.click(block(el, "mon"));
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(roleField(el).value).toBe("dw");
+  expect(stepper(el).value).toBe("3");
+  expect(save(el).variant).toBe("primary");
+});
+
+test("a block whose staff role is gone opens with an empty role; Save stays quiet, even after a How many change, until a known role is chosen", async () => {
+  const el = await grid({ mon: [{ ...headChef, staffRoleId: "gone" }] });
+  await userEvent.click(block(el, "mon"));
+  expect(roleField(el).value).toBe("");
+  expect(roleField(el).required).toBe(true);
+  await step(el, 1);
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+  await chooseOption(roleField(el), "dw");
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(false);
+  expect(save(el).variant).toBe("primary");
+});
+
+test("an unchanged editor's Save sends nothing, even clicked directly, and the editor stays open", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  save(el).click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
+test("a gone staff role's Save sends nothing after a How many change, even clicked directly, and the editor stays open", async () => {
+  const el = await grid({ mon: [{ ...headChef, staffRoleId: "gone" }] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  save(el).click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
+test("How many in the editor stays within 1 to 50 and puts back the last count for other text", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
   for (const [value, expected] of [
     ["0", 1],
     ["51", 50],
@@ -528,14 +948,58 @@ test("How many changes the block's headcount, within 1 to 50, and keeps the menu
     await el.updateComplete;
     await stepper(el).updateComplete;
     if (value === "") {
-      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+      input.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, composed: true, relatedTarget: menu(el) }),
+      );
       await stepper(el).updateComplete;
     }
     expect(input.value, value).toBe(String(expected));
     expect(menu(el).matches(":popover-open")).toBe(true);
   }
-  expect(seen.map((change) => change.blocks![0]!.headcount)).toEqual([3, 1, 50, 2]);
+  expect(seen).toEqual([]);
+  await step(el, 1);
+  await userEvent.click(save(el));
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 3 }] }]);
 });
+
+test("the editor's text is Spanish under the Spanish locale", async () => {
+  setLocale("es");
+  const el = await grid({ mon: [sous] });
+  await userEvent.click(block(el, "mon"));
+  expect(roleField(el).label).toBe("Rol de personal");
+  expect(roleField(el).searchPlaceholder).toBe("Buscar");
+  expect(roleField(el).noResultsLabel).toBe("Sin resultados");
+  expect(stepper(el).label).toBe("Cuántas personas");
+  expect(cancel(el).textContent!.trim()).toBe("Cancelar");
+  expect(menuButton(el, "Eliminar")).toBeDefined();
+  expect(save(el).textContent!.trim()).toBe("Guardar");
+});
+
+for (const [locale, deleteLabel] of [
+  ["es", "Eliminar"],
+  ["en", "Delete"],
+] as const) {
+  test(`in ${locale}, the editor's Save stands well apart from Delete, and its buttons sit clear of its fields`, async () => {
+    setLocale(locale);
+    const el = await grid({ mon: [sous] });
+    await userEvent.click(block(el, "mon"));
+    await el.updateComplete;
+    const space = (n: number) =>
+      parseFloat(getComputedStyle(el).getPropertyValue(`--wt-space-${n}`));
+    expect(space(3)).toBeGreaterThan(0);
+    expect(space(5)).toBeGreaterThan(space(3));
+    const cancelBox = cancel(el).getBoundingClientRect();
+    const deleteBox = menuButton(el, deleteLabel).getBoundingClientRect();
+    const saveBox = save(el).getBoundingClientRect();
+    const saveGap = saveBox.left - deleteBox.right;
+    expect(saveGap).toBeGreaterThanOrEqual(space(5));
+    expect(saveGap).toBeGreaterThan(deleteBox.left - cancelBox.right);
+    const fields = menu(el).querySelector(".fields")!.getBoundingClientRect();
+    const actions = menu(el).querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(actions.top - fields.bottom).toBeGreaterThanOrEqual(space(3));
+  });
+}
 
 test("Delete in the menu removes the block; Backspace on a focused block removes it too", async () => {
   const el = await grid({ mon: [headChef, sous] });
@@ -551,16 +1015,190 @@ test("Delete in the menu removes the block; Backspace on a focused block removes
   expect(seen[1]).toEqual({ key: "mon", blocks: [headChef] });
 });
 
-test("Delete or Backspace inside an open menu deletes, but not while typing in How many", async () => {
+test("Delete or Backspace in the editor deletes the block from its buttons but not from the role field or How many", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);
   await userEvent.click(block(el, "mon", 0));
+  await el.updateComplete;
+  roleField(el).focus();
+  expect(el.shadowRoot!.activeElement).toBe(roleField(el));
+  await userEvent.keyboard("{Backspace}");
   stepper(el).shadowRoot!.querySelector("input")!.focus();
   await userEvent.keyboard("{Backspace}");
-  expect(seen.filter((change) => change.blocks?.length === 1)).toEqual([]);
-  menuButton(el, "Sous chef").focus();
+  await userEvent.click(roleField(el));
+  await roleField(el).updateComplete;
+  const search = roleField(el).shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+  expect(roleField(el).shadowRoot!.activeElement).toBe(search);
+  await userEvent.keyboard("{Backspace}");
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  cancel(el).focus();
   await userEvent.keyboard("{Delete}");
-  expect(seen.at(-1)).toEqual({ key: "mon", blocks: [sous] });
+  expect(seen).toEqual([{ key: "mon", blocks: [sous] }]);
+});
+
+test("Escape with the role list open closes only the list; a second Escape closes the editor", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  await userEvent.click(roleField(el));
+  await roleField(el).updateComplete;
+  const list = roleField(el).shadowRoot!.querySelector("[popover]")!;
+  expect(list.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(list.matches(":popover-open")).toBe(false);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(seen).toEqual([]);
+  expect(picked(el)).toBe(block(el, "mon"));
+});
+
+test("Enter in How many saves", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  const input = () => stepper(el).shadowRoot!.querySelector("input")!;
+  input().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await step(el, 1);
+  input().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 3 }] }]);
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon"));
+  expect(picked(el)).toBe(block(el, "mon"));
+});
+
+test("Tab out of the editor's last button closes it without sending and unpicks the block", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon", 0));
+  await step(el, 1);
+  save(el).focus();
+  expect(el.shadowRoot!.activeElement).toBe(save(el));
+  await userEvent.tab();
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(menu(el).contains(el.shadowRoot!.activeElement)).toBe(false);
+  expect(seen).toEqual([]);
+  expect(picked(el)).toBeNull();
+  await userEvent.click(block(el, "mon", 0));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+});
+
+test("an edge drag of the picked block with its editor open closes the editor when it first stretches, drops the draft, and resizes", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  // Dispatched, so the browser's light dismiss plays no part: only the grid can close the editor.
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  point(el, "mon", 720, "pointermove");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  point(el, "mon", 720, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }] }]);
+  await userEvent.click(block(el, "mon"));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+  expect(save(el).disabled).toBe(true);
+});
+
+test("a press and release on the picked block's edge with no movement keeps the editor and its draft", async () => {
+  const el = await grid({ mon: [sous] }, { chosen: undefined });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  const end = edge(el, "mon", 0, "end");
+  const strip = end.getBoundingClientRect();
+  const y = strip.top + strip.height / 2;
+  // Dispatched: the browser does not light-dismiss, so this checks the grid keeps the editor.
+  pointAt(el, "mon", y, "pointerdown", end);
+  await el.updateComplete;
+  pointAt(el, "mon", y, "pointerup");
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  // A real press: the browser light-dismisses the editor, and the click on its block shows it again.
+  await userEvent.click(end);
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  expect(save(el).variant).toBe("primary");
+  expect(picked(el)).toBe(block(el, "mon"));
+  expect(seen).toEqual([]);
+});
+
+test("a paint drag from the picked block's body with its editor open closes the editor, drops the draft, and adds a block", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  point(el, "mon", 300, "pointerdown", block(el, "mon"));
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  point(el, "mon", 420, "pointermove");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  point(el, "mon", 420, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "11:00", endsAt: "13:00" }],
+    },
+  ]);
+  await userEvent.click(block(el, "mon"));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+  expect(save(el).disabled).toBe(true);
+});
+
+test("at 390×844 the editor fits inside the window, and sits above a block low in the view when there is room", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const late: StaffingBlock = {
+      staffRoleId: "sc",
+      headcount: 1,
+      startsAt: "22:00",
+      endsAt: "00:00",
+    };
+    const el = await grid({ mon: [late] });
+    // Pushes the block down until its foot is a little above the window's.
+    const spacer = document.createElement("div");
+    spacer.style.height = `${innerHeight - 40 - block(el, "mon").getBoundingClientRect().bottom}px`;
+    el.before(spacer);
+    await userEvent.click(block(el, "mon"));
+    await el.updateComplete;
+    const box = menu(el).getBoundingClientRect();
+    const at = block(el, "mon").getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(innerWidth);
+    expect(at.top - box.height).toBeGreaterThanOrEqual(8);
+    expect(box.bottom).toBeLessThanOrEqual(at.top + 0.5);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
 
 test("keyboard: blocks are buttons in tab order, Enter opens one, Escape closes and refocuses it", async () => {
@@ -800,6 +1438,7 @@ test("a column the days map does not hold draws as an empty day and paints into 
 test("a resize whose block the host removes mid-drag previews and changes nothing", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);
+  await pickBlock(el, "mon", 1);
   point(el, "mon", 360, "pointerdown", edge(el, "mon", 1, "end"));
   point(el, "mon", 420, "pointermove");
   await el.updateComplete;
@@ -848,6 +1487,7 @@ test("scrolling sideways fades the side that has columns hidden beyond it", asyn
 test("a one-step resize moves the edge a quarter hour wherever in the edge strip the press lands", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: undefined });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
   const row = column(el, "mon").getBoundingClientRect().height / 96;
   const into = [0.5, 1, 2, 3, 4, 5, 6, 7, 7.5].map((px) => (px / 8) * strip.height);
@@ -864,6 +1504,7 @@ test("a one-step resize moves the edge a quarter hour wherever in the edge strip
 test("a press anywhere in an edge strip released where it landed changes nothing", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: undefined });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
   for (const px of [0.5, 2, 4, 6, 7.5].map((n) => (n / 8) * strip.height)) {
     pointAt(el, "mon", strip.top + px, "pointerdown", edge(el, "mon", 0, "end"));
@@ -876,6 +1517,7 @@ test("a press anywhere in an edge strip released where it landed changes nothing
 test("a second finger during a resize neither adds a block nor changes which edge moves", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: "sc" });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
   point(el, "mon", 720, "pointermove");
   point(el, "mon", 840, "pointerdown", column(el, "mon"), 8);
@@ -887,6 +1529,7 @@ test("a second finger during a resize neither adds a block nor changes which edg
 test("a second finger on a block's edge during an add does not turn the add into a resize", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: "sc" });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 720, "pointerdown");
   point(el, "mon", 840, "pointermove");
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"), 8);
@@ -916,6 +1559,7 @@ test("a resize that leaves the block as it was sends no change", async () => {
   const short: StaffingBlock = { ...headChef, startsAt: "09:00", endsAt: "09:15" };
   const el = await grid({ mon: [short] }, { chosen: undefined });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   await drag(el, "mon", 180, 600, edge(el, "mon", 0, "start"));
   expect(seen).toEqual([]);
 });
@@ -955,23 +1599,23 @@ test("the open menu closes when the host moves another block into its block's pl
   expect(menu(el).matches(":popover-open")).toBe(false);
 });
 
-test("the open menu stays open when its own headcount change comes back from the host", async () => {
+test("the open menu stays open when the host sends its block back unchanged", async () => {
   const el = await grid({ mon: [headChef, sous] });
-  el.addEventListener("staffing-change", (event) => {
-    el.days = new Map([["mon", event.detail.blocks ?? []]]);
-  });
+  const seen = changes(el);
   await userEvent.click(block(el, "mon", 1));
-  stepper(el).shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!.click();
-  await el.updateComplete;
+  await step(el, 1);
   expect(menu(el).matches(":popover-open")).toBe(true);
-  el.days = new Map([["mon", [headChef, { ...sous, headcount: 3 }]]]);
+  el.days = new Map([["mon", [{ ...headChef }, { ...sous }]]]);
   await el.updateComplete;
   expect(menu(el).matches(":popover-open")).toBe(true);
   expect(stepper(el).value).toBe("3");
+  expect(save(el).variant).toBe("primary");
+  expect(seen).toEqual([]);
 });
 
 test("a 30-minute block keeps both edges and a body to click", async () => {
   const el = await grid({ mon: [{ ...headChef, endsAt: "09:30" }] }, { chosen: undefined });
+  await pickBlock(el, "mon", 0);
   const at = block(el, "mon").getBoundingClientRect();
   const start = edge(el, "mon", 0, "start").getBoundingClientRect();
   const end = edge(el, "mon", 0, "end").getBoundingClientRect();
@@ -984,10 +1628,12 @@ test("a 30-minute block keeps both edges and a body to click", async () => {
 
 test("a 15-minute block's edges leave a gap between them; a long block's are a fixed strip", async () => {
   const el = await grid({ mon: [{ ...headChef, endsAt: "09:15" }], tue: [headChef] });
+  await pickBlock(el, "mon", 0);
   const start = edge(el, "mon", 0, "start").getBoundingClientRect();
   const end = edge(el, "mon", 0, "end").getBoundingClientRect();
   expect(start.height).toBeGreaterThan(0);
   expect(end.top - start.bottom).toBeGreaterThan(0);
+  await pickBlock(el, "tue", 0);
   const long = edge(el, "tue", 0, "end").getBoundingClientRect().height;
   const probe = document.createElement("div");
   probe.style.blockSize = "var(--wt-space-2)";
@@ -1004,6 +1650,7 @@ test("an end resize of a block kept on the day's last quarter hour sends a block
   el.cutover = "06:10";
   await el.updateComplete;
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   await drag(el, "mon", 1440, 1380, edge(el, "mon", 0, "end"));
   expect(seen).toEqual([
     {
@@ -1019,6 +1666,7 @@ test("a press on the end edge of a block that crosses the changeover, released w
   el.cutover = "06:10";
   await el.updateComplete;
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   const strip = edge(el, "mon", 0, "end").getBoundingClientRect();
   pointAt(el, "mon", strip.top + strip.height / 2, "pointerdown", edge(el, "mon", 0, "end"));
   pointAt(el, "mon", strip.top + strip.height / 2, "pointerup");
@@ -1031,6 +1679,7 @@ test("a press on the end edge of a block that crosses the changeover, released w
 test("a resize whose block the host replaces with another mid-drag changes nothing on release", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: "dw" });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
   point(el, "mon", 720, "pointermove");
   await el.updateComplete;
@@ -1046,6 +1695,7 @@ test("a resize whose block the host replaces with another mid-drag changes nothi
 test("a resize released after the host replaced its block, before the grid redrew, changes nothing", async () => {
   const el = await grid({ mon: [headChef] }, { chosen: "dw" });
   const seen = changes(el);
+  await pickBlock(el, "mon", 0);
   point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
   point(el, "mon", 720, "pointermove");
   await el.updateComplete;

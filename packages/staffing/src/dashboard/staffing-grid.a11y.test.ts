@@ -1,5 +1,6 @@
 import { setLocale } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -26,6 +27,7 @@ describe.each(["light", "dark"] as const)("staffing grid (%s)", (theme) => {
     "empty",
     "blocks",
     "menu",
+    "menu-roles-open",
     "dragging",
     "column-menu",
     "chooser",
@@ -90,11 +92,22 @@ describe.each(["light", "dark"] as const)("staffing grid (%s)", (theme) => {
       expect(
         el.shadowRoot!.querySelector('.heading[data-column="tue"][data-error]'),
       ).not.toBeNull();
-    if (state === "menu") {
+    if (state === "menu" || state === "menu-roles-open") {
       el.shadowRoot!.querySelector<HTMLButtonElement>("button.block")!.click();
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector(".menu")!.matches(":popover-open")).toBe(true);
+      expect(el.shadowRoot!.querySelector(".menu wt-combobox[name=staff-role]")).not.toBeNull();
       expect(el.shadowRoot!.querySelector(".menu wt-number-stepper")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector(".menu wt-form-actions")).not.toBeNull();
+    }
+    if (state === "menu-roles-open") {
+      const roles = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        ".menu wt-combobox[name=staff-role]",
+      )!;
+      await userEvent.click(roles);
+      await roles.updateComplete;
+      expect(roles.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(el.shadowRoot!.querySelector(".menu")!.matches(":popover-open")).toBe(true);
     }
     if (state === "dragging") {
       const monday = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="mon"]')!;

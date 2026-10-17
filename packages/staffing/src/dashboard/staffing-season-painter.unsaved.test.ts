@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
+import { userEvent } from "vitest/browser";
 import { applyTokens, LeaveController, registerIcons } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
@@ -158,5 +159,50 @@ it("an edit kept while the painter is put back in a later task still asks before
   await new Promise((resolve) => setTimeout(resolve, 20));
   parent.insertBefore(painter, parent.firstChild);
   await settle(painter);
+  expect(unload()).toBe(true);
+});
+
+const editor = (painter: StaffingSeasonPainter) =>
+  grid(painter).shadowRoot!.querySelector<HTMLElement>(".menu")!;
+/** Clicks the head chef's block on Tuesday, which opens the grid's block editor on it. */
+async function openEditor(painter: StaffingSeasonPainter) {
+  const block = grid(painter).shadowRoot!.querySelector<HTMLElement>(
+    '.day[data-column="2"] button.block[data-index="0"]',
+  )!;
+  await userEvent.click(block);
+  await grid(painter).updateComplete;
+  expect(editor(painter).matches(":popover-open")).toBe(true);
+}
+async function addOne(painter: StaffingSeasonPainter) {
+  editor(painter)
+    .querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("wt-number-stepper")!
+    .shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!
+    .click();
+  await settle(painter);
+}
+
+it("a block editor's unsaved change asks nothing: Save stays quiet, the page has no leave warning, and Cancel closes the painter at once", async () => {
+  const painter = await mount();
+  await openEditor(painter);
+  await addOne(painter);
+  expect(frameButton(painter, "save").disabled).toBe(true);
+  expect(unload()).toBe(false);
+  expect(editor(painter).matches(":popover-open")).toBe(true);
+  const close = closed(painter);
+  frameButton(painter, "cancel").click();
+  await close;
+  await expect.poll(() => app.open.mock.calls.length).toBe(1);
+  expect(question().open).toBe(false);
+});
+
+it("the block editor's Save becomes a painter edit that asks before leaving", async () => {
+  const painter = await mount();
+  await openEditor(painter);
+  await addOne(painter);
+  editor(painter).querySelector<HTMLElement>('[data-test="save-block"]')!.click();
+  await settle(painter);
+  expect(grid(painter).days.get("2")).toEqual([{ ...headChef, headcount: 2 }]);
+  expect(frameButton(painter, "save").variant).toBe("primary");
+  expect(frameButton(painter, "save").disabled).toBe(false);
   expect(unload()).toBe(true);
 });

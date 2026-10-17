@@ -2221,8 +2221,18 @@ and let you clear the input while typing, restoring the count when you move to a
 A block's hover tooltip keeps the full day, role name, count and times; short blocks may have no
 inline text at the whole-day scale. The month's today marker is a badge (the day number on a
 phone); the surrounding focus ring marks keyboard focus. Dragging down a column adds a block of
-the chosen role and number, dragging a block's
-top or bottom edge resizes it, and clicking a block offers another staff role, How many and Delete.
+the chosen role and number, even over an existing block. Clicking a block picks it, draws its
+outline and opens its editor: Staff role (a searchable list) and How many on one row, and
+`[Cancel] [Delete] … [Save]` below, with a fixed gap keeping Save apart from Delete. Only the picked
+block's top and bottom edges resize it, by a drag that starts on one. The block stays
+picked until the focus leaves both it and its editor; a click on the editor's blank space stays
+inside it. The editor opens below the block, or above it when it fits there and not below; with room on
+neither side it covers the block. It keeps
+a change only on Save, which Enter in How many also presses; Cancel, Escape, a click outside, the
+focus leaving, or a drag that paints or resizes throw the change away. Save stays quiet until the
+role or number differs from the block's, and while a block's staff role no longer exists it waits
+for a known one. Delete or Backspace anywhere in the editor deletes the block, except inside Staff
+role or How many.
 Each column's ⋮ offers Copy to… and Clear; in the special-day painter it also offers Follow the
 season, and a date that follows the season reads "Follows the season". Behind the staffing blocks,
 a department's opening periods are faint bands in their own colours,
@@ -2244,7 +2254,8 @@ A form that saves opens with its primary action (Save, Add…) disabled and draw
 `secondary`. As soon as its draft differs from what was opened, the action is enabled and drawn
 `primary`; undoing the change back to the opened values makes it quiet and disabled again (owner
 decision, 2026-10-07, A331). "Changed" is the draft scope's `isDirty()`, never a second comparison
-written per screen (one stated exception, the till's profile dialog, is in the batch 4c entry below):
+written per screen (two stated exceptions, the till's profile dialog in the batch 4c entry below
+and the staffing grid's block editor in the A761 entry):
 
 - take the scope with `draftScopeFor(this, owner)` from `@waitron/ui`. It hands back the
   application's `coordinator` — `undefined` where no `LeaveController` is above the form, as in a
@@ -2383,10 +2394,18 @@ and nothing guards it across screens:
 - A585-4: the season and special-day staffing painters
   (`packages/staffing/src/dashboard/staffing-season-painter.ts` and
   `staffing-special-day-painter.ts`). Each has a sibling `*.unsaved.test.ts`;
+- A761: the staffing grid's block editor (`packages/staffing/src/dashboard/staffing-grid.ts`).
+  Its Save writes its own comparison (`sameBlock` of the draft against the block as it was opened),
+  and it takes no draft scope and has no `*.unsaved.test.ts`. The owner asked for "a Save rather than saving
+  on a click outside" (owner, 2026-10-16), so a click outside throws the change away; taking no scope, so that leaving the painter does not
+  ask about the editor, is Decision 8 of the
+  [A761 plan](../superpowers/plans/2026-10-17-a761-staffing-grid-paint-and-editor.md). Closing the
+  tab, reloading or going Back with a changed editor open therefore also throws its change away
+  without asking;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
-  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
-  the one form that writes its own comparison (`chosen !== activeProfileId`) instead of a draft
+  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog writes
+  its own comparison (`chosen !== activeProfileId`) instead of a draft
   scope: a scope registered with the till's coordinator would be unsaved whenever another profile is
   chosen, so the app's unsaved-changes check before a switch (`#onProfileSwitch` in
   `apps/till/src/till-app.ts`) would ask about the switch itself every time. See
@@ -2645,8 +2664,8 @@ Each form owns its comparison and successful-write boundary. Compare membership 
 ID sets and preserve order for submitted positions. Nested image forms retain File identity;
 a child save commits that child without committing its parent. Independent receipt, credential
 and inline-row writes commit separately. A failed refresh after a successful write cannot make
-that submitted value dirty again. Read-only views, immediately saved controls and safety
-acknowledgements remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
+that submitted value dirty again. Read-only views, immediately saved controls, safety
+acknowledgements and the staffing grid's block editor (A761) remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
 records the coverage and limits of the rollout checks.
 
 The dirty-only unload listener requests the browser's own warning. Activated desktop Chromium

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens, registerIcons, DROPDOWN_ICONS } from "@waitron/ui";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { StaffingApi } from "./client.js";
@@ -919,4 +919,26 @@ it("reads the staff roles again when a role changes, not when a person does", as
   liveData.invalidate([{ type: "staff_roles" }]);
   await vi.waitFor(() => expect(roleReads()).toHaveLength(2));
   liveData.clear();
+});
+
+it("the block editor's Save reaches the special day's draft", async () => {
+  const { painter } = await mount();
+  const editor = grid(painter).shadowRoot!.querySelector<HTMLElement>(".menu")!;
+  await userEvent.click(
+    grid(painter).shadowRoot!.querySelector<HTMLElement>(
+      '.day[data-column="eve"] button.block[data-index="0"]',
+    )!,
+  );
+  await grid(painter).updateComplete;
+  expect(editor.matches(":popover-open")).toBe(true);
+  expect(saveButton(painter).disabled).toBe(true);
+  editor
+    .querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("wt-number-stepper")!
+    .shadowRoot!.querySelector<HTMLButtonElement>('button[data-step="1"]')!
+    .click();
+  await settle(painter);
+  editor.querySelector<HTMLElement>('[data-test="save-block"]')!.click();
+  await settle(painter);
+  expect(grid(painter).days.get("eve")).toEqual([{ ...headChef, headcount: 2 }]);
+  expect(saveButton(painter).disabled).toBe(false);
 });

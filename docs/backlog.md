@@ -4238,12 +4238,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   goes, since its day box already offers it. Before A586–A588.
   [Detail](backlog/workforce.md#a763-the-rota-view-redesigned-one-show-menu-no-button-per-cell-an-empty-week-that-says-why), [mockups](backlog/mockups/a763-rota/)
 
-- **A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
-  (owner, 2026-10-16).** Painting a second role over a day almost always resized the first; now a
-  block must be clicked before its edges resize it. Its editor becomes wide: a role dropdown, How
-  many beside it, and `[Cancel] [Delete] … [Save]`, saving only on Save.
-  [Detail](backlog/workforce.md#a761-the-staffing-grid-a-drag-paints-unless-a-block-is-picked-and-a-wide-block-editor)
-
 - **Staffing's day box: each area's staff roles and times.** The box lists each area's number; the
   mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
   block. Decision 13 of the [A720 plan](superpowers/plans/2026-10-15-a720-calendar-year-month.md),
@@ -4353,8 +4347,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
-  does not fit below its trigger up over it; Opening hours' grid placed its menu the same way before
-  A585-4 moved the code there. Next: place it above or beside the block instead.
+  does not fit below its trigger up over it. The staffing grid's block editor opens above its
+  block when it fits there and not below; with room on neither side it still covers the block, and
+  at 390 px the wide editor can cover blocks in the next column (A761's look, 2026-10-17). Opening
+  hours' block menu and the Copy to… chooser have no such placement. Next: place them above or
+  beside the block instead.
 
 - **A708. The special-day staffing painter draws every date on the location's baseline changeover,
   while each date's opening hours and staffing slots use that date's own.** So when a changeover
