@@ -1928,6 +1928,17 @@ labelled primitive, follow this pattern, not the unconnected-siblings one.
 
 ### Accessible names (`wt-button`, `wt-dialog`, `wt-input`, `wt-combobox`)
 
+An `aria-label` or `aria-labelledby` on a control that draws text must contain that text word for
+word, as one unbroken run of the name's words (WCAG 2.5.3, Label in Name: _"the name contains the
+text that is presented visually"_). axe-core 4.14 checks it by default
+(`label-content-name-mismatch`), but only on a control a mounted test draws, and only where the
+control has an `aria-label` or `aria-labelledby`: a control named by its own content is not checked
+at all, so a fix that removes the `aria-label` is checked by reading the name back
+(`toHaveAccessibleName`), not by a green axe run. Context the eye gets from the layout — a cell's
+row and zone, a day's month — either goes in visually hidden text inside the control, which joins a
+name taken from content, or stands before or after the drawn words in an `aria-label`, never between
+them.
+
 A shadow-DOM host's own `aria-label` attribute does not reach the focusable element inside its
 shadow root on its own — the native `ariaLabel` accessor every `HTMLElement` carries just
 reads/writes the host's own attribute, and the host itself has no interactive semantics. Every
@@ -3388,7 +3399,9 @@ one uniform set rather than a jumble of pill widths, and keep labels short — r
 the surrounding row or card label already says. Where a short label repeats more than once on the
 same screen for genuinely different things (two "Change" buttons, for Password and PIN; two "Set
 up" buttons, for the authenticator and Google), give each an `aria-label` with the fuller wording —
-otherwise a screen reader's "list all buttons" navigation can't tell them apart. A label that
+otherwise a screen reader's "list all buttons" navigation can't tell them apart. The fuller wording
+contains the drawn label word for word, as one unbroken run: "Change password" for a drawn "Change",
+"Set up authenticator" for a drawn "Set up" (see "Accessible names"). A label that
 appears once on the screen doesn't need one, matching the sitewide bare "Edit"/"Remove" convention.
 
 Right-align a card's footer actions (`justify-content: flex-end`) — the same "primary action
@@ -3551,6 +3564,11 @@ stripping `wt-dialog`'s `aria-labelledby`/`aria-label` produced zero axe violati
 implicit role of a bare native `<dialog>` (see "Accessible names" above). Breaking a component and
 watching the relevant test _fail_ is not optional busywork; it is the only way to know the test would
 have caught the defect it's named after.
+
+**Label in Name.** From axe-core 4.14.0 the default ruleset includes `label-content-name-mismatch`
+(WCAG 2.5.3), which fails a control whose `aria-label` or `aria-labelledby` leaves out the text it
+draws. It never looks at a control without either attribute, so for a control named by its content
+the check is a `toHaveAccessibleName` read-back, not the axe run (see "Accessible names").
 
 **Colour contrast** is checked as part of the same default ruleset, per theme, via `mountThemed`'s
 `theme` argument — see the `describe.each(["light", "dark"])` pattern above, used throughout the

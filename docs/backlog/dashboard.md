@@ -1203,3 +1203,24 @@ this stays open.
   tried). Measured (`~/waitron-campaign-c/item-a397-measurements.md`, A397.2): after a put-back, focus
   is on the page body and the dialog is no longer modal; the measurements attribute this to how
   `wt-dialog` handles being put back. Left open by A397 part 1 (#1429), under A331 batch 5.
+
+## `wt-combobox` without a search box never exposes `aria-required`
+
+Found by A506-6's review: with `required` set, a combobox without a search box put `aria-required`
+on nothing; one with a search box put it on the search input. The closed trigger is a `<button>`
+that opens a list, and `aria-required` is not an attribute of the button role (axe-core 4.14.0's
+role table in `axe.js` allows `button` only `aria-expanded` and `aria-pressed`, and lists
+`aria-required` among `combobox`'s allowed attributes, with `aria-expanded` and `aria-controls`
+required).
+
+One way to fix it (A775, 2026-10-16): move the trigger to the WAI-ARIA Authoring Practices'
+select-only combobox, `role="combobox"` on the trigger, which can carry `aria-required`. The APG
+marks the button-and-list pattern `wt-combobox` follows as deprecated ("Collapsible Dropdown
+Listbox": _"This pattern has been deprecated … The select-only combobox should be used as an
+alternative"_). A775 did not make the move. Tried in a throwaway worktree on 2026-10-16,
+`role="combobox"` on the trigger alone gave 44 `aria-required-attr` failures in
+`wt-combobox.a11y.test.ts`, all on the trigger (the role requires `aria-controls`, which the
+trigger does not carry); the move also changes the role every test and screen reader meets,
+and a combobox with a search box would then hold two comboboxes, the trigger and its search input.
+A775 kept the button and named it by its label and its chosen value instead (design-system.md,
+"Accessible names").
