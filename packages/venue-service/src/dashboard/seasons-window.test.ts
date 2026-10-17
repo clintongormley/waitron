@@ -1271,6 +1271,77 @@ it("a row before the binned season with a start but no name is not named", async
   expect(notes(el)).toEqual(["Saving deletes Winter."]);
 });
 
+const unanswered = () => vi.fn(() => new Promise<never>(() => {}));
+
+it("a new season starting inside the binned one's days is named beside the season before it", async () => {
+  const el = await mount(false, { readSeasonDeleteImpact: unanswered() });
+  el.seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+    { id: "late", name: "Late autumn", startsOn: "11-01", colour: "grey" },
+    { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
+  ];
+  await el.updateComplete;
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-3-name", "Christmas");
+  await change(el, "season-3-month", "12");
+  await change(el, "season-3-day", "20");
+  expect(rowKeys(el)[0]).toBe("winter");
+  await press(el, bins(el)[0]!);
+  expect(notes(el)).toEqual(["Saving deletes Winter; its days join Late autumn and Christmas."]);
+});
+
+it("the seasons a binned one's days join are listed by start, round the year from its own", async () => {
+  const el = await mount(false, { readSeasonDeleteImpact: unanswered() });
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-4-name", "Kings");
+  await change(el, "season-4-month", "01");
+  await change(el, "season-4-day", "6");
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-5-name", "Christmas");
+  await change(el, "season-5-month", "12");
+  await change(el, "season-5-day", "20");
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-6-name", "Easter");
+  await change(el, "season-6-month", "04");
+  await change(el, "season-6-day", "1");
+  await press(el, bins(el)[0]!);
+  expect(notes(el)).toEqual(["Saving deletes Winter; its days join Autumn, Christmas, and Kings."]);
+});
+
+it("a new season starting outside the binned one's days leaves the note naming one season", async () => {
+  const el = await mount(false, { readSeasonDeleteImpact: unanswered() });
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-4-name", "Christmas");
+  await change(el, "season-4-month", "12");
+  await change(el, "season-4-day", "20");
+  await press(el, bins(el)[3]!);
+  expect(notes(el)).toEqual(["Saving deletes Autumn; its days join Summer."]);
+});
+
+it("a season moved to start inside the binned one's days is named, and a binned neighbour never is", async () => {
+  const el = await mount(false, { readSeasonDeleteImpact: unanswered() });
+  await change(el, "season-0-month", "10");
+  await change(el, "season-0-day", "15");
+  await press(el, bins(el)[3]!);
+  expect(notes(el)).toEqual(["Saving deletes Autumn; its days join Summer and Winter."]);
+  await press(el, bins(el)[2]!);
+  expect(notes(el)).toEqual([
+    "Saving deletes Autumn; its days join Spring and Winter.",
+    "Saving deletes Summer; its days join Spring.",
+  ]);
+});
+
+it("a season holding the binned one's start and starting inside its days is named once", async () => {
+  const el = await mount(false, { readSeasonDeleteImpact: unanswered() });
+  await change(el, "season-0-month", "04");
+  for (const index of [3, 2, 1]) await press(el, bins(el)[index]!);
+  expect(notes(el)).toEqual([
+    "Saving deletes Autumn; its days join Winter.",
+    "Saving deletes Summer; its days join Winter.",
+    "Saving deletes Spring; its days join Winter.",
+  ]);
+});
+
 it("a Save refused because a changed season is gone marks that row until it is binned", async () => {
   const saveSeasons = vi
     .fn<WindowApi["saveSeasons"]>()

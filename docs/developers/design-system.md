@@ -4904,8 +4904,10 @@ goes to the bin of the row that took the removed row's place, else the bin of th
 "+ Season". Binning a
 stored season reads what deleting it loses (`GET …/seasons/:seasonId/delete-impact`; a newer read's
 answer wins) and adds a note under the table, in a live region: "Saving deletes {name}; its days
-join {previous}.", where {previous} is the row starting last before it, round the year; or "Saving
-deletes {name}." when that row has no name or no other row has a whole start. Once the read answers,
+join {previous}.", where {previous} lists, joined by "and", every remaining row that will hold
+some of its stored days: the row holding its start day, then each row whose start falls before the
+next stored season's start, in start order round the year. A row with no name, or no whole start,
+is left out, and the note reads "Saving deletes {name}." when no row is left. Once the read answers,
 the note adds "The hours of {departments} in it are lost.", "No department has hours in it." or,
 when the read fails, "Which departments lose hours could not be read."
 

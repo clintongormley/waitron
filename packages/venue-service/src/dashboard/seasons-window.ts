@@ -49,12 +49,17 @@ import { refusalOf, type Refusal } from "./refusal.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
+const startOf = (row: SeasonRow): string => `${row.month}-${row.day.padStart(2, "0")}`;
+
 const seasonOf = (row: SeasonRow): OpeningHoursModel["seasons"][number] => ({
   id: row.key,
   name: row.name,
-  startsOn: `${row.month}-${row.day.padStart(2, "0")}`,
+  startsOn: startOf(row),
   colour: row.colour,
 });
+
+const listOf = (names: readonly string[]): string =>
+  new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" }).format(names);
 
 type RowField = "name" | "day" | "month" | "colour";
 const errorFieldOf = (field: RowField): SeasonRefusedField =>
@@ -324,20 +329,31 @@ export class SeasonsWindow extends LitElement {
     if (this.impacts.get(id)?.token !== token) return;
     this.impacts = new Map(this.impacts).set(id, { token, impact });
   }
-  /** The row whose days a binned season's days join: the one starting last before it, round the year. */
-  private joins(start: string): string | undefined {
-    const starts = this.rows.flatMap((row) =>
-      row.day && row.month ? [{ start: `${row.month}-${row.day.padStart(2, "0")}`, row }] : [],
+  /**
+   * The named rows that will hold some of a binned season's stored days: the row holding its start,
+   * then each row starting before the next stored start, in start order round the year.
+   */
+  private receivers(season: SeasonRow): string[] {
+    const start = startOf(season);
+    // Prefixed so plain string order runs round the year from the binned season's start.
+    const from = (row: SeasonRow) => (startOf(row) >= start ? "0" : "1") + startOf(row);
+    const end = this.baseline!.rows.reduce(
+      (soonest, row) => (row.key !== season.key && from(row) < soonest ? from(row) : soonest),
+      "2",
     );
-    starts.sort((a, b) => a.start.localeCompare(b.start));
-    const before = starts.filter((each) => each.start < start);
-    return (before.at(-1) ?? starts.at(-1))?.row.name.trim() || undefined;
+    const proposed = this.rows
+      .filter((row) => row.day && row.month)
+      .map((row) => ({ at: from(row), row }))
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    const holding = proposed[0]?.at === `0${start}` ? proposed[0] : proposed.at(-1);
+    const inside = proposed.filter((each) => each.at > `0${start}` && each.at < end);
+    const rows = new Set([holding, ...inside].flatMap((each) => (each ? [each.row] : [])));
+    return [...rows].flatMap((row) => row.name.trim() || []);
   }
   private deleteNotes() {
     const notes = this.draft!.deleted.map((id) => {
       // A merge keeps only binned ids the new list still holds, and the baseline holds that list.
       const season = this.baseline!.rows.find((row) => row.key === id)!;
-      const start = `${season.month}-${season.day.padStart(2, "0")}`;
       const found = this.impacts.get(id)?.impact;
       const loses =
         found === undefined
@@ -346,17 +362,13 @@ export class SeasonsWindow extends LitElement {
             ? t("season.delete_loses_unknown")
             : found.departments.length
               ? format("season.delete_loses", {
-                  departments: new Intl.ListFormat(currentLocale(), {
-                    style: "long",
-                    type: "conjunction",
-                  }).format(found.departments.map((department) => department.name)),
+                  departments: listOf(found.departments.map((department) => department.name)),
                 })
               : t("season.delete_loses_none");
-      const previous = this.joins(start);
-      const deletes =
-        previous === undefined
-          ? format("season.delete_pending_alone", { name: season.name })
-          : format("season.delete_pending", { name: season.name, previous });
+      const receivers = this.receivers(season);
+      const deletes = receivers.length
+        ? format("season.delete_pending", { name: season.name, previous: listOf(receivers) })
+        : format("season.delete_pending_alone", { name: season.name });
       return html`<p data-test="delete-note">${deletes} ${loses}</p>`;
     });
     return html`<div class="notes" role="status">${notes}</div>`;
@@ -565,7 +577,7 @@ export class SeasonsWindow extends LitElement {
         >
       </td>
       <td>${row.name}</td>
-      <td class="text">${formatMonthDay(`${row.month}-${row.day.padStart(2, "0")}`)}</td>
+      <td class="text">${formatMonthDay(startOf(row))}</td>
       <td class="until" data-test="runs-until">${this.until(row.key)}</td>
     </tr>`;
   }
