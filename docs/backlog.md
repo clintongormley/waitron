@@ -4117,6 +4117,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal),
   [the purchase form's case](backlog/dashboard.md#once-put-back-with-an-edit-keyboard-focus-is-outside-the-dialog-and-escape-neither-asks-nor-closes)
 
+- **In a text field inside a dialog, with the field's text selected, End and Home do not move the
+  caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the
+  period dialog; a bare input and a bare dialog in the same Chromium behave normally. Cause not
+  found; not tested on main.
+
 - **On a hovered Products row in the dark theme, status and allergen badge borders appear to
   disappear into the row** — the earlier screenshot-only observation remains open. Contrast for those
   borders, a category row's maker link and the prep stations screen remains unmeasured. Left open by
@@ -4391,9 +4396,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
   second read.
 
-- **A702. Opening hours' season chips may widen the page on a long season name.**
-  `packages/venue-service/src/dashboard/season-chips.ts` has no width rule, untried at phone width.
-  Next: try it at 390 px and wrap it with `max-width: 100%; overflow-wrap: anywhere`.
+- **A702. Opening hours' season chip is clipped on a season name that is one long word.** Measured
+  on the A721 branch at 390 px on 2026-10-18: the page does not scroll sideways (scrollWidth 390 =
+  innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
+  chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
+  text with `overflow-wrap: anywhere`.
 
 - **A703. Keeping a Calendar view's address words is a special case named in the app.**
   `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`

@@ -4885,7 +4885,8 @@ Periods window, because its footer holds the draft's Save and the form's bottom 
 modal's `wt-close` reaches the screen, which takes the window pair out of the address.
 
 The body is a table in a scrolling region named "Seasons", with the columns Colour, Season, Starts
-on, Runs until and a bin. Rows run from the season in force on 1 January, then by start (`draftOf`,
+on, Runs until and a bin. The bin column stays at the region's trailing edge while the others scroll
+sideways under it, as a `wt-data-table` column with `pinned: "end"` does. Rows run from the season in force on 1 January, then by start (`draftOf`,
 `season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
 Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other named rows
 that use each colour; two seasons may share one), its name, and its start as a Day and a Month
@@ -4897,7 +4898,9 @@ the end in the first calendar colour no row uses (the first colour when every on
 one starts. The list re-sorts by start date when you save."
 
 The bin, named "Delete {name}" or, on a row with no name, "Delete this new season", removes the row
-from the draft; the last remaining row's bin is disabled, and Cancel is the only undo. Binning a
+from the draft; the last remaining row's bin is disabled, and Cancel is the only undo. Focus then
+goes to the bin of the row that took the removed row's place, else the bin of the row above, else
+"+ Season". Binning a
 stored season reads what deleting it loses (`GET …/seasons/:seasonId/delete-impact`; a newer read's
 answer wins) and adds a note under the table, in a live region: "Saving deletes {name}; its days
 join {previous}.", where {previous} is the row starting last before it, round the year; or "Saving
