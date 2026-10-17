@@ -359,8 +359,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   waiting responses and exact input import; the HTTP routes use these same operations.
   New direct checks exercise the real hour selector and opaque module contracts. The module-owned
   terminal preparation stage now checks clock agreement, taxpayer-wide answers, password confirmation,
-  retained waits and exact input replay. Connecting it to the command's claim, delivery and publication
-  lifecycle remains open, alongside the complete wizard.
+  retained waits and exact input replay. The actual command now reaches this stage through its owned
+  claim and password-recovery path. Built-command checks use a migrated synthetic database and an
+  offline time reply. Missing delivery/publication support still refuses after preparation;
+  a successor workspace without a retired-evidence adapter refuses before clock selection.
+  Delivery, activation and checked publication remain open, alongside the complete wizard.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

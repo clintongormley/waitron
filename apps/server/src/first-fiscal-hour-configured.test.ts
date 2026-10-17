@@ -32,7 +32,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(NOW);
   external.internet.mockImplementation(async () => {
     const mono = performance.now();

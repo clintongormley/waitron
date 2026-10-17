@@ -508,3 +508,40 @@ downstream import check, so a cancelled-command preflight case was added and the
 then failed. The initial receipt remains alongside the corrected controls. Both changed fiscal
 test files retain their entire former contents as byte-identical prefixes. The disposable checkout
 and its parent were removed after checking all 6,748 product paths and open working directories.
+
+## Command ownership and preparation entry, 2026-10-17
+
+Existing assertions remain unchanged. New command checks exercise
+the shared claim, password recovery, retained wait and input-import stages. The built-command check
+copies a migrated synthetic database and drives its real terminal prompts. Only the external HTTPS
+clock call is replaced with an offline reply; it does not file anything.
+
+An interrupted command must match its frozen request, environment and module versions before
+recovering ownership. The recovered capability is checked before and after the database opens.
+Declining the plan preserves ownership. JSON activation input does not grant owned setup authority,
+and an incompatible deployment stamp is refused before a new attempt is recorded.
+
+Preparation alone still returns `setup.not_ready` instead of applying the venue directly. Delivery,
+activation and checked publication remain unfinished. Without a retired-evidence adapter, the shared
+runtime also refuses a successor workspace before clock selection. This is a refusal for missing
+evidence, not qualification of the future recovery path.
+
+The local receipt directory is `a679-cli-lifecycle-20261017`. It retains initial failing checks,
+installed omission controls and their restorations. The first decline control passed because the
+new fixture's empty address prompted again and changed the request before confirmation. A new
+assertion reproduced that unintended path; supplying a fixed address makes the case reach the
+decline itself. Earlier control logs are retained separately from the corrected set.
+
+Two existing server fixtures add `performance` beside `Date` in `vi.useFakeTimers`:
+`first-fiscal-hour-configured.test.ts:35` and `first-fiscal-hour-readiness.test.ts:48`.
+Every original assertion and expected value remains unchanged. In the independently installed
+starting commit, adding a 1.1-second delay after comparison produces `clock_corrected` with the
+original fixture and succeeds when both clocks are paused. The production correction check still
+uses real elapsed time; the built-command check exercises it without fake timers.
+
+The complete provisioning run passes 857 cases across 48 files. Its measured coverage is
+95.17% statements, 92.9% branches, 98.4% functions and 97.37% lines, so the package gate still
+fails. The corrected six server files pass 29 cases. The fiscal selection and protected suites
+pass 160 cases; root boundary/error/teardown checks pass 3,117. Ten installed omissions fail their
+intended assertions, with passing restorations; the final installed command/runtime run passes
+149 cases. These results qualify this checkpoint, not Task 4 or the whole branch.

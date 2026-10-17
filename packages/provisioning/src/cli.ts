@@ -1,5 +1,5 @@
 import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
-import { parseArgs } from "node:util";
+import { parseArgs, isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import {
   deploymentTableExists,
@@ -16,8 +16,18 @@ import {
   hashPassword,
   hashPin,
   normalizeAndValidateEmail,
+  verifyPin,
 } from "@waitron/identity";
-import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
+import {
+  enabledModules,
+  initialSetupFor,
+  type ModuleConfig,
+  type WaitronModule,
+} from "@waitron/module";
+import { randomBytes } from "node:crypto";
+import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
+import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
@@ -29,11 +39,6 @@ import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.
 import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
 import "./errors.js";
 
-/**
- * Everything this CLI does to the outside world, injected, so every path is testable with no
- * process, tty or database. `planVenue` is pure and deliberately NOT injected: the tests render the
- * summary from a real plan rather than a fixture that could drift from it.
- */
 export interface CliDeps {
   io: ProvisioningIo;
   env: Record<string, string | undefined>;
@@ -43,6 +48,7 @@ export interface CliDeps {
   /** The composition list (`@waitron/composition`'s `ALL_MODULES`). */
   modules: readonly WaitronModule[];
   configureVenueModules?: (directory: string) => readonly WaitronModule[];
+  configureFirstSetup?: (directory: string) => ReturnType<typeof createFirstSetupRuntime>;
   initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
@@ -265,7 +271,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         email: adminEmail,
       },
     };
-    const installed = deps.configureVenueModules?.(venueDir) ?? deps.modules;
+    const runtime = deps.configureFirstSetup?.(venueDir);
+    const installed = runtime?.modules ?? deps.configureVenueModules?.(venueDir) ?? deps.modules;
     const selection = venueFiscalSelection(installed, request.location.fiscalTerritory);
     const fiscalConfig = selection.config;
     // The regime's own rules on the fields just typed, through the seat the setup wizard uses, before
@@ -281,90 +288,145 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
     const actions = planVenue(request, modules);
     const requested = resolveEnvironment(deps.env);
-
-    return await withVenueState(venueDir, deps, async (target) => {
-      let environment: DeploymentEnvironment | null;
-      let migrated: boolean;
-      try {
-        // Only the state reads are classified as unreadable; the stamp and the apply keep their own
-        // errors.
-        environment = await deps.readEnvironment(target);
-        // A stamp is itself proof the table is there.
-        migrated = environment !== null || (await deps.readDeploymentTable(target));
-      } catch (error) {
-        throw asUnreadable(error, venueDir);
-      }
-      if (!migrated) {
-        // Opening a virgin directory succeeds — the store creates it — so a mistyped path lands here.
-        throw new AppError("provisioning.database_unmigrated", { database: venueDir });
-      }
-
-      // `provisionVenue` and `adoptFromPrimary` run the same guard.
-      const ensure = actions.find((a) => a.kind === "ensure-tenant");
-      if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-        assertNoForeignTenant(
-          await deps.readTenants(target),
-          { country: ensure.country, taxId: ensure.taxId },
-          venueDir,
-        );
-      }
-
-      // The environment ALREADY stamped when there is one, so the header never announces a value
-      // the stamp below is about to refuse.
-      deps.io.stdout(`Plan for a venue in ${venueDir} (${environment ?? requested}):`);
-      deps.io.stdout("");
-      if (environment === null) {
-        // A stamp cannot be taken back, so it is listed in what the operator confirms.
-        deps.io.stdout(`  stamp this venue directory ${requested} — permanent, from WAITRON_ENV`);
-      }
-      for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
-      deps.io.stdout("");
-
-      if (values.yes !== true) {
-        const answer = (await deps.io.prompt("Apply this plan? [y/N] ")).trim().toLowerCase();
-        if (answer !== "y" && answer !== "yes") {
-          deps.io.stderr("Nothing was applied.");
-          return 1;
-        }
-      }
-
-      // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
-      // stamping is permanent, so declining must leave the directory exactly as it was found.
-      const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
-      const initialVenue =
-        deps.initialVenue ??
-        (inputPath?.trim()
-          ? initialVenueApplyInput(await readInitialVenueFile(inputPath))
-          : undefined);
-      if (
-        [...(initialVenue?.moduleInputs?.keys() ?? [])].some(
-          (name) =>
-            !modules.some(
-              (module) => module.name === name && module.provisioning?.seed !== undefined,
-            ),
-        )
-      )
+    const owned =
+      runtime !== undefined && modules.some((module) => initialSetupFor(modules, module.name));
+    let owner: FirstSetupOwnerAttempt | undefined;
+    if (owned) {
+      if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
         throw new AppError("provisioning.initial_input_invalid", {});
-      await deps.stampEnvironment(target, requested);
-
-      try {
-        const result = await deps.applyVenue(actions, {
-          ...initialVenue,
-          db: target,
-          modules,
+      const retained = await runtime.store.readForRepair();
+      if (retained !== null) {
+        const state = retained.state;
+        if (!["claimed", "consumption-intent"].includes(state.status))
+          throw new AppError("setup.attempt_uncertain", {});
+        runtime.assertSelection(state);
+        if (
+          state.frozen.environment !== requested ||
+          !isDeepStrictEqual(
+            withoutCredentials(state.frozen.request),
+            withoutCredentials(request),
+          ) ||
+          !(await verifyPin(adminPin, state.frozen.request.admin.pinHash))
+        )
+          throw new AppError("setup.attempt_conflict", {});
+        if (!(await confirmVenuePlan(actions, venueDir, requested, requested, values.yes, deps)))
+          return 1;
+        const inspection = await runtime.resolution.inspectFirstSetupResolution();
+        const recovered = await runtime.owner.recoverFirstSetupOwner({
+          inspectionId: inspection.inspectionId,
+          revision: state.revision,
+          ownerGeneration: state.ownerGeneration,
+          clientClaimNonce: randomBytes(32).toString("base64url"),
+          password: adminPassword,
         });
-        if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
-        deps.io.stdout("");
-        deps.io.stdout(`node:     ${result.nodeId}`);
-        for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
-        return 0;
-      } catch (error) {
-        if (isUniqueViolation(error)) {
-          throw new AppError("provisioning.venue_conflict", { database: venueDir });
-        }
-        throw error;
+        owner = { ...recovered.state, capability: recovered.capability };
       }
-    });
+    }
+
+    return await withVenueState(
+      venueDir,
+      deps,
+      async (target) => {
+        let environment: DeploymentEnvironment | null;
+        let migrated: boolean;
+        try {
+          // Only the state reads are classified as unreadable; the stamp and the apply keep their own
+          // errors.
+          environment = await deps.readEnvironment(target);
+          // A stamp is itself proof the table is there.
+          migrated = environment !== null || (await deps.readDeploymentTable(target));
+        } catch (error) {
+          throw asUnreadable(error, venueDir);
+        }
+        if (!migrated) {
+          // Opening a virgin directory succeeds — the store creates it — so a mistyped path lands here.
+          throw new AppError("provisioning.database_unmigrated", { database: venueDir });
+        }
+        if (owned && environment !== null && environment !== requested)
+          throw new AppError("deployment.already_stamped", {
+            stamped: environment,
+            requested,
+          });
+
+        // `provisionVenue` and `adoptFromPrimary` run the same guard.
+        const ensure = actions.find((a) => a.kind === "ensure-tenant");
+        if (ensure !== undefined && ensure.kind === "ensure-tenant") {
+          assertNoForeignTenant(
+            await deps.readTenants(target),
+            { country: ensure.country, taxId: ensure.taxId },
+            venueDir,
+          );
+        }
+
+        if (
+          owner === undefined &&
+          !(await confirmVenuePlan(actions, venueDir, environment, requested, values.yes, deps))
+        )
+          return 1;
+
+        if (owned) {
+          if (owner === undefined) {
+            const claim = await runtime.owner.claimFirstSetup(
+              {
+                environment: requested,
+                request: {
+                  ...withoutCredentials(request),
+                  admin: {
+                    ...withoutCredentials(request).admin,
+                    password: adminPassword,
+                    pin: adminPin,
+                  },
+                },
+              },
+              randomBytes(32).toString("base64url"),
+            );
+            owner = { ...claim.state, capability: claim.capability };
+          }
+          const prepared = await prepareFirstSetupCommand(runtime, owner, deps.io);
+          if (prepared.status !== "ready") return 1;
+          // Prepared inputs alone do not satisfy document delivery or checked publication.
+          throw new AppError("setup.not_ready", {});
+        }
+
+        // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
+        // stamping is permanent, so declining must leave the directory exactly as it was found.
+        const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
+        const initialVenue =
+          deps.initialVenue ??
+          (inputPath?.trim()
+            ? initialVenueApplyInput(await readInitialVenueFile(inputPath))
+            : undefined);
+        if (
+          [...(initialVenue?.moduleInputs?.keys() ?? [])].some(
+            (name) =>
+              !modules.some(
+                (module) => module.name === name && module.provisioning?.seed !== undefined,
+              ),
+          )
+        )
+          throw new AppError("provisioning.initial_input_invalid", {});
+        await deps.stampEnvironment(target, requested);
+
+        try {
+          const result = await deps.applyVenue(actions, {
+            ...initialVenue,
+            db: target,
+            modules,
+          });
+          if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
+          deps.io.stdout("");
+          deps.io.stdout(`node:     ${result.nodeId}`);
+          for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
+          return 0;
+        } catch (error) {
+          if (isUniqueViolation(error)) {
+            throw new AppError("provisioning.venue_conflict", { database: venueDir });
+          }
+          throw error;
+        }
+      },
+      owner === undefined ? undefined : () => runtime!.owner.authorize(owner!),
+    );
   } catch (error) {
     return reportFailure(error, deps);
   }
@@ -378,8 +440,10 @@ async function withVenueState(
   venueDir: string,
   deps: CliDeps,
   body: (target: Database) => Promise<number>,
+  authorize?: () => Promise<unknown>,
 ): Promise<number> {
-  await assertVenueFirstSetupAllowed(venueDir);
+  if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
+  else await authorize();
   let store: VenueDatabase;
   try {
     store = await deps.openVenue(venueDir);
@@ -387,11 +451,40 @@ async function withVenueState(
     throw asUnreadable(error, venueDir);
   }
   try {
-    await assertVenueFirstSetupAllowed(venueDir);
+    if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
+    else await authorize();
     return await body(store.venue);
   } finally {
     await store.close();
   }
+}
+
+function withoutCredentials(request: VenueRequest) {
+  const { pinHash: _, passwordHash: __, ...admin } = request.admin;
+  void _;
+  void __;
+  return { ...request, admin };
+}
+
+async function confirmVenuePlan(
+  actions: ReturnType<typeof planVenue>,
+  venueDir: string,
+  environment: DeploymentEnvironment | null,
+  requested: DeploymentEnvironment,
+  yes: boolean | undefined,
+  deps: CliDeps,
+): Promise<boolean> {
+  deps.io.stdout(`Plan for a venue in ${venueDir} (${environment ?? requested}):`);
+  deps.io.stdout("");
+  if (environment === null)
+    deps.io.stdout(`  stamp this venue directory ${requested} — permanent, from WAITRON_ENV`);
+  for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
+  deps.io.stdout("");
+  if (yes === true) return true;
+  const answer = (await deps.io.prompt("Apply this plan? [y/N] ")).trim().toLowerCase();
+  if (answer === "y" || answer === "yes") return true;
+  deps.io.stderr("Nothing was applied.");
+  return false;
 }
 
 /**

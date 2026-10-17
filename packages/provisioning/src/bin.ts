@@ -53,7 +53,7 @@ async function main(): Promise<number> {
       },
       applyVenue,
       modules: ALL_MODULES,
-      configureVenueModules: (venueDir) => {
+      configureFirstSetup: (venueDir) => {
         const stateDir = process.env.WAITRON_STATE_DIR;
         if (stateDir === undefined || stateDir === "") throw new AppError("setup.not_ready", {});
         return createFirstSetupRuntime({
@@ -62,7 +62,7 @@ async function main(): Promise<number> {
           venueDir,
           modules: ALL_MODULES,
           database: () => database,
-        }).modules;
+        });
       },
       // The same variable `apps/server` reads; unset, no `modules.json` is written.
       writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),

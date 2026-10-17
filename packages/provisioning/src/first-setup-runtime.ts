@@ -25,6 +25,7 @@ import { createFirstSetupResolutionInspection } from "./first-setup-resolution-i
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { createFirstSetupPreparation } from "./first-setup-preparation.js";
+import { readFirstSetupRetirements } from "./first-setup-workspace.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -66,6 +67,13 @@ export function createFirstSetupRuntime(options: {
   readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
   onOwnershipRecovered?: (attemptId: string) => void;
 }) {
+  const readRetiredSetup: NonNullable<ModuleOperationHost["readRetiredSetup"]> =
+    options.readRetiredSetup ??
+    (async () => {
+      if ((await readFirstSetupRetirements(options)).length !== 0)
+        throw new AppError("setup.not_ready", {});
+      return [];
+    });
   const sharedCoordinator = createFirstSetupCoordinator();
   const holds = new AsyncLocalStorage<FirstSetupHold>();
   const replacementAuthority = new AsyncLocalStorage<() => Promise<void>>();
@@ -80,7 +88,7 @@ export function createFirstSetupRuntime(options: {
       return preparation.current.readSetupFacts(binding);
     },
     read: async (binding) => options.readPublicEvidence?.(binding),
-    readRetiredSetup: options.readRetiredSetup,
+    readRetiredSetup,
     withPreparationState: (binding, run) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.withPreparationState(binding, run);
@@ -164,6 +172,7 @@ export function createFirstSetupRuntime(options: {
         )
       )
         throw new AppError("setup.attempt_conflict", {});
+      if (options.readRetiredSetup === undefined) await readRetiredSetup(held.module);
       const database = options.database?.();
       const contribution = initialSetupFor(modules, held.module);
       if (database === undefined || contribution?.localHistory === undefined)
@@ -237,6 +246,7 @@ export function createFirstSetupRuntime(options: {
     ...authorization,
     ...createFirstSetupPreparation({
       ...options,
+      readRetiredSetup,
       ...authorization,
       modules,
       owner,
