@@ -113,6 +113,8 @@ interface Answers {
   /** The station list never answers. */
   holdStations?: boolean;
   timesFail?: unknown;
+  /** Stations whose times reads never answer. */
+  holdTimes?: readonly string[];
   /** Month reads that never answer. */
   holdMonths?: readonly string[];
   /** Station-times reads answer December's dates, whatever they asked for. */
@@ -143,6 +145,7 @@ async function mount(
     const times = /\/stations\/([^/]+)\/service-times\?from=([\d-]+)&to=([\d-]+)$/.exec(path);
     if (times) {
       if (answers.timesFail) throw answers.timesFail;
+      if (answers.holdTimes?.includes(times[1]!)) return new Promise(() => {});
       return answers.timesAsDecember
         ? stationTimes(times[1]!, "2026-11-30", "2027-01-03")
         : stationTimes(times[1]!, times[2]!, times[3]!);
@@ -964,6 +967,35 @@ describe("a prep station in the Calendar", () => {
     await el.updateComplete;
     expect(week(el)!.model?.month).toBe("2026-12");
     expect(week(el)!.station?.state).toBe("loading");
+  });
+
+  it("a station whose times have not answered draws as loading, not with the last station's", async () => {
+    const { el, paths } = await mount(grillWeek, undefined, false, { holdTimes: ["s2"] });
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    chooseShown(el, "station:s2");
+    await expect
+      .poll(() => timesReads(paths))
+      .toContain(
+        "/management-api/venue-service/stations/s2/service-times?from=2026-11-30&to=2027-01-03",
+      );
+    await el.updateComplete;
+    await week(el)!.updateComplete;
+    expect(week(el)!.station).toEqual({ id: "s2", state: "loading" });
+  });
+
+  it("a station list delivered again unchanged hands the Week the same station", async () => {
+    const watched = vi.spyOn(OpeningHoursApi.prototype, "watchStations");
+    const { el } = await mount(grillWeek);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    const shown = week(el)!.station;
+    // STATIONS holds only the fields the Calendar reads, as the mocked station list does.
+    const deliver = watched.mock.calls[0]![0] as (stations: readonly object[]) => void;
+    deliver(structuredClone(STATIONS));
+    await el.updateComplete;
+    expect(week(el)!.station).toBe(shown);
+    deliver(STATIONS.map((station) => ({ ...station, name: `${station.name} renamed` })));
+    await el.updateComplete;
+    expect(week(el)!.station).not.toBe(shown);
   });
 
   it("a week across two months draws the station on every one of its days", async () => {

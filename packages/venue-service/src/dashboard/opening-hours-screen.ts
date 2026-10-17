@@ -750,7 +750,15 @@ export class OpeningHoursScreen extends LitElement {
     const times =
       this.stationTimes?.key === this.stationTimesWatch.month ? this.stationTimes.value : undefined;
     const meta = this.monthModel;
-    const inputs = [this.stationId, station, times, meta, this.readMonth(), this.model];
+    const inputs = [
+      this.stationId,
+      station?.id,
+      station?.name,
+      times,
+      meta,
+      this.readMonth(),
+      this.model,
+    ];
     const held = this.#stationShow;
     if (held && held.inputs.every((input, index) => input === inputs[index])) return held.show;
     const show: StationShow = station
