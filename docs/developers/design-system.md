@@ -4285,8 +4285,7 @@ Opening hours' Year.
   "Seasons…", which opens the Seasons window, and "Periods…", which opens the Periods window, on a
   read-only page too. Seasons are named, coloured, moved, added and deleted in the Seasons
   window (below, "Seasons window"). A new season starts with a copy of the department and zone
-  weeks of the season that held its start before the Save; a deleted season's days join the season
-  before it.
+  weeks of the season that held its start before the Save.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. Above its months
   the Year gives a coverage sentence only when the shown year's official list is not complete:

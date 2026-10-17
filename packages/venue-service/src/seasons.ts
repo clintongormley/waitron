@@ -75,7 +75,7 @@ async function checkScheduleAfterSeasonWrite(tx: Transaction, cfg: VenueScope): 
 
 /** Applies a change to the venue's seasons and answers them by start. A changed season keeps its
  *  id, so its weeks stay with it; a new one copies the weeks of the season holding its start
- *  before the change; a deleted one's days join the season before it. */
+ *  before the change. */
 export async function saveSeasons(
   tx: Transaction,
   cfg: VenueScope,
