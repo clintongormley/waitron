@@ -39,7 +39,7 @@ export default defineConfig({
             provider: playwright({}),
             headless: true,
             instances: [{ browser: "chromium" }],
-            // The a11y suite imports @waitron/ui's a11y-helpers.ts, whose beforeEach runs this command.
+            // The a11y suite imports @waitron/ui's a11y-helpers.ts, whose beforeEach runs `parkPointer`.
             commands: { ...parkPointerCommands, ...pointerGestureCommands },
           },
         },

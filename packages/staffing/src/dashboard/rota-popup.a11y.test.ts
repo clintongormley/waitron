@@ -9,7 +9,7 @@ afterEach(() => cleanup());
 describe.each(["light", "dark"] as const)("rota-popup accessibility (%s)", (theme) => {
   test.each(["open beside", "open with a list of buttons", "sheet"])("%s", async (state) => {
     const el = (await mountThemed(
-      `<div><button>+ unfilled</button><rota-popup heading="Fri 4 Dec · Sous chef · 09:00–17:00"></rota-popup></div>`,
+      `<div><button>09:00–17:00 · Fill</button><rota-popup heading="Fri 4 Dec · Sous chef · 09:00–17:00"></rota-popup></div>`,
       theme,
     )) as HTMLElement;
     const popup = el.querySelector<RotaPopup>("rota-popup")!;

@@ -41,7 +41,7 @@ type Grid = LitElement & { focusTarget(target: Target): boolean };
  *  `PHONE_WIDTH` (`opening-hours-week.ts`), which venue-service does not export. */
 export const PHONE_WIDTH = 560;
 /** The least a finger moves across the day to step a day: the Calendar Week's `SWIPE_PX`
- *  (`opening-hours-week.ts:42`), which venue-service does not export. */
+ *  (`opening-hours-week.ts`), which venue-service does not export. */
 const SWIPE_PX = 48;
 
 /** The venue's business day now. The read gives only its own week's changeovers, so a day just

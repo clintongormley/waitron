@@ -41,7 +41,7 @@ async function useViewport(width: number, height: number) {
 }
 function anchorAt(left: number, top: number, parent: HTMLElement = host): HTMLButtonElement {
   const anchor = document.createElement("button");
-  anchor.textContent = "+ unfilled";
+  anchor.textContent = "09:00–17:00 · Fill";
   anchor.style.cssText = `position: absolute; left: ${left}px; top: ${top}px; width: 120px; height: 40px; box-sizing: border-box;`;
   parent.append(anchor);
   return anchor;

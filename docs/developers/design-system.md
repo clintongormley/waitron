@@ -4064,9 +4064,10 @@ week's title, › and a Show menu (Everyone, then every area), then at the end t
 changed, what needs attention, the labour count (or a quiet "No labour rules to check against")
 and the one action. With no `area`, or an unknown one, the Rota shows its first area; with no active
 area it shows Everyone. The title is the week's range, keeps one width from week to week, and links
-each month it names to Staffing → Month; on a phone it is plain text. The counts (unfilled, partly
+each month it names to Staffing → Month when you may open that view; on a phone it is plain text. The counts (unfilled, partly
 uncovered, over; zero counts left out) are buttons: each press moves to the next such slot or
-shift, wrapping, and scrolls it into view. With none left the bar reads "All slots filled", "No
+shift (in Everyone the unfilled count moves to the next day's header, on a phone its strip button),
+wrapping, and scrolls it into view. With none left the bar reads "All slots filled", "No
 shifts yet" in Everyone when the week has none, or "Nothing to fill". Publish is in the bar of every
 week that is not published, quiet and disabled while the week has no shifts or its labour warnings
 have not loaded; it reads "Publish changes" on a published week being changed. A published week
@@ -4081,11 +4082,11 @@ shifts and shifts whose area is inactive sit under Not in a slot, shown only whe
 version's shifts outside its business week remain visible on the first or last day with the
 adjacent-week label. An unfilled slot reads Fill; choosing it opens its picker beside the slot (or
 on its other side, or below it, to stay inside the window), which follows the slot as the grid
-scrolls and closes once the slot leaves the window. Staff-role holders come first, with leave or
+scrolls and closes once the slot scrolls out of view. Staff-role holders come first, with leave or
 overlapping work and their week hours against their contract, and "would go over … h contract" when
 the slot would take them over it; Show everyone includes the other active people. A choice writes at
-once, and a refusal stays in the picker for retry, or shows under the bar if the picker was closed
-while the write was in flight. The empty part of a cell holds "+ Add shift", its words shown on
+once, and a refusal stays in the picker for retry, and shows under the bar when the picker is
+closed other than by its Cancel, until the next pick. The empty part of a cell holds "+ Add shift", its words shown on
 hover or focus, which opens the shift editor with the day, area and staff role chosen. In an area
 the person-level weekly labour warnings have no cell; the bar's labour count, the publish dialog and
 Everyone still show them.
@@ -4095,8 +4096,9 @@ staff role comes last. Each shows their hours under the name and their shifts as
 staff role's colour, area and role. Clicking the empty part of a day opens a menu of that day's open
 slots, those in the person's staff roles first and the rest marked outside staff role, then
 "Another shift…" (the shift editor). An area with no staffing painted for the week says so, explains
-that slots come from staffing paint, and offers "Paint {season}'s standard week" (or the special
-day's editor when every day of the week is a special day) and "Show everyone"; Everyone with no
+that slots come from staffing paint, and offers "Paint {season}'s standard week" (the season of the week's first ordinary day that has
+one, or on a phone the shown day's; with none, the first special day's editor; "Show…" for someone who may only
+read Staffing; no button without Staffing access) and "Show everyone"; Everyone with no
 shifts keeps everyone's rows with one line saying how to add one. A draft's shifts open the staffing
 shift editor; Save waits for a changed draft, and Delete asks first. Labour warnings appear while
 you plan, and Publish lets you review them before publishing anyway. Change this week copies a

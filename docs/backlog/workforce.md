@@ -136,7 +136,7 @@ The completed rota retirement does not depend on that choice.
 
 ## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
-**A763 point 9 (owner, 2026-10-16).** Waits for lane F's A724 Part 2. A763's points 1–8 are
+**A763 point 9 (owner, 2026-10-16).** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. A763's points 1–8 are
 built (the [plan](../superpowers/plans/2026-10-17-a763-rota-redesign.md)). The owner's point, as written:
 
 > **Staffing month: the Monday "Rota for this week" link goes**
@@ -161,8 +161,9 @@ already shared through `@waitron/venue-service/dashboard/season-tint`). The same
 `dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
 because venue-service's `exports` map does not include `hours-view.ts` (A775). A763 added more
 copies of venue-service code outside that map: `weekTitleParts` in `format.ts` (of
-`formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic with its own
-`flatParent` and `scrollTargets` (of `calendar-day-box.ts` and `flat-tree.ts`); and `rota-view.ts`'s
+`formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic (private to `CalendarDayBox` in `calendar-day-box.ts`,
+which the map does export), with its own `flatParent` and `scrollTargets` (of `flat-tree.ts`, which
+it does not); and `rota-view.ts`'s
 swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
 limits, and these, into browser-safe venue-service files and export them.
 

@@ -4257,7 +4257,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   parameter or a second route), keeping the Staff roles list's.
 
 - **A763 point 9. The Staffing month's Monday "Rota for this week" link goes, and the Rota tab
-  opens the week last picked (owner, 2026-10-16).** Waits for lane F's A724 Part 2. Monday's box
+  opens the week last picked (owner, 2026-10-16).** Waits for the second part of A724, which has not landed. Monday's box
   becomes the height of the others; the day box's Rota for this week states where that week's rota
   stands. A763's points 1–8 are built.
   [Detail](backlog/workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes),
@@ -4333,8 +4333,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [workforce detail](backlog/workforce.md#roster-browser-entry-re-exports).
 
 - **A699. The Staffing month keeps its own copy of month stepping, and staffing its own date
-  formatting.** Next: move `stepMonth` and the limits into a browser-safe venue-service file and
-  export it.
+  formatting.** Next: move `stepMonth`, the limits and the copies A763 added into browser-safe
+  venue-service files and export them.
   [Detail](backlog/workforce.md#a699-the-staffing-month-keeps-its-own-copy-of-month-stepping-and-staffing-its-own-date-formatting)
 
 - **A700. A failed Opening hours read also hides the Calendar's other views.** A module view draws
