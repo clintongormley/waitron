@@ -30,6 +30,7 @@ import type {
   TableParty,
   TableState,
   TillApi,
+  TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
@@ -2015,5 +2016,434 @@ describe("till-app: service cancellation consent", () => {
     expect(cancelDialog(el)).toBeNull();
     expect(methods.cancelItem).not.toHaveBeenCalled();
     expect(replacement.cancelItem).not.toHaveBeenCalled();
+  });
+
+  describe("paid cancellation refund handoff", () => {
+    const paidReceipt: TillSaleResult = {
+      receiptTrim: {},
+      venueAddress: [],
+      receiptSettings: { printAddress: false },
+      issuer: { venueName: "Filed venue", nif: "B12345678" },
+      orderLabel: "Table 4",
+      orderNumber: 42,
+      invoiceType: "F2",
+      invoiceNumber: "F/42",
+      issuedAt: "2026-10-17T11:00:00.000Z",
+      total: "30.00",
+      vatBreakdown: [{ rate: "10", base: "27.27", tax: "2.73" }],
+      lines: [{ descriptions: { en: "Filed wine" }, quantity: "1", gross: "30.00" }],
+      tender: { method: "cash", change: "0.00" },
+      qr: "",
+    };
+    const cash = {
+      tenderId: "11111111-1111-4111-8111-111111111111",
+      method: "cash",
+      last4: null,
+      appliedRemaining: "30.00",
+      tipRemaining: "2.00",
+      pendingRefundId: null,
+      manual: false,
+    };
+    const refunded = {
+      id: "22222222-2222-4222-8222-222222222222",
+      saleId: "own-sale",
+      tenderId: cash.tenderId,
+      state: "completed",
+      appliedAmount: "7.50",
+      tipAmount: "0.00",
+      createdAt: "2026-10-17T11:01:00.000Z",
+      completedAt: "2026-10-17T11:01:01.000Z",
+    };
+    const refundForm = (el: TillApp) => el.shadowRoot!.querySelector("till-tender-refund-dialog");
+    const ticket = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
+    const paidMethods = (more: Record<string, unknown> = {}) =>
+      apiFor(
+        { ...consent("settled"), saleId: "own-sale" },
+        {
+          getTransactionReceipt: vi.fn().mockResolvedValue(paidReceipt),
+          getRefundableTenders: vi.fn().mockResolvedValue([cash]),
+          refundTransaction: vi.fn().mockResolvedValue(refunded),
+          ...more,
+        },
+      );
+    async function chooseRefund(el: TillApp) {
+      await openCancel(el);
+      await clickChoice(el, 'input[value="refund"]');
+      await clickChoice(el, "[data-confirm]");
+    }
+    async function submitRefund(el: TillApp) {
+      const form = refundForm(el)!;
+      await form.updateComplete;
+      for (const [name, value] of [
+        ["appliedAmount", "7.50"],
+        ["tipAmount", "0.00"],
+        ["reason", "Wine returned; customer request"],
+      ])
+        emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
+      emit(form.shadowRoot!.querySelector('[name="cashConfirmed"]')!, "wt-change", {
+        checked: true,
+      });
+      await form.updateComplete;
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
+      );
+      await flush(el);
+    }
+    beforeEach(() => {
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
+    });
+    afterEach(() => {
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
+    });
+
+    it("stops the kitchen once, opens its filed transaction, and refunds only the explicitly confirmed amount", async () => {
+      const methods = paidMethods();
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(methods.cancelItem.mock.calls[0]![2]).toEqual({
+        quantity: "1",
+        outcome: "keep_charge",
+        expectedPartyRevision: 3,
+        expectedBillRevision: 6,
+        expectedContext: consent("settled").context,
+        submissionId: expect.any(String),
+      });
+      expect(api.getTransactionReceipt).toHaveBeenCalledWith("own-sale", expect.any(Object));
+      expect(api.getRefundableTenders).toHaveBeenCalledWith("own-sale", expect.any(Object));
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(ticket(el)?.result).toEqual(paidReceipt);
+      expect(refundForm(el)!.tenders).toEqual([cash]);
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+      await submitRefund(el);
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(api.refundTransaction).toHaveBeenCalledWith("own-sale", {
+        tenderId: cash.tenderId,
+        appliedAmount: "7.50",
+        tipAmount: "0.00",
+        reason: "Wine returned; customer request",
+        cashConfirmed: true,
+        manualConfirmed: false,
+        submissionId: expect.any(String),
+      });
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(ticket(el)?.result).toEqual(paidReceipt);
+    });
+
+    it("offers Refund only when this paid dish maps to a filed sale", async () => {
+      const methods = apiFor({ ...consent("settled"), saleId: "own-sale" });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[value="refund"]')).not.toBeNull();
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+    });
+
+    it("retains a pending refund through closing and reopening without cancelling the kitchen again", async () => {
+      const methods = paidMethods({
+        refundTransaction: vi
+          .fn()
+          .mockResolvedValue({ ...refunded, state: "pending", completedAt: null }),
+        getTenderRefund: vi.fn().mockResolvedValue(refunded),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await submitRefund(el);
+      expect(refundForm(el)?.result?.state).toBe("pending");
+      expect(refundForm(el)?.shadowRoot!.querySelector("[data-outcome]")?.textContent).toBe(
+        t("tender_refund.pending"),
+      );
+      const form = refundForm(el)!;
+      const closed = new Promise<void>((resolve) =>
+        form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
+      );
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!),
+      );
+      await closed;
+      await flush(el);
+      expect(refundForm(el)).toBeNull();
+      await userEvent.click(
+        page.elementLocator(
+          ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]")!,
+        ),
+      );
+      await flush(el);
+      expect(refundForm(el)?.attempt?.refundId).toBe(refunded.id);
+      await userEvent.click(
+        page.elementLocator(
+          refundForm(el)!.shadowRoot!.querySelector<HTMLElement>("[data-status]")!,
+        ),
+      );
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(api.getTenderRefund).toHaveBeenCalledWith(refunded.id);
+      expect(api.refundTransaction).toHaveBeenCalledOnce();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(ticket(el)?.result).toEqual(paidReceipt);
+    });
+
+    it("resumes a lost refund answer with the saved request and never repeats kitchen cancellation", async () => {
+      const methods = paidMethods({
+        refundTransaction: vi
+          .fn()
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+          .mockResolvedValue(refunded),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await submitRefund(el);
+      const request = vi.mocked(api.refundTransaction).mock.calls[0]![1];
+      expect(refundForm(el)?.attempt?.request).toEqual(request);
+      await userEvent.click(
+        page.elementLocator(
+          refundForm(el)!.shadowRoot!.querySelector<HTMLElement>("[data-status]")!,
+        ),
+      );
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(api.refundTransaction).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(api.refundTransaction).mock.calls[1]).toEqual(["own-sale", request]);
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+    });
+
+    it("leaves a failed refund visibly failed while keeping the committed kitchen cancellation", async () => {
+      const methods = paidMethods({
+        refundTransaction: vi
+          .fn()
+          .mockResolvedValue({ ...refunded, state: "failed", completedAt: null }),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await submitRefund(el);
+      expect(refundForm(el)?.result?.state).toBe("failed");
+      expect(refundForm(el)?.shadowRoot!.querySelector("[data-outcome]")?.textContent).toBe(
+        t("tender_refund.failed"),
+      );
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(ticket(el)?.result).toEqual(paidReceipt);
+    });
+
+    it("does not open the transaction or send a refund when kitchen cancellation refuses", async () => {
+      const methods = paidMethods({
+        cancelItem: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(cancelDialog(el)?.refusal).toBe(codeMessage("working_order.out_of_date"));
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(refundForm(el)).toBeNull();
+    });
+
+    it("rereads raced paid kitchen consent and requires another choice before navigating to a refund", async () => {
+      const fresh = { ...consent("settled", "not_started"), saleId: "own-sale" };
+      const methods = paidMethods({
+        getCancellation: vi
+          .fn()
+          .mockResolvedValueOnce({ ...consent("settled"), saleId: "own-sale" })
+          .mockResolvedValue(fresh),
+        cancelItem: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "tab.cancel_context_changed" })
+          .mockResolvedValue({ revision: 4 }),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      expect(cancelDialog(el)?.consent).toEqual(fresh);
+      expect(
+        cancelDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[value="refund"]')!
+          .checked,
+      ).toBe(false);
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      await clickChoice(el, 'input[value="refund"]');
+      await clickChoice(el, "[data-confirm]");
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
+        expectedContext: fresh.context,
+        outcome: "keep_charge",
+      });
+    });
+
+    it("replays the same uncertain kitchen command before entering the separate refund flow", async () => {
+      const methods = paidMethods({
+        cancelItem: vi
+          .fn()
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+          .mockResolvedValue({ revision: 4 }),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el), { timeout: 4000 }).not.toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+      expect(methods.cancelItem.mock.calls[1]![2]).toEqual(methods.cancelItem.mock.calls[0]![2]);
+      expect(api.getTransactionReceipt).toHaveBeenCalledOnce();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      await submitRefund(el);
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(api.refundTransaction).toHaveBeenCalledOnce();
+      expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    });
+
+    it("uses the existing refund manager PIN after stopping the kitchen without repeating that stop", async () => {
+      const methods = paidMethods({
+        refundTransaction: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+          .mockResolvedValue(refunded),
+        listRefundAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await submitRefund(el);
+      await expect.poll(() => approval(el)).not.toBeNull();
+      expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+      await pinPad(el, "1234");
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(vi.mocked(api.refundTransaction).mock.calls[1]![1]).toMatchObject({
+        override: { personId: "m-1", pin: "1234" },
+        appliedAmount: "7.50",
+      });
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith("waitron.tender-refund:"))
+          expect(localStorage.getItem(key)).not.toContain("1234");
+    });
+
+    it("opens the filed receipt without offering money back when no supported tender remains", async () => {
+      const methods = paidMethods({
+        getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method: "voucher" }]),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => ticket(el)).not.toBeNull();
+      await flush(el);
+      expect(refundForm(el)).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+    });
+
+    it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
+      const methods = paidMethods({
+        getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect
+        .poll(() => el.shadowRoot!.textContent)
+        .toContain(t("find_bill.invoice_load_failed"));
+      expect(cancelDialog(el)).toBeNull();
+      expect(refundForm(el)).toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    });
+
+    it("ignores a paid receipt read answered after the waiter leaves the bill", async () => {
+      let answer!: (receipt: TillSaleResult) => void;
+      const methods = paidMethods({
+        getTransactionReceipt: vi.fn().mockImplementation(
+          () =>
+            new Promise<TillSaleResult>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => api.getTransactionReceipt).toHaveBeenCalledOnce();
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      answer(paidReceipt);
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(refundForm(el)).toBeNull();
+      expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+    });
+
+    it("does not open an old refund after its tender read completes for a replaced API", async () => {
+      let answer!: (rows: (typeof cash)[]) => void;
+      const methods = paidMethods({
+        getRefundableTenders: vi.fn().mockImplementation(
+          () =>
+            new Promise<(typeof cash)[]>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledOnce();
+      el.api = stubApi(paidMethods());
+      await flush(el);
+      answer([cash]);
+      await flush(el);
+      expect(refundForm(el)).toBeNull();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(el.api.refundTransaction).not.toHaveBeenCalled();
+    });
+
+    it("can discard an edited refund without undoing or repeating the kitchen cancellation", async () => {
+      const methods = paidMethods();
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      const form = refundForm(el)!;
+      await form.updateComplete;
+      emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
+        value: "Changed my mind",
+      });
+      await form.updateComplete;
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!),
+      );
+      await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
+      expect(refundForm(el)).toBe(form);
+      const closed = new Promise<void>((resolve) =>
+        form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
+      );
+      await discardLeave(el);
+      await closed;
+      await flush(el);
+      expect(refundForm(el)).toBeNull();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(ticket(el)?.result).toEqual(paidReceipt);
+    });
+
+    it("keeps the payment choice available without inventing a sale for an unfiled paid bill", async () => {
+      const methods = apiFor(consent("settled"));
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[value="refund"]')).toBeNull();
+      expect(
+        cancelDialog(el)!.shadowRoot!.querySelector('input[value="keep_charge"]'),
+      ).not.toBeNull();
+    });
   });
 });

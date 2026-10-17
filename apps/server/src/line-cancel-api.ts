@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
+  sales,
   ticketState,
   workingOrders,
   workingOrderLines,
@@ -145,11 +146,16 @@ export function mountLineCancelApi(
           .from(workingOrderLines)
           .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
           .where(eq(workingOrderLines.id, lineId));
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, bill!.id));
         return {
           context,
           revision: await partyRevision(tx, partyId),
           billRevision: bill!.revision,
           billId: bill!.id,
+          ...(sale === undefined ? {} : { saleId: sale.id }),
         };
       });
       return c.json(answer);

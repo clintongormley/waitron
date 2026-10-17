@@ -18,6 +18,7 @@ export interface CancellationRead {
   revision: number;
   billRevision: number;
   billId: string;
+  saleId?: string;
 }
 
 export interface CancelItemRequest {

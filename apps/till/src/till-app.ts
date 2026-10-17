@@ -6293,11 +6293,15 @@ export class TillApp extends LitElement {
     });
   }
 
-  async #openHistoricalReceipt(row: {
-    saleId: string;
-    workingOrderId: string | null;
-    refundId: string | null;
-  }): Promise<void> {
+  async #openHistoricalReceipt(
+    row: {
+      saleId: string;
+      workingOrderId: string | null;
+      refundId: string | null;
+    },
+    cancellation?: CancellingItem,
+  ): Promise<void> {
+    if (cancellation !== undefined && !this.#cancellationCurrent(cancellation)) return;
     if (this.findBillBusy) return;
     this.#cancelFindBillRead();
     const controller = (this.#findBillRead = new AbortController());
@@ -6307,8 +6311,10 @@ export class TillApp extends LitElement {
     const origin = this.historicalReceipt;
     const current = () =>
       this.isConnected &&
-      (this.drill?.kind === "find-bill" ||
-        (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
+      (cancellation !== undefined
+        ? this.#cancellationCurrent(cancellation)
+        : this.drill?.kind === "find-bill" ||
+          (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
       api === this.api &&
       session === this.#operatorSession &&
       visit === this.#invoiceRecoveryVisit;
@@ -6349,7 +6355,20 @@ export class TillApp extends LitElement {
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
       this.#pushDrill({ kind: "ticket" });
-      if (refundId === null) void this.#readRefundableTenders();
+      if (refundId === null) {
+        if (cancellation === undefined) void this.#readRefundableTenders();
+        else {
+          const receipt = this.historicalReceipt;
+          await this.#readRefundableTenders();
+          if (
+            this.isConnected &&
+            this.historicalReceipt === receipt &&
+            this.#operatorSession === session &&
+            this.api === api
+          )
+            this.#openTenderRefund();
+        }
+      }
     } catch {
       if (current())
         this.errorKey =
@@ -8376,6 +8395,7 @@ export class TillApp extends LitElement {
       .name=${open.name}
       .unitPrecision=${open.unitPrecision}
       .consent=${open.consent}
+      .refundAvailable=${open.consent.context.billStatus === "settled" && open.consent.saleId !== undefined && this.#tenderRefundSession !== undefined}
       .busy=${open.busy}
       .refusal=${open.refusal}
       @cancel-item-choice=${(event: CustomEvent<CancelItemChoice>) => void this.#onCancelItemChoice(event)}
@@ -10523,7 +10543,8 @@ export class TillApp extends LitElement {
       await this.#openCancelAdjustment(open, choice);
       return;
     }
-    if (choice.outcome === "keep_charge") await this.#sendItemCancellation(open, choice);
+    if (choice.outcome === "keep_charge" || choice.outcome === "refund")
+      await this.#sendItemCancellation(open, choice);
   }
 
   async #openCancelAdjustment(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
@@ -10579,10 +10600,17 @@ export class TillApp extends LitElement {
     adjustment?: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
-    if (!this.#itemCancellationShown(open) || choice.outcome === "refund") return;
+    if (!this.#itemCancellationShown(open)) return;
+    if (
+      choice.outcome === "refund" &&
+      (open.consent.context.billStatus !== "settled" ||
+        open.consent.saleId === undefined ||
+        this.#tenderRefundSession === undefined)
+    )
+      return;
     const command: CancelItemRequest = {
       quantity: choice.quantity,
-      outcome: choice.outcome,
+      outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
       expectedPartyRevision: choice.consent.revision,
       expectedBillRevision: choice.consent.billRevision,
       expectedContext: structuredClone(choice.consent.context),
@@ -10614,6 +10642,20 @@ export class TillApp extends LitElement {
       }
       this.#closeCancelItem();
       await this.#rereadAmounts(open.billId, open.visit);
+      if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
+        await this.updateComplete;
+        // Kitchen cancellation is committed before entering the independently retried refund flow.
+        this.#requestLeave(() =>
+          this.#openHistoricalReceipt(
+            {
+              saleId: open.consent.saleId!,
+              workingOrderId: open.billId,
+              refundId: null,
+            },
+            open,
+          ),
+        );
+      }
     } catch (error) {
       if (!this.#itemCancellationShown(open)) return;
       const code = (error as { code?: string } | undefined)?.code ?? "server.internal";

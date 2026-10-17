@@ -140,6 +140,30 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it("identifies the cancelled dish's own filed sale among paid party bills without writing", async () => {
+    const first = await fixture();
+    const second = await fixture("fire");
+    for (const p of [first, second])
+      await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
+      );
+    const before = await frozen();
+    const firstSale = before.sales.find((sale) => sale.workingOrderId === first.billId)!;
+    const secondSale = before.sales.find((sale) => sale.workingOrderId === second.billId)!;
+    expect(firstSale.id).not.toBe(secondSale.id);
+    for (const [p, sale] of [
+      [first, firstSale],
+      [second, secondSale],
+    ] as const) {
+      const read = await send(venue.app, venue.cookie.staff, "GET", path(p, true));
+      expect(read.status).toBe(200);
+      expect(read.json).toMatchObject({ billId: p.billId, saleId: sale.id });
+    }
+    expect(await frozen()).toEqual(before);
+  });
+
   it("reads every component and both revisions without updating device activity", async () => {
     const p = await fixture();
     const body = await bodyFor(p);
