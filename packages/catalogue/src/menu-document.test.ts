@@ -852,6 +852,14 @@ describe("the live-fields digest", () => {
     expect(await fromApply(lunch)).not.toBe(before);
   });
 
+  it("moves when the dish's category is renamed", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    const before = await fromApply(lunch);
+    await app((tx) => updateCategory(tx, f.softDrinks, { name: "Fizzy" }));
+    expect(await fromApply(lunch)).not.toBe(before);
+  });
+
   it("stays when only availability changes", async () => {
     const f = await menusFixture(fx.db);
     const lunch = await build(f.lunch);

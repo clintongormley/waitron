@@ -963,6 +963,7 @@ describe("GET /api/menu-state", () => {
       products: string[];
       optionLabels: string[];
     };
+    liveFields: string;
   };
   const state = async (v: Lunch, query = `?zoneId=${v.zoneId}`): Promise<MenuState> => {
     const response = await send(v, "GET", `/api/menu-state${query}`);
@@ -974,7 +975,8 @@ describe("GET /api/menu-state", () => {
   it("lists a product made unavailable without moving the version, and clears it when restored", async () => {
     const v = await setupLunch();
     const v1 = await publish(v.menuId);
-    expect(await state(v)).toEqual({
+    const first = await state(v);
+    expect(first).toEqual({
       service: {
         open: true,
         zoneOpen: true,
@@ -1016,7 +1018,7 @@ describe("GET /api/menu-state", () => {
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
-      liveFields: expect.any(String),
+      liveFields: first.liveFields,
     });
     const status = await withTransaction(suite.db, (tx) => menuStatus(tx, [v.menuId]));
     expect(status.get(v.menuId)?.state).toBe("current");

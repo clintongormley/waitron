@@ -473,7 +473,7 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
   return { products: productRows, labels };
 }
 
-/** Digest of each product row's course and reporting category, in id order; not its availability. */
+/** Digest of each dish, variant and extra's course and reporting category, in id order; not availability. */
 function liveFieldsDigest(products: ReadonlyMap<string, LiveProductRow>): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
