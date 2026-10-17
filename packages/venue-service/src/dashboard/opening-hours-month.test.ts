@@ -1443,6 +1443,19 @@ describe("Opening hours month, a station shown", () => {
     expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
   });
 
+  it("draws No orders muted, as the Week does", async () => {
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    applyTokens(el);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    applyTokens(probe);
+    el.after(probe);
+    hosts.push(probe);
+    const none = cell(el, "2026-12-15").querySelector<HTMLElement>('[data-test="no-orders"]')!;
+    expect(getComputedStyle(none).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
+  });
+
   it("loading draws only the head", async () => {
     const el = await mount(monthModel(), {
       stations: STATIONS,

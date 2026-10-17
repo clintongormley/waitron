@@ -705,14 +705,16 @@ export class OpeningHoursWeekView extends LitElement {
       const { days, chosen, names } = drawn;
       return draw({ days, names, rows: (day) => weekRows(day, chosen, names), orders: false });
     }
-    if (station.state === "loading") return nothing;
     if (station.state === "always")
       return html`<p class="always-open" data-test="always-open">
         ${t("prep.always_open_default")}
       </p>`;
-    const byDate = new Map(station.model.days.map((day) => [day.date, day] as const));
+    const byDate = new Map(
+      station.state === "ready" ? station.model.days.map((day) => [day.date, day] as const) : [],
+    );
     const days = dates.map((day) => byDate.get(day.date));
-    if (!days.every((day) => day !== undefined)) return nothing;
+    // A read that lacks a shown date is one still on its way for that week: drawn as loading.
+    if (station.state === "loading" || !days.every((day) => day !== undefined)) return nothing;
     const names = monthNames(station.departments);
     return draw({ days, names, rows: (day) => weekStationRows(day, names), orders: true });
   }

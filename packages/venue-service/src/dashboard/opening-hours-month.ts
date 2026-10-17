@@ -101,6 +101,9 @@ export class OpeningHoursMonthView extends LitElement {
       }
       .always-open {
         margin: 0;
+      }
+      .always-open,
+      .no-orders {
         color: var(--wt-color-text-muted);
       }
       .sub {

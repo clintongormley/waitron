@@ -1379,6 +1379,41 @@ describe("Opening hours week, a station shown", () => {
     expect(text(tip(el))).toBe("Restaurant · Lunch 13:00–15:30");
   });
 
+  it("a change of station hides a shown tip", async () => {
+    const el = await mount({ stations: STATIONS, station: grill() });
+    await userEvent.hover(block(el, "2026-12-02", "rest", 2));
+    expect(open(el)).toBe(true);
+    el.station = { ...grill(), id: "cold" };
+    await el.updateComplete;
+    expect(block(el, "2026-12-02", "rest", 2)).toBeTruthy();
+    expect(open(el)).toBe(false);
+  });
+
+  it("a station read lacking a shown date draws as loading does", async () => {
+    const station = grill();
+    const el = await mount({
+      stations: STATIONS,
+      station: {
+        ...station,
+        model: {
+          ...station.model,
+          days: station.model.days.filter((day) => day.date !== "2026-12-04"),
+        },
+      },
+    });
+    const loading = await mount({
+      stations: STATIONS,
+      station: { id: "grill", state: "loading" },
+    });
+    expect(root(el).querySelector("section")).toBeNull();
+    expect(root(el).querySelector(".ruler")).toBeNull();
+    expect(
+      [...root(el).children].map((child) => child.outerHTML.replace(/<!--[^>]*-->/g, "")),
+    ).toEqual(
+      [...root(loading).children].map((child) => child.outerHTML.replace(/<!--[^>]*-->/g, "")),
+    );
+  });
+
   it("on a phone a station row writes its orders under its name", async () => {
     const [width, height] = [window.innerWidth, window.innerHeight];
     await page.viewport(390, 800);
