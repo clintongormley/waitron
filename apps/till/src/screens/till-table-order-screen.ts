@@ -2156,7 +2156,11 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The course goes on the line, so the draft saves it. */
   #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
-    store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
+    store.setLineCourse(
+      store.lines.indexOf(line),
+      courseId === "" ? undefined : courseId,
+      this.courses.find((course) => course.id === courseId),
+    );
   }
 
   #makeAtPicker(

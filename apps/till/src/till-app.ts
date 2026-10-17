@@ -1887,6 +1887,10 @@ export class TillApp extends LitElement {
   #setupRevision?: string;
   /** A read of the setup a poll asked for, while it is out. */
   #setupRead?: Promise<void>;
+  /** Each read of the setup is numbered when it is sent; an answer applies its venue values only
+   * when no read sent after it has applied its own. */
+  #setupAsked = 0;
+  #setupApplied = 0;
   #preLoginChoice?: string;
   #venueLocaleReady = false;
   #loginPending = false;
@@ -2284,7 +2288,7 @@ export class TillApp extends LitElement {
   #deviceZonesRead = 0;
   #deviceZonesWrite = 0;
   #pendingDeviceZoneSelection: DeviceZoneSelection | null = null;
-  #pendingDeviceZoneSetup?: TillInfo;
+  #pendingDeviceZoneSetup?: { till: TillInfo; asked: number };
   #pendingDeviceZoneSetupRead = false;
   @state() private profileServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
@@ -2943,6 +2947,7 @@ export class TillApp extends LitElement {
     clearTimeout(this.#contentLanguageTimer);
     const contentGeneration = ++this.#contentLanguageGeneration;
     try {
+      const asked = ++this.#setupAsked;
       const [till] = await Promise.all([
         this.api.getTill(),
         this.#refreshContentLanguages(contentGeneration),
@@ -2956,7 +2961,7 @@ export class TillApp extends LitElement {
         setLocale(this.#preLoginLocale());
       this.orderFlow = "prepay";
       this.receiptPrintMode = "auto";
-      this.#applyVenueSetup(till);
+      this.#applyVenueSetup(till, asked);
       this.#applyProfileSetup(till);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
@@ -4292,7 +4297,6 @@ export class TillApp extends LitElement {
       this.#rememberZoneMenu(this.counterServiceZoneId, this.counterService, event.detail.id);
   }
 
-  /** While a table is still opening this says no, as it did before the screen switched early. */
   #tableCatalogueActive(): boolean {
     return !this.tableOpening && this.#orderScreenShown();
   }
@@ -4310,19 +4314,10 @@ export class TillApp extends LitElement {
     this.tableOpening = true;
   }
 
-  #leaveFailedOpen(
-    shownEarly: boolean,
-    left: () => boolean,
-    offerRequest: number,
-    session: number,
-  ): void {
-    if (
-      !shownEarly ||
-      left() ||
-      offerRequest !== this.#tableOfferRequest ||
-      session !== this.#operatorSession ||
-      !this.#orderScreenShown()
-    )
+  /** Both callers' `left()` reads `#orderVisit`, which every newer open moves, so it also stops an
+   * open a newer one has overtaken. */
+  #leaveFailedOpen(shownEarly: boolean, left: () => boolean, session: number): void {
+    if (!shownEarly || left() || session !== this.#operatorSession || !this.#orderScreenShown())
       return;
     this.#orderVisit++;
     if (this.#tableOrderTabKey() !== undefined) this.activeTabKey = this.#openedFrom;
@@ -7781,10 +7776,11 @@ export class TillApp extends LitElement {
       this.deviceZonesReading = false;
       this.deviceZonesEditing = selection;
     }
+    const asked = ++this.#setupAsked;
     const setup = await api.getTill({ signal });
     if (!current()) return;
     this.#pendingDeviceZoneSetupRead = false;
-    this.#pendingDeviceZoneSetup = setup;
+    this.#pendingDeviceZoneSetup = { till: setup, asked };
     this.#reconcileSavedDeviceZones();
   }
 
@@ -7802,8 +7798,9 @@ export class TillApp extends LitElement {
     this.#pendingDeviceZoneSelection = null;
     if (this.#pendingDeviceZoneSetup) {
       const previousTimeout = this.#inactivityTimeoutSeconds;
-      this.#applyVenueSetup(this.#pendingDeviceZoneSetup);
-      this.#applyProfileSetup(this.#pendingDeviceZoneSetup);
+      const { till, asked } = this.#pendingDeviceZoneSetup;
+      this.#applyVenueSetup(till, asked);
+      this.#applyProfileSetup(till);
       this.#pendingDeviceZoneSetup = undefined;
       this.activeProfileId = selection.profileId;
       if (this.#inactivityTimeoutSeconds !== previousTimeout) this.#configureSessionActivity();
@@ -8052,7 +8049,9 @@ export class TillApp extends LitElement {
   }
 
   /** The parts of the till's setup that come from the venue. */
-  #applyVenueSetup(till: TillInfo): void {
+  #applyVenueSetup(till: TillInfo, asked: number): void {
+    if (asked < this.#setupApplied) return;
+    this.#setupApplied = asked;
     // A separate field: the UI default drops UI-unsupported codes, which must never change the
     // printed ticket's language.
     this.invoiceLocale = till.invoiceLocale;
@@ -8078,12 +8077,11 @@ export class TillApp extends LitElement {
   #noteSetupRevision(revision: string | undefined): void {
     if (revision === undefined || revision === this.#setupRevision || this.#setupRead) return;
     const generation = this.#bootGeneration;
-    const api = this.api;
-    const read: Promise<void> = api
+    const asked = ++this.#setupAsked;
+    const read: Promise<void> = this.api
       .getTill()
       .then((till) => {
-        if (generation === this.#bootGeneration && api === this.api && this.isConnected)
-          this.#applyVenueSetup(till);
+        if (generation === this.#bootGeneration) this.#applyVenueSetup(till, asked);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -8104,9 +8102,10 @@ export class TillApp extends LitElement {
 
   async #enterSwitchedProfile(session: number): Promise<void> {
     try {
+      const asked = ++this.#setupAsked;
       const till = await this.api.getTill();
       if (session !== this.#operatorSession) return;
-      this.#applyVenueSetup(till);
+      this.#applyVenueSetup(till, asked);
       this.#applyProfileSetup(till);
     } catch {
       if (session === this.#operatorSession) this.errorKey = "boot.error";
@@ -8697,7 +8696,7 @@ export class TillApp extends LitElement {
           );
         } catch {
           if (left() || offerRequest !== this.#tableOfferRequest) return;
-          this.#leaveFailedOpen(shownEarly, left, offerRequest, session);
+          this.#leaveFailedOpen(shownEarly, left, session);
           this.#loadTableOffers(
             undefined,
             {
@@ -8778,9 +8777,10 @@ export class TillApp extends LitElement {
                 ? await this.api.seatAtTables(tableId, guestCount, withTableIds, note)
                 : await this.api.seatAtTables(tableId, guestCount, withTableIds);
           const { tabId, partyId, revision } = seated;
-          // A table opened after this one has made its own table the active one, so this answer
-          // would put this table's order beside that table. Leaving does not stop it: the party
-          // now exists, and the carried lines live only here.
+          // Only a new operator session, or a newer open that has already claimed its table
+          // (`#openClaimed`), stops this answer; a newer open that has not claimed one yet lets it
+          // through. Leaving does not stop it: the party now exists, and the carried lines live
+          // only here.
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
           this.activeTabId = tabId;
@@ -8810,7 +8810,7 @@ export class TillApp extends LitElement {
             opened.sync.store.appendLines(carried.lines);
           this.#showDraft(opened);
         } catch (error) {
-          this.#leaveFailedOpen(shownEarly, left, offerRequest, session);
+          this.#leaveFailedOpen(shownEarly, left, session);
           this.errorKey = tableWriteError(error);
           await this.#refreshFloor();
           return;

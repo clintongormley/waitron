@@ -603,6 +603,29 @@ describe("A768 a held zone's menu follows the server", () => {
     expect(beer(el)!.unitPrice).toBe("8.00");
   });
 
+  it("a poll after both held opens' checks have answered keeps the menu the table shows", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(twoMenus("lunch")),
+      menuState: vi.fn(async () => twoMenuState("lunch")),
+    });
+    await openMesa(el);
+    await back(el);
+    const first = later<MenuStateAnswer>();
+    const second = later<MenuStateAnswer>();
+    api.menuState.mockImplementationOnce(() => first.promise);
+    api.menuState.mockImplementationOnce(() => second.promise);
+    await reopen(el, "t7");
+    await back(el);
+    await reopen(el, "t4");
+    first.resolve(twoMenuState("lunch"));
+    await flush(el);
+    second.resolve(twoMenuState("lunch"));
+    await flush(el);
+    api.menuState.mockImplementation(async () => twoMenuState("dinner"));
+    await poll(el);
+    expect(tableOrder(el)!.selectedMenuId).toBe("lunch");
+  });
+
   it("an older menu read answering after a newer one does not replace it", async () => {
     const { el } = await mountApp();
     await flush(el);
@@ -996,6 +1019,107 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)!.loading).toBe(false);
   });
 
+  it("a first open's reads answering while a second table's menu is read keep the second loading", async () => {
+    const mesa4Lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const z2Offers = deferred<ZoneOfferCatalogue>();
+    const { el } = await mountApp();
+    await openMesa(el, "t7");
+    await back(el);
+    api.getTabLines.mockImplementation(async (tabId: string) =>
+      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0, editSentLines: true },
+    );
+    api.listZoneOffers.mockImplementation(async (zoneId: string) =>
+      zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
+    );
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.loading).toBe(true);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el);
+    mesa4Lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.loading).toBe(true);
+    expect(loadingLine(el)).not.toBeNull();
+    const z2 = catalogue("v1", { Beer: "7.00" });
+    z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
+    await flush(el, 6);
+    expect(tableOrder(el)!.loading).toBe(false);
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    expect(tableOrder(el)!.products.find((p) => p.name === "Beer")!.unitPrice).toBe("7.00");
+    expect(api.listDrafts).toHaveBeenLastCalledWith("v9", expect.anything());
+  });
+
+  it("a refused seat of an open already left keeps the next table loading", async () => {
+    const free = table("t5", "5", null);
+    let refuse!: () => void;
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn(
+        () =>
+          new Promise(
+            (_, reject) => (refuse = () => reject({ code: "table.occupied", status: 409 })),
+          ),
+      ),
+    });
+    await openMesa(el, "t7");
+    await back(el);
+    api.getTabLines.mockImplementation(async (tabId: string) =>
+      tabId === "wo-4" ? lines.promise : { lines: [], revision: 0, editSentLines: true },
+    );
+    emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
+    await flush(el);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    refuse();
+    await flush(el, 6);
+    expect(tableOrder(el)!.loading).toBe(true);
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(tableOrder(el)!.loading).toBe(false);
+  });
+
+  it("the table resumed at sign-in shows its loading line", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    emit(shell(el), "logout");
+    await flush(el);
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    api.getTabLines.mockImplementation(() => lines.promise);
+    await signIn(el);
+    await flush(el, 6);
+    expect(tableOrder(el)!.loading).toBe(true);
+    expect(loadingLine(el)).not.toBeNull();
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(tableOrder(el)!.loading).toBe(false);
+  });
+
+  it("an order tab left for the floor while loading is never written to history", async () => {
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
+      getTabLines: vi.fn(() => lines.promise),
+    });
+    await onFloor(el);
+    vi.spyOn(history, "pushState");
+    vi.spyOn(history, "replaceState");
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el, 6);
+    expect(floor(el)).not.toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(orderPushes()).toEqual([]);
+    expect(orderReplaces()).toEqual([]);
+  });
+
   it("a table whose menu cannot be read goes back to the floor with the error", async () => {
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
@@ -1019,7 +1143,7 @@ describe("A768 the order screen shows at once", () => {
     await flush(el);
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
-    expect(banner(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
   });
 
   it("a bill opened from Find a bill shows no loading line, and Back during its read stops it", async () => {
@@ -1199,6 +1323,7 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)).toBeNull();
     seat.resolve();
     await flush(el, 6);
+    expect(tableOrder(el)).toBeNull();
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el, 6);
     await reopen(el, "t9");

@@ -236,6 +236,10 @@ names the test that pins it and the task that owns that test.
   of the till that asks "is a table's order showing?" (`#tableCatalogueActive()`) says no while the
   open is under way, which is what it said before this change during the same moments. Only the
   render shows the order screen early.
+- **An open started from Find a bill keeps today's behaviour: no early switch.** The order screen is
+  pushed when the open completes, as before this change. `#onFindBillOpen` abandons the open once
+  Find a bill is no longer showing, so switching to the loading order screen at once would end the
+  open it started. Task 9's docs say so.
 
 ## Decisions for the owner to check (each has a default; nothing waits on them)
 
@@ -696,7 +700,9 @@ Changes:
 - The two failure branches call `#leaveFailedOpen()` before setting the error they set today. One is
   the awaited menu read's `catch` (an unheld zone); the other is the seating `catch`.
   `#leaveFailedOpen` acts only when
-  `!left() && offerRequest === this.#tableOfferRequest && session === this.#operatorSession && this.#orderScreenShown()`.
+  `!left() && session === this.#operatorSession && this.#orderScreenShown()`. (After Task 6b no
+  `offerRequest` check is needed: both callers' `left()` reads `#orderVisit`, which every newer open
+  moves.)
   It does `this.#orderVisit++`, then `#popDrill()` on a drill mount, or
   `this.activeTabKey = this.#openedFrom` on a card mount (no URL was written, so there is no history
   entry to undo). Pass it what it needs as parameters.
@@ -815,8 +821,10 @@ where it applies `#pendingDeviceZoneSetup` (`:7699`).
 
 `#noteSetupRevision` (first line of `#onMenuState`) does nothing when the revision is undefined,
 equals `#setupRevision`, or a read is already out. Otherwise it reads `getTill()` once. It applies the
-answer only when the boot generation, `this.api` and `isConnected` are unchanged. A failed read keeps
-every value, and the next answer that names another revision asks again.
+answer only when the boot generation is unchanged. A failed read keeps every value, and the next
+answer that names another revision asks again. Every `getTill()` (the boot's, the poll's, the profile
+switch's and the zone change's) is numbered when it is sent, and `#applyVenueSetup` skips an answer
+when a read sent after it has already applied its own, so an older answer never undoes a newer one.
 
 - [ ] **Step 1: Write the failing tests:**
   - `"new courses reach an open table without a reload"` (the 2026-10-16 report; Review Focus 4):
@@ -897,6 +905,8 @@ every value, and the next answer that names another revision asks again.
     offers, and applied mid-session they could remove the screen the person is on; at those three
     points the till already lays itself out again (owner decision 4).
   - A kitchen screen in device mode: nothing refreshes.
+  Say that a table opened from Find a bill does not show the loading screen at once: the order
+  screen appears when the open completes, because leaving Find a bill abandons the open it started.
   Record two known limits of a held menu: its sold-out marks are as of its last full read until
   the check sent at the open answers, or, if that check fails, a later one (every 15 s); its department name is not checked,
   and changes only at the next full read.

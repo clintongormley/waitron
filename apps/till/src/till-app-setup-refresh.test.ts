@@ -23,6 +23,8 @@ import type {
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import type { WtCombobox } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -528,5 +530,164 @@ describe("A768 the till follows the venue's setup revision", () => {
     api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
     await poll(el);
     expect(api.getTill.mock.calls.length).toBe(reads);
+  });
+
+  function held<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  }
+
+  const switched = { ...till(drillFormFactor), courses, setupRevision: "s3" };
+  const profileApi = {
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      profileId: "pr-counter",
+      approvedProfiles: [
+        { id: "pr-counter", name: "Counter till" },
+        { id: "pr-bar", name: "Bar till" },
+      ],
+    }),
+    switchDeviceProfile: vi.fn().mockResolvedValue({ activeProfileId: "pr-bar" }),
+  };
+
+  async function switchProfile(el: TillApp): Promise<void> {
+    shell(el).shadowRoot!.querySelector<HTMLElement>("wt-button.profile")!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-profile-dialog")!, "profile-switch", {
+      profileId: "pr-bar",
+    });
+    await flush(el, 6);
+  }
+
+  it("a settings read sent before a profile switch does not undo the switch's settings", async () => {
+    const { el } = await mountApp({
+      ...profileApi,
+      getTill: vi.fn().mockResolvedValue(noCourses),
+    });
+    await openMesa(el);
+    const stale = held<unknown>();
+    api.getTill.mockImplementationOnce(() => stale.promise);
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    api.getTill.mockResolvedValue({ ...switched, defaultReaderId: "reader-new" });
+    await switchProfile(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+    stale.resolve({ ...noCourses, setupRevision: "s2" });
+    await flush(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+    expect((el as unknown as { defaultReaderId?: string }).defaultReaderId).toBe("reader-new");
+  });
+
+  it("a profile switch's settings read answering after a newer poll's read does not undo it", async () => {
+    const { el } = await mountApp({
+      ...profileApi,
+      getTill: vi.fn().mockResolvedValue(noCourses),
+    });
+    await openMesa(el);
+    const stale = held<unknown>();
+    api.getTill.mockImplementationOnce(() => stale.promise);
+    api.getTill.mockResolvedValue(switched);
+    await switchProfile(el);
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s3"));
+    await poll(el);
+    await flush(el, 3);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+    stale.resolve({ ...noCourses, setupRevision: "s2" });
+    await flush(el, 6);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+  });
+
+  it("a change of the device's zones applies the venue's new settings", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(noCourses) });
+    await openMesa(el);
+    api.getTill.mockResolvedValue(switched);
+    api.getDeviceZones.mockResolvedValue({
+      ...deviceZonesFixture(undefined, ["z1"]),
+      snapshot: "moved",
+    });
+    await poll(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+  });
+
+  it("a settings read sent before a change of the device's zones does not undo its settings", async () => {
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(noCourses) });
+    await openMesa(el);
+    const stale = held<unknown>();
+    api.getTill.mockImplementationOnce(() => stale.promise);
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    api.getTill.mockResolvedValue(switched);
+    api.getDeviceZones.mockResolvedValue({
+      ...deviceZonesFixture(undefined, ["z1"]),
+      snapshot: "moved",
+    });
+    await poll(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+    stale.resolve({ ...noCourses, setupRevision: "s2" });
+    await flush(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+  });
+
+  it("a settings read left out across a server switch does not stop the next one", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    await openMesa(el);
+    api.getTill.mockImplementationOnce(() => new Promise(() => undefined));
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    await switchServer();
+    await openMesa(el);
+    const reads = api.getTill.mock.calls.length;
+    api.getTill.mockResolvedValue(moved);
+    await poll(el);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+  });
+
+  it("a settings read from before a server switch applies nothing while the new start read is out", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    await openMesa(el);
+    const late = held<unknown>();
+    const start = held<unknown>();
+    api.getTill.mockImplementationOnce(() => late.promise);
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    api.getTill.mockImplementationOnce(() => start.promise);
+    await switchServer();
+    late.resolve({
+      ...till(drillFormFactor),
+      courses: [{ id: "late", name: "Late", displayOrder: 0 }],
+      setupRevision: "s2",
+    });
+    await flush(el);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+    start.resolve(till(drillFormFactor));
+    await flush(el, 6);
+  });
+
+  it("a draft line keeps a course a refresh deleted, and still shows its name", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await chooseOption(
+      tableOrder(el)!.shadowRoot!.querySelector<WtCombobox>("[data-round-course]")!,
+      "mains",
+    );
+    await flush(el);
+    api.getTill.mockResolvedValue({
+      ...till(drillFormFactor),
+      courses: courses.filter((course) => course.id !== "mains"),
+      setupRevision: "s2",
+    });
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(courseIds(tableOrder(el)!.courses)).toEqual(["drinks", "desserts"]);
+    expect(tableOrder(el)!.draftStore!.lines.map((line) => line.courseId)).toEqual(["mains"]);
+    const order = tableOrder(el)!.shadowRoot!;
+    expect(order.querySelector("[data-round-course]")!.getAttribute("placeholder")).toBe("Mains");
+    expect(
+      order.querySelector('[data-draft-section="mains"] .draft-section-name')?.textContent,
+    ).toBe("Mains");
   });
 });

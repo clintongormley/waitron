@@ -925,6 +925,17 @@ describe("WorkingOrderStore.setLineCourse", () => {
     expect(notified).toBe(2);
   });
 
+  it("keeps the picked course's name on the line, and drops it with the pick", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    const mains = { id: "mains", name: "Mains", displayOrder: 1 };
+    s.setLineCourse(0, "mains", mains);
+    expect(s.lines[0]!.course).toEqual(mains);
+    s.setLineCourse(0, "desserts");
+    expect(s.lines[0]!.courseId).toBe("desserts");
+    expect("course" in s.lines[0]!).toBe(false);
+  });
+
   it("takes no change while the order is being sent, or for a line that is not there", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1");
