@@ -24,7 +24,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin, persons } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -48,6 +48,7 @@ import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 /**
  * A provisioned venue for the adjustment suites: real Veri*Factu filing that never contacts AEAT, a
@@ -299,8 +300,8 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -394,9 +395,9 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     const people = await tx
       .insert(persons)
       .values([
-        { displayName: "Ana", pinHash: hashPin(PINS.staff), role: "staff" },
-        { displayName: "Sara", pinHash: hashPin(PINS.supervisor), role: "supervisor" },
-        { displayName: "Marta", pinHash: hashPin(PINS.manager), role: "manager" },
+        { displayName: "Ana", pinHash: fixturePinHash(PINS.staff), role: "staff" },
+        { displayName: "Sara", pinHash: fixturePinHash(PINS.supervisor), role: "supervisor" },
+        { displayName: "Marta", pinHash: fixturePinHash(PINS.manager), role: "manager" },
       ])
       .returning({ id: persons.id });
     const [profile] = await tx

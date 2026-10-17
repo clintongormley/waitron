@@ -23,7 +23,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -66,6 +66,7 @@ import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -153,8 +154,8 @@ async function setupVenue(): Promise<Venue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { deviceProfiles, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin, persons } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
@@ -25,6 +25,7 @@ import type { TillConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { BASIC_ACTIONS } from "./session-device.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 export const SIGNED_IN_TILL_LOCALE = "es-ES";
 
@@ -77,8 +78,8 @@ export async function provisionSignedInTill<S extends TillSeed>(
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -109,7 +110,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
         .onConflictDoNothing({ target: departmentReceipts.departmentId });
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     return { ...seed, personId: person!.id };
   });

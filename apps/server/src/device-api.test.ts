@@ -47,13 +47,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal } from "@waitron/shared";
-import {
-  deviceProfileAdmissionRoles,
-  hashPin,
-  loginWithPin,
-  persons,
-  sessions,
-} from "@waitron/identity";
+import { deviceProfileAdmissionRoles, loginWithPin, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   deleteDeviceProfile,
@@ -63,6 +57,7 @@ import {
 } from "@waitron/layouts";
 import "./errors.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -224,7 +219,7 @@ async function seedPagePrinter(cfg: TillConfig): Promise<string> {
 async function openTillSession(deviceId: string): Promise<string> {
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
+    .values({ displayName: "Server", pinHash: fixturePinHash("4321"), role: "staff" })
     .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
@@ -3634,7 +3629,7 @@ describe("a device's approved profiles and switching its active one", () => {
   ): Promise<{ cookie: string; personId: string }> {
     const [person] = await suite.db
       .insert(persons)
-      .values({ displayName: `Person ${randomUUID()}`, pinHash: hashPin("4321"), role })
+      .values({ displayName: `Person ${randomUUID()}`, pinHash: fixturePinHash("4321"), role })
       .returning({ id: persons.id });
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),

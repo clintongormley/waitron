@@ -17,7 +17,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -48,6 +48,7 @@ import { createOpenOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import "./errors.js";
 
 // The A4 invoice path in one process: the real routes, the real agent loop, the real IPP client and
@@ -283,11 +284,11 @@ async function venue() {
   const { managerCookie, staffId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const [manager] = await tx
       .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .values({ displayName: "The Manager", pinHash: fixturePinHash("1234"), role: "manager" })
       .returning({ id: persons.id });
     const [staff] = await tx
       .insert(persons)
-      .values({ displayName: "Staff one", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Staff one", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: manager!.id });
     const zone = await createZone(tx, cfg, { name: "Bar" });

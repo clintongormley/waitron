@@ -17,7 +17,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, hashPin } from "@waitron/identity";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
@@ -37,6 +36,7 @@ import { enabledModules } from "@waitron/module";
 import { recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
 const ES_CONFIG = venueModuleConfig(ALL_ENABLED, "ES-common");
@@ -69,8 +69,8 @@ function venueRequest(taxId: string): VenueRequest {
     rectificativeSeriesCode: "R",
     admin: {
       displayName: "Administradora",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword("dashPass123"),
+      pinHash: fixturePinHash("1234"),
+      passwordHash: fixturePasswordHash("dashPass123"),
       email: "owner@example.test",
     },
   };

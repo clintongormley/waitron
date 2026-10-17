@@ -36,13 +36,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import {
-  createPinThrottle,
-  hashPassword,
-  hashPin,
-  persons,
-  startManagementSession,
-} from "@waitron/identity";
+import { createPinThrottle, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -104,6 +98,7 @@ import {
   watchedOrder,
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
+import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -198,8 +193,8 @@ async function setupVenue(): Promise<{
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -240,11 +235,11 @@ async function setupVenue(): Promise<{
     });
     const [staff] = await tx
       .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Cajera", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     const [supervisor] = await tx
       .insert(persons)
-      .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
+      .values({ displayName: "Responsable", pinHash: fixturePinHash("5555"), role: "supervisor" })
       .returning({ id: persons.id });
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
     for (const department of await tx

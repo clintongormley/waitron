@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
-import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { Logger } from "../logger.js";
@@ -21,6 +21,7 @@ import {
 } from "./bill-venue.js";
 import { offerProducts } from "./zone-offers.js";
 import { issueOrderInvoice } from "./issue-order.js";
+import { fixturePinHash } from "./known-secret-hashes.js";
 
 /** {@link provisionBillVenue} with a supervisor, the Orders routes, and a ticket-then-pay counter. */
 export interface OrderVenue extends BillVenue {
@@ -58,7 +59,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   const made = await inTx(venue, async (tx) => {
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Sofía", pinHash: hashPin("7777"), role: "supervisor" })
+      .values({ displayName: "Sofía", pinHash: fixturePinHash("7777"), role: "supervisor" })
       .returning({ id: persons.id });
     const till = await loginWithPin(tx, {
       deviceId: venue.deviceId,

@@ -33,7 +33,7 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
+import { hashSecret, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -69,6 +69,7 @@ import {
   type CheckpointProbe,
 } from "./stream-pause-diagnostics.js";
 import { offerProducts } from "./zone-offers.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 const LOCALE = "es-ES";
 const ADMIN_PIN = "1234";
@@ -323,8 +324,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
               displayName: "Administradora",
               firstNames: "Test",
               lastNames: "Operator",
-              pinHash: hashPin(ADMIN_PIN),
-              passwordHash: hashPassword("dashPass123"),
+              pinHash: fixturePinHash(ADMIN_PIN),
+              passwordHash: fixturePasswordHash("dashPass123"),
               email: "owner@example.test",
             },
           },
