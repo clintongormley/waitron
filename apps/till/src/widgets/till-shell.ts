@@ -34,7 +34,7 @@ export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 type ActionVariant = "secondary" | "ghost";
 
 /** An item of the bar that can move into More; "transfers" is the count and its button together,
- * "operator" the name and Log out together. */
+ * "operator" the name and everything in its menu together. */
 type BarItem =
   | "transfers"
   | "find-bill"

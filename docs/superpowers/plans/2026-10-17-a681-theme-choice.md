@@ -393,6 +393,9 @@ bar and must change; each task lists them under "Changed test checks".
   `data-theme` for Light/Dark and removes it for Follow device. The `storage` listener parses
   `event.newValue` with the same rule when `event.key === THEME_STORAGE_KEY`, treats `event.key === null`
   as Follow device, applies, notifies, and never writes. Export everything from `packages/ui/src/index.ts`.
+  **Changed 2026-10-17 (finish-branch review):** on a theme event from local storage, the listener
+  re-reads the saved value instead of `event.newValue`, and ignores events from any other storage
+  area; the other-tab test writes the value before dispatching.
 
 - [ ] **Step 4: Run the tests to see them pass**
 
