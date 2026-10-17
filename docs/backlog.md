@@ -1957,8 +1957,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones
   (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
   whether clocking is offered change the till's layout, so they are applied only where the till
-  already lays itself out again (A768's default; the owner has not decided). Decide whether any of them should follow
-  a profile edit made on the dashboard while the till is open.
+  already lays itself out again (A768's default; the owner has not decided). Decide whether any of
+  them should follow a profile edit made on the dashboard while the till is open.
+
+- **A791. A restart of the till does not end the person's session, so the till guards each draft
+  save itself (left open by A768, 2026-10-17).** After the till restarts to the lock screen with no
+  sign-out (a refused device, for one), the next person's sign-in drops the drafts of the person
+  before (`#dropOthersDrafts`, `apps/till/src/till-app.ts`). The new session cookie arrives with the
+  login answer, a moment before the till runs that drop, so a save timer firing in between would go
+  out as the new person (read, not run). The server takes the person from the session alone; a
+  save that named its draft's person, refused when it differs, would close the gap in one place.
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642. The drag's override sheet is added to the document and to every
