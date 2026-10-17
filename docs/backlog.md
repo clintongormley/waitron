@@ -2243,6 +2243,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (#1824); seen on the demo stack (`~/waitron-campaign-b/a766-shots`). A refit during a drag moves
   the drawn table out from under a still finger.
 
+- **A pan or zoom on a hidden till map is believed to divide by zero** — raised by A766's review
+  (#1824), not run. A hidden map refits to a scale of 0, and `#moveView`
+  (`packages/ui/src/components/wt-floor-map.ts`) divides by the view's scale; `git blame` puts that
+  code before A766. A766 guarded only a drag's move at scale 0.
+
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 
