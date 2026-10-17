@@ -689,7 +689,9 @@ export class TillShell extends LitElement {
             ></wt-count-badge>`
           : nothing
       }
-      ${this.#items(moved, true)}${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
+      ${this.#items(moved, true)}
+      ${this.formFactor === "till" ? html`<wt-button class="settings" variant="ghost" align="start" @click=${() => this.#emit("open-settings")}>${t("device_zones.settings")}</wt-button>` : nothing}
+      ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
     </wt-row-actions>`;
   }
 

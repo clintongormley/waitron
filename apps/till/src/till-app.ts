@@ -1,4 +1,6 @@
-import type { DeviceZoneSelection } from "@waitron/venue-service";
+import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
+import "./widgets/device-zones-dialog.js";
+import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
@@ -1730,6 +1732,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeDeviceZones();
+    this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
     this.#tenderRefundRead++;
     this.#stopClocking();
@@ -1900,6 +1904,7 @@ export class TillApp extends LitElement {
     this.#store.subscribe(() => {
       this.#evaluateBasket(false);
       this.#syncBasketDraft();
+      this.#reconcileSavedDeviceZones();
     });
     this.#store.on("refused", (payload) => {
       const refusal = payload as BasketRefusal;
@@ -2235,6 +2240,18 @@ export class TillApp extends LitElement {
    * afterwards can tell that the session it was asked in has ended. */
   #operatorSession = 0;
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
+  @state() private deviceSettingsOpen = false;
+  @state() private deviceZonesOpen = false;
+  @state() private deviceZonesReading = false;
+  @state() private deviceZonesSaving = false;
+  @state() private deviceZonesEditing: DeviceZoneSelection | null = null;
+  @state() private deviceZonesReadError = "";
+  @state() private deviceZonesRefusal?: DeviceZonesRefusal;
+  @state() private deviceZonesNotice = "";
+  #deviceZonesOpening = 0;
+  #deviceZonesRead = 0;
+  #deviceZonesWrite = 0;
+  #pendingDeviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private profileServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
@@ -7368,6 +7385,146 @@ export class TillApp extends LitElement {
     this.equipmentOpen = true;
   }
 
+  #closeDeviceZones(): void {
+    this.deviceZonesOpen = false;
+    this.deviceZonesReading = false;
+    this.deviceZonesSaving = false;
+    this.#deviceZonesOpening++;
+    this.#deviceZonesRead++;
+  }
+
+  #openDeviceZones(): void {
+    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    this.deviceSettingsOpen = false;
+    if (this.deviceZonesOpen) return;
+    this.#deviceZonesOpening++;
+    this.deviceZonesEditing = this.deviceZoneSelection;
+    this.deviceZonesRefusal = undefined;
+    this.deviceZonesReadError = "";
+    this.deviceZonesOpen = true;
+    void this.#readDeviceZonesEditor();
+  }
+
+  async #readDeviceZonesEditor(): Promise<void> {
+    const read = ++this.#deviceZonesRead;
+    const opening = this.#deviceZonesOpening;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const write = this.#deviceZonesWrite;
+    const current = () =>
+      this.isConnected &&
+      this.deviceZonesOpen &&
+      opening === this.#deviceZonesOpening &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      read === this.#deviceZonesRead &&
+      write === this.#deviceZonesWrite;
+    this.deviceZonesReading = true;
+    try {
+      const selection = await api.getDeviceZones();
+      if (!current()) return;
+      this.deviceZonesEditing = selection;
+      this.deviceZonesReadError = "";
+    } catch {
+      if (current()) this.deviceZonesReadError = t("device_zones.read_failed");
+    } finally {
+      if (current()) this.deviceZonesReading = false;
+    }
+  }
+
+  #hidesOrderZone(input: Pick<DeviceZoneSelectionInput, "selectedZoneIds">): boolean {
+    return (
+      (this.#store.lines.length > 0 &&
+        !input.selectedZoneIds.includes(this.counterServiceZoneId)) ||
+      ((this.#partylessDraft.lines.length > 0 || (this.#draftSync?.store.lines.length ?? 0) > 0) &&
+        this.#tableZoneId !== undefined &&
+        !input.selectedZoneIds.includes(this.#tableZoneId))
+    );
+  }
+
+  #reconcileSavedDeviceZones(): void {
+    const selection = this.#pendingDeviceZoneSelection;
+    if (!selection || this.#hidesOrderZone(selection) || this.#requestsOut()) return;
+    this.#pendingDeviceZoneSelection = null;
+    this.deviceZoneSelection = selection;
+    this.profileServiceZones = [...selection.zones];
+    const tab = this.#resolveScreen(this.activeTabKey ?? null);
+    this.#setActiveTab(tab, true, true);
+    if (tab === "floor" && !this.#floorLoaded) void this.#loadFloorData();
+    if (
+      tab === "counter" &&
+      !this.#deviceNavigation()?.counterZoneIds.includes(this.counterServiceZoneId)
+    ) {
+      const zoneId = this.#deviceNavigation()?.counterZoneIds[0];
+      if (zoneId)
+        void this.#onCounterZoneSelected(
+          new CustomEvent("counter-zone-selected", { detail: { zoneId } }),
+        );
+    }
+  }
+
+  async #saveDeviceZones(input: DeviceZoneSelectionInput): Promise<void> {
+    if (
+      !this.deviceZonesOpen ||
+      this.deviceZonesSaving ||
+      !this.isConnected ||
+      this.operatorName === ""
+    )
+      return;
+    if (this.#hidesOrderZone(input) || this.#requestsOut()) {
+      this.deviceZonesRefusal = { message: t("device_zones.order_in_zone") };
+      return;
+    }
+    const opening = this.#deviceZonesOpening;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const write = ++this.#deviceZonesWrite;
+    this.#deviceZonesRead++;
+    this.deviceZonesReading = false;
+    const current = () =>
+      this.isConnected &&
+      this.deviceZonesOpen &&
+      opening === this.#deviceZonesOpening &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      write === this.#deviceZonesWrite;
+    this.deviceZonesSaving = true;
+    this.deviceZonesRefusal = undefined;
+    try {
+      const selection = await api.setDeviceZones(input);
+      if (!current()) return;
+      this.shadowRoot!.querySelector("till-device-zones-dialog")?.acceptSaved(input);
+      this.#closeDeviceZones();
+      this.#pendingDeviceZoneSelection = selection;
+      this.deviceZonesNotice = "";
+      this.#reconcileSavedDeviceZones();
+      const savedWrite = this.#deviceZonesWrite;
+      try {
+        await api.getDeviceZones();
+      } catch {
+        if (
+          this.isConnected &&
+          session === this.#operatorSession &&
+          api === this.api &&
+          device === this.deviceId &&
+          savedWrite === this.#deviceZonesWrite
+        )
+          this.deviceZonesNotice = t("device_zones.read_failed");
+      }
+    } catch (error) {
+      if (current()) {
+        const refusal = error as { code?: string; params?: { field?: string } };
+        this.deviceZonesRefusal = { code: refusal.code, field: refusal.params?.field };
+      }
+    } finally {
+      if (current()) this.deviceZonesSaving = false;
+    }
+  }
+
   /** Whether the device answered; either way the equipment held is shown. */
   async #readEquipment(): Promise<boolean> {
     const changed = this.#equipmentChanged;
@@ -11057,6 +11214,11 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#closeDeviceZones();
+    this.deviceSettingsOpen = false;
+    this.deviceZonesEditing = null;
+    this.deviceZonesNotice = "";
+    this.#pendingDeviceZoneSelection = null;
     this.#clearTenderRefundSession();
     this.#stopClocking();
     this.#readerPayments.clear();
@@ -12039,6 +12201,12 @@ export class TillApp extends LitElement {
       : html`<section data-device-zones-empty role="status">
           <p>${codeMessage("device_profile.no_service_zone")}</p>
           <wt-button
+            data-open-device-settings
+            variant="secondary"
+            @click=${() => (this.deviceSettingsOpen = true)}
+            >${t("device_zones.settings")}</wt-button
+          >
+          <wt-button
             data-retry-device-zones
             variant="secondary"
             @click=${() => void this.#enterSignedIn({ personId: this.operatorPersonId, displayName: this.operatorName, permissions: this.permissions })}
@@ -12426,6 +12594,8 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @open-equipment=${() => void this.#onOpenEquipment()}
+        @open-settings=${() => (this.deviceSettingsOpen = true)}
+        @open-device-zones=${() => this.#openDeviceZones()}
         @open-profile=${() => void this.#onOpenProfile()}
         @logout=${() => this.#requestLeave(() => this.#onLogout(), "signout")}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => {
@@ -12460,6 +12630,47 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.errorKey ? html`<p class="error" role="alert">${errorMessage}</p>` : nothing}
+        ${this.deviceZonesNotice ? html`<p role="status">${this.deviceZonesNotice}</p>` : nothing}
+        ${
+          this.deviceSettingsOpen
+            ? html`<wt-dialog
+                .open=${true}
+                .heading=${t("device_zones.settings")}
+                @wt-close=${() => (this.deviceSettingsOpen = false)}
+              >
+                <wt-button
+                  data-settings-equipment
+                  variant="secondary"
+                  @click=${() => {
+                    this.deviceSettingsOpen = false;
+                    void this.#onOpenEquipment();
+                  }}
+                  >${t("equipment.open")}</wt-button
+                >
+                <wt-button
+                  data-settings-zones
+                  variant="secondary"
+                  @click=${() => this.#openDeviceZones()}
+                  >${t("device_zones.title")}</wt-button
+                >
+              </wt-dialog>`
+            : nothing
+        }
+        ${
+          this.deviceZonesOpen
+            ? html`<till-device-zones-dialog
+                .open=${true}
+                .selection=${this.deviceZonesEditing}
+                .loading=${this.deviceZonesReading}
+                .busy=${this.deviceZonesSaving}
+                .readError=${this.deviceZonesReadError}
+                .refusal=${this.deviceZonesRefusal}
+                @save-device-zones=${(event: CustomEvent<DeviceZoneSelectionInput>) => void this.#saveDeviceZones(event.detail)}
+                @retry-device-zones=${() => void this.#readDeviceZonesEditor()}
+                @close-device-zones=${() => this.#closeDeviceZones()}
+              ></till-device-zones-dialog>`
+            : nothing
+        }
         ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
         ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
         <wt-toast

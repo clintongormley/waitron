@@ -434,7 +434,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(11);
+        expect(controls.length).toBe(formFactor === "till" ? 12 : 11);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
           .map((c) => {
@@ -529,6 +529,7 @@ const menuActions = [
   [".profile", "open-profile"],
   [".equipment", "open-equipment"],
   ["[data-open-transfers]", "open-transfers"],
+  [".settings", "open-settings"],
   [".logout", "logout"],
 ] as const;
 
@@ -616,6 +617,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
+        "settings",
         "operator",
         "logout",
       ]);
@@ -801,7 +803,7 @@ describe("till-shell at phone width", () => {
         el
           .shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!
           .querySelectorAll(":scope > *"),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       const session = el.shadowRoot!.querySelector("header .session")!;
@@ -836,7 +838,7 @@ describe("till-shell at phone width", () => {
       const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       expect(menuOf(el)).not.toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
-      await vi.waitFor(() => expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1));
+      await vi.waitFor(() => expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2));
       expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBe(chooser);
       await page.viewport(390, 844);
@@ -1015,7 +1017,7 @@ describe("till-shell above phone width", () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", shell);
       await settle(el);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
       const header = el.shadowRoot!.querySelector("header")!;
       const session = header.querySelector<HTMLElement>(".session")!;
       const width = (node: Element) => node.getBoundingClientRect().width;
@@ -1123,7 +1125,7 @@ describe("till-shell above phone width", () => {
         atViewport(ROOMY_WIDTH, async () => {
           const { el } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
-          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
             "header .session > [data-open-transfers]",
           )!;
@@ -1146,7 +1148,7 @@ describe("till-shell above phone width", () => {
         await atViewport(ROOMY_WIDTH, async () => {
           const { el, host } = await mountWidget<TillShell>("till-shell", full);
           await settle(el);
-          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+          expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
           const nameMenu = el.shadowRoot!.querySelector("wt-row-actions.operator-menu")!;
           const onBar = nameMenu.querySelector<HTMLElement>(".logout")!;
           expect(onBar.textContent!.trim()).toBe(label);
@@ -1212,6 +1214,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
+        "settings",
         "operator",
         "logout",
       ];
@@ -1243,7 +1246,7 @@ describe("till-shell above phone width", () => {
       expect(el.shadowRoot!.querySelector(".brand")).toBeNull();
       await page.viewport(ROOMY_WIDTH, 844);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
       expect(el.shadowRoot!.querySelector("header > .brand")!.textContent).toBe("Waitron");
       expectOneRow(el);
     });
@@ -1316,7 +1319,7 @@ describe("till-shell above phone width", () => {
       atViewport(ROOMY_WIDTH, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
         const [status, ...rest] = statuses(el);
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
@@ -1390,7 +1393,7 @@ describe("till-shell above phone width", () => {
         expect(inMore(el)).toEqual(held);
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1424,7 +1427,7 @@ describe("till-shell above phone width", () => {
         );
         await userEvent.keyboard("{Escape}");
         await settle(el);
-        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+        expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
         expect(el.shadowRoot!.querySelector(".brand")).not.toBeNull();
         expectOneRow(el);
       }),
@@ -1548,7 +1551,7 @@ describe("till-shell above phone width", () => {
             for (let i = 0; i < ticks; i += 1) await Promise.resolve();
             el.kiosk = false;
             await settle(el);
-            expect(menuOf(el)!.querySelectorAll(":scope > *"), `${ticks}`).toHaveLength(1);
+            expect(menuOf(el)!.querySelectorAll(":scope > *"), `${ticks}`).toHaveLength(2);
             expect(el.shadowRoot!.querySelector("header > .brand"), `${ticks}`).not.toBeNull();
             expectOneRow(el);
           }
@@ -1565,7 +1568,7 @@ describe("till-shell above phone width", () => {
     await atViewport(ROOMY_WIDTH, async () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", full);
       await settle(el);
-      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(1);
+      expect(menuOf(el)!.querySelectorAll(":scope > *")).toHaveLength(2);
       el.remove();
       host.append(el);
       await settle(el);

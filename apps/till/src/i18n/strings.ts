@@ -2,6 +2,25 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "device_zones.title": "Zones on this device",
+  "device_zones.explanation":
+    "Choose which permitted zones this device shows and where it opens first.",
+  "device_zones.show": "Show",
+  "device_zones.zone": "Zone",
+  "device_zones.kind": "Kind",
+  "device_zones.opens_first": "Opens first",
+  "device_zones.floor": "Floor plan",
+  "device_zones.counter": "Counter",
+  "device_zones.choose_zones": "Choose at least one zone allowed by this profile.",
+  "device_zones.choose_start": "Choose a shown zone to open first.",
+  "device_zones.loading": "Reading zones…",
+  "device_zones.adjusted": "Some saved zones are unavailable. Check the choices for this device.",
+  "device_zones.save": "Save",
+  "device_zones.settings": "Settings",
+  "device_zones.read_failed": "The zones could not be read. Try again.",
+  "device_zones.write_failed": "The zones could not be saved. Try again.",
+  "device_zones.order_in_zone": "Hold, send or cancel this order before hiding its zone.",
+
   "refund_ack.title": "Payment refund acknowledgment",
   "refund_ack.reference": "Refund reference",
   "refund_ack.invoice": "Original invoice",
@@ -1542,6 +1561,26 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "device_zones.title": "Zonas en este dispositivo",
+  "device_zones.explanation":
+    "Elige qué zonas permitidas muestra este dispositivo y dónde se abre primero.",
+  "device_zones.show": "Mostrar",
+  "device_zones.zone": "Zona",
+  "device_zones.kind": "Tipo",
+  "device_zones.opens_first": "Abre primero",
+  "device_zones.floor": "Plano de sala",
+  "device_zones.counter": "Mostrador",
+  "device_zones.choose_zones": "Elige al menos una zona permitida por este perfil.",
+  "device_zones.choose_start": "Elige una zona visible para abrir primero.",
+  "device_zones.loading": "Consultando zonas…",
+  "device_zones.adjusted":
+    "Algunas zonas guardadas no están disponibles. Revisa las opciones de este dispositivo.",
+  "device_zones.save": "Guardar",
+  "device_zones.settings": "Ajustes",
+  "device_zones.read_failed": "No se han podido consultar las zonas. Inténtalo de nuevo.",
+  "device_zones.write_failed": "No se han podido guardar las zonas. Inténtalo de nuevo.",
+  "device_zones.order_in_zone": "Retén, envía o cancela este pedido antes de ocultar su zona.",
+
   "refund_ack.title": "Justificante de devolución del pago",
   "refund_ack.reference": "Referencia de la devolución",
   "refund_ack.invoice": "Factura original",
