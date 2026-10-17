@@ -315,8 +315,8 @@ export class SeasonPainter extends LitElement {
   private refresh(previous: Model, confirmed?: Draft) {
     const fresh = seed(this.model, this.seasonId);
     // A save naming a deleted period is refused, so its paint leaves every week held here. A
-    // deletion naming a replacement moves the saved blocks to it, so a saved block's stretch takes
-    // what the stored week now holds there.
+    // deletion naming a replacement moves the saved blocks to it, so the stretch of a deleted-period
+    // block the week still holds where it was saved takes what the stored week now holds there.
     const removed = removedPeriods(previous, this.model);
     if (removed.size) {
       const none: Week = new Map();
@@ -326,7 +326,7 @@ export class SeasonPainter extends LitElement {
             key,
             refill(
               withoutPeriods(week, removed),
-              savedBlocks(week, removed, saved.get(key) ?? none),
+              savedBlocks(week, removed, saved.get(key) ?? none, this.model.dayCutover),
               fresh.get(key) ?? none,
               this.model.dayCutover,
             ),

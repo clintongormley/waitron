@@ -1438,9 +1438,10 @@ describe("the painters' Periods link", () => {
     ]);
   });
 
-  /** Paints Dinner 08:00–10:00 on `weekday`, deletes Lunch (saved Monday 13:00–16:00) in the
-   *  Periods window with Dinner as its replacement, closes the window and saves: what was sent. */
-  async function saveAfterReplacingLunch(weekday: string) {
+  /** Paints `pot` (Dinner by default) 08:00–10:00, or `from`–`to` minutes after the 06:00
+   *  changeover, on `weekday`, deletes Lunch (saved Monday 13:00–16:00) in the Periods window with
+   *  Dinner as its replacement, closes the window and saves: what was sent. */
+  async function saveAfterReplacingLunch(weekday: string, pot = "p2", from = 120, to = 240) {
     history.replaceState(null, "", base);
     const app = document.createElement("opening-hours-replacing-test-app") as ReplacingApp;
     applyTokens(app);
@@ -1450,9 +1451,9 @@ describe("the painters' Periods link", () => {
     const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
     await expect.poll(() => drawnView(el)).toBeDefined();
     const painter = await shownPainter(el);
-    painter.shadowRoot!.querySelector<HTMLElement>('[data-test="paint-p2"]')!.click();
+    painter.shadowRoot!.querySelector<HTMLElement>(`[data-test="paint-${pot}"]`)!.click();
     await settle(painter);
-    await drag(painter, weekday, 120, 240);
+    await drag(painter, weekday, from, to);
     await userEvent.click(link(painter));
     const { modal, list, table } = await periodsWindow(el);
     table
@@ -1505,6 +1506,20 @@ describe("the painters' Periods link", () => {
         days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
           weekday,
           slots: weekday === 1 ? [dinner("08:00", "10:00"), dinner("13:00", "16:00")] : [],
+        })),
+      },
+    ]);
+  });
+
+  it("a period deleted with a replacement fills both ends of a saved block the draft split", async () => {
+    const { shown, sent } = await saveAfterReplacingLunch("1", "closed", 480, 540);
+    expect(shown("1")).toEqual([dinner("13:00", "14:00"), dinner("15:00", "16:00")]);
+    expect(sent).toEqual([
+      {
+        departmentId: "d1",
+        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
+          weekday,
+          slots: weekday === 1 ? [dinner("13:00", "14:00"), dinner("15:00", "16:00")] : [],
         })),
       },
     ]);

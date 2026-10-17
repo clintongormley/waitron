@@ -325,7 +325,7 @@ describe("withoutPeriods", () => {
 });
 
 describe("savedBlocks", () => {
-  it("finds each day's blocks of a removed period that the saved days hold the same, and copies them", () => {
+  it("finds where each day's blocks of a removed period overlap the same period's saved blocks that day, and copies them", () => {
     const days = new Map([
       ["1", [paint(LUNCH, "13:00", "16:00"), paint(DINNER, "18:00", "21:00")]],
       ["2", [paint(LUNCH, "08:00", "10:00"), paint(null, "10:00", "11:00")]],
@@ -335,9 +335,65 @@ describe("savedBlocks", () => {
       ["1", [paint(LUNCH, "13:00", "16:00"), paint(DINNER, "18:00", "21:00")]],
       ["2", [paint(LUNCH, "08:00", "09:00"), paint(null, "10:00", "11:00")]],
     ]);
-    const found = savedBlocks(days, new Set([LUNCH]), saved);
-    expect(found).toEqual(new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]));
+    const found = savedBlocks(days, new Set([LUNCH]), saved, "06:00");
+    expect(found).toEqual(
+      new Map([
+        ["1", [paint(LUNCH, "13:00", "16:00")]],
+        ["2", [paint(LUNCH, "08:00", "09:00")]],
+      ]),
+    );
     expect(found.get("1")![0]).not.toBe(days.get("1")![0]);
+    expect(found.get("1")![0]).not.toBe(saved.get("1")![0]);
+  });
+
+  /** Saved Lunch 13:00–16:00 on day "1", Lunch then deleted with Dinner as its replacement, so the
+   *  stored day holds Dinner 13:00–16:00: what the draft `day` keeps once refilled. */
+  const replaced = (day: Paint[]) => {
+    const removed = new Set([LUNCH]);
+    const draft = new Map([["1", day]]);
+    return refill(
+      withoutPeriods(draft, removed),
+      savedBlocks(draft, removed, new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]), "06:00"),
+      new Map([["1", [paint(DINNER, "13:00", "16:00")]]]),
+      "06:00",
+    ).get("1");
+  };
+
+  it("finds both ends of a saved block the draft split", () => {
+    expect(
+      replaced([
+        paint(LUNCH, "13:00", "14:00"),
+        paint(BREAKFAST, "14:00", "15:00"),
+        paint(LUNCH, "15:00", "16:00"),
+      ]),
+    ).toEqual([
+      paint(DINNER, "13:00", "14:00"),
+      paint(BREAKFAST, "14:00", "15:00"),
+      paint(DINNER, "15:00", "16:00"),
+    ]);
+  });
+
+  it("finds the saved stretch of a block the draft lengthened, and nothing past it", () => {
+    expect(replaced([paint(LUNCH, "13:00", "17:00")])).toEqual([paint(DINNER, "13:00", "16:00")]);
+  });
+
+  it("finds the stretch of a saved block the draft shortened", () => {
+    expect(replaced([paint(LUNCH, "13:00", "15:00")])).toEqual([paint(DINNER, "13:00", "15:00")]);
+  });
+
+  it("finds nothing for a block the draft moved off its saved times", () => {
+    expect(replaced([paint(LUNCH, "17:00", "20:00")])).toEqual([]);
+  });
+
+  it("finds the overlap of a block and a saved block across midnight by the changeover's order", () => {
+    expect(
+      savedBlocks(
+        new Map([["1", [paint(DINNER, "23:00", "03:00")]]]),
+        new Set([DINNER]),
+        new Map([["1", [paint(DINNER, "22:00", "02:00")]]]),
+        "06:00",
+      ),
+    ).toEqual(new Map([["1", [paint(DINNER, "23:00", "02:00")]]]));
   });
 });
 

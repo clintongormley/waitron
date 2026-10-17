@@ -735,12 +735,14 @@ export class SpecialDayPainter extends LitElement {
   private dropDeletedPeriods(previous: Model) {
     const removed = removedPeriods(previous, this.model);
     if (!removed.size) return;
+    const cutover = this.cutover();
     const holes = (paint: OwnerPaint, into: OwnerPaint = new Map()): OwnerPaint => {
       for (const [owner, days] of paint)
         for (const [date, blocks] of savedBlocks(
           days,
           removed,
           this.baseline.paint.get(owner) ?? new Map(),
+          cutover,
         )) {
           const held = new Map(into.get(owner));
           into.set(owner, held.set(date, [...(held.get(date) ?? []), ...blocks]));

@@ -126,22 +126,33 @@ export function withoutPeriods<K>(
   );
 }
 
-/** Each day's blocks of a period in `removed` that `saved` holds, the same, on that day. */
+/** Each day's stretches where a block of a period in `removed` overlaps a block `saved` holds of
+ *  the same period on that day. */
 export function savedBlocks<K>(
   days: ReadonlyMap<K, readonly Paint[]>,
   removed: ReadonlySet<string>,
   saved: ReadonlyMap<K, readonly Paint[]>,
+  cutover: string,
 ): Map<K, Paint[]> {
   const found = new Map<K, Paint[]>();
   for (const [key, day] of days) {
-    const blocks = day
-      .filter(
-        (block) =>
-          block.periodId !== null &&
-          removed.has(block.periodId) &&
-          (saved.get(key) ?? []).some((other) => samePaint([other], [block])),
-      )
-      .map((block) => ({ ...block }));
+    const blocks: Paint[] = [];
+    for (const block of day) {
+      if (block.periodId === null || !removed.has(block.periodId)) continue;
+      const [start, end] = stepSpan(block, cutover);
+      for (const other of saved.get(key) ?? []) {
+        if (other.periodId !== block.periodId) continue;
+        const [otherStart, otherEnd] = stepSpan(other, cutover);
+        const from = Math.max(start, otherStart);
+        const to = Math.min(end, otherEnd);
+        if (from < to)
+          blocks.push({
+            periodId: block.periodId,
+            startsAt: clockAt(from, cutover),
+            endsAt: clockAt(to, cutover),
+          });
+      }
+    }
     if (blocks.length) found.set(key, blocks);
   }
   return found;
