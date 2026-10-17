@@ -387,7 +387,8 @@ export class WtColourChooser extends LitElement {
 **Files:**
 - Modify: `wt-colour-chooser.test.ts`, `packages/ui/src/index.ts` (add
   `export type { ColourChoice } from "./components/wt-colour-chooser.js";` — a type-only export, so
-  importing the package index does not register the element), `packages/ui/demo/main.ts` (the
+  importing the package index does not register the element; review fix 2026-10-17: the index now
+  exports the `WtColourChooser` class, as it does every other `wt-*` component), `packages/ui/demo/main.ts` (the
   workbench: import it and show one with marks and one with an error, beside the other fields)
 - Create: `packages/ui/src/components/wt-colour-chooser.a11y.test.ts`
 
@@ -446,6 +447,9 @@ export function calendarColourChoices(
 /** The first calendar colour no entry of `used` is; the first colour when every one is. */
 export function firstUnusedCalendarColour(used: readonly string[]): CalendarColour;
 ```
+
+(Review fix 2026-10-17: `firstUnusedCalendarColour` takes the colour users, `{ colour }[]`, and both
+dialogs share `rememberedColourChoices` from this file.)
 
 The period dialog: the `<fieldset name="colour">` and its radio group (`period-dialog.ts:500-544`),
 `COLOUR_STEPS` (`:38-43`), the `tabStop` line (`:446`) and the swatch, radiogroup, fieldset, legend

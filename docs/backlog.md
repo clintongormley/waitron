@@ -1327,7 +1327,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the link must also go on the hidden width copies in `fixed-title.ts`, or the arrows move again.
   Left open by A759.
 
-- **A753. Calendar colours: more of them (owner, 2026-10-16; left open by A753 points 2 and 3, #NNNN).** Periods (which set the menus'
+- **A753. Calendar colours: more of them (owner, 2026-10-16; left open by #NNNN).** Periods (which set the menus'
   times) and staff roles pick from six colours; special dates store no colour. The palette grows
   once the owner has seen a swatch board, with a migration, because a CHECK on each of the two
   tables lists the six. Every calendar-colour picker in dashboard code already uses the shared

@@ -272,7 +272,7 @@ special-day write routes.
 
 ## A753. Calendar colours: more of them
 
-**A753 (owner, 2026-10-16; left open by A753 points 2 and 3, #NNNN).**
+**A753 (owner, 2026-10-16; left open by #NNNN).**
 
 1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
    from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
