@@ -193,6 +193,48 @@ it("the bin removes a row; the last row's bin is disabled", async () => {
   expect(bins(el)[0]!.disabled).toBe(true);
 });
 
+const focused = (el: SeasonsWindow) => root(el).activeElement;
+const innerButton = (host: HTMLElement) => host.shadowRoot!.querySelector<HTMLElement>("button")!;
+
+it("a bin pressed with the mouse hands focus to the bin of the row that took its place", async () => {
+  const el = await mount();
+  await userEvent.click(innerButton(bins(el)[1]!));
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "summer", "autumn"]);
+  expect(focused(el)).toBe(bins(el)[1]);
+  expect(bins(el)[1]!.shadowRoot!.activeElement).toBe(innerButton(bins(el)[1]!));
+});
+
+it("a bin pressed from the keyboard on the last row hands focus to the row above's bin, and the one row left hands it to + Season", async () => {
+  const el = await mount();
+  bins(el)[3]!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer"]);
+  expect(focused(el)).toBe(bins(el)[2]);
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(focused(el)).toBe(bins(el)[1]);
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter"]);
+  expect(bins(el)[0]!.disabled).toBe(true);
+  expect(focused(el)).toBe(button(el, "add-season"));
+});
+
+it("after a bin, Escape asks the leave question without a Tab first", async () => {
+  const el = await mount();
+  const guard = vi.fn(async () => false);
+  el.beforeClose = guard;
+  await el.updateComplete;
+  await userEvent.click(innerButton(bins(el)[0]!));
+  await el.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => guard.mock.calls.length).toBe(1);
+  expect(guard).toHaveBeenCalledWith("escape");
+  expect(root(el).querySelector("wt-modal")!.open).toBe(true);
+});
+
 it("marks the name, day and month of every row required, the heading drawing the one asterisk", async () => {
   const el = await mount();
   const marks = [...root(el).querySelectorAll("thead th")].map(
@@ -342,6 +384,64 @@ it.each(["en", "es"] as const)(
       await expect.poll(() => panel.matches(":popover-open")).toBe(true);
       await frames();
       inside(panel.getBoundingClientRect());
+    } finally {
+      setLocale("en");
+      await page.viewport(old[0], old[1]);
+    }
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "at 390 every row's bin and Day box are on screen on opening, and the bin stays put while the table scrolls (%s)",
+  async (locale) => {
+    const old = [window.innerWidth, window.innerHeight] as const;
+    try {
+      setLocale(locale);
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
+      const el = await mount();
+      await change(el, "season-1-day", "31");
+      await frames();
+      expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
+      const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
+      expect(day.textContent!.trim()).toBe("31");
+      expect(day.scrollWidth, "the Day box shows 31 whole").toBeLessThanOrEqual(day.clientWidth);
+      const modal = root(el).querySelector("wt-modal")!;
+      const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!.getBoundingClientRect();
+      const region = root(el).querySelector<HTMLElement>(".table-wrap")!;
+      const shown = region.getBoundingClientRect();
+      const within = (box: DOMRect, what: string) => {
+        expect(box.width, what).toBeGreaterThan(0);
+        expect(box.left, what).toBeGreaterThanOrEqual(Math.max(shown.left, body.left));
+        expect(box.right, what).toBeLessThanOrEqual(Math.min(shown.right, body.right));
+      };
+      const rows = root(el).querySelectorAll("tbody tr");
+      expect(rows).toHaveLength(4);
+      const check = () =>
+        rows.forEach((row, index) =>
+          within(
+            row.querySelector("[data-test=delete-season]")!.getBoundingClientRect(),
+            `row ${index}'s bin`,
+          ),
+        );
+      check();
+      const binCell = rows[0]!.querySelector<HTMLElement>("td.bin")!;
+      rows.forEach((row, index) => {
+        const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
+        within(day, `row ${index}'s Day box`);
+        expect(day.right, `row ${index}'s Day box clears the bin column`).toBeLessThanOrEqual(
+          binCell.getBoundingClientRect().left,
+        );
+      });
+
+      expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
+      region.scrollLeft = region.scrollWidth;
+      await frames();
+      expect(region.scrollLeft).toBeGreaterThan(0);
+      check();
+      const surface = getComputedStyle(modal.shadowRoot!.querySelector("dialog")!).backgroundColor;
+      for (const cell of [binCell, root(el).querySelector<HTMLElement>("thead th:last-child")!])
+        expect(getComputedStyle(cell).backgroundColor).toBe(surface);
     } finally {
       setLocale("en");
       await page.viewport(old[0], old[1]);

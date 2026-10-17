@@ -104,10 +104,11 @@ export class SeasonsWindow extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       .name wt-input {
-        min-width: calc(var(--wt-space-6) * 6);
+        min-width: calc(var(--wt-space-6) * 2.75);
       }
-      .start wt-combobox {
-        min-width: calc(var(--wt-space-6) * 3);
+      /* stable-width sizes it to its widest day; this floor stops a squeezed table shrinking it below. */
+      .start wt-combobox[name$="-day"] {
+        min-width: max-content;
       }
       .start wt-combobox[name$="-month"] {
         min-width: calc(var(--wt-space-6) * 4.5);
@@ -116,9 +117,14 @@ export class SeasonsWindow extends LitElement {
       .text {
         white-space: nowrap;
       }
+      /* Opaque, so the columns scrolling under it at a phone's width do not show through. */
       .bin {
+        position: sticky;
+        inset-inline-end: 0;
+        z-index: 1;
         width: 1%;
         text-align: end;
+        background: var(--wt-color-surface-raised);
       }
       .colour-text {
         display: inline-flex;
@@ -287,10 +293,26 @@ export class SeasonsWindow extends LitElement {
     return new Set(goneKeys(this.draft!, this.baseline!));
   }
   private bin(key: string) {
+    const index = this.rows.findIndex((row) => row.key === key);
     const draft = removeRow(this.draft!, key, this.baseline!.rows);
     const id = draft.deleted.find((each) => !this.draft!.deleted.includes(each));
     this.setDraft(draft);
     if (id !== undefined) void this.readImpact(id);
+    void this.focusAfterBin(index);
+  }
+  /** The bin took its own button away; focus goes to the bin now in its place, else the one above, else + Season. */
+  private async focusAfterBin(index: number) {
+    await this.updateComplete;
+    const bins = [
+      ...this.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=delete-season]",
+      ),
+    ].filter((bin) => !bin.disabled);
+    const target =
+      bins[index] ??
+      bins[index - 1] ??
+      this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]");
+    target?.focus();
   }
   private async readImpact(id: string) {
     const api = this.api;
@@ -499,6 +521,7 @@ export class SeasonsWindow extends LitElement {
             required
             hide-label
             search="never"
+            stable-width
             .value=${row.day}
             .options=${this.dayOptions(row.month)}
             ?invalid=${startError !== ""}
@@ -576,7 +599,7 @@ export class SeasonsWindow extends LitElement {
             <th scope="col">${t("season.runs_until")}</th>
             ${
               editable
-                ? html`<th scope="col">
+                ? html`<th scope="col" class="bin">
                     <span class="visually-hidden">${t("prep.delete")}</span>
                   </th>`
                 : nothing
