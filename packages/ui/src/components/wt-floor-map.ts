@@ -408,9 +408,15 @@ export class WtFloorMap extends LitElement {
 
   #tablesCrop: PlanRect | null = null;
 
-  /** Every crop this drag has drawn, united, so a drag back inward does not shrink the plan; null
-   * when no movable group is dragged. */
+  /** Every crop this drag has drawn while the view was untouched, united, so a drag back inward
+   * does not shrink the plan; null until such a drag of a movable group moves. */
   #dragCrop: PlanRect | null = null;
+
+  /** Set while the view is fitted to a drag's crop. Ending the drag refits it: the tables' crop can
+   * have the same ratio, so no resize would. */
+  #fittedToDrag = false;
+
+  #refitFrame = 0;
 
   /** Built from `tables` when it changes: the groups in `tables`' order, in reading order, and by
    * member id. */
@@ -475,9 +481,10 @@ export class WtFloorMap extends LitElement {
         this.#held = tableOf(at.target);
         this.#held?.setAttribute("data-held", "");
         this.#travel = null;
+        cancelAnimationFrame(this.#refitFrame);
       },
       longPress: (at) => {
-        this.#clearHeld();
+        this.#endDrag();
         const id = idOf(at.target);
         if (id !== null) this.#send("wt-table-details", id);
       },
@@ -503,6 +510,7 @@ export class WtFloorMap extends LitElement {
     this.#gestures = null;
     this.#dropPendingTap();
     this.#endDrag();
+    cancelAnimationFrame(this.#refitFrame);
   }
 
   readonly #onTap = (at: GesturePoint): void => {
@@ -556,8 +564,19 @@ export class WtFloorMap extends LitElement {
     this.#clearHeld();
     this.#drag = null;
     this.#dragCrop = null;
+    if (this.#fittedToDrag) {
+      // A frame later: the map's own update from the drop runs before its parent re-renders it.
+      cancelAnimationFrame(this.#refitFrame);
+      this.#refitFrame = requestAnimationFrame(this.#refitAfterDrag);
+    }
     this.requestUpdate();
   }
+
+  readonly #refitAfterDrag = (): void => {
+    if (this.#touched) return;
+    this.#needsFit = true;
+    this.requestUpdate();
+  };
 
   readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
     const { dx, dy } = at;
@@ -587,11 +606,12 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
-    this.#dragCrop = this.#grownCrop(this.#dragCrop);
+    if (!this.#touched) this.#dragCrop = this.#grownCrop(this.#dragCrop);
     this.requestUpdate();
   };
 
-  /** `from`, or the tables' crop, united with the crop of the tables as the drag draws them. */
+  /** `from`, or the tables' crop, united with the crop of the tables as the drag draws them; null
+   * for a fixed group, so its drag never grows the plan. */
   #grownCrop(from: PlanRect | null): PlanRect | null {
     const drag = this.#drag!;
     const group = this.#groupOf.get(drag.tableId)!;
@@ -604,9 +624,9 @@ export class WtFloorMap extends LitElement {
     return unionRect(from ?? this.#tablesCrop!, cropToTables(moved)!);
   }
 
-  /** What the view fits and the ratio describes: a drag's crop while the person has not moved the view. */
+  /** What the view fits and the ratio describes: a drag's crop until release, else the tables'. */
   #crop(): PlanRect | null {
-    return (this.#touched ? null : this.#dragCrop) ?? this.#tablesCrop;
+    return this.#dragCrop ?? this.#tablesCrop;
   }
 
   /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale. */
@@ -801,10 +821,10 @@ export class WtFloorMap extends LitElement {
       this.#tablesCrop = cropToTables(this.tables.map((t) => t.placement));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
-      else if (this.#drag !== null) this.#dragCrop = this.#grownCrop(null);
+      else if (this.#drag !== null && !this.#touched) this.#dragCrop = this.#grownCrop(null);
     }
     const crop = this.#crop();
-    // A host whose CSS reads this is resized when it changes, and the observer refits the view.
+    // A host whose CSS reads this is resized when it changes; the observer refits an untouched view.
     this.style.setProperty(
       "--floor-map-ratio",
       String(crop === null ? 1 : crop.width / crop.height),
@@ -818,6 +838,7 @@ export class WtFloorMap extends LitElement {
     const crop = this.#crop();
     if (crop === null) return;
     const scale = fitScale(crop, this.#size);
+    this.#fittedToDrag = this.#dragCrop !== null;
     this.#fit = { scale, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
     this.#touched = false;
     this.#view = {

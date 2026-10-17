@@ -39,15 +39,17 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    live update) the drag's crop restarts from the new tables' crop united with the moved group's.
    Dragging the edge table inward does not shrink the plan mid-drag.
 2. **The map publishes its own `--floor-map-ratio` on its host**, from the effective crop: the
-   drag's crop while a non-fixed drag is drawn and the view is untouched, else the tables' crop (1
-   with no tables). The till screen stops computing the ratio (its `styleMap` and `cropToTables`
+   drag's crop while a drag has one (decisions 5 and 6 say when it has none), else the tables' crop
+   (1 with no tables). The till screen stops computing the ratio (its `styleMap` and `cropToTables`
    imports go with it) and keeps reading the variable in its CSS. The map owns the variable; a
    parent only reads it (a parent binding `style` as a plain attribute would wipe it — say so in
    design-system.md).
-3. **The view is refitted only by a resize, as on release today.** `#fitView` fits the effective
-   crop. A host whose CSS reads the ratio (the till) is resized when the ratio changes, and the
-   `ResizeObserver` refits it unless the view was touched. A host of fixed size — every existing
-   suite's box, fixed in both dimensions (600 × 300, 480 × 240, 400 × 200) — is never refitted during a drag, so those suites keep their assertions.
+3. **During a drag the view is refitted only by a resize, as on release today** (what release
+   itself does is decision 7). `#fitView` fits the effective crop. A host whose CSS reads the ratio
+   (the till) is resized when the ratio changes, and the `ResizeObserver` refits it unless the view
+   was touched. A host of fixed size — every existing suite's box, fixed in both dimensions
+   (600 × 300, 480 × 240, 400 × 200) — is never refitted during a drag, so those suites keep their
+   assertions.
 4. **The drag follows the finger's travel, never a view the drag itself caused.** Today the squares
    are `snapToSquare(dx, view.scale)`; with the scale changing under a drag that would feed back.
    The map banks the travel each time the scale changes: it keeps the squares travelled at the scale
@@ -58,14 +60,25 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    squares are exactly today's `round(dx / scale)`. A still finger moves nothing after a refit; the
    table keeps moving at finger speed on screen. A wheel zoom during a drag is banked the same way
    (today it rescales the travel already made; no existing test covers it).
-5. **A waiter's own pan or zoom is kept, and turns the growth off.** While `#touched` is set the map
-   publishes the tables' ratio, so nothing changes during the drag; release behaves as today.
+5. **A waiter's own pan or zoom is kept, and turns the growth off.** A drag that starts on a touched
+   view has no drag's crop: the map publishes the tables' ratio and nothing changes during the drag.
+   A pan or zoom during a drag stops the drag's crop growing, but the map keeps publishing it until
+   release, so the host does not change shape under the finger. On release the tables' ratio comes
+   back and the person's view is kept: nothing refits a touched view.
 6. **A fixed group does not grow the plan.** Its drag draws a copy that can only be dropped on
    another table (`dropAction`), which is already inside the plan.
-7. **Release refits nothing itself.** `#endDrag` only ends the drag. Where the new tables' crop
-   equals the drag's crop, the ratio does not change and the view stays fitted to it; where it
-   differs (a refused drop, a drag out and back, a move off the opposite edge), the ratio changes
-   and the observer refits.
+7. **Release refits only a view the drag refitted.** Where the ratio changes at release (a refused
+   drop after a drag out and back, a move off the opposite edge), the host resizes and the observer
+   refits an untouched view, as today. The ratio can also stay the same while the crop changes: an
+   L-shaped drag, 12 × 8 to 15 × 8 to 15 × 10, ends at the tables' ratio of 3 to 2 with the view
+   fitted to 15 × 10. So when the view was last fitted to a drag's crop, ending a hold (a drop, a
+   cancel, a long press) refits on the next animation frame, unless the view has been touched by
+   then. The frame is what lets the fit see the tables the parent sets in answer to the drop: the
+   map's own update from the drop runs before the till re-renders with the pending place. A new hold
+   cancels a waiting refit, and that hold's end asks for it again unless a fit has run since;
+   disconnecting cancels it. Where the view was never fitted to a drag's crop — as in a fixed-size
+   host, which no drag resizes, unless `fitKey` changes mid-drag — release refits nothing, and a new
+   `tables` alone still keeps the view.
 8. **Residuals, recorded as short backlog entries in Task 5:** a crop that grows in proportion (a
    diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today; and
    after the view has rescaled during a drag the drawn table lags the finger, while the drop target

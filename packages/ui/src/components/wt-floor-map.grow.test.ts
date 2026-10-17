@@ -278,6 +278,85 @@ it("a drag out and back, released on the same tables, returns to the tables' rat
   expect(widthOf(el, "t1")).toBe(240);
 });
 
+/** Drags T1 3 squares right (ratio 15 / 8), then 2 down: the drag's crop is 15 × 10, ratio 3 / 2
+ * again, so the host keeps its size while the view is fitted to that crop. */
+async function dragAnL(el: WtFloorMap): Promise<{ x: number; y: number }> {
+  const { to } = await holdAndMove(el, "t1", 3, 0);
+  expect(widthOf(el, "t1")).toBe(192);
+  const end = { x: to.x, y: to.y + 2 * 24 };
+  move(el, end.x, end.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(widthOf(el, "t1")).toBe(192);
+  return end;
+}
+
+it("an L-shaped drag released on the same tables returns to the tables' fit", async () => {
+  const el = await growingMap([t1]);
+  const end = await dragAnL(el);
+  up(el, end.x, end.y);
+  await settled(el);
+  expect(drops).toEqual([{ tableId: "t1", x: 13, y: 7, targetId: null }]);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(240);
+});
+
+it("an L-shaped drag released where the parent moves the table fits the moved tables", async () => {
+  const el = await growingMap([t1]);
+  const end = await dragAnL(el);
+  // The till sets the pending place in its drop handler and re-renders the map a microtask later.
+  document.addEventListener(
+    "wt-table-drag-end",
+    () =>
+      queueMicrotask(() => {
+        el.tables = [{ ...t1, placement: { ...t1.placement, x: 13, y: 7 } }];
+      }),
+    { once: true },
+  );
+  up(el, end.x, end.y);
+  await settled(el);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(240);
+  expect(await leftOf(el, "t1")).toBe(60);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("a hold straight after an L-shaped drag's release refits when the hold ends", async () => {
+  const el = await growingMap([t1]);
+  const end = await dragAnL(el);
+  up(el, end.x, end.y);
+  const back = centreOf(el, "t1");
+  hold(el, back.x, back.y);
+  await settled(el);
+  expect(widthOf(el, "t1")).toBe(192);
+  up(el, back.x, back.y);
+  await settled(el);
+  expect(widthOf(el, "t1")).toBe(240);
+});
+
+it("a pan during a grown drag keeps the host's shape and stops the growth", async () => {
+  const el = await growingMap([t1]);
+  const { to } = await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  el.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 1 }));
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  expect(heightOfHost(el)).toBe(180);
+  expect(widthOf(el, "t1")).toBe(180);
+  const further = { x: to.x + 2 * 22.5, y: to.y };
+  move(el, further.x, further.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  expect(widthOf(el, "t1")).toBe(180);
+  up(el, further.x, further.y);
+  await settled(el);
+  expect(drops).toEqual([{ tableId: "t1", x: 16, y: 5, targetId: null }]);
+  // Released, the host takes the tables' shape again, and the person's view is kept.
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(180);
+});
+
 it("after a pan, a drag past the edge changes neither the ratio nor the scale", async () => {
   const el = await growingMap([t1]);
   const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 });
