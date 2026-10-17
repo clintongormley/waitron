@@ -146,7 +146,7 @@ so in the dark theme a sold-out tile sits at the page's own level, below an avai
 `--wt-color-surface`.
 
 `--wt-color-track` is the empty track behind the Opening hours Week's bars, on the page on a wide
-screen and on a card on a phone: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
+screen and on a card on a phone, and behind the Opening hours Month's bars on each date: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
 dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--wt-color-text` at
 4.5:1 or more on it (the "bar track" cases in `packages/ui-core/src/tokens/colors.test.ts`).
 
@@ -4112,12 +4112,14 @@ Opening hours' Year.
   holding the venue's today. It draws the whole Monday-to-Sunday weeks covering the month, the
   neighbouring months' dates faint, and each date heading carries only the day's number (the
   column heading names the weekday) and a Today marker. Each date shows its special day's name
-  and its public holiday's name, the holiday's in red and given once when the two are the same,
+  and its public holiday's name, the holiday's in red and given once when the two are the same
+  (a day's name, here, in the Week and in the day box, breaks only between its words; a word too
+  wide for its place is cut with an ellipsis, and the name's tooltip holds it whole),
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
   less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
   closes, a closed time inside the department's hours is hatched while the zone has some hours that
-  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
+  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty bar in `--wt-color-track`, as in the Week, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
   colour. Above the dates, ‹, the month's name and year, › and the Show picker share one

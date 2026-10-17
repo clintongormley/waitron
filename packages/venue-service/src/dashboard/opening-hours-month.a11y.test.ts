@@ -69,6 +69,19 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     ).toBeGreaterThanOrEqual(1.4);
   });
 
+  test("draws its empty track in the Week's track colour", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, { model: monthModel(), departments: DEPARTMENTS });
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-track)";
+    host.append(el, probe);
+    await el.updateComplete;
+    const track = el.shadowRoot!.querySelector<HTMLElement>('[data-date="2026-12-09"] .track')!;
+    expect(getComputedStyle(probe).backgroundColor).toMatch(/^rgb/);
+    expect(getComputedStyle(track).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+  });
+
   test.each(["en", "es"] as const)("station mode (%s)", async (locale) => {
     setLocale(locale);
     await mountThemed("<div></div>", theme);
