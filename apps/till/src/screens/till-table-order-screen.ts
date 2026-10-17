@@ -1174,6 +1174,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
   @property({ type: Boolean }) orderingAllowed = true;
+  @property({ attribute: false }) productSelectable?: (product: TillProduct) => boolean;
   @property() departmentName = "";
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
@@ -1452,6 +1453,7 @@ export class TillTableOrderScreen extends LitElement {
     if (store !== null)
       store.canSelectProduct = (product) =>
         this.orderingAllowed &&
+        this.productSelectable?.(product) !== false &&
         this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
     return store;
   }
@@ -2595,6 +2597,7 @@ export class TillTableOrderScreen extends LitElement {
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
     store.canSelectProduct = (product) =>
       this.orderingAllowed &&
+      this.productSelectable?.(product) !== false &&
       this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
     const menu = this.menuSelectionRequired
       ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)

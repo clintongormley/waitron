@@ -295,6 +295,57 @@ describe("live device zones", () => {
     expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
   });
 
+  it("retains a real card request and its decline through live narrowing until the order clears", async () => {
+    let answer!: (outcome: { outcome: "declined"; failureReason: string }) => void;
+    const pending = new Promise<{ outcome: "declined"; failureReason: string }>((resolve) => {
+      answer = resolve;
+    });
+    const pay = vi.fn<TillApi["pay"]>(() => pending);
+    const cancelCardPayment = vi.fn();
+    const recordSale = vi.fn();
+    const { el, api } = await mount(selection(["bar", "room"], "bar"), {
+      pay,
+      cancelCardPayment,
+      recordSale,
+    });
+    const screen = counter(el)!;
+    const store = screen.store;
+    store.addProduct(screen.products[0]!, "1");
+    const id = store.id;
+    emit(screen, "collect-card", { readerId: "reader-original" });
+    await tick(el);
+    expect(pay).toHaveBeenCalledOnce();
+    const submitted = structuredClone(pay.mock.calls[0]);
+    expect(submitted?.[0]).toMatchObject({ id, readerId: "reader-original" });
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)).toBe(screen);
+    expect(store.id).toBe(id);
+    expect(screen.selectedServiceZoneId).toBe("bar");
+    expect(pay.mock.calls).toEqual([submitted]);
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+    expect(api.setServiceZone).toHaveBeenCalledExactlyOnceWith("bar");
+    answer({ outcome: "declined", failureReason: "insufficient_funds" });
+    await pending;
+    await tick(el);
+    expect(counter(el)).toBe(screen);
+    expect(store.id).toBe(id);
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["coffee", "1", "2.00"]]);
+    expect(screen.cardOutcome).toEqual({
+      outcome: "declined",
+      failureReason: "insufficient_funds",
+    });
+    expect(pay).toHaveBeenCalledOnce();
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+    expect(recordSale).not.toHaveBeenCalled();
+    store.clear();
+    await el.updateComplete;
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
   it("keeps the latest scope through a transient read failure and retries on the next tick", async () => {
     const { el, api } = await mount(selection(["bar", "room"], "bar"));
     api.getDeviceZones.mockRejectedValueOnce(new TypeError("offline"));

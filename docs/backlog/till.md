@@ -1175,19 +1175,6 @@ arriving, but open periods are told apart only by their start time, to the milli
   schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
   whether to keep an empty status region on the page and fill it later, and test that sequence.
 
-## The counter till may start in a zone its service zone dropdown does not list
-
-- **The counter till may start in a zone its service zone dropdown does not list** (found
-  2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
-  in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
-  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
-  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
-  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
-  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
-  for it (2026-10-06).
-  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
-  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
-
 ## Unresolved observation from W101 verification
 
 Left open by W101 (#1351).
@@ -1532,6 +1519,22 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 - **The edit form** asks only what applies to the reason's kind, with the role lists.
 
 ## Decisions and deliberate limits
+
+### Device zones and period menu memory (A740)
+
+Owner, 2026-10-15 and 2026-10-16: a till shows the zones you select from its profile's permitted
+zones, and opens a fresh order at its saved starting zone after sign-in. Counter becomes a list
+with several counter zones. Floor shows only table zones, with List/Map and its zone menu on the
+pills' row. Choose the subset under Settings → Zones on this device; there is no manual default-menu
+setting.
+
+Within a service-period occurrence, each device and zone remembers its last selected menu across
+operators and restarts. Lunch → Drinks stays on Drinks until the next occurrence, including a
+new day's Lunch with the same name. The department's timetable supplies the next default. An order
+or payment in progress keeps its context, with the grid/default change deferred until safe.
+The implementation choices and acceptance cases are in the
+[A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
+
 
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either
   party has that answer. Otherwise an unanswered party leaves the combined party unanswered, so

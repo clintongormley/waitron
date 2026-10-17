@@ -481,6 +481,136 @@ describe("device and zone period memory", () => {
     },
   );
 
+  it("keeps the visible grid and menu list through a boundary until the basket is held", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    add(el, ALMUERZO);
+    const store = counter(el).store;
+    const orderId = store.id;
+    const laterLunch = { ...ALMUERZO, product: "Afternoon sandwich" };
+    current = running(offers("zone-barra", [CENA, laterLunch], "cena"), "afternoon");
+    await poll(el);
+    expect(names(el)).toEqual(["Menú del día"]);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
+    expect(store.id).toBe(orderId);
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    await park(el);
+    expect(store.lineCount).toBe(0);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["cena", "almuerzo"]);
+  });
+
+  it("loads a boundary skipped during a real card request before the next empty order", async () => {
+    let current = running(BARRA);
+    let answer!: (value: { outcome: "captured"; ticket: TillSaleResult }) => void;
+    const payment = new Promise<{ outcome: "captured"; ticket: TillSaleResult }>((resolve) => {
+      answer = resolve;
+    });
+    const pay = vi.fn<TillApi["pay"]>(() => payment);
+    const cancelCardPayment = vi.fn();
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      pay,
+      cancelCardPayment,
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    add(el, ALMUERZO);
+    const store = counter(el).store;
+    const orderId = store.id;
+    emit(counter(el), "collect-card", { readerId: "reader-1" });
+    await flush(el);
+    expect(pay).toHaveBeenCalledOnce();
+    const submitted = structuredClone(pay.mock.calls[0]);
+    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    await poll(el);
+    expect(names(el)).toEqual(["Menú del día"]);
+    expect(store.id).toBe(orderId);
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    expect(pay.mock.calls).toEqual([submitted]);
+    expect(submitted?.[0]).toMatchObject({ id: orderId, readerId: "reader-1" });
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+    answer({ outcome: "captured", ticket: saleResult });
+    await payment;
+    await flush(el);
+    emit(counter(el), "new-sale");
+    await flush(el);
+    expect(store.lineCount).toBe(0);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(pay).toHaveBeenCalledOnce();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+  });
+
+  it("keeps old grid prices and live unavailability until an unchanged default is safe to show", async () => {
+    let current = running(BARRA);
+    let unavailable: string[] = [];
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        service: current.service,
+        defaultMenuId: current.defaultMenuId,
+        menus: current.menus.map((menu) => ({
+          menuId: menu.id,
+          versionId: menu.versionId,
+          orderable: menu.orderable,
+          sendable: menu.sendable,
+        })),
+        unavailable: { products: unavailable, optionLabels: [] },
+      })),
+    });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    const store = counter(el).store;
+    const refusals: unknown[] = [];
+    store.on("refused", (value) => refusals.push(value));
+    current = {
+      ...running(BARRA, "afternoon"),
+      menus: BARRA.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: BARRA.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["3.00", "3.00"]);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).not.toBeNull();
+    store.setLineQuantity(0, "2");
+    expect(store.lines.map((line) => [line.quantity, line.product.unitPrice])).toEqual([
+      ["1", "3.00"],
+    ]);
+    expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    unavailable = ["Tostada"];
+    await poll(el);
+    expect(counter(el).products.find((product) => product.productId === "Tostada")?.available).toBe(
+      false,
+    );
+    expect(store.lines[0]?.blocked).toBe("unavailable");
+    await park(el);
+    expect(selected(el)).toBe("desayunos");
+    expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["4.00", "4.00"]);
+  });
+
   it("respects an explicit null default after memory expires instead of selecting the first menu", async () => {
     let current: ZoneOfferCatalogue = running(BARRA);
     const { el } = await mountApp({
@@ -1093,6 +1223,86 @@ describe("an open table's order", () => {
   const runningTable = (occurrence = "table-lunch-1"): ZoneOfferCatalogue => ({
     ...COMEDOR,
     service: { ...COMEDOR.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
+  });
+
+  it("keeps the table grid through a boundary until its draft clears", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
+    await flush(el);
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(ALMUERZO), "v1"), "1");
+    await flush(el);
+    const id = browser.store.id;
+    const names = () =>
+      [
+        ...tableScreen(el)
+          .shadowRoot!.querySelector("till-menu-browser")!
+          .shadowRoot!.querySelectorAll(".name"),
+      ].map((node) => node.textContent?.trim());
+    current = {
+      ...offers(
+        "zone-comedor",
+        [CENA, { ...ALMUERZO, product: "Afternoon sandwich" }],
+        "cena",
+        "table_tab",
+      ),
+      service: runningTable("afternoon").service,
+    };
+    await poll(el);
+    expect(names()).toEqual(["Menú del día"]);
+    expect(browser.store.id).toBe(id);
+    expect(
+      browser.store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    browser.store.clear();
+    await flush(el);
+    expect(tableScreen(el).selectedMenuId).toBe("cena");
+    expect(names()).toEqual(["Croquetas"]);
+  });
+
+  it("refuses an increased table quantity from a grid retained under an obsolete version", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    await flush(el);
+    current = {
+      ...runningTable("afternoon"),
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    const refusals: unknown[] = [];
+    browser.store.on("refused", (value) => refusals.push(value));
+    browser.store.setLineQuantity(0, "2");
+    expect(
+      browser.store.lines.map((line) => [
+        line.quantity,
+        line.product.unitPrice,
+        line.product.menuVersionId,
+      ]),
+    ).toEqual([["1", "3.00", "v1"]]);
+    expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    browser.store.clear();
+    await flush(el);
+    const fresh =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    expect(fresh.products.map((product) => [product.unitPrice, product.menuVersionId])).toEqual([
+      ["4.00", "v2"],
+    ]);
   });
 
   it("shows no implicit first menu when a new table occurrence has no default", async () => {

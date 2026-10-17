@@ -2046,10 +2046,11 @@ export class TillApp extends LitElement {
   @state() private tableService: MenuStateAnswer["service"] | null = null;
   @state() private counterDepartmentName = "";
   @state() private tableDepartmentName = "";
-  /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
-   * applies without reloading them. */
+  /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
+  readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
+  readonly #tableGridOffers = new ZoneOfferIndex();
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -2268,7 +2269,10 @@ export class TillApp extends LitElement {
   #counterDefaultMenuId: string | null = null;
   #tableDefaultMenuId: string | null = null;
   #counterMenuPending = false;
+  #pendingCounterMenus?: TillZoneMenu[];
+  #counterOffersDue = false;
   #tableMenuPending = false;
+  #pendingTableMenus?: TillZoneMenu[];
   readonly #polledOccurrences = new Map<string, string | null>();
   /** Per counter zone, the default menu its latest menu-state answer named. */
   readonly #polledDefaults = new Map<string, string | null>();
@@ -4349,11 +4353,31 @@ export class TillApp extends LitElement {
       Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
+    const deferGrid =
+      loaded &&
+      (this.#pendingCounterMenus !== undefined ||
+        (this.#counterOffers.loaded &&
+          this.counterService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+      (this.#store.lines.length > 0 || this.#requestsOut());
     this.#counterOffers.load(catalogue, loaded);
     this.#store.canSelectProduct = (product) =>
       this.#deviceZoneAllows(this.counterServiceZoneId) &&
-      this.#counterOffers.selectable.has(product.catalogueId ?? "");
-    this.menus = catalogue.menus;
+      this.#counterOffers.selectable.has(product.catalogueId ?? "") &&
+      (this.#pendingCounterMenus === undefined ||
+        (this.#counterOffers.byId.has(product.menuItemId ?? "") &&
+          this.#counterOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId));
+    if (deferGrid) {
+      this.#pendingCounterMenus = catalogue.menus;
+      this.menus = this.menus.map((menu) => {
+        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+      });
+      this.#counterMenuPending = true;
+    } else {
+      this.#pendingCounterMenus = undefined;
+      this.#counterGridOffers.load(catalogue, loaded);
+      this.menus = catalogue.menus;
+    }
     this.#counterDefaultMenuId =
       catalogue.defaultMenuId === undefined
         ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
@@ -4364,7 +4388,7 @@ export class TillApp extends LitElement {
   }
 
   #showCounterOffers(): void {
-    this.products = this.#counterOffers.products();
+    this.products = this.#counterGridOffers.products();
     this.#evaluateBasket();
   }
 
@@ -4380,16 +4404,34 @@ export class TillApp extends LitElement {
     loaded = true,
   ): void {
     const before = this.#tableOffers.versions;
+    const deferGrid =
+      loaded &&
+      zoneId === this.#tableZoneId &&
+      (this.#pendingTableMenus !== undefined ||
+        (this.#tableOffers.loaded &&
+          this.tableService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+      this.#tableMenuBusy();
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
-    this.tableMenus = catalogue.menus;
+    if (deferGrid) {
+      this.#pendingTableMenus = catalogue.menus;
+      this.tableMenus = this.tableMenus.map((menu) => {
+        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+      });
+      this.#tableMenuPending = true;
+    } else {
+      this.#pendingTableMenus = undefined;
+      this.#tableGridOffers.load(catalogue, loaded);
+      this.tableMenus = catalogue.menus;
+    }
     this.#tableDefaultMenuId =
       catalogue.defaultMenuId === undefined
         ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
         : catalogue.defaultMenuId;
     this.tableService = loaded ? catalogue.service : null;
     this.tableDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
-    this.tableProducts = this.#tableOffers.products();
+    this.tableProducts = this.#tableGridOffers.products();
     if (!loaded) return;
     const { versions, byId } = this.#tableOffers;
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
@@ -4498,7 +4540,9 @@ export class TillApp extends LitElement {
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     if (zoneId === this.counterServiceZoneId) {
-      if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
+      const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
+      if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)
+        this.#showCounterOffers();
       if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
       const serviceMoved =
         state.service.open !== this.counterService?.open ||
@@ -4509,6 +4553,10 @@ export class TillApp extends LitElement {
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
       this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
       const busy = this.#requestsOut();
+      if ((menusMoved(this.menus, state.menus) || serviceMoved) && busy) {
+        this.#counterOffersDue = true;
+        this.#counterMenuPending = true;
+      }
       if (
         (menusMoved(this.menus, state.menus) || serviceMoved) &&
         !busy &&
@@ -4518,8 +4566,9 @@ export class TillApp extends LitElement {
       else this.#followDefault();
     }
     if (zoneId === this.#tableZoneId) {
-      if (this.#tableOffers.setUnavailable(state.unavailable)) {
-        this.tableProducts = this.#tableOffers.products();
+      const unavailableMoved = this.#tableOffers.setUnavailable(state.unavailable);
+      if (this.#tableGridOffers.setUnavailable(state.unavailable) || unavailableMoved) {
+        this.tableProducts = this.#tableGridOffers.products();
         this.#markRounds();
         this.#markDraft(true);
       }
@@ -4584,6 +4633,23 @@ export class TillApp extends LitElement {
   }
 
   #followDefault(): void {
+    if (this.#store.lines.length === 0 && !this.#requestsOut()) {
+      if (this.#basketRefreshing !== undefined) return;
+      if (this.#counterOffersDue) {
+        this.#counterOffersDue = false;
+        void this.#refreshBasket().then((result) => {
+          if (result === "failed") this.#counterOffersDue = true;
+          else this.#followDefault();
+        });
+        return;
+      }
+      if (this.#pendingCounterMenus !== undefined) {
+        this.menus = this.#pendingCounterMenus;
+        this.#pendingCounterMenus = undefined;
+        this.#counterGridOffers.load({ offers: this.#counterOffers.live, menus: this.menus });
+        this.#showCounterOffers();
+      }
+    }
     const zoneId = this.counterServiceZoneId;
     const menuId = this.#resolveZoneMenu(
       zoneId,
@@ -4595,31 +4661,49 @@ export class TillApp extends LitElement {
         ? this.#polledDefaults.get(zoneId)!
         : this.#counterDefaultMenuId,
     );
-    this.#counterMenuPending = menuId !== this.selectedCatalogueId;
+    this.#counterMenuPending =
+      this.#counterOffersDue ||
+      this.#pendingCounterMenus !== undefined ||
+      menuId !== this.selectedCatalogueId;
     if (this.#store.lines.length > 0 || this.#requestsOut()) return;
     this.#counterMenuPending = false;
     this.#selectMenu(menuId);
   }
 
   #followTableMenu(): void {
+    if (!this.#tableMenuBusy() && this.#pendingTableMenus !== undefined) {
+      this.tableMenus = this.#pendingTableMenus;
+      this.#pendingTableMenus = undefined;
+      this.#tableGridOffers.load({ offers: this.#tableOffers.live, menus: this.tableMenus });
+      this.tableProducts = this.#tableGridOffers.products();
+    }
     const menuId = this.#resolveZoneMenu(
       this.#tableZoneId,
       this.tableService?.periodOccurrenceKey ?? null,
       this.tableMenus,
       this.#tableDefaultMenuId,
     );
-    this.#tableMenuPending = menuId !== this.tableSelectedCatalogueId;
-    if (
-      (this.#draftSync?.store.lines.length ?? 0) > 0 ||
-      this.#partylessDraft.lines.length > 0 ||
-      this.#draftSync?.saving ||
-      this.#draftSync?.store.sending ||
-      this.#requestsOut()
-    )
-      return;
+    this.#tableMenuPending =
+      this.#pendingTableMenus !== undefined || menuId !== this.tableSelectedCatalogueId;
+    if (this.#tableMenuBusy()) return;
     this.#tableMenuPending = false;
     this.tableSelectedCatalogueId = menuId;
   }
+
+  #tableMenuBusy(): boolean {
+    return (
+      (this.#draftSync?.store.lines.length ?? 0) > 0 ||
+      this.#partylessDraft.lines.length > 0 ||
+      this.#draftSync?.saving === true ||
+      this.#draftSync?.store.sending === true ||
+      this.#requestsOut()
+    );
+  }
+
+  readonly #tableProductSelectable = (product: TillProduct): boolean =>
+    this.#pendingTableMenus === undefined ||
+    (this.#tableOffers.byId.has(product.menuItemId ?? "") &&
+      this.#tableOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId);
 
   #clearBasket(): void {
     this.#store.clear();
@@ -8107,7 +8191,6 @@ export class TillApp extends LitElement {
     this.overrideError = null;
   }
 
-  /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
     if (!this.#inShell()) return;
     this.#dismissStationChoices();
@@ -12274,6 +12357,7 @@ export class TillApp extends LitElement {
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
       .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
+      .productSelectable=${this.#tableProductSelectable}
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
@@ -12397,6 +12481,7 @@ export class TillApp extends LitElement {
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
           .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
+          .productSelectable=${this.#tableProductSelectable}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
