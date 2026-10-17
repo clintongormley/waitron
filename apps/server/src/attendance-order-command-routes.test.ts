@@ -1,3 +1,8 @@
+import {
+  placeOrder,
+  setOrderInvoiceChoice,
+  setOrderReceiptLanguage,
+} from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -18,12 +23,7 @@ import { AppError, locationId } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
-import {
-  parkOrder,
-  placeOrder,
-  setOrderInvoiceChoice,
-  setOrderReceiptLanguage,
-} from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

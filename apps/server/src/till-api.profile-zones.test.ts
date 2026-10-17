@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readBillEditState } from "./bill-editing.js";
 import { Hono } from "hono";
 import { sql, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -1742,6 +1743,7 @@ describe("the bill and invoice lookups", () => {
     const lines = await send(plain, "GET", `/api/working-orders/${tabId}/lines`);
     const chosen = await send(plain, "PUT", `/api/working-orders/${tabId}/invoice-choice`, {
       revision: lines.body.revision,
+      expectedEdit: await inTx(v, (tx) => readBillEditState(tx, tabId)),
       invoiceType: "F1",
       recipient: {
         taxId: "B12345674",

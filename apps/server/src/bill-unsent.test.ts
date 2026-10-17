@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -19,7 +20,7 @@ import { decimal } from "@waitron/shared";
 import type { Draft } from "./order-drafts.js";
 import { issueIfFullyPaid, previewBillPayment, type BillPaymentAsk } from "./bill-payments.js";
 import { payWorkingOrder, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
-import { createOpenOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order.js";
 import {
   inTx,
   paymentRows,
@@ -256,6 +257,7 @@ describe("payment reservations and previously received money", () => {
         expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
         draftRevision: draft.revision,
         groups: [{ lineIds: [draft.lines[0]!.id], release: "fire" }],
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
       },
     );
     expect(sent.status).toBe(200);
@@ -313,6 +315,7 @@ describe("payment reservations and previously received money", () => {
                 revision: draft.revision,
                 expectedRevision: bill!.revision,
                 submissionId: randomUUID(),
+                expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
               },
             );
       expect(answer.status).toBe(200);

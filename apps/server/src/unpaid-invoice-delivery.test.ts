@@ -1,3 +1,4 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,12 +22,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import * as selection from "./invoice-selection.js";
-import {
-  issueUnpaidInvoice,
-  priceForIssuance,
-  readOrderRevision,
-  setOrderInvoiceChoice,
-} from "./working-order.js";
+import { issueUnpaidInvoice, priceForIssuance, readOrderRevision } from "./working-order.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 

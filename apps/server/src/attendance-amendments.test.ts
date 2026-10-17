@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -18,7 +19,7 @@ import { AppError, locationId } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { cancelPlacedOrder, markOrderPlaced, parkOrder, placeOrder } from "./working-order.js";
+import { cancelPlacedOrder, markOrderPlaced, parkOrder } from "./working-order.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { overridePinAttempts } from "./till-api.js";
 import {

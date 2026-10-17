@@ -3982,7 +3982,7 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
   return order!.revision;
 }
 
-export interface InvoiceChoiceRequest {
+export interface InvoiceChoiceRequest extends OrderEditAuthority {
   revision: number;
   invoiceType: "F1" | "F2";
   delivery?: unknown;
@@ -4073,6 +4073,7 @@ export async function setOrderInvoiceChoice(
   }
   return withTransaction(db, async (tx) => {
     const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
+    await requireOrderBillEditor(tx, orderId, request);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
         .select({ id: billPayments.id })
@@ -4116,21 +4117,17 @@ export async function setOrderInvoiceChoice(
   });
 }
 
-/**
- * Save the language the order's receipt prints in, or clear it with `null` so the location's own
- * receipt language applies. Refused as {@link setOrderInvoiceChoice} refuses, and refused for a
- * language the location does not offer.
- */
 export async function setOrderReceiptLanguage(
   db: Database,
   cfg: Pick<TillConfig, "nodeId">,
   orderId: string,
-  request: { revision: number; language: unknown },
+  request: OrderEditAuthority & { revision: number; language: unknown },
   attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
     const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
+    await requireOrderBillEditor(tx, orderId, request);
     if (
       language !== null &&
       !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)
@@ -6161,11 +6158,12 @@ async function countEdit(
 export async function setWorkingOrderLabel(
   db: Database,
   orderId: string,
-  request: { label: string; revision: number },
+  request: OrderEditAuthority & { label: string; revision: number },
   attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   return withTransaction(db, async (tx) => {
     const { label, locationId } = await requireEditableOrder(tx, orderId, request.revision);
+    await requireOrderBillEditor(tx, orderId, request);
     const changed = label !== request.label;
     if (changed) {
       await tx
@@ -6401,6 +6399,7 @@ export async function placeOrder(
   cfg: DeviceRequestConfig,
   id: string,
   operatorId: string,
+  expectedEdit: OrderEditAuthority["expectedEdit"],
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -6410,6 +6409,7 @@ export async function placeOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await requireOrderBillEditor(tx, id, { operatorId, expectedEdit });
     await refusePaymentInFlight(tx, [id]);
     await refuseBillWithPayments(tx, id);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);

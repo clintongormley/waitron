@@ -1,3 +1,4 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,7 @@ import { readInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { layoutInvoicePages } from "./invoice-page.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import { setOrderInvoiceChoice } from "./working-order.js";
+
 import { billPayments, tenants, workingOrders } from "@waitron/db";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

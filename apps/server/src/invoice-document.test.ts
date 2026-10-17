@@ -1,3 +1,4 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -28,7 +29,7 @@ import {
 } from "./testing/adjustment-venue.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { setOrderInvoiceChoice } from "./working-order.js";
+
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";

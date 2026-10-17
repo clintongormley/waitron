@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { startManagementSession, persons, registerModulePermissions } from "@waitron/identity";
@@ -61,7 +62,7 @@ import {
 import { createTable } from "./testing/live-table.js";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { handOverOrder, listTablesWithState, parkOrder, placeOrder } from "./working-order.js";
+import { handOverOrder, listTablesWithState, parkOrder } from "./working-order.js";
 import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
 import { collectOrder } from "./till-sale.js";
 import { WorkforceBackend } from "@waitron/workforce";

@@ -1,4 +1,9 @@
-import { recallLines, sendLines, setLineCourse } from "./testing/order-writer-fixture.js";
+import {
+  recallLines,
+  sendLines,
+  setLineCourse,
+  placeOrder,
+} from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -24,7 +29,7 @@ import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { bumpGroupReady } from "./order-groups.js";
 import { splitPartyBill } from "./testing/serve-line.js";
-import { advanceTicketItem, bumpCourseReady, markServed, placeOrder } from "./working-order.js";
+import { advanceTicketItem, bumpCourseReady, markServed } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

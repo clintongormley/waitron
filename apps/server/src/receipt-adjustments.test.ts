@@ -1,3 +1,4 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ import {
   type RoundLine,
 } from "./testing/adjustment-venue.js";
 import { payWorkingOrder, readSettledTicket } from "./till-sale.js";
-import { readStoredOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { readStoredOrder } from "./working-order.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 

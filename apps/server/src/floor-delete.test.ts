@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -43,7 +44,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { giveKeptSize, plannedZone } from "./testing/floor-today-venue.js";
-import { handOverOrder, placeOrder } from "./working-order.js";
+import { handOverOrder } from "./working-order.js";
 
 let v: PartyVenue;
 useVenueDb({

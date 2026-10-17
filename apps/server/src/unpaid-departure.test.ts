@@ -1,3 +1,5 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -42,7 +44,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { readOrderRevision, setOrderInvoiceChoice } from "./working-order.js";
+import { readOrderRevision } from "./working-order.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
@@ -1381,7 +1383,7 @@ describe("what is refused", () => {
       venue.cookie,
       "POST",
       `/api/working-orders/${party.tabId}/lines/recall`,
-      { lineNos: [2] },
+      { lineNos: [2], expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)) },
     );
     expect(recalled.status).toBe(200);
 
@@ -1407,6 +1409,7 @@ describe("what is refused", () => {
       {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
         groups: [
           {
             lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
@@ -1422,6 +1425,7 @@ describe("what is refused", () => {
       venue.cookie,
       "POST",
       `/api/working-orders/${party.tabId}/place`,
+      { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)) },
     );
     expect(placed.status).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("placed");

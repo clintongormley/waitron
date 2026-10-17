@@ -4,6 +4,7 @@ import {
   setLineCourse,
   updateHeldOrder,
   updateOrderLine,
+  placeOrder,
 } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -73,7 +74,6 @@ import {
   listStationQueue,
   markCourseAway,
   parkOrder,
-  placeOrder,
   readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,

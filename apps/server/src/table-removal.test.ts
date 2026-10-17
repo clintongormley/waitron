@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -46,7 +47,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { giveKeptSize, plannedZone as plannedSavedZone } from "./testing/floor-today-venue.js";
-import { handOverOrder, placeOrder } from "./working-order.js";
+import { handOverOrder } from "./working-order.js";
 import "./errors.js";
 
 let v: PartyVenue;

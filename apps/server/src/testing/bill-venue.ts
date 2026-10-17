@@ -1,3 +1,4 @@
+import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
@@ -47,7 +48,7 @@ import { openPartyTab } from "./serve-line.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
-import { parkOrder, placeOrder } from "../working-order.js";
+import { parkOrder } from "../working-order.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 

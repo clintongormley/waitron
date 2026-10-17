@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -15,7 +16,6 @@ import {
   listCounterWaiting,
   markCollected,
   parkOrder,
-  placeOrder,
   readInvoiceNumbers,
 } from "./working-order.js";
 import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";

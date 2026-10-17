@@ -7,6 +7,10 @@ import {
   setLineCourse as course,
   updateOrderLine as line,
   updateHeldOrder as whole,
+  setWorkingOrderLabel as label,
+  setOrderReceiptLanguage as language,
+  setOrderInvoiceChoice as invoice,
+  placeOrder as place,
 } from "../working-order.js";
 import type { OrderAttendance, UpdateHeldOrderRequest } from "../working-order.js";
 
@@ -113,4 +117,50 @@ export async function updateHeldOrder(
   return issue === undefined
     ? whole(deps, cfg, id, request, undefined, attendance)
     : whole(deps, cfg, id, { ...request, operatorId: input.operatorId! }, issue, attendance);
+}
+
+export async function setWorkingOrderLabel(
+  db: Parameters<typeof label>[0],
+  id: string,
+  request: { label: string; revision: number },
+  attendance?: Parameters<typeof label>[3],
+) {
+  const observed = await withTransaction(db, (tx) => authority(tx, id, attendance?.personId));
+  return label(db, id, { ...request, ...observed }, attendance);
+}
+
+export async function setOrderReceiptLanguage(
+  db: Parameters<typeof language>[0],
+  cfg: Parameters<typeof language>[1],
+  id: string,
+  request: { revision: number; language: unknown },
+  attendance?: Parameters<typeof language>[4],
+) {
+  const observed = await withTransaction(db, (tx) => authority(tx, id, attendance?.personId));
+  return language(db, cfg, id, { ...request, ...observed }, attendance);
+}
+
+export async function setOrderInvoiceChoice(
+  db: Parameters<typeof invoice>[0],
+  backend: Parameters<typeof invoice>[1],
+  cfg: Parameters<typeof invoice>[2],
+  id: string,
+  request: Omit<Parameters<typeof invoice>[4], "operatorId" | "expectedEdit">,
+  delivery?: Parameters<typeof invoice>[5],
+  attendance?: Parameters<typeof invoice>[6],
+) {
+  const observed = await withTransaction(db, (tx) =>
+    authority(tx, id, delivery?.personId ?? attendance?.personId),
+  );
+  return invoice(db, backend, cfg, id, { ...request, ...observed }, delivery, attendance);
+}
+
+export async function placeOrder(
+  deps: Parameters<typeof place>[0],
+  cfg: Parameters<typeof place>[1],
+  id: string,
+  operatorId: string,
+) {
+  const observed = await withTransaction(deps.db, (tx) => authority(tx, id, operatorId));
+  return place(deps, cfg, id, operatorId, observed.expectedEdit);
 }

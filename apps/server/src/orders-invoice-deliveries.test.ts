@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -33,7 +34,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSettledTicket } from "./till-sale.js";
-import { placeOrder } from "./working-order.js";
+
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { mountOrdersApi } from "./orders-api.js";
 

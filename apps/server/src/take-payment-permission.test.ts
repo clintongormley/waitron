@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrders } from "@waitron/db";
 import { payments } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   inTx,

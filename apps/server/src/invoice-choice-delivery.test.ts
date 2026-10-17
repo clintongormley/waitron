@@ -1,3 +1,4 @@
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -22,7 +23,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { checkedInvoiceChoiceDelivery } from "./invoice-choice-delivery.js";
 import type { InvoicePrinter } from "./receipt-print.js";
-import { setOrderInvoiceChoice } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

@@ -1,4 +1,4 @@
-import { updateOrderLine } from "./testing/order-writer-fixture.js";
+import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -22,7 +22,6 @@ import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
 import { provisionBillVenue, statusOf, tabWith, tendersOfBill } from "./testing/bill-venue.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
-import { placeOrder } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

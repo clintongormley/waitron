@@ -3,6 +3,7 @@ import {
   sendLines,
   setLineCourse,
   updateHeldOrder,
+  placeOrder,
 } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { floorTodayTables } from "@waitron/db";
@@ -65,7 +66,6 @@ import {
   markCollected,
   parkOrder,
   paysAfterSending,
-  placeOrder,
   sendToPrep,
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";

@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -20,7 +21,7 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
-import { placeOrder, sendToPrep } from "./working-order.js";
+import { sendToPrep } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

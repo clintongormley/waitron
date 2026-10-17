@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -39,7 +40,6 @@ import {
   parkOrder,
   issueUnpaidInvoice,
   priceForIssuance,
-  placeOrder,
 } from "./working-order.js";
 import {
   payWorkingOrder,

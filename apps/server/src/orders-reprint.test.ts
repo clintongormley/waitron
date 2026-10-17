@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -18,7 +19,7 @@ import { createPrinter } from "@waitron/printing";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
-import { placeOrder } from "./working-order.js";
+
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";

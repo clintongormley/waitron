@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
 import { stampDeployment } from "@waitron/db";
@@ -12,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { VenueDetailPatch, VenueDetailWrite } from "./venue-detail-types.js";
 import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/reporting";
-import { createOpenOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";

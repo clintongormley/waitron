@@ -1906,13 +1906,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ label?: unknown; revision?: unknown }>(c);
+      const body = await readJsonBody<{
+        label?: unknown;
+        revision?: unknown;
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       const revision = await setWorkingOrderLabel(
         deps.db,
         id,
         {
           label: requireString(body.label, "label"),
           revision: requireRevision(body.revision),
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit,
         },
         deps.attendance === undefined
           ? undefined
@@ -1931,6 +1937,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         revision?: unknown;
         invoiceType: "F1" | "F2";
+        expectedEdit: BillEditExpected | null;
         delivery?: unknown;
         recipient: {
           taxId: string;
@@ -1957,6 +1964,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           invoiceType: body.invoiceType,
           recipient: body.recipient,
           delivery,
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit,
         },
         { personId: session.personId, emailAvailable },
         deps.attendance === undefined
@@ -1992,12 +2001,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ revision?: unknown; language?: unknown }>(c);
+      const body = await readJsonBody<{
+        revision?: unknown;
+        language?: unknown;
+        expectedEdit: BillEditExpected | null;
+      }>(c);
       const revision = await setOrderReceiptLanguage(
         deps.db,
         cfg,
         id,
-        { revision: requireRevision(body.revision), language: body.language },
+        {
+          revision: requireRevision(body.revision),
+          language: body.language,
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit,
+        },
         deps.attendance === undefined
           ? undefined
           : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
@@ -2031,11 +2049,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ expectedEdit: BillEditExpected | null }>(c);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         sendingCfg(cfg, c, session.device),
         id,
         personId,
+        body.expectedEdit,
       );
       return c.json(result);
     }),

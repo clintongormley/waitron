@@ -1,4 +1,4 @@
-import { updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -32,7 +32,6 @@ import {
   listExpoQueue,
   listHeldOrders,
   listStationQueues,
-  placeOrder,
 } from "./working-order.js";
 import "./errors.js";
 

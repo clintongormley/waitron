@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {

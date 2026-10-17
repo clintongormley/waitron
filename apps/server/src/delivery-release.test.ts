@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -16,7 +17,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { collectOrderOrchestration as collectOrder, payWorkingOrder } from "./till-sale.js";
-import { abandonHeldOrder, createOpenOrder, handOverOrder, placeOrder } from "./working-order.js";
+import { abandonHeldOrder, createOpenOrder, handOverOrder } from "./working-order.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

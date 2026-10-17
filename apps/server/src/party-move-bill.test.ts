@@ -1,3 +1,4 @@
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { configureZone, createDepartment, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -29,7 +30,6 @@ import {
   listHeldOrders,
   markServed,
   parkOrder,
-  placeOrder,
 } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
