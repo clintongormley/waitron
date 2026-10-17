@@ -72,3 +72,20 @@ export async function takeOverDraftForTest(
   );
   return result.draft!;
 }
+
+export async function expectedDraftEditForTest(
+  tx: Transaction,
+  draft: { id: string; revision: number },
+) {
+  const [row] = await tx
+    .select()
+    .from(orderDrafts)
+    .where(eq(orderDrafts.id, draft.id.toLowerCase()));
+  const edit = await readBillEditState(tx, row?.billId ?? randomUUID());
+  return {
+    billId: edit.billId,
+    editorVersion: edit.editorVersion,
+    draftId: draft.id.toLowerCase(),
+    draftRevision: draft.revision,
+  };
+}

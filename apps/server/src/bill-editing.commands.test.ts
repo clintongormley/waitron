@@ -19,7 +19,7 @@ import { persons } from "@waitron/identity";
 import { readEditSentLines, writeEditSentLines } from "@waitron/venue-service";
 import { AppError } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import { discardDraft, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
@@ -469,6 +469,7 @@ describe("bill editor in real save and takeover commands", () => {
         operatorId: venue.operatorId,
         expectedPartyRevision: p.revision,
         draftRevision: saved.draft!.revision,
+        expectedEdit: saved.edit,
         groups: [{ lineIds: [saved.draft!.lines[0]!.id], release: "fire" }],
       }),
     );
@@ -627,4 +628,304 @@ describe("bill editor in real save and takeover commands", () => {
     expect((await send(venue.app, "", "POST", path, body)).status).toBe(401);
     expect(await rows()).toEqual(before);
   });
+});
+
+async function sendAsk(saved: Awaited<ReturnType<typeof save>>) {
+  const [party] = await venue.db.select().from(parties).where(eq(parties.id, saved.draft!.partyId));
+  return {
+    submissionId: randomUUID(),
+    operatorId: venue.operatorId,
+    expectedPartyRevision: party!.revision,
+    draftRevision: saved.draft!.revision,
+    expectedEdit: saved.edit as BillEditExpected,
+    groups: [{ lineIds: saved.draft!.lines.map((line) => line.id), release: "fire" as const }],
+  };
+}
+
+async function discardAsk(saved: Awaited<ReturnType<typeof save>>) {
+  const [bill] = await venue.db
+    .select()
+    .from(workingOrders)
+    .where(eq(workingOrders.id, saved.edit.billId));
+  return {
+    submissionId: randomUUID(),
+    revision: saved.draft!.revision,
+    expectedRevision: bill!.revision,
+    expectedEdit: saved.edit as BillEditExpected,
+    note: null,
+  };
+}
+
+function submitSaved(
+  saved: Awaited<ReturnType<typeof save>>,
+  ask: Awaited<ReturnType<typeof sendAsk>>,
+) {
+  return inTx(venue, (tx) =>
+    submitDraft(tx, venue.cfg, saved.draft!.partyId, saved.draft!.id, ask),
+  );
+}
+
+function discardSaved(
+  saved: Awaited<ReturnType<typeof save>>,
+  ask: Awaited<ReturnType<typeof discardAsk>>,
+  operatorId = venue.operatorId,
+) {
+  return inTx(venue, (tx) =>
+    discardDraft(tx, venue.cfg, saved.draft!.partyId, saved.draft!.id, operatorId, ask, "es-ES"),
+  );
+}
+
+describe("observed bill state in Send and Discard", () => {
+  it.each(["send", "discard"] as const)(
+    "%s refuses a missing expectation without mutation",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      if (command === "send") {
+        const ask = await sendAsk(saved);
+        ask.expectedEdit = undefined as unknown as BillEditExpected;
+        await refused(() => submitSaved(saved, ask), "management.request_invalid", {
+          field: "expectedEdit",
+        });
+      } else {
+        const ask = await discardAsk(saved);
+        ask.expectedEdit = undefined as unknown as BillEditExpected;
+        await refused(() => discardSaved(saved, ask), "management.request_invalid", {
+          field: "expectedEdit",
+        });
+      }
+    },
+  );
+
+  it.each(["send", "discard"] as const)(
+    "%s compares the editor version even when the draft revision is current",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      const ask = command === "send" ? await sendAsk(saved) : await discardAsk(saved);
+      ask.expectedEdit = { ...saved.edit, editorVersion: 0 };
+      await refused(
+        () =>
+          command === "send"
+            ? submitSaved(saved, ask as Awaited<ReturnType<typeof sendAsk>>)
+            : discardSaved(saved, ask as Awaited<ReturnType<typeof discardAsk>>),
+        "draft.out_of_date",
+        stale(saved.edit),
+      );
+    },
+  );
+
+  it.each(["send", "discard"] as const)(
+    "%s reports the new editor before a stale revision",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      const sentAsk = await sendAsk(saved);
+      const discardedAsk = await discardAsk(saved);
+      const taken = await take(p.partyId, saved.edit);
+      await refused(
+        () =>
+          command === "send" ? submitSaved(saved, sentAsk) : discardSaved(saved, discardedAsk),
+        "draft.taken_over",
+        {
+          billId: p.tabId,
+          draftId: saved.draft!.id,
+          ownerId: venue.adminId,
+          ownerName: taken.edit.editorName,
+          edit: taken.edit,
+        },
+      );
+    },
+  );
+
+  it.each(["send", "discard"] as const)(
+    "%s rejects an expectation naming a different bill",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      const ask = command === "send" ? await sendAsk(saved) : await discardAsk(saved);
+      ask.expectedEdit = { ...saved.edit, billId: p.otherId };
+      await refused(
+        () =>
+          command === "send"
+            ? submitSaved(saved, ask as Awaited<ReturnType<typeof sendAsk>>)
+            : discardSaved(saved, ask as Awaited<ReturnType<typeof discardAsk>>),
+        "management.request_invalid",
+        { field: "expectedEdit.billId" },
+      );
+    },
+  );
+
+  it.each(["send", "discard"] as const)(
+    "%s requires its named draft and revision to agree with the expectation",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      const ask = command === "send" ? await sendAsk(saved) : await discardAsk(saved);
+      ask.expectedEdit = { ...saved.edit, draftId: randomUUID() };
+      await refused(
+        () =>
+          command === "send"
+            ? submitSaved(saved, ask as Awaited<ReturnType<typeof sendAsk>>)
+            : discardSaved(saved, ask as Awaited<ReturnType<typeof discardAsk>>),
+        "management.request_invalid",
+        { field: "expectedEdit.draftId" },
+      );
+      ask.expectedEdit = { ...saved.edit, draftRevision: saved.edit.draftRevision! + 1 };
+      await refused(
+        () =>
+          command === "send"
+            ? submitSaved(saved, ask as Awaited<ReturnType<typeof sendAsk>>)
+            : discardSaved(saved, ask as Awaited<ReturnType<typeof discardAsk>>),
+        "management.request_invalid",
+        { field: command === "send" ? "draftRevision" : "revision" },
+      );
+    },
+  );
+
+  it("last Send wins before Takeover, whose unseen released state refuses", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId));
+    const answer = await submitSaved(saved, await sendAsk(saved));
+    await refused(() => take(p.partyId, saved.edit), "draft.out_of_date", stale(answer.edit));
+  });
+
+  it("partial Send retains its editor, and a stale Takeover cannot take unseen remaining dishes", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId), [
+      { ...fresh(), note: "first" },
+      { ...fresh("2"), note: "second" },
+    ]);
+    const ask = await sendAsk(saved);
+    ask.groups[0]!.lineIds = [saved.draft!.lines[0]!.id];
+    const answer = await submitSaved(saved, ask);
+    expect(answer.edit).toEqual({ ...saved.edit, draftRevision: 1 });
+    expect(answer.draft!.lines.map((line) => line.id)).toEqual([saved.draft!.lines[1]!.id]);
+    await refused(() => take(p.partyId, saved.edit), "draft.out_of_date", stale(answer.edit));
+    const taken = await take(p.partyId, answer.edit);
+    expect(taken.edit.editorId).toBe(venue.adminId);
+    expect(taken.draft!.lines.map((line) => line.id)).toEqual([saved.draft!.lines[1]!.id]);
+  });
+
+  it("a completed Send replays its original result after release and reacquisition without sending twice", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId));
+    const ask = await sendAsk(saved);
+    const answer = await submitSaved(saved, ask);
+    const next = await save(p.partyId, answer.edit, [fresh()], venue.adminId);
+    const before = await rows();
+    expect(await submitSaved(saved, ask)).toEqual(answer);
+    expect(await rows()).toEqual(before);
+    await refused(
+      () =>
+        submitSaved(saved, {
+          ...ask,
+          expectedEdit: { ...ask.expectedEdit, editorVersion: next.edit.editorVersion },
+        }),
+      "submission.id_reused",
+      { submissionId: ask.submissionId },
+    );
+  });
+
+  it("a same-person stale Send cannot cross release and reacquisition even with a fresh draft revision", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId));
+    const ask = await sendAsk(saved);
+    const answer = await submitSaved(saved, ask);
+    const next = await save(p.partyId, answer.edit);
+    const nextAsk = await sendAsk(next);
+    nextAsk.expectedEdit = { ...next.edit, editorVersion: saved.edit.editorVersion };
+    await refused(() => submitSaved(next, nextAsk), "draft.out_of_date", stale(next.edit));
+  });
+
+  it("Discard closes and releases only its own bill, preserving a colleague's other bill", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId));
+    const other = await save(p.partyId, blank(p.otherId), [fresh()], venue.adminId);
+    const answer = await discardSaved(saved, await discardAsk(saved));
+    expect(answer).toMatchObject({
+      draftId: saved.draft!.id,
+      billId: p.tabId,
+      revision: 1,
+      adjustmentIds: [],
+    });
+    expect(await inTx(venue, (tx) => readBillEditState(tx, p.tabId))).toEqual({
+      ...blank(p.tabId),
+      editorVersion: 2,
+      editorId: null,
+      editorName: null,
+    });
+    expect(
+      await venue.db
+        .select()
+        .from(orderDraftLines)
+        .where(eq(orderDraftLines.draftId, saved.draft!.id)),
+    ).toEqual([]);
+    expect(await inTx(venue, (tx) => readBillEditState(tx, p.otherId))).toEqual(other.edit);
+    const next = await save(
+      p.partyId,
+      { ...blank(p.tabId), editorVersion: 2 },
+      [fresh()],
+      venue.adminId,
+    );
+    expect(next.edit.editorVersion).toBe(3);
+  });
+
+  it("completed Discard replays after reacquisition, but a changed expectation reuses no command", async () => {
+    const p = await fixture();
+    const saved = await save(p.partyId, blank(p.tabId));
+    const ask = await discardAsk(saved);
+    const answer = await discardSaved(saved, ask);
+    const released = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
+    await save(p.partyId, released, [fresh()], venue.adminId);
+    const before = await rows();
+    expect(await discardSaved(saved, ask)).toEqual(answer);
+    expect(await rows()).toEqual(before);
+    await refused(
+      () =>
+        discardSaved(saved, {
+          ...ask,
+          expectedEdit: { ...ask.expectedEdit, editorVersion: released.editorVersion },
+        }),
+      "submission.id_reused",
+      { submissionId: ask.submissionId },
+    );
+  });
+
+  it.each(["submit", "discard"] as const)(
+    "the %s HTTP route requires and uses the observed state",
+    async (command) => {
+      const p = await fixture();
+      const saved = await save(p.partyId, blank(p.tabId));
+      const path = `/api/parties/${p.partyId}/drafts/${saved.draft!.id}/${command}`;
+      const ask = command === "submit" ? await sendAsk(saved) : await discardAsk(saved);
+      const { expectedEdit, ...missing } = ask;
+      const before = await rows();
+      expect(await send(venue.app, venue.cookie, "POST", path, missing)).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "expectedEdit" } },
+      });
+      expect(await rows()).toEqual(before);
+      expect(
+        await send(venue.app, venue.cookie, "POST", path, {
+          ...ask,
+          expectedEdit: { ...expectedEdit, editorVersion: 0 },
+          operatorId: venue.adminId,
+        }),
+      ).toEqual({ status: 409, json: { code: "draft.out_of_date", params: stale(saved.edit) } });
+      expect(await rows()).toEqual(before);
+      const answer = await send(venue.app, venue.cookie, "POST", path, ask);
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      if (command === "submit")
+        expect(answer.json).toMatchObject({
+          edit: { billId: p.tabId, editorId: null, editorVersion: 2 },
+        });
+      expect(await inTx(venue, (tx) => readBillEditState(tx, p.tabId))).toEqual({
+        ...blank(p.tabId),
+        editorVersion: 2,
+        editorId: null,
+        editorName: null,
+      });
+    },
+  );
 });

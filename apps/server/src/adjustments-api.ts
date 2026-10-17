@@ -1,3 +1,4 @@
+import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { ADJUSTMENT_ACTIONS, listAdjustmentReasons } from "@waitron/adjustments";
@@ -131,6 +132,7 @@ export function mountAdjustmentsApi(
       const partyId = requireBodyUuid(c.req.param("id"), "partyId").toLowerCase();
       const draftId = requireBodyUuid(c.req.param("did"), "draftId").toLowerCase();
       const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedEdit = parseBillEditExpected(body.expectedEdit);
       const revision = requireRevision(body.revision);
       const expectedRevision = requireRevision(body.expectedRevision, "expectedRevision");
       const submissionId = submissionIdOf(body);
@@ -162,6 +164,7 @@ export function mountAdjustmentsApi(
               submissionId,
               revision,
               expectedRevision,
+              expectedEdit,
               ...(reasonId === undefined ? {} : { reasonId }),
               note: typeof note === "string" ? note : null,
               approver: withCheck(parsedApprover, checked),

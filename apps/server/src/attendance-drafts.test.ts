@@ -1,3 +1,4 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
@@ -197,6 +198,7 @@ describe("accepted draft attendance capture", () => {
       submissionId: newId(),
       expectedPartyRevision: 0,
       operatorId: OPERATOR,
+      expectedEdit: await expectedDraftEditForTest(suite.db, first),
       draftRevision: first.revision,
       groups: [{ lineIds: first.lines.map((l) => l.id), release: "hold" as const }],
     };

@@ -1,3 +1,4 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -183,11 +184,12 @@ describe("the main bill", () => {
       drafts: await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId)),
     };
     await expect(
-      inTx(v, (tx) =>
+      inTx(v, async (tx) =>
         submitDraft(tx, v.cfg, partyId, draft.id, {
           submissionId: randomUUID(),
           operatorId: OPERATOR,
           expectedPartyRevision: before.party.revision,
+          expectedEdit: await expectedDraftEditForTest(v.db, draft),
           draftRevision: draft.revision,
           groups: [{ lineIds: draft.lines.map(({ id }) => id), release: "fire" }],
         }),

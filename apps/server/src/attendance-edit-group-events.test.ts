@@ -1,3 +1,4 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -74,6 +75,7 @@ async function prepare(action: Action) {
       partyId: party.partyId,
       tabId: party.tabId,
       draft,
+      expectedEdit: await expectedDraftEditForTest(suite.db, draft),
       submissionId: newId(),
       revision: party.revision,
     };
@@ -97,6 +99,7 @@ async function prepare(action: Action) {
     partyId: party.partyId,
     tabId: placed.tabId,
     draft: null,
+    expectedEdit: null,
     submissionId: newId(),
     revision: order!.revision,
   };
@@ -107,7 +110,7 @@ async function command(
   recorder?: AttendanceRecorder,
 ) {
   if (action === "submit-draft")
-    return run((tx) =>
+    return run(async (tx) =>
       submitDraft(
         tx,
         v.cfg,
@@ -117,6 +120,7 @@ async function command(
           submissionId: p.submissionId,
           expectedPartyRevision: p.revision,
           operatorId: v.operatorId,
+          expectedEdit: p.expectedEdit!,
           draftRevision: p.draft!.revision,
           groups: p.draft!.lines.map((line) => ({ lineIds: [line.id], release: "hold" as const })),
         },

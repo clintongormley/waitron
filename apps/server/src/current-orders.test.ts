@@ -1,3 +1,4 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { sql } from "drizzle-orm";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
@@ -1513,10 +1514,11 @@ describe("where each submission's groups go (spec §3)", () => {
     groups: { lineIds: string[]; release: GroupRelease }[],
   ) => {
     const expectedPartyRevision = await revisionOf(partyId);
-    return inTx((tx) =>
+    return inTx(async (tx) =>
       submitDraft(tx, v.cfg, partyId, draft.id, {
         operatorId: draft.ownerId,
         submissionId: randomUUID(),
+        expectedEdit: await expectedDraftEditForTest(tx, draft),
         draftRevision: draft.revision,
         expectedPartyRevision,
         groups,

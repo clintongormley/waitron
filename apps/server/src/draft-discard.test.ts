@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +28,7 @@ import {
   savePartyAllergy,
   setAllergyLineTicks,
 } from "@waitron/venue-service";
-import { discardDraft, type Draft } from "./order-drafts.js";
+import { discardDraft, type Draft, type BillDraftSnapshot } from "./order-drafts.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { AppError } from "@waitron/shared";
@@ -72,7 +73,12 @@ async function billRevision(billId: string) {
 }
 async function recall(partyId: string, lineId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, lineId));
   const answer = await call("POST", `/api/parties/${partyId}/lines/${lineId}/recall`, {
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, line!.workingOrderId)),
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
   });
@@ -114,6 +120,7 @@ async function request(
     submissionId: randomUUID(),
     revision: p.draft.revision,
     expectedRevision: await billRevision(p.billId),
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
     reasonId: venue.reasonId.house,
     note: null,
     ...overrides,
@@ -244,12 +251,13 @@ describe("Discard resolves the whole owned draft atomically", () => {
       const p = await billWith(venue, [{ name: "Water" }], { release: "hold" });
       const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
         billId: p.billId,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
       });
       expect(saved.status).toBe(200);
-      const draft = saved.json as unknown as Draft;
+      const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
       if (refusal === "paying")
         await inTx(venue, (tx) =>
           tx
@@ -264,6 +272,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
           submissionId: randomUUID(),
           revision: draft.revision,
           expectedRevision: await billRevision(p.billId),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
         },
         refusal === "foreign-owner" ? venue.cookie.manager : venue.cookie.staff,
       );
@@ -274,13 +283,25 @@ describe("Discard resolves the whole owned draft atomically", () => {
     },
   );
 
-  it("keeps another owner's same-bill draft while the current owner discards recalled dishes", async () => {
+  it("keeps another owner's other-bill draft while the current owner discards recalled dishes", async () => {
     const p = await setup();
+    const [otherBill] = await inTx(venue, (tx) =>
+      tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          orderNumber: 2,
+          partyId: p.partyId,
+          locationId: venue.cfg.locationId,
+        })
+        .returning(),
+    );
     const saved = await call(
       "PUT",
       `/api/parties/${p.partyId}/drafts`,
       {
-        billId: p.billId,
+        billId: otherBill!.id,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, otherBill!.id)),
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
@@ -288,7 +309,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       venue.cookie.manager,
     );
     expect(saved.status).toBe(200);
-    const otherDraft = saved.json as unknown as Draft;
+    const otherDraft = (saved.json as unknown as BillDraftSnapshot).draft!;
     const before = await frozen();
     expect((await discard(p, await request(p))).status).toBe(200);
     const after = await frozen();
@@ -305,11 +326,15 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const taken = await call(
       "POST",
       `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
-      { revision: p.draft.revision },
+      {
+        revision: p.draft.revision,
+        submissionId: randomUUID(),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
+      },
       venue.cookie.manager,
     );
     expect(taken.status).toBe(200);
-    p.draft = taken.json as unknown as Draft;
+    p.draft = (taken.json as unknown as BillDraftSnapshot).draft!;
     const answer = await discard(p, await request(p), venue.cookie.manager);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(
@@ -440,12 +465,13 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const current = (read.json as unknown as { drafts: Draft[] }).drafts[0]!;
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
       draftId: current.id,
       revision: current.revision,
       lines: [...current.lines, { menuItemId: venue.item("Bread"), quantity: "1" }],
     });
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
-    p.draft = saved.json as unknown as Draft;
+    p.draft = (saved.json as unknown as BillDraftSnapshot).draft!;
     const other = await setup();
     const before = await frozen();
     const body = await request(p);
@@ -491,7 +517,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(
       after.events.filter((r) => r.draftId === p.draft.id && r.kind === "discarded"),
     ).toHaveLength(1);
-    expect(after.fresh).toEqual(before.fresh);
+    expect(after.fresh).toEqual(before.fresh.filter((row) => row.draftId !== p.draft.id));
     expect(after.drafts.find((r) => r.id === other.draft.id)).toEqual(
       before.drafts.find((r) => r.id === other.draft.id),
     );
@@ -640,7 +666,10 @@ describe("Discard resolves the whole owned draft atomically", () => {
       const answer = await discard(p, {
         ...body,
         ...(stale === "draft"
-          ? { revision: body.revision - 1 }
+          ? {
+              revision: body.revision - 1,
+              expectedEdit: { ...body.expectedEdit, draftRevision: body.revision - 1 },
+            }
           : { expectedRevision: body.expectedRevision - 1 }),
       });
       expect(answer.json).toMatchObject({
@@ -700,12 +729,13 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const freshParty = await billWith(venue, [{ name: "Water" }], { release: "hold" });
     const saved = await call("PUT", `/api/parties/${freshParty.partyId}/drafts`, {
       billId: freshParty.billId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, freshParty.billId)),
       draftId: null,
       revision: 0,
       lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }],
     });
     expect(saved.status).toBe(200);
-    const draft = saved.json as unknown as Draft;
+    const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
     const freshBefore = await frozen();
     const answer = await discard(
       { ...freshParty, draft },
@@ -713,6 +743,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         submissionId: randomUUID(),
         revision: draft.revision,
         expectedRevision: await billRevision(freshParty.billId),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, freshParty.billId)),
       },
     );
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);

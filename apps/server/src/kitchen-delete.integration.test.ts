@@ -1,3 +1,4 @@
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -164,11 +165,12 @@ it("keeps retained draft, group, course and ready station history through manage
       course: { id: course.id, name: course.name, displayOrder: course.displayOrder },
     },
   ]);
-  const submitted = await inTx(v, (tx) =>
+  const submitted = await inTx(v, async (tx) =>
     submitDraft(tx, v.cfg, seated.partyId, draft.id, {
       operatorId: OPERATOR,
       submissionId: randomUUID(),
       expectedPartyRevision: seated.revision,
+      expectedEdit: await expectedDraftEditForTest(v.db, draft),
       draftRevision: draft.revision,
       groups: [{ lineIds: draft.lines.map((line) => line.id), release: "hold" }],
     }),

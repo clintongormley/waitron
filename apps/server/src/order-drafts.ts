@@ -541,8 +541,9 @@ export async function takeOverDraft(
     "draft.take-over",
     { partyId, draftId: id, operatorId, revision: ask.revision, expectedEdit },
     async () => {
-      const draft = await requireDraft(tx, id, partyId);
+      const draft = await draftOnParty(tx, id, partyId);
       const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
       await requireBillOfParty(tx, partyId, billId);
       await refusePaymentInFlight(tx, [billId]);
       const edit = await transferBillEditor(tx, billId, operatorId, expectedEdit);
@@ -725,6 +726,7 @@ export async function discardPartyDrafts(
 }
 
 export interface DiscardDraftInput {
+  expectedEdit: BillEditExpected;
   submissionId: string;
   revision: number;
   expectedRevision: number;
@@ -750,19 +752,24 @@ export async function discardDraft(
   adjustmentIds: string[];
   party: { id: string; revision: number } | null;
 }> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (input.revision !== expectedEdit.draftRevision) throw invalid("revision");
   const { submissionId, approver, ...command } = input;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     submissionId,
     "draft.discard",
-    { ...command, draftId, operatorId, approverId: approver?.personId },
+    { ...command, expectedEdit, draftId: id, operatorId, approverId: approver?.personId },
     async () => {
-      const draft = await requireDraft(tx, draftId, partyId);
-      await requireOwnDraftAt(tx, draft, operatorId, input.revision);
+      const draft = await draftOnParty(tx, id, partyId);
       const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
       await requireBillOfParty(tx, partyId, billId);
       await refusePaymentInFlight(tx, [billId]);
+      await requireBillEditor(tx, billId, operatorId, expectedEdit);
       const revision = await readOrderRevision(tx, billId);
       if (revision !== input.expectedRevision)
         throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
@@ -795,7 +802,15 @@ export async function discardDraft(
         adjustmentIds.push(...applied.adjustmentIds);
       }
       const at = nowIso();
-      await discardDrafts(tx, [draft.id]);
+      await tx.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
+      await tx.delete(orderDraftRecalledLines).where(eq(orderDraftRecalledLines.draftId, draft.id));
+      await closeBillDraft(
+        tx,
+        billId,
+        operatorId,
+        await readBillEditState(tx, billId),
+        "discarded",
+      );
       await recordDraftEvents(
         tx,
         attendance === undefined ? undefined : { recorder: attendance.recorder, at },
@@ -835,6 +850,7 @@ export async function discardDraft(
 }
 
 export interface SubmitDraftInput extends PartyCommandArgs {
+  expectedEdit: BillEditExpected;
   draftRevision: number;
   /** Lines of the draft's current revision, each named once across the groups. */
   groups: {
@@ -860,7 +876,10 @@ export async function submitDraft(
 ): Promise<SubmittedDraft> {
   const at = nowIso();
   const { operatorId } = input;
-  const id = foldIfUuid(draftId);
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (input.draftRevision !== expectedEdit.draftRevision) throw invalid("draftRevision");
   const groups = input.groups.map(({ lineIds, release, joinGroupId, afterGroupId }) => ({
     lineIds: lineIds.map(foldIfUuid),
     release,
@@ -873,13 +892,14 @@ export async function submitDraft(
     { kind: "party", partyId },
     input.submissionId,
     "draft.submit",
-    { partyId, draftId: id, operatorId, groups, joinGroupId },
+    { partyId, draftId: id, operatorId, groups, joinGroupId, expectedEdit },
     async () => {
-      const draft = await requireDraft(tx, id, partyId);
-      await requireOwnDraftAt(tx, draft, operatorId, input.draftRevision);
+      const draft = await draftOnParty(tx, id, partyId);
       const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
       await requireBillOfParty(tx, partyId, billId);
       await refusePaymentInFlight(tx, [billId]);
+      const edit = await requireBillEditor(tx, billId, operatorId, expectedEdit);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
       const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
@@ -941,14 +961,7 @@ export async function submitDraft(
       );
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
-      if (emptied)
-        await closeBillDraft(
-          tx,
-          billId,
-          operatorId,
-          await readBillEditState(tx, billId),
-          "submitted",
-        );
+      if (emptied) await closeBillDraft(tx, billId, operatorId, edit, "submitted");
       else
         await tx
           .update(orderDrafts)
@@ -1202,6 +1215,13 @@ async function requireCourses(
 }
 
 async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
+  const draft = await draftOnParty(tx, draftId, partyId);
+  if (draft.state === "discarded") throw new AppError("draft.not_found", { draftId });
+  if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
+  return draft;
+}
+
+async function draftOnParty(tx: Transaction, draftId: string, partyId: string) {
   const [draft] = await tx
     .select({
       id: orderDrafts.id,
@@ -1214,34 +1234,10 @@ async function requireDraft(tx: Transaction, draftId: string, partyId: string) {
     })
     .from(orderDrafts)
     .where(eq(orderDrafts.id, draftId));
-  if (draft === undefined || draft.state === "discarded" || draft.partyId !== partyId) {
+  if (draft === undefined || draft.partyId !== partyId) {
     throw new AppError("draft.not_found", { draftId });
   }
-  if (draft.state === "submitted") throw new AppError("draft.already_submitted", { draftId });
   return draft;
-}
-
-/** Refuse a draft another person now owns, then one that has moved on since `revision`. */
-async function requireOwnDraftAt(
-  tx: Transaction,
-  draft: { id: string; ownerId: string; revision: number },
-  operatorId: string,
-  revision: number,
-): Promise<void> {
-  if (draft.ownerId !== operatorId) {
-    throw new AppError("draft.taken_over", {
-      draftId: draft.id,
-      ownerId: draft.ownerId,
-      ownerName: await personName(tx, draft.ownerId),
-    });
-  }
-  requireDraftRevision(draft, revision);
-}
-
-function requireDraftRevision(draft: { id: string; revision: number }, revision: number): void {
-  if (draft.revision !== revision) {
-    throw new AppError("draft.out_of_date", { draftId: draft.id, revision: draft.revision });
-  }
 }
 
 async function openDraftsOn(tx: Transaction, partyId: string, ownerId?: string, billId?: string) {
@@ -1327,14 +1323,6 @@ function absorbLines(receiving: readonly DraftLine[], absorbed: readonly DraftLi
     ...receiving,
     ...absorbed.map((line) => (line.slot > 0 ? { ...line, slot: line.slot + offset } : line)),
   ];
-}
-
-async function personName(tx: Transaction, personId: string): Promise<string> {
-  const [person] = await tx
-    .select({ displayName: persons.displayName })
-    .from(persons)
-    .where(eq(persons.id, personId));
-  return person?.displayName ?? "";
 }
 
 type DraftEvent = typeof orderDraftEvents.$inferInsert;

@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
@@ -1847,7 +1849,7 @@ describe("taking over a draft (D5, spec §2)", () => {
     expect(await eventsOf(first.id)).toHaveLength(1);
   });
 
-  it("answers draft.not_found for an unknown or discarded draft, and draft.already_submitted for a submitted one", async () => {
+  it("answers draft.not_found for an unknown draft and draft.out_of_date for a closed one", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     const unknown = randomUUID();
@@ -1858,12 +1860,23 @@ describe("taking over a draft (D5, spec §2)", () => {
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     await db.update(orderDrafts).set({ state: "submitted" }).where(eq(orderDrafts.id, draft.id));
     await expect(takeOver(v, partyId, draft.id, SAM, 0)).rejects.toMatchObject({
-      code: "draft.already_submitted",
-      params: { draftId: draft.id },
+      code: "draft.out_of_date",
+      params: {
+        billId: draft.billId,
+        draftId: null,
+        revision: null,
+        edit: await inTx((tx) => readBillEditState(tx, draft.billId)),
+      },
     });
     await db.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, draft.id));
     await expect(takeOver(v, partyId, draft.id, SAM, 0)).rejects.toMatchObject({
-      code: "draft.not_found",
+      code: "draft.out_of_date",
+      params: {
+        billId: draft.billId,
+        draftId: null,
+        revision: null,
+        edit: await inTx((tx) => readBillEditState(tx, draft.billId)),
+      },
     });
     expect(await draftRow(draft.id)).toMatchObject({ ownerId: ALEX, revision: 0 });
     expect(await eventsOf(draft.id)).toHaveLength(1);
@@ -2392,6 +2405,7 @@ interface SubmitOptions {
   draftRevision?: number;
   partyRevision?: number;
   joinGroupId?: string;
+  expectedEdit?: Awaited<ReturnType<typeof expectedDraftEditForTest>>;
 }
 
 async function submit(
@@ -2403,10 +2417,16 @@ async function submit(
   opts: SubmitOptions = {},
 ) {
   const expectedPartyRevision = opts.partyRevision ?? (await partyRevision(partyId));
-  return inTx((tx) =>
+  return inTx(async (tx) =>
     submitDraft(tx, v.cfg, partyId, draft.id, {
       operatorId,
       submissionId: opts.submissionId ?? randomUUID(),
+      expectedEdit:
+        opts.expectedEdit ??
+        (await expectedDraftEditForTest(tx, {
+          id: draft.id,
+          revision: opts.draftRevision ?? draft.revision,
+        })),
       draftRevision: opts.draftRevision ?? draft.revision,
       expectedPartyRevision,
       groups,
@@ -2541,7 +2561,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     );
   });
 
-  it("answers draft.already_submitted when Alex submits and THEN Sam takes over, leaving Alex's submitted draft", async () => {
+  it("answers draft.out_of_date when Alex submits and THEN Sam takes over, leaving Alex's submitted draft", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
@@ -2550,13 +2570,18 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     expect(submitted).toMatchObject({ state: "submitted", ownerId: ALEX, revision: 1 });
 
     await refusedWritingNothing(() => takeOver(v, partyId, alex.id, SAM, submitted.revision), {
-      code: "draft.already_submitted",
-      params: { draftId: alex.id },
+      code: "draft.out_of_date",
+      params: {
+        billId: alex.billId,
+        draftId: null,
+        revision: null,
+        edit: await inTx((tx) => readBillEditState(tx, alex.billId)),
+      },
     });
     expect(await draftRow(alex.id)).toEqual(submitted);
   });
 
-  it("gives one success and one draft.already_submitted to two submits of a draft under different ids", async () => {
+  it("gives one success and one draft.out_of_date to two submits of a draft under different ids", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
@@ -2569,7 +2594,15 @@ describe("one submission, in both orders (Review Focus 1)", () => {
         submit(v, partyId, alex, ALEX, [{ lineIds: lineIds(alex), release: "fire" }], {
           partyRevision: first.revision,
         }),
-      { code: "draft.already_submitted", params: { draftId: alex.id } },
+      {
+        code: "draft.out_of_date",
+        params: {
+          billId: alex.billId,
+          draftId: null,
+          revision: null,
+          edit: await inTx((tx) => readBillEditState(tx, alex.billId)),
+        },
+      },
     );
     expect(
       await db.select().from(orderGroups).where(eq(orderGroups.partyId, partyId)),
@@ -2595,6 +2628,7 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     const again = await submit(v, partyId, alex, ALEX, drinks, {
       submissionId,
       partyRevision: seen,
+      expectedEdit: await expectedDraftEditForTest(db, alex),
       draftRevision: alex.revision,
     });
 
@@ -2607,11 +2641,14 @@ describe("one submission, in both orders (Review Focus 1)", () => {
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     const submissionId = randomUUID();
+    const expectedEdit = await expectedDraftEditForTest(db, alex);
     const groups = [{ lineIds: lineIds(alex), release: "fire" as const }];
-    const first = await submit(v, partyId, alex, ALEX, groups, { submissionId });
+    const first = await submit(v, partyId, alex, ALEX, groups, { submissionId, expectedEdit });
     const after = await everything();
 
-    expect(await submit(v, partyId, alex, ALEX, groups, { submissionId })).toEqual(first);
+    expect(await submit(v, partyId, alex, ALEX, groups, { submissionId, expectedEdit })).toEqual(
+      first,
+    );
     expect(await everything()).toEqual(after);
   });
 
@@ -2788,6 +2825,7 @@ describe("partial submission", () => {
     const groupId = held.groups[0]!.id;
     const retry = {
       submissionId: randomUUID(),
+      expectedEdit: await expectedDraftEditForTest(db, held.draft!),
       partyRevision: await partyRevision(partyId),
     };
     const rest = [{ lineIds: lineIds(held.draft!), release: "hold" as const }];
@@ -3017,6 +3055,7 @@ describe("which lines a submission names", () => {
     const { partyId } = await seated(v);
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "fish")]);
     const submissionId = randomUUID();
+    const expectedEdit = await expectedDraftEditForTest(db, draft);
     const upper = { id: draft.id.toUpperCase(), revision: draft.revision };
     const first = await submit(
       v,
@@ -3024,13 +3063,14 @@ describe("which lines a submission names", () => {
       upper,
       ALEX,
       [{ lineIds: [draft.lines[0]!.id.toUpperCase()], release: "fire" }],
-      { submissionId },
+      { submissionId, expectedEdit },
     );
     expect(first.draft!.lines.map((line) => line.id)).toEqual([draft.lines[1]!.id]);
 
     expect(
       await submit(v, partyId, draft, ALEX, [{ lineIds: [draft.lines[0]!.id], release: "fire" }], {
         submissionId,
+        expectedEdit,
       }),
     ).toEqual(first);
   });
@@ -3290,14 +3330,19 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
     await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "fish")]);
     const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "beer"), burger(v)]);
     const submissionId = randomUUID();
+    const expectedEdit = await expectedDraftEditForTest(db, alexOn5);
     const partyRevisionSeen = await partyRevision(mesa5.partyId);
     const sent = [{ lineIds: [alexOn5.lines[0]!.id], release: "fire" as const }];
-    const first = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, { submissionId });
+    const first = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, {
+      submissionId,
+      expectedEdit,
+    });
     await merge(v, mesa4, mesa5, SAM);
     const before = await everything();
 
     const again = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, {
       submissionId,
+      expectedEdit,
       partyRevision: partyRevisionSeen,
     });
 
@@ -3314,6 +3359,7 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
     const input = {
       operatorId: SAM,
       submissionId,
+      expectedEdit: await expectedDraftEditForTest(db, samOn5),
       draftRevision: samOn5.revision,
       expectedPartyRevision: await partyRevision(mesa5.partyId),
       groups: [{ lineIds: [samOn5.lines[0]!.id], release: "fire" as const }],
@@ -3353,6 +3399,7 @@ describe("a draft named on another party", () => {
           submitDraft(tx, v.cfg, mesa5.partyId, alex.id, {
             operatorId: ALEX,
             submissionId: randomUUID(),
+            expectedEdit: await expectedDraftEditForTest(db, alex),
             draftRevision: alex.revision,
             expectedPartyRevision: await partyRevision(mesa5.partyId),
             groups: [{ lineIds: lineIds(alex), release: "fire" }],
@@ -3695,6 +3742,7 @@ it("A669 replays a submitted draft without duplicating its groups or moving its 
     submissionId: randomUUID(),
     expectedPartyRevision: await partyRevision(partyId),
     operatorId: ALEX,
+    expectedEdit: await expectedDraftEditForTest(db, draft),
     draftRevision: draft.revision,
     groups: [{ lineIds: lineIds(draft), release: "hold" as const }],
   };
@@ -4787,6 +4835,7 @@ describe("source-backed draft foundations", () => {
       submissionId: randomUUID(),
       expectedPartyRevision: await partyRevision(partyId),
       operatorId: ALEX,
+      expectedEdit: await expectedDraftEditForTest(db, draft),
       draftRevision: draft.revision,
       groups: [{ lineIds: [id, ...lineIds(draft)], release: "fire" as const }],
     };
@@ -4846,6 +4895,7 @@ describe("source-backed draft foundations", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(partyId),
         operatorId: ALEX,
+        expectedEdit: await expectedDraftEditForTest(db, draft),
         draftRevision: draft.revision,
         groups: [{ lineIds: [id], release: "hold", joinGroupId: existing.groups[0]!.id }],
       }),
@@ -4935,6 +4985,7 @@ describe("source-backed draft foundations", () => {
             submissionId: randomUUID(),
             expectedPartyRevision: await partyRevision(partyId),
             operatorId: ALEX,
+            expectedEdit: await expectedDraftEditForTest(db, draft),
             draftRevision: draft.revision,
             groups: [
               { lineIds: [id, ...lineIds(draft)], release: "hold", joinGroupId: randomUUID() },
