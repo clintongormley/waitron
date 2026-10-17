@@ -1259,3 +1259,214 @@ for (const locale of ["en", "es"]) {
     }
   });
 }
+
+describe("till-bill-pay-dialog: the receipt's guests field", () => {
+  type Stepper = HTMLElementTagNameMap["wt-number-stepper"];
+  const guests = (el: TillBillPayDialog) => root(el).querySelector<Stepper>('[name="guests"]');
+  const owing = balanceOf({ total: "30.00", received: "10.00", outstanding: "20.00" });
+
+  async function typeGuests(el: TillBillPayDialog, value: string): Promise<void> {
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+  }
+
+  async function step(el: TillBillPayDialog, delta: "1" | "-1"): Promise<void> {
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    stepper.shadowRoot!.querySelector<HTMLElement>(`button[data-step="${delta}"]`)!.click();
+    await el.updateComplete;
+  }
+
+  /** A cash contribution of `amount`, confirmed with the server's allocation of all of it. */
+  async function contribute(amount: string, over: Partial<TillBillPayDialog> = {}) {
+    const el = await mount({
+      balance: owing,
+      way: "contribution",
+      asksGuests: true,
+      receiptGuests: 4,
+      ...over,
+    });
+    await type(el, "amount", amount);
+    await type(el, "tendered", amount);
+    await previewed(el, cashPreview(`${amount}.00`, "0.00"));
+    return el;
+  }
+
+  it("shows the party's count above the buttons when the payment pays what is left, and carries it", async () => {
+    const el = await contribute("20");
+    const stepper = guests(el)!;
+    expect(stepper.tagName).toBe("WT-NUMBER-STEPPER");
+    expect(stepper.value).toBe("4");
+    expect(stepper.label).toBe(t("seat.guest_count"));
+    expect(
+      stepper.compareDocumentPosition(actions(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: 4 }]);
+  });
+
+  it("carries a stepped-up count", async () => {
+    const el = await contribute("20");
+    await step(el, "1");
+    expect(guests(el)!.value).toBe("5");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: 5 }]);
+  });
+
+  it("carries null when emptied, showing the placeholder", async () => {
+    const el = await contribute("20");
+    await typeGuests(el, "");
+    expect(guests(el)!.placeholder).toBe(t("receipt.guests_none"));
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: null }]);
+  });
+
+  it("starts empty with no count, and carries null", async () => {
+    const el = await contribute("20", { receiptGuests: null });
+    expect(guests(el)!.value).toBe("");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: null }]);
+  });
+
+  it("shows no field and carries no guests on a payment that leaves something owing", async () => {
+    const el = await contribute("5");
+    expect(guests(el)).toBeNull();
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{}]);
+  });
+
+  it("shows the field on an equal share that pays the rest", async () => {
+    const el = await mount({ balance: owing, way: "share", asksGuests: true, receiptGuests: 4 });
+    await type(el, "people", "1");
+    await type(el, "tendered", "20");
+    await previewed(el, cashPreview("20.00", "0.00"));
+    expect(guests(el)!.value).toBe("4");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: 4 }]);
+  });
+
+  it("shows the field on chosen items that pay the rest", async () => {
+    const el = await mount({
+      balance: balanceOf({ total: "35.00", outstanding: "35.00" }),
+      lines: [paella],
+      asksGuests: true,
+      receiptGuests: 4,
+    });
+    await pick(el, "line", "1");
+    await type(el, "tendered", "50");
+    await previewed(el, cashPreview("35.00", "15.00"));
+    expect(guests(el)!.value).toBe("4");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: 4 }]);
+  });
+
+  it("shows the field on a card that pays the rest", async () => {
+    const el = await mount({ balance: owing, way: "contribution", asksGuests: true });
+    await type(el, "amount", "20");
+    await pick(el, "method", "card");
+    await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: "20.00",
+      tip: "0.00",
+      change: null,
+      charged: "20.00",
+    });
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{ guests: null }]);
+  });
+
+  it("holds a count it cannot take: says nothing until Take, then marks the field and holds Take until fixed", async () => {
+    const el = await contribute("20");
+    await typeGuests(el, "1000");
+    expect(guests(el)!.error).toBe("");
+    expect(actions(el).error).toBe("");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+    await el.updateComplete;
+
+    expect(confirmed).toEqual([]);
+    expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(guests(el));
+
+    await typeGuests(el, "3");
+    expect(guests(el)!.error).toBe("");
+    expect(actions(el).error).toBe("");
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ guests: 3 }]);
+  });
+
+  it("keeps the waiter's count when the payment is refused, and starts again after one is taken", async () => {
+    const el = await contribute("20");
+    await step(el, "1");
+    await click(el, "[data-pay-confirm]");
+    el.refusal = { code: "network" };
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("5");
+
+    el.taken = { change: "0.00" };
+    el.asked = null;
+    el.preview = null;
+    await el.updateComplete;
+    el.taken = null;
+    await type(el, "amount", "20");
+    await type(el, "tendered", "20");
+    await previewed(el, cashPreview("20.00", "0.00"));
+
+    expect(guests(el)!.value).toBe("4");
+  });
+
+  it("ignores a change while the payment is being taken", async () => {
+    const el = await contribute("20");
+    el.busy = true;
+    await el.updateComplete;
+    guests(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "9" }, bubbles: true, composed: true }),
+    );
+    el.busy = false;
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("4");
+  });
+
+  it("shows no field and carries no guests when the screen does not ask", async () => {
+    const el = await contribute("20", { asksGuests: false });
+    expect(guests(el)).toBeNull();
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([{}]);
+  });
+});
