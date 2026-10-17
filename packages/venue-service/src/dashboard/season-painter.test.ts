@@ -948,3 +948,21 @@ it("a period save refused after the painter left the page puts no refusal on the
   expect(editor.refusal).toBeUndefined();
   expect(reread).not.toHaveBeenCalled();
 });
+
+it("a period the live model no longer lists leaves the draft, which is clean when that was its only edit", async () => {
+  const { painter } = await mount();
+  await drag(painter, "3", 120, 240);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p1", startsAt: "08:00", endsAt: "10:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  const next = painterModel();
+  const restaurant = next.departments[0]!;
+  restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+  (restaurant.seasonWeeks[1]!.week[1]!.slots as unknown[]).splice(0, 1);
+  painter.model = next;
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([]);
+  expect(grid(painter).days.get("1")).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+});

@@ -590,3 +590,56 @@ describe("periods from the painter", () => {
     expect(part(painter, "periods-link")).not.toBeNull();
   });
 });
+
+describe("a period the live model no longer lists", () => {
+  const withoutLunch = () => {
+    const next = painterModel();
+    const restaurant = next.departments[0]!;
+    restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+    return next;
+  };
+
+  it("leaves the draft, and Save sends only the other edits", async () => {
+    const day = storedDay({
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("08:00", "10:00")] }],
+    });
+    const { painter, writes } = await mount({ days: { sd1: day } });
+    chip(painter, "paint-p1").click();
+    await drag(painter, DEC_14, at("13:00"), at("16:00"));
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_15, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([
+      lunch("08:00", "10:00"),
+      dinner("19:00", "22:00"),
+    ]);
+    day.paint = [];
+    painter.model = withoutLunch();
+    await settle(painter);
+    expect(part(painter, "paint-p1")).toBeNull();
+    expect(grid(painter).days.get(DEC_14) ?? []).toEqual([]);
+    expect(
+      grid(painter).shadowRoot!.querySelectorAll(
+        `.day[data-column="${DEC_14}"] .block:not(.underlay)`,
+      ).length,
+    ).toBe(0);
+    expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
+    expect(saveButton(painter).disabled).toBe(false);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect((writes[0]!.body as { paint: unknown }).paint).toEqual([
+      { departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] },
+    ]);
+  });
+
+  it("leaves a draft whose only edit used it with nothing to save", async () => {
+    const { painter, writes } = await mount();
+    chip(painter, "paint-p1").click();
+    await drag(painter, DEC_14, at("13:00"), at("16:00"));
+    expect(saveButton(painter).disabled).toBe(false);
+    painter.model = withoutLunch();
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_14) ?? []).toEqual([]);
+    expect(saveButton(painter).disabled).toBe(true);
+    expect(writes).toEqual([]);
+  });
+});

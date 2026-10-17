@@ -7,7 +7,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
-import { drag, frame, settle, withBar } from "../testing/season-painter-fixture.js";
+import { drag, frame, grid, settle, withBar } from "../testing/season-painter-fixture.js";
 import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
@@ -1235,6 +1235,38 @@ class AddingApp extends PainterApp {
 }
 customElements.define("opening-hours-adding-test-app", AddingApp);
 
+/** Deleting p1 takes it out of the periods and out of every saved week, as the server does. */
+class DeletingApp extends PainterApp {
+  override readonly api = new OpeningHoursApi((async (
+    path: string,
+    method: string,
+    body: unknown,
+  ) => {
+    if (method === "GET" && path.endsWith("/menu-periods/p1/delete-impact"))
+      return {
+        seasons: 1,
+        specialDays: 0,
+        routingUses: [],
+        keptOpenToday: false,
+        replacements: [],
+        clockRevision: 4,
+      };
+    if (method === "POST" && path.endsWith("/menu-periods/p1/delete")) {
+      this.writes.push([path, method, body]);
+      const next = structuredClone(this.model);
+      const restaurant = next.departments[0]!;
+      restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+      for (const season of restaurant.seasonWeeks)
+        for (const day of season.week)
+          day.slots = day.slots.filter(({ periodId }) => periodId !== "p1");
+      this.model = next;
+      return {};
+    }
+    return request(() => this.model, this.writes)(path, method, body);
+  }) as DashboardRequest);
+}
+customElements.define("opening-hours-deleting-test-app", DeletingApp);
+
 describe("the painters' Periods link", () => {
   const base = "/manage/opening-hours/view/season/season/winter/department/d1";
   const link = (painter: SeasonPainter) =>
@@ -1293,6 +1325,77 @@ describe("the painters' Periods link", () => {
     expect(painter.edited()).toEqual(before);
     expect(app.leave.coordinator.isDirty()).toBe(true);
     expect(app.writes).toHaveLength(1);
+  });
+
+  it("a period deleted in the Periods window leaves the painter's draft, and Save sends only the other edits", async () => {
+    history.replaceState(null, "", base);
+    const app = document.createElement("opening-hours-deleting-test-app") as DeletingApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    await expect.poll(() => drawnView(el)).toBeDefined();
+    const painter = await shownPainter(el);
+    const blocks = (column: string) =>
+      grid(painter).shadowRoot!.querySelectorAll(`.day[data-column="${column}"] .block`).length;
+    painter.shadowRoot!.querySelector<HTMLElement>('[data-test="paint-p2"]')!.click();
+    await settle(painter);
+    await drag(painter, "4", 120, 240);
+    painter.shadowRoot!.querySelector<HTMLElement>('[data-test="paint-p1"]')!.click();
+    await settle(painter);
+    await drag(painter, "3", 120, 240);
+    expect(grid(painter).days.get("3")).toEqual([
+      { periodId: "p1", startsAt: "08:00", endsAt: "10:00" },
+    ]);
+    expect(blocks("3")).toBe(1);
+    await userEvent.click(link(painter));
+    const { modal, list, table } = await periodsWindow(el);
+    table
+      .shadowRoot!.querySelector<HTMLElement>(
+        'tr[data-row-key="period:p1"] [data-test=delete-period]',
+      )!
+      .click();
+    await expect
+      .poll(() => list.shadowRoot!.querySelector("period-delete-dialog")?.impact)
+      .toBeTruthy();
+    const deletion = list.shadowRoot!.querySelector("period-delete-dialog")!;
+    await deletion.updateComplete;
+    deletion.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect.poll(() => list.shadowRoot!.querySelector("period-delete-dialog")).toBeNull();
+    await expect
+      .poll(() => table.shadowRoot!.querySelector('tr[data-row-key="period:p1"]'))
+      .toBeNull();
+    modal.querySelector<HTMLElement>("[data-test=close-calendar-window]")!.click();
+    await expect.poll(() => location.pathname).toBe(base);
+    expect(painterOf(el)).toBe(painter);
+    await expect.poll(() => painter.shadowRoot!.querySelector('[data-test="paint-p1"]')).toBeNull();
+    await settle(painter);
+    expect(grid(painter).days.get("3")).toEqual([]);
+    expect(blocks("3")).toBe(0);
+    expect(grid(painter).days.get("4")).toEqual([
+      { periodId: "p2", startsAt: "08:00", endsAt: "10:00" },
+    ]);
+    expect(blocks("4")).toBe(1);
+    expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await expect
+      .poll(() => app.writes.filter((write) => (write as unknown[])[1] === "PUT"))
+      .toHaveLength(1);
+    const [, , sent] = app.writes.find((write) => (write as unknown[])[1] === "PUT") as [
+      string,
+      string,
+      { departments: { departmentId: string; days: { weekday: number; slots: unknown[] }[] }[] },
+    ];
+    expect(sent.departments).toEqual([
+      {
+        departmentId: "d1",
+        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
+          weekday,
+          slots: weekday === 4 ? [{ periodId: "p2", startsAt: "08:00", endsAt: "10:00" }] : [],
+        })),
+      },
+    ]);
   });
 
   it("Review Focus 1 through the link: Back asks about the window's period draft, Keep stays and Discard closes the window over the same paint", async () => {

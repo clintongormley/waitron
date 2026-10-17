@@ -7,6 +7,7 @@ import {
   rebaseDays,
   stepAt,
   stepMinuteAt,
+  withoutPeriods,
   type Paint,
 } from "./paint-model.js";
 
@@ -298,5 +299,25 @@ describe("rebaseDays", () => {
         ["2026-12-31", [paint(AFTERNOON, "15:00", "17:00")]],
       ]),
     );
+  });
+});
+
+describe("withoutPeriods", () => {
+  it("takes out every block of a removed period, keeps Closed and every other block, and copies them", () => {
+    const days = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00"), paint(null, "16:00", "17:00")]],
+      ["2", [paint(DINNER, "18:00", "21:00"), paint(LUNCH, "21:00", "22:00")]],
+      ["3", [paint(LUNCH, "07:00", "09:00")]],
+    ]);
+    const kept = withoutPeriods(days, new Set([LUNCH]));
+    expect(kept).toEqual(
+      new Map([
+        ["1", [paint(null, "16:00", "17:00")]],
+        ["2", [paint(DINNER, "18:00", "21:00")]],
+        ["3", []],
+      ]),
+    );
+    const inputs = [...days.values()].flat();
+    for (const day of kept.values()) for (const block of day) expect(inputs).not.toContain(block);
   });
 });

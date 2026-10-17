@@ -21,7 +21,7 @@ import { addDays, isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
-import { rebaseDays, samePaint } from "../paint-model.js";
+import { rebaseDays, samePaint, withoutPeriods } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -30,7 +30,13 @@ import { paintRow, paintRowStyles } from "./paint-row.js";
 import { PeriodEditing, periodsLink } from "./period-editing.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { segmentedStyles } from "./segmented-styles.js";
-import { departmentOf, droppedNotice, ownerName, refusalReason } from "./painter-labels.js";
+import {
+  departmentOf,
+  droppedNotice,
+  ownerName,
+  refusalReason,
+  removedPeriods,
+} from "./painter-labels.js";
 import {
   browserToday,
   format,
@@ -464,6 +470,7 @@ export class SpecialDayPainter extends LitElement {
     const key = this.seedKey();
     if (this.open && this.seeded !== key) this.reseed(key);
     else if (changes.has("model")) {
+      this.dropDeletedPeriods((changes.get("model") as Model | undefined) ?? this.model);
       if (sameDraft(this.draft, this.baseline)) this.revision = this.model.clockRevision;
       if (!this.saving)
         this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
@@ -699,6 +706,16 @@ export class SpecialDayPainter extends LitElement {
         if (!samePaint(day, sent.get(owner)?.get(date) ?? []))
           since.set(owner, new Map(since.get(owner)).set(date, day));
     return since;
+  }
+  /** A save naming a deleted period is refused, so its paint leaves the draft and the saved state. */
+  private dropDeletedPeriods(previous: Model) {
+    const removed = removedPeriods(previous, this.model);
+    if (!removed.size) return;
+    const strip = (paint: OwnerPaint): OwnerPaint =>
+      new Map([...paint].map(([owner, days]) => [owner, withoutPeriods(days, removed)]));
+    this.draft = { ...this.draft, paint: strip(this.draft.paint) };
+    this.baseline = { ...this.baseline, paint: strip(this.baseline.paint) };
+    this.scope?.commit(copyDraft(this.baseline));
   }
   /** An edited owner's paint goes back to its saved state when the owner is gone from `this.model`
    *  or no longer active, and the notice beside Save names it. */

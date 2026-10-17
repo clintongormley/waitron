@@ -110,3 +110,18 @@ export function rebaseDays<K>(
   }
   return rebased;
 }
+
+/** `days` with every block of a period in `removed` taken out. */
+export function withoutPeriods<K>(
+  days: ReadonlyMap<K, readonly Paint[]>,
+  removed: ReadonlySet<string>,
+): Map<K, Paint[]> {
+  return new Map(
+    [...days].map(([key, day]) => [
+      key,
+      day
+        .filter(({ periodId }) => periodId === null || !removed.has(periodId))
+        .map((range) => ({ ...range })),
+    ]),
+  );
+}
