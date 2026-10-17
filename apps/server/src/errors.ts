@@ -5,6 +5,7 @@ import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
 import type { CancellationContext } from "./line-cancel-context.js";
+import type { BillEditState } from "./order-drafts.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -464,16 +465,25 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
-    /** The draft is owned by someone else; `ownerId` and `ownerName` say who owns it now. */
-    "draft.taken_over": { draftId: string; ownerId: string; ownerName: string };
+    "draft.taken_over":
+      | { draftId: string; ownerId: string; ownerName: string }
+      | {
+          billId: string;
+          draftId: string | null;
+          ownerId: string;
+          ownerName: string | null;
+          edit: BillEditState;
+        };
     /** The draft has been submitted, so no command can act on it. */
     "draft.already_submitted": { draftId: string };
-    /**
-     * A draft command carried a draft revision another write has since moved past, or asked for a
-     * new draft where the person already has one open on the party. `draftId` and `revision` are
-     * that draft's current ones; the caller reloads and acts again.
-     */
-    "draft.out_of_date": { draftId: string; revision: number };
+    "draft.out_of_date":
+      | { draftId: string; revision: number }
+      | {
+          billId: string;
+          draftId: string | null;
+          revision: number | null;
+          edit: BillEditState;
+        };
     /**
      * The id names no draft that is open or submitted, or names one of another party than the one
      * the request is on. A discarded draft is not found.

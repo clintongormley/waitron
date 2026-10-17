@@ -13,7 +13,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { readBillEditState } from "./bill-editing.js";
+import { AppError } from "@waitron/shared";
+import { readBillEditState, requireBillEditor } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
@@ -40,6 +42,224 @@ async function fixture() {
 }
 
 const read = (billId: string) => inTx((tx) => readBillEditState(tx, billId));
+
+async function ownedBill() {
+  const data = await fixture();
+  const draft = await inTx(async (tx) => {
+    await tx
+      .insert(billEditStates)
+      .values({ billId: data.bill.id, editorId: data.ana.id, editorVersion: 2 });
+    const [row] = await tx
+      .insert(orderDrafts)
+      .values({ billId: data.bill.id, partyId: data.party.id, ownerId: data.ana.id, revision: 5 })
+      .returning();
+    return row!;
+  });
+  const expected: BillEditExpected = {
+    billId: data.bill.id,
+    editorVersion: 2,
+    draftId: draft.id,
+    draftRevision: 5,
+  };
+  return { ...data, draft, expected };
+}
+
+async function snapshot() {
+  return {
+    states: await suite.db.select().from(billEditStates),
+    drafts: await suite.db.select().from(orderDrafts),
+    bills: await suite.db.select().from(workingOrders),
+  };
+}
+
+async function refusedWith(run: () => Promise<unknown>, code: string, params: unknown) {
+  const before = await snapshot();
+  const error = await run().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(error).toBeInstanceOf(AppError);
+  expect((error as AppError).code).toBe(code);
+  expect((error as AppError).params).toEqual(params);
+  expect(await snapshot()).toEqual(before);
+}
+
+describe("validating a bill's editor", () => {
+  it("allows an unowned bill without acquiring it or allocating a draft", async () => {
+    const { bill, ana } = await fixture();
+    const before = await snapshot();
+    expect(
+      await inTx((tx) =>
+        requireBillEditor(tx, bill.id, ana.id, {
+          billId: bill.id,
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        }),
+      ),
+    ).toEqual({
+      billId: bill.id,
+      editorId: null,
+      editorName: null,
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("allows the editor's current expectation without changing versions or drafts", async () => {
+    const { bill, ana, draft, expected } = await ownedBill();
+    const before = await snapshot();
+    expect(await inTx((tx) => requireBillEditor(tx, bill.id, ana.id, expected))).toEqual({
+      billId: bill.id,
+      editorId: ana.id,
+      editorName: "Ana",
+      editorVersion: 2,
+      draftId: draft.id,
+      draftRevision: 5,
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("does not require taking over an editor's other bill", async () => {
+    const { other, luis } = await ownedBill();
+    const before = await snapshot();
+    expect(
+      await inTx((tx) =>
+        requireBillEditor(tx, other.id, luis.id, {
+          billId: other.id,
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        }),
+      ),
+    ).toEqual({
+      billId: other.id,
+      editorId: null,
+      editorName: null,
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([false, true])(
+    "refuses another editor before a stale-version comparison (stale=%s)",
+    async (stale) => {
+      const { bill, ana, luis, draft, expected } = await ownedBill();
+      const edit = {
+        billId: bill.id,
+        editorId: ana.id,
+        editorName: "Ana",
+        editorVersion: 2,
+        draftId: draft.id,
+        draftRevision: 5,
+      };
+      await refusedWith(
+        () =>
+          inTx((tx) =>
+            requireBillEditor(tx, bill.id, luis.id, {
+              ...expected,
+              editorVersion: stale ? 0 : 2,
+            }),
+          ),
+        "draft.taken_over",
+        { billId: bill.id, draftId: draft.id, ownerId: ana.id, ownerName: "Ana", edit },
+      );
+    },
+  );
+
+  it.each([
+    { editorVersion: 1 },
+    { draftId: randomUUID() },
+    { draftRevision: 4 },
+    { draftId: null, draftRevision: null },
+  ])("refuses the same editor's mismatched expectation %j", async (change) => {
+    const { bill, ana, draft, expected } = await ownedBill();
+    const edit = {
+      billId: bill.id,
+      editorId: ana.id,
+      editorName: "Ana",
+      editorVersion: 2,
+      draftId: draft.id,
+      draftRevision: 5,
+    };
+    await refusedWith(
+      () => inTx((tx) => requireBillEditor(tx, bill.id, ana.id, { ...expected, ...change })),
+      "draft.out_of_date",
+      { billId: bill.id, draftId: draft.id, revision: 5, edit },
+    );
+  });
+
+  it("refuses an expectation for another bill as an invalid field", async () => {
+    const { bill, other, ana, expected } = await ownedBill();
+    await refusedWith(
+      () => inTx((tx) => requireBillEditor(tx, bill.id, ana.id, { ...expected, billId: other.id })),
+      "management.request_invalid",
+      { field: "expectedEdit.billId" },
+    );
+  });
+
+  it("refuses a pre-release request with nullable current draft facts", async () => {
+    const { bill, ana, draft, expected } = await ownedBill();
+    await inTx(async (tx) => {
+      await tx.update(orderDrafts).set({ state: "submitted" }).where(eq(orderDrafts.id, draft.id));
+      await tx
+        .update(billEditStates)
+        .set({ editorId: null, editorVersion: 3 })
+        .where(eq(billEditStates.billId, bill.id));
+    });
+    const edit = {
+      billId: bill.id,
+      editorId: null,
+      editorName: null,
+      editorVersion: 3,
+      draftId: null,
+      draftRevision: null,
+    };
+    await refusedWith(
+      () => inTx((tx) => requireBillEditor(tx, bill.id, ana.id, expected)),
+      "draft.out_of_date",
+      { billId: bill.id, draftId: null, revision: null, edit },
+    );
+    expect(
+      await inTx((tx) =>
+        requireBillEditor(tx, bill.id, ana.id, {
+          billId: bill.id,
+          editorVersion: 3,
+          draftId: null,
+          draftRevision: null,
+        }),
+      ),
+    ).toEqual(edit);
+  });
+
+  it("compares the version even when the original person owns the bill again", async () => {
+    const { bill, ana, draft, expected } = await ownedBill();
+    await inTx((tx) =>
+      tx.update(billEditStates).set({ editorVersion: 6 }).where(eq(billEditStates.billId, bill.id)),
+    );
+    await refusedWith(
+      () => inTx((tx) => requireBillEditor(tx, bill.id, ana.id, expected)),
+      "draft.out_of_date",
+      {
+        billId: bill.id,
+        draftId: draft.id,
+        revision: 5,
+        edit: {
+          billId: bill.id,
+          editorId: ana.id,
+          editorName: "Ana",
+          editorVersion: 6,
+          draftId: draft.id,
+          draftRevision: 5,
+        },
+      },
+    );
+  });
+});
 
 describe("reading a bill's editing state", () => {
   it("reads a missing version row as unowned without creating one", async () => {
