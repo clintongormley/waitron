@@ -452,7 +452,7 @@ export class WtFloorPlanCanvas extends LitElement {
    * tables show another layout or the box is resized, the room and the grid only grow, as during
    * the drag: less room at scroll 0, or a grid too short for its scroll, cannot be scrolled away,
    * so what was under the pointer would jump when it let go. After an arrow key's change (`key`),
-   * the room shrinks only by what is scrolled, so no other table moves.
+   * the room and the grid shrink only by what is out of view, so no other table moves.
    */
   #hold: {
     before: string;
@@ -569,19 +569,27 @@ export class WtFloorPlanCanvas extends LitElement {
       columns = Math.max(this.#size.columns + x - this.#origin.x, x + plan.columns);
       rows = Math.max(this.#size.rows + y - this.#origin.y, y + plan.rows);
     } else {
+      let view = { columns: 0, rows: 0 };
       if (hold === "key") {
         const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
-        x = Math.max(
-          x,
-          this.#origin.x - Math.floor(viewport.scrollLeft / (GRID_SQUARE_PX * this.zoom)),
-        );
-        y = Math.max(
-          y,
-          this.#origin.y - Math.floor(viewport.scrollTop / (GRID_SQUARE_PX * this.zoom)),
-        );
+        // Where `updated` scrolls from: a zoom's scroll is set there, at the new zoom.
+        const scroll = this.#scroll ?? { x: viewport.scrollLeft, y: viewport.scrollTop };
+        const square = GRID_SQUARE_PX * this.zoom;
+        x = Math.max(x, this.#origin.x - Math.floor(viewport.scrollLeft / square));
+        y = Math.max(y, this.#origin.y - Math.floor(viewport.scrollTop / square));
+        // The grid is drawn before `updated` scrolls by the change in `#origin`, so it reaches the
+        // view's far edge as it stands.
+        view = {
+          columns: Math.ceil((scroll.x + viewport.clientWidth) / square),
+          rows: Math.ceil((scroll.y + viewport.clientHeight - this.bottomInset) / square),
+        };
       }
-      columns = Math.max(Math.floor(this.visible.columns / this.zoom), x + plan.columns);
-      rows = Math.max(Math.floor(this.visible.rows / this.zoom), y + plan.rows);
+      columns = Math.max(
+        Math.floor(this.visible.columns / this.zoom),
+        x + plan.columns,
+        view.columns,
+      );
+      rows = Math.max(Math.floor(this.visible.rows / this.zoom), y + plan.rows, view.rows);
     }
     // The first tables drawn take their room unscrolled, so their corners show from the start.
     if (this.#drewTables) {
@@ -946,6 +954,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const next = resizeFrom(t.placement, resize.side, resize.squares);
     if (sameBox(next, t.placement)) return;
     const { x, y, width, height } = next;
+    this.#keyHold({ key: t.key, placement: { ...t.placement, x, y, width, height } });
     this.#resize({ key: t.key, x, y, width, height });
     this.keyResized = t.key;
     this.announcement = this.#copy.size

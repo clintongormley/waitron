@@ -1084,3 +1084,187 @@ it.each(ZOOMS)(
     }
   },
 );
+
+const turning = (rotation: number): PlanCanvasTable => ({
+  ...table("T1", 300, 200),
+  placement: { x: 300, y: 200, width: 8, height: 4, rotation, shape: "rect" },
+});
+
+const small = (x: number): PlanCanvasTable => ({
+  ...table("T2", x, 190),
+  placement: { x, y: 190, width: 2, height: 2, rotation: 0, shape: "rect" },
+});
+
+/** A 600 × 300 canvas with a 60px `bottomInset`, holding `tables`, at the zoom a Ctrl+wheel of
+ *  `deltaY` reaches. */
+async function insetCanvas(tables: PlanCanvasTable[], deltaY: number): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.bottomInset = 60;
+  el.tables = tables;
+  el.selected = "T1";
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+  }
+  return el;
+}
+
+const sizeOf = (el: WtFloorPlanCanvas) => {
+  const grid = part(el, "grid").getBoundingClientRect();
+  return { width: grid.width, height: grid.height };
+};
+
+it.each(ZOOMS.flatMap(([zoom, deltaY]) => [0, 5].map((short) => [zoom, short, deltaY] as const)))(
+  "at zoom %s, scrolled to %spx short of the far corner, a full keyboard turn moves no other table on screen, and the room it held goes once the parent sets another layout",
+  async (_zoom, short, deltaY) => {
+    const el = await insetCanvas([turning(90), small(290)], deltaY);
+    el.addEventListener("wt-table-rotate", (event) => {
+      const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+      queueMicrotask(() => {
+        el.tables = el.tables.map((t) =>
+          t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+        );
+      });
+    });
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth - viewport.clientWidth - short;
+    viewport.scrollTop = viewport.scrollHeight - viewport.clientHeight - short;
+    await settled(el);
+    const start = sizeOf(el);
+    const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+    const before = other().getBoundingClientRect();
+    const press = async () => {
+      part(el, "rotate-handle").focus({ preventScroll: true });
+      await userEvent.keyboard("{ArrowRight}");
+      await settled(el);
+      const now = other().getBoundingClientRect();
+      const at = `rotation ${el.tables[0]!.placement.rotation}`;
+      expect({ left: now.left, top: now.top }, at).toEqual({
+        left: before.left,
+        top: before.top,
+      });
+    };
+    for (let i = 0; i < 24; i++) await press();
+    expect(el.tables[0]!.placement.rotation).toBe(90);
+    expect(sizeOf(el)).toEqual(start);
+    for (let i = 0; i < 6; i++) await press();
+    expect(el.tables[0]!.placement.rotation).toBe(180);
+    const held = sizeOf(el);
+    el.tables = [turning(180), small(291)];
+    await settled(el);
+    const after = sizeOf(el);
+    cleanup();
+    const alone = sizeOf(await insetCanvas([turning(180), small(291)], deltaY));
+    expect(after).toEqual(alone);
+    // The turn to 180° pulled the arrow's reach back, so the room held was more than it takes.
+    expect(held.width).toBeGreaterThan(alone.width);
+  },
+);
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) =>
+    ["{ArrowLeft}", "{ArrowUp}", "{Shift>}{ArrowLeft}{/Shift}", "{Shift>}{ArrowUp}{/Shift}"].map(
+      (keys) => [zoom, keys, deltaY] as const,
+    ),
+  ),
+)(
+  "at zoom %s, scrolled to the far corner, %s on the furthest table moves no other table on screen",
+  async (_zoom, keys, deltaY) => {
+    const el = await insetCanvas([turning(0), small(290)], deltaY);
+    const apply = (event: Event) => {
+      const { key, ...change } = (event as CustomEvent<{ key: string }>).detail;
+      queueMicrotask(() => {
+        el.tables = el.tables.map((t) =>
+          t.key === key ? { ...t, placement: { ...t.placement, ...change } } : t,
+        );
+      });
+    };
+    el.addEventListener("wt-table-move", apply);
+    el.addEventListener("wt-table-resize", apply);
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth;
+    viewport.scrollTop = viewport.scrollHeight;
+    await settled(el);
+    const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+    const before = other().getBoundingClientRect();
+    const { placement } = el.tables[0]!;
+    button(el).focus({ preventScroll: true });
+    await userEvent.keyboard(keys);
+    await settled(el);
+    expect(el.tables[0]!.placement).not.toEqual(placement);
+    const now = other().getBoundingClientRect();
+    expect({ left: now.left, top: now.top }).toEqual({ left: before.left, top: before.top });
+  },
+);
+
+it("zooming out after a keyboard turn at the far corner keeps the grid only out to the view or to what the plan takes", async () => {
+  const el = await insetCanvas([turning(90), small(290)], 0);
+  el.addEventListener("wt-table-rotate", (event) => {
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+      );
+    });
+  });
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = viewport.scrollWidth;
+  viewport.scrollTop = viewport.scrollHeight;
+  await settled(el);
+  part(el, "rotate-handle").focus({ preventScroll: true });
+  for (let i = 0; i < 6; i++) {
+    await userEvent.keyboard("{ArrowRight}");
+    await settled(el);
+  }
+  const held = sizeOf(el);
+  wheel(el, 100);
+  await settled(el);
+  const zoomed = sizeOf(el);
+  const right = viewport.scrollLeft + viewport.clientWidth;
+  const bottom = viewport.scrollTop + viewport.clientHeight - 60;
+  cleanup();
+  const alone = sizeOf(await insetCanvas([turning(180), small(290)], 100));
+  // Half zoom: 6px squares, the 60px inset unscaled.
+  expect(zoomed).toEqual({
+    width: Math.max(alone.width, Math.ceil(right / 6) * 6),
+    height: Math.max(alone.height, Math.ceil(bottom / 6) * 6 + 60),
+  });
+  expect(zoomed.width).toBeLessThan(held.width);
+});
+
+it("a keyboard turn at the far corner that gives back scrolled-away margin moves no other table on screen", async () => {
+  const big = (rotation: number): PlanCanvasTable => ({
+    ...table("T1", 0, 0),
+    placement: { ...table("T1", 0, 0).placement, width: 60, height: 60, rotation },
+  });
+  const el = await insetCanvas([big(45), table("T2", 70, 0)], 0);
+  el.addEventListener("wt-table-rotate", (event) => {
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+      );
+    });
+  });
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = viewport.scrollWidth;
+  viewport.scrollTop = viewport.scrollHeight;
+  await settled(el);
+  const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+  const before = other().getBoundingClientRect();
+  const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  part(el, "rotate-handle").focus({ preventScroll: true });
+  await userEvent.keyboard("{ArrowLeft}");
+  await settled(el);
+  expect(el.tables[0]!.placement.rotation).toBe(30);
+  const now = other().getBoundingClientRect();
+  expect({ left: now.left, top: now.top }).toEqual({ left: before.left, top: before.top });
+  // The two squares of margin the turn gave back on the left and top were scrolled away.
+  expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+    left: scroll.left - 24,
+    top: scroll.top - 24,
+  });
+});
