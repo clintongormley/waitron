@@ -4,6 +4,10 @@ export const shellEn = {
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
   "shell.reload_open_till": "Reload to open the till",
+  "shell.theme.label": "Theme",
+  "shell.theme.light": "Light",
+  "shell.theme.dark": "Dark",
+  "shell.theme.device": "Follow device",
 
   "shell.connection.already_set_up": "This server is already set up. Reload to open it.",
   "shell.connection.server_problem": "This server reported a problem. Try again in a moment.",
@@ -132,6 +136,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",
   "shell.reload_open_till": "Recargar para abrir la caja",
+  "shell.theme.label": "Tema",
+  "shell.theme.light": "Claro",
+  "shell.theme.dark": "Oscuro",
+  "shell.theme.device": "Según el dispositivo",
 
   "shell.connection.already_set_up": "Este servidor ya está configurado. Recarga para abrirlo.",
   "shell.connection.server_problem":

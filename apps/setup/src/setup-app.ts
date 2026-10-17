@@ -1,4 +1,4 @@
-import { LeaveController, type DraftScope } from "@waitron/ui";
+import { LeaveController, ThemeChoiceController, type DraftScope } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -23,6 +23,7 @@ import "./screens/provisioning-screen.js";
 import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
+import "@waitron/ui/src/components/wt-theme-chooser.js";
 import type {
   RecoveryRestoreCredentials,
   AdoptBody,
@@ -438,6 +439,12 @@ export class SetupApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
       @media (max-width: 40rem) {
         wt-language-chooser::part(name) {
           display: none;
@@ -472,6 +479,8 @@ export class SetupApp extends LitElement {
 
   /** Held for the page's life only: a reload goes back to the browser's languages. */
   #localeChosen = false;
+
+  readonly #theme = new ThemeChoiceController(this, { applies: true });
 
   constructor() {
     super();
@@ -1478,10 +1487,22 @@ export class SetupApp extends LitElement {
           <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
             ${unsafeHTML(waitronLockup)}
           </div>
-          <wt-language-chooser
-            .active=${currentLocale()}
-            @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
-          ></wt-language-chooser>
+          <div class="header-controls">
+            <wt-theme-chooser
+              data-test="theme-chooser"
+              .active=${this.#theme.choice}
+              .labels=${{
+                theme: t("shell.theme.label"),
+                light: t("shell.theme.light"),
+                dark: t("shell.theme.dark"),
+                device: t("shell.theme.device"),
+              }}
+            ></wt-theme-chooser>
+            <wt-language-chooser
+              .active=${currentLocale()}
+              @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
+            ></wt-language-chooser>
+          </div>
         </header>
         ${this.#renderScreen()}
       </main>`;

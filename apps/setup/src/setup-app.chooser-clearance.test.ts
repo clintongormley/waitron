@@ -123,3 +123,73 @@ describe("the language chooser in the card's header", () => {
     },
   );
 });
+
+const themeChooserOf = (el: SetupApp) => el.shadowRoot!.querySelector<Chooser>("wt-theme-chooser")!;
+
+describe("the theme chooser in the card's header", () => {
+  const cases = (["admin", "venue", "cert", "connect", "restore-bucket", "mode"] as const).flatMap(
+    (screen) =>
+      (["en-GB", "es-ES"] as const).flatMap((locale) =>
+        ([390, 1280] as const).map((width) => ({ screen, locale, width })),
+      ),
+  );
+
+  it.each(cases)(
+    "covers nothing interactive on the $screen screen ($locale, $width wide)",
+    async ({ screen, locale, width }) => {
+      await page.viewport(width, VIEWPORT_HEIGHT);
+      const el = await mountAt(screen, [locale]);
+
+      const trigger = themeChooserOf(el)
+        .shadowRoot!.querySelector("[data-test=theme-trigger]")!
+        .getBoundingClientRect();
+      const screenRoot = el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!.shadowRoot!;
+      const logo = el.shadowRoot!.querySelector("[data-test=setup-logo]")!;
+      const covered = [
+        ...screenRoot.querySelectorAll<HTMLElement>(INTERACTIVE),
+        logo,
+        chooserOf(el),
+      ]
+        .filter((node) => overlaps(trigger, node.getBoundingClientRect()))
+        .map((node) => `${node.localName} "${node.textContent!.trim().slice(0, 40)}"`);
+      expect(covered).toEqual([]);
+    },
+  );
+
+  it.each(cases)(
+    "opens its menu on screen and over the $screen screen ($locale, $width wide)",
+    async ({ screen, locale, width }) => {
+      await page.viewport(width, VIEWPORT_HEIGHT);
+      const el = await mountAt(screen, [locale]);
+      const chooser = themeChooserOf(el);
+      chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=theme-trigger]")!.click();
+      await new Promise((resolve) => setTimeout(resolve));
+      await chooser.updateComplete;
+
+      const menu = chooser.shadowRoot!.querySelector<HTMLElement>("[role=menu]")!;
+      const box = menu.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+
+      const screenTop = el
+        .shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!
+        .getBoundingClientRect().top;
+      const options = [...menu.querySelectorAll<HTMLElement>("[role=menuitemradio]")];
+      expect(options.length).toBeGreaterThan(1);
+      for (const option of options) {
+        const r = option.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        expect(document.elementFromPoint(x, y)).toBe(el);
+        expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(chooser);
+        expect(chooser.shadowRoot!.elementFromPoint(x, y)).toBe(option);
+      }
+      const last = options.at(-1)!.getBoundingClientRect();
+      expect(last.top + last.height / 2, "the menu reaches over the screen below").toBeGreaterThan(
+        screenTop,
+      );
+    },
+  );
+});
