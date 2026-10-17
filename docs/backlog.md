@@ -1343,8 +1343,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `wt-colour-chooser`. Owner's call: keep, or have the chooser show the tint for seasons. Measured in
   A721's LOOK, 2026-10-18 (#1843). Left open by A721.
 
-- **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"): below 480 px
-  each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
+- **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"): while the table is
+  narrower than 480 px, each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
   (`seasons-window.ts`, #1843). 1280 px is unchanged. Owner's call whether the cut is acceptable or the
   row should stack on a phone. Left open by A721.
 
