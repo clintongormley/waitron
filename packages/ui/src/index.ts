@@ -105,6 +105,18 @@ export {
   setContentLanguages,
   subscribeContentLanguages,
 } from "./content-languages.js";
+export {
+  THEME_CHOICES,
+  THEME_SELECTED_EVENT,
+  THEME_STORAGE_KEY,
+  ThemeChoiceController,
+  chooseTheme,
+  currentThemeChoice,
+  isThemeChoice,
+  startThemeChoice,
+  subscribeThemeChoice,
+} from "./theme-choice.js";
+export type { ThemeChoice } from "./theme-choice.js";
 
 export {
   UrlStateController,
