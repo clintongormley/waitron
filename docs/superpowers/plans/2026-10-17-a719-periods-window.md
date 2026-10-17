@@ -94,8 +94,9 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
   `PeriodEditing.render` passes `.fromPainter` and the submit label (`period-editing.ts:221`,
   `:237-238`). `fromPainter` has no reader in the dialog but the Floor plan field.
 - **The window handler.** `followUrl` accepts only `seasons` and removes any other window by
-  replacement (`opening-hours-screen.ts:268-271`), and also rewrites a `seasons` window away when the
-  address carries `?station=` (`:257-266`). `navigationScopes` returns `[this.windowDraftRoot]` only
+  replacement (`opening-hours-screen.ts:268-271`). An address carrying `?station=` with a `seasons`
+  window is replaced by the same path without the `station` query, the window kept
+  (`:257-266`; `calendarUrl`, `:450-455`, deletes only `station`). `navigationScopes` returns `[this.windowDraftRoot]` only
   for `seasons` (`:394`). The window is a compact `wt-modal`, `data-test="calendar-window"`, with a
   footer Close (`:404-444`), drawn last in `render` (`:1542`).
 - **The Year's season row** is `season-chips` (`opening-hours-year.ts:485-491`): a flex `.row` of
@@ -112,7 +113,7 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
   `<a part="link" href="/manage/periods">Set up periods</a>`.
 - **Page search** lists `venue-service:seasons` with path
   `/manage/opening-hours/view/year/window/seasons` (`index.ts:24-55`). The shell's URL config
-  already knows the `window` key (`apps/dashboard/src/navigation.ts:10`).
+  already knows the `window` key (`apps/dashboard/src/navigation.ts:19`).
 - **No root guard pins the page list.** `git grep` of `scripts/` for `periods`, `opening-hours`,
   `navLabelKey` and `moreScreens` finds only schema tests (`scripts/schema-constraints.test.ts`,
   `scripts/migration-upgrade.test.ts`), none about pages. The lists that pin the page are tests in
@@ -360,10 +361,12 @@ all-states case), `:938` (Delete… not in the footer → in the footer's cancel
   - **"heading and + Add period share the top row"**: `h2` reads "Periods" (es "Periodos"); the add
     button's top is within the `h2`'s vertical extent and its left is right of the `h2`'s right; no
     `h1`.
-  - **"an unused period shows its colour"** (replaces `:258-269`): for `p2` (painted nowhere) the
-    swatch's computed `background-color` equals that of a painted swatch of the same colour drawn in
-    the same table (add a painted green period to the fixture), its `part` holds no
-    `swatch-unpainted`, and the name's computed `color` equals `p1`'s name colour; "Not painted
+  - **"an unused period shows its colour"** (replaces `:258-269`): mount with this case's own
+    model, in which `p2` (painted nowhere, `red` in the shared fixture) is `green` like `p1`
+    (painted) — `answering(() => { const m = model(); m.departments[0]!.periods[1]!.colour =
+    "green"; return m; })` — leaving the shared fixture alone. Then `p2`'s swatch's computed
+    `background-color` equals `p1`'s (today `transparent` against green, so this fails first), its
+    `part` holds no `swatch-unpainted`, and the name's computed `color` equals `p1`'s name colour; "Not painted
     anywhere" is still shown in Painted in. The rest of that case (`p3`'s empty Painted in) stays.
   - **"no Floor plan column"** (replaces `:179-193`'s floor-plan half): `grid.columns` keys are
     `["period", "customerMenu", "staffMenus", "paintedIn", "actions"]`; no `[part=unavailable]`. The
@@ -450,8 +453,15 @@ Open in Calendar, Delete; `h1` → bin, row activator; `h2`), `:300-307` (adds n
       returns to `/manage/opening-hours/view/year/year/2027` with the Year drawn.
     - **"a viewer's Periods window lists periods with nothing to change"** (Review Focus 4): mounted
       read-only, `periods-list.readOnly` is true, no `[data-test=add-period]`, no bin, no activator.
-    - **"a station address loses its Periods window"**: `…/view/year/window/periods?station=s1`
-      replaces to an address with no `window` pair, as `:257-266` does for Seasons.
+    - **"a station address keeps its Periods window and drops the station query"**:
+      `…/view/year/window/periods?station=s1` is replaced (no push) by
+      `/manage/opening-hours/view/year/window/periods` with no `?station`, and the window is drawn —
+      what `:257-266` does for Seasons today: `calendarUrl` deletes only `station` and keeps the
+      pathname, window pair included (reviewer's probe, 2026-10-17: mounting
+      `/manage/opening-hours/view/year/window/seasons?station=s1` in the painter suite's `mount`
+      ended at `/manage/opening-hours/view/year/window/seasons` with the window drawn). Today the
+      Periods address loses its window instead (the unknown-window rule runs after the station
+      rewrite), so this case fails first.
     - **"window-only Back and Forward retain the painter and its paint under Periods"**: the
       `:816-858` case with `window/periods`.
     - **"closing the Periods window protects its period draft and keeps the painter's paint"**
@@ -530,7 +540,7 @@ Open in Calendar, Delete; `h1` → bin, row activator; `h2`), `:300-307` (adds n
 - Modify: `packages/venue-service/src/dashboard/opening-hours-screen.ts:1059-1078` (move the click
   interception into one handler used by both `season-painter` and `special-day-painter`)
 - Test: `opening-hours-screen.painter.test.ts`, `opening-hours-screen.special-day.test.ts`,
-  `special-day-painter.paint.test.ts`
+  `special-day-painter.paint.test.ts`, `season-painter.test.ts`
 
 **Interfaces:**
 - Consumes: Task 4's `openWindow("periods")` and `periodsWindowPath`.
@@ -553,25 +563,36 @@ Open in Calendar, Delete; `h1` → bin, row activator; `h2`), `:300-307` (adds n
     painter with paint; open the window by the link; "+ Add period", fill and save (the request stub
     answers the create and the next model read lists the new period); close the window; the
     painter's paint row offers the new period's chip and `painter.edited()` is unchanged.
-  - **"a modified click on the Periods link is left to the browser"**: a `ctrlKey` click is not
-    prevented by the screen (`event.defaultPrevented` false in a capturing listener on `document`,
-    whose handler then prevents it so the test page does not navigate).
+  - **"a modified click on the Periods link is left to the browser"**: a **bubbling** listener on
+    `window` (it runs after the screen's listener on the painter; a capturing listener on `document`
+    runs before it and would read `false` whatever the screen does) records
+    `event.defaultPrevented` and then prevents the click so the test page does not navigate. A
+    `ctrlKey` click records `false` and the path is unchanged; the control, a plain click, records
+    `true` and the path ends `/window/periods`. Repeat the `ctrlKey` click from the special-day
+    painter.
+  - Setup: `opening-hours-screen.special-day.test.ts`'s `request` (`:88`) answers
+    `/menu-periods/painted-in` with `[]` before its catch-all, as Task 4 does for the painter
+    suite — the window's list watches it, and the catch-all would hand it a model.
+  - `season-painter.test.ts:100`: the `href` assertion becomes
+    `"/manage/opening-hours/view/year/window/periods"`; its text "Periods" stays.
   - `opening-hours-screen.special-day.test.ts`: **"the special-day painter's Periods link opens the
     window over it and keeps its unsaved day"**: change the day; click the link; path ends
     `/window/periods`, the same `special-day-painter` element, still dirty; Back → the painter
     address, still dirty.
   - `special-day-painter.paint.test.ts:499-511`: both `href` assertions become
     `"/manage/opening-hours/view/year/window/periods"`; text "Periods" and `slot` "link" stay.
-- [ ] **Step 2: Run the three files; the new and changed cases fail** (the link still goes to
+- [ ] **Step 2: Run the four files; the new and changed cases fail** (the link still goes to
   `/manage/periods`).
 - [ ] **Step 3: Implement** the link and the shared interception (same modifier and
   `defaultPrevented` checks as `:1067-1075`).
-- [ ] **Step 4: Run the three files and `season-painter.test.ts`**: all pass.
+- [ ] **Step 4: Run the four files**: all pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "A painter's Periods link opens the Periods window over it (A719)"`
 
 **Existing checks that change:** `opening-hours-screen.painter.test.ts:326-328` (lands on
 `/manage/periods` → on the painter's address plus `/window/periods`), `:424-445` (asks and leaves →
-opens over the painter and keeps the paint); `special-day-painter.paint.test.ts:504`, `:510` (href).
+opens over the painter and keeps the paint); `special-day-painter.paint.test.ts:504`, `:510` and
+`season-painter.test.ts:100` (href). Setup: `opening-hours-screen.special-day.test.ts:88` answers
+the painted-in read.
 
 ## Task 7: The Periods page and its sidebar entry go; "Set up periods" opens the window
 
@@ -647,7 +668,8 @@ loses `nav-periods`), `:8197-8241` (destination; `history.length` → `pushState
   window's"), `:2146` (say what the Periods link opens), and `:3189-3193` (the window pair now opens
   Seasons and Periods; drop "A719 can reuse…").
 - [ ] `dashboard-live-updates.md:45`, `:94` and the `live-queries.ts:182` comment: "Periods page" →
-  "Periods window". Before editing, `git grep -n "Periods page\|periods page"` across `docs/developers`,
+  "Periods window", and `:97`'s `periods-screen.ts` → `periods-list.ts`. Before editing,
+  `git grep -n "Periods page\|periods page\|periods-screen"` across `docs/developers`,
   `packages`, `apps` and root READMEs, and fix every hit (CLAUDE.md §1, "A behaviour change retires
   every receipt").
 - [ ] `docs/backlog.md:1356-1359`: delete the A719 entry. `docs/backlog/service-periods.md:184-213`:
