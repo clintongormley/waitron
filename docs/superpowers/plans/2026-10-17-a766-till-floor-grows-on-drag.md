@@ -187,5 +187,5 @@ equivalent. Record the score in the ledger.
   must not be overwritten; the prose at `:806–810` ("Its size is its parent's choice", the fit
   rules) says that during a drag it fits as if the held table already stood where it is drawn,
   growing only, and that a pan turns that off.
-- `docs/backlog.md`: delete the A766 entry; `docs/backlog/till.md`: delete its A766 section, and add
-  decision 8's two residuals as short points under A474's follow-ups.
+- `docs/backlog.md`: delete the A766 entry, and add decision 8's two residuals as two short entries
+  of their own beside A474; `docs/backlog/till.md`: delete its A766 section.
