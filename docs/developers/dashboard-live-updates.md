@@ -124,10 +124,14 @@ holds there — the replacement the delete named, which the server moved the sav
 where the draft had split, shortened or lengthened the saved block, and on a day the draft changed
 as well as one it did not (`savedBlocks` and `refill`, `paint-model.ts`). The season painter fills
 it in from the refreshed model. The special-day painter fills it when its re-read of the stored day
-lands (`merge`), and while any such stretch waits it holds Save; a failed re-read leaves Save held,
-and the next model the painter is handed reads the day again (`follow`). Paint made on the special day before that re-read
-lands keeps its stretch, and the fill takes only the rest. The rest of a deleted-period block, with
-nothing saved behind it, is dropped.
+lands (`merge`); Save stays as it would be without the wait. A Save pressed while a stretch still
+waits shows the save in progress, asks for a re-read unless one is already out, and sends only
+once `merge` has filled it (`fillVacated`). If that re-read fails, the press ends with the
+generic refusal beside Save, Save stays enabled, and the stretch keeps waiting for the next press
+or the next model the painter is handed (`follow`). A save that was already out when the delete
+arrived, and is then refused, asks for the re-read itself. Paint made on the special day before
+the re-read lands keeps its stretch, and the fill takes only the rest. The rest of a
+deleted-period block, with nothing saved behind it, is dropped.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

@@ -430,9 +430,14 @@ export class SpecialDayPainter extends LitElement {
   /** The stored dates, each with the public holiday it was saved on, if any. */
   private stored = new Map<LocalDate, string | undefined>();
   /** The stretches where `dropDeletedPeriods` took out a deleted period's paint over a block of it
-   *  that was saved, which the next {@link merge} fills from the stored day. Save is held while any
-   *  wait: sent before, the save would overwrite the replacement the server moved there. */
+   *  that was saved, which the next {@link merge} fills from the stored day. A save waits for that
+   *  fill: sent before it, the save would send a changed date without the replacement the server
+   *  moved there. */
   private vacated?: { draft: OwnerPaint; baseline: OwnerPaint };
+  /** A pressed Save is waiting for {@link merge} to fill {@link vacated}; re-reads still run. */
+  private filling = false;
+  /** The newest re-read of the stored day, until it answers. */
+  private rereading?: Promise<boolean | undefined>;
   /** The clock revision the draft was seeded with; followed only while nothing is edited. */
   private revision = 0;
   /** Replaced whenever a read's or a write's answer would land on a draft it no longer belongs to. */
@@ -478,7 +483,7 @@ export class SpecialDayPainter extends LitElement {
       if (sameDraft(this.draft, this.baseline)) this.revision = this.model.clockRevision;
       if (!this.saving)
         this.dropUnpaintable((changes.get("model") as Model | undefined) ?? this.model);
-      if (this.open) this.follow();
+      if (this.open) void this.follow();
     }
     if (this.isConnected && !this.scope) {
       const { scope, coordinator } = draftScopeFor(this, {
@@ -545,6 +550,7 @@ export class SpecialDayPainter extends LitElement {
     this.seedToken = {};
     this.followAfterRead = false;
     this.unanswered = undefined;
+    this.rereading = undefined;
     this.seeded = key;
     this.saving = false;
     this.attempted = false;
@@ -595,7 +601,7 @@ export class SpecialDayPainter extends LitElement {
               ...added.map((date) => ({ date, closedAllDay: false })),
             ].sort(byDate),
           });
-        if (this.followAfterRead) this.follow();
+        if (this.followAfterRead) void this.follow();
         if (!addDates.length) return;
         if (announce)
           this.dispatchEvent(
@@ -614,27 +620,52 @@ export class SpecialDayPainter extends LitElement {
       },
     );
   }
-  /** Re-reads the stored day the painter shows, passively, for {@link merge}. While a save is in
-   *  flight it reads nothing, and a save drops a re-read already asked for: the save's answer
-   *  becomes the saved state. */
-  private follow() {
+  /** Re-reads the stored day the painter shows, passively, for {@link merge}: true once merged,
+   *  false when it reads nothing or fails, undefined when a newer re-read, a save or a new seed
+   *  drops it. While a save's write is in flight it reads nothing, and the write drops a re-read
+   *  already asked for: the save's answer becomes the saved state. */
+  private follow(): Promise<boolean | undefined> {
     const id = this.specialDayId;
     this.followAfterRead = this.loading;
-    if (id === null || this.loading || this.loadFailed || this.saving) return;
+    if (id === null || this.loading || this.loadFailed || (this.saving && !this.filling))
+      return Promise.resolve(false);
     const generation = this.generation;
     const token = (this.followToken = {});
     const current = () => generation === this.generation && token === this.followToken;
-    this.unanswered = () => this.follow();
-    this.api.specialDays.readSpecialDay(id, { passive: true }).then(
-      (detail) => {
-        if (!current()) return;
-        this.unanswered = undefined;
-        this.merge(detail);
-      },
-      () => {
-        if (current()) this.unanswered = undefined;
-      },
-    );
+    this.unanswered = () => void this.follow();
+    const reading: Promise<boolean | undefined> = this.api.specialDays
+      .readSpecialDay(id, { passive: true })
+      .then(
+        (detail) => {
+          if (this.rereading === reading) this.rereading = undefined;
+          if (!current()) return undefined;
+          this.unanswered = undefined;
+          this.merge(detail);
+          return true;
+        },
+        () => {
+          if (this.rereading === reading) this.rereading = undefined;
+          if (!current()) return undefined;
+          this.unanswered = undefined;
+          return false;
+        },
+      );
+    this.rereading = reading;
+    return reading;
+  }
+  /** Waits for re-reads of the stored day until {@link merge} has filled {@link vacated}: false
+   *  when one fails, or is dropped with no newer one asked for. */
+  private async fillVacated(): Promise<boolean> {
+    this.filling = true;
+    try {
+      while (this.vacated) {
+        const outcome = await (this.rereading ?? this.follow());
+        if (outcome === false || (outcome === undefined && !this.rereading)) return false;
+      }
+      return true;
+    } finally {
+      this.filling = false;
+    }
   }
   /** Name and Every year each follow `detail`, in the draft and the saved state alike, where the
    *  draft has not changed them; a changed one keeps both. The saved dates follow `detail`, and so
@@ -846,7 +877,6 @@ export class SpecialDayPainter extends LitElement {
       this.saving ||
       this.loading ||
       this.offered ||
-      this.vacated ||
       saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged
     )
       return;
@@ -856,6 +886,20 @@ export class SpecialDayPainter extends LitElement {
       focusFirstInvalid(this.shadowRoot!);
       return;
     }
+    const seed = this.seedToken;
+    const model = this.model;
+    this.offerToken = {};
+    this.saving = true;
+    this.refused = undefined;
+    this.notice = "";
+    if (this.vacated && !(await this.fillVacated())) {
+      if (seed !== this.seedToken) return;
+      this.saving = false;
+      this.refused = { message: t("menu.save_error") };
+      this.dropUnpaintable(model);
+      return;
+    }
+    if (seed !== this.seedToken) return;
     const input: SpecialDayInput = {
       name: this.draft.name.trim(),
       repeatsYearly: this.draft.repeatsYearly,
@@ -863,21 +907,17 @@ export class SpecialDayPainter extends LitElement {
       ...this.changedPaint(),
     };
     const sent = copyPaint(this.draft.paint);
-    const seed = this.seedToken;
-    this.offerToken = {};
-    const model = this.model;
     this.followToken = {};
     this.unanswered = undefined;
-    this.saving = true;
-    this.refused = undefined;
-    this.notice = "";
     let detail: SpecialDayDetail;
     try {
       detail = await this.api.specialDays.writeSpecialDay(this.specialDayId, input, this.revision);
     } catch (error) {
       if (seed === this.seedToken) {
+        this.saving = false;
         this.refuse(error, input);
         this.dropUnpaintable(model);
+        if (this.vacated) void this.follow();
       }
       return;
     } finally {
@@ -1540,7 +1580,6 @@ export class SpecialDayPainter extends LitElement {
         .coordinator=${this.coordinator}
         .dirty=${
           !this.offered &&
-          !this.vacated &&
           !saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged &&
           !this.blocked()
         }
