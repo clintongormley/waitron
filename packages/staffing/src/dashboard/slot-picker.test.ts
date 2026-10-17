@@ -194,3 +194,27 @@ describe.each(["light", "dark"] as const)("the slot picker's busy people (%s)", 
     expect(choose.mock.calls[0]![0].detail).toEqual({ personId: "joan" });
   });
 });
+
+describe("the slot picker before and during a fill", () => {
+  it("draws nothing until it has a week and a slot", async () => {
+    const el = document.createElement("slot-picker") as Picker;
+    document.body.append(el);
+    frames.push(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.children).toHaveLength(0);
+    el.week = rotaWeek();
+    await el.updateComplete;
+    expect(el.shadowRoot!.children).toHaveLength(0);
+  });
+  it("sends no choice for a press while a fill is in flight", async () => {
+    const el = await mount();
+    const choose = vi.fn();
+    el.addEventListener("choose", choose);
+    el.busy = true;
+    await el.updateComplete;
+    const marc = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-person=marc]")!;
+    marc.disabled = false;
+    marc.click();
+    expect(choose).not.toHaveBeenCalled();
+  });
+});

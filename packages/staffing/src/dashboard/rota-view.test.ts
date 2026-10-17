@@ -2066,3 +2066,16 @@ describe("the sheets' foot", () => {
     await vi.waitFor(() => expect(q(el, "rota-open-slots")).toBeNull());
   });
 });
+
+it("the area grid draws nothing until it has a week and an area", async () => {
+  const grid = document.createElement("rota-by-area") as LitElement & {
+    week?: RotaWeek;
+  };
+  document.body.append(grid);
+  onTestFinished(() => grid.remove());
+  await grid.updateComplete;
+  expect(grid.shadowRoot!.children).toHaveLength(0);
+  grid.week = rotaWeek();
+  await grid.updateComplete;
+  expect(grid.shadowRoot!.children).toHaveLength(0);
+});
