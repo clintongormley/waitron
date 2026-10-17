@@ -29,14 +29,21 @@ function swapNote(week: RotaWeek, shiftId: string) {
 export function warnings(breaches: RosterBreach[]) {
   return breaches.map((b) => html`<small class="danger">${breachText(b)}</small>`);
 }
+/** A person's warnings about one business day. */
+export function dailyBreaches(breaches: RosterBreach[], personId: string, businessDay: string) {
+  return breaches.filter(
+    (b) => b.kind === "exceeds_daily_max" && b.personId === personId && b.workDate === businessDay,
+  );
+}
+/** A person's warnings about their week: those about neither a shift nor a day. */
+export function weekBreaches(breaches: RosterBreach[], personId: string) {
+  return breaches.filter(
+    (b) => b.personId === personId && !("shiftId" in b) && b.kind !== "exceeds_daily_max",
+  );
+}
 function areaNotes(host: CardHost, shiftId: string) {
   const shift = host.week.shifts.find((s) => s.shiftId === shiftId)!;
-  const daily = host.breaches.filter(
-    (b) =>
-      b.kind === "exceeds_daily_max" &&
-      b.personId === shift.personId &&
-      b.workDate === shift.businessDay,
-  );
+  const daily = dailyBreaches(host.breaches, shift.personId, shift.businessDay);
   return html`${swapNote(host.week, shiftId)}${warnings([...shiftBreaches(host.breaches, shiftId), ...daily])}`;
 }
 

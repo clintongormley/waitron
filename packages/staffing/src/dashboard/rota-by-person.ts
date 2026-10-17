@@ -6,7 +6,13 @@ import { RotaByArea, dayHead, focusIn } from "./rota-by-area.js";
 import { peopleInOrder, type Target } from "./rota-model.js";
 import { dateLabel } from "./format.js";
 import { hours } from "./rota-format.js";
-import { personDayShifts, personShiftCard, warnings } from "./rota-cards.js";
+import {
+  dailyBreaches,
+  personDayShifts,
+  personShiftCard,
+  warnings,
+  weekBreaches,
+} from "./rota-cards.js";
 import { t, tf } from "./strings.js";
 @customElement("rota-by-person")
 export class RotaByPerson extends LitElement {
@@ -49,14 +55,14 @@ export class RotaByPerson extends LitElement {
                   ${p.name}<small
                     >${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}</small
                   ><small class="hours">${hours(p)}</small
-                  >${warnings(this.breaches.filter((b) => b.personId === p.personId && !("shiftId" in b) && b.kind !== "exceeds_daily_max"))}
+                  >${warnings(weekBreaches(this.breaches, p.personId))}
                 </th>
                 ${this.week.days.map((day) => {
                   const shifts = personDayShifts(this.week, p.personId, day);
                   return html`<td data-day=${day.businessDay}>
                     <div class="cell">
                       ${shifts.map((s) => personShiftCard(this, s))}
-                      ${warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
+                      ${warnings(dailyBreaches(this.breaches, p.personId, day.businessDay))}
                       ${
                         this.editable && this.canAdd
                           ? html`<button

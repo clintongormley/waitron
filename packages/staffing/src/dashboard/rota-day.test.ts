@@ -178,6 +178,37 @@ describe("rota-day for Everyone", () => {
     ana.querySelector<HTMLButtonElement>("[data-shift=filled]")!.click();
     expect(edits.map((e) => e.detail)).toEqual([{ shiftId: "filled" }]);
   });
+  it("keeps a person's week warnings under their name, on every day, and no one else's", async () => {
+    const { el, root } = await mount(everyone, "2026-12-01");
+    el.breaches = [
+      {
+        kind: "exceeds_weekly_max",
+        personId: "joan",
+        weekStart: "2026-11-30",
+        plannedMinutes: 2460,
+        maxMinutes: 2400,
+      },
+      {
+        kind: "weekly_rest_insufficient",
+        personId: "joan",
+        weekStart: "2026-11-30",
+        longestRestMinutes: 1440,
+        requiredMinutes: 2160,
+      },
+      { kind: "overtime_cap_exceeded", personId: "joan", overtimeMinutes: 120, capMinutes: 60 },
+    ];
+    await el.updateComplete;
+    for (const day of ["2026-12-01", "2026-12-03"]) {
+      el.businessDay = day;
+      await el.updateComplete;
+      const joan = text(root.querySelector("[data-person=joan]"));
+      expect(joan).toContain("41 h planned; weekly maximum 40 h");
+      expect(joan).toContain("24 h weekly rest");
+      expect(joan).toContain("2 h overtime; cap 1 h");
+      expect(joan.match(/weekly maximum 40 h/g)).toHaveLength(1);
+      expect(text(root.querySelector("[data-person=ana]"))).not.toContain("weekly");
+    }
+  });
   it("in a published week, or with no active area, a person is not a button", async () => {
     for (const setup of [{ editable: false }, { canAdd: false }]) {
       const { el, root } = await mount(everyone, "2026-12-01", { editable: setup.editable });

@@ -5,12 +5,14 @@ import { areaKey } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import { RotaByArea, dayNote, focusIn } from "./rota-by-area.js";
 import {
+  dailyBreaches,
   notInSlotCard,
   overCard,
   personDayShifts,
   personShiftCard,
   slotCard,
   warnings,
+  weekBreaches,
 } from "./rota-cards.js";
 import { dateFormat, utc } from "./format.js";
 import { hours } from "./rota-format.js";
@@ -134,15 +136,9 @@ export class RotaDay extends LitElement {
               </button>`
             : html`<div class="person" data-test="person-name">${label}</div>`
         }
+        ${warnings(weekBreaches(this.breaches, p.personId))}
         ${personDayShifts(this.week, p.personId, day).map((s) => personShiftCard(this, s))}
-        ${warnings(
-          this.breaches.filter(
-            (b) =>
-              b.personId === p.personId &&
-              b.kind === "exceeds_daily_max" &&
-              b.workDate === day.businessDay,
-          ),
-        )}
+        ${warnings(dailyBreaches(this.breaches, p.personId, day.businessDay))}
       </section>`;
     });
   }
