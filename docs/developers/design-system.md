@@ -4111,8 +4111,7 @@ Opening hours' Year.
   active prep stations under their own heading; the Calendar is read-only for anyone without
   `venue_service.manage`, the permission Prep stations needs, and a read-only Calendar reads no
   station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`
-  and draws, in place of the departments, the times it gets orders, worked out as the Times tab
-  works them out: one row per department that sends it dishes on any date read for the view, named
+  and draws, in place of the departments, the times it gets orders: one row per department that sends it dishes on any date read for the view, named
   by the department even when only one does. A date none of them sends on reads "No orders" once;
   the default station shows "Always open: this is the default station" in place of the dates, and
   nothing is drawn below the head while the station's times load. Clicking a date still picks it
