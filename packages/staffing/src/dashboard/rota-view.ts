@@ -893,7 +893,7 @@ export class RotaView extends LitElement {
     return html`<rota-by-area
       .week=${read}
       .breaches=${breaches}
-      .area=${show.area}
+      .show=${show}
       .editable=${editable}
       @edit-shift=${this.#editShift}
       @add-shift=${(

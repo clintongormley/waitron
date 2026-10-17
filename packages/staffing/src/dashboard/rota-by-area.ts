@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { periodColourStyles } from "@waitron/venue-service/painter";
-import { areaKey, type AreaRef } from "../slots.js";
+import { areaKey } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, dateLabel, utc } from "./format.js";
 import { notInSlotCard, overCard, slotCard } from "./rota-cards.js";
@@ -180,25 +180,22 @@ export class RotaByArea extends LitElement {
   ];
   @property({ attribute: false }) week!: RotaWeek;
   @property({ attribute: false }) breaches: RosterBreach[] = [];
-  @property({ attribute: false }) area!: AreaRef;
+  @property({ attribute: false }) show!: Show & { kind: "area" };
   @property({ type: Boolean }) editable = false;
-  #show(): Show & { kind: "area" } {
-    return { kind: "area", area: this.area, key: areaKey(this.area), name: "" };
-  }
   focusTarget(target: Target): boolean {
     return focusIn(this.renderRoot as ShadowRoot, target, true);
   }
   #add(day: string, role: StaffRole) {
     this.dispatchEvent(
       new CustomEvent("add-shift", {
-        detail: { businessDay: day, area: this.area, staffRoleId: role.id },
+        detail: { businessDay: day, area: this.show.area, staffRoleId: role.id },
         bubbles: true,
         composed: true,
       }),
     );
   }
   #cell(role: StaffRole, day: RotaWeek["days"][number]) {
-    const match = day.areas.find((a) => areaKey(a.area) === areaKey(this.area))?.match;
+    const match = day.areas.find((a) => areaKey(a.area) === this.show.key)?.match;
     return html`<div class="cell">
       ${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => slotCard(this, s.slot, s.status, day.cutover))}${match?.over
         .map((id) => this.week.shifts.find((s) => s.shiftId === id)!)
@@ -218,7 +215,7 @@ export class RotaByArea extends LitElement {
     </div>`;
   }
   override render() {
-    if (!this.week || !this.area) return nothing;
+    if (!this.week || !this.show) return nothing;
     return html`<div
       class="scroll"
       data-test="grid-scroll"
@@ -230,11 +227,11 @@ export class RotaByArea extends LitElement {
         <thead>
           <tr>
             <th scope="col">${t("staffing.rota.staff_role")}</th>
-            ${this.week.days.map((d) => dayHead(this.week, this.#show(), d.businessDay))}
+            ${this.week.days.map((d) => dayHead(this.week, this.show, d.businessDay))}
           </tr>
         </thead>
         <tbody>
-          ${rotaModel(this.week, this.#show()).roles.map(
+          ${rotaModel(this.week, this.show).roles.map(
             (role) =>
               html`<tr>
                 <th scope="row">
