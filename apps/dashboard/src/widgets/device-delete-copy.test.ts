@@ -54,6 +54,8 @@ describe("a device's delete dialog copy, in English", () => {
     [item("approved_profiles", [waiters]), "Can switch to: Waiters"],
     [item("card_reader", [{ id: "r-1", name: "Solo" }]), "Card reader: Solo"],
     [item("kitchen_screens", [], 2), "2 kitchen screens"],
+    [item("zone_selections", [], 2), "2 saved zone selections"],
+    [item("zone_selections", [], 1), "Saved zone selection"],
     [item("kitchen_screens", [], 1), "Kitchen screen"],
   ])("words %j", (each, line) => {
     setLocale("en");
@@ -128,6 +130,8 @@ describe("a device's delete dialog copy, in Spanish", () => {
     [item("approved_profiles", [waiters]), "Puede cambiar a: Waiters"],
     [item("card_reader", [{ id: "r-1", name: "Solo" }]), "Lector de tarjetas: Solo"],
     [item("kitchen_screens", [], 2), "2 pantallas de cocina"],
+    [item("zone_selections", [], 2), "2 selecciones de zonas guardadas"],
+    [item("zone_selections", [], 1), "Selección de zonas guardada"],
     [item("kitchen_screens", [], 1), "Pantalla de cocina"],
   ])("words %j", (each, line) => {
     setLocale("es");

@@ -19,6 +19,8 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("menu_period_staff_menus", "state", STATE),
   classify("device_profile_service_access", "state", STATE),
   classify("device_profile_zones", "state", STATE),
+  classify("device_zone_selections", "state", STATE),
+  classify("device_zone_selection_zones", "state", STATE),
   classify("device_profile_kitchen_screens", "state", STATE),
   classify("device_profile_kitchen_screen_stations", "state", STATE),
   classify("device_profile_kitchen_screen_zones", "state", STATE),

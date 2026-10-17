@@ -6012,6 +6012,7 @@ describe("Delete", () => {
       { key: "printer_choices", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
       { key: "approved_profiles", count: 1, targets: [{ id: "dp1", name: "Counter till" }] },
       { key: "kitchen_screens", count: 1, targets: [] },
+      { key: "zone_selections", count: 2, targets: [] },
     ],
   });
   const refusedImpact: DeleteImpact = {
@@ -6129,6 +6130,7 @@ describe("Delete", () => {
       "Impresoras: Mano",
       "Puede cambiar a: Counter till",
       "Pantalla de cocina",
+      "2 selecciones de zonas guardadas",
     ]);
   });
 

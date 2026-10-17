@@ -37,6 +37,7 @@ import {
 } from "@waitron/payments";
 import { AppError, deviceOrigin, type DeleteImpact, type ResourceIdentity } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
+import { VENUE_SERVICE } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { parkOrder } from "./working-order.js";
 import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
@@ -765,4 +766,52 @@ describe("the device delete impact", () => {
       await suite.db.execute(sql`delete from change_log`);
     }
   });
+});
+
+it("device deletion reports and removes all saved profile zone selections, retaining other devices", async () => {
+  const venue = await setupVenue(suite.db);
+  const firstProfile = await profile("First");
+  const secondProfile = await profile("Second");
+  const one = (
+    await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "One",
+      profileId: firstProfile,
+      stationId: venue.defaultStationId,
+    })
+  ).deviceId;
+  const two = (
+    await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Two",
+      profileId: firstProfile,
+      stationId: venue.defaultStationId,
+    })
+  ).deviceId;
+  const save = (deviceId: string) =>
+    inTx(async (tx) => {
+      const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, deviceId);
+      expect(current.startingZoneId).not.toBeNull();
+      await VENUE_SERVICE.setDeviceZoneSelection(tx, venue.cfg, deviceId, {
+        ...current,
+        startingZoneId: current.startingZoneId!,
+      });
+    });
+  await save(one);
+  await save(two);
+  await suite.db.update(devices).set({ deviceProfileId: secondProfile }).where(eq(devices.id, one));
+  await save(one);
+  await suite.db.update(devices).set({ active: false }).where(eq(devices.id, one));
+  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(2);
+  const impact = await inTx((tx) => readDeviceDeleteImpact(tx, venue.cfg, one));
+  expect(impact.removes).toContainEqual({ key: "zone_selections", count: 2, targets: [] });
+  const before = await snapshot();
+  await expect(
+    inTx(async (tx) => {
+      await deleteDevice(tx, venue.cfg, one);
+      throw new Error("rollback device deletion");
+    }),
+  ).rejects.toThrow("rollback device deletion");
+  expect(await snapshot()).toEqual(before);
+  await inTx((tx) => deleteDevice(tx, venue.cfg, one));
+  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(0);
+  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, two))).toBe(1);
 });

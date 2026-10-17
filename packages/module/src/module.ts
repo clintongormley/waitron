@@ -463,6 +463,22 @@ export interface DepartmentTransferReceiver extends DepartmentTransferActor {
   profileId: string;
 }
 
+export interface DeviceZoneSelection {
+  profileId: string;
+  snapshot: string;
+  zones: readonly { id: string; name: string; serviceMode: ServiceMode }[];
+  selectedZoneIds: readonly string[];
+  startingZoneId: string | null;
+  adjusted: boolean;
+}
+
+export interface DeviceZoneSelectionInput {
+  profileId: string;
+  snapshot: string;
+  selectedZoneIds: readonly string[];
+  startingZoneId: string;
+}
+
 export type KitchenScreenKind = "station" | "pass" | "pass_monitor";
 
 /**
@@ -972,6 +988,19 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
+  readDeviceZoneSelection(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    deviceId: string,
+  ): Promise<DeviceZoneSelection>;
+  setDeviceZoneSelection(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    deviceId: string,
+    input: DeviceZoneSelectionInput,
+  ): Promise<DeviceZoneSelection>;
+  countDeviceZoneSelections(tx: Transaction, deviceId: string): Promise<number>;
+  removeDeviceZoneSelections(tx: Transaction, deviceId: string): Promise<void>;
   /** How many kitchen screens the device has chosen. */
   countDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<number>;
   /** Removes the device's kitchen screens, their stations and zones, and what narrowings took. */

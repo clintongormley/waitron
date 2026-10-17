@@ -13,9 +13,13 @@ const NAMED: Record<string, StringKey> = {
   card_reader: "devices.delete_card_reader",
 };
 
-const COUNTED: Record<string, "devices.delete_sessions" | "devices.delete_kitchen_screens"> = {
+const COUNTED: Record<
+  string,
+  "devices.delete_sessions" | "devices.delete_kitchen_screens" | "devices.delete_zone_selections"
+> = {
   sessions: "devices.delete_sessions",
   kitchen_screens: "devices.delete_kitchen_screens",
+  zone_selections: "devices.delete_zone_selections",
 };
 
 const names = (targets: DeleteImpactItem["targets"]): string =>

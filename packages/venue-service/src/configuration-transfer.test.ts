@@ -1708,3 +1708,11 @@ describe("special days in a configuration bundle", () => {
     expect(() => validate(tables, clock)).not.toThrow();
   });
 });
+
+it("leaves per-device zone choices outside the configuration transfer descriptor", () => {
+  const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+  expect(names).toContain("device_profile_service_access");
+  expect(names).toContain("device_profile_zones");
+  expect(names).not.toContain("device_zone_selections");
+  expect(names).not.toContain("device_zone_selection_zones");
+});
