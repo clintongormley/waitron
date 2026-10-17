@@ -73,6 +73,10 @@
     "./src/*": "./src/*",
     "./test/*": "./test/*",
     "./package.json": "./package.json",
-    "./setup": "./src/setup/first-fiscal-screen.ts"
+    "./setup": "./src/setup/first-fiscal-screen.ts",
+    "./recovery-document": "./src/recovery-document.ts",
+    "./recovery-pdf": "./src/recovery-pdf.ts",
+    "./recovery-reader": "./src/recovery-reader.ts",
+    "./recovery-delivery": "./src/recovery-delivery.ts"
   }
 }
