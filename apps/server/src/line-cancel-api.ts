@@ -12,6 +12,7 @@ import {
 import { canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
+import { parseBillEditExpected } from "./bill-editing.js";
 import { approverToCheck } from "./adjustments-api.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -110,6 +111,7 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
   if (outcome === "remove_charge" && reasonId === undefined) throw invalid("reasonId");
   return {
     quantity: body.quantity,
+    expectedEdit: parseBillEditExpected(body.expectedEdit),
     outcome,
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
@@ -180,6 +182,7 @@ export function mountLineCancelApi(
               deps.db,
               {
                 orderId: line.billId,
+                expectedEdit: ask.expectedEdit,
                 expectedRevision: ask.expectedBillRevision,
                 lineId,
                 reasonId: ask.reasonId!,

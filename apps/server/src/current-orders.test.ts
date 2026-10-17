@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { recallLines } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -1858,6 +1859,7 @@ describe("a paid held dish fired on its own", () => {
         tx,
         v.cfg,
         {
+          expectedEdit: await readBillEditState(tx, s.tabId),
           orderId: s.tabId,
           expectedRevision: bill!.revision,
           submissionId: randomUUID(),

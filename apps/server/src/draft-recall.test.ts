@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -354,6 +355,7 @@ describe("party Recall to draft", () => {
         tx,
         venue.cfg,
         {
+          expectedEdit: await readBillEditState(tx, p.tabId),
           orderId: p.tabId,
           expectedRevision: bill!.revision,
           submissionId: randomUUID(),
@@ -880,6 +882,7 @@ describe("party Recall to draft", () => {
         tx,
         venue.cfg,
         {
+          expectedEdit: await readBillEditState(tx, p.tabId),
           orderId: p.tabId,
           expectedRevision: bill!.revision,
           submissionId: randomUUID(),

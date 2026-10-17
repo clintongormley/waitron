@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -180,6 +181,7 @@ async function gherkinsCancel(billId: string): Promise<Command> {
   const lineId = await lineIdOf(venue, billId, 4);
   return inTx(venue, async (tx) => ({
     orderId: billId,
+    expectedEdit: await readBillEditState(tx, billId),
     submissionId: randomUUID(),
     expectedRevision: await revisionOf(tx, billId),
     lineId,

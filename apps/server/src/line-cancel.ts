@@ -16,6 +16,8 @@ import type { TillConfig } from "./till-config.js";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
+import { requireBillEditor, parseBillEditExpected } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
@@ -24,6 +26,7 @@ import { quantityOfLine, bumpRevision, type OrderAttendance } from "./working-or
 import "./errors.js";
 
 export interface CancelItemAsk {
+  expectedEdit: BillEditExpected;
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   expectedPartyRevision: number;
@@ -50,6 +53,7 @@ export async function cancelItem(
   } = { venueLocale: cfg.locale },
 ): Promise<{ revision: number }> {
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
+  const expectedEdit = parseBillEditExpected(ask.expectedEdit);
   const expectedContext = {
     ...ask.expectedContext,
     components: [...ask.expectedContext.components].sort((a, b) => {
@@ -69,6 +73,7 @@ export async function cancelItem(
       quantity: ask.quantity,
       outcome: ask.outcome,
       expectedContext,
+      expectedEdit,
       operatorId,
       reasonId: ask.reasonId,
       note: ask.note,
@@ -92,6 +97,7 @@ export async function cancelItem(
           workingOrderId: bill!.id,
           revision: bill!.revision,
         });
+      await requireBillEditor(tx, bill!.id, operatorId, expectedEdit);
       await refuseRecalledWrite(tx, eq(workingOrderLines.id, lineId));
       const [prior] = await tx
         .select()
@@ -153,6 +159,7 @@ export async function cancelItem(
           cfg,
           {
             orderId: bill!.id,
+            expectedEdit,
             expectedRevision: ask.expectedBillRevision,
             lineId,
             action: "cancel",

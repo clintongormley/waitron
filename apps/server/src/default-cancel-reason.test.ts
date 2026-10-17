@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -51,6 +52,7 @@ describe("a newly set-up venue's till", () => {
       "POST",
       `/api/working-orders/${billId}/adjustments`,
       {
+        expectedEdit: await readBillEditState(venue.db, billId),
         submissionId: randomUUID(),
         expectedRevision: order!.revision,
         lineId: await lineIdOf(venue, billId, 1),

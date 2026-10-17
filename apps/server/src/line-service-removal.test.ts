@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -132,6 +133,7 @@ async function ask(order: Fixture, quantity: string | undefined) {
     .where(eq(workingOrders.id, order.billId));
   return {
     orderId: order.billId,
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, order.billId)),
     expectedRevision: bill!.revision,
     lineId: order.parent.id,
     reasonId: venue.reasonId.house,

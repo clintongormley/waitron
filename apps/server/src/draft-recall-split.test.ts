@@ -62,6 +62,7 @@ async function setup(
   dish = "Pizza",
   quantity = "3",
   paidQuantity?: string,
+  discounted = false,
 ) {
   const p = await billWith(
     venue,
@@ -80,6 +81,23 @@ async function setup(
       tip: "0.00",
     });
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  }
+  if (discounted) {
+    const [bill] = await venue.db
+      .select()
+      .from(workingOrders)
+      .where(eq(workingOrders.id, p.billId));
+    const discount = await call("POST", `/api/working-orders/${p.billId}/adjustments`, {
+      expectedEdit: await readBillEditState(venue.db, p.billId),
+      submissionId: randomUUID(),
+      expectedRevision: bill!.revision,
+      action: "discount_percent",
+      percentBp: 1000,
+      lineId: line!.id,
+      reasonId: venue.reasonId.house,
+      note: null,
+    });
+    expect(discount.status, JSON.stringify(discount.json)).toBe(200);
   }
   const answer = await call("POST", `/api/parties/${p.partyId}/lines/${line!.id}/recall`, {
     submissionId: randomUUID(),
@@ -121,21 +139,7 @@ describe("splitting a recalled dish through the public group command", () => {
   it.each(["hold", "fire"] as const)(
     "splits a %s source and its discounted extras without another charge",
     async (release) => {
-      const p = await setup(release);
-      const [bill] = await venue.db
-        .select()
-        .from(workingOrders)
-        .where(eq(workingOrders.id, p.billId));
-      const discount = await call("POST", `/api/working-orders/${p.billId}/adjustments`, {
-        submissionId: randomUUID(),
-        expectedRevision: bill!.revision,
-        action: "discount_percent",
-        percentBp: 1000,
-        lineId: p.line.id,
-        reasonId: venue.reasonId.house,
-        note: null,
-      });
-      expect(discount.status, JSON.stringify(discount.json)).toBe(200);
+      const p = await setup(release, "Pizza", "3", undefined, true);
       const draft = await readDraft(p.partyId, p.draft.id);
       const before = await frozen();
       const { answer, body, path } = await split(p.partyId, p.line.id);

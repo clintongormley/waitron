@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -197,6 +198,7 @@ async function setup(withVariant = false) {
       tx,
       venue.cfg,
       {
+        expectedEdit: await readBillEditState(tx, tabId),
         orderId: tabId,
         expectedRevision: bill!.revision,
         submissionId: randomUUID(),

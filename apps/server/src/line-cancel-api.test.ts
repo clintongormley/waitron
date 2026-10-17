@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -93,6 +94,7 @@ async function bodyFor(p: Fixture, overrides: Record<string, unknown> = {}) {
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.billId));
   return {
     quantity: "2",
+    expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.billId)),
     outcome: "remove_charge",
     expectedPartyRevision: party!.revision,
     expectedBillRevision: bill!.revision,

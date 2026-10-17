@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -77,6 +78,7 @@ async function post(billId: string, body: Record<string, unknown>, cookie = venu
     "POST",
     `/api/working-orders/${billId}/adjustments`,
     {
+      expectedEdit: await readBillEditState(venue.db, billId),
       submissionId: randomUUID(),
       expectedRevision: await billRevision(billId),
       lineId: null,

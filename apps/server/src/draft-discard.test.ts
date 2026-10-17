@@ -85,7 +85,7 @@ async function recall(partyId: string, lineId: string) {
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return (answer.json as unknown as { draft: Draft }).draft;
 }
-async function setup(paidLast = false, paidWater = false) {
+async function setup(paidLast = false, paidWater = false, discounted = false) {
   const p = await billWith(
     venue,
     [
@@ -107,6 +107,19 @@ async function setup(paidLast = false, paidWater = false) {
       tip: "0.00",
     });
     expect(payment.status, JSON.stringify(payment.json)).toBe(200);
+  }
+  if (discounted) {
+    const discount = await call("POST", `/api/working-orders/${p.billId}/adjustments`, {
+      expectedEdit: await readBillEditState(venue.db, p.billId),
+      submissionId: randomUUID(),
+      expectedRevision: await billRevision(p.billId),
+      action: "discount_percent",
+      percentBp: 1000,
+      lineId: null,
+      reasonId: venue.reasonId.house,
+      note: null,
+    });
+    expect(discount.status, JSON.stringify(discount.json)).toBe(200);
   }
   await recall(p.partyId, pizza!.id);
   const draft = await recall(p.partyId, burger!.id);
@@ -450,17 +463,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("cancels both frozen discounted families, discards fresh work and replays once", async () => {
-    const p = await setup();
-    const discount = await call("POST", `/api/working-orders/${p.billId}/adjustments`, {
-      submissionId: randomUUID(),
-      expectedRevision: await billRevision(p.billId),
-      action: "discount_percent",
-      percentBp: 1000,
-      lineId: null,
-      reasonId: venue.reasonId.house,
-      note: null,
-    });
-    expect(discount.status, JSON.stringify(discount.json)).toBe(200);
+    const p = await setup(false, false, true);
     const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
     const current = (read.json as unknown as { drafts: Draft[] }).drafts[0]!;
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {

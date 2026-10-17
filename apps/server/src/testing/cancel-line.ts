@@ -1,3 +1,4 @@
+import { readBillEditState } from "../bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
@@ -93,6 +94,7 @@ export async function cancelBody(
     return {
       submissionId: randomUUID(),
       expectedRevision: revision,
+      expectedEdit: await readBillEditState(tx, orderId),
       lineId,
       reasonId: await cancelReasonId(tx),
       action: "cancel",
@@ -122,6 +124,7 @@ export async function cancelLine(
     cfg,
     {
       orderId,
+      expectedEdit: await readBillEditState(tx, orderId),
       submissionId: randomUUID(),
       expectedRevision: revision,
       lineId,

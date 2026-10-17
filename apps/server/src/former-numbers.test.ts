@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -158,6 +159,7 @@ async function cancelLine(billId: string, name: string) {
       tx,
       v.cfg,
       {
+        expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
         expectedRevision: bill!.revision,

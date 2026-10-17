@@ -796,11 +796,21 @@ export async function discardDraft(
       if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
       const adjustmentIds: string[] = [];
       for (const source of sources) {
+        // Reservation release and charge cancellation share the validated Discard transaction.
+        await tx
+          .delete(orderDraftRecalledLines)
+          .where(
+            and(
+              eq(orderDraftRecalledLines.draftId, draft.id),
+              eq(orderDraftRecalledLines.sourceLineId, source.sourceLineId),
+            ),
+          );
         const applied = await applyAdjustment(
           tx,
           cfg,
           {
             orderId: billId,
+            expectedEdit: await readBillEditState(tx, billId),
             expectedRevision: await readOrderRevision(tx, billId),
             submissionId: newId(),
             lineId: source.sourceLineId,
@@ -814,6 +824,10 @@ export async function discardDraft(
           attempts,
           attendance,
         );
+        await tx
+          .update(orderDrafts)
+          .set({ revision: sql`${orderDrafts.revision} + 1`, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, draft.id));
         adjustmentIds.push(...applied.adjustmentIds);
       }
       const at = nowIso();

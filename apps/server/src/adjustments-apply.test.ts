@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import {
   recallLines,
   updateHeldOrder,
@@ -105,6 +106,7 @@ async function argsFor(tx: Transaction, billId: string, ask: Ask): Promise<Adjus
   const { amount, ...rest } = ask;
   return {
     orderId: billId,
+    expectedEdit: await readBillEditState(tx, billId),
     submissionId: randomUUID(),
     expectedRevision: order!.revision,
     lineId: null,

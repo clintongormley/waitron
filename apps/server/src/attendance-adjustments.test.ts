@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -75,6 +76,7 @@ async function prepare(action: Action) {
   const body = {
     submissionId: newId(),
     expectedRevision: bill.revision,
+    expectedEdit: await readBillEditState(v.db, bill.billId),
     lineId: await lineIdOf(v, bill.billId, 1),
     reasonId: v.reasonId.house,
     action,
@@ -107,6 +109,7 @@ async function heldCancellation(app: Hono) {
   const body = {
     submissionId: newId(),
     expectedRevision: bill.revision,
+    expectedEdit: await readBillEditState(v.db, bill.billId),
     lineId: await lineIdOf(v, bill.billId, 1),
     reasonId: v.reasonId.house,
     action: "cancel",

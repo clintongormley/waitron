@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -91,6 +92,7 @@ async function compOne(venue: Venue) {
       tx,
       venue.cfg,
       {
+        expectedEdit: await readBillEditState(tx, venue.party.tabId),
         orderId: venue.party.tabId,
         submissionId: randomUUID(),
         expectedRevision: order!.revision,

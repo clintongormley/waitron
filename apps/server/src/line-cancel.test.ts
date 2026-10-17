@@ -86,6 +86,7 @@ async function askFor(
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, order.billId));
     return {
       quantity,
+      expectedEdit: await readBillEditState(tx, order.billId),
       outcome,
       expectedPartyRevision: party!.revision,
       expectedBillRevision: bill!.revision,

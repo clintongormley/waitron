@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -61,6 +62,7 @@ async function adjust(billId: string, ask: Ask): Promise<void> {
       tx,
       venue.cfg,
       {
+        expectedEdit: await readBillEditState(tx, billId),
         orderId: billId,
         submissionId: randomUUID(),
         expectedRevision: order!.revision,

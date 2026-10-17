@@ -24,15 +24,7 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import {
-  nowIso,
-  orderDraftRecalledLines,
-  orderDrafts,
-  orderGroups,
-  ticketItems,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -62,6 +54,9 @@ import {
 import { invalid, money } from "./bill-allocation.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
+import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
+import { refuseRecalledWrite } from "./draft-source.js";
 import type { TillConfig } from "./till-config.js";
 import {
   assertTabOpen,
@@ -86,6 +81,7 @@ import "./errors.js";
 
 /** What an adjustment asks, as a preview and an apply share it. */
 export interface AdjustmentAsk {
+  expectedEdit: BillEditExpected | null;
   orderId: string;
   /** The bill's revision as the caller read it (plan D19). */
   expectedRevision: number;
@@ -172,7 +168,6 @@ interface Carve {
 }
 
 interface Plan {
-  recalledDraftIds: string[];
   reason: AdjustmentReason;
   reasonName: string;
   /** The dish or the extra the action names; null on a bill-level discount. */
@@ -407,6 +402,7 @@ export async function planAdjustment(
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
   await refusePaymentInFlight(tx, [orderId]);
+  await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   const rows = await readRows(tx, orderId);
 
@@ -562,34 +558,15 @@ export async function planAdjustment(
       (row) => row.parentLineId ?? row.id,
     ),
   );
-  const recalled =
-    parents.size === 0
-      ? []
-      : await tx
-          .select({
-            id: orderDrafts.id,
-            ownerId: orderDrafts.ownerId,
-            ownerName: persons.displayName,
-          })
-          .from(orderDraftRecalledLines)
-          .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
-          .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
-          .where(
-            and(
-              eq(orderDrafts.state, "open"),
-              inArray(orderDraftRecalledLines.sourceLineId, [...parents]),
-            ),
-          );
-  for (const draft of recalled) {
-    if (draft.ownerId !== ask.operatorId)
-      throw new AppError("draft.taken_over", {
-        draftId: draft.id,
-        ownerId: draft.ownerId,
-        ownerName: draft.ownerName ?? "",
-      });
-  }
+  if (parents.size > 0)
+    await refuseRecalledWrite(
+      tx,
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        inArray(workingOrderLines.id, [...parents]),
+      )!,
+    );
   return {
-    recalledDraftIds: [...new Set(recalled.map((draft) => draft.id))],
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
     line,
@@ -869,12 +846,14 @@ export async function applyAdjustment(
   attendance?: OrderAttendance,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
   const { submissionId, approver, ...command } = args;
+  const expectedEdit =
+    args.expectedEdit == null ? args.expectedEdit : parseBillEditExpected(args.expectedEdit);
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: args.orderId },
     submissionId,
     "adjustment.apply",
-    { ...command, approverId: approver?.personId },
+    { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver, attempts);
@@ -898,15 +877,6 @@ export async function applyAdjustment(
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
-      }
-      if (plan.recalledDraftIds.length > 0) {
-        await tx
-          .update(orderDrafts)
-          .set({
-            revision: sql`${orderDrafts.revision} + 1`,
-            updatedAt: nowIso(),
-          })
-          .where(inArray(orderDrafts.id, plan.recalledDraftIds));
       }
       const { line } = plan;
       const id = await recordAdjustment(tx, {

@@ -1562,6 +1562,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         "POST",
         `/api/working-orders/${billId}/adjustments`,
         {
+          expectedEdit: await readBillEditState(venue.db, billId),
           submissionId: randomUUID(),
           expectedRevision: await revisionOfOrder(venue, billId),
           lineId: null,
