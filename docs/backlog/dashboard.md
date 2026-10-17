@@ -919,8 +919,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 **Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
 readable pages, showing their name and containing page. Page matches precede inner results.
 The approved scope is preserved in the [implementation plan](../superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
-Periods moves into the Calendar under A719; the editable Seasons table is A721 and the real Week
-view is A722. Each registers its destination when it exists.
+Periods moves into the Calendar under A719; the editable Seasons table is A721. The Week is
+registered as `venue-service:week`, and the others register theirs when they exist.
 
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s
   shorter height is a fixed medium one, not one that follows its content, so a dialog given it does

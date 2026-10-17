@@ -1422,7 +1422,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
   and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  Reached from the day box's "Open this week", with no Week button (A759). [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  Points 1–3 and 5 landed in Part 1 (feat/a722-1-week-view); 4 and 6 remain. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying

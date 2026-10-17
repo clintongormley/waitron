@@ -236,25 +236,10 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
 [on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
 
-Register the new view in venue-service's search destinations when it exists; A727 deliberately
-keeps `/view/week` out of search while it still means the old season painter.
+Registered in page search as `venue-service:week` (Part 1).
 
-1. **One real week** — holidays, special days and closed days included, unlike a painter's standard
-   week — for the department chosen in Show and its zones, or one row per department for All
-   departments. Time runs left to right from the day's changeover to the next morning, one row per
-   department or zone; the department's blocks carry their period and times, and a zone row is drawn
-   faded where it only follows the department and labelled where it differs. A zone's own hours
-   from `zoneOwnHours` (`packages/venue-service/src/zone-own-hours.ts`).
-2. **A block too short for its label shows the whole label** — department or zone, period, times —
-   when it is pointed at or tapped (Lunch 16:00–17:00 is a sliver).
-3. **No Week button (A759, owner 2026-10-16).** The Week opens from the day box's "Open this week"
-   (point 5) on that date's week; its title links back to the month and the year. ‹ › step a week.
-   Its title takes its own fixed width, wide enough for the longest week title (A759).
 4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
    for the next day.
-5. **No painting here.** Clicking a day's name opens the Calendar's day box (`calendar-day-box.ts`).
-   The day box gains an Open this week button, which opens the Week on that date's week; the box's
-   buttons are whatever its host puts in its slot.
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
    department that sends it dishes, from each period's start to its last orders — what A725 retires
    with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,
@@ -344,17 +329,30 @@ Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
 
-- **No Week button and no "Open this week" in the day box until A722 (A720, 2026-10-15).** The
-  Calendar has a Year and a Month only, and today's `/view/week` addresses still open the season
-  painter. A disabled button would do nothing. A722 adds both, and then deletes this note.
-
 - **The Calendar has no Year | Month switch; the title moves between views (A759, owner
   2026-10-16).** A month's name in the Year opens that month; in the Month's "‹ February 2026 ›" the
-  year is a link that opens the Year; A722's Week is to open from the day box's "Open this week",
-  with no Week button. The Month's "‹ title ›", and Staffing's, keeps one width, as wide as the
+  year is a link that opens the Year; the Week opens from the day box's "Open this week"; there is
+  no Week button. The Month's "‹ title ›", and Staffing's, keeps one width, as wide as the
   longest month-and-year title in any interface language, so the arrows stay put. When the Year
   cannot be read it lists the twelve month names, so the Month stays reachable. The station Times
   tab's year and Staffing's year are plain text, since neither has a Year view.
+
+- **The Week's address takes over `view/week` (A722 Part 1, Decision 1).** The Week is
+  `/manage/opening-hours/view/week[/department/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
+  the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
+  painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
+  names a season, department, zone or `?station=` still opens it.
+
+- **Every block in the Week shows its whole label on pointing or tapping, not only the clipped ones
+  (A722 Part 1, Decision 4).** Telling which labels are clipped would mean measuring text, and a
+  label that fits, shown again in full, says nothing wrong. The tip sits above the block, and below
+  it only when there is no room above.
+
+- **The Week draws every day on one scale, the week's longest day (A722 Part 1, Decision 5).** Each
+  block sits on its own day from that day's changeover, so a shorter day's track ends early and the
+  ruler and the blocks agree on a week holding a 25-hour day. Deliberate limit: a week whose days
+  have different changeovers (a scheduled change of when the business day starts) labels the ruler
+  from Monday's.
 
 - **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
   (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.
