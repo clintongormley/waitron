@@ -2,7 +2,8 @@ import { navigationGuardFor } from "@waitron/ui";
 
 /** A copy of the dashboard shell's capturing link handler (`#onAppLink` in
  *  `apps/dashboard/src/dashboard-app.ts`): an in-app link without `data-own-click` is cancelled,
- *  stopped before it reaches the screen, and written through the window's navigation guard. */
+ *  stopped before it reaches the screen, and written through the window's navigation guard.
+ *  Nothing checks that it stays a copy. */
 export function captureShellLinks(host: HTMLElement): () => void {
   const capture = (event: MouseEvent) => {
     if (event.defaultPrevented) return;

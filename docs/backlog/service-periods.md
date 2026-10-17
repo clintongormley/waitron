@@ -193,7 +193,8 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
    `calendarColourChoices`, `packages/venue-service/src/dashboard/calendar-colours.ts`), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
-   window; Cancel discards. The separate season editor and the chips' ✎ go.
+   window; Cancel discards. The separate season editor and the chips' ✎ go. The row's "Periods…"
+   (A719) is placed into `season-chips`' default slot by the Year view; keep it after "Seasons…".
 2. **Each season stores its colour.** Today `seasonTints` colours a season by its place in the list
    it is handed, so February's Month view, handed only Winter and Spring, paints Winter yellow while
    the Year paints it blue. A stored colour is the same on every view. Landing deletes the open note

@@ -64,14 +64,14 @@ const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
 const isImpactRead = (path: string, method: string) =>
   method === "GET" && path.endsWith("/delete-impact");
 
-/** Answers the page's reads from `data`, each impact read from `impact`, and every write with `write`. */
+/** Answers the list's reads from `data`, each impact read from `impact`, and every write with `write`. */
 function fake(options: {
   data?: () => OpeningHoursModel;
   impact?: (path: string) => unknown;
   write?: (path: string, method: string, body: unknown) => unknown;
-  /** Answers Painted in this many milliseconds late, in a later turn than the page's own read. */
+  /** Answers Painted in this many milliseconds late, in a later turn than the list's own read. */
   paintedInDelay?: number;
-  /** Answers the page's own read this many milliseconds late, after Painted in. */
+  /** Answers the list's own read this many milliseconds late, after Painted in. */
   dataDelay?: () => number;
 }): DashboardRequest {
   return (async (path, method, body) => {
@@ -351,7 +351,7 @@ it("a failed impact read shows Retry, and Retry reads it again; a failed re-read
   expect(body(dialog)).toContain(`Painted in ${before + 1} seasons.`);
 });
 
-it("a failed then recovered page read leaves the delete dialog's refusal in place", async () => {
+it("a failed then recovered list read leaves the delete dialog's refusal in place", async () => {
   let data = model();
   let failRead = false;
   const el = await mount(
@@ -636,7 +636,7 @@ it("with live data, reads the impact again when today's kept-open period changes
   expect(reads).toBe(2);
 });
 
-it("with live data, an impact answer that arrives while the page is detached is shown once it is back, and Delete sends its revision", async () => {
+it("with live data, an impact answer that arrives while the list is detached is shown once it is back, and Delete sends its revision", async () => {
   const liveData = new LiveData();
   const sent: unknown[] = [];
   let reads = 0;
@@ -921,7 +921,7 @@ it("Cancel and native Escape close a deletion without a draft or a write", async
   expect(writes).toBe(0);
 });
 
-it("Delete… in the Edit dialog, after its own question, opens the delete dialog for that period", async () => {
+it("Delete… in the period dialog, after its own question, opens the delete dialog for that period", async () => {
   const { screen, question } = await inLeaveApp();
   const openEdit = async () => {
     rowButton(screen, "edit-period", "p1").click();

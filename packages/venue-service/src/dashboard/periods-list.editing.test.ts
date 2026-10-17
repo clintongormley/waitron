@@ -49,7 +49,7 @@ const lunch = (): Period => ({
   routingUses: [],
 });
 
-/** One active department, Restaurant, and an inactive Deli the page does not list. */
+/** One active department, Restaurant, and an inactive Deli the list does not show. */
 function model(): OpeningHoursModel {
   return {
     businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -98,7 +98,7 @@ function twoDepartments(): OpeningHoursModel {
 
 const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
 const unpainted = (): PaintedInRow[] => [{ periodId: "p1", seasons: [], specialDays: [] }];
-/** Answers the page's Painted-in watch with `painted`; everything else goes to `request`. */
+/** Answers the list's Painted-in watch with `painted`; everything else goes to `request`. */
 function withPaintedIn(
   request: DashboardRequest,
   painted: () => PaintedInRow[] = unpainted,
@@ -293,7 +293,7 @@ it("places a refused period name under Name with the bottom explanation and retr
   expect(writes).toEqual([body, body]);
 });
 
-it("reports a failed refresh as a page load failure after the write closed the dialog", async () => {
+it("reports a failed refresh as a load failure after the write closed the dialog", async () => {
   let reads = 0;
   const el = await mount((async (path, method) => {
     if (method === "GET") {
@@ -740,7 +740,7 @@ it("+ Add period is disabled until the periods have been read, and after a faile
   expect((await edit(el)).departments?.map(({ id }) => id)).toEqual(["restaurant"]);
 });
 
-it("Edit shows Painted in as links from the page's own read, with no extra request", async () => {
+it("Opening a period shows Painted in as links from the list's own read, with no extra request", async () => {
   const paintedReads: string[] = [];
   const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi((async (path: string, method: string) => {
@@ -787,7 +787,6 @@ it("Edit shows Painted in as links from the page's own read, with no extra reque
   expect(paintedReads).toEqual(["GET"]);
 });
 
-// Ported from service-delete-editors.test.ts: a dialog held by the page while its rows change.
 class LeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
@@ -965,7 +964,7 @@ it("editing a period marks the colours its department's other periods use, never
   expect(checkedColour(dialog)).toBe("red");
 });
 
-it("a page redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
+it("a list redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
   const data = model();
   data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
   const el = await mount((async () => structuredClone(data)) as DashboardRequest);
@@ -987,7 +986,7 @@ it("a page redraw that changes neither the periods nor the period edited hands t
   expect(dialog.colourUsers).toEqual([{ name: "Dinner", colour: "blue" }]);
 });
 
-it("a page redraw hands a dialog asking for the department the same department list", async () => {
+it("a list redraw hands a dialog asking for the department the same department list", async () => {
   const el = await mount((async () => twoDepartments()) as DashboardRequest);
   const dialog = await edit(el);
   const departments = dialog.departments;

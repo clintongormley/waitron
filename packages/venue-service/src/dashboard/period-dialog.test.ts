@@ -1025,7 +1025,7 @@ async function mountAdd(list: typeof departments | (typeof departments)[number][
   return el;
 }
 
-it("from the page, Add asks for the department first, preselects a lone department, and sends it", async () => {
+it("from the Periods window, Add asks for the department first, preselects a lone department, and sends it", async () => {
   const el = await mountAdd([departments[1]!]);
   const names = [...el.shadowRoot!.querySelectorAll("[name]")].map((n) => n.getAttribute("name"));
   expect(names[0]).toBe("departmentId");

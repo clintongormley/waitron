@@ -4216,7 +4216,7 @@ Opening hours' Year.
   order, each written as its name and first and last day. A chip's name opens the season
   painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
   season, and + Season opens the dialog empty; on a read-only page a chip's name opens the season's
-  week read-only, there is no ✎, and + Season is not offered. A new season starts with a copy of the department and zone weeks of the
+  week read-only, there is no ✎, and + Season is not offered. The row ends with "Periods…", which opens the Periods window, on a read-only page too. A new season starts with a copy of the department and zone weeks of the
   season it starts inside. The dialog has a required Name and a Starts on day and month, each
   picked from a list; Save stays quiet and disabled until the draft changes. A name or start
   another season already holds is refused under its field. A move or a deletion that would make a
@@ -4735,9 +4735,10 @@ row (a default slot in `season-chips`; the button sends `calendar-window-open` w
 Departments warning's "Set up periods" link and from page search (`venue-service:periods`). The
 painters' link points at `/manage/opening-hours/view/year/window/periods` and carries
 `data-own-click`, so the dashboard shell's link handler leaves it alone; a plain click on it is
-handled by the screen (`periodsLinkClicked`, `opening-hours-screen.ts`), which pushes the current
-address with `window/periods` added, so the window opens over the painter and its unsaved paint
-stays. A click with a modifier key is left to the browser. The window is an unsized, so wide,
+handled by the link itself (`periodsLink`, `period-editing.ts`), which sends `calendar-window-open`
+as the Year's button does, and the screen pushes the current address with `window/periods` added,
+so the window opens over the painter and its unsaved paint stays. A click with a modifier key, a
+click other than the left button and a click already cancelled are left to the browser. The window is an unsized, so wide,
 `wt-modal` with no heading, named "Periods" by its `aria-label` (`data-window="periods"`; the
 Seasons window is the compact one, `data-window="seasons"`), and both end with a footer Close.
 

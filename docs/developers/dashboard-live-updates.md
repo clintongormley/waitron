@@ -91,12 +91,12 @@ a day the draft has not changed takes the stored paint, and a day it changed kee
 (`refresh` and `mayFollow`, `packages/venue-service/src/dashboard/season-painter.ts`). A save in
 flight, and the time until the first read that started after the latest successful save answered,
 still hold the edited weeks whole.
-2026-10-14, A506-11: the Periods window reads `/menu-periods/painted-in` through
+2026-10-14, A506-11: the Periods page reads `/menu-periods/painted-in` through
 `OpeningHoursApi.watchPaintedIn` on the `menu-periods-painted-in` dependencies. Its delete dialog
-reads `…/delete-impact` again, passively, when a list read (the hours model or Painted in) that
-started after its last impact read answers (`rereadImpact`, `periods-list.ts`; `nextReadNumber`,
+reads `…/delete-impact` again, passively, when a page read (the hours model or Painted in) that
+started after its last impact read answers (`rereadImpact`, `periods-screen.ts`; `nextReadNumber`,
 `model-watch.ts`), and after a delete refused as `hours.clock_changed`. The impact answer carries
-the clock revision it was read under, and the delete sends that one, so the order the list's reads
+the clock revision it was read under, and the delete sends that one, so the order the page's reads
 answer in decides nothing about the revision sent.
 2026-10-14, A506-12: Prep stations' Times tab reads `/opening-hours/month` through
 `OpeningHoursApi.watchMonth`, as the Month does, and the station's `…/service-times` through
@@ -114,6 +114,8 @@ neither.
 2026-10-17, A725: Prep stations' Times tab is retired. Its month, station-change, read-recovery
 and reconnect checks now exercise the Calendar in `calendar-station-month.test.ts`; the Calendar
 continues to use the watches described in A722-3 above.
+2026-10-17, A719: the Periods page is retired. Its list is `periods-list` (`periods-list.ts`) in the
+Calendar's Periods window, and reads and re-reads as the A506-11 line above says.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

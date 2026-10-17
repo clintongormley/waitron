@@ -1452,15 +1452,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   else edits a period's end offset. Owner to confirm; removing it is one field — left open by
   A506-11, #1694.
 
-- **A painter opened from a Painted in chip in the Periods window closes to the Calendar's Year,
-  not back to the window**, so a manager loses their place — left open by A506-11, #1694.
+- **A painter opened from a Painted in chip in the Periods window does not return to the window
+  when it closes**, so a manager loses their place — left open by A506-11, #1694.
 
 - **The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
   dashboard**, while `readOpeningHoursModel` still works both out on every read. See also "Routing
   reads do work only one screen uses" — left open by A506-11, #1694.
 
 - **The period delete dialog can keep Delete greyed out** after a refusal for a changed business-day
-  start, when the page is taken out of the document during its re-read and comes back
+  start, when the Periods window's list is taken out of the document during its re-read and comes back
   (`period-delete-dialog.ts`; found by reading, not tried) — left open by A506-11, #1694.
 
 - **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
