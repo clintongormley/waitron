@@ -448,3 +448,20 @@ existing refusal case. Restoring it and removing the setup-app check fails the o
 Restoring both returns two passes. The receipt directory is `a679-cli-entry-20261017-0254`.
 These checks qualify the startup change and selected rebased consumers. CLI lifecycle integration,
 provisioning coverage and the remaining hour-plan tasks are still open.
+
+
+## Shared owned preparation service, 2026-10-17
+
+No existing test, assertion or fixture changes in this continuation. The new
+`packages/provisioning/src/first-setup-preparation.test.ts` exercises selection and input import
+through the shared owner, store and real hour contribution. Additional opaque module cases check
+asynchronous preparation, multiple offerings, conflicting inputs and retired-assignment limits.
+The HTTP routes now call that same service. This does not complete the command's claim, recovery
+PDF, activation or publication journey.
+
+The two retained paper suites, `setup-first-fiscal.route.test.ts` and
+`first-setup-retired-assignments.test.ts`, return 42 failures and 36 unhandled rejections both at the
+starting commit `118b02458b6e87e0fa499f07cfaf1c53b3cce353` in an independently installed checkout
+and after this extraction. Their failing test names match. The local receipt directory is
+`a679-cli-preparation-20261017`. Their hour/PDF qualification remains open; no existing fiscal
+assertion changed to make this check pass.

@@ -1,5 +1,4 @@
 import { writeModuleConfig } from "./module-config.js";
-import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import {
@@ -105,57 +104,7 @@ export function createFirstSetupModuleHost(options: {
     keys,
     bootId,
   });
-  const assertFreshAssignment = async (
-    state: import("@waitron/provisioning").FirstSetupState,
-    name: string,
-    input = state.inputs[name],
-  ): Promise<void> => {
-    const seat = initialSetupFor(modules, name);
-    if (
-      seat === undefined ||
-      (seat.assignmentKeys === undefined && seat.assignmentPositions === undefined)
-    )
-      return;
-    const context = firstSetupModuleContext(state, name);
-    const candidates = new Set(seat.assignmentKeys?.(context, input) ?? []);
-    const positions = seat.assignmentPositions?.(context, input) ?? [];
-    const retired = await readRetiredSetup(name);
-    const retainedFacts = retired.flatMap((entry) =>
-      entry.publicEvidence
-        .map((value) => seat.retainedAssignments?.(value))
-        .filter((value) => value !== undefined),
-    );
-    for (const facts of retainedFacts) {
-      if (
-        facts.keys.some((key) => candidates.has(key)) ||
-        facts.positions.some((floor) =>
-          positions.some(
-            (value) => value.namespace === floor.namespace && value.position <= floor.position,
-          ),
-        )
-      )
-        throw new AppError("setup.attempt_conflict", {});
-    }
-    for (const old of [
-      ...state.previous
-        .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === name))
-        .map((attempt) => ({
-          context: firstSetupModuleContext(attempt, name),
-          input: attempt.inputs[name],
-        })),
-      ...retired,
-    ]) {
-      for (const key of seat.assignmentKeys?.(old.context, old.input) ?? [])
-        if (candidates.has(key)) throw new AppError("setup.attempt_conflict", {});
-      for (const floor of seat.assignmentPositions?.(old.context, old.input) ?? [])
-        if (
-          positions.some(
-            (value) => value.namespace === floor.namespace && value.position <= floor.position,
-          )
-        )
-          throw new AppError("setup.attempt_conflict", {});
-    }
-  };
+  const { assertFreshAssignment, assertSelection, preparation } = runtime;
   const configuredEvidence = {
     ...legacyEvidence,
     invalidate(attemptId: string) {
@@ -203,23 +152,8 @@ export function createFirstSetupModuleHost(options: {
         ).config,
       );
     },
-    assertSelection(state: import("@waitron/provisioning").FirstSetupState) {
-      const selected = enabledModules(
-        modules,
-        venueFiscalSelection(
-          modules,
-          state.frozen.request.location.fiscalTerritory,
-          options.moduleConfig,
-        ).config,
-      );
-      if (
-        !isDeepStrictEqual(
-          selected.map((module) => ({ module: module.name, version: module.version })),
-          state.frozen.modules.map(({ module, version }) => ({ module, version })),
-        )
-      )
-        throw new AppError("setup.attempt_conflict", {});
-    },
+    assertSelection,
+    preparation,
     modules,
   };
 }

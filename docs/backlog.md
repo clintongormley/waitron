@@ -343,8 +343,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   another password grant. The owner's exact 22:10 fiscal-check permission is applied, including
   the owned production-readiness fixture. Browser-session preparation, automatic Demo/Preparation,
   owned development Live and production certificate boot cases have local checks; unowned Live is
-  refused when the host offers owned setup. Earlier full-boot checks returned two configuration-error
-  failures; lane F's current A764 branch also changes `boot.ts`. Real-server configuration-import checks
+  refused when the host offers owned setup. Real-server configuration-import checks
   now cover fresh hour names/counters, both taxpayer choices, replacement refusal and restart.
   The owner's exact 2026-10-17 import-fixture permission is applied; all eight retained import
   cases pass with hour preparation. The preparation journal and bound facts scope now live in
@@ -356,7 +355,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   include password recovery, capability rotation, exact snapshots and interrupted operations.
   The browser and command entry now use the shared ownership/preparation runtime. Its frozen-facts
   checks moved with it, and the built command refuses a missing host-state directory before creating
-  venue files. Complete wizard and CLI claim, delivery and publication remain unfinished.
+  venue files. The shared runtime now also provides password-confirmed candidate selection,
+  waiting responses and exact input import; the HTTP routes use these same operations.
+  New direct checks exercise the real hour selector and opaque module contracts. Complete wizard
+  and CLI claim, delivery and publication remain unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

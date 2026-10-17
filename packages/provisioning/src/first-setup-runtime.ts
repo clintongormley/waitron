@@ -24,6 +24,7 @@ import { venueFiscalSelection } from "./venue-fiscal.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { createFirstSetupPreparation } from "./first-setup-preparation.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -219,13 +220,24 @@ export function createFirstSetupRuntime(options: {
         throw new AppError("setup.attempt_conflict", {});
     },
   });
-  return {
+  const authorization = {
     withPreparationAuthorization<T>(
       authorize: () => Promise<void>,
       run: () => Promise<T>,
     ): Promise<T> {
       return replacementAuthority.run(authorize, run);
     },
+  };
+  return {
+    ...authorization,
+    ...createFirstSetupPreparation({
+      ...options,
+      ...authorization,
+      modules,
+      owner,
+      store,
+      coordinator,
+    }),
     coordinator,
     store,
     owner,

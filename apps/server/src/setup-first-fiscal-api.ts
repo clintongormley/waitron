@@ -10,7 +10,6 @@ import { assertFinishRegister } from "./first-setup-finish-audit.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
-import { isDeepStrictEqual } from "node:util";
 import { TLSSocket } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
@@ -404,18 +403,14 @@ export function mountSetupFirstFiscalApi(
     boundary(c, log, async () => {
       const body = exact(await readFirstFiscalBody(c), ["module", "proposal"]);
       boundedPublic(body.proposal);
-      return host.coordinator.run(async () => {
-        const state = await host.owner.authorize(firstFiscalOwner(c));
-        host.assertSelection(state);
-        const module = text(body.module);
-        const entry = state.frozen.modules.find((value) => value.module === module);
-        const installed = host.modules.find((value) => value.name === module);
-        const seat = initialSetupFor(host.modules, module);
-        if (!entry || entry.version !== installed?.version || seat?.preparation === undefined)
-          invalid();
-        const preparation = await seat.preparation(
-          firstSetupModuleContext(state, module),
+      return host.coordinator.run(async (hold) => {
+        const owner = firstFiscalOwner(c);
+        const state = await host.owner.authorize(owner);
+        const preparation = await host.preparation.prepare(
+          owner,
+          text(body.module),
           body.proposal,
+          hold,
         );
         return c.json({ state: publicFirstSetupState(state), preparation });
       });
@@ -439,75 +434,25 @@ export function mountSetupFirstFiscalApi(
           };
           if (action === "candidates") {
             exact(body, ["module", "proposal", "reconfirmation"]);
-            if (state.status !== "claimed") throw new AppError("setup.attempt_conflict", {});
-            const { module, seat, context } = selected(body.module);
             boundedPublic(body.proposal);
-            // Pure input validation precedes reconfirmation; durable preparation consumes it first.
-            let reconfirmed = false;
-            const confirm = async () => {
-              if (reconfirmed) return;
-              await host.owner.consumeReconfirmation(
-                owner,
-                text(body.reconfirmation),
-                "block-use",
-                hold,
-              );
-              reconfirmed = true;
-            };
-            const request = await host.withPreparationAuthorization(confirm, async () =>
-              seat.request(context, await seat.candidates(context, body.proposal)),
-            );
-            if (seat.pending?.(request)) {
-              await confirm();
-              return c.json({ state: publicFirstSetupState(state), preparation: request });
-            }
-            await host.assertFreshAssignment(
-              {
-                ...state,
-                frozen: {
-                  ...state.frozen,
-                  modules: state.frozen.modules.map((entry) =>
-                    entry.module === module ? { ...entry, request } : entry,
-                  ),
-                },
-              },
-              module,
-            );
-            await confirm();
-            state = await host.store.update(
-              owner.attemptId,
-              state.revision,
-              { kind: "candidates", module, request },
+            const result = await host.preparation.select(
+              owner,
+              text(body.module),
+              body.proposal,
+              body.reconfirmation,
               hold,
             );
-            if (
-              state.frozen.modules.every(
-                (m) => initialSetupFor(host.modules, m.module) === undefined || m.request !== null,
-              )
-            )
-              state = await host.store.update(
-                owner.attemptId,
-                state.revision,
-                { kind: "consumption-intent" },
-                hold,
-              );
+            state = result.state;
+            if (result.preparation !== undefined)
+              return c.json({
+                state: publicFirstSetupState(state),
+                preparation: result.preparation,
+              });
           } else if (action === "input") {
             exact(body, ["module", "input"]);
             boundedPublic(body.input);
-            const { module, seat, context } = selected(body.module);
             if (Buffer.byteLength(JSON.stringify(body.input)) > 65536) invalid();
-            const imported = seat.inspect(context, body.input);
-            await host.assertFreshAssignment(state, module, imported.input);
-            if (Object.hasOwn(state.inputs, module)) {
-              if (!isDeepStrictEqual(state.inputs[module], imported.input))
-                throw new AppError("setup.attempt_conflict", {});
-            } else
-              state = await host.store.update(
-                owner.attemptId,
-                state.revision,
-                { kind: "import", module, input: imported.input },
-                hold,
-              );
+            state = await host.preparation.import(owner, text(body.module), body.input, hold);
           } else if (action === "enrol") {
             exact(body, ["module", "publicKey", "comparison"]);
             boundedPublic(body.publicKey);
