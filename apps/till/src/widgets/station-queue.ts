@@ -3,7 +3,7 @@ import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
+import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
@@ -108,6 +108,11 @@ export class TillStationQueue extends LitElement {
     css`
       :host {
         display: block;
+      }
+
+      /* The line's drawn text names it; the bump verb is hidden text, not an aria-label (WCAG 2.5.3). */
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
 
       .empty {
@@ -1143,10 +1148,10 @@ export class TillStationQueue extends LitElement {
         : html`<button
             class="line state-${item.state}"
             data-item=${item.id}
-            aria-label=${this.#bumpLabel(group)}
             @click=${() => this.#bump(group, item, next)}
           >
             ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}
+            <span class="visually-hidden">${this.#bumpLabel(group)}</span>
           </button>`;
     if (!this.#movable(item)) return line;
     return html`<div class="movable">
