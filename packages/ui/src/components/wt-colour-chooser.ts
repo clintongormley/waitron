@@ -189,7 +189,7 @@ export class WtColourChooser extends LitElement {
     return this.popup!.querySelector<HTMLButtonElement>('[role="radio"][tabindex="0"]');
   }
 
-  /** `wt-combobox`'s placement: under the trigger, at least as wide, kept 8px inside the window. */
+  /** `wt-combobox`'s placement. */
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup!;

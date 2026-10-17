@@ -537,3 +537,191 @@ describe("position", () => {
     }
   });
 });
+
+describe("keys that the chooser prevents", () => {
+  test("arrow, Home and End presses in the panel are prevented, including a move onto the chosen colour", async () => {
+    const { el, panel } = await mountChooser();
+    hostSetsValue(el);
+    const seen: KeyboardEvent[] = [];
+    panel.addEventListener("keydown", (event) => seen.push(event), { capture: true });
+    await openByClick(el);
+    for (const key of [
+      "{ArrowRight}",
+      "{ArrowDown}",
+      "{ArrowLeft}",
+      "{ArrowUp}",
+      "{End}",
+      "{Home}",
+    ])
+      await userEvent.keyboard(key);
+    // The loop's Home chose red, so this second Home is a move onto the chosen colour.
+    await userEvent.keyboard("{Home}");
+    expect(seen.map((event) => event.key)).toEqual([
+      "ArrowRight",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowUp",
+      "End",
+      "Home",
+      "Home",
+    ]);
+    expect(el.value).toBe("red");
+    for (const event of seen) expect(event.defaultPrevented, event.key).toBe(true);
+  });
+
+  for (const key of ["{ArrowDown}", "{ArrowUp}"]) {
+    test(`${key} that opens the closed field is prevented`, async () => {
+      const { trigger, panel } = await mountChooser();
+      const seen: KeyboardEvent[] = [];
+      trigger.addEventListener("keydown", (event) => seen.push(event), { capture: true });
+      trigger.focus();
+      await userEvent.keyboard(key);
+      await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.defaultPrevented).toBe(true);
+    });
+  }
+});
+
+describe("a key something above the chooser has already handled", () => {
+  function preventAbove() {
+    host.addEventListener("keydown", (event) => event.preventDefault(), { capture: true });
+  }
+
+  test("on the closed field opens nothing", async () => {
+    const { trigger, panel } = await mountChooser();
+    preventAbove();
+    trigger.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(panel.matches(":popover-open")).toBe(false);
+  });
+
+  test("in the open panel chooses nothing and leaves focus", async () => {
+    const { el, root, panel, tile } = await mountChooser();
+    const changes = vi.fn();
+    el.addEventListener("wt-change", changes);
+    await openByClick(el);
+    preventAbove();
+    await userEvent.keyboard("{ArrowRight}");
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(changes).not.toHaveBeenCalled();
+    expect(root.activeElement).toBe(tile("blue"));
+    expect(panel.matches(":popover-open")).toBe(true);
+  });
+});
+
+describe("more ways out of the panel", () => {
+  test("Shift+Tab from the checked tile moves focus back out of the chooser and closes the panel", async () => {
+    host?.remove();
+    await mount(
+      `<div><input name="other" /><wt-colour-chooser name="colour" label="Colour" value="blue"></wt-colour-chooser></div>`,
+    );
+    const el = host.querySelector("wt-colour-chooser")!;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const other = host.querySelector("input")!;
+    const { root, panel, tile } = parts(el);
+    await openByClick(el);
+    expect(root.activeElement).toBe(tile("blue"));
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    expect(document.activeElement).toBe(other);
+  });
+
+  test("Escape inside an unguarded modal closes only the panel", async () => {
+    host?.remove();
+    const modal = (await mount(
+      `<wt-modal open size="compact"><wt-colour-chooser name="colour" label="Colour" value="blue"></wt-colour-chooser></wt-modal>`,
+    )) as HTMLElement & { open: boolean };
+    const el = modal.querySelector("wt-colour-chooser")!;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const { root, trigger, panel } = parts(el);
+    await openByClick(el);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(modal.open).toBe(true);
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(root.activeElement).toBe(trigger);
+  });
+});
+
+describe("the page around it", () => {
+  test("removed while open and put back, the trigger is no longer expanded", async () => {
+    const { el, trigger, panel } = await mountChooser();
+    await openByClick(el);
+    await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("show() on the page but before the first render does nothing, and the panel is closed after it", async () => {
+    await mount("<div></div>");
+    const el = document.createElement("wt-colour-chooser");
+    el.choices = CHOICES;
+    el.value = "blue";
+    host.append(el);
+    expect(el.shadowRoot!.querySelector("[popover]")).toBeNull();
+    expect(() => el.show()).not.toThrow();
+    await el.updateComplete;
+    const { trigger, panel } = parts(el);
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("tokens", () => {
+  test("a palette token repaints the field's square and the tile's square", async () => {
+    const { el, trigger, tile } = await mountChooser();
+    host.style.setProperty("--wt-color-palette-blue", "rgb(1, 2, 3)");
+    await openByClick(el);
+    const squares = [
+      trigger.querySelector<HTMLElement>('[part="swatch"]')!,
+      tile("blue").querySelector<HTMLElement>('[part="swatch"]')!,
+    ];
+    for (const square of squares)
+      expect(getComputedStyle(square).backgroundColor).toBe("rgb(1, 2, 3)");
+    expect(
+      getComputedStyle(tile("red").querySelector<HTMLElement>('[part="swatch"]')!).backgroundColor,
+    ).not.toBe("rgb(1, 2, 3)");
+  });
+
+  test("--wt-color-field-fill repaints the field box", async () => {
+    const { field } = await mountChooser();
+    host.style.setProperty("--wt-color-field-fill", "rgb(4, 5, 6)");
+    expect(getComputedStyle(field).backgroundColor).toBe("rgb(4, 5, 6)");
+  });
+
+  test("--wt-color-primary repaints the checked tile's ring, and only that tile's", async () => {
+    const { el, tile } = await mountChooser();
+    host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+    await openByClick(el);
+    expect(getComputedStyle(tile("blue")).boxShadow).toContain("rgb(7, 8, 9)");
+    expect(getComputedStyle(tile("grey")).boxShadow).toBe("none");
+  });
+
+  test("--wt-field-max-width caps the field's width", async () => {
+    const { el, field } = await mountChooser();
+    host.style.width = "600px";
+    expect(el.getBoundingClientRect().width).toBe(600);
+    host.style.setProperty("--wt-field-max-width", "200px");
+    expect(el.getBoundingClientRect().width).toBe(200);
+    expect(field.getBoundingClientRect().width).toBeLessThanOrEqual(200);
+  });
+
+  test("the trigger and every tile are at least --wt-tap-min tall", async () => {
+    const { el, trigger, tiles } = await mountChooser();
+    // 52px, as wt-combobox's case uses: the trigger's own floor is --wt-field-height (56px).
+    host.style.setProperty("--wt-tap-min", "52px");
+    await openByClick(el);
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+    expect(tiles()).toHaveLength(CHOICES.length);
+    for (const tile of tiles())
+      expect(tile.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  });
+});
