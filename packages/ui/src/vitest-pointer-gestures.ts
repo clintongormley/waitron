@@ -141,11 +141,15 @@ export interface TouchGesture {
   moveBy?: { x: number; y: number };
 }
 
+/** Browser sessions that have touched since their last `parkTouch`. */
+const touchedSessions = new Set<string>();
+
 /** One finger, through Chromium's DevTools input: down on `at`'s centre (scrolled into view if it
  * is not wholly on screen), held `holdMs` of real
  * time, then moved in steps to `moveTo`'s centre or by `moveBy`, then lifted. */
 export const touchGesture: BrowserCommand<[gesture: TouchGesture]> = async (context, gesture) => {
   const ctx = context as unknown as PlaywrightCommandContext;
+  touchedSessions.add(context.sessionId);
   const start = await centreOf(ctx, gesture.at, { reveal: true });
   const end =
     gesture.moveTo !== undefined
@@ -178,11 +182,14 @@ export const touchGesture: BrowserCommand<[gesture: TouchGesture]> = async (cont
   }
 };
 
-/** Run after each test that calls `touchGesture`. After a swipe lifted in motion that the page did
- * not take as a scroll, Linux Chromium sends no click for the next touch begun within roughly
- * 0.8 s, so a later test's tap would open nothing. This touch is that next one: cancelled, so it
- * can click nothing, and below the window, where no element of the test page is. */
+/** Run after each test in a file that calls `touchGesture`; it does nothing unless this session
+ * touched since it last ran. After a swipe lifted in motion that the page did not take as a scroll,
+ * Linux Chromium sends no click for the next touch begun within roughly 0.8 s, so a later test's
+ * tap would open nothing. This touch is that next one: cancelled, so it can click nothing, and
+ * below the window, where it was seen reaching the Vitest runner page's `<html>`, not the test
+ * page. */
 export const parkTouch: BrowserCommand<[]> = async (context) => {
+  if (!touchedSessions.delete(context.sessionId)) return;
   const ctx = context as unknown as PlaywrightCommandContext;
   const viewport = ctx.page.viewportSize();
   if (viewport === null) throw new Error("parkTouch needs a page with a set viewport");

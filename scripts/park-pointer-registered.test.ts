@@ -12,6 +12,10 @@ import { describe, expect, it } from "vitest";
  * its vitest config. A rename of the command or the shared fragment, or a helper reached under a
  * different spelling, would slip past. The same holds for `pointerGestureCommands`: a literal
  * `commands.mouseDrag`, `commands.mouseMove`, `commands.touchGesture` or `commands.parkTouch` call, and the `...pointerGestureCommands` spread.
+ *
+ * Every source FILE that calls `commands.touchGesture` must also call `commands.parkTouch`, or on
+ * Linux Chromium a later test's tap can lose its click. Weaker than that sounds: it sees the call's
+ * text in the file, not that it runs after each test.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -23,6 +27,8 @@ const IMPORTS_A11Y_HELPERS = /^\s*import\b[^\n]*\ba11y-helpers\b/m;
 const CALLS_PARK_POINTER = /\bcommands\.parkPointer\b/;
 /** A source file calls one of the commands in `pointerGestureCommands`. */
 const CALLS_POINTER_GESTURE = /\bcommands\.(?:mouseDrag|mouseMove|touchGesture|parkTouch)\b/;
+const CALLS_TOUCH_GESTURE = /\bcommands\.touchGesture\b/;
+const CALLS_PARK_TOUCH = /\bcommands\.parkTouch\b/;
 
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];
@@ -56,7 +62,10 @@ function packageDirsWithVitestConfig(): string[] {
 
 type Uses = { parkPointer: boolean; pointerGesture: boolean };
 
-/** What each package's source uses, from one read of its files; both blocks below share it. */
+/** Repo-relative source files that call `commands.touchGesture`, each with whether it parks. */
+const touchCallers: { file: string; parks: boolean }[] = [];
+
+/** What each package's source uses, from one read of its files; every block below shares it. */
 const usesByPackage = new Map<string, Uses>(
   packageDirsWithVitestConfig().map((dir) => {
     let files: string[];
@@ -70,7 +79,12 @@ const usesByPackage = new Map<string, Uses>(
       const text = readFileSync(f, "utf8");
       uses.parkPointer ||= IMPORTS_A11Y_HELPERS.test(text) || CALLS_PARK_POINTER.test(text);
       uses.pointerGesture ||= CALLS_POINTER_GESTURE.test(text);
-      if (uses.parkPointer && uses.pointerGesture) break;
+      if (CALLS_TOUCH_GESTURE.test(text)) {
+        touchCallers.push({
+          file: f.slice(repoRoot.length + 1),
+          parks: CALLS_PARK_TOUCH.test(text),
+        });
+      }
     }
     return [dir, uses];
   }),
@@ -110,7 +124,22 @@ describe("pointer gesture command registration", () => {
       const config = readFileSync(join(dir, "vitest.config.ts"), "utf8");
       expect(
         config.includes("...pointerGestureCommands"),
-        `${rel}/src calls commands.mouseDrag, commands.mouseMove or commands.touchGesture but ${rel}/vitest.config.ts does not spread ...pointerGestureCommands into its browser commands`,
+        `${rel}/src calls commands.mouseDrag, commands.mouseMove, commands.touchGesture or commands.parkTouch but ${rel}/vitest.config.ts does not spread ...pointerGestureCommands into its browser commands`,
+      ).toBe(true);
+    });
+  }
+});
+
+describe("touch gesture callers park their touch", () => {
+  it("finds files calling commands.touchGesture (the scan is not silently empty)", () => {
+    expect(touchCallers.length).toBeGreaterThan(0);
+  });
+
+  for (const { file, parks } of touchCallers) {
+    it(`${file} calls commands.parkTouch`, () => {
+      expect(
+        parks,
+        `${file} calls commands.touchGesture but never commands.parkTouch, so on Linux Chromium a later test's tap can lose its click; call it in an afterEach`,
       ).toBe(true);
     });
   }
