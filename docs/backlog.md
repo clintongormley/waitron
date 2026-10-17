@@ -4347,9 +4347,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A707. On a phone, a paint grid's block menu or Copy to… chooser can cover the block it belongs to.**
   `placePopover` (`packages/venue-service/src/dashboard/paint-grid-parts.ts`) moves a menu that
-  does not fit below its trigger up over it. The staffing grid's block editor now opens above its
-  block when it fits there and not below; Opening hours' block menu and the Copy to… chooser
-  remain. Next: place them above or beside the block instead.
+  does not fit below its trigger up over it. The staffing grid's block editor opens above its
+  block when it fits there and not below; with room on neither side it still covers the block, and
+  at 390 px the wide editor can cover blocks in the next column (A761's look, 2026-10-17). Opening
+  hours' block menu and the Copy to… chooser have no such placement. Next: place them above or
+  beside the block instead.
 
 - **A708. The special-day staffing painter draws every date on the location's baseline changeover,
   while each date's opening hours and staffing slots use that date's own.** So when a changeover

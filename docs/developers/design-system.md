@@ -2226,7 +2226,8 @@ outline and opens its editor: Staff role (a searchable list) and How many on one
 `[Cancel] [Delete] … [Save]` below, with a fixed gap keeping Save apart from Delete. Only the picked
 block's top and bottom edges resize it, by a drag that starts on one. The block stays
 picked until the focus leaves both it and its editor; a click on the editor's blank space stays
-inside it. The editor opens below the block, or above it when it fits there and not below. It keeps
+inside it. The editor opens below the block, or above it when it fits there and not below; with room on
+neither side it covers the block. It keeps
 a change only on Save, which Enter in How many also presses; Cancel, Escape, a click outside, the
 focus leaving, or a drag that paints or resizes throw the change away. Save stays quiet until the
 role or number differs from the block's, and while a block's staff role no longer exists it waits
@@ -2394,13 +2395,17 @@ and nothing guards it across screens:
   (`packages/staffing/src/dashboard/staffing-season-painter.ts` and
   `staffing-special-day-painter.ts`). Each has a sibling `*.unsaved.test.ts`;
 - A761: the staffing grid's block editor (`packages/staffing/src/dashboard/staffing-grid.ts`).
-  Its Save writes its own comparison (`sameBlock` of the draft against the block as it was opened)
-  instead of taking a draft scope: the owner wants a click outside to throw its change away, and a
-  registered scope would make leaving the painter ask about it (owner, 2026-10-16);
+  Its Save writes its own comparison (`sameBlock` of the draft against the block as it was opened),
+  and it takes no draft scope and has no `*.unsaved.test.ts`. The owner wants a click outside to
+  throw its change away (owner, 2026-10-16); taking no scope, so that leaving the painter does not
+  ask about the editor, is Decision 8 of the
+  [A761 plan](../superpowers/plans/2026-10-17-a761-staffing-grid-paint-and-editor.md). Closing the
+  tab, reloading or going Back with a changed editor open therefore also throws its change away
+  without asking;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
-  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
-  the one form that writes its own comparison (`chosen !== activeProfileId`) instead of a draft
+  till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog writes
+  its own comparison (`chosen !== activeProfileId`) instead of a draft
   scope: a scope registered with the till's coordinator would be unsaved whenever another profile is
   chosen, so the app's unsaved-changes check before a switch (`#onProfileSwitch` in
   `apps/till/src/till-app.ts`) would ask about the switch itself every time. See
@@ -2641,7 +2646,8 @@ editing, offers a danger-styled Discard changes action and emits `wt-unsaved-cho
 `detail: { decision: "keep" | "discard" }`. Escape chooses Keep. Closing its `open` property
 for an aborted request emits no choice. Its message is the inner dialog's accessible description.
 Keep the original editor mounted until the coordinator approves leaving, so Keep restores focus
-and preserves the draft. Read-only and automatically saved forms need no draft scope.
+and preserves the draft. Read-only and automatically saved forms need no draft scope, and neither does the staffing grid's
+block editor (A761, in the A331 list above).
 
 The dashboard, till and setup shells share this controller and the accepted-history adapter.
 Its leave callback receives the destination URL so Account settings can retain underlying
