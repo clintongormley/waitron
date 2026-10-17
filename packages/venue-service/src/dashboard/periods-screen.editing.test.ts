@@ -922,3 +922,36 @@ it("editing a period marks the colours its department's other periods use, never
   expect(marks.blue).toEqual(["Brunch"]);
   expect(checkedColour(dialog)).toBe("red");
 });
+
+it("a page redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
+  const data = model();
+  data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  const chooser = () =>
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+      "wt-colour-chooser[name=colour]",
+    )!;
+  const users = dialog.colourUsers;
+  const choices = chooser().choices;
+  el.requestUpdate();
+  await el.updateComplete;
+  await dialog.updateComplete;
+  expect(dialog.colourUsers).toBe(users);
+  expect(chooser().choices).toBe(choices);
+  data.departments[0]!.periods[1]!.colour = "blue";
+  el.api.rereadWatches();
+  await expect.poll(() => dialog.colourUsers).not.toBe(users);
+  expect(dialog.colourUsers).toEqual([{ name: "Dinner", colour: "blue" }]);
+});
+
+it("a page redraw hands a dialog asking for the department the same department list", async () => {
+  const el = await mount((async () => twoDepartments()) as DashboardRequest);
+  const dialog = await edit(el);
+  const departments = dialog.departments;
+  const users = dialog.colourUsers;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(dialog.departments).toBe(departments);
+  expect(dialog.colourUsers).toBe(users);
+});

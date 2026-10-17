@@ -1,5 +1,4 @@
 import { LitElement, css, html, nothing } from "lit";
-import { currentLocale } from "@waitron/dashboard-kit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -8,7 +7,6 @@ import {
   focusFirstInvalid,
   saveActionState,
   submitOnEnter,
-  type ColourChoice,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -23,8 +21,9 @@ import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import {
-  calendarColourChoices,
   firstUnusedCalendarColour,
+  NO_COLOUR_USERS,
+  rememberedColourChoices,
   type ColourUser,
 } from "./calendar-colours.js";
 import { format } from "./hours-view.js";
@@ -39,14 +38,13 @@ type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   departmentId: string;
 };
 type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
-const NO_USERS: readonly ColourUser[] = [];
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
-const empty = (users: readonly ColourUser[] = []): Draft => ({
+const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
   name: "",
-  colour: firstUnusedCalendarColour(users.map(({ colour }) => colour)),
+  colour: firstUnusedCalendarColour(users),
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
@@ -219,21 +217,11 @@ export class PeriodDialog extends LitElement {
   private get shownColourUsers(): readonly ColourUser[] {
     if (!this.choosesDepartment) return this.colourUsers;
     return (
-      this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ?? NO_USERS
+      this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ??
+      NO_COLOUR_USERS
     );
   }
-  private choicesFor?: { users: readonly ColourUser[]; locale: string; choices: ColourChoice[] };
-  private colourChoices(): ColourChoice[] {
-    const users = this.shownColourUsers;
-    const locale = currentLocale();
-    if (this.choicesFor?.users !== users || this.choicesFor.locale !== locale)
-      this.choicesFor = {
-        users,
-        locale,
-        choices: calendarColourChoices((colour) => t(`hours.colour.${colour}`), users),
-      };
-    return this.choicesFor.choices;
-  }
+  private readonly colourChoices = rememberedColourChoices((colour) => t(`hours.colour.${colour}`));
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
   private get choosesDepartment() {
@@ -298,15 +286,8 @@ export class PeriodDialog extends LitElement {
         staffMenuIds: this.draft.staffMenuIds.filter((id) => id !== value),
       };
     if (field === "colour") this.colourPicked = true;
-    if (field === "departmentId" && !this.colourPicked) {
-      const department = this.departments?.find((entry) => entry.id === value);
-      this.draft = {
-        ...this.draft,
-        colour: firstUnusedCalendarColour(
-          (department ? department.colourUsers : this.colourUsers).map(({ colour }) => colour),
-        ),
-      };
-    }
+    if (field === "departmentId" && !this.colourPicked)
+      this.draft = { ...this.draft, colour: firstUnusedCalendarColour(this.shownColourUsers) };
     if (this.refusalField() === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -489,7 +470,7 @@ export class PeriodDialog extends LitElement {
             label=${t("hours.colour")}
             required
             .value=${this.draft.colour}
-            .choices=${this.colourChoices()}
+            .choices=${this.colourChoices(this.shownColourUsers)}
             .usedByLabel=${this.usedByLabel}
             .error=${this.error("colour")}
             ?disabled=${this.busy}
