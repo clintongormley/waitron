@@ -1510,6 +1510,19 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   station's times. One `StationShow` from both callers, one shared drawing of those cases and one
   watch would leave `stationMode` only for what differs — left open by A722 Part 3's review.
 
+- **A failed re-read of the prep-station list keeps the stations already shown** in the
+  Calendar's Show picker; only a list that never loaded leaves Show with departments only. Kept
+  so a brief network drop does not lose a manager's chosen station — left open by A722 Part 3's
+  Codex review, #1834.
+
+- **Opening the Year from a station's Week may keep `/station/<id>` in the address**, though the
+  Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
+
+- **Cosmetic points from A722 Part 3's look, #1834:** the Spanish phone Month breaks "Sin
+  pedidos" mid-word, as holiday names already do; at 320 px a 45-letter station name scrolls
+  Show's open list sideways (the page does not widen); a station's Month has no key naming which
+  bar is which department (hover shows it; the All departments Month has none either).
+
 - **The painter cannot resize a block by dragging its edge**; painting over a block lengthens it
   and painting Closed shortens it — left open by A506-8, #1634.
 
