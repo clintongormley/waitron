@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -171,6 +172,7 @@ describe("remaining accepted order attendance", () => {
         "POST",
         `/api/parties/${p.partyId}/unpaid-departure`,
         {
+          expectedEdits: await closingEditsForTest(suite.db, p.partyId),
           expectedPartyRevision: party!.revision,
           reason: "Guests left",
           operatorId: v.adminId,

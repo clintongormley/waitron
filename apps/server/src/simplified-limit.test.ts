@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -500,7 +501,11 @@ describe("a card on the integrated reader", () => {
   it("is refused for an open bill over the limit before the reader is asked, leaving no mark", async () => {
     const { tabId } = await seated(venue.app, { Lote: 1, Céntimo: 1 });
     const before = written();
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", { id: tabId, lines: [] });
+    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      id: tabId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
+      lines: [],
+    });
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
     expect(written()).toEqual(before);
@@ -617,6 +622,7 @@ describe("an unpaid departure", () => {
       "POST",
       `/api/parties/${partyId}/unpaid-departure`,
       {
+        expectedEdits: await closingEditsForTest(venue.db, partyId),
         expectedPartyRevision: partyRevision(partyId),
         reason: "Se marcharon",
         override: { personId: venue.adminId, pin: "1234" },

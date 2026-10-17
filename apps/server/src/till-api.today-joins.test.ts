@@ -1,3 +1,4 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -78,7 +79,9 @@ async function post(path: string, body: unknown): Promise<Response> {
   return app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(await withFloorRevision(v, path, body)),
+    body: JSON.stringify(
+      await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+    ),
   });
 }
 

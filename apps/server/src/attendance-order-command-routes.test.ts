@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import {
   placeOrder,
   setOrderInvoiceChoice,
@@ -266,6 +267,7 @@ describe("accepted till order command attendance", () => {
         "POST",
         `/api/parties/${party.partyId}/unpaid-departure`,
         {
+          expectedEdits: await closingEditsForTest(suite.db, party.partyId),
           expectedPartyRevision: party.revision,
           reason: "Guests left",
           operatorId: v.adminId,
