@@ -4,6 +4,7 @@ import { colorOrNull } from "./color-inheritance.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { validateOptionalTranslations } from "./optional-translations.js";
 import { isProductOrdering, type ProductOrdering } from "./product-ordering.js";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
@@ -88,7 +89,7 @@ function requiredText(value: unknown, field: string): string {
 /** Optional translated text: null/absent or an all-blank map means "no value" (falls back to name). */
 function nullableTranslations(value: unknown, field: string): Record<string, string> | null {
   if (value === null || value === undefined) return null;
-  return nonBlankTranslations(translations(value, field));
+  return nonBlankTranslations(validateOptionalTranslations(translations(value, field)));
 }
 
 /** `null` is a variant's blank; a product with no parent refuses it as malformed. */

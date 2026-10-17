@@ -140,9 +140,7 @@ describe("unit operations", () => {
     expect(await run((tx) => getUnit(tx, unit.id))).toEqual(saved);
   });
 
-  // The content-language read is the only SELECT a create, or an update that supplies both maps,
-  // issues; the write itself uses `returning`.
-  it("reads the content languages once for a create and once for an update", async () => {
+  it("reads content languages only for an update that merges stored translations", async () => {
     await run(async (tx) => {
       const reads = vi.spyOn(tx, "select");
       const unit = await createUnit(
@@ -156,7 +154,7 @@ describe("unit operations", () => {
         },
         "en",
       );
-      expect(reads).toHaveBeenCalledTimes(1);
+      expect(reads).toHaveBeenCalledTimes(0);
       reads.mockClear();
       await updateUnit(tx, unit.id, { name: { en: "Liter" }, abbreviation: { en: "L" } }, "en");
       expect(reads).toHaveBeenCalledTimes(1);

@@ -4,7 +4,7 @@ import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
 import { AppError } from "@waitron/shared";
-import { contentLanguagesOr, readContentLanguages } from "./content-languages.js";
+import { contentLanguagesOr } from "./content-languages.js";
 import { contentLanguages } from "./schema/menu.js";
 import {
   mergeOptionalTranslations,
@@ -99,19 +99,19 @@ export async function createUnit(
   input: CreateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
+  void fallbackLanguage;
   const staffName = unitStaffText(input.staffName, "staffName");
   const staffAbbreviation = unitStaffText(input.staffAbbreviation, "staffAbbreviation");
-  validateOptionalTranslations(input.name);
-  validateOptionalTranslations(input.abbreviation);
-  const config = await readContentLanguages(tx, fallbackLanguage);
+  const name = validateOptionalTranslations(input.name);
+  const abbreviation = validateOptionalTranslations(input.abbreviation);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
     .values({
       staffName,
       staffAbbreviation,
-      name: mergeOptionalTranslations(null, input.name, config) ?? {},
-      abbreviation: mergeOptionalTranslations(null, input.abbreviation, config) ?? {},
+      name,
+      abbreviation,
       precision: input.precision,
       measure: input.measure ?? false,
     })

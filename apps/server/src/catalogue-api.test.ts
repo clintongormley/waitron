@@ -2560,13 +2560,12 @@ describe("mountCatalogueApi — products", () => {
     expect(flags(await read())).toEqual(flags(saved));
   });
 
-  it("checks a variant's customer name against the default language only when it is saved Active", async () => {
+  it("saves incomplete names on newly active and inactive variants without a default companion", async () => {
     const app = mountApp("es-ES");
     const { parentId } = await parentWithVariant(app);
     const parent = (await (
       await send(app, "GET", `/management-api/products/${parentId}/editor`)
     ).json()) as { variants: Record<string, unknown>[] };
-    // French only: it names neither the venue's default language nor any fallback.
     const french = {
       name: "Café corto",
       customerName: { fr: "Café court" },
@@ -2580,11 +2579,17 @@ describe("mountCatalogueApi — products", () => {
         body: { ...parent, variants: [...parent.variants, { ...french, active }] },
       });
     expect((await put(false)).status).toBe(200);
-    const refused = await put(true);
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "content.translation_required" },
-    });
+    const saved = await put(true);
+    expect(saved.status).toBe(200);
+    const reread = await (
+      await send(app, "GET", `/management-api/products/${parentId}/editor`)
+    ).json();
+    expect(
+      reread.variants.find(
+        (variant: { active: boolean; name: string }) =>
+          variant.active && variant.name === "Café corto",
+      ),
+    ).toMatchObject({ customerName: { fr: "Café court" }, active: true });
   });
 
   it("reads an archived variant without the default language, and refuses either save state", async () => {
@@ -2609,7 +2614,7 @@ describe("mountCatalogueApi — products", () => {
     );
     expect(untranslated.status).toBe(400);
     expect(await untranslated.json()).toMatchObject({
-      error: { code: "content.translation_required" },
+      error: { code: "content.translation_invalid" },
     });
     const parent = await editor(parentId);
     const french = {

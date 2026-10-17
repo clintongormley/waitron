@@ -205,7 +205,7 @@ async function existingWrite(
 
 describe("shared translation writes", () => {
   it.each(kinds)(
-    "%s existing writer checks the same default and accepts its explicit companion",
+    "%s existing writer retains its current translation rules and exact saved maps",
     async (kind) => {
       await seedTenant(suite.db);
       const ids = await withTransaction(suite.db, (tx) => fixture(tx));
@@ -219,18 +219,24 @@ describe("shared translation writes", () => {
           staffName: "Staff unit",
           staffAbbreviation: "su",
         });
+      } else if (kind === "product" || kind === "variant") {
+        await withTransaction(suite.db, (tx) =>
+          existingWrite(tx, kind, ids, { en: "English only" }),
+        );
+        const [stored] = await suite.db
+          .select({ customerName: products.customerName })
+          .from(products)
+          .where(eq(products.id, ids[kind]));
+        expect(stored!.customerName).toEqual({ en: "English only" });
       } else
         await expect(
           withTransaction(suite.db, (tx) => existingWrite(tx, kind, ids, { en: "English only" })),
         ).rejects.toMatchObject({
           code: codes[kind],
-          params:
-            kind === "product" || kind === "variant"
-              ? { language: "es" }
-              : {
-                  language: "es",
-                  field: kind === "option_label" ? "labels.0.customerName" : "customerName",
-                },
+          params: {
+            language: "es",
+            field: kind === "option_label" ? "labels.0.customerName" : "customerName",
+          },
         });
       await withTransaction(suite.db, async (tx) => {
         await existingWrite(tx, kind, ids, { en: "English", es: "Castellano" });

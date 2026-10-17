@@ -149,20 +149,22 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "product.variant_not_found" });
   });
 
-  it("requires the default language in a variant's customer name when one is given", async () => {
-    await expect(
-      run((tx) =>
-        setProductVariants(
-          tx,
-          productId,
-          [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
-          "en",
-        ),
+  it("saves a supplied variant customer name without the default language", async () => {
+    const saved = await run((tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
+        "en",
       ),
-    ).rejects.toMatchObject({ code: "content.translation_required" });
+    );
+    expect(saved[0]!.customerName).toEqual({ es: "Pequeño" });
+    expect((await run((tx) => listProductVariants(tx, productId)))[0]!.customerName).toEqual({
+      es: "Pequeño",
+    });
   });
 
-  it("refuses the first Active variant's missing default language before a later variant's malformed name", async () => {
+  it("refuses a later malformed name while allowing an earlier variant to omit the default language", async () => {
     const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "Pequeño" } };
     const laterNames: Record<string, string>[] = [
       { "!!": "Large" },
@@ -179,8 +181,8 @@ describe("product variants", () => {
           ),
         ),
       ).rejects.toMatchObject({
-        code: "content.translation_required",
-        params: { language: "en" },
+        code: "content.translation_invalid",
+        params: {},
       });
   });
 

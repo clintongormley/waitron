@@ -232,16 +232,6 @@ describe("unit management routes", () => {
       {
         staffName: "Staff unit",
         staffAbbreviation: "su",
-        name: { fr: "tasse" },
-        precision: 0,
-        abbreviation: { en: "c" },
-      },
-      "content.translation_invalid",
-    ],
-    [
-      {
-        staffName: "Staff unit",
-        staffAbbreviation: "su",
         name: "cup",
         precision: 0,
         abbreviation: { en: "c" },
@@ -274,20 +264,40 @@ describe("unit management routes", () => {
     expect(await response.json()).toMatchObject({ error: { code } });
   });
 
-  it("refuses a translated abbreviation in a disabled language", async () => {
-    const response = await send("POST", "/management-api/units", {
-      staffName: "Staff unit",
-      staffAbbreviation: "su",
-      name: { en: "cup" },
-      precision: 0,
-      abbreviation: { fr: "t" },
-    });
-    expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: unknown }).error).toEqual({
-      code: "content.translation_invalid",
-      params: {},
-    });
-  });
+  it.each([
+    { name: { fr: "tasse" }, abbreviation: { en: "c" } },
+    { name: { en: "cup" }, abbreviation: { fr: "t" } },
+  ])(
+    "keeps authored disabled translations on create, then refuses disabled edits: %j",
+    async (maps) => {
+      const response = await send("POST", "/management-api/units", {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        ...maps,
+        precision: 0,
+      });
+      expect(response.status).toBe(201);
+      const saved = await response.json();
+      expect(saved).toEqual({
+        id: expect.any(String),
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        ...maps,
+        precision: 0,
+      });
+      const read = await send("GET", `/management-api/units/${saved.id}`);
+      expect(await read.json()).toEqual(saved);
+      const field = maps.name.fr ? "name" : "abbreviation";
+      const refused = await send("PATCH", `/management-api/units/${saved.id}`, {
+        [field]: { fr: "Changed" },
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: { code: "content.translation_invalid", params: {} },
+      });
+      expect(await (await send("GET", `/management-api/units/${saved.id}`)).json()).toEqual(saved);
+    },
+  );
 
   it("reports the abbreviation field when the abbreviation shape is wrong", async () => {
     const response = await send("POST", "/management-api/units", {

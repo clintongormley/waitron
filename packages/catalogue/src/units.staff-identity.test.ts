@@ -34,6 +34,26 @@ describe("explicit unit staff identity", () => {
     });
   });
 
+  it("retains authored disabled-language text on create while refusing later disabled edits", async () => {
+    await suite.db
+      .insert(contentLanguages)
+      .values({ defaultLanguage: "es", languages: ["es", "en"] });
+    const saved = await run((tx) =>
+      createUnit(
+        tx,
+        { ...input(), name: { fr: " Kilogramme " }, abbreviation: { fr: " kg-fr " } },
+        "es",
+      ),
+    );
+    expect(saved.name).toEqual({ fr: "Kilogramme" });
+    expect(saved.abbreviation).toEqual({ fr: "kg-fr" });
+    expect(await run((tx) => getUnit(tx, saved.id))).toEqual(saved);
+    await expect(
+      run((tx) => updateUnit(tx, saved.id, { name: { fr: "Nouveau" } }, "es")),
+    ).rejects.toMatchObject({ code: "content.translation_invalid" });
+    expect(await run((tx) => getUnit(tx, saved.id))).toEqual(saved);
+  });
+
   it("clears enabled translations, preserves disabled text and keeps PATCH omissions", async () => {
     await suite.db
       .insert(contentLanguages)
