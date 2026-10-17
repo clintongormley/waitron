@@ -7,6 +7,7 @@ import {
   focusFirstInvalid,
   saveActionState,
   submitOnEnter,
+  visuallyHiddenStyles,
   type DraftScope,
   type LeaveReason,
 } from "@waitron/ui";
@@ -162,12 +163,7 @@ export class SeasonsWindow extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
+        ${visuallyHiddenStyles}
       }
     `,
   ];

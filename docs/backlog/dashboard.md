@@ -919,7 +919,7 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 **Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
 readable pages, showing their name and containing page. Page matches precede inner results.
 The approved scope is preserved in the [implementation plan](../superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
-Periods and Seasons are registered as `venue-service:periods` and `venue-service:seasons`, windows in the Calendar (A719, A721). The Week is
+Periods and Seasons are registered as `venue-service:periods` and `venue-service:seasons`, windows in the Calendar (the Periods window from A719, the Seasons window from A721). The Week is
 registered as `venue-service:week`, and the others register theirs when they exist.
 
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s

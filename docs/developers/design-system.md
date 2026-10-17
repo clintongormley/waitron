@@ -257,8 +257,9 @@ fill as its tint, the station dot as its line, and `--wt-color-text` as its text
 `packages/venue-service/src/dashboard/`, over `STATION_COLOUR_TOKENS`, `station-colour-styles.ts`).
 `seasonTintStyles` sets `--season-tint`, `--season-on-tint` and `--season-tint-line` on each
 `[data-tint]` element, whose value is the colour's name; `seasonTints` reads a stored value that
-names no calendar colour as grey. The season chips (`season-chips.ts`), the Year's days, the swatches of a viewer's Seasons window
-and the staffing season painter's chip take the tint, and the Month's and the Staffing month's days
+names no calendar colour as grey. The season chips (`season-chips.ts`), the Year's days, the chips of both season painters
+(`season-painter.ts`, `staffing-season-painter.ts`), the period dialog's and the Periods window's
+season chips, and the swatches of a viewer's Seasons window take the tint, and the Month's and the Staffing month's days
 take the line as their top border.
 Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
 orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`). The

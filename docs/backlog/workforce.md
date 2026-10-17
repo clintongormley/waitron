@@ -129,8 +129,8 @@ the text guard would fail to catch in a later edit.
 
 ## Staffing paint in calendar delete confirmations
 
-The A585 design leaves the count of staffing paint out of season and special-day date deletion
-confirmations (open point 7). Decide whether to add a shared deletion-impact seam, so venue-service
+The A585 design leaves the count of staffing paint out of the Seasons window's delete note and the
+special-day date deletion confirmation (open point 7). Decide whether to add a shared deletion-impact seam, so venue-service
 can ask contributing modules for that count, or deliberately keep the confirmation without it.
 The completed rota retirement does not depend on that choice.
 

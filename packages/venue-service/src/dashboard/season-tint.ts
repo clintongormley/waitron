@@ -2,8 +2,6 @@ import { CALENDAR_COLOURS, isStationColour, type CalendarColour } from "@waitron
 import { css, unsafeCSS } from "lit";
 import { STATION_COLOUR_TOKENS } from "./station-colour-styles.js";
 
-/** A season is painted with the station tints of its colour, its text in the page's own text
- *  colour. */
 export const SEASON_TINT_TOKENS = Object.fromEntries(
   CALENDAR_COLOURS.map((colour) => [
     colour,
