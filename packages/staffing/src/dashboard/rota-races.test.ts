@@ -30,6 +30,7 @@ async function mount(
     warnings?: (week: string) => Promise<Warnings>;
     publish?: () => Promise<unknown>;
     change?: (week: string) => Promise<unknown>;
+    fill?: () => Promise<unknown>;
   } = {},
 ) {
   setLocale("en");
@@ -44,6 +45,7 @@ async function mount(
       return config.warnings ? config.warnings(week) : quiet();
     }
     if (path.endsWith("/publish")) return config.publish?.() ?? { breaches: [] };
+    if (path.endsWith("/rota/shifts")) return config.fill?.() ?? { shiftId: "new" };
     if (path.endsWith("/change-week"))
       return config.change?.(body!.week) ?? { versionId: "copy", openSwaps: [] };
     throw Error(`unexpected ${method} ${path}`);
@@ -209,3 +211,46 @@ it("closes an open shift editor when another manager publishes its week", async 
   live.invalidate([{ type: "roster_versions" }]);
   await vi.waitFor(() => expect(editor().open).toBe(false));
 });
+
+const popupOpen = (el: RotaView) =>
+  el
+    .shadowRoot!.querySelector("rota-popup")!
+    .shadowRoot!.querySelector("[popover]")!
+    .matches(":popover-open");
+async function openPicker(el: RotaView) {
+  const area = el.shadowRoot!.querySelector<RotaView>("rota-by-area")!;
+  await area.updateComplete;
+  click(area, "[data-slot=empty]");
+  await vi.waitFor(() => expect(popupOpen(el)).toBe(true));
+  const picker = el.shadowRoot!.querySelector<RotaView>("slot-picker")!;
+  await picker.updateComplete;
+  return picker;
+}
+it.each(["lands", "is refused"])(
+  "a fill that %s after the week has moved on leaves the new week's picker alone",
+  async (outcome) => {
+    const old = deferred<unknown>();
+    const { el } = await mount({ fill: () => old.promise });
+    click(await openPicker(el), "[data-person=marc]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("slot-picker")).toBeTruthy());
+    el.week = B;
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<RotaView & { week: { week: string } }>("rota-by-area")?.week
+          .week,
+      ).toBe(B),
+    );
+    const picker = await openPicker(el);
+    if (outcome === "lands") old.resolve({ shiftId: "late" });
+    else old.reject({ code: "connection.failed" });
+    await old.promise.catch(() => undefined);
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("slot-picker")).toBe(picker);
+    expect(popupOpen(el)).toBe(true);
+    expect(picker.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      picker.shadowRoot!.querySelector<HTMLButtonElement>("[data-person=marc]")!.disabled,
+    ).toBe(false);
+  },
+);

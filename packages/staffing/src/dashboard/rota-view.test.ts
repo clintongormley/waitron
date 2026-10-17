@@ -817,6 +817,21 @@ describe("the Rota's week title", () => {
     expect(first).toBeGreaterThan(0);
     expect(Math.abs(width() - first)).toBeLessThanOrEqual(0.5);
   });
+  it("draws no title and asks for nothing before it is given a week", async () => {
+    const { api, request } = rotaApi();
+    const f = document.createElement("div");
+    document.body.append(f);
+    frames.push(f);
+    applyTokens(f);
+    const el = document.createElement("staffing-rota") as View;
+    el.api = api;
+    el.params = {};
+    el.open = vi.fn();
+    f.append(el);
+    await el.updateComplete;
+    expect(normal(q(el, "[data-test=week]")!.textContent!)).toBe("");
+    expect(request).not.toHaveBeenCalled();
+  });
   it("each month name opens that month's Staffing", async () => {
     const el = (await mount()) as Linked;
     expect(months(el)).toHaveLength(0);
@@ -1103,6 +1118,23 @@ describe("the Rota's count buttons and day headers", () => {
     const over = r.querySelector<HTMLElement>("[data-shift=over]")!;
     await vi.waitFor(() => expect(r.activeElement).toBe(over));
     expect(over.getAttribute("tabindex")).toBe("-1");
+  });
+  it("in Everyone a count whose only target belongs to someone no longer listed leaves focus on the count", async () => {
+    const { api } = rotaApi(async (w) => {
+      const r = rotaWeek(w);
+      r.people = r.people.filter((p) => p.personId !== "laia");
+      return r;
+    });
+    const el = await mount(api, "1280px", { area: "everyone" }, "rota-by-person");
+    const r = await everyone(el);
+    expect(r.querySelector("[data-shift=over]")).toBeNull();
+    const over = countButton(el, "over");
+    over.focus();
+    over.click();
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(over);
+    expect(r.activeElement).toBeNull();
   });
   it("in Everyone the unfilled count steps to the next day header that says it has unfilled slots", async () => {
     const el = await mount(twoUnfilled(), "1280px", { area: "everyone" }, "rota-by-person");

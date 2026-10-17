@@ -355,6 +355,26 @@ describe("the people Everyone draws, in order", () => {
       "ibra",
     ]);
   });
+  it("gives the same order whatever order the read lists people in", () => {
+    const read = rotaWeek();
+    const ana = read.people[0]!;
+    const people = [
+      { ...ana, personId: "c-ana" },
+      { ...ana, personId: "a-ana" },
+      { ...ana, personId: "b-ana" },
+    ];
+    for (const listed of [people, [...people].reverse()]) {
+      read.people = listed;
+      expect(peopleInOrder(read).map((p) => p.personId)).toEqual(["a-ana", "b-ana", "c-ana"]);
+    }
+  });
+  it("counts a staff role the week does not list as no staff role", () => {
+    const read = rotaWeek();
+    read.people = read.people
+      .filter((p) => p.personId === "ibra" || p.personId === "laia")
+      .map((p) => (p.personId === "laia" ? { ...p, name: "Zoe", staffRoleIds: ["retired"] } : p));
+    expect(peopleInOrder(read).map((p) => p.personId)).toEqual(["ibra", "laia"]);
+  });
   it("takes a person's lowest staff-role position, not their first listed", () => {
     const read = rotaWeek();
     read.people = read.people.filter((p) => p.personId === "marc" || p.personId === "laia");

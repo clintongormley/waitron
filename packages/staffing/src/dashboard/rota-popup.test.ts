@@ -305,6 +305,25 @@ describe("rota-popup", () => {
     placed();
   });
 
+  it("a sheet shown again after its content changes stays open at the foot without moving focus", async () => {
+    await useViewport(390, 844);
+    const anchor = anchorAt(100, 300);
+    const inside = document.createElement("button");
+    inside.textContent = "Ana";
+    el.append(inside);
+    el.sheet = true;
+    await el.updateComplete;
+    el.show(anchor);
+    inside.focus();
+    content.style.height = "100px";
+    el.show(anchor);
+    expect(el.shown).toBe(true);
+    expect(deepActive()).toBe(inside);
+    near(box().bottom, 844);
+    near(box().left, 0);
+    expect(closes).toBe(0);
+  });
+
   it("a sheet's Cancel closes it and returns focus to what opened it", async () => {
     await useViewport(390, 844);
     const anchor = anchorAt(100, 300);
