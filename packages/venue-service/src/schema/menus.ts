@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { catalogues, count, enumCheck, enumType, id, label, newId, table } from "@waitron/db";
+import {
+  catalogues,
+  count,
+  enumCheck,
+  enumType,
+  floorPlanSets,
+  id,
+  label,
+  newId,
+  table,
+} from "@waitron/db";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import { departments } from "./service.js";
 
@@ -16,6 +26,14 @@ export const menuPeriods = table(
     colour: calendarColour("colour").notNull().default("grey"),
     menuId: id("menu_id").notNull(),
     endOffsetMinutes: count("end_offset_minutes").notNull().default(0),
+    /**
+     * A set of this period's own department. The key names core's floor_plan_sets, so the
+     * database takes any department's set; the period routes refuse another department's with
+     * menu_period.invalid (floorPlanSetId) and the configuration import with
+     * menu_periods.floor_plan_set_id. A composite key to department_floor_plan_sets would rebuild
+     * menu_periods, whose rebuild empties menu_period_staff_menus (its key cascades).
+     */
+    floorPlanSetId: id("floor_plan_set_id").references(() => floorPlanSets.id),
   },
   (t) => [
     foreignKey({

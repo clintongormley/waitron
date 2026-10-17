@@ -91,6 +91,7 @@ export type {
 export { diningTables } from "./schema/dining-tables.js";
 export {
   floorPlanPlacements,
+  floorPlanSets,
   floorPlanShape,
   floorPlans,
   floorPlanTableParts,

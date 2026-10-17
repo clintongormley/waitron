@@ -85,6 +85,8 @@ declare module "@waitron/shared" {
     };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
+    /** Another of the department's floor plan sets already has `name`. */
+    "floor_plan_set.name_taken": { departmentId: string; name: string };
     "menu_timetable.invalid": {
       field: string;
       periodId?: string;
