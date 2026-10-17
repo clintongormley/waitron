@@ -7,6 +7,7 @@ import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstSetupState, FirstSetupHold } from "./first-setup-state.js";
 import type { VenueResult } from "./venue-apply.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
+import { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 import "./errors.js";
 
 export type FirstSetupActivationHost = Pick<
@@ -215,4 +216,43 @@ export async function publishCheckedFirstSetup(
   await beforeComplete?.();
   await advance({ kind: "complete" });
   return result;
+}
+
+export interface FirstSetupFinishDeps {
+  check(state: FirstSetupState): Promise<CheckedFirstSetupCommit | null>;
+  publish(
+    state: FirstSetupState,
+    checked: CheckedFirstSetupCommit,
+    beforeComplete: () => Promise<unknown>,
+  ): Promise<VenueResult>;
+}
+export async function finishFirstSetup(
+  host: FirstSetupActivationHost & Pick<ReturnType<typeof createFirstSetupRuntime>, "resolution">,
+  deps: FirstSetupFinishDeps,
+  owner: FirstSetupOwnerAttempt,
+  publicationDigest: string | ((state: FirstSetupState) => string),
+  hold: FirstSetupHold,
+): Promise<VenueResult> {
+  let state = await host.owner.authorize(owner);
+  const ownership = [...state.history]
+    .reverse()
+    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
+    throw new AppError("setup.owner_required", {});
+  if (!["activation-started", "committed", "publication"].includes(state.status)) conflict();
+  host.assertSelection(state);
+  const digest =
+    typeof publicationDigest === "string" ? publicationDigest : publicationDigest(state);
+  if (!isDeepStrictEqual(state.inputs.$publication, { digest })) conflict();
+  const checked = await deps.check(state);
+  if (checked === null) conflict();
+  const applyAudit = await prepareFirstSetupFinishAudit(host, state, checked);
+  if (state.status === "activation-started")
+    state = await host.store.update(
+      state.frozen.attemptId,
+      state.revision,
+      { kind: "committed", result: checked },
+      hold,
+    );
+  return deps.publish(state, checked, applyAudit);
 }

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import { readMembershipTrustSet, readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
+  finishFirstSetup,
   publishCheckedFirstSetup,
   checkedFirstSetupCommit,
   firstSetupProvisionRequest as firstFiscalProvisionRequest,
@@ -27,7 +27,6 @@ import {
 import { putCredential, tryGetCredential } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
-import { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 
 function conflict(): never {
   throw new AppError("setup.attempt_uncertain", {});
@@ -199,34 +198,28 @@ export async function finishFirstFiscalSetup(
   body: Record<string, unknown>,
   hold: FirstSetupHold,
 ): Promise<VenueResult> {
-  let state = await host.owner.authorize(owner);
-  const ownership = [...state.history]
-    .reverse()
-    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
-    throw new AppError("setup.owner_required", {});
-  if (!["activation-started", "committed", "publication"].includes(state.status)) conflict();
-  host.assertSelection(state);
-  const publication = firstFiscalPayload(host, state, body);
-  if (!isDeepStrictEqual(state.inputs.$publication, { digest: publication.digest })) conflict();
-  const checked = await checkedFirstFiscalCommit(host, deps, state);
-  if (checked === null) conflict();
-  const applyAudit = await prepareFirstSetupFinishAudit(host, state, checked);
-  if (state.status === "activation-started")
-    state = await host.store.update(
-      state.frozen.attemptId,
-      state.revision,
-      { kind: "committed", result: checked },
-      hold,
-    );
-  return publishCheckedFirstFiscal(
+  let publication: ReturnType<typeof firstFiscalPayload>;
+  return finishFirstSetup(
     host,
-    deps,
-    state,
-    checked,
-    { owner, body, payload: publication },
+    {
+      check: (state) => checkedFirstFiscalCommit(host, deps, state),
+      publish: (state, checked, applyAudit) =>
+        publishCheckedFirstFiscal(
+          host,
+          deps,
+          state,
+          checked,
+          { owner, body, payload: publication },
+          hold,
+          applyAudit,
+        ),
+    },
+    owner,
+    (state) => {
+      publication = firstFiscalPayload(host, state, body);
+      return publication.digest;
+    },
     hold,
-    applyAudit,
   );
 }
 

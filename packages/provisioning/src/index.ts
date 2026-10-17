@@ -121,6 +121,7 @@ export {
 
 export {
   activateFirstSetup,
+  finishFirstSetup,
   publishCheckedFirstSetup,
   checkedFirstSetupCommit,
   firstSetupProvisionRequest,
@@ -129,5 +130,8 @@ export type {
   CheckedFirstSetupCommit,
   FirstSetupActivationHost,
   FirstSetupActivationDeps,
+  FirstSetupFinishDeps,
   FirstSetupPublicationDeps,
 } from "./first-setup-activation.js";
+
+export { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
