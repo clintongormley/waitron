@@ -165,10 +165,12 @@ declare module "@waitron/shared" {
     /** `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`. */
     "hours.invalid": { field: string };
     "season.not_found": { seasonId: string };
-    /** `end_offset`: the change leaves a sending cutoff running into what follows; a boundary
-     *  between two seasons names the season and weekday, a special day its date. */
+    /** `field` is the request path of the refused value, such as `save.2.startsOn`, or `delete`
+     *  (`last`) or `seasons` (`end_offset`). `end_offset`: the change leaves a sending cutoff
+     *  running into what follows; a boundary between two seasons names the season and weekday, a
+     *  special day its date. */
     "season.invalid": {
-      field: "name" | "startsOn" | "seasonId";
+      field: string;
       reason?: "taken" | "last" | "end_offset";
       date?: string;
       departmentId?: string;

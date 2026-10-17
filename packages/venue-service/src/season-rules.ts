@@ -7,6 +7,20 @@ export interface Season {
   colour: CalendarColour;
 }
 
+/** A season to save: with an `id` it changes that season, without one it adds a season. */
+export interface SeasonEntry {
+  id?: string;
+  name: string;
+  startsOn: string;
+  colour: CalendarColour;
+}
+
+/** Only the seasons that change; a season named in neither list is left as it is. */
+export interface SeasonChange {
+  save: readonly SeasonEntry[];
+  delete: readonly string[];
+}
+
 export const DEFAULT_SEASONS: readonly {
   name: string;
   startsOn: string;

@@ -1,7 +1,7 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError, type ErrorParams } from "@waitron/shared";
+import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import type { VenueScope } from "./operations.js";
@@ -11,6 +11,7 @@ import {
   parseSeasonStart,
   seasonOn,
   type Season,
+  type SeasonChange,
 } from "./season-rules.js";
 import {
   readDepartmentSeasonWeeks,
@@ -70,11 +71,24 @@ function parseSeasonInput(
   return { name, startsOn };
 }
 
+/** MM-DD values the starts CHECK accepts and no real start can equal. */
+const TEMPORARY_STARTS = Array.from({ length: 20 * 40 }, (_, i) => {
+  const mm = String(Math.floor(i / 40)).padStart(2, "0");
+  const dd = String(i % 40).padStart(2, "0");
+  return `${mm}-${dd}`;
+}).filter((value) => value !== "02-29" && parseSeasonStart(value) === null);
+
+export function temporaryStart(index: number): string {
+  const value = TEMPORARY_STARTS[index];
+  if (value === undefined) throw new Error(`no temporary season start ${index}`);
+  return value;
+}
+
 /** Every department, since a season change moves days under all of them. */
 async function checkScheduleAfterSeasonWrite(
   tx: Transaction,
   cfg: VenueScope,
-  field: "startsOn" | "seasonId",
+  field: "startsOn" | "seasonId" | "seasons",
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg);
   if (clash !== null) invalid({ field, reason: "end_offset", ...clash });
@@ -131,6 +145,104 @@ export async function addSeason(
     await writeZoneSeasonWeeks(tx, zoneId, [added!.id], weeks.get(split.id)!);
   await checkScheduleAfterSeasonWrite(tx, cfg, "startsOn");
   return added!;
+}
+
+/** Applies a change to the venue's seasons and answers them by start. A changed season keeps its
+ *  id, so its weeks stay with it; a new one copies the weeks of the season holding its start
+ *  before the change; a deleted one's days join the season before it. */
+export async function saveSeasons(
+  tx: Transaction,
+  cfg: VenueScope,
+  change: SeasonChange,
+  at: Date,
+  expectedClockRevision: number,
+): Promise<Season[]> {
+  const all = await ensureDefaultSeasons(tx, cfg);
+  const stored = new Map(all.map((season) => [season.id, season]));
+  for (const id of [...change.delete, ...change.save.flatMap((entry) => entry.id ?? [])])
+    if (!stored.has(id)) throw new AppError("season.not_found", { seasonId: id });
+  const deleted = new Set(change.delete);
+  const sentIds = new Set<string>();
+  const parsed = change.save.map((entry, i) => {
+    if (entry.id !== undefined) {
+      if (sentIds.has(entry.id) || deleted.has(entry.id)) invalid({ field: `save.${i}.id` });
+      sentIds.add(entry.id);
+    }
+    const name = typeof entry.name === "string" ? entry.name.trim() : "";
+    if (name === "") invalid({ field: `save.${i}.name` });
+    const startsOn = parseSeasonStart(entry.startsOn) ?? invalid({ field: `save.${i}.startsOn` });
+    if (!(CALENDAR_COLOURS as readonly unknown[]).includes(entry.colour))
+      invalid({ field: `save.${i}.colour` });
+    return { id: entry.id, name, startsOn, colour: entry.colour as CalendarColour };
+  });
+  const kept = all.filter((season) => !deleted.has(season.id) && !sentIds.has(season.id));
+  const names = new Set(kept.map((season) => season.name));
+  const starts = new Set(kept.map((season) => season.startsOn));
+  parsed.forEach((entry, i) => {
+    if (names.has(entry.name)) invalid({ field: `save.${i}.name`, reason: "taken" });
+    if (starts.has(entry.startsOn)) invalid({ field: `save.${i}.startsOn`, reason: "taken" });
+    names.add(entry.name);
+    starts.add(entry.startsOn);
+  });
+  if (names.size === 0) invalid({ field: "delete", reason: "last" });
+
+  const changed = parsed.filter((entry) => entry.id !== undefined);
+  const added = parsed
+    .filter((entry) => entry.id === undefined)
+    .map((entry) => ({ ...entry, split: seasonOn(all, `2001-${entry.startsOn}`)!.id }));
+  const timed =
+    deleted.size > 0 ||
+    added.length > 0 ||
+    changed.some((entry) => entry.startsOn !== stored.get(entry.id!)!.startsOn);
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    timed ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+  );
+
+  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const only = {
+    seasonIds: [...new Set(added.map((entry) => entry.split))],
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+  };
+  const departmentWeeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover, only);
+  const zoneWeeks = await readZoneSeasonWeeks(tx, cfg, undefined, dayCutover, only);
+
+  if (deleted.size > 0)
+    await tx
+      .delete(seasons)
+      .where(and(eq(seasons.locationId, cfg.locationId), inArray(seasons.id, [...deleted])));
+  // Two passes, so a swap of two names or two starts never meets a unique index mid-way: a final
+  // name is trimmed, so never equals a temporary one.
+  const moving = changed.filter((entry) => {
+    const own = stored.get(entry.id!)!;
+    return own.name !== entry.name || own.startsOn !== entry.startsOn;
+  });
+  for (const [k, entry] of moving.entries())
+    await tx
+      .update(seasons)
+      .set({ name: ` ${entry.id!}`, startsOn: temporaryStart(k) })
+      .where(eq(seasons.id, entry.id!));
+  for (const { id, name, startsOn, colour } of changed)
+    await tx.update(seasons).set({ name, startsOn, colour }).where(eq(seasons.id, id!));
+  for (const { name, startsOn, colour, split } of added) {
+    const [row] = await tx
+      .insert(seasons)
+      .values({ name, startsOn, colour, locationId: cfg.locationId })
+      .returning({ id: seasons.id });
+    for (const [departmentId, weeks] of departmentWeeks) {
+      const week = weeks.get(split);
+      if (week !== undefined) await writeDepartmentSeasonWeeks(tx, departmentId, [row!.id], week);
+    }
+    for (const [zoneId, weeks] of zoneWeeks) {
+      const week = weeks.get(split);
+      if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
+    }
+  }
+  if (timed) await checkScheduleAfterSeasonWrite(tx, cfg, "seasons");
+  return readSeasons(tx, cfg);
 }
 
 /** Deletes a season; its days go to the season before it, and its weeks go with it
