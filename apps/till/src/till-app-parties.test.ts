@@ -4584,6 +4584,8 @@ describe("till-app: the order's groups", () => {
       courseIds: [],
       id,
       position,
+      displayNumber: position,
+      numberPartyId: "v1",
       state,
       firedAt: state === "fired" ? "2026-09-27T10:00:00.000Z" : null,
       remindAt: null,
@@ -5208,11 +5210,14 @@ describe("till-app: the order's groups", () => {
         dish("line-fish", 4, "Fish", "1.000", "g3"),
         dish("line-flan", 5, "Flan", "1.000", "g4"),
       ];
-      const groups: { id: string; position: number; state: OrderGroup["state"] }[] = [
-        { id: "g1", position: 1, state: "fired" },
-        { id: "g2", position: 2, state: "held" },
-        { id: "g3", position: 3, state: "held" },
-        { id: "g4", position: 4, state: "held" },
+      const groups: Pick<
+        OrderGroup,
+        "id" | "position" | "displayNumber" | "numberPartyId" | "state"
+      >[] = [
+        { id: "g1", position: 1, displayNumber: 1, numberPartyId: "v1", state: "fired" },
+        { id: "g2", position: 2, displayNumber: 2, numberPartyId: "v1", state: "held" },
+        { id: "g3", position: 3, displayNumber: 3, numberPartyId: "v1", state: "held" },
+        { id: "g4", position: 4, displayNumber: 4, numberPartyId: "v1", state: "held" },
       ];
       const listed = (): OrderGroup[] =>
         groups
@@ -5295,7 +5300,13 @@ describe("till-app: the order's groups", () => {
             let targetId: string;
             if (target === "new") {
               targetId = `g${groups.length + 1}`;
-              groups.push({ id: targetId, position: groups.length + 1, state: "held" });
+              groups.push({
+                id: targetId,
+                position: groups.length + 1,
+                displayNumber: groups.length + 1,
+                numberPartyId: "v1",
+                state: "held",
+              });
             } else targetId = held(target.groupId).id;
             for (const { lineId, quantity } of moves) {
               const line = lines.find((each) => each.id === lineId)!;
@@ -6071,6 +6082,8 @@ describe("till-app: submitting the draft", () => {
             courseIds: [],
             id: `g${groups.length + 1}`,
             position: groups.length + 1,
+            displayNumber: groups.length + 1,
+            numberPartyId: "v1",
             state: group.release === "fire" ? "fired" : "held",
             firedAt: group.release === "fire" ? "2026-09-27T10:00:00.000Z" : null,
             remindAt: null,
@@ -6213,6 +6226,8 @@ describe("till-app: submitting the draft", () => {
       courseIds: [],
       id,
       position: 1,
+      displayNumber: 1,
+      numberPartyId: "v1",
       state: "fired",
       firedAt: "2026-09-27T10:00:00Z",
       remindAt: null,
@@ -6281,6 +6296,8 @@ describe("till-app: submitting the draft", () => {
       const held = (id: string, position: number): OrderGroup => ({
         ...firedGroup(id, `1 × ${id}`),
         position,
+        displayNumber: position,
+        numberPartyId: "v1",
         state: "held",
         firedAt: null,
       });
@@ -6660,6 +6677,7 @@ describe("till-app: Current orders", () => {
   const noCurrentOrders = () => ({
     readCurrentOrders: vi.fn().mockResolvedValue({
       hasGroups: false,
+      nextDisplayNumber: 1,
       retainedCourses: [],
       revision: 3,
       reminder: null,
@@ -6669,6 +6687,7 @@ describe("till-app: Current orders", () => {
   });
   const orders: CurrentOrders = {
     hasGroups: true,
+    nextDisplayNumber: 2,
     retainedCourses: [],
     revision: 3,
     reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
@@ -6676,6 +6695,8 @@ describe("till-app: Current orders", () => {
       {
         id: "g1",
         position: 1,
+        displayNumber: 1,
+        numberPartyId: "v1",
         state: "fired",
         firedAt: "2026-09-28T19:50:00.000Z",
         remindAt: null,
@@ -6839,6 +6860,7 @@ describe("till-app: Current orders", () => {
   it("moves a held row on another open bill of the party from Current orders", async () => {
     const heldOnCheck: CurrentOrders = {
       hasGroups: true,
+      nextDisplayNumber: 2,
       retainedCourses: [],
       revision: 3,
       reminder: null,
@@ -6846,6 +6868,8 @@ describe("till-app: Current orders", () => {
         {
           id: "g1",
           position: 1,
+          displayNumber: 1,
+          numberPartyId: "v1",
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -6882,6 +6906,8 @@ describe("till-app: Current orders", () => {
             courseIds: [],
             id: "g1",
             position: 1,
+            displayNumber: 1,
+            numberPartyId: "v1",
             state: "held",
             firedAt: null,
             remindAt: null,

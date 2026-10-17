@@ -19,7 +19,12 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { AppError, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  partyTablesName,
+  stringToThousandths,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import { enqueueHoldCorrections, enqueueKitchenTickets } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -52,6 +57,7 @@ import {
 import "./errors.js";
 import { stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
+import { readPartyTables } from "./orders-list.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -88,6 +94,7 @@ export interface OrderGroup {
   position: number;
   displayNumber: number;
   numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -835,6 +842,7 @@ export async function moveLinesToGroup(
         ...lines.map((line) => line.groupId!),
         ...(target === "new" ? [] : [target.groupId]),
       ]);
+      const numberLabels = await readGroupNumberLabels(tx, [partyId]);
       const heldItems = await heldItemsOf(
         tx,
         moves.map((m) => m.lineId),
@@ -891,13 +899,19 @@ export async function moveLinesToGroup(
           };
           const from = printed.get(line.groupId!);
           if (from !== undefined)
-            taken.push({ ...change, workingOrderLineId: item.workingOrderLineId, group: from });
+            taken.push({
+              ...change,
+              workingOrderLineId: item.workingOrderLineId,
+              group: from,
+              numberPartyLabel: numberLabels.get(line.groupId!),
+            });
           const to = printed.get(targetId);
           if (to !== undefined) {
             given.push({
               ...change,
               workingOrderLineId: split ?? item.workingOrderLineId,
               group: to,
+              numberPartyLabel: numberLabels.get(targetId),
             });
           }
         }
@@ -1117,6 +1131,7 @@ async function readGroups(
   partyId: string,
   only?: readonly string[],
 ): Promise<OrderGroup[]> {
+  const numberLabels = await readGroupNumberLabels(tx, [partyId]);
   const scope = only === undefined ? [] : [inArray(orderGroups.id, [...only])];
   const groups = await tx
     .select({
@@ -1179,6 +1194,7 @@ async function readGroups(
     return {
       ...group,
       ...groupNumberIdentity(group),
+      ...(numberLabels.has(group.id) ? { numberPartyLabel: numberLabels.get(group.id)! } : {}),
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
       ...(awayGroups.has(group.id) ? { away: true as const } : {}),
@@ -1343,6 +1359,7 @@ export interface CurrentOrderGroup {
   position: number;
   displayNumber: number;
   numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   /** A snooze's time, until it is cleared or the group fires, empties or moves in a reorder. */
@@ -1388,6 +1405,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   if (party === undefined) throw new AppError("party.not_open", { partyId });
   const family = await partyFamily(tx, partyId);
   const nextDisplayNumber = await nextGroupNumber(tx, partyId);
+  const numberLabels = await readGroupNumberLabels(tx, [partyId]);
   const groups = await tx
     .select({
       id: orderGroups.id,
@@ -1485,6 +1503,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .map(({ createdAt, ...group }) => ({
       ...group,
       ...groupNumberIdentity(group),
+      ...(numberLabels.has(group.id) ? { numberPartyLabel: numberLabels.get(group.id)! } : {}),
       state: group.state as "held" | "fired",
       // `order_groups_fired_at_ck` requires `fired_at` exactly when the group is fired.
       sentAt: group.state === "fired" ? group.firedAt! : createdAt,
@@ -1587,14 +1606,14 @@ export async function printHoldTickets(
   }
 }
 
-/** Of these groups, the positions of those still held whose HOLD ticket was queued. */
+/** Permanent paper numbers of held groups whose HOLD ticket was queued. */
 export async function printedHeldGroups(
   tx: Transaction,
   groupIds: readonly string[],
 ): Promise<Map<string, number>> {
   if (groupIds.length === 0) return new Map();
   const rows = await tx
-    .select({ id: orderGroups.id, position: orderGroups.position })
+    .select({ id: orderGroups.id, displayNumber: orderGroups.displayNumber })
     .from(orderGroups)
     .where(
       and(
@@ -1603,16 +1622,17 @@ export async function printedHeldGroups(
         isNotNull(orderGroups.holdPrintedAt),
       ),
     );
-  return new Map(rows.map((row) => [row.id, row.position]));
+  return new Map(rows.map((row) => [row.id, row.displayNumber]));
 }
 
-/** Changed held work on a queued HOLD ticket: the thousandths changed, and the group's position. */
+/** Changed held work on a queued HOLD ticket, identified by its permanent group number. */
 export interface HeldChange {
   workingOrderId: string;
   workingOrderLineId: string;
   stationId: string;
   quantity: number;
   group: number;
+  numberPartyLabel?: string;
 }
 
 /** Record and print a HOLD correction for each change, bill by bill. */
@@ -1631,12 +1651,13 @@ export async function correctHoldTickets(
       tx,
       cfg,
       orderId,
-      bill.map(({ workingOrderLineId, stationId, quantity, group }) => ({
+      bill.map(({ workingOrderLineId, stationId, quantity, group, numberPartyLabel }) => ({
         workingOrderLineId,
         stationId,
         quantity,
         wasStarted: false,
         group,
+        ...(numberPartyLabel === undefined ? {} : { numberPartyLabel }),
       })),
       correction,
     );
@@ -1757,6 +1778,48 @@ async function nextGroupNumber(tx: Transaction, partyId: string): Promise<number
   let last = 0;
   for (const group of groups) last = Math.max(last, groupNumberIdentity(group).displayNumber);
   return last + 1;
+}
+
+export async function readGroupNumberLabels(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string>> {
+  const labels = new Map<string, string>();
+  if (partyIds.length === 0) return labels;
+  const groups = await tx
+    .select({
+      id: orderGroups.id,
+      partyId: orderGroups.partyId,
+      displayNumber: orderGroups.displayNumber,
+      numberPartyId: orderGroups.numberPartyId,
+    })
+    .from(orderGroups)
+    .where(
+      and(inArray(orderGroups.partyId, [...new Set(partyIds)]), ne(orderGroups.state, "removed")),
+    );
+  const counts = new Map<string, number>();
+  for (const group of groups) {
+    const key = `${group.partyId}:${group.displayNumber}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const duplicates = groups.filter((g) => counts.get(`${g.partyId}:${g.displayNumber}`)! > 1);
+  if (duplicates.length === 0) return labels;
+  const origins = await tx
+    .select({ id: parties.id, state: parties.state, tableNames: parties.tableNames })
+    .from(parties)
+    .where(inArray(parties.id, [...new Set(duplicates.map((g) => g.numberPartyId!))]));
+  const current = await readPartyTables(
+    tx,
+    origins.filter((p) => p.state === "open").map((p) => p.id),
+  );
+  const names = new Map(
+    origins.map((p) => [
+      p.id,
+      partyTablesName(p.state === "open" ? (current.get(p.id) ?? []) : (p.tableNames ?? [])),
+    ]),
+  );
+  for (const group of duplicates) labels.set(group.id, names.get(group.numberPartyId!)!);
+  return labels;
 }
 
 function groupNumberIdentity(group: { displayNumber: number; numberPartyId: string | null }): {

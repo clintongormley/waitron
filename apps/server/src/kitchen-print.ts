@@ -62,6 +62,7 @@ import {
 import { readRestOfOrder } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
+import { readGroupNumberLabels } from "./order-groups.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -86,10 +87,10 @@ export interface FiredItem {
  * Group-less items first, then group by group, each in line order: a paper heads each group's run.
  */
 function byGroupThenLine(
-  a: { lineNo: number; item: KitchenTicketItem },
-  b: { lineNo: number; item: KitchenTicketItem },
+  a: { lineNo: number; position: number | null },
+  b: { lineNo: number; position: number | null },
 ): number {
-  return (a.item.group ?? 0) - (b.item.group ?? 0) || a.lineNo - b.lineNo;
+  return (a.position ?? 0) - (b.position ?? 0) || a.lineNo - b.lineNo;
 }
 
 /** `entry`'s printed item at the quantity `item` was fired at, where it records one. */
@@ -168,16 +169,23 @@ function groupByLayout<T extends EscSetting>(printers: readonly T[]): T[][] {
 }
 
 /**
- * Each line's printed item, keyed by line id and carrying its `line_no` and the position of the
- * party's group it is in (null in none). The fire and correction paths share it, so a slip lays out
- * a line's item the way its ticket did, from the line as it stands when the slip prints. `lineIds`
- * include parent dish lines and separately prepared extra lines.
+ * Display numbers identify paper across reorders; positions order its group sections.
  */
 async function buildTicketItems(
   tx: Transaction,
   cfg: TillConfig,
   lineIds: string[],
-): Promise<Map<string, { lineNo: number; group: number | null; item: KitchenTicketItem }>> {
+): Promise<
+  Map<
+    string,
+    {
+      lineNo: number;
+      group: number | null;
+      position: number | null;
+      item: KitchenTicketItem;
+    }
+  >
+> {
   // The customer-facing `descriptions` is deliberately not read: the cook's name falls back to the
   // staff name (`kitchenPresentationName`), as on the station screen.
   const parentLine = alias(workingOrderLines, "ticket_parent_line");
@@ -196,7 +204,10 @@ async function buildTicketItems(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       note: workingOrderLines.note,
-      group: orderGroups.position,
+      group: orderGroups.displayNumber,
+      groupId: orderGroups.id,
+      groupPartyId: orderGroups.partyId,
+      position: orderGroups.position,
       parentName: parentLine.name,
       parentKitchenName: parentLine.kitchenName,
       parentVariantName: parentLine.variantName,
@@ -209,6 +220,10 @@ async function buildTicketItems(
     .leftJoin(parentRecord, eq(parentRecord.workingOrderLineId, parentLine.id))
     .leftJoin(parentStation, eq(parentStation.id, parentRecord.stationId))
     .where(inArray(workingOrderLines.id, lineIds));
+  const numberLabels = await readGroupNumberLabels(
+    tx,
+    storedLineRows.flatMap((r) => (r.groupPartyId === null ? [] : [r.groupPartyId])),
+  );
   const lineRows = storedLineRows.map((row) => ({
     ...row,
     quantity: thousandthsToDecimal(row.quantity),
@@ -282,7 +297,7 @@ async function buildTicketItems(
 
   const byLine = new Map<
     string,
-    { lineNo: number; group: number | null; item: KitchenTicketItem }
+    { lineNo: number; group: number | null; position: number | null; item: KitchenTicketItem }
   >();
   for (const row of lineRows) {
     const unit =
@@ -292,7 +307,12 @@ async function buildTicketItems(
     byLine.set(row.id, {
       lineNo: row.lineNo,
       group: row.group,
+      position: row.position,
       item: {
+        ...(row.groupId === null ? {} : { groupId: row.groupId }),
+        ...(row.groupId !== null && numberLabels.has(row.groupId)
+          ? { groupLabel: numberLabels.get(row.groupId)! }
+          : {}),
         qty: row.quantity,
         unit,
         name: kitchenPresentationName(row),
@@ -530,13 +550,21 @@ async function planKitchenTickets(
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
   const grouping = await VENUE_SERVICE.readKitchenTicketGrouping(tx);
 
-  const itemsByStation = new Map<string, { lineNo: number; item: KitchenTicketItem }[]>();
+  const itemsByStation = new Map<
+    string,
+    {
+      lineNo: number;
+      position: number | null;
+      item: KitchenTicketItem;
+    }[]
+  >();
   for (const fired of firedItems) {
     const entry = itemsByLine.get(fired.workingOrderLineId)!;
     const item = atFiredQuantity(entry.item, fired);
     const bucket = itemsByStation.get(fired.stationId) ?? [];
     bucket.push({
       lineNo: entry.lineNo,
+      position: entry.position,
       item: entry.group === null ? item : { ...item, group: entry.group },
     });
     itemsByStation.set(fired.stationId, bucket);
@@ -738,8 +766,9 @@ export interface CorrectionItem {
    *  CHANGED. */
   quantity: number;
   wasStarted: boolean;
-  /** On a HOLD correction, the position of the group whose HOLD ticket it corrects. */
+  /** The permanent number on the HOLD ticket being corrected. */
   group?: number;
+  numberPartyLabel?: string;
 }
 
 /** What a correction slip says happened; the slip's header and its sign follow from it. */
@@ -764,7 +793,7 @@ export async function enqueueOrderKitchenNoteChange(
       stationId: ticketItems.stationId,
       quantity: firedQuantity,
       state: ticketItems.state,
-      group: orderGroups.position,
+      group: orderGroups.displayNumber,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1054,7 +1083,16 @@ async function printCorrectionSlips(
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
-          item: target.group === undefined ? item : { ...item, group: target.group },
+          item:
+            target.group === undefined
+              ? item
+              : {
+                  ...item,
+                  group: target.group,
+                  groupLabel:
+                    target.numberPartyLabel ??
+                    (target.group === entry.group ? item.groupLabel : undefined),
+                },
         },
         group[0]!,
       );
@@ -1386,6 +1424,7 @@ async function printMovedSlips(
         return {
           held: target.held,
           lineNo: entry.lineNo,
+          position: entry.position,
           item: entry.group === null ? item : { ...item, group: entry.group },
         };
       })
@@ -1394,7 +1433,12 @@ async function printMovedSlips(
     const held: MovedSlip["held"] = [];
     for (const { item } of listed.filter((entry) => entry.held)) {
       const last = held.at(-1);
-      if (last !== undefined && last.group === item.group) last.items.push(...laidOut(item));
+      if (
+        last !== undefined &&
+        last.items[0]?.groupId === item.groupId &&
+        last.group === item.group
+      )
+        last.items.push(...laidOut(item));
       else held.push({ group: item.group!, items: laidOut(item) });
     }
     const fired = listed.filter((entry) => !entry.held).flatMap((entry) => laidOut(entry.item));

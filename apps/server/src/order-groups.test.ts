@@ -45,7 +45,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { enqueueOrderKitchenNoteChange, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -462,6 +462,193 @@ async function specExample(v: Venue): Promise<SpecExample> {
     desserts: later.groups[1]!.id,
   };
 }
+
+describe("permanent group numbers on kitchen work", () => {
+  it("qualifies duplicate numbers from a closed origin using its recorded tables", async () => {
+    const v = await setupVenue();
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    const into = await seated(v);
+    const from = await seated(v);
+    await db
+      .update(diningTables)
+      .set({ label: "Terrace 4" })
+      .where(eq(diningTables.id, into.tableId));
+    await db
+      .update(diningTables)
+      .set({ label: "Terrace 7" })
+      .where(eq(diningTables.id, from.tableId));
+    const a = (await submit(v, into.partyId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!;
+    const b = (await submit(v, from.partyId, [{ release: "hold", lines: [line(v, "steak")] }]))
+      .groups[0]!;
+    await inTx((tx) =>
+      joinTables(tx, v.cfg, into.partyId, from.tableId, {
+        bills: "merge",
+        expectedPartyRevision: 1,
+        otherPartyId: from.partyId,
+        expectedOtherPartyRevision: 1,
+        operatorId: ALEX,
+      }),
+    );
+    await db
+      .update(diningTables)
+      .set({ label: "Terrace 9" })
+      .where(eq(diningTables.id, from.tableId));
+
+    const { groups } = await groupsOf(into.partyId);
+    expect(groups.map((g) => [g.id, g.displayNumber, g.numberPartyId, g.numberPartyLabel])).toEqual(
+      [
+        [a.id, 1, into.partyId, "Terrace 4, 9"],
+        [b.id, 1, from.partyId, "Terrace 7"],
+      ],
+    );
+    const current = await inTx((tx) => readCurrentOrders(tx, into.partyId));
+    expect(current.groups.map((g) => g.numberPartyLabel)).toEqual(["Terrace 4, 9", "Terrace 7"]);
+    const station = (await inTx((tx) => listStationQueue(tx, v.stationId))).find(
+      (o) => o.orderId === into.tabId,
+    )!;
+    expect(station.items.map((i) => i.group?.numberPartyLabel)).toEqual([
+      "Terrace 4, 9",
+      "Terrace 7",
+    ]);
+    const expo = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
+      (o) => o.orderId === into.tabId,
+    )!;
+    expect(expo.groups.map((g) => g.numberPartyLabel)).toEqual(["Terrace 4, 9", "Terrace 7"]);
+    const before = (await printed(v)).length;
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, into.tabId));
+    const paper = (await printed(v)).slice(before).join("\n");
+    expect(paper).toContain("GROUP 1 · Terrace 4, 9\n1.000 x K-STEAK");
+    expect(paper).toContain("GROUP 1 · Terrace 7\n1.000 x K-STEAK");
+    expect(paper).not.toContain("2.000 x K-STEAK");
+    const beforeMove = (await printed(v)).length;
+    await move(v, into.partyId, [{ lineId: b.lineIds[0]!, quantity: "1" }], { groupId: a.id });
+    const corrections = (await printed(v)).slice(beforeMove);
+    expect(corrections).toHaveLength(2);
+    expect(corrections[0]).toContain("GROUP 1 · Terrace 7\n-1.000 x K-STEAK");
+    expect(corrections[1]).toContain("GROUP 1 · Terrace 4, 9\n+1.000 x K-STEAK");
+    const next = await submit(v, into.partyId, [{ release: "hold", lines: [line(v, "flan")] }]);
+    expect(next.groups[0]).toMatchObject({ displayNumber: 2, numberPartyId: into.partyId });
+    expect(next.groups[0]).not.toHaveProperty("numberPartyLabel");
+  });
+
+  it("does not qualify a non-colliding number from another party", async () => {
+    const v = await setupVenue();
+    const into = await seated(v);
+    const from = await seated(v);
+    const source = (await submit(v, from.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
+      .groups[0]!;
+    await inTx((tx) =>
+      joinTables(tx, v.cfg, into.partyId, from.tableId, {
+        bills: "merge",
+        expectedPartyRevision: 0,
+        otherPartyId: from.partyId,
+        expectedOtherPartyRevision: 1,
+        operatorId: ALEX,
+      }),
+    );
+    const { groups } = await groupsOf(into.partyId);
+    expect(groups[0]).toMatchObject({
+      id: source.id,
+      displayNumber: 1,
+      numberPartyId: from.partyId,
+    });
+    expect(groups[0]).not.toHaveProperty("numberPartyLabel");
+  });
+
+  it("keeps original numbers on FIRE paper after reordering held groups", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
+    const before = (await printed(v)).length;
+
+    await fire(v, s.partyId, s.desserts);
+
+    const paper = (await printed(v)).slice(before);
+    expect(paper).toHaveLength(1);
+    expect(paper[0]).toContain("GROUP 5\n");
+    expect(paper[0]).not.toContain("GROUP 3\n");
+    expect(paper[0]).toContain(DISHES.flan.kitchen);
+  });
+
+  it("keeps original numbers on HOLD corrections after reordering", async () => {
+    const v = await setupVenue();
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    const s = await specExample(v);
+    await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
+    const before = (await printed(v)).length;
+
+    await submit(v, s.partyId, [
+      { release: "hold", joinGroupId: s.desserts, lines: [line(v, "flan")] },
+    ]);
+
+    const paper = (await printed(v)).slice(before);
+    expect(paper).toHaveLength(1);
+    expect(paper[0]).toContain("HOLD CHANGED");
+    expect(paper[0]).toContain("GROUP 5\n");
+    expect(paper[0]).not.toContain("GROUP 3\n");
+    expect(paper[0]).toContain("+1.000 x K-FLAN");
+  });
+
+  it("reprints permanent numbers in the changed firing order", async () => {
+    const v = await setupVenue();
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    const s = await specExample(v);
+    await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
+    const before = (await printed(v)).length;
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const paper = (await printed(v)).slice(before).join("\n");
+    expect(paper).toContain("GROUP 5\n2.000 x K-FLAN");
+    expect(paper).toContain("GROUP 3\n4.000 x K-OCTO");
+    expect(paper).toContain("GROUP 4\n2.000 x K-STEAK");
+    expect(paper.indexOf("GROUP 5\n")).toBeLessThan(paper.indexOf("GROUP 3\n"));
+  });
+
+  it("keeps the original group number on order-note change slips", async () => {
+    const v = await setupVenue();
+    await inTx((tx) => writePrintHeldWork(tx, true));
+    const s = await specExample(v);
+    await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
+    const before = (await printed(v)).length;
+
+    await inTx((tx) =>
+      enqueueOrderKitchenNoteChange(tx, v.cfg, [s.tabId], {
+        before: null,
+        after: "Bring together",
+      }),
+    );
+
+    const paper = (await printed(v)).slice(before).filter((p) => p.includes("K-FLAN"));
+    expect(paper).toHaveLength(1);
+    expect(paper[0]).toContain("GROUP 5\n");
+    expect(paper[0]).not.toContain("GROUP 3\n");
+  });
+
+  it("carries permanent numbers and origins through station and pass queues", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    await reorder(s.partyId, [s.desserts, s.warm, s.mains]);
+
+    const station = (await inTx((tx) => listStationQueue(tx, v.stationId))).find(
+      (o) => o.orderId === s.tabId,
+    )!;
+    expect(station.items.find((i) => i.group?.id === s.desserts)?.group).toMatchObject({
+      position: 3,
+      displayNumber: 5,
+      numberPartyId: s.partyId,
+    });
+    const expo = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find((o) => o.orderId === s.tabId)!;
+    expect(expo.groups.map((g) => [g.position, g.displayNumber, g.numberPartyId])).toEqual([
+      [1, 1, s.partyId],
+      [2, 2, s.partyId],
+      [3, 5, s.partyId],
+      [4, 3, s.partyId],
+      [5, 4, s.partyId],
+    ]);
+  });
+});
 
 describe("per-group submission destinations", () => {
   it("joins one table group from two bills and two owners without moving earlier charges", async () => {
@@ -3610,7 +3797,13 @@ describe("the kitchen and the pass read a party's groups", () => {
     for (const item of items) {
       const groupId = groupOfLine.get(item.workingOrderLineId)!;
       const [position, state] = positions.get(groupId)!;
-      expect(item.group).toEqual({ id: groupId, position, state });
+      expect(item.group).toEqual({
+        id: groupId,
+        position,
+        displayNumber: position,
+        numberPartyId: s.partyId,
+        state,
+      });
     }
   });
 
@@ -3642,7 +3835,13 @@ describe("the kitchen and the pass read a party's groups", () => {
       [DISHES.steak.kitchen, DISHES.fish.kitchen],
       [DISHES.flan.kitchen],
     ]);
-    expect(order.groups[1]!.items[0]!.group).toEqual({ id: s.cold, position: 2, state: "fired" });
+    expect(order.groups[1]!.items[0]!.group).toEqual({
+      id: s.cold,
+      position: 2,
+      displayNumber: 2,
+      numberPartyId: s.partyId,
+      state: "fired",
+    });
     expect(order.groups.every((group) => !group.away)).toBe(true);
   });
 
@@ -3820,12 +4019,12 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     expect(reprint.filter((text) => text.startsWith("GROUP"))).toEqual([
       "GROUP 1",
       "GROUP 2",
-      "GROUP 3",
       "GROUP 4",
+      "GROUP 3",
     ]);
-    expect(at("GROUP 3")).toBeLessThan(at(DISHES.steak.kitchen));
-    expect(at(DISHES.steak.kitchen)).toBeLessThan(at("GROUP 4"));
-    expect(at("GROUP 4")).toBeLessThan(at(DISHES.warm.kitchen));
+    expect(at("GROUP 4")).toBeLessThan(at(DISHES.steak.kitchen));
+    expect(at(DISHES.steak.kitchen)).toBeLessThan(at("GROUP 3"));
+    expect(at("GROUP 3")).toBeLessThan(at(DISHES.warm.kitchen));
   });
 
   // Fails if the fire ticket or the reprint ignores the venue's grouping setting.

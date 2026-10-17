@@ -1773,7 +1773,7 @@ const partyOrder: StationQueueGroup = {
       name: "Solomillo",
       quantity: "2.000",
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
-      group: { id: "g-3", position: 3, state: "held" },
+      group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
     },
     {
@@ -1783,7 +1783,7 @@ const partyOrder: StationQueueGroup = {
       name: "Ensalada",
       quantity: "1.000",
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
-      group: { id: "g-2", position: 2, state: "fired" },
+      group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
       firedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1802,7 +1802,7 @@ const partyOrder: StationQueueGroup = {
       name: "Flan",
       quantity: "1.000",
       course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
-      group: { id: "g-4", position: 4, state: "held" },
+      group: { id: "g-4", position: 4, displayNumber: 4, numberPartyId: "v-4", state: "held" },
       firedAt: null,
     },
     {
@@ -1812,7 +1812,7 @@ const partyOrder: StationQueueGroup = {
       name: "Merluza",
       quantity: "1.000",
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
-      group: { id: "g-3", position: 3, state: "held" },
+      group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
     },
   ],
@@ -1822,6 +1822,40 @@ describe("till-station-queue — a seated party's groups", () => {
   const sections = (el: TillStationQueue) => [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-section]"),
   ];
+
+  it("keeps permanent heading numbers when firing positions change", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        {
+          ...partyOrder,
+          items: partyOrder.items.map((item) => ({
+            ...item,
+            ...(item.group === undefined
+              ? {}
+              : {
+                  group: {
+                    ...item.group,
+                    displayNumber: item.group.position,
+                    numberPartyId: "v-4",
+                    ...(item.group.id === "g-4" ? { numberPartyLabel: "Terrace 7" } : {}),
+                    position: item.group.id === "g-4" ? 1 : item.group.position,
+                  },
+                }),
+          })),
+        },
+      ],
+      view: "rail",
+      stationId: "st-1",
+      fireControl: "kitchen",
+    });
+    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual(["none", "g-4", "g-2", "g-3"]);
+    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+      `${t("table.group_n").replace("{n}", "4")} · Terrace 7`,
+    );
+    expect(
+      el.shadowRoot!.querySelector('[data-fire-group="g-4"]')?.getAttribute("aria-label"),
+    ).toContain(`${t("table.group_n").replace("{n}", "4")} · Terrace 7`);
+  });
 
   it("rail: sections a party's card by group position, the lines with no group first, and no course headers", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {

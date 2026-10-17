@@ -87,6 +87,8 @@ export function currentGroup(
   return {
     id,
     position,
+    displayNumber: position,
+    numberPartyId: "v1",
     state,
     firedAt: state === "fired" ? fired : null,
     remindAt: null,
@@ -102,6 +104,8 @@ export function orderGroup(id: string, position: number, state: "held" | "fired"
     courseIds: [],
     id,
     position,
+    displayNumber: position,
+    numberPartyId: "v1",
     state,
     firedAt: state === "fired" ? fired : null,
     remindAt: null,
@@ -120,6 +124,7 @@ export const groups = [
 export function current(over: Partial<CurrentOrders> = {}): CurrentOrders {
   return {
     hasGroups: true,
+    nextDisplayNumber: 5,
     retainedCourses: [],
     revision: 7,
     reminder: { groupId: "g3", dueAt: "2026-09-28T20:15:00.000Z" },

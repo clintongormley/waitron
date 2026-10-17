@@ -316,6 +316,8 @@ const group = (id: string, position: number, state: "held" | "fired" = "held"): 
   courseIds: [],
   id,
   position,
+  displayNumber: position,
+  numberPartyId: "v1",
   state,
   firedAt: state === "held" ? null : "2026-10-16T20:00:00Z",
   remindAt: null,
@@ -333,6 +335,7 @@ describe("heldViews", () => {
   it("keeps held groups in firing order and collects recorded courses from every bill", () => {
     const current: CurrentOrders = {
       hasGroups: true,
+      nextDisplayNumber: 4,
       retainedCourses: [],
       revision: 3,
       reminder: null,

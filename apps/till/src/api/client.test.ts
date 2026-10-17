@@ -3682,6 +3682,8 @@ describe("TillApi: a seated party", () => {
       courseIds: [],
       id: "g1",
       position: 1,
+      displayNumber: 1,
+      numberPartyId: "v1",
       state: "fired",
       firedAt: "2026-09-27T10:00:00.000Z",
       remindAt: null,
@@ -3692,6 +3694,8 @@ describe("TillApi: a seated party", () => {
       courseIds: [],
       id: "g2",
       position: 2,
+      displayNumber: 2,
+      numberPartyId: "v1",
       state: "held",
       firedAt: null,
       remindAt: null,
@@ -3874,6 +3878,7 @@ describe("TillApi: a seated party", () => {
   it("readCurrentOrders GETs the party's Current orders", async () => {
     const answer = {
       hasGroups: true,
+      nextDisplayNumber: 2,
       retainedCourses: [],
       revision: 6,
       reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
@@ -3881,6 +3886,8 @@ describe("TillApi: a seated party", () => {
         {
           id: "g1",
           position: 1,
+          displayNumber: 1,
+          numberPartyId: "v1",
           state: "fired",
           firedAt: "2026-09-28T19:50:00.000Z",
           remindAt: null,

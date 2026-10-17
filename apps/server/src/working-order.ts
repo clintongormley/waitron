@@ -189,6 +189,7 @@ import {
   printedHeldGroups,
   printHoldTickets,
   readReleaseReminders,
+  readGroupNumberLabels,
   recordGroupEvent,
   removeEmptiedHeldGroups,
   requireGroup,
@@ -6784,6 +6785,9 @@ export interface QueueParty {
 export interface QueueGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
 }
 
@@ -6999,6 +7003,9 @@ const queueGroupColumns = {
   partyRevision: parties.revision,
   groupId: orderGroups.id,
   groupPosition: orderGroups.position,
+  groupDisplayNumber: orderGroups.displayNumber,
+  groupNumberPartyId: orderGroups.numberPartyId,
+  groupPartyId: orderGroups.partyId,
   groupState: orderGroups.state,
 };
 
@@ -7009,16 +7016,26 @@ function queueParty(row: {
   return row.partyId === null ? undefined : { id: row.partyId, revision: row.partyRevision! };
 }
 
-function queueGroup(row: {
-  groupId: string | null;
-  groupPosition: number | null;
-  groupState: string | null;
-}): QueueGroup | undefined {
+function queueGroup(
+  row: {
+    groupId: string | null;
+    groupPosition: number | null;
+    groupDisplayNumber: number | null;
+    groupNumberPartyId: string | null;
+    groupState: string | null;
+  },
+  numberLabels: ReadonlyMap<string, string>,
+): QueueGroup | undefined {
   return row.groupId === null
     ? undefined
     : {
         id: row.groupId,
         position: row.groupPosition!,
+        displayNumber: row.groupDisplayNumber!,
+        numberPartyId: row.groupNumberPartyId!,
+        ...(numberLabels.has(row.groupId)
+          ? { numberPartyLabel: numberLabels.get(row.groupId)! }
+          : {}),
         state: row.groupState as QueueGroup["state"],
       };
 }
@@ -7106,6 +7123,10 @@ export async function listStationQueues(
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  const numberLabels = await readGroupNumberLabels(
+    tx,
+    rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
+  );
   const lastMoves = await readStationQueueMoves(
     tx,
     rows.map((row) => row.workingOrderLineId),
@@ -7226,7 +7247,7 @@ export async function listStationQueues(
         row.courseId === null
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
-      ...optional("group", queueGroup(row)),
+      ...optional("group", queueGroup(row, numberLabels)),
       firedAt: row.firedAt,
       note: row.note,
       queuedAt: row.queuedAt,
@@ -7282,6 +7303,9 @@ export interface ExpoCourse {
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
+  displayNumber: number | null;
+  numberPartyId: string | null;
+  numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
   away: boolean;
@@ -7405,6 +7429,10 @@ export async function readPassBoard(
       ticketItems.id,
     );
 
+  const numberLabels = await readGroupNumberLabels(
+    tx,
+    rows.flatMap((row) => (row.groupPartyId === null ? [] : [row.groupPartyId])),
+  );
   const { modifiersByParent, crossRefsByLine, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.lineId),
@@ -7458,7 +7486,7 @@ export async function readPassBoard(
       sectionMaps.set(row.orderId, new Map());
     }
     const sections = sectionMaps.get(row.orderId)!;
-    const group = queueGroup(row);
+    const group = queueGroup(row, numberLabels);
     const byGroup = order.party !== undefined;
     const sectionKey = (byGroup ? group?.id : row.courseId) ?? "__none__";
     let section = sections.get(sectionKey);
@@ -7467,6 +7495,11 @@ export async function readPassBoard(
         const expoGroup: ExpoGroup = {
           groupId: group?.id ?? null,
           position: group?.position ?? null,
+          displayNumber: group?.displayNumber ?? null,
+          numberPartyId: group?.numberPartyId ?? null,
+          ...(group?.numberPartyLabel === undefined
+            ? {}
+            : { numberPartyLabel: group.numberPartyLabel }),
           state: group?.state ?? null,
           fired: true,
           away: true,

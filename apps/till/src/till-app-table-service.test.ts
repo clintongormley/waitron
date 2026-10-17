@@ -584,6 +584,7 @@ it("moves a table dish with one submission id and reloads its current orders", a
   });
   const readCurrentOrders = vi.fn().mockResolvedValue({
     hasGroups: false,
+    nextDisplayNumber: 1,
     retainedCourses: [],
     revision: 1,
     reminder: null,

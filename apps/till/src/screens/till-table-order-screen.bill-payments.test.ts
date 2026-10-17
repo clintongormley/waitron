@@ -262,6 +262,8 @@ describe("till-table-order-screen: items already paid for", () => {
       courseIds: [],
       id: "g-2",
       position: 2,
+      displayNumber: 2,
+      numberPartyId: "v1",
       state: "held",
       lineIds: ["line-3"],
       summary: "1 × Tiramisu",
@@ -270,6 +272,7 @@ describe("till-table-order-screen: items already paid for", () => {
     };
     const currentOrders: CurrentOrders = {
       hasGroups: true,
+      nextDisplayNumber: 3,
       retainedCourses: [],
       groups: [
         currentGroup("g-2", 2, "held", [

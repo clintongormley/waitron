@@ -559,6 +559,9 @@ export interface GroupLine extends SaleLine {
 export interface OrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -617,6 +620,9 @@ export interface CurrentOrderRow {
 export interface CurrentOrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -631,6 +637,7 @@ export interface CurrentOrderGroup {
 export interface CurrentOrders {
   revision: number;
   hasGroups: boolean;
+  nextDisplayNumber: number;
   retainedCourses: TillCourse[];
   reminder: ReleaseReminder | null;
   groups: CurrentOrderGroup[];
@@ -1392,6 +1399,9 @@ export interface QueueParty {
 export interface QueueGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
+  numberPartyLabel?: string;
   state: "held" | "fired";
 }
 
@@ -1769,6 +1779,9 @@ export interface ExpoCourse {
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;
+  displayNumber: number | null;
+  numberPartyId: string | null;
+  numberPartyLabel?: string;
   state: QueueGroup["state"] | null;
   fired: boolean;
   away: boolean;

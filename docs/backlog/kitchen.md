@@ -69,8 +69,6 @@ list does not exist.
 - **Task 6 (#761, HOLD tickets in advance).** Left open:
   - A failed HOLD correction slip (HOLD CHANGED or HOLD CANCELLED) raises no "Printing problem",
     like every correction slip: none is recorded in `kitchen_print_jobs`.
-  - A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
-    another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
   - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.

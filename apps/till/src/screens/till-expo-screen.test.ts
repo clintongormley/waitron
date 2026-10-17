@@ -1252,6 +1252,8 @@ describe("till-expo-screen", () => {
         {
           groupId: "g-3",
           position: 3,
+          displayNumber: 3,
+          numberPartyId: "party-1",
           state: "fired" as const,
           fired: true,
           away: false,
@@ -2172,7 +2174,16 @@ describe("till-expo-screen — a seated party's groups", () => {
     items: ExpoItem[],
     away = false,
   ): ExpoGroup {
-    return { groupId, position, state, fired: state !== "held", away, items };
+    return {
+      groupId,
+      position,
+      displayNumber: position,
+      numberPartyId: groupId === null ? null : "v-4",
+      state,
+      fired: state !== "held",
+      away,
+      items,
+    };
   }
 
   // Listed out of position order, with a course on none of them, so the card must section by group.
@@ -2216,6 +2227,30 @@ describe("till-expo-screen — a seated party's groups", () => {
       ...overrides,
     });
   }
+
+  it("keeps permanent heading numbers when firing positions change", async () => {
+    const reordered = {
+      ...partyOrder,
+      groups: partyOrder.groups!.map((group) => ({
+        ...group,
+        displayNumber: group.position,
+        numberPartyId: group.groupId === null ? null : "v-4",
+        ...(group.groupId === "g-5" ? { numberPartyLabel: "Terrace 7" } : {}),
+        position: group.groupId === "g-5" ? 1 : group.position,
+      })),
+    };
+    const el = await mount({ api: stubApi([reordered]), fireControl: "expo" });
+    expect(sections(el).map((s) => s.dataset.groupSection)).toEqual([
+      "none",
+      "g-5",
+      "g-2",
+      "g-3",
+      "g-4",
+    ]);
+    expect(sections(el)[1]!.querySelector(".course-head")!.textContent).toContain(
+      `${groupName(5)} · Terrace 7`,
+    );
+  });
 
   it("shows the lines with no group first, then each group by position; a group already away drops off", async () => {
     const el = await mount({ api: partyApi(), fireControl: "expo" });
@@ -2618,6 +2653,8 @@ describe("till-expo-screen — a pass monitor", () => {
       {
         groupId: "g-2",
         position: 2,
+        displayNumber: 2,
+        numberPartyId: "v-4",
         state: "fired",
         fired: true,
         away: false,
@@ -2626,6 +2663,8 @@ describe("till-expo-screen — a pass monitor", () => {
       {
         groupId: "g-4",
         position: 4,
+        displayNumber: 4,
+        numberPartyId: "v-4",
         state: "held",
         fired: false,
         away: false,

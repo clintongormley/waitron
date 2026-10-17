@@ -25,8 +25,10 @@ export interface KitchenTicketItem {
   modifiers?: string[];
   /** Already-worded links to lines at other stations, printed after modifiers and before the note. */
   crossRefs?: string[];
-  /** The position of the party's group the item fired in; absent for an item in no group. */
+  /** The permanent number on the group's original ticket. */
   group?: number;
+  groupId?: string;
+  groupLabel?: string;
   /** Printed as sold, never merged or split. */
   printedAsSold?: boolean;
 }
@@ -86,6 +88,8 @@ function entryKey(item: KitchenTicketItem): string {
     item.unit ?? "",
     item.note === undefined ? "" : sanitizeNote(item.note),
     item.group ?? null,
+    item.groupId ?? null,
+    item.groupLabel ?? null,
     item.modifiers ?? [],
     item.crossRefs ?? [],
   ]);
@@ -190,9 +194,20 @@ function emitItem(
 }
 
 /** The group every item in `items` shares, else undefined. */
-function onlyGroupOf(items: readonly KitchenTicketItem[]): number | undefined {
-  const groups = new Set(items.map((item) => item.group));
-  return groups.size === 1 ? [...groups][0] : undefined;
+function groupKey(item: KitchenTicketItem): string | undefined {
+  return item.group === undefined ? undefined : (item.groupId ?? String(item.group));
+}
+
+function onlyGroupOf(items: readonly KitchenTicketItem[]): KitchenTicketItem | undefined {
+  const first = items[0];
+  return first?.group !== undefined && items.every((item) => groupKey(item) === groupKey(first))
+    ? first
+    : undefined;
+}
+
+function emitGroup(b: ReturnType<typeof esc>, item: KitchenTicketItem, columns: number): void {
+  const label = item.groupLabel === undefined ? "" : ` · ${item.groupLabel}`;
+  for (const line of wrapText(prepareText(`GROUP ${item.group}${label}`), columns)) b.line(line);
 }
 
 /**
@@ -203,11 +218,12 @@ function emitGrouped(
   b: ReturnType<typeof esc>,
   items: readonly KitchenTicketItem[],
   columns: number,
-  current: number | undefined,
+  current: KitchenTicketItem | undefined,
 ): void {
   for (const item of items) {
-    if (item.group !== undefined && item.group !== current) b.line(`GROUP ${item.group}`);
-    current = item.group;
+    if (item.group !== undefined && (current === undefined || groupKey(item) !== groupKey(current)))
+      emitGroup(b, item, columns);
+    current = item;
     emitItem(b, item, columns);
   }
 }
@@ -265,7 +281,7 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): 
   if (ticket.from !== undefined)
     text(`${kitchenWords(ticket.from.locale).from} ${ticket.from.stationName}`);
   emitKitchenNote(b, ticket.kitchenNote, columns);
-  if (onlyGroup !== undefined) b.line(`GROUP ${onlyGroup}`);
+  if (onlyGroup !== undefined) emitGroup(b, onlyGroup, columns);
 
   if (ticket.scope === "station") emitList(ticket.items);
   else {
@@ -417,7 +433,7 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): 
     else emitKitchenNote(b, { text: after, locale: slip.locale }, columns);
     if (before !== null) text(`${spanish ? "Antes" : "Was"}: ${cleanOrderNote(before)}`);
   } else emitKitchenNote(b, slip.kitchenNote, columns);
-  if (slip.item.group !== undefined) b.line(`GROUP ${slip.item.group}`);
+  if (slip.item.group !== undefined) emitGroup(b, slip.item, columns);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   emitItem(b, slip.item, columns, sign);
   if (slip.kind === "EXTRA CANCELLED") {
@@ -491,7 +507,7 @@ export function formatMovedSlip(slip: MovedSlip, layout: EscSetting): Uint8Array
   emitGrouped(b, slip.items, columns, onlyGroupOf(slip.items));
   if (slip.held.length > 0) b.line("HOLD");
   for (const { group, items } of slip.held) {
-    b.line(`GROUP ${group}`);
+    emitGroup(b, { ...items[0]!, group }, columns);
     for (const item of items) emitItem(b, item, columns);
   }
 

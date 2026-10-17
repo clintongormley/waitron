@@ -206,6 +206,8 @@ function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
     courseIds: [],
     id,
     position: 1,
+    displayNumber: 1,
+    numberPartyId: "v1",
     state,
     firedAt: state === "fired" ? "2026-08-20T09:59:00.000Z" : null,
     remindAt: null,
@@ -940,10 +942,10 @@ describe("till-table-order-screen", () => {
     const menu = [beer, croquetas, steak, bread];
 
     function heldGroup(id: string, position: number, summary: string): OrderGroup {
-      return { ...orderGroup(id, "held"), position, summary };
+      return { ...orderGroup(id, "held"), position, displayNumber: position, summary };
     }
     function firedGroup(id: string, position: number, summary: string): OrderGroup {
-      return { ...orderGroup(id, "fired"), position, summary };
+      return { ...orderGroup(id, "fired"), position, displayNumber: position, summary };
     }
 
     async function ring(el: TillTableOrderScreen, ...rung: [TillProduct, string][]) {
@@ -1364,7 +1366,14 @@ describe("till-table-order-screen", () => {
       lineIds: string[],
       summary: string,
     ): OrderGroup {
-      return { ...orderGroup(id, state), position, lineIds, summary };
+      return {
+        ...orderGroup(id, state),
+        position,
+        displayNumber: position,
+        numberPartyId: "v1",
+        lineIds,
+        summary,
+      };
     }
     const fired = { sentAt: at, firedAt: at };
     const beer = dishLine("l-beer", 1, "Beer", "1.000", "g1", fired);
@@ -1403,6 +1412,25 @@ describe("till-table-order-screen", () => {
     const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
     const control = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
+
+    it("keeps permanent heading numbers when firing positions change", async () => {
+      const { el } = await mountGroups({
+        groups: groups.map((g) => ({
+          ...g,
+          displayNumber: g.position,
+          numberPartyId: "p-4",
+          ...(g.id === "g5" ? { numberPartyLabel: "Terrace 7" } : {}),
+          position: g.id === "g5" ? 3 : g.id === "g3" ? 5 : g.position,
+        })),
+      });
+      const rows = groupRows(el);
+      expect(rows.map((row) => row.dataset.group)).toEqual(["g1", "g2", "g5", "g4", "g3"]);
+      expect(rows.map((row) => text(row.querySelector("[data-group-position]")!))).toEqual(
+        [1, 2, 5, 4, 3].map(
+          (n) => t("table.group_n").replace("{n}", String(n)) + (n === 5 ? " · Terrace 7" : ""),
+        ),
+      );
+    });
 
     function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
       const events: CustomEvent[] = [];
@@ -5803,6 +5831,7 @@ describe("A668 nutrition after table-order names", () => {
       currentOrders: {
         revision: 1,
         hasGroups: false,
+        nextDisplayNumber: 1,
         retainedCourses: [],
         reminder: null,
         groups: [],

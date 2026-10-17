@@ -1,3 +1,4 @@
+import { groupName, groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import {
   nutritionIcons,
@@ -313,7 +314,7 @@ function heldGroupLabel(group: OrderGroup, index: number): string {
   return index === 0
     ? t("table.held_next").replace("{summary}", () => group.summary)
     : t("table.held_group")
-        .replace("{n}", String(group.position))
+        .replace("{n}", () => groupNumberText(group))
         .replace("{summary}", () => group.summary);
 }
 
@@ -3852,7 +3853,7 @@ export class TillTableOrderScreen extends LitElement {
   #groupRow(group: OrderGroup): TemplateResult {
     const held = this.#heldInOrder;
     const isHeld = group.state === "held";
-    const name = t("table.group_n").replace("{n}", String(group.position));
+    const name = groupName(group);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const place = held.indexOf(group);
     const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
@@ -3980,7 +3981,7 @@ export class TillTableOrderScreen extends LitElement {
     // A time that cannot be read is no time.
     if (reminder?.groupId !== group.id || reminderDueAt(reminder) === Number.POSITIVE_INFINITY)
       return nothing;
-    const name = t("table.group_n").replace("{n}", String(group.position));
+    const name = groupName(group);
     const snoozed = shown?.remindAt;
     const clear =
       snoozed === null || snoozed === undefined
