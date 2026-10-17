@@ -569,8 +569,8 @@ describe("keys that the chooser prevents", () => {
     for (const event of seen) expect(event.defaultPrevented, event.key).toBe(true);
   });
 
-  for (const key of ["{ArrowDown}", "{ArrowUp}"]) {
-    test(`${key} that opens the closed field is prevented`, async () => {
+  for (const key of ["{ArrowDown}", "{ArrowUp}", "{Enter}", " "]) {
+    test(`${key === " " ? "Space" : key} that opens the closed field is prevented`, async () => {
       const { trigger, panel } = await mountChooser();
       const seen: KeyboardEvent[] = [];
       trigger.addEventListener("keydown", (event) => seen.push(event), { capture: true });
@@ -723,5 +723,105 @@ describe("tokens", () => {
     expect(tiles()).toHaveLength(CHOICES.length);
     for (const tile of tiles())
       expect(tile.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  });
+});
+
+describe("edges", () => {
+  test("with no attributes: no name, an empty label, no value and no tiles", async () => {
+    const { el, label, trigger, tiles } = await mountChooser("");
+    el.choices = [];
+    await el.updateComplete;
+    const bare = document.createElement("wt-colour-chooser");
+    expect(bare.value).toBe("");
+    expect(bare.choices).toEqual([]);
+    expect(trigger.hasAttribute("name")).toBe(false);
+    expect(label.querySelector(".field-label-text")!.textContent).toBe("");
+    expect(tiles()).toEqual([]);
+  });
+
+  test("hide() before the first render does nothing", () => {
+    const bare = document.createElement("wt-colour-chooser");
+    expect(() => bare.hide()).not.toThrow();
+  });
+
+  test("with no choices, show() opens an empty panel without throwing", async () => {
+    const { el, panel } = await mountChooser();
+    el.choices = [];
+    await el.updateComplete;
+    expect(() => el.show()).not.toThrow();
+    expect(panel.matches(":popover-open")).toBe(true);
+  });
+
+  test("a value set while the panel is open but focus is elsewhere leaves focus where it is", async () => {
+    host?.remove();
+    await mount(
+      `<div><input name="other" /><wt-colour-chooser name="colour" label="Colour" value="blue"></wt-colour-chooser></div>`,
+    );
+    const el = host.querySelector("wt-colour-chooser")!;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const other = host.querySelector("input")!;
+    const { panel } = parts(el);
+    await openByClick(el);
+    other.focus();
+    el.value = "green";
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    expect(document.activeElement).toBe(other);
+    el.choices = [...CHOICES];
+    await el.updateComplete;
+    expect(document.activeElement).toBe(other);
+  });
+
+  test("an arrow onto the chosen colour from another tile moves focus there and sends nothing", async () => {
+    const { el, root, tile } = await mountChooser();
+    const changes = vi.fn();
+    el.addEventListener("wt-change", changes);
+    await openByClick(el);
+    tile("grey").focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(changes).not.toHaveBeenCalled();
+    expect(root.activeElement).toBe(tile("blue"));
+  });
+
+  test("every tile but the tab stop is out of the tab order", async () => {
+    const { tiles, tile } = await mountChooser();
+    for (const t of tiles())
+      expect(t.getAttribute("tabindex"), t.dataset.value).toBe(t === tile("blue") ? "0" : "-1");
+  });
+
+  test("a value in no choice shows no text in the trigger", async () => {
+    const { trigger } = await mountChooser('name="colour" label="Colour" value="pink"');
+    expect(trigger.querySelector(".value")!.textContent).toBe("");
+  });
+
+  test("the open panel is at least as wide as a wide trigger", async () => {
+    const { el, trigger, panel } = await mountChooser();
+    el.style.width = `${innerWidth - 16}px`;
+    await openByClick(el);
+    expect(panel.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      trigger.getBoundingClientRect().width - 0.5,
+    );
+  });
+
+  test("in a 390px window, long names keep the panel 8px inside both sides", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(390, 700);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const { el, panel } = await mountChooser();
+      el.style.width = "160px";
+      el.choices = CHOICES.map((choice) => ({
+        ...choice,
+        label: `${choice.label} with a name long enough to need more room than the window has`,
+      }));
+      await el.updateComplete;
+      await openByClick(el);
+      const box = panel.getBoundingClientRect();
+      expect(box.width).toBeLessThanOrEqual(innerWidth - 16 + 0.5);
+      expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 });
