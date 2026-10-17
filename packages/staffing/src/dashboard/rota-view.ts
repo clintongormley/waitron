@@ -43,6 +43,9 @@ export const PHONE_WIDTH = 560;
 /** The least a finger moves across the day to step a day: the Calendar Week's `SWIPE_PX`
  *  (`opening-hours-week.ts`), which venue-service does not export. */
 const SWIPE_PX = 48;
+/** What, beside its key (which names its day and area), the slot picker and its fill read from a
+ *  slot. */
+const sameSlotFields = ["staffRoleId", "startsAt", "endsAt", "start", "end"] as const;
 
 /** The venue's business day now. The read gives only its own week's changeovers, so a day just
  *  outside the week is taken to change over as its nearest day in the week does. */
@@ -423,13 +426,14 @@ export class RotaView extends LitElement {
               .flatMap((a) => a.match.slots)
               .find((s) => s.slot.key === picked.key)
           : undefined;
-        // The picker reads its slot's area and staff role from the week, so it cannot outlive the
-        // slot, the area or the staff role, even mid-fill. A slot's key is its place in the area's
-        // day, so once a staff role and its blocks are deleted another staff role's slot can take
-        // it.
+        // A slot's key is its block's place in the area's day, not its times, so a repainted or
+        // deleted block can leave another slot under the picked key. The picker closes, even
+        // mid-fill, once the slot under its key is not the one it was opened for (another staff
+        // role, other times or another changeover, or none) or its area stops being active.
         if (
           picked &&
-          (listed?.slot.staffRoleId !== picked.staffRoleId ||
+          (!listed ||
+            sameSlotFields.some((f) => listed.slot[f] !== picked[f]) ||
             !read.areas.some((a) => areaKey(a.area) === areaKey(picked.area)))
         )
           this.picked = undefined;

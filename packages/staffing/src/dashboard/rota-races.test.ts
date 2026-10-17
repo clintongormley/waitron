@@ -475,3 +475,51 @@ it("a picker that closes as a page scroll takes its slot out of view stays close
   await el.updateComplete;
   await openPicker(el);
 });
+/** The read once Friday's Sous chef block is repainted: the same place in the day, so its slot
+ *  keeps the key `empty` and its staff role, under other times or another changeover. */
+function repainted(change: "times" | "changeover") {
+  return (w: string) => {
+    const r = rotaWeek(w);
+    const friday = r.days[4]!;
+    const listed = friday.areas[0]!.match.slots[0]!;
+    if (change === "times")
+      listed.slot = { ...listed.slot, startsAt: "10:00", endsAt: "18:00", start: 240, end: 720 };
+    else {
+      friday.cutover = "07:00";
+      listed.slot = { ...listed.slot, start: 120, end: 600 };
+    }
+    return r;
+  };
+}
+const shownFriday = (el: RotaView) =>
+  el.shadowRoot!.querySelector<RotaView & { week: RotaWeek }>("rota-by-area")?.week.days[4];
+it.each([
+  ["other times", "idle", "times"],
+  ["other times", "in flight", "times"],
+  ["another changeover", "idle", "changeover"],
+] as const)(
+  "closes the slot picker when its slot takes %s under it, while a fill is %s",
+  async (_, fill, change) => {
+    const pending = deferred<unknown>();
+    let moved = false;
+    const { el, live } = await mount({
+      fill: () => pending.promise,
+      read: async (w) => (moved ? repainted(change)(w) : rotaWeek(w)),
+    });
+    const picker = await openPicker(el);
+    if (fill === "in flight") click(picker, "[data-person=marc]");
+    moved = true;
+    live.invalidate([{ type: "staffing_blocks" }]);
+    await vi.waitFor(() =>
+      expect(
+        change === "times"
+          ? shownFriday(el)?.areas[0]!.match.slots[0]!.slot.startsAt
+          : shownFriday(el)?.cutover,
+      ).toBe(change === "times" ? "10:00" : "07:00"),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+    await vi.waitFor(() => expect(popupOpen(el)).toBe(false));
+    pending.resolve({ shiftId: "new" });
+  },
+);
