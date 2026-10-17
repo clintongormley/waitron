@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -15,6 +15,7 @@ import { linkFloorPlanSet, readFloorPlanSets } from "./floor-plan-set-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
+import { departments } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -140,6 +141,22 @@ describe("a department's floor plan sets", () => {
         isDefault: true,
         zoneIds: [dining.id, terrace.id],
       });
+    });
+  });
+
+  it("leaves out an inactive department's sets and refuses to link one to it", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const { cfg, restaurant, bar } = await venue(tx);
+      const kept = await newSet(tx, cfg);
+      const hidden = await newSet(tx, cfg);
+      await linkFloorPlanSet(tx, cfg, { setId: kept, departmentId: restaurant, name: "Standard" });
+      await linkFloorPlanSet(tx, cfg, { setId: hidden, departmentId: bar, name: "Standard" });
+      await tx.update(departments).set({ active: false }).where(eq(departments.id, bar));
+      expect((await readFloorPlanSets(tx, cfg)).map(({ setId }) => setId)).toEqual([kept]);
+      const another = await newSet(tx, cfg);
+      await expect(
+        linkFloorPlanSet(tx, cfg, { setId: another, departmentId: bar, name: "Dinner" }),
+      ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: bar } });
     });
   });
 
