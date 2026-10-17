@@ -28,6 +28,10 @@ at selection installation. A separate case retains the original refusal after se
 local directory evidence. The replacement plan's Task 8 distinguishes current outside sources from
 the immutable retirement archive. No fiscal hash or filing assertion changes are covered by this inventory.
 
+> **2026-10-17:** the hour plan replaces the Finish contract described in the following
+> paragraph. See “Hour retirement and exact Finish” below; its older paper fixtures remain
+> unfinished qualification.
+
 The Finish fixtures now supply a consumed-current-register answer, including its consulted person
 and public history reference, separately from publication inputs. You can inspect these additions
 in `first-fiscal-declared-publication.test.ts` and `first-setup-finish.route.test.ts`. Their existing
@@ -545,3 +549,43 @@ fails. The corrected six server files pass 29 cases. The fiscal selection and pr
 pass 160 cases; root boundary/error/teardown checks pass 3,117. Ten installed omissions fail their
 intended assertions, with passing restorations; the final installed command/runtime run passes
 149 cases. These results qualify this checkpoint, not Task 4 or the whole branch.
+
+
+## Hour retirement and exact Finish — 2026-10-17
+
+You can review these changes against the approved hour design’s keep/change/drop inventory
+(“exact Finish” and “Consumed / Not consumed / Unknown”) and implementation plan Task 5.
+A null register field records no consultation. Outcome and authority remain explicit in each
+prepared/applied record; Finish also retains the checked commit with the original files.
+
+| Existing check | Before | After |
+| --- | --- | --- |
+| `apps/server/src/first-fiscal-declared-publication.test.ts:238`, local audit check | Audit contains the supplied consumed-register answer. | Audit contains `register: null`; original-byte, digest, file-mode, ordering and allocation assertions remain. |
+| Same file:330, malformed Finish payload cases | An unavailable consumed answer refuses with `setup.attempt_invalid`. | An obsolete register field in publication inputs refuses with `setup.request_invalid`; unchanged state and zero-publication checks remain. |
+| Same file:379, recovered ownership case | Fresh password recovery without outside confirmation refuses. | The original capability still refuses; fresh password recovery plus exact commitment succeeds, with one initial activation and unchanged stored allocation. |
+| `apps/server/src/first-setup-finish.route.test.ts:229`, request fixture | Every Finish silently receives a consumed-register answer. | Finish sends only its explicit body. The former missing-register representative becomes a consumed-register object that is now an unexpected field. |
+| Same file:344, obsolete register payloads | Missing answer returns 400/request-invalid; other invalid answers return 409/attempt-invalid. | Every supplied register field returns 400/request-invalid before the database opens; no publication/restart remains asserted. |
+| Same file:470, real resolution Finish | No new outside grant returns 400/allocation-invalid, retaining committed state and absent trading settings. | Fresh password recovery returns 200, complete state and the exact production trading settings; retained allocation comparison remains. |
+| `apps/server/src/first-setup-empty-selection.route.test.ts:276`, missing declaration case | Missing register field is a malformed request (400/request-invalid). | The declaration-free request is well formed, but cannot authorise this fixture’s older register-based retirement (503/not-ready); no workspace selection remains asserted. |
+| `packages/provisioning/src/first-setup-resolution.test.ts:88`, unused-assignment metadata | Null register is rejected with otherwise valid empty metadata. | Malformed `{}` and contradictory absence are rejected; new cases retain null with explicit local authority and observed outcome across restart. |
+| Same file:396, unconsulted retirement/selection metadata | Null rejects beside empty-preactivation metadata. | Unknown-or-nonempty metadata still rejects; explicit empty or separately password-authorised missing outcomes can be recorded. Finish requires committed-exact. |
+
+These are intentional generic host-contract changes. No existing hash, filing, invoice-counter,
+login, cash-drawer or root-guard assertion changed. Old Finish fixtures still try to prepare paper
+material through the configured hour contribution, so their revised assertions have **not** all
+executed. They remain open work; their presence is not evidence of a passing Finish suite.
+
+The new `first-fiscal-hour-finish.test.ts` uses the configured hour selector and real provisioning,
+password recovery, storage and publication. Only external time replies and the release stamp are
+controlled. It checks whole-hour exclusion across changed bases, immutable originals, original-root
+refusal, positive full-empty proof, missing/corrupt/partial/unknown data, retained activation
+history, exact module/venue/publication agreement, interrupted audit and selection writes, and
+publication without fiscal replay. One case issues a real synthetic sale and compares its record,
+chain, pending filing and advanced counter. The HTTPS boot case reads the retained database copy
+that the resolution server actually used.
+
+Receipts are in the lane’s `a679-retirement-20261017` directory. The independently installed exact
+starting commit `7f7c93adb67c80725e46ab9581c1d8366758fe4a` reports 57 failures and 37 passes across the
+six retained server suites. The installed candidate reports those same failure positions, plus the
+new hour cases; `legacy-comparison.json` lists every name. This measures those six suites only.
+Task 5 and the branch remain incomplete until their remaining qualification is resolved.

@@ -6,7 +6,6 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
-import { assertFinishRegister } from "./first-setup-finish-audit.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
@@ -580,7 +579,7 @@ export function mountFirstSetupResolutionApi(
           "ownerGeneration",
           "workspaceId",
           "selectionGeneration",
-          withPassword ? "password" : "register",
+          ...(withPassword ? ["password"] : Object.hasOwn(rawBody, "register") ? ["register"] : []),
         ]);
         if (
           ![body.revision, body.ownerGeneration, body.selectionGeneration].every(
@@ -589,10 +588,12 @@ export function mountFirstSetupResolutionApi(
         )
           invalid();
         let proof:
-          { password: string } | { register: import("@waitron/provisioning").RegisterAnswer };
+          { password: string } | { register?: import("@waitron/provisioning").RegisterAnswer };
         if (withPassword) proof = { password: text(body.password) };
         else {
-          proof = { register: registerAnswer(body.register) };
+          proof = Object.hasOwn(body, "register")
+            ? { register: registerAnswer(body.register) }
+            : {};
         }
         const selected = await selection.resumeWorkspaceSelection({
           inspectionId: text(body.inspectionId),
@@ -732,14 +733,7 @@ export function mountFirstSetupResolutionApi(
                 }
                 return c.json({ accepted: true });
               }
-              exact(body, [
-                "inspectionId",
-                "revision",
-                "ownerGeneration",
-                "publication",
-                "register",
-              ]);
-              assertFinishRegister(body.register);
+              exact(body, ["inspectionId", "revision", "ownerGeneration", "publication"]);
               const inspected = await host.resolution.inspectFirstSetupResolution();
               if (
                 body.inspectionId !== inspected.inspectionId ||
@@ -749,7 +743,7 @@ export function mountFirstSetupResolutionApi(
                 throw new AppError("setup.attempt_conflict", {});
               const publication = object(body.publication);
               await options.withPublication!((deps) =>
-                finishFirstFiscalSetup(host, deps, owner, publication, hold, body.register),
+                finishFirstFiscalSetup(host, deps, owner, publication, hold),
               );
               setTimeout(() => options.requestRestart?.(), 0);
               return c.json({ provisioned: true, restarting: true });
@@ -766,11 +760,12 @@ export function mountFirstSetupResolutionApi(
         const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
         if (!(socket instanceof TLSSocket) || !socket.encrypted)
           throw new AppError("setup.owner_required", {});
-        const body = exact(await readFirstFiscalBody(c), [
+        const rawBody = object(await readFirstFiscalBody(c));
+        const body = exact(rawBody, [
           "inspectionId",
           "revision",
           "ownerGeneration",
-          "register",
+          ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
         ]);
         if (
           ![body.revision, body.ownerGeneration].every(
@@ -778,7 +773,9 @@ export function mountFirstSetupResolutionApi(
           )
         )
           invalid();
-        const register = registerAnswer(body.register);
+        const register = Object.hasOwn(body, "register")
+          ? registerAnswer(body.register)
+          : undefined;
         const selected = await options.startAgain!({
           inspectionId: text(body.inspectionId),
           revision: body.revision as number,

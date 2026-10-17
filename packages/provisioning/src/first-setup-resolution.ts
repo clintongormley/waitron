@@ -42,11 +42,11 @@ interface ResolutionMetadata {
   nextWorkspace: WorkspaceBinding | null;
   recordedAt: string;
 }
-export type ResolutionRecord = ResolutionMetadata &
-  (
-    | { action: "marker-repair" | "ownership-rebind"; register: RegisterAnswer | null }
-    | { action: "retire" | "select-workspace" | "finish-publication"; register: RegisterAnswer }
-  );
+export interface ResolutionRecord extends ResolutionMetadata {
+  action:
+    "marker-repair" | "ownership-rebind" | "retire" | "select-workspace" | "finish-publication";
+  register: RegisterAnswer | null;
+}
 export interface FirstSetupOriginal {
   name: string;
   bytes: Uint8Array | null;
@@ -220,10 +220,16 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
   const answer = value.register;
   if (
     answer === null &&
-    value.authority === "original-password" &&
-    ["marker-repair", "ownership-rebind"].includes(String(value.action))
+    ((value.authority === "local-empty-unused-assignment" &&
+      value.database === "empty-preactivation" &&
+      ["retire", "select-workspace"].includes(String(value.action))) ||
+      (value.authority === "original-password" &&
+        (["marker-repair", "ownership-rebind"].includes(String(value.action)) ||
+          (value.action === "finish-publication" && value.database === "committed-exact") ||
+          (["retire", "select-workspace"].includes(String(value.action)) &&
+            ["missing", "empty-preactivation"].includes(String(value.database))))))
   ) {
-    // These password-authorised actions do not consult the current register.
+    // Null records no consultation; the observed outcome and authority are checked separately.
   } else if (
     exact(answer, ["kind", "confirmed"]) &&
     answer.kind === "no-current-master" &&
@@ -252,8 +258,7 @@ function validateInput(value: unknown): asserts value is ResolutionInput {
   if (
     value.authority === "local-empty-unused-assignment" &&
     (value.database !== "empty-preactivation" ||
-      !object(answer) ||
-      answer.kind !== "current-master" ||
+      !(answer === null || (object(answer) && answer.kind === "current-master")) ||
       !["retire", "select-workspace"].includes(String(value.action)))
   )
     invalid();

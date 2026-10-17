@@ -226,20 +226,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
               }),
           ...extra,
         },
-        body: JSON.stringify(
-          action === "finish"
-            ? {
-                register: {
-                  kind: "current-master",
-                  status: "Consumed",
-                  custodian: "Elena",
-                  reference: f.statement.delivery.historyDigest,
-                  consultedAt: "2026-10-16T00:00:00.000Z",
-                },
-                ...(body as object),
-              }
-            : body,
-        ),
+        body: JSON.stringify(body),
       } as RequestInit);
     const inspect = () => host.resolution.inspectFirstSetupResolution();
     const snapshot = async () => {
@@ -337,7 +324,13 @@ it("HTTPS Finish publishes the exact committed setup after fresh document confir
 });
 
 it.each([
-  undefined,
+  {
+    kind: "current-master",
+    status: "Consumed",
+    custodian: "Elena",
+    reference: "a".repeat(64),
+    consultedAt: "2026-10-16T00:00:00.000Z",
+  },
   null,
   { kind: "no-current-master", confirmed: true },
   {
@@ -348,7 +341,7 @@ it.each([
     consultedAt: "2026-10-16T00:00:00.000Z",
   },
 ])(
-  "HTTPS Finish rejects an invalid register answer %j before opening a database",
+  "HTTPS Finish rejects an obsolete register payload %j before opening a database",
   async (register) => {
     const f = await fixture();
     try {
@@ -358,9 +351,9 @@ it.each([
         { ...(await f.snapshot()), publication, register },
         owner,
       );
-      expect(response.status).toBe(register === undefined ? 400 : 409);
+      expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
-        error: { code: register === undefined ? "setup.request_invalid" : "setup.attempt_invalid" },
+        error: { code: "setup.request_invalid" },
       });
       expect(f.counts()).toEqual({ activations: 1, publications: 0, opens: 0, restart: 0 });
       expect((await f.host.store.read())?.status).toBe("committed");
@@ -474,15 +467,18 @@ it("Finish on a newly missing retained database refuses without recreating it", 
   }
 });
 
-it("Finish cannot reuse the interrupted process's outside-document grant after ownership recovery", async () => {
+it("Finish uses fresh password recovery and exact local commitment without an outside-document grant", async () => {
   const f = await fixture(true);
   try {
     const owner = await f.recover();
     const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: { code: "sif.allocation_invalid" } });
-    expect((await f.host.store.read())?.status).toBe("committed");
-    await expect(stat(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+    expect((await f.host.store.read())?.status).toBe("complete");
+    expect(parseEnvFile(await readFile(join(f.stateDir, "trading.env"), "utf8"))).toMatchObject({
+      WAITRON_ENV: "production",
+      WAITRON_ONBOARDING_INTENT: "live",
+    });
     const opened = await openVenueDatabase(f.venueDir);
     try {
       expect(await opened.venue.select().from(fiscalAllocations)).toEqual(f.rows);

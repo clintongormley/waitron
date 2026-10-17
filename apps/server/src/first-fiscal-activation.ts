@@ -19,7 +19,7 @@ import {
 import { putCredential, tryGetCredential } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
-import { assertFinishRegister, prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
+import { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 
 function conflict(): never {
   throw new AppError("setup.attempt_uncertain", {});
@@ -271,7 +271,6 @@ export async function finishFirstFiscalSetup(
   owner: FirstSetupOwnerAttempt,
   body: Record<string, unknown>,
   hold: FirstSetupHold,
-  register: unknown,
 ): Promise<VenueResult> {
   let state = await host.owner.authorize(owner);
   const ownership = [...state.history]
@@ -283,23 +282,9 @@ export async function finishFirstFiscalSetup(
   host.assertSelection(state);
   const publication = firstFiscalPayload(host, state, body);
   if (!isDeepStrictEqual(state.inputs.$publication, { digest: publication.digest })) conflict();
-  assertFinishRegister(register);
-  for (const module of state.frozen.modules) {
-    if (initialSetupFor(host.modules, module.module) === undefined) continue;
-    const evidence = await host.evidence.read(
-      firstSetupModuleContext(state, module.module).binding,
-    );
-    if (
-      typeof evidence?.current !== "object" ||
-      evidence.current === null ||
-      !("priorActivation" in evidence.current) ||
-      evidence.current.priorActivation !== "committed"
-    )
-      throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
-  }
   const checked = await checkedFirstFiscalCommit(host, deps, state);
   if (checked === null) conflict();
-  const applyAudit = await prepareFirstSetupFinishAudit(host, state, checked, register);
+  const applyAudit = await prepareFirstSetupFinishAudit(host, state, checked);
   if (state.status === "activation-started")
     state = await host.store.update(
       state.frozen.attemptId,

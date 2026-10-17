@@ -273,7 +273,7 @@ it("rejects altered observations and ambiguous authority without selecting a wor
     const inspection = await f.get();
     for (const [body, status, code] of [
       [{ ...inspection, register: noMaster, password: "ambiguous" }, 400, "setup.request_invalid"],
-      [{ ...inspection }, 400, "setup.request_invalid"],
+      [{ ...inspection }, 503, "setup.not_ready"],
       [
         { ...inspection, register: { ...noMaster, confirmed: false } },
         400,

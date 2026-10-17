@@ -168,15 +168,14 @@ async function fixture() {
         capability: rebound.capability,
       };
     },
-    finish: (owner = f.ownerAttempt, suppliedBody = body, answer: unknown = register) =>
+    finish: (owner = f.ownerAttempt, suppliedBody = body, answer?: unknown) =>
       host.coordinator.run((hold) =>
         finishFirstFiscalSetup(
           host,
           { ...deps, provision: undefined, assertFiscalReady: undefined },
           owner,
-          suppliedBody,
+          answer === undefined ? suppliedBody : { ...suppliedBody, register: answer },
           hold,
-          answer,
         ),
       ),
     interrupt: () => {
@@ -197,7 +196,7 @@ it("installs the staged named verifier after exact fiscal commit and before trad
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 
-it("Finish retains the consulted register and exact originals before publication, then records completion", async () => {
+it("Finish retains the local exact-commit observation and originals before publication, then records completion", async () => {
   const f = await fixture();
   await f.consult();
   f.interrupt();
@@ -236,7 +235,7 @@ it("Finish retains the consulted register and exact originals before publication
     observedOwnerGeneration: owner.ownerGeneration,
     authority: "original-password",
     database: "committed-exact",
-    register: f.register,
+    register: null,
     nextWorkspace: null,
     previousRecordDigest: null,
   });
@@ -328,23 +327,20 @@ it.each([
     reference: "a".repeat(64),
     consultedAt: "2026-10-16T00:00:00.000Z",
   },
-])(
-  "Finish refuses an unavailable consumed-register answer %j without publication",
-  async (answer) => {
-    const f = await fixture();
-    await f.consult();
-    f.interrupt();
-    await expect(f.activate()).rejects.toThrow("synthetic after commit");
-    const owner = await f.recover();
-    await f.consult(true, owner);
-    const before = await fs.readFile(join(f.stateDir, "first-setup.json"));
-    await expect(f.finish(owner, undefined, answer)).rejects.toMatchObject({
-      code: "setup.attempt_invalid",
-    });
-    expect(await fs.readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-    expect(f.counts()).toEqual({ activations: 1, publications: 0 });
-  },
-);
+])("Finish refuses an obsolete register payload %j without publication", async (answer) => {
+  const f = await fixture();
+  await f.consult();
+  f.interrupt();
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  const owner = await f.recover();
+  await f.consult(true, owner);
+  const before = await fs.readFile(join(f.stateDir, "first-setup.json"));
+  await expect(f.finish(owner, undefined, answer)).rejects.toMatchObject({
+    code: "setup.request_invalid",
+  });
+  expect(await fs.readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(f.counts()).toEqual({ activations: 1, publications: 0 });
+});
 it("publication after interruption preserves the staged verifier with zero further fiscal activations", async () => {
   const f = await fixture();
   await f.consult();
@@ -380,7 +376,7 @@ it("Finish setup refuses before activation and cannot spend a fresh allocation",
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
-it("Finish setup needs a fresh outside committed confirmation and the original password", async () => {
+it("Finish setup requires fresh original-password recovery and no outside committed confirmation", async () => {
   const f = await fixture();
   await f.consult();
   f.interrupt();
@@ -388,8 +384,10 @@ it("Finish setup needs a fresh outside committed confirmation and the original p
   const beforeRecovery = await f.consult(true);
   await expect(f.finish(beforeRecovery)).rejects.toMatchObject({ code: "setup.owner_required" });
   const owner = await f.recover();
-  await expect(f.finish(owner)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-  expect(f.counts()).toEqual({ activations: 1, publications: 0 });
+  const before = await suite.db.select().from(fiscalAllocations);
+  await expect(f.finish(owner)).resolves.toMatchObject({ nodeId: f.staged.key.nodeId });
+  expect(f.counts()).toEqual({ activations: 1, publications: 1 });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(before);
 });
 
 it("Finish setup recovers the exact committed result when the host result write was interrupted", async () => {

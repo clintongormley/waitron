@@ -84,8 +84,8 @@ it.each(["marker-repair", "ownership-rebind", "finish-publication"] as const)(
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
-it.each([null, { kind: "no-current-master", confirmed: true }])(
-  "unused-assignment authority refuses an absent consulted register %j",
+it.each([{}, { kind: "no-current-master", confirmed: true }])(
+  "unused-assignment authority refuses a malformed or contradictory register %j",
   async (register) => {
     const f = await fixture();
     await expect(
@@ -393,11 +393,14 @@ it.each(["marker-repair", "ownership-rebind"] as const)(
   },
 );
 it.each(["retire", "select-workspace", "finish-publication"] as const)(
-  "an unconsulted register cannot authorise %s",
+  "an unconsulted register cannot authorise %s with an unknown database outcome",
   async (action) => {
     const f = await fixture();
     await expect(
-      f.store.prepare({ ...f.input, action, register: null }, f.originals),
+      f.store.prepare(
+        { ...f.input, action, database: "unknown-or-nonempty", register: null },
+        f.originals,
+      ),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
@@ -413,3 +416,39 @@ it.each(["marker-repair", "ownership-rebind"] as const)(
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
+
+it.each([
+  ["original-password", "retire", "missing"],
+  ["original-password", "select-workspace", "empty-preactivation"],
+  ["original-password", "finish-publication", "committed-exact"],
+  ["local-empty-unused-assignment", "retire", "empty-preactivation"],
+  ["local-empty-unused-assignment", "select-workspace", "empty-preactivation"],
+])(
+  "retains local %s/%s/%s observations without inventing register answers",
+  async (authority, action, database) => {
+    const f = await fixture();
+    const prepared = await f.store.prepare(
+      { ...f.input, authority, action, database, register: null },
+      f.originals,
+    );
+    const applied = await f.store.apply(prepared);
+    const restarted = resolution.createFirstSetupResolutionStore({
+      ...f.roots,
+      coordinator: resolution.createFirstSetupCoordinator(),
+    });
+    expect(await restarted.read(f.input.resolutionId)).toEqual([prepared, applied]);
+    expect(applied).toMatchObject({ authority, action, database, register: null });
+    expect(await restarted.readOriginals(f.input.resolutionId)).toEqual(f.originals);
+  },
+);
+
+it.each([
+  ["local-empty-unused-assignment", "retire", "missing"],
+  ["local-empty-unused-assignment", "finish-publication", "committed-exact"],
+  ["original-password", "finish-publication", "empty-preactivation"],
+])("refuses impossible local observations %s/%s/%s", async (authority, action, database) => {
+  const f = await fixture();
+  await expect(
+    f.store.prepare({ ...f.input, authority, action, database, register: null }, f.originals),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});

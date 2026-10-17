@@ -363,8 +363,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   claim and password-recovery path. Built-command checks use a migrated synthetic database and an
   offline time reply. Missing delivery/publication support still refuses after preparation;
   a successor workspace without a retired-evidence adapter refuses before clock selection.
-  Delivery, activation and checked publication remain open, alongside the complete wizard.
-  Real hour setup/recovery consumers and generated-PDF acceptance remain open.
+  Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
+  resolution boot and preservation of an issued record, chain, outbox and advanced counter.
+  Legacy paper fixtures still fail qualification. Key-only PDF delivery, final command composition,
+  the complete wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.

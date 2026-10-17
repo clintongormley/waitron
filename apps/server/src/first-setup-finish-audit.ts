@@ -5,45 +5,16 @@ import {
   createFirstSetupResolutionStore,
   firstSetupAnchorFor,
   type FirstSetupState,
-  type RegisterAnswer,
 } from "@waitron/provisioning";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { checkedFirstFiscalCommit } from "./first-fiscal-activation.js";
 import "./errors.js";
-
-export function assertFinishRegister(
-  answer: unknown,
-): asserts answer is Extract<RegisterAnswer, { kind: "current-master" }> {
-  if (
-    typeof answer !== "object" ||
-    answer === null ||
-    Array.isArray(answer) ||
-    Object.keys(answer).length !== 5 ||
-    !("kind" in answer) ||
-    answer.kind !== "current-master" ||
-    !("status" in answer) ||
-    answer.status !== "Consumed" ||
-    !("custodian" in answer) ||
-    typeof answer.custodian !== "string" ||
-    !answer.custodian.trim() ||
-    answer.custodian.length > 256 ||
-    !("reference" in answer) ||
-    typeof answer.reference !== "string" ||
-    !/^[a-f0-9]{64}$/.test(answer.reference) ||
-    !("consultedAt" in answer) ||
-    typeof answer.consultedAt !== "string" ||
-    !Number.isFinite(Date.parse(answer.consultedAt)) ||
-    new Date(answer.consultedAt).toISOString() !== answer.consultedAt
-  )
-    throw new AppError("setup.attempt_invalid", {});
-}
 
 // The caller holds venue exclusion and the coordinator; the audit grants no publication authority.
 export async function prepareFirstSetupFinishAudit(
   host: FirstFiscalHost,
   state: FirstSetupState,
   checked: NonNullable<Awaited<ReturnType<typeof checkedFirstFiscalCommit>>>,
-  register: RegisterAnswer,
 ) {
   const snapshot = await host.resolution.captureFirstSetupOriginals();
   if (
@@ -64,7 +35,7 @@ export async function prepareFirstSetupFinishAudit(
       observedOwnerGeneration: state.ownerGeneration,
       database: "committed-exact",
       authority: "original-password",
-      register,
+      register: null,
       action: "finish-publication",
       nextWorkspace: null,
     },

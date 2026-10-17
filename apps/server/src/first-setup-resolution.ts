@@ -29,7 +29,7 @@ export interface StartAgainFirstSetupRequest {
   revision: number;
   ownerGeneration: number;
   owner?: FirstSetupOwnerAttempt;
-  register: RegisterAnswer;
+  register?: RegisterAnswer;
 }
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
@@ -93,7 +93,9 @@ export function createFirstSetupResolutionActions(
         ownerGeneration: number;
         workspaceId: string;
         selectionGeneration: number;
-      } & ({ password: string; register?: never } | { register: RegisterAnswer; password?: never }),
+      } & (
+        { password: string; register?: never } | { register?: RegisterAnswer; password?: never }
+      ),
     ): Promise<WorkspaceBinding> {
       const inspected = await inspectSelection();
       if (inspected === null) conflict();
@@ -124,14 +126,14 @@ export function createFirstSetupResolutionActions(
           current.record.authority === "local-empty-no-custodian" &&
           request.register?.kind === "no-current-master" &&
           request.register.confirmed === true &&
-          current.record.register.kind === "no-current-master" &&
+          current.record.register?.kind === "no-current-master" &&
           unused(current.state)
         )
           return;
         if (
           current.record.authority === "local-empty-unused-assignment" &&
           request.register?.kind === "current-master" &&
-          current.record.register.kind === "current-master" &&
+          current.record.register?.kind === "current-master" &&
           typeof request.register.consultedAt === "string" &&
           Number.isFinite(Date.parse(request.register.consultedAt)) &&
           new Date(request.register.consultedAt).toISOString() === request.register.consultedAt &&
@@ -152,6 +154,27 @@ export function createFirstSetupResolutionActions(
               await archive.readOriginals(current.record.resolutionId),
               host.modules,
             )
+          )
+            return;
+        }
+        if (
+          current.record.authority === "local-empty-unused-assignment" &&
+          current.record.register === null &&
+          request.register === undefined &&
+          host.modules !== undefined
+        ) {
+          const archive = createFirstSetupResolutionStore({
+            venueDir: current.binding.anchorVenueDir,
+            stateDir: current.binding.anchorStateDir,
+            coordinator: createFirstSetupCoordinator(),
+          });
+          if (
+            unused(current.state) ||
+            (await firstSetupUnusedAssignment(
+              current.state,
+              await archive.readOriginals(current.record.resolutionId),
+              host.modules,
+            ))
           )
             return;
         }
@@ -220,7 +243,7 @@ export function createFirstSetupResolutionActions(
           const noInheritedRegister = retired.every(
             ({ state, record }) =>
               record.action === "retire" &&
-              record.register.kind === "no-current-master" &&
+              record.register?.kind === "no-current-master" &&
               unused(state),
           );
           const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
@@ -229,9 +252,10 @@ export function createFirstSetupResolutionActions(
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
           let unusedAssignment =
             inspection.emptyDatabase &&
-            request.register.kind === "current-master" &&
+            (request.register === undefined || request.register.kind === "current-master") &&
             host.modules !== undefined &&
-            (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules));
+            ((request.register === undefined && emptyWorkspace) ||
+              (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
           if (unusedAssignment) {
             const anchor = await firstSetupAnchorFor(options);
             const archive = createFirstSetupResolutionStore({
@@ -260,8 +284,8 @@ export function createFirstSetupResolutionActions(
             else {
               if (
                 !empty ||
-                request.register.kind !== "no-current-master" ||
-                request.register.confirmed !== true
+                request.register?.kind !== "no-current-master" ||
+                request.register?.confirmed !== true
               )
                 unavailable();
               authority = "local-empty-no-custodian";
@@ -278,7 +302,7 @@ export function createFirstSetupResolutionActions(
             )
               throw new AppError("setup.owner_required", {});
             authority = "original-password";
-            if (request.register.kind === "no-current-master" && !empty) unavailable();
+            if (request.register?.kind === "no-current-master" && !empty) unavailable();
             if (inspection.database !== "missing" && !emptyWorkspace && !unusedAssignment)
               unavailable();
           }
@@ -313,7 +337,7 @@ export function createFirstSetupResolutionActions(
               observedOwnerGeneration: state.ownerGeneration,
               database: emptyWorkspace || unusedAssignment ? "empty-preactivation" : "missing",
               authority,
-              register: request.register,
+              register: request.register ?? null,
               action: "retire",
               nextWorkspace: binding,
             },
