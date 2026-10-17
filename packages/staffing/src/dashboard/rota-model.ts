@@ -1,5 +1,5 @@
 import { areaKey, type AreaDayMatch, type AreaRef } from "../slots.js";
-import type { RotaWeek } from "../staffing-types.js";
+import type { RotaWeek, StaffRole } from "../staffing-types.js";
 
 export const EVERYONE = "everyone";
 export type Show =
@@ -19,6 +19,19 @@ export function matchesFor(read: RotaWeek, show: Show, businessDay?: string): Ar
         .filter((a) => show.kind === "everyone" || areaKey(a.area) === show.key)
         .map((a) => a.match),
     );
+}
+
+/** The staff roles an area draws a row for: those with a slot, or a shift of the week's own days,
+ *  in that area — in position order. */
+export function rolesShown(read: RotaWeek, show: Show & { kind: "area" }): StaffRole[] {
+  const days = new Set(read.days.map((d) => d.businessDay));
+  const used = new Set([
+    ...matchesFor(read, show).flatMap((m) => m.slots.map((s) => s.slot.staffRoleId)),
+    ...read.shifts
+      .filter((s) => s.area && areaKey(s.area) === show.key && days.has(s.businessDay))
+      .map((s) => s.staffRoleId),
+  ]);
+  return read.staffRoles.filter((r) => used.has(r.id)).sort((a, b) => a.position - b.position);
 }
 
 type Counts = { unfilled: number; partly: number; over: number };

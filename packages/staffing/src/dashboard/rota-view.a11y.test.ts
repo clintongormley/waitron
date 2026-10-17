@@ -53,6 +53,7 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     "published-all-filled",
     "no-rules",
     "labour-count",
+    "cell-add focused",
   ])("%s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -129,6 +130,13 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
             .matches(":popover-open"),
         ).toBe(true),
       );
+    }
+    if (state === "cell-add focused") {
+      const area = el.shadowRoot!.querySelector("rota-by-area")!;
+      await (area as import("lit").LitElement).updateComplete;
+      area.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.focus();
+      await userEvent.tab();
+      expect(area.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cell-add");
     }
     if (state === "no-rules")
       await vi.waitFor(() =>

@@ -6,7 +6,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/fixed-title";
-import { areaKey, type Slot } from "../slots.js";
+import { areaKey, type AreaRef, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { weekTitleParts } from "./format.js";
@@ -161,7 +161,13 @@ export class RotaView extends LitElement {
   @state() private loadError = "";
   @state() private actionError = "";
   @state() private picked?: Slot;
-  @state() private editor?: { shiftId?: string; businessDay?: string; personId?: string };
+  @state() private editor?: {
+    shiftId?: string;
+    businessDay?: string;
+    personId?: string;
+    area?: AreaRef;
+    staffRoleId?: string;
+  };
   @state() private busy = false;
   @state() private warnings?: { breaches: RosterBreach[]; ruleset: WorkTimeRuleset | null };
   @state() private warningsError = "";
@@ -559,6 +565,11 @@ export class RotaView extends LitElement {
                       @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
                         this.editor = e.detail;
                       }}
+                      @add-shift=${(
+                        e: CustomEvent<{ businessDay: string; area: AreaRef; staffRoleId: string }>,
+                      ) => {
+                        this.editor = e.detail;
+                      }}
                       @pick-slot=${(e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
                         this.picked = e.detail.slot;
                         this.#anchor = e.detail.anchor;
@@ -600,6 +611,8 @@ export class RotaView extends LitElement {
               .shiftId=${this.editor?.shiftId}
               .businessDay=${this.editor?.businessDay ?? ""}
               .personId=${this.editor?.personId ?? ""}
+              .area=${this.editor?.area ? areaKey(this.editor.area) : ""}
+              .staffRoleId=${this.editor?.staffRoleId ?? ""}
               @shift-close=${() => {
                 this.editor = undefined;
               }}

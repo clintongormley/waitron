@@ -7,6 +7,7 @@ import {
   dayCounts,
   isClosed,
   matchesFor,
+  rolesShown,
   summary,
   weekCounts,
   weekShiftCount,
@@ -264,5 +265,48 @@ describe("what a count button steps to", () => {
     open.days[6]!.areas[0]!.match.slots = [];
     expect(open.days[6]!.hasHours).toBe(true);
     expect(isClosed(open, kitchen(open), open.days[6]!.businessDay)).toBe(false);
+  });
+});
+
+describe("the staff role rows an area draws", () => {
+  const kitchen = (read: RotaWeek) =>
+    chosenShow(read, "station:kitchen") as ReturnType<typeof chosenShow> & { kind: "area" };
+  it("drops a staff role with no slot and no shift that week, and keeps one with only an over shift", () => {
+    const read = rotaWeek();
+    read.staffRoles.push({
+      id: "pastry",
+      name: "Pastry chef",
+      colour: "blue",
+      position: 2,
+      holderIds: [],
+    });
+    for (const day of read.days)
+      for (const a of day.areas)
+        a.match.slots = a.match.slots.filter((s) => s.slot.staffRoleId !== "sous");
+    read.shifts = read.shifts.filter((s) => s.shiftId !== "part");
+    expect(rolesShown(read, kitchen(read)).map((r) => r.id)).toEqual(["head", "sous"]);
+    read.shifts = read.shifts.filter((s) => s.shiftId !== "over");
+    for (const day of read.days) for (const a of day.areas) a.match.over = [];
+    expect(rolesShown(read, kitchen(read)).map((r) => r.id)).toEqual(["head"]);
+  });
+  it("counts a shift only in its own area and week", () => {
+    const read = rotaWeek();
+    for (const day of read.days) for (const a of day.areas) a.match = { slots: [], over: [] };
+    read.shifts = read.shifts.filter((s) => s.shiftId !== "part");
+    read.shifts = read.shifts.map((s) =>
+      s.shiftId === "over" ? { ...s, area: { kind: "department", id: "restaurant" } } : s,
+    );
+    read.shifts.push({
+      ...read.shifts[0]!,
+      shiftId: "early",
+      staffRoleId: "sous",
+      businessDay: "2026-11-29",
+    });
+    expect(rolesShown(read, kitchen(read)).map((r) => r.id)).toEqual(["head"]);
+    expect(
+      rolesShown(read, chosenShow(read, "department:restaurant") as ReturnType<typeof kitchen>).map(
+        (r) => r.id,
+      ),
+    ).toEqual(["sous"]);
   });
 });

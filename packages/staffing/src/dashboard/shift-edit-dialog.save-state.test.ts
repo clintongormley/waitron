@@ -40,3 +40,39 @@ it("quiets Save on undo and prevents a synthetic unchanged save", async () => {
   expect(save().variant).toBe("secondary");
   expect(save().shadowRoot!.querySelector("button")!.disabled).toBe(true);
 });
+it("a new shift opened from a cell starts with its area and staff role, and its Save stays quiet until a person is chosen", async () => {
+  setLocale("en");
+  el = new ShiftEditDialog();
+  el.open = true;
+  el.week = rotaWeek();
+  el.businessDay = "2026-12-04";
+  el.area = "station:kitchen";
+  el.staffRoleId = "sous";
+  const client = rotaApi();
+  el.api = client.api;
+  document.body.append(el);
+  applyTokens(el);
+  await el.updateComplete;
+  const save = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  await save().updateComplete;
+  const value = (name: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { value: string }>(`[name=${name}]`)!.value;
+  expect([value("personId"), value("area"), value("staffRoleId")]).toEqual([
+    "",
+    "station:kitchen",
+    "sous",
+  ]);
+  expect(save().variant).toBe("secondary");
+  expect(save().shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  save().click();
+  await el.updateComplete;
+  expect(client.request).not.toHaveBeenCalled();
+  el.shadowRoot!.querySelector("[name=personId]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "laia" } }),
+  );
+  await el.updateComplete;
+  await save().updateComplete;
+  expect(save().variant).toBe("primary");
+  expect(save().shadowRoot!.querySelector("button")!.disabled).toBe(false);
+});

@@ -13,6 +13,8 @@ type Editor = LitElement & {
   shiftId?: string;
   businessDay: string;
   personId: string;
+  area: string;
+  staffRoleId: string;
 };
 let el: Editor;
 beforeEach(() => setLocale("en"));
@@ -66,6 +68,49 @@ it("marks each required field, opens Save quiet, enables on edits and quiets on 
   expect(button("save").variant).toBe("primary");
   await change("endsAt", "17:00");
   expect(button("save").disabled).toBe(true);
+});
+it("a new shift opened from a cell starts with its area and staff role", async () => {
+  const api = await mount(false);
+  el.open = false;
+  el.personId = "";
+  await el.updateComplete;
+  el.area = "station:kitchen";
+  el.staffRoleId = "sous";
+  el.open = true;
+  await el.updateComplete;
+  expect(field("personId").value).toBe("");
+  expect(field("area").value).toBe("station:kitchen");
+  expect(field("staffRoleId").value).toBe("sous");
+  await change("personId", "laia");
+  await change("startsAt", "09:00");
+  await change("endsAt", "17:00");
+  button("save").click();
+  await vi.waitFor(() => expect(el.open).toBe(false));
+  expect(api.addRotaShift).toHaveBeenCalledWith({
+    week: "2026-11-30",
+    businessDay: "2026-12-04",
+    personId: "laia",
+    area: { kind: "station", id: "kitchen" },
+    staffRoleId: "sous",
+    startsAt: "09:00",
+    endsAt: "17:00",
+  });
+});
+it("a second cell's editor on the same day starts afresh with its own staff role", async () => {
+  await mount(false);
+  el.personId = "";
+  el.area = "station:kitchen";
+  el.staffRoleId = "sous";
+  await el.updateComplete;
+  await change("startsAt", "10:00");
+  expect(field("startsAt").value).toBe("10:00");
+  el.staffRoleId = "head";
+  await el.updateComplete;
+  expect(field("staffRoleId").value).toBe("head");
+  expect(field("startsAt").value).toBe("");
+  el.area = "department:restaurant";
+  await el.updateComplete;
+  expect(field("area").value).toBe("department:restaurant");
 });
 it("assigns an unlinked shift through a patch and closes after writing", async () => {
   const api = await mount();

@@ -82,11 +82,12 @@ describe("the Rota by area", () => {
       "uncovered 14:00–17:00",
       "outside staff role",
       "not needed",
-      "+ unfilled",
+      "Fill",
       "belongs to the previous week",
       "Closed",
     ])
       expect(text(el)).toContain(label);
+    expect(normal(r.querySelector("[data-slot=empty]")!.textContent!)).toBe("09:00–17:00 · Fill");
     const attention = el.shadowRoot!.querySelector("[data-test=attention]")!;
     expect(normal(attention.textContent!)).toContain("1 unfilled · 1 partly uncovered · 1 over");
     expect(
@@ -112,6 +113,88 @@ describe("the Rota by area", () => {
     const marc = people.querySelector("[data-person=marc] th")!;
     expect(marc.hasAttribute("data-over-contract")).toBe(false);
     expect(getComputedStyle(marc.querySelector(".hours")!).color).not.toBe(warning);
+  });
+  it("a staff role row appears only when the area has slots or shifts for it that week; Not in a slot only when it has a shift", async () => {
+    const rows = (el: View) =>
+      [...area(el).shadowRoot!.querySelectorAll("th[scope=row]")].map((n) => n.textContent!.trim());
+    let unlinked = true;
+    const el = await mount(
+      rotaApi(async (week) => {
+        const r = rotaWeek(week);
+        r.staffRoles.push({
+          id: "pastry",
+          name: "Pastry chef",
+          colour: "blue",
+          position: 2,
+          holderIds: ["ibra"],
+        });
+        if (!unlinked) {
+          r.shifts = r.shifts.filter((s) => s.shiftId !== "unlinked");
+          for (const day of r.days) day.notInSlot = [];
+        }
+        return r;
+      }).api,
+    );
+    expect(rows(el)).toEqual(["Head chef", "Sous chef", "Not in a slot"]);
+    unlinked = false;
+    el.week = "2026-12-07";
+    await vi.waitFor(() => expect(rows(el)).toEqual(["Head chef", "Sous chef"]));
+  });
+  it("an unfilled slot reads its time and Fill, dashed", async () => {
+    const el = await mount();
+    const slot = area(el).shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!;
+    expect(normal(slot.textContent!)).toBe("09:00–17:00 · Fill");
+    expect(getComputedStyle(slot).borderTopStyle).toBe("dashed");
+    expect(getComputedStyle(slot).borderInlineStartStyle).toBe("dashed");
+  });
+  it("the empty part of a cell shows + Add shift on hover or focus and opens the editor with the day, area and staff role", async () => {
+    const el = await mount();
+    const r = area(el).shadowRoot!;
+    const row = [...r.querySelectorAll("tbody tr")].find(
+      (tr) => tr.querySelector("th")!.textContent!.trim() === "Sous chef",
+    )!;
+    const cell = row.querySelectorAll("td")[4]!;
+    const add = cell.querySelector<HTMLElement>("[data-test=cell-add]")!;
+    expect(normal(add.textContent!)).toBe("+ Add shift");
+    expect(add.getAttribute("aria-label")).toBe("Add a Sous chef shift on Fri 4 Dec");
+    expect(getComputedStyle(add).opacity).toBe("0");
+    const box = add.getBoundingClientRect(),
+      td = cell.getBoundingClientRect(),
+      slot = cell.querySelector("[data-slot=empty]")!.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(slot.bottom);
+    expect(td.bottom - box.bottom).toBeLessThanOrEqual(
+      parseFloat(getComputedStyle(cell).paddingBottom) + 1,
+    );
+    await userEvent.hover(add);
+    expect(getComputedStyle(add).opacity).toBe("1");
+    await userEvent.unhover(add);
+    expect(getComputedStyle(add).opacity).toBe("0");
+    cell.querySelector<HTMLElement>("[data-slot=empty]")!.focus();
+    await userEvent.tab();
+    expect(r.activeElement).toBe(add);
+    expect(getComputedStyle(add).opacity).toBe("1");
+    await userEvent.click(add);
+    const dialog = el.shadowRoot!.querySelector("rota-shift-dialog") as LitElement & {
+      open: boolean;
+      businessDay: string;
+      area: string;
+      staffRoleId: string;
+      personId: string;
+    };
+    await vi.waitFor(() => expect(dialog.open).toBe(true));
+    expect(dialog.businessDay).toBe("2026-12-04");
+    expect(dialog.area).toBe("station:kitchen");
+    expect(dialog.staffRoleId).toBe("sous");
+    expect(dialog.personId).toBe("");
+    const published = await mount(
+      rotaApi(async (w) => {
+        const read = rotaWeek(w);
+        read.version = { id: "pub", status: "published", changedSincePublished: false };
+        return read;
+      }).api,
+    );
+    expect(area(published).shadowRoot!.querySelector("[data-slot=empty]")).toBeTruthy();
+    expect(area(published).shadowRoot!.querySelector("[data-test=cell-add]")).toBeNull();
   });
   it("paints a staff role's swatch in a calendar colour beyond the first six", async () => {
     const el = await mount(
