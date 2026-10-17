@@ -29,6 +29,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
+import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -2222,6 +2223,17 @@ describe("department service periods", () => {
         .insert(periodExtensions)
         .values({ departmentId: v.restaurant, businessDay, periodId, startsAt, endsAt }),
     );
+
+  it("keys the running period's occurrence as the floor layout rule does", async () => {
+    const v = await serviceVenue();
+    expect((await read(v, FRIDAY, "13:00")).periodOccurrenceKey).toBe(
+      occurrenceKey(v.restaurant, FRIDAY, {
+        periodId: v.lunch,
+        startsAt: "12:00",
+        endsAt: "14:00",
+      }),
+    );
+  });
 
   it("keeps Lunch running and delays Afternoon until the stored extension ends", async () => {
     const v = await serviceVenue();

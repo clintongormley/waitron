@@ -10,6 +10,7 @@ import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
+import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import {
   parseServiceDay,
@@ -459,7 +460,7 @@ export async function resolveDepartmentService(
     periodOccurrenceKey:
       period === undefined || running === null
         ? null
-        : JSON.stringify([departmentId, moment.businessDay, period.id, running.startsAt]),
+        : occurrenceKey(departmentId, moment.businessDay, running),
     periodName: period?.name ?? null,
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
