@@ -91,10 +91,10 @@ async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promi
   return row!.id;
 }
 
-async function seedStation(locationId: LocationId, name: string, displayOrder: number) {
+async function seedStation(locationId: LocationId, name: string) {
   const [row] = await db
     .insert(kitchenStations)
-    .values({ locationId, name, displayOrder })
+    .values({ locationId, name })
     .returning({ id: kitchenStations.id });
   return row!.id;
 }
@@ -106,9 +106,9 @@ async function seedStation(locationId: LocationId, name: string, displayOrder: n
 async function seedVenue() {
   const locationId = await seedLocation();
   const cfg = { locationId };
-  const grill = await seedStation(locationId, "Grill", 2);
-  const cold = await seedStation(locationId, "Cold", 1);
-  const pastry = await seedStation(locationId, "Pastry", 3);
+  const grill = await seedStation(locationId, "Grill");
+  const cold = await seedStation(locationId, "Cold");
+  const pastry = await seedStation(locationId, "Pastry");
   const zones = await scoped(async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",
@@ -153,7 +153,7 @@ async function screensOf(venue: Venue, profileId: string) {
 }
 
 describe("a profile's kitchen screens", () => {
-  it("stores each kind a kitchen display offers, stations and zones in display order", async () => {
+  it("stores each kind a kitchen display offers, stations by name and zones in display order", async () => {
     const venue = await seedVenue();
     await expect(
       set(venue, venue.kds, {
@@ -273,7 +273,7 @@ describe("a profile's kitchen screens", () => {
   it("refuses an unknown station or zone, one at another location, or one switched off", async () => {
     const venue = await seedVenue();
     const elsewhere = await seedVenue();
-    const offStation = await seedStation(venue.cfg.locationId, "Old grill", 0);
+    const offStation = await seedStation(venue.cfg.locationId, "Old grill");
     await db
       .update(kitchenStations)
       .set({ active: false })
@@ -858,7 +858,7 @@ describe("what a device's kitchen screens show", () => {
     switchedOff,
   });
 
-  it("shows an every device the profile's stations in display order, its removals in their places", async () => {
+  it("shows an every device the profile's stations by name, its removals in their places", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.pastry, venue.grill, venue.cold], zoneIds: null },
@@ -883,7 +883,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("shows an explicit device its stored stations and its removals in display order", async () => {
+  it("shows an explicit device its stored stations and its removals by name", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -1608,7 +1608,7 @@ describe("a profile save narrowing its devices", () => {
     const all = await seedDevice(venue, venue.kds, "All");
     await choose(venue, all, venue.kds, [station(null)]);
     await recordRemoval(all, "station", { stationId: venue.cold });
-    const off = await seedStation(venue.cfg.locationId, "Bar", 4);
+    const off = await seedStation(venue.cfg.locationId, "Bar");
     await db.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, off));
     await expect(
       set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } }),
@@ -2217,4 +2217,17 @@ describe("deleted zone bounds", () => {
       params: { zoneId: venue.terrace },
     });
   });
+});
+
+it("A725 profile and device station choices use names and preserve removed slots", async () => {
+  const v = await seedVenue();
+  await db.update(kitchenStations).set({ name: "Ásador" }).where(eq(kitchenStations.id, v.cold));
+  await set(v, v.kds, { station: { stationIds: [v.pastry, v.grill, v.cold], zoneIds: null } });
+  expect((await screensOf(v, v.kds))!.station!.stationIds).toEqual([v.cold, v.grill, v.pastry]);
+  const device = await seedDevice(v, v.kds, "Names");
+  await choose(v, device, v.kds, [{ kind: "station", ...every }]);
+  await recordRemoval(device, "station", { stationId: v.pastry });
+  const rows = (await shown(v, device))[0]!.stations;
+  expect(rows.map(({ id }) => id)).toEqual([v.cold, v.grill, v.pastry]);
+  expect(rows.map(({ available }) => available)).toEqual([true, true, false]);
 });

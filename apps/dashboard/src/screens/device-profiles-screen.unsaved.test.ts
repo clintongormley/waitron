@@ -54,7 +54,6 @@ const station: Station = {
   id: "s1",
   name: "Kitchen",
   active: true,
-  displayOrder: 0,
   isDefault: true,
   showsRestOfOrder: false,
   warmAfterMinutes: 5,

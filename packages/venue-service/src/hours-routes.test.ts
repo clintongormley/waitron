@@ -106,8 +106,8 @@ async function fixture(): Promise<Fixture> {
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: location!.id, name: "Bar", displayOrder: 1 },
-        { locationId: location!.id, name: "Kitchen", isDefault: true, displayOrder: 0 },
+        { locationId: location!.id, name: "Bar" },
+        { locationId: location!.id, name: "Kitchen", isDefault: true },
       ])
       .returning();
     const person = async (role: "manager" | "supervisor" | "staff") => {
@@ -121,8 +121,8 @@ async function fixture(): Promise<Fixture> {
     const [restaurantStation, deliStation, foreignStation] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: location!.id, name: "Pass", displayOrder: 2 },
-        { locationId: location!.id, name: "Grill", displayOrder: 3 },
+        { locationId: location!.id, name: "Pass" },
+        { locationId: location!.id, name: "Grill" },
         { locationId: other!.id, name: "Other pass" },
       ])
       .returning();

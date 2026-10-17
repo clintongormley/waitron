@@ -13,14 +13,18 @@ afterEach(() => {
   setLocale("en");
 });
 function station(overrides: Partial<PrepStation> & Pick<PrepStation, "id" | "name">) {
-  return { active: true, isDefault: false, displayOrder: 0, ...overrides } as PrepStation;
+  return {
+    active: true,
+    isDefault: false,
+    colour: "blue",
+    ...overrides,
+  } as PrepStation;
 }
 const bar = station({ id: "bar", name: "Bar", isDefault: true });
 type StationTable = HTMLElement & {
   stations: readonly PrepStation[];
   statusNotes: Record<string, string>;
   actions: Record<string, unknown>;
-  handles: Record<string, unknown>;
   outputs: Record<string, { printedOn: unknown; shownOn: unknown }>;
 };
 async function mount(stations: readonly PrepStation[] = [bar], theme: "light" | "dark" = "light") {
@@ -54,18 +58,17 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   expect(table(el)?.querySelector("button")).toBeNull();
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
 });
-it("puts the grip before the name and the row menu in its own Actions column, pinned to the end", async () => {
+it("puts the row menu in its own Actions column, pinned to the end, without a grip", async () => {
   const el = await mount();
-  el.handles = { bar: html`<button type="button" data-test="grip-bar">⠿</button>` };
   el.actions = { bar: html`<button type="button" data-test="menu-bar">⋮</button>` };
   await new Promise((resolve) => setTimeout(resolve, 0));
   const cells = [...table(el)!.querySelectorAll("tbody tr td")];
-  expect(cells[0]!.querySelector('[data-test="grip-bar"]')).not.toBeNull();
+  expect(cells[0]!.querySelector("button")).toBeNull();
   expect(cells[0]!.querySelector('[data-test="menu-bar"]')).toBeNull();
   const last = cells.at(-1)!;
   expect(last.getAttribute("data-pinned")).toBe("end");
   expect(last.querySelector('[data-test="menu-bar"]')).not.toBeNull();
-  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(2);
+  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(1);
 });
 it("names its columns in Spanish, and says so when there are no stations", async () => {
   setLocale("es");
@@ -78,8 +81,8 @@ it("names its columns in Spanish, and says so when there are no stations", async
 });
 it("omits deleted stations and their supplied status while preserving Default", async () => {
   const el = await mount([
-    station({ id: "disabled", name: "Old kitchen", active: false, displayOrder: 0 }),
-    station({ id: "bar", name: "Bar", isDefault: true, displayOrder: 1 }),
+    station({ id: "disabled", name: "Old kitchen", active: false }),
+    station({ id: "bar", name: "Bar", isDefault: true }),
   ]);
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
@@ -90,17 +93,17 @@ it("omits deleted stations and their supplied status while preserving Default", 
   expect(table(el)?.textContent).not.toContain("Switched off");
   expect(table(el)?.textContent).not.toContain("Old kitchen");
 });
-it("orders tied stations by name", async () => {
+it("orders stations by name despite legacy positions", async () => {
   const el = await mount([
-    station({ id: "zulu", name: "Zulu", displayOrder: 1 }),
-    station({ id: "alpha", name: "Alpha", displayOrder: 1 }),
-    station({ id: "first", name: "Yankee", displayOrder: 0 }),
+    station({ id: "zulu", name: "Zulu" }),
+    station({ id: "alpha", name: "Alpha" }),
+    station({ id: "first", name: "Yankee" }),
   ]);
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
   ).toEqual([
-    expect.stringContaining("Yankee"),
     expect.stringContaining("Alpha"),
+    expect.stringContaining("Yankee"),
     expect.stringContaining("Zulu"),
   ]);
 });
@@ -177,4 +180,57 @@ it.each([
   } finally {
     await page.viewport(frame.width, frame.height);
   }
+});
+
+it.each(["light", "dark"] as const)(
+  "A725 paints every station swatch through the table parts in %s",
+  async (theme) => {
+    const colours = [
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+      "grey",
+    ] as const;
+    const el = await mount(
+      colours.map((colour) => station({ id: colour, name: colour, colour })),
+      theme,
+    );
+    const squares = [...table(el)!.querySelectorAll<HTMLElement>('[part~="station-colour"]')];
+    expect(squares).toHaveLength(colours.length);
+    for (const colour of colours) {
+      const square = squares.find((node) => node.dataset.stationColour === colour)!;
+      const probe = document.createElement("span");
+      probe.style.backgroundColor =
+        colour === "grey"
+          ? "var(--wt-color-palette-grey)"
+          : `var(--wt-color-station-${colour}-dot)`;
+      el.parentElement!.append(probe);
+      const actual = getComputedStyle(square);
+      expect(actual.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+      expect(square.getAttribute("aria-hidden")).toBe("true");
+      expect(square.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(square.getBoundingClientRect().width).toBe(square.getBoundingClientRect().height);
+      expect(square.closest("td")).toBe(square.closest("tr")!.querySelector("td"));
+      probe.remove();
+    }
+  },
+);
+
+it("A725 leaves station names and status without a retired Times link", async () => {
+  const el = await mount([bar, station({ id: "grill", name: "Grill" })]);
+  const rows = [...table(el)!.querySelectorAll("tbody tr")];
+  expect(rows).toHaveLength(2);
+  expect(rows[0]!.textContent).toContain("Default");
+  expect(rows[0]!.textContent).toContain("Closed for today → Grill");
+  expect(rows[1]!.textContent).toContain("Grill");
+  expect(rows.flatMap((row) => [...row.querySelectorAll('a[href*="/view/times"]')])).toEqual([]);
 });

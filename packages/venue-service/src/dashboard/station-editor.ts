@@ -17,10 +17,11 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import type { StationColour, StationThresholds } from "@waitron/shared";
-import type { StationColourUser } from "./station-colour-picker.js";
-import "./station-colour-picker.js";
+import { isStationColour, type StationColour, type StationThresholds } from "@waitron/shared";
+import { stationColourChoices, type StationColourUser } from "./station-colour-choices.js";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 export interface StationEditorStation {
@@ -53,9 +54,9 @@ export type StationEditorSave = {
 const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 type TimingField = (typeof TIMING_FIELDS)[number];
 const TIMING_LABELS = {
-  warmAfterMinutes: "prep.warm",
-  overdueAfterMinutes: "prep.overdue",
-  forgottenAfterMinutes: "prep.forgotten",
+  warmAfterMinutes: "prep.health.warm",
+  overdueAfterMinutes: "prep.health.overdue",
+  forgottenAfterMinutes: "prep.health.forgotten",
 } as const;
 const isTimingField = (value: unknown): value is TimingField =>
   (TIMING_FIELDS as readonly unknown[]).includes(value);
@@ -245,6 +246,28 @@ export class StationEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+      fieldset {
+        border: 0;
+        margin: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      legend {
+        padding: 0;
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .timing-fields {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-2);
+      }
+      .timing-fields wt-input {
+        min-width: 0;
+      }
+      .moved-slips wt-combobox {
+        margin-block-start: var(--wt-space-2);
+      }
     `,
   ];
 
@@ -280,6 +303,8 @@ export class StationEditor extends LitElement {
   private baseline?: Draft;
   private submitted?: Draft;
   private generation = {};
+  private readonly colourUsedByLabel = (colour: string, stations: string) =>
+    format("prep.colour_used_by", { colour, stations });
 
   override connectedCallback() {
     super.connectedCallback();
@@ -529,43 +554,53 @@ export class StationEditor extends LitElement {
             @keydown=${(event: KeyboardEvent) =>
               submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-station-edit]"))}
           ></wt-input>
-          <station-colour-picker
+          <wt-colour-chooser
+            name="colour"
+            label=${t("prep.colour")}
+            required
             .value=${this.draft.colour}
-            .stations=${this.stations.filter((station) => station.id !== this.station!.id)}
+            .choices=${stationColourChoices(this.stations, this.station!.id)}
+            .usedByLabel=${this.colourUsedByLabel}
             .error=${refusedField === "colour" ? fieldMessage : ""}
-            @station-colour-change=${(event: CustomEvent<{ colour: StationColour }>) => {
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
-              if (current()) this.changed({ ...this.draft, colour: event.detail.colour }, "colour");
+              if (current() && isStationColour(event.detail.value))
+                this.changed({ ...this.draft, colour: event.detail.value }, "colour");
             }}
-          ></station-colour-picker>
+          ></wt-colour-chooser>
           ${this.printersField(current, refusedField === "printers" ? fieldMessage : "")}
           ${
             this.canManagePrinters && !this.station.active
               ? html`<p class="note">${t("prep.printers_need_active")}</p>`
               : nothing
           }
-          ${TIMING_FIELDS.map(
-            (field) =>
-              html`<wt-input
-                name=${field}
-                label=${t(TIMING_LABELS[field])}
-                type="number"
-                placeholder=${String(this.station!.timingDefaults[field])}
-                hint=${t("prep.inherit_minutes")}
-                .value=${this.draft[field]}
-                .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  if (current())
-                    this.changed({ ...this.draft, [field]: event.detail.value }, field);
-                }}
-                @keydown=${(event: KeyboardEvent) =>
-                  submitOnEnter(
-                    event,
-                    this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
-                  )}
-              ></wt-input>`,
-          )}
+          <fieldset aria-describedby="timing-inheritance">
+            <legend>${t("prep.late_flags")}</legend>
+            <div class="timing-fields">
+              ${TIMING_FIELDS.map(
+                (field) =>
+                  html`<wt-input
+                    name=${field}
+                    label=${t(TIMING_LABELS[field])}
+                    type="number"
+                    placeholder=${String(this.station!.timingDefaults[field])}
+                    .value=${this.draft[field]}
+                    .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      event.stopPropagation();
+                      if (current())
+                        this.changed({ ...this.draft, [field]: event.detail.value }, field);
+                    }}
+                    @keydown=${(event: KeyboardEvent) =>
+                      submitOnEnter(
+                        event,
+                        this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
+                      )}
+                  ></wt-input>`,
+              )}
+            </div>
+            <p id="timing-inheritance" class="note">${t("prep.timing_inheritance")}</p>
+          </fieldset>
           <wt-switch
             name="showsRestOfOrder"
             label=${t("prep.shows_rest_of_order")}
@@ -576,22 +611,26 @@ export class StationEditor extends LitElement {
                 this.changed({ ...this.draft, showsRestOfOrder: event.detail.checked }, "rest");
             }}
           ></wt-switch>
-          <p class="note">${t("prep.shows_rest_of_order_hint")}</p>
-          <wt-combobox
-            name="printMovedSlips"
-            label=${t("prep.moved_slips")}
-            search="never"
-            .value=${movedChoice(this.draft.printMovedSlips)}
-            .options=${movedOptions(this.venuePrintsMovedSlips)}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current())
-                this.changed(
-                  { ...this.draft, printMovedSlips: movedValue(event.detail.value) },
-                  "printMovedSlips",
-                );
-            }}
-          ></wt-combobox>
+          <p class="note" data-test="rest-of-order-hint">${t("prep.shows_rest_of_order_hint")}</p>
+          <fieldset class="moved-slips" data-test="moved-slips-group">
+            <legend>${t("prep.moved_slips")}</legend>
+            <wt-combobox
+              name="printMovedSlips"
+              label=${t("prep.moved_slips")}
+              hide-label
+              search="never"
+              .value=${movedChoice(this.draft.printMovedSlips)}
+              .options=${movedOptions(this.venuePrintsMovedSlips)}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (current())
+                  this.changed(
+                    { ...this.draft, printMovedSlips: movedValue(event.detail.value) },
+                    "printMovedSlips",
+                  );
+              }}
+            ></wt-combobox>
+          </fieldset>
         </div>
         <wt-form-actions
           slot="footer"

@@ -101,7 +101,6 @@ import {
   getFireControl,
   listCourses,
   moveCourse,
-  reorderStations,
   listStations,
   setBumpMode,
   setDefaultStation,
@@ -1739,7 +1738,8 @@ export function mountManagementApi(
       }
       if (typeof body.name !== "string")
         throw new AppError("management.request_invalid", { field: "name" });
-      const displayOrder = parseDisplayOrder(body.displayOrder);
+      if (Object.hasOwn(body, "displayOrder"))
+        throw new AppError("management.request_invalid", { field: "displayOrder" });
       let isDefault: boolean | undefined;
       if (body.isDefault !== undefined) {
         if (typeof body.isDefault !== "boolean")
@@ -1754,7 +1754,6 @@ export function mountManagementApi(
         await authorizeStationPrinters(tx, sessionId, printerIds);
         return createStation(tx, cfg, {
           name,
-          displayOrder,
           isDefault,
           colour,
           thresholds,
@@ -1771,20 +1770,6 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       const stations = await withVenueReadAuth(deps, sessionId, (tx) => listStations(tx, cfg));
       return c.json(stations);
-    }),
-  );
-
-  app.put("/management-api/stations/order", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readRawJsonBody(c);
-      const ids =
-        body && typeof body === "object" && !Array.isArray(body)
-          ? (body as { ids?: unknown }).ids
-          : undefined;
-      await withVenueAuth(deps, sessionId, (tx) => reorderStations(tx, cfg, ids));
-      return c.body(null, 204);
     }),
   );
 
@@ -1824,7 +1809,6 @@ export function mountManagementApi(
         throw new AppError("management.request_invalid", { field: "active" });
       const patch: {
         name?: string;
-        displayOrder?: number;
         showsRestOfOrder?: boolean;
         printMovedSlips?: boolean | null;
         colour?: StationColour;
@@ -1838,9 +1822,8 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "name" });
         patch.name = body.name;
       }
-      if (body.displayOrder !== undefined) {
-        patch.displayOrder = parseDisplayOrder(body.displayOrder);
-      }
+      if (Object.hasOwn(body, "displayOrder"))
+        throw new AppError("management.request_invalid", { field: "displayOrder" });
       if (body.showsRestOfOrder !== undefined) {
         if (typeof body.showsRestOfOrder !== "boolean")
           throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });

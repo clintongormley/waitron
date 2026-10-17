@@ -48,7 +48,6 @@ const view: PrepStationsView = {
       active: true,
       colour: "blue",
       isDefault: true,
-      displayOrder: 1,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -229,7 +228,6 @@ for (const rename of [false, true]) {
         : [
             {
               name: "Kitchen",
-              displayOrder: 0,
               warmAfterMinutes: 5,
               overdueAfterMinutes: 10,
               forgottenAfterMinutes: 15,
@@ -337,7 +335,6 @@ for (const rename of [false, true])
     });
   }
 for (const [name, changed, reverted] of [
-  ["displayOrder", "3", "0"],
   ["warmAfterMinutes", "6", "5"],
   ["overdueAfterMinutes", "12", "10"],
   ["forgottenAfterMinutes", "20", "15"],
@@ -531,12 +528,13 @@ it("Edit keeps a redrawn editor open when a lone save written after reconnect fi
 it("Add station with only its colour changed counts as unsaved, asks before closing, and keeps the colour as a string", async () => {
   const { screen, writes } = await mount();
   const modal = await open(screen, false);
-  const picker = modal.querySelector("station-colour-picker")!;
+  const picker = modal.querySelector("wt-colour-chooser")!;
   await picker.updateComplete;
   const tile = (colour: string) =>
-    picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+    picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-value="${colour}"]`)!;
   expect(picker.value).toBe("red");
   expect(unload()).toBe(false);
+  picker.show();
   tile("teal").click();
   await screen.updateComplete;
   await picker.updateComplete;
@@ -555,12 +553,11 @@ it("Add station with only its colour changed counts as unsaved, asks before clos
 it("Add station counts picking the opened colour again as no change and closes without asking", async () => {
   const { screen, writes } = await mount();
   const modal = await open(screen, false);
-  const picker = modal.querySelector("station-colour-picker")!;
+  const picker = modal.querySelector("wt-colour-chooser")!;
   await picker.updateComplete;
   const pick = async (colour: string) => {
-    picker
-      .shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!
-      .click();
+    picker.show();
+    picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-value="${colour}"]`)!.click();
     await screen.updateComplete;
     await picker.updateComplete;
   };

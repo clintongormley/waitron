@@ -140,42 +140,6 @@ list does not exist.
   stays, counting, until the screen is opened again; long outages are counted in minutes, never
   hours.
 
-## A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
-
-**A725 (owner, 2026-10-15).** Mockup: [prep stations](mockups/a718-a727-calendar-and-stations/14-prep-stations.png). Files:
-`packages/venue-service/src/dashboard/prep-stations-screen.ts`, `station-table.ts`,
-`station-editor.ts`, `station-colour-picker.ts`, `opening-hours-screen.ts`, the Times tab, the sidebar order,
-`apps/server/src/kitchen.ts`, `packages/db/src/schema/kitchen-stations.ts`.
-
-1. **Prep stations sits just after Departments and zones** in the sidebar.
-2. **The Times tab and each station's "When it gets orders" link go** (`station-table.ts:79`). What
-   the tab showed has moved to the Calendar's Show picker (`calendar-show.ts`), offered to the
-   same people as the Times tab. Landing deletes the open note
-   "The Times tab opens on the browser's current month", and takes the Times tab out of "Supervisors
-   have no dashboard path to a prep station's times", whose question stays open (service-periods.md,
-   Decision 12 points at it).
-3. **No drag handles, and stations listed by name everywhere**, the default one among them (it keeps
-   its "Default" label). The stored order (`displayOrder`, `reorderStations` in `kitchen.ts`) is
-   also read by kitchen timing, the stations-down list and the Calendar's Show (`opening-hours-screen.ts`): move them to name order and remove the
-   reorder route and the column, unless one turns out to need a hand-set order.
-4. **A new station's colour is the first one no station uses.** The dashboard's Add station does
-   this; the server does not, so a station created without a colour — the default Kitchen, or one a
-   script or import made — gets the column's default, red (`kitchen-stations.ts:29`). In the Santet
-   venue Kitchen and Bar are both red, which makes the Routes grid hard to read.
-5. **Each row of the Stations tab shows its colour square.**
-6. **The station editor:** the three late-flag minute fields (`TIMING_FIELDS`, `station-editor.ts`)
-   share one row of short fields under one heading, with "Leave a field blank to use the venue
-   setting" once beneath; "Show the rest of the order" becomes "Also list the order's dishes from
-   other stations", with "On this station's tickets and kitchen screen" under it; "MOVED slips"
-   becomes "Print a slip when sent dishes move table", its options "Venue setting: Print" (or
-   "Venue setting: Don't print"), "Print" and "Don't print" — owner: not "As the venue". Spanish to
-   match.
-7. **The colour is chosen in a popup:** the shared `wt-colour-chooser` (#1828), a field
-   showing the colour's square and name, opens a small panel of colours, which still marks those
-   other stations use. It is already used by the period and staff role dialogs. A725 hands
-   it the twelve station colours from `STATION_COLOUR_TOKENS` with `usedBy`, and
-   `station-colour-picker.ts` goes. Category colours keep their dialog.
-
 ## Whole-order note correction volume
 
 A743 retains the existing per-dish correction path and the plan's explicit per-item station
@@ -299,6 +263,36 @@ confirm the new wording when A756 is picked up.
 
 ## Decisions and deliberate limits
 
+### A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
+
+**Owner decisions, 2026-10-15; implemented 2026-10-17.**
+
+- Prep stations follows Departments and zones in the sidebar. It has Stations and Routes tabs.
+  You view planned station times through Calendar's Show picker; its existing
+  `venue_service.manage` permission stays. The supervisor's read-only Calendar question stays open.
+- Station lists use names, with the default station in its alphabetical place and its Default label
+  retained. Stations have no hand-set order, reorder route or stored order column. Courses and
+  zones keep their own order.
+  Implementation choice, 2026-10-17: every station list uses the same Spanish alphabetical
+  comparison, including accents and ñ, independently of the interface language.
+- A new station without an explicit colour takes the first colour unused by active stations at its
+  location, falling back to red when all colours are used. Explicit colours stay as chosen, including
+  duplicates. Server creation, provisioning, scripts and imports use this rule. Each station row
+  shows its colour square.
+- Add and Edit use the shared `wt-colour-chooser`, showing other stations that use a colour.
+  The Edit window groups its three late-flag fields in one short row under Late flags (minutes),
+  followed by one instruction to leave a field blank to use the venue setting.
+- The Edit switch reads "Also list the order's dishes from other stations", with "On this station's
+  tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
+  "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
+- Configuration bundles use version 4. Older exports must be exported again from a compatible
+  source; there is no conversion of station-order settings.
+
+The populated predecessor test carries ticket, printer, timing and staffing references through the
+native column drop and compares every recorded table value except the retired column. Run
+`pnpm --filter @waitron/server exec vitest run src/station-order-migration.test.ts` and
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` for this migration's retention checks.
+
 - **Whole-order kitchen notes (A743, owner 2026-10-15).** You can give the kitchen one
   instruction above a counter order or a table party's dishes, alongside each dish's own note.
   It appears on kitchen paper and station/pass screens; later edits and removals use acknowledged
@@ -351,6 +345,8 @@ confirm the new wording when A756 is picked up.
   one track and no key. The owner turned down one bar holding every range (two ranges at the same
   time hid each other) and one bar with a label naming both where times overlap. Mockups:
   [mockups/a506-12-times-overlap/](mockups/a506-12-times-overlap/).
+  **2026-10-17:** A725 retires that standalone tab. Calendar's Show picker carries the station
+  view, using department names even for a single sending department (A722 Part 3, Decision 10).
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").
@@ -402,8 +398,10 @@ confirm the new wording when A756 is picked up.
   periods" is read as each time the page opens: the choice is the grid's own state, never written to
   the address or to storage. Mockups:
   [mockups/a584-station-colours/](mockups/a584-station-colours/). **2026-10-17, A753 point 1:**
-  periods now pick from thirteen colours and stations still from twelve, so decision (1)'s "bigger
-  set than the periods use" no longer holds.
+  periods gained thirteen colours, retiring decision (1)'s "bigger set than the periods use".
+  **2026-10-17, owner's A725/A783 decision:** stations use the same shared palette as periods,
+  staff roles and seasons. A725 adopts the current shared list; A783 expands it to sixteen and
+  changes the shared chooser layout. The historical twelve-colour board does not set today's palette.
 
 - **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and

@@ -1015,7 +1015,7 @@ describe("/management-api/tables", () => {
 describe("/management-api/stations (KDS-1 config)", () => {
   async function createStation(
     name: string,
-    extra: { isDefault?: boolean; displayOrder?: number; colour?: string } = {},
+    extra: { isDefault?: boolean; colour?: string } = {},
   ): Promise<string> {
     const res = await req(
       "/stations",
@@ -1030,7 +1030,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     {
       id: string;
       name: string;
-      displayOrder: number;
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
@@ -1041,7 +1040,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     return (await (await req("/stations", { method: "GET" }, managerCookie)).json()) as {
       id: string;
       name: string;
-      displayOrder: number;
       isDefault: boolean;
       active: boolean;
       showsRestOfOrder: boolean;
@@ -1090,89 +1088,55 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).not.toContainEqual(expect.objectContaining({ id }));
   });
-  it("saves the complete active station order atomically without changing default or disabled rows", async () => {
-    await createStation(unique("First order"), { displayOrder: 8 });
-    await createStation(unique("Second order"), { displayOrder: 9 });
-    const disabled = await createStation(unique("Retained order"), { displayOrder: 17 });
-    await req(`/stations/${disabled}`, { method: "DELETE" }, managerCookie);
-    const disabledBefore = await suite.db
-      .select()
-      .from(kitchenStations)
-      .where(eq(kitchenStations.id, disabled));
-    const before = await listStations();
-    const active = before.filter((station) => station.active);
-    const ids = active.map((station) => station.id).reverse();
-    const response = await req(
-      "/stations/order",
-      { method: "PUT", body: JSON.stringify({ ids }) },
-      managerCookie,
-    );
-    expect(response.status).toBe(204);
-    const after = await listStations();
-    expect(after.filter((station) => station.active).map((station) => station.id)).toEqual(ids);
-    expect(
-      after.filter((station) => station.active).map((station) => station.displayOrder),
-    ).toEqual(ids.map((_, index) => index));
-    expect(
-      await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, disabled)),
-    ).toEqual(disabledBefore);
-    expect(after.filter((station) => station.isDefault).map((station) => station.id)).toEqual(
-      before.filter((station) => station.isDefault).map((station) => station.id),
-    );
-  });
-  it("refuses malformed, incomplete, duplicate, missing and disabled station order sets before any write", async () => {
-    const disabled = await createStation(unique("Disabled order"));
-    await req(`/stations/${disabled}`, { method: "DELETE" }, managerCookie);
-    const before = await listStations();
-    const ids = before.filter((station) => station.active).map((station) => station.id);
-    for (const body of [
-      null,
-      [],
-      {},
-      { ids: null },
-      { ids: "wrong" },
-      { ids: [] },
-      { ids: ids.slice(1) },
-      { ids: [...ids, ids[0]] },
-      { ids: [...ids, disabled] },
-      { ids: [...ids, randomUUID()] },
-    ]) {
-      const response = await req(
-        "/stations/order",
-        { method: "PUT", body: JSON.stringify(body) },
-        managerCookie,
-      );
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "ids" } },
-      });
-      expect(await listStations()).toEqual(before);
+
+  it("A725 the retired reorder endpoint returns 404 and changes no station row", async () => {
+    const before = await suite.db.select().from(kitchenStations);
+    for (const cookie of [managerCookie, supervisorCookie, staffCookie, undefined]) {
+      for (const body of [
+        null,
+        [],
+        {},
+        { ids: [] },
+        { ids: before.map(({ id }) => id).reverse() },
+      ]) {
+        const response = await req(
+          "/stations/order",
+          { method: "PUT", body: JSON.stringify(body) },
+          cookie,
+        );
+        expect(response.status).toBe(404);
+        expect(await suite.db.select().from(kitchenStations)).toEqual(before);
+      }
     }
+    expect(await suite.db.select().from(kitchenStations)).toEqual(before);
   });
-  it("station ordering requires configuration permission and a session", async () => {
-    const ids = (await listStations())
-      .filter((station) => station.active)
-      .map((station) => station.id);
-    const before = await listStations();
-    for (const [cookie, status] of [
-      [undefined, 401],
-      [staffCookie, 403],
-      [supervisorCookie, 403],
-    ] as const) {
-      const response = await req(
-        "/stations/order",
-        { method: "PUT", body: JSON.stringify({ ids }) },
-        cookie,
-      );
-      expect(response.status).toBe(status);
-    }
-    expect(await listStations()).toEqual(before);
-  });
-  it("POST creates (201 { id }) + GET lists it, active, at its display order (manager)", async () => {
+  it.each([0, 2, null, "2", [], {}])(
+    "A725 refuses retired station displayOrder %j without writes",
+    async (displayOrder) => {
+      const id = await createStation(unique("Retired field"));
+      const before = await suite.db.select().from(kitchenStations);
+      for (const method of ["POST", "PATCH"] as const) {
+        const response = await req(
+          method === "POST" ? "/stations" : `/stations/${id}`,
+          {
+            method,
+            body: JSON.stringify({ name: unique("Must not save"), displayOrder }),
+          },
+          managerCookie,
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+        });
+        expect(await suite.db.select().from(kitchenStations)).toEqual(before);
+      }
+    },
+  );
+  it("POST creates (201 { id }) + GET lists it active (manager)", async () => {
     const name = unique("Cocina");
-    const id = await createStation(name, { displayOrder: 2 });
+    const id = await createStation(name);
     const found = (await listStations()).find((s) => s.id === id);
-    expect(found).toMatchObject({ name, displayOrder: 2, isDefault: false, active: true });
+    expect(found).toMatchObject({ name, isDefault: false, active: true });
   });
 
   it("lists a new station with the rest of the order switch off", async () => {
@@ -1189,15 +1153,34 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("a station created with no colour is Red", async () => {
+  it("A725 a station created with no colour takes the first unused colour", async () => {
+    const original = await suite.db
+      .select({ id: kitchenStations.id, colour: kitchenStations.colour })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, venue.locationId));
+    onTestFinished(() =>
+      withTransaction(suite.db, async (tx) => {
+        for (const row of original)
+          await tx
+            .update(kitchenStations)
+            .set({ colour: row.colour })
+            .where(eq(kitchenStations.id, row.id));
+      }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ colour: "red" })
+        .where(eq(kitchenStations.locationId, venue.locationId)),
+    );
     const id = await createStation(unique("No colour"));
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
-      colour: "red",
+      colour: "orange",
     });
   });
 
   it("PATCH changes only the colour", async () => {
-    const id = await createStation(unique("Recolour"), { displayOrder: 3 });
+    const id = await createStation(unique("Recolour"));
     const timed = await req(
       `/stations/${id}`,
       {
@@ -1220,9 +1203,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("refuses a colour outside the twelve on create and on edit, naming colour, and writes nothing", async () => {
+  it("refuses a colour outside the shared palette on create and on edit, naming colour, and writes nothing", async () => {
     const id = await createStation(unique("Kept colour"), { colour: "cyan" });
-    for (const colour of ["grey", "Teal", 7, null]) {
+    for (const colour of ["invalid-colour", "Teal", 7, null]) {
       const countBefore = (await listStations()).length;
       const created = await req(
         "/stations",
@@ -1258,7 +1241,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
         method: "POST",
         body: JSON.stringify({
           name,
-          displayOrder: 2,
           warmAfterMinutes: 3,
           overdueAfterMinutes: 8,
           forgottenAfterMinutes: 12,
@@ -1648,20 +1630,21 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "station.not_found" } });
   });
 
-  it("PATCH edits name/displayOrder; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
+  it("PATCH edits name; a rename collision → 409; empty patch → 204 no-op; unknown/malformed :id → 404", async () => {
     const id = await createStation(unique("Edit"));
+    const renamed = unique("Renamed station");
     const patch = await req(
       `/stations/${id}`,
-      { method: "PATCH", body: JSON.stringify({ displayOrder: 7 }) },
+      { method: "PATCH", body: JSON.stringify({ name: renamed }) },
       managerCookie,
     );
     expect(patch.status).toBe(204);
     // Through the table definition: a raw `select active` returns the stored integer, not a boolean.
     const [row] = await suite.db
-      .select({ displayOrder: kitchenStations.displayOrder, active: kitchenStations.active })
+      .select({ name: kitchenStations.name, active: kitchenStations.active })
       .from(kitchenStations)
       .where(eq(kitchenStations.id, id));
-    expect(row).toMatchObject({ displayOrder: 7, active: true });
+    expect(row).toMatchObject({ name: renamed, active: true });
 
     const taken = unique("Taken");
     await createStation(taken);
@@ -1785,7 +1768,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
   it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {
     const name = unique("Screened");
-    const id = await createStation(name, { displayOrder: 3 });
+    const id = await createStation(name);
     for (const [body, field] of [
       ["[]", "body"],
       [JSON.stringify({ name: 5 }), "name"],
@@ -1799,7 +1782,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }
     expect((await listStations()).find((s) => s.id === id)).toMatchObject({
       name,
-      displayOrder: 3,
       active: true,
     });
   });

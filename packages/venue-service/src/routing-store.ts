@@ -11,7 +11,7 @@ import {
   readOfferedExtraItemIds,
   staffPresentationName,
 } from "@waitron/catalogue";
-import { AppError, normaliseUuid } from "@waitron/shared";
+import { AppError, normaliseUuid, compareStationNames } from "@waitron/shared";
 import { liveDocumentsByZone, resolveZoneContext, type VenueScope } from "./operations.js";
 import {
   cellKey,
@@ -430,6 +430,7 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   const stationIds = stations.map((row) => row.id);
   const dayStates =
     stationIds.length === 0 || businessDay === null

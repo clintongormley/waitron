@@ -550,3 +550,33 @@ describe("the toolbar", () => {
     },
   );
 });
+
+describe.each(["light", "dark"] as const)("a shared grey station (%s)", (theme) => {
+  test("keeps route text readable on the added palette tint", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid") as RoutingGrid;
+    const model = routing();
+    el.model = {
+      ...model,
+      stations: model.stations.map((s) => (s.id === "bar" ? { ...s, colour: "grey" } : s)),
+    };
+    host.append(el);
+    await el.updateComplete;
+    const cell = el.shadowRoot!.querySelector<HTMLElement>(
+      'td[data-row="c:drinks"][data-zone="every"]',
+    )!;
+    expect(cell.dataset.stationColour).toBe("grey");
+    const fill = getComputedStyle(cell).backgroundColor;
+    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data;
+    expect(alpha).toBe(255);
+    const text = cell.querySelector<HTMLElement>(".station")!;
+    expect(
+      contrastRatio(getComputedStyle(text).color, `rgb(${r}, ${g}, ${b})`),
+    ).toBeGreaterThanOrEqual(4.5);
+    await expectNoA11yViolations(host);
+  });
+});

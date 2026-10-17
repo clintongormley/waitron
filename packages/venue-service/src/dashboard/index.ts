@@ -46,7 +46,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
       labelKey: "opening.view.week",
       path: "/manage/opening-hours/view/week",
     },
-    ...(["stations", "routing", "times"] as const).map((view) => ({
+    ...(["stations", "routing"] as const).map((view) => ({
       id: `venue-service:prep:${view}`,
       screen: "prep-stations",
       labelKey: `prep.tab.${view}`,
@@ -70,18 +70,14 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         id: "prep-stations",
         navLabelKey: "nav.prep_stations",
         group: "operations",
-        order: 30,
+        order: 12,
         requiresPermission: "venue_service.manage",
       },
       create(ctx) {
         const api = new PrepStationsApi(ctx.request, ctx.liveData);
-        const hoursApi = new OpeningHoursApi(ctx.request, ctx.liveData);
         return {
           render: () =>
-            html`<dashboard-prep-stations-screen
-              .api=${api}
-              .hoursApi=${hoursApi}
-            ></dashboard-prep-stations-screen>`,
+            html`<dashboard-prep-stations-screen .api=${api}></dashboard-prep-stations-screen>`,
         };
       },
     },

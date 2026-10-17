@@ -7,6 +7,7 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   kitchenCourses,
+  kitchenStations,
   kitchenTimingDefaults,
   locations,
   products,
@@ -77,6 +78,165 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 describe("kitchen-station config", () => {
+  it("A725 lower-case accents and enyes use Spanish alphabetical station order", async () => {
+    const cfg = await setupVenue();
+    for (const name of ["Ñandú", "barra", "Cocina", "Ásador", "Níspero", "Naranja"])
+      await asApp(cfg, (tx) => createStation(tx, cfg, { name }));
+    expect((await listStations(db, cfg)).map(({ name }) => name)).toEqual([
+      "Ásador",
+      "barra",
+      "Cocina",
+      "Naranja",
+      "Níspero",
+      "Ñandú",
+    ]);
+  });
+
+  it("A725 backend station lists use names and keep the default among them", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, async (tx) => {
+      await createStation(tx, cfg, { name: "Zulu", isDefault: true });
+      await createStation(tx, cfg, { name: "Bar" });
+      await createStation(tx, cfg, { name: "Alpha" });
+    });
+    await db.execute(sql`pragma reverse_unordered_selects = on`);
+    try {
+      const stations = await listStations(db, cfg);
+      expect(stations.map(({ name }) => name)).toEqual(["Alpha", "Bar", "Zulu"]);
+      expect(stations.map(({ isDefault }) => isDefault)).toEqual([false, false, true]);
+      expect(stations.every((station) => !Object.hasOwn(station, "displayOrder"))).toBe(true);
+    } finally {
+      await db.execute(sql`pragma reverse_unordered_selects = off`);
+    }
+  });
+
+  it("A725 timing refuses the alphabetically first invalid station override", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "barra", thresholds: { warmAfterMinutes: 7 } }),
+    );
+    const alpha = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "Ásador", thresholds: { warmAfterMinutes: 6 } }),
+    );
+    await expect(
+      asApp(cfg, (tx) =>
+        setKitchenTimingDefaults(tx, cfg, {
+          warmAfterMinutes: 2,
+          overdueAfterMinutes: 5,
+          forgottenAfterMinutes: 15,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "station.thresholds_invalid",
+      params: {
+        name: "Ásador",
+        stationId: alpha.id,
+        field: "overdueAfterMinutes",
+      },
+    });
+    expect(await getKitchenTimingDefaults(db, cfg)).toEqual({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    });
+  });
+
+  it("A725 gives sequential omitted colours the first unused choices", async () => {
+    const cfg = await setupVenue();
+    const ids = await asApp(cfg, async (tx) => {
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const bar = await createStation(tx, cfg, { name: "Bar" });
+      return [kitchen.id, bar.id];
+    });
+    const rows = await listStations(db, cfg);
+    expect(ids.map((id) => rows.find((station) => station.id === id)!.colour)).toEqual([
+      "red",
+      "orange",
+    ]);
+  });
+
+  it("A725 concurrent station creates reserve different unused colours", async () => {
+    const cfg = await setupVenue();
+    const ids = await Promise.all([
+      asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen" })),
+      asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" })),
+    ]);
+    const rows = await listStations(db, cfg);
+    expect(ids.map(({ id }) => rows.find((station) => station.id === id)!.colour).sort()).toEqual([
+      "orange",
+      "red",
+    ]);
+  });
+
+  it("A725 keeps explicit shared colours and fills the first unused gap", async () => {
+    const cfg = await setupVenue();
+    const ids = await asApp(cfg, async (tx) => {
+      await createStation(tx, cfg, { name: "Kitchen", colour: "red" });
+      const blue = await createStation(tx, cfg, { name: "Bar", colour: "blue" });
+      const duplicate = await createStation(tx, cfg, { name: "Coffee", colour: "blue" });
+      const missing = await createStation(tx, cfg, { name: "Desserts" });
+      return [blue.id, duplicate.id, missing.id];
+    });
+    const rows = await listStations(db, cfg);
+    expect(ids.map((id) => rows.find((station) => station.id === id)!.colour)).toEqual([
+      "blue",
+      "blue",
+      "orange",
+    ]);
+  });
+
+  it.each(["inactive", "another location"] as const)(
+    "A725 does not reserve colours used by %s stations",
+    async (scope) => {
+      const cfg = await setupVenue();
+      await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen", colour: "red" }));
+      if (scope === "inactive") {
+        const old = await asApp(cfg, (tx) =>
+          createStation(tx, cfg, { name: "Old bar", colour: "orange" }),
+        );
+        await asApp(cfg, (tx) =>
+          tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, old.id)),
+        );
+      } else {
+        const other = await setupVenue();
+        await asApp(other, (tx) =>
+          createStation(tx, other, { name: "Other bar", colour: "orange" }),
+        );
+      }
+      const created = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
+      expect(
+        (await listStations(db, cfg)).find((station) => station.id === created.id)!.colour,
+      ).toBe("orange");
+    },
+  );
+
+  it("A725 reuses red when every station colour is occupied", async () => {
+    const cfg = await setupVenue();
+    const colours = [
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+      "grey",
+    ] as const;
+    await asApp(cfg, async (tx) => {
+      for (const colour of colours)
+        await createStation(tx, cfg, { name: `Station ${colour}`, colour });
+    });
+    const last = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Extra station" }));
+    expect((await listStations(db, cfg)).find((station) => station.id === last.id)!.colour).toBe(
+      "red",
+    );
+  });
+
   it("creates/lists stations and flips the default atomically", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
@@ -92,10 +252,10 @@ describe("kitchen-station config", () => {
     ).rejects.toMatchObject({ code: "station.name_taken" });
   });
 
-  it("defaults displayOrder to 0 and isDefault to false, and lists active stations by display_order then name", async () => {
+  it("defaults isDefault to false and lists active stations by name", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Zebra", displayOrder: 0 }));
-    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Alpha", displayOrder: 0 }));
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Zebra" }));
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Alpha" }));
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     const defaultThresholds = {
@@ -113,29 +273,26 @@ describe("kitchen-station config", () => {
       {
         id: expect.any(String),
         name: "Alpha",
-        displayOrder: 0,
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
         printMovedSlips: null,
-        colour: "red",
+        colour: "orange",
         ...defaultThresholds,
       },
       {
         id: expect.any(String),
         name: "Barra",
-        displayOrder: 0,
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
         printMovedSlips: null,
-        colour: "red",
+        colour: "amber",
         ...defaultThresholds,
       },
       {
         id: expect.any(String),
         name: "Zebra",
-        displayOrder: 0,
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -160,12 +317,10 @@ describe("kitchen-station config", () => {
     expect(list.filter((s) => s.isDefault)).toHaveLength(1);
   });
 
-  it("updateStation renames and reorders but cannot reactivate a removed station", async () => {
+  it("updateStation renames but cannot reactivate a removed station", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Plancha", displayOrder: 5 }),
-    );
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Parrilla", displayOrder: 2 }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Parrilla" }));
     expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual([
       "Parrilla",
     ]);
@@ -179,7 +334,6 @@ describe("kitchen-station config", () => {
           overdueAfterMinutes: null,
           forgottenAfterMinutes: null,
         },
-        displayOrder: 2,
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -193,7 +347,7 @@ describe("kitchen-station config", () => {
     await asApp(cfg, (tx) => deleteStation(tx, cfg, id));
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
     await expect(
-      asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true, displayOrder: 9 } as never)),
+      asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true } as never)),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
     await expect(asApp(cfg, (tx) => updateStation(tx, cfg, id, {}))).rejects.toMatchObject({
       code: "station.not_found",

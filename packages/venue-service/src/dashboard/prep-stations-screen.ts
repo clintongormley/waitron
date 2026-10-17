@@ -1,4 +1,3 @@
-import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -11,15 +10,8 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
   submitOnEnter,
-  ReorderController,
-  reorder,
   UrlStateController,
 } from "@waitron/ui";
-import {
-  holdPageCursor,
-  releasePageCursor,
-  pointerElementsAt,
-} from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -64,10 +56,8 @@ import type {
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
-import "./station-colour-picker.js";
-import "./station-times-tab.js";
-import { activeStationsInOrder } from "./station-show.js";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
+import "@waitron/ui/src/components/wt-colour-chooser.js";
+import { stationColourChoices } from "./station-colour-choices.js";
 import {
   refusalOf,
   listedPrinterIds,
@@ -77,7 +67,7 @@ import {
   type StationRefusal,
 } from "./station-editor.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
-import { STATION_COLOURS, type DeleteImpact, type StationColour } from "@waitron/shared";
+import { firstUnusedStationColour, isStationColour, type DeleteImpact } from "@waitron/shared";
 import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 
 type StationAction = {
@@ -91,7 +81,7 @@ type StationAction = {
 
 type Editor = { kind: "station" };
 type NewStation = StationInput & { printerIds: string[] };
-const PREP_TABS = ["stations", "routing", "times"] as const;
+const PREP_TABS = ["stations", "routing"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
@@ -119,8 +109,6 @@ function screenDevices(devices: PrepStationsView["devices"], stationId: string) 
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    ReorderController.styles,
-    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -162,13 +150,11 @@ export class PrepStationsScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
-  @property({ attribute: false }) hoursApi!: OpeningHoursApi;
   @state() private view?: PrepStationsView;
   @state() private editor?: Editor;
   @state() private draft: NewStation = {
     name: "",
     colour: "red",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -182,11 +168,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationAttempted = false;
   @state() private stationAction?: StationAction;
   @state() private tab: PrepTab = "stations";
-  /** The Times tab's station as its address names it; `#settleStation` replaces one not shown. */
-  @state() private timesStation: string | null = null;
-  @state() private stationOrder?: string[];
-  @state() private stationAnnouncement = "";
-  #stationDrag?: { id: string; pointerId: number; changed: boolean };
   /** The station the editor opened for; `token` tells one opening from the next. */
   @state() private stationEdit?: { token: object; station: PrepStation };
   @state() private stationEditBusy = false;
@@ -198,10 +179,7 @@ export class PrepStationsScreen extends LitElement {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
       this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
-      this.timesStation = this.tab === "times" ? this.#url.read("station") : null;
-      if (this.tab !== requested || (this.tab !== "times" && this.#url.read("station") !== null))
-        this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
-      this.#settleStation();
+      this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
     },
     {
       basePath: "/manage",
@@ -209,20 +187,6 @@ export class PrepStationsScreen extends LitElement {
       children: { "prep-stations": { view: "view", station: "station" }, "*": { view: "view" } },
     },
   );
-  /** The station the Times tab draws first: the Stations table's first active one. */
-  #firstStation(): string | undefined {
-    return this.view ? activeStationsInOrder(this.view.stations)[0]?.id : undefined;
-  }
-  /** On Times, an address naming no active station is replaced by the one the tab draws. */
-  #settleStation(): void {
-    if (this.tab !== "times" || !this.view) return;
-    const id = this.timesStation;
-    if (this.view.stations.some((station) => station.active && station.id === id)) return;
-    const first = this.#firstStation();
-    if (first === undefined) return;
-    this.timesStation = first;
-    this.#url.write({ dashboard: "prep-stations", view: "times", station: first }, true);
-  }
   /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
     change: RoutingChange;
@@ -386,7 +350,6 @@ export class PrepStationsScreen extends LitElement {
     this.#syncStationDrafts();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
-    if (changedState.has("view")) this.#settleStation();
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
       this.#writtenChoice = undefined;
@@ -429,7 +392,6 @@ export class PrepStationsScreen extends LitElement {
     this.#leave = undefined;
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
-    this.#endStationDrag();
   }
   async #load() {
     try {
@@ -665,132 +627,6 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
   }
-  #activeStationOrder() {
-    return (
-      this.stationOrder ??
-      activeStationsInOrder(this.view?.stations ?? []).map((station) => station.id)
-    );
-  }
-  #stationTable() {
-    return this.renderRoot
-      .querySelector("prep-station-table")
-      ?.shadowRoot?.querySelector("wt-data-table");
-  }
-  #moveStation(id: string, to: number) {
-    const previous = this.#activeStationOrder();
-    const next = reorder(previous, previous.indexOf(id), to);
-    if (next.join() === previous.join()) return false;
-    this.stationOrder = next;
-    this.stationAnnouncement = format("prep.station_reordered", {
-      name: this.#stationName(id),
-      index: String(to + 1),
-      total: String(next.length),
-    });
-    return true;
-  }
-  async #saveStationOrder(id: string) {
-    if (this.busy || !this.stationOrder) return;
-    const ids = [...this.stationOrder];
-    await this.#act(() => this.api.reorderStations(ids));
-    this.stationOrder = undefined;
-    await this.updateComplete;
-    const stations = this.renderRoot.querySelector("prep-station-table");
-    if (stations) await stations.updateComplete;
-    const table = this.#stationTable();
-    if (table) await table.updateComplete;
-    table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
-  }
-  readonly #stationScroll = new DragEdgeScroll();
-  #stationPoint = { x: 0, y: 0 };
-
-  #startStationDrag(event: PointerEvent, id: string) {
-    if (this.busy || this.#stationDrag || event.button !== 0) return;
-    event.preventDefault();
-    this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
-    this.#stationPoint = { x: event.clientX, y: event.clientY };
-    this.#stationScroll.start(event.currentTarget as Element, this.#stationPoint, () => {
-      const root = this.#stationTable()?.shadowRoot;
-      const row = pointerElementsAt(this.#stationPoint.x, this.#stationPoint.y).find(
-        (element) => element.matches("tbody tr") && root?.contains(element),
-      );
-      this.#trackStationDrag(row ? [row] : []);
-    });
-    holdPageCursor();
-    document.addEventListener("pointermove", this.#moveStationDrag);
-    document.addEventListener("pointerup", this.#dropStationDrag);
-    document.addEventListener("pointercancel", this.#dropStationDrag);
-    document.addEventListener("keydown", this.#stationDragKey, true);
-  }
-  readonly #moveStationDrag = (event: PointerEvent) => {
-    const drag = this.#stationDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    this.#stationPoint = { x: event.clientX, y: event.clientY };
-    this.#stationScroll.update(this.#stationPoint);
-    this.#trackStationDrag();
-  };
-  #trackStationDrag(
-    rows: Iterable<Element> = this.#stationTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
-  ): void {
-    const drag = this.#stationDrag;
-    if (!drag) return;
-    const order = this.#activeStationOrder();
-    for (const row of rows) {
-      const bounds = row.getBoundingClientRect();
-      if (this.#stationPoint.y < bounds.top || this.#stationPoint.y >= bounds.bottom) continue;
-      const id = row.querySelector<HTMLElement>("[data-station-id]")?.dataset.stationId;
-      if (id && order.includes(id) && this.#moveStation(drag.id, order.indexOf(id)))
-        drag.changed = true;
-      break;
-    }
-  }
-
-  readonly #dropStationDrag = (event: PointerEvent) => {
-    const drag = this.#stationDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    this.#endStationDrag();
-    if (drag.changed) void this.#saveStationOrder(drag.id);
-  };
-  readonly #stationDragKey = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || !this.#stationDrag) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const drag = this.#stationDrag;
-    this.#endStationDrag();
-    if (drag.changed) void this.#saveStationOrder(drag.id);
-  };
-
-  #endStationDrag() {
-    this.#stationScroll.stop();
-    if (!this.#stationDrag) return;
-    this.#stationDrag = undefined;
-    releasePageCursor();
-    document.removeEventListener("pointermove", this.#moveStationDrag);
-    document.removeEventListener("pointerup", this.#dropStationDrag);
-    document.removeEventListener("pointercancel", this.#dropStationDrag);
-    document.removeEventListener("keydown", this.#stationDragKey, true);
-  }
-  #stationGrip(station: PrepStation) {
-    return station.active
-      ? html`<button
-          type="button"
-          part="station-grip"
-          data-test=${`drag-${station.id}`}
-          aria-label=${format("prep.reorder_station", { name: station.name })}
-          ?disabled=${this.busy}
-          @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
-          @keydown=${(event: KeyboardEvent) => {
-            const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-            if (!delta || this.busy) return;
-            event.preventDefault();
-            const order = this.#activeStationOrder();
-            if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
-              void this.#saveStationOrder(station.id);
-          }}
-        >
-          <wt-icon name="grip"></wt-icon>
-        </button>`
-      : nothing;
-  }
   #stationMenu(station: PrepStation) {
     return html`<wt-row-actions
       data-station-id=${station.id}
@@ -952,8 +788,7 @@ export class PrepStationsScreen extends LitElement {
     const used = this.#colourUsers().map(({ colour }) => colour);
     this.draft = {
       name: "",
-      colour: STATION_COLOURS.find((colour) => !used.includes(colour)) ?? "red",
-      displayOrder: 0,
+      colour: firstUnusedStationColour(used),
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -985,8 +820,6 @@ export class PrepStationsScreen extends LitElement {
     const d = this.draft;
     const errors: Record<string, string> = {};
     if (!d.name.trim()) errors.name = t("prep.name_required");
-    if (!Number.isInteger(d.displayOrder) || d.displayOrder < 0)
-      errors.displayOrder = t("prep.order_invalid");
     if (!Number.isInteger(d.warmAfterMinutes) || d.warmAfterMinutes < 1)
       errors.warmAfterMinutes = t("prep.threshold_invalid");
     if (!Number.isInteger(d.overdueAfterMinutes) || d.overdueAfterMinutes <= d.warmAfterMinutes)
@@ -1188,17 +1021,25 @@ export class PrepStationsScreen extends LitElement {
   }
   #newStationColour() {
     const identity = this.#stationIdentity;
-    return html`<station-colour-picker
+    return html`<wt-colour-chooser
+      name="colour"
+      label=${t("prep.colour")}
+      required
       .value=${this.draft.colour}
-      .stations=${this.#colourUsers()}
+      .choices=${stationColourChoices(this.#colourUsers())}
+      .usedByLabel=${(colour: string, names: string) => format("prep.colour_used_by", { colour, stations: names })}
       .error=${this.fieldError.colour ?? ""}
-      ?busy=${this.busy}
-      @station-colour-change=${(event: CustomEvent<{ colour: StationColour }>) => {
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        if (this.isConnected && identity === this.#stationIdentity)
-          this.#change("colour", event.detail.colour);
+        if (
+          this.isConnected &&
+          identity === this.#stationIdentity &&
+          isStationColour(event.detail.value)
+        )
+          this.#change("colour", event.detail.value);
       }}
-    ></station-colour-picker>`;
+    ></wt-colour-chooser>`;
   }
   #newStationPrinters() {
     const identity = this.#stationIdentity;
@@ -1242,7 +1083,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
+          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">
@@ -1541,9 +1382,7 @@ export class PrepStationsScreen extends LitElement {
                 (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.tab;
                 const proceed = () => {
                   this.tab = tab;
-                  this.timesStation = null;
                   this.#url.write({ dashboard: "prep-stations", view: tab, station: null });
-                  this.#settleStation();
                 };
                 if (this.pending) this.#leaveCell("navigation", proceed);
                 else proceed();
@@ -1562,17 +1401,8 @@ export class PrepStationsScreen extends LitElement {
                     </div>`
               }
               <div slot="stations">
-                <div
-                  class="reorder-status"
-                  data-test="station-order-status"
-                  role="status"
-                  aria-live="polite"
-                >
-                  ${this.stationAnnouncement}
-                </div>
                 <prep-station-table
-                  .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
-                  .handles=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationGrip(station)]))}
+                  .stations=${view.stations}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(
@@ -1596,27 +1426,6 @@ export class PrepStationsScreen extends LitElement {
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>
-              </div>
-              <div slot="times">
-                ${
-                  this.tab === "times"
-                    ? html`<prep-station-times
-                        .api=${this.hoursApi}
-                        .stations=${view.stations}
-                        .periods=${view.routing.periods}
-                        .stationId=${this.timesStation ?? ""}
-                        @station-change=${(event: CustomEvent<{ stationId: string }>) => {
-                          event.stopPropagation();
-                          this.timesStation = event.detail.stationId;
-                          this.#url.write({
-                            dashboard: "prep-stations",
-                            view: "times",
-                            station: event.detail.stationId,
-                          });
-                        }}
-                      ></prep-station-times>`
-                    : nothing
-                }
               </div>
             </wt-tabs>`
           : nothing

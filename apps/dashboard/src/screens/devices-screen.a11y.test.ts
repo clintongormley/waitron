@@ -26,7 +26,6 @@ const stations: Station[] = [
   {
     id: "s1",
     name: "Cocina",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     showsRestOfOrder: false,
@@ -37,7 +36,6 @@ const stations: Station[] = [
   {
     id: "s2",
     name: "Barra",
-    displayOrder: 1,
     isDefault: false,
     active: true,
     showsRestOfOrder: false,

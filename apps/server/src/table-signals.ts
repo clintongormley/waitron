@@ -14,7 +14,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { classifyBand, worstBand } from "@waitron/shared";
+import { classifyBand, worstBand, compareStationNames } from "@waitron/shared";
 import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
@@ -25,7 +25,6 @@ interface KitchenLine {
   billId: string;
   stationId: string;
   stationName: string;
-  displayOrder: number;
   state: string;
   queuedAt: string;
   units: number;
@@ -47,7 +46,6 @@ async function readKitchenLines(
       billId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       stationName: kitchenStations.name,
-      displayOrder: kitchenStations.displayOrder,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
       quantity: workingOrderLines.quantity,
@@ -100,13 +98,12 @@ async function readKitchenLines(
 /** `ready` per station and the worst `long_wait` band over the lines, in that order. */
 function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSignal[] {
   const signals: KitchenSignal[] = [];
-  const ready = new Map<string, ReadyAtStation & { displayOrder: number }>();
+  const ready = new Map<string, ReadyAtStation>();
   for (const line of lines) {
     if (line.state !== "ready") continue;
     const station = ready.get(line.stationId) ?? {
       stationId: line.stationId,
       stationName: line.stationName,
-      displayOrder: line.displayOrder,
       count: 0,
     };
     station.count += line.units;
@@ -114,7 +111,11 @@ function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSi
   }
   if (ready.size > 0) {
     const byStation = [...ready.values()]
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.stationName.localeCompare(b.stationName))
+      .sort(
+        (a, b) =>
+          compareStationNames(a.stationName, b.stationName) ||
+          a.stationId.localeCompare(b.stationId),
+      )
       .map(({ stationId, stationName, count }) => ({ stationId, stationName, count }));
     signals.push({ kind: "ready", byStation });
   }

@@ -186,6 +186,15 @@ describe("rest of the order read", () => {
       (await withTransaction(db, (tx) => readRestOfOrder(tx, [otherOrderId]))).get(otherOrderId),
     ).toHaveLength(1);
     expect(await withTransaction(db, (tx) => readRestOfOrder(tx, []))).toEqual(new Map());
+    await db.execute(
+      sql`update kitchen_stations set name = case name when 'Fryer' then 'barra' else 'Ásador' end`,
+    );
+    const renamed = await withTransaction(db, (tx) => readRestOfOrder(tx, [orderId]));
+    expect(renamed.get(orderId)?.map(({ stationName, name }) => [stationName, name])).toEqual([
+      ["Ásador", "Kitchen burger"],
+      ["barra", "Kitchen fish"],
+      ["barra", "Kitchen chips"],
+    ]);
   });
 
   it("uses the order index instead of scanning ticket items", async () => {

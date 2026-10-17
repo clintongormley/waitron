@@ -33,6 +33,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     "timing refused",
     "timing invalid",
     "colour refused",
+    "colour popup",
     "moved slips as the venue, venue off",
     "moved slips own choice",
   ])("%s", async (state) => {
@@ -114,10 +115,16 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       el.refusal = { code: "management.request_invalid", params: { field: "colour" } };
       await el.updateComplete;
       expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["station-colour-picker"]>(
-          "station-colour-picker",
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+          "wt-colour-chooser[name=colour]",
         )!.error,
       ).toBe("Choose one of these colours.");
+    }
+    if (state === "colour popup") {
+      const chooser = el.shadowRoot!.querySelector("wt-colour-chooser")!;
+      await chooser.updateComplete;
+      chooser.show();
+      expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     }
     if (state.startsWith("moved slips")) {
       const moved = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -125,7 +132,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       )!;
       expect(moved.value).toBe(state === "moved slips own choice" ? "dont-print" : "venue");
       expect(moved.options[0]!.label).toBe(
-        state === "moved slips own choice" ? "As the venue (print)" : "As the venue (don't print)",
+        state === "moved slips own choice" ? "Venue setting: Print" : "Venue setting: Don't print",
       );
     }
     for (const name of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"]) {
@@ -135,7 +142,15 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       const description = (input.getAttribute("aria-describedby") ?? "")
         .split(" ")
         .map((id) => root.getElementById(id)?.textContent ?? "");
-      expect(description[0]).toBe("Leave blank to use the venue default.");
+      expect(description.filter((text) => text !== "")).toEqual(
+        timing(name).error ? [timing(name).error] : [],
+      );
+      const group = el.shadowRoot!.querySelector("fieldset")!;
+      expect(group.contains(timing(name))).toBe(true);
+      expect(group.getAttribute("aria-describedby")).toBe("timing-inheritance");
+      expect(el.shadowRoot!.getElementById("timing-inheritance")!.textContent).toBe(
+        "Leave a field blank to use the venue setting",
+      );
       const placeholder = getComputedStyle(input, "::placeholder").color;
       const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
       expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);

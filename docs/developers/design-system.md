@@ -1421,10 +1421,9 @@ Hold a dragged row or tile near the visible top or bottom edge to reach rows out
 view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
 across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
-Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
-stations, the Customise column list and the Home page tab's shortcut preview use this helper. Shared
-reorder tables and preparation stations keep the moves already made when a drag is cancelled, as
-they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
+Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, the Customise
+column list and the Home page tab's shortcut preview use this helper. Shared reorder tables keep
+the moves already made when a drag is cancelled, as they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
 only on release.
 
 ### Remembered, searchable, filterable tables
@@ -3830,24 +3829,18 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Worked-out prep-station times
 
-Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
-Station picker at the top lists the active stations in the Stations table's order, the default
-station included. The month is Opening hours' month in its station mode (`stationMode` on
-`opening-hours-month.ts`): ‹ › step months, the month's year is plain text, and there is no
-department picker. A station one department or none feeds draws one bar per date of the times it
-gets orders, worked out from routed products and the zones that can order them, and a date it gets
-none reads "No orders". When more than one department sends the station orders in the weeks
-shown, each date draws one track per department in department order, a Rows key names them, a
-department with nothing that date draws an empty track, a date none of them sends on reads "No
-orders" once, and hovering a range names its department ("Lunch (Restaurant)"). Dates show their
-special day's and public holiday's names, as in Opening hours, and the season chips are only a
-key to the tints, not buttons (`keyOnly` on `season-chips.ts`). These are planned times; today's
-station closures and service extensions do not change them. A default station shows "Always open: this is the default
-station" and no month. A failed read shows "This station's times could not be loaded. It will be
-tried again." above the month until that read succeeds again. The month is not kept in the
-address: the tab opens on the browser's current month. The Calendar's Show picker draws a station's
-times in the Month and the Week (below). Special days are made and painted in Opening hours' special-day painter, opened
-from the Year, the Month or the Week.
+Choose a prep station in the Calendar's Month or Week Show picker to see its planned service
+times (see Calendar below). Each sending department gets its own row, even when only one sends
+to the station. A date with no orders says so once, and the default station shows "Always open:
+this is the default station" in place of the dates. The station choices require
+`venue_service.manage`; a read-only Calendar keeps its department choices.
+
+Prep stations itself has only Stations and Routes. The former Times tab and each station's
+"When it gets orders" link are retired. Station lists use name order, with the Default badge at
+its alphabetical place and a colour square on every Stations row. Add and Edit use
+`wt-colour-chooser`; a missing creation colour takes the first unused active-local station colour,
+or red when all choices are occupied. The Edit window groups its late-flag minutes into one row
+with one inheritance hint. There is no station order field or drag handle.
 
 ### Tabbed management pages
 
@@ -3895,18 +3888,17 @@ leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hi
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations`, `routing` and `times` (Stations, Routes and Times) at
-`/manage/prep-stations/view/<key>`; any other key, such as an old `settings`, `tickets` or
-`watchers` address, opens Stations and replaces the address without adding a history entry. Its tab
-strip wraps onto a second line when the labels do not fit, on every tab. Times takes
-`/station/<id>`: choosing a station in its picker adds a history entry, and a Times address naming
-no active station is replaced by the first one without adding one; moving to Stations or Routes
-drops the station from the address (`prep-stations-screen.ts`). Stations shows no live kitchen numbers: each station's name with its
+Prep stations uses `stations` and `routing` (Stations and Routes) at
+`/manage/prep-stations/view/<key>`. Any other key, including `times`, opens Stations and replaces
+the address without adding a history entry. A retired `/station/<id>` child is dropped; Routes
+keeps its own tab when an old address names a station. The tab strip wraps onto a second line
+when the labels do not fit.
+
+Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
 show it, and a link to Devices) and Actions, the row's menu.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
-Each non-default station's "When it gets orders" link opens Times on that station.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
@@ -3938,7 +3930,7 @@ cell's repair note under the station is drawn inside the button. Every table cel
 included, is filled with `--wt-color-station-<colour>` of the station it sends to (for a blank cell, the
 one it inherits), and a choice waiting to be saved paints as it will be saved; a cell stays plain when it sends nowhere (No
 preparation, no station), sends to a disabled or deleted station, or its station's stored colour is
-not one of the twelve. A painted cell beside another cell is parted from it by a 2px line in
+not in the shared palette. A painted cell beside another cell is parted from it by a 2px line in
 `--wt-color-surface` on its start edge, drawn as an inset shadow so the button still covers the
 whole cell. Pointing at a cell draws the focus outline just inside its edges and shows a hand
 pointer; a painted cell keeps its fill, and a plain one is tinted with `--wt-color-surface-lifted`
@@ -4004,9 +3996,11 @@ variant reads "Product (Variant)" beside its product. A product's own choice, an
 moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
-late-flag minutes (Warm after, Overdue after and Forgotten after), "Show the rest of the order" and MOVED
-slips — As the venue (naming the venue's current choice), Print or Don't print; choosing As the venue
-again sends null.
+late-flag fields in one row under "Late flags (minutes)", "Also list the order's dishes from other
+stations" with "On this station's tickets and kitchen screen", and "Print a slip when sent dishes
+move table". The slip choices are "Venue setting: Print" (or "Venue setting: Don't print"), "Print"
+and "Don't print"; choosing the venue setting again sends null. One note below the minutes fields
+says "Leave a field blank to use the venue setting".
 Save sends only what changed, in one request. A minutes field left blank follows the venue's
 Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
 follows the default again. Save first checks that each filled minutes field is a whole number from
@@ -4016,13 +4010,14 @@ that names a minutes field (`station.thresholds_invalid` or `management.request_
 under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
-`station-colour-picker` (`station-colour-picker.ts`) of the twelve station colours, each tile
-naming under it the other active stations that have that colour; it is no wider than
-`--wt-field-max-width`, like the dialog's other fields, and its required `*` is in
-`--wt-color-danger`, like theirs. Add station also sets Colour and
-Printers, and starts on the first colour no active station has, or Red when all twelve are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
+required `wt-colour-chooser`: its closed field shows the chosen colour's square and name,
+and its popup offers the shared calendar palette, naming the other active stations that use each.
+The editor's own station is excluded from those names. Each Stations row also shows its colour
+square beside its name; both squares use the station dot colour. Add station uses the same colour
+field and sets Printers. It starts on the first colour no active station has, or Red when all palette colours
+are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
-an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
+stations appear in Spanish alphabetical order without drag grips. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
@@ -4130,8 +4125,7 @@ Opening hours' Year.
   dates, with one Tab stop. Clicking a date picks it and opens the day box (below), for a viewer
   too; days are picked as Picking days (below) says, and
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
-  today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
-  the dates are plain and nothing is picked. Unless the Calendar is read-only, Show also lists the
+  today's own inner ring in `--wt-color-primary`. Unless the Calendar is read-only, Show also lists the
   active prep stations under their own heading; the Calendar is read-only for anyone without
   `venue_service.manage`, the permission Prep stations needs, and a read-only Calendar reads no
   station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`
@@ -4605,7 +4599,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, tenant themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 3; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 4; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

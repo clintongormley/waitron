@@ -111,6 +111,9 @@ through `StaffingApi.watchMonth` on the `staffing-month` dependencies
 `OpeningHoursApi.watchStations` on the `prep-stations-list` dependencies, and a shown station's
 `…/service-times` through `watchStationTimes`, as the Times tab does; a read-only Calendar reads
 neither.
+2026-10-17, A725: Prep stations' Times tab is retired. Its month, station-change, read-recovery
+and reconnect checks now exercise the Calendar in `calendar-station-month.test.ts`; the Calendar
+continues to use the watches described in A722-3 above.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

@@ -710,7 +710,6 @@ export type KitchenTimingDefaults = StationThresholds;
 export interface Station {
   id: string;
   name: string;
-  displayOrder: number;
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
@@ -3134,7 +3133,6 @@ export class DashboardApi {
 
   createStation(input: {
     name: string;
-    displayOrder?: number;
     isDefault?: boolean;
     warmAfterMinutes?: number;
     overdueAfterMinutes?: number;
@@ -3147,7 +3145,6 @@ export class DashboardApi {
     id: string,
     patch: {
       name?: string;
-      displayOrder?: number;
       showsRestOfOrder?: boolean;
       warmAfterMinutes?: number;
       overdueAfterMinutes?: number;

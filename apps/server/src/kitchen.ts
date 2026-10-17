@@ -1,7 +1,7 @@
 // Side-effect import: registers the `station.*`/`course.*` codes this file throws (errors.ts).
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import {
   fireControlMode,
   isUniqueViolation,
@@ -9,6 +9,7 @@ import {
   products,
   kitchenStations,
   kitchenStationTiming,
+  nextStationColour,
 } from "@waitron/db";
 import type { StationColour, StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -29,7 +30,6 @@ import type { StationTimingPatch } from "./kitchen-timing.js";
 export interface Station {
   id: string;
   name: string;
-  displayOrder: number;
   /** The venue's single fallback station, enforced by the partial unique `kitchen_stations_default_key`.
    *  Written only by {@link setDefaultStation} / {@link createStation}, never a plain update. */
   isDefault: boolean;
@@ -83,7 +83,6 @@ export async function createStation(
   cfg: TillConfig,
   input: {
     name: string;
-    displayOrder?: number;
     isDefault?: boolean;
     colour?: StationColour;
     thresholds?: StationTimingPatch;
@@ -104,9 +103,9 @@ export async function createStation(
       .values({
         locationId: cfg.locationId,
         name: input.name,
-        displayOrder: input.displayOrder ?? 0,
         isDefault: input.isDefault ?? false,
-        ...(input.colour === undefined ? {} : { colour: input.colour }),
+        colour:
+          input.colour === undefined ? await nextStationColour(tx, cfg.locationId) : input.colour,
       })
       .returning({ id: kitchenStations.id });
     if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {
@@ -130,7 +129,6 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     .select({
       id: kitchenStations.id,
       name: kitchenStations.name,
-      displayOrder: kitchenStations.displayOrder,
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
@@ -143,19 +141,21 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     .from(kitchenStations)
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
-    .orderBy(kitchenStations.displayOrder, kitchenStations.name);
-  return stations.map((station) => ({
-    ...station,
-    timingDefaults: defaults,
-    timingOverrides: {
-      warmAfterMinutes: station.warmAfterMinutes,
-      overdueAfterMinutes: station.overdueAfterMinutes,
-      forgottenAfterMinutes: station.forgottenAfterMinutes,
-    },
-    warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
-    overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
-    forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
-  }));
+    .orderBy(kitchenStations.name, kitchenStations.id);
+  return stations
+    .sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id))
+    .map((station) => ({
+      ...station,
+      timingDefaults: defaults,
+      timingOverrides: {
+        warmAfterMinutes: station.warmAfterMinutes,
+        overdueAfterMinutes: station.overdueAfterMinutes,
+        forgottenAfterMinutes: station.forgottenAfterMinutes,
+      },
+      warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+    }));
 }
 
 /** The active stations, each with how it stands today. */
@@ -174,32 +174,12 @@ export async function listStationsToday(tx: Transaction, cfg: TillConfig) {
   });
 }
 
-export async function reorderStations(
-  tx: Transaction,
-  cfg: TillConfig,
-  ids: unknown,
-): Promise<void> {
-  const stations = (await listStations(tx, cfg)).filter((station) => station.active);
-  if (
-    !Array.isArray(ids) ||
-    ids.length !== stations.length ||
-    new Set(ids).size !== ids.length ||
-    ids.some((id) => typeof id !== "string" || !stations.some((station) => station.id === id))
-  ) {
-    throw new AppError("management.request_invalid", { field: "ids" });
-  }
-  for (const [displayOrder, id] of ids.entries()) {
-    await tx.update(kitchenStations).set({ displayOrder }).where(eq(kitchenStations.id, id));
-  }
-}
-
 export async function updateStation(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
   patch: {
     name?: string;
-    displayOrder?: number;
     showsRestOfOrder?: boolean;
     printMovedSlips?: boolean | null;
     colour?: StationColour;

@@ -50,6 +50,11 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     });
   }
 
+  it("A725 station schema has no manual order column", async () => {
+    const columns = suite.db.all<{ name: string }>(sql`pragma table_info(kitchen_stations)`);
+    expect(columns.map(({ name }) => name)).not.toContain("display_order");
+  });
+
   it("deleted station names are reusable under new ids", async () => {
     const name = "Reusable station";
     const oldId = await seedStation(LOCATION_A, name);
@@ -96,13 +101,10 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
   it("exposes every column through the Drizzle export, with the is_default and active defaults", async () => {
     const id = await seedStation(LOCATION_A, "Cocina");
-    await inTx((tx) =>
-      tx.update(kitchenStations).set({ displayOrder: 5 }).where(eq(kitchenStations.id, id)),
-    );
     const [row] = await inTx((tx) =>
       tx.select().from(kitchenStations).where(eq(kitchenStations.id, id)),
     );
-    expect(row!.displayOrder).toBe(5);
+    expect(row).not.toHaveProperty("displayOrder");
     expect(row!.name).toBe("Cocina");
     expect(row!.isDefault).toBe(false);
     expect(row!.active).toBe(true);

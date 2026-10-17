@@ -4106,3 +4106,12 @@ describe("saving a cell's period choices", () => {
       ]);
     }));
 });
+
+it("A725 Routes station names use Spanish alphabetical order", async () => {
+  const f = await withTransaction(db, (tx) => fixture(tx));
+  await db.update(kitchenStations).set({ name: "Ásador" }).where(eq(kitchenStations.id, f.bar));
+  const model = await withTransaction(db, (tx) =>
+    routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z")),
+  );
+  expect(model.stations.map(({ name }) => name)).toEqual(["Ásador", "Terrace Bar"]);
+});

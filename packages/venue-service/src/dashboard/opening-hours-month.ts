@@ -516,7 +516,7 @@ export class OpeningHoursMonthView extends LitElement {
           </span>`,
       )}
       ${
-        this.stationMode || !unseen
+        this.stationMode || !unseen || none
           ? nothing
           : html`<span class="visually-hidden">${more ? ", " : ""}${unseen}</span>`
       }`;

@@ -2348,3 +2348,25 @@ describe("the party's name on a kitchen ticket", () => {
     ]);
   });
 });
+
+it("A725 shared kitchen paper lists stations in Spanish alphabetical order", async () => {
+  const { cfg, catalogueId } = await setupVenue();
+  const text = await asApp(cfg, async (tx) => {
+    const late = { id: "00000000-0000-4000-8000-000000000001" };
+    const early = { id: "00000000-0000-4000-8000-000000000002" };
+    await tx.insert(kitchenStations).values([
+      { ...late, locationId: cfg.locationId, name: "Ñandú", isDefault: true, colour: "red" },
+      { ...early, locationId: cfg.locationId, name: "Naranja", colour: "red" },
+    ]);
+    const printerId = await makeSharedPrinter(tx, cfg, "Shared paper", [late.id, early.id]);
+    const lateDish = await makeProduct(tx, cfg, catalogueId, "LateDish", { stationId: late.id });
+    const earlyDish = await makeProduct(tx, cfg, catalogueId, "EarlyDish", { stationId: early.id });
+    await fireNewOrder(tx, cfg, [line(lateDish), line(earlyDish)]);
+    const jobs = (await printJobsFor(tx)).filter((job) => job.printerId === printerId);
+    expect(jobs).toHaveLength(1);
+    return decodeTicket(jobs[0]!.payload);
+  });
+  expect(text.indexOf("EarlyDish")).toBeGreaterThanOrEqual(0);
+  expect(text.indexOf("LateDish")).toBeGreaterThanOrEqual(0);
+  expect(text.indexOf("EarlyDish")).toBeLessThan(text.indexOf("LateDish"));
+});

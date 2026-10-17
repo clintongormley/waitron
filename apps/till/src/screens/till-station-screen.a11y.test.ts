@@ -9,7 +9,6 @@ const stations: Station[] = [
   {
     id: "st-1",
     name: "Cocina",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     open: true,
@@ -20,7 +19,6 @@ const stations: Station[] = [
   {
     id: "st-2",
     name: "Barra",
-    displayOrder: 1,
     isDefault: false,
     active: true,
     open: true,

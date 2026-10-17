@@ -6,6 +6,7 @@ import {
   kitchenTimingDefaults,
   locations,
   locationDayCutoverChanges,
+  nextStationColour,
   nodes,
   tenants,
   withTransaction,
@@ -305,7 +306,7 @@ export async function applyVenue(
           await tx.insert(kitchenStations).values({
             locationId,
             name: "Cocina",
-            displayOrder: 0,
+            colour: await nextStationColour(tx, locationId),
             isDefault: true,
             active: true,
           });

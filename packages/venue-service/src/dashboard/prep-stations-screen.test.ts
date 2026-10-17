@@ -1,17 +1,10 @@
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { RetiredFallbackPrepStationsView as PrepStationsView } from "../../test/retired-routing-fixture-types.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import {
-  registerIcons,
-  applyTokens,
-  NavigationGuard,
-  type WtCombobox,
-  type WtInput,
-} from "@waitron/ui";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
-import type { PrepStationTimes } from "./station-times-tab.js";
+import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
@@ -75,7 +68,6 @@ const view: PrepStationsView = {
       active: true,
       colour: "blue",
       isDefault: true,
-      displayOrder: 1,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -130,10 +122,6 @@ async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<Prep
   hosts.push(host);
   const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
   el.api = a;
-  el.hoursApi = {
-    watchMonth: () => () => {},
-    watchStationTimes: () => () => {},
-  } as unknown as OpeningHoursApi;
   host.append(el);
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
@@ -545,35 +533,7 @@ it("without live data, starts no fifteen-second refresh", async () => {
     interval.mockRestore();
   }
 });
-it("a manager's drag reorder saves the new order with no health read", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockResolvedValue(undefined);
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    reorderStations: order,
-  } as Partial<PrepStationsApi>);
-  expect("readStationHealth" in a).toBe(false);
-  const el = await mount(a);
-  const summary = stationTable(el)!;
-  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
-  const target = summary
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 93,
-      clientY: handle.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 93, clientY: target.top + target.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 93 }));
-  await settle(el);
-  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-});
+
 function stationRow(el: PrepStationsScreen, stationId: string) {
   return stationTable(el)!.querySelector(`[data-test="station-menu-${stationId}"]`)!.closest("tr")!;
 }
@@ -588,7 +548,7 @@ it("keeps whole-station editing out of Routing while showing the grid", async ()
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="name"]')).not.toBeNull();
-  expect(q(el, '[data-test="displayOrder"]')).not.toBeNull();
+  expect(q(el, '[data-test="displayOrder"]')).toBeNull();
   expect(q(el, '[data-test="overdue"]')).not.toBeNull();
   expect(a.updateStation).not.toHaveBeenCalled();
 });
@@ -672,7 +632,6 @@ it("creates a station from the modal with the chosen thresholds", async () => {
   await settle(el);
   expect(a.createStation).toHaveBeenCalledWith({
     name: "Terrace",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -680,11 +639,13 @@ it("creates a station from the modal with the chosen thresholds", async () => {
   });
 });
 const addPicker = (el: PrepStationsScreen) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["station-colour-picker"]>(
-    "wt-modal station-colour-picker",
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
   )!;
-const colourTile = (picker: HTMLElementTagNameMap["station-colour-picker"], colour: string) =>
-  picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+const colourTile = (picker: HTMLElementTagNameMap["wt-colour-chooser"], colour: string) => {
+  picker.show();
+  return picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-value="${colour}"]`)!;
+};
 const colouredView = (colours: readonly (string | [string, boolean])[]): PrepStationsView => ({
   ...view,
   stations: colours.map((entry, index) => {
@@ -711,7 +672,7 @@ it("a new station starts on the first colour no station has, and is created with
   expect(picker.value).toBe("amber");
   expect(
     el.shadowRoot!.querySelector(
-      "wt-modal .form > div:has(wt-input[name=name]) + station-colour-picker",
+      "wt-modal .form > div:has(wt-input[name=name]) + wt-colour-chooser",
     ),
   ).toBe(picker);
   expect(colourTile(picker, "orange").getAttribute("aria-label")).toBe("Orange, used by Station 1");
@@ -726,20 +687,20 @@ it("a new station starts on the first colour no station has, and is created with
   await settle(el);
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
     colour: "cyan",
   });
 });
-it("a new station starts on Red when all twelve are taken", async () => {
+it("a new station starts on Red when all shared colours are taken", async () => {
   const a = api({
     load: vi
       .fn()
       .mockResolvedValue(
         colouredView([
           "brown",
+          "grey",
           "orange",
           "amber",
           "lime",
@@ -790,10 +751,14 @@ it("the station editor opens on the station's colour and names the other active 
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
-  const picker = editor.shadowRoot!.querySelector("station-colour-picker")!;
+  const picker = editor.shadowRoot!.querySelector("wt-colour-chooser")!;
   await picker.updateComplete;
   expect(picker.value).toBe("blue");
-  expect(picker.stations.map(({ id, colour }) => [id, colour])).toEqual([["s1", "orange"]]);
+  expect(
+    picker.choices
+      .filter(({ usedBy }) => usedBy!.length)
+      .map(({ value, usedBy }) => [value, usedBy]),
+  ).toEqual([["orange", ["Station 1"]]]);
 });
 it("makes a nondefault station the default", async () => {
   const changed = {
@@ -809,9 +774,9 @@ it("makes a nondefault station the default", async () => {
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
-it("saves station name and order through their own controls and thresholds together through the editor", async () => {
+it("saves station name and thresholds together through the editor", async () => {
   const next = withUpstairs({ open: true, why: "open" });
-  const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
+  const a = api({ load: vi.fn().mockResolvedValue(next) });
   const el = await mount(a);
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
@@ -822,11 +787,6 @@ it("saves station name and order through their own controls and thresholds toget
   q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenNthCalledWith(1, "bar", { name: "Terrace bar" });
-  q(el, '[data-test="drag-bar"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
-  );
-  await settle(el);
-  expect(a.reorderStations).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   for (const [field, value] of [
@@ -974,7 +934,7 @@ it("hands the station's and the venue's MOVED slips choices to the editor and sa
     "wt-combobox[name=printMovedSlips]",
   )!;
   expect(moved.value).toBe("print");
-  expect(moved.options[0]!.label).toBe("As the venue (don't print)");
+  expect(moved.options[0]!.label).toBe("Venue setting: Don't print");
   moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "venue" } }));
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
@@ -1004,9 +964,9 @@ async function openMovedSlipsEditorThatSeesVenueStopPrinting() {
 it("follows the venue's MOVED slips switch in an open editor's first option", async () => {
   const { el, editor, moved, liveData } = await openMovedSlipsEditorThatSeesVenueStopPrinting();
   expect(moved().value).toBe("venue");
-  expect(moved().options[0]!.label).toBe("As the venue (print)");
+  expect(moved().options[0]!.label).toBe("Venue setting: Print");
   liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("As the venue (don't print)"));
+  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
   expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
   expect(moved().value).toBe("venue");
 });
@@ -1017,7 +977,7 @@ it("keeps a MOVED slips choice made in an open editor when the venue's switch ch
   await editor.updateComplete;
   expect(save().hasAttribute("disabled")).toBe(false);
   liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("As the venue (don't print)"));
+  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
   await editor.updateComplete;
   expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
   expect(moved().value).toBe("print");
@@ -1028,7 +988,7 @@ function fallbackView(): PrepStationsView {
     ...view,
     stations: [
       ...view.stations,
-      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false, displayOrder: 2 },
+      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false },
     ],
     routing: {
       ...view.routing,
@@ -1137,7 +1097,7 @@ it("does not create an unnamed station", async () => {
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
-  await editSaveField(el, q(el, 'wt-input[name="displayOrder"]')!, "2");
+  await editSaveField(el, q(el, 'wt-input[name="warmAfterMinutes"]')!, "6");
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(a.createStation).not.toHaveBeenCalled();
@@ -1163,7 +1123,7 @@ it("refreshes the Stations row after a kitchen-stations live change", async () =
   await vi.waitFor(() => expect(stationRow(el, "bar").textContent).toContain("New bar"));
   expect(load).toHaveBeenCalledTimes(2);
 });
-it("creates a station with its name, order and thresholds when Enter is pressed in Order", async () => {
+it("creates a station with its name and thresholds when Enter is pressed in Name", async () => {
   const a = api();
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
@@ -1171,11 +1131,8 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
   q(el, '[data-test="name"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
-  q(el, '[data-test="displayOrder"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "3" } }),
-  );
   await settle(el);
-  q(el, '[data-test="displayOrder"]')!
+  q(el, '[data-test="name"]')!
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -1188,7 +1145,6 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
   await settle(el);
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace bar",
-    displayOrder: 3,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -1296,7 +1252,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
   expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
 });
 
-it("refuses negative order and invalid warm and forgotten thresholds together when creating", async () => {
+it("refuses invalid warm and forgotten thresholds together when creating", async () => {
   const a = api();
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
@@ -1305,7 +1261,6 @@ it("refuses negative order and invalid warm and forgotten thresholds together wh
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
   for (const [field, value] of [
-    ["displayOrder", "-1"],
     ["warmAfterMinutes", "0"],
     ["forgottenAfterMinutes", "10"],
   ]) {
@@ -1316,7 +1271,7 @@ it("refuses negative order and invalid warm and forgotten thresholds together wh
   await settle(el);
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  for (const field of ["displayOrder", "warmAfterMinutes", "forgottenAfterMinutes"])
+  for (const field of ["warmAfterMinutes", "forgottenAfterMinutes"])
     expect(q(el, `[data-field-error="${field}"]`)).not.toBeNull();
   expect(a.createStation).not.toHaveBeenCalled();
   expect(a.updateStation).not.toHaveBeenCalled();
@@ -1584,7 +1539,6 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routes" },
-    { key: "times", label: "Times" },
   ]);
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
@@ -1684,184 +1638,40 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
 });
 
-describe("the Times tab", () => {
-  /** Terrace is second by display order, so the Upstairs bar is the first non-default after Bar. */
-  const timesView = (): PrepStationsView => {
-    const loaded = withUpstairs({ open: true, why: "open" });
-    loaded.stations.push(
-      { ...upstairs, id: "terrace", name: "Terrace", displayOrder: 3 },
-      { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 0 },
-    );
-    return loaded;
-  };
-  const hoursApi = () =>
-    ({
-      liveData: undefined,
-      watchMonth: vi.fn(() => () => {}),
-      watchStationTimes: vi.fn(() => () => {}),
-    }) as unknown as OpeningHoursApi;
-  async function mountTimes(loaded: PrepStationsView = timesView()) {
-    const host = document.createElement("div");
-    applyTokens(host);
-    document.body.append(host);
-    hosts.push(host);
-    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-    el.api = api({ load: vi.fn().mockResolvedValue(loaded) });
-    el.hoursApi = hoursApi();
-    host.append(el);
-    await settle(el);
-    await settle(el);
-    return el;
-  }
-  const times = (el: PrepStationsScreen) =>
-    el.shadowRoot!.querySelector<PrepStationTimes>("prep-station-times");
-  const tabs = (el: PrepStationsScreen) => el.shadowRoot!.querySelector("wt-tabs")!;
-
+describe("A725 retired Times destinations", () => {
   it.each([
-    ["en", "Times"],
-    ["es", "Horarios"],
-  ] as const)(
-    "is the third tab, labelled in %s, and opens on the station its address names through a reload",
-    async (locale, label) => {
-      setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-      let el = await mountTimes();
-      expect(tabs(el).items.map((item) => item.key)).toEqual(["stations", "routing", "times"]);
-      expect(tabs(el).items[2]!.label).toBe(label);
-      expect(tabs(el).value).toBe("times");
-      expect(times(el)?.closest('[slot="times"]')).not.toBeNull();
-      expect(times(el)!.stationId).toBe("terrace");
-      expect(times(el)!.stations.map((station) => station.id)).toEqual(
-        expect.arrayContaining(["bar", "upstairs", "terrace"]),
-      );
-      expect(times(el)!.api).toBe(el.hoursApi);
-      el.parentElement!.remove();
-      el = await mountTimes();
-      expect(tabs(el).value).toBe("times");
-      expect(times(el)!.stationId).toBe("terrace");
-      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-    },
-  );
-
-  it("choosing a station writes it to the address as a new history entry", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/times/station/upstairs");
-    const el = await mountTimes();
+    "/manage/prep-stations/view/times",
+    "/manage/prep-stations/view/times/station/gone",
+    "/manage/prep-stations/view/times/station/disabled",
+    "/manage/prep-stations/view/times/station/terrace",
+  ])("replaces %s, including after reloading, without pushing history", async (address) => {
+    history.replaceState(null, "", address);
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    times(el)!.dispatchEvent(
-      new CustomEvent("station-change", {
-        detail: { stationId: "terrace" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    let el = await mount(api());
     await settle(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-    expect(writtenPaths(push)).toEqual(["/manage/prep-stations/view/times/station/terrace"]);
-    expect(replace).not.toHaveBeenCalled();
-    expect(times(el)!.stationId).toBe("terrace");
-    history.back();
-    await expect.poll(() => times(el)?.stationId).toBe("upstairs");
-  });
-
-  it.each([
-    ["no station", "/manage/prep-stations/view/times"],
-    ["an unknown station", "/manage/prep-stations/view/times/station/gone"],
-    ["a switched-off station", "/manage/prep-stations/view/times/station/disabled"],
-  ])(
-    "replaces %s with the first active station without a history entry",
-    async (_case, address) => {
-      history.replaceState(null, "", address);
-      const push = vi.spyOn(history, "pushState");
-      const replace = vi.spyOn(history, "replaceState");
-      const el = await mountTimes();
-      await expect
-        .poll(() => location.pathname)
-        .toBe("/manage/prep-stations/view/times/station/bar");
-      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
-      expect(push).not.toHaveBeenCalled();
-      expect(times(el)!.stationId).toBe("bar");
-    },
-  );
-
-  it("replaces the shown station with the first one when a refresh no longer lists it", async () => {
-    const liveData = new LiveData();
-    const loaded = timesView();
-    const without = { ...loaded, stations: loaded.stations.filter((s) => s.id !== "terrace") };
-    history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-    const host = document.createElement("div");
-    document.body.append(host);
-    hosts.push(host);
-    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-    el.api = api({
-      liveData,
-      load: vi.fn().mockResolvedValueOnce(loaded).mockResolvedValue(without),
-    });
-    el.hoursApi = hoursApi();
-    host.append(el);
-    await expect.poll(() => times(el)?.stationId).toBe("terrace");
-    const push = vi.spyOn(history, "pushState");
-    const replace = vi.spyOn(history, "replaceState");
-    liveData.invalidate([{ type: "kitchen_stations", id: "terrace" }]);
-    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/times/station/bar");
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
     expect(push).not.toHaveBeenCalled();
-    expect(times(el)!.stationId).toBe("bar");
+    el.parentElement!.remove();
+    el = await mount(api());
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
+    expect(push).not.toHaveBeenCalled();
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
   });
-
-  it.each(["stations", "routing"] as const)(
-    "switching to %s clears the station from the address",
-    async (key) => {
-      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-      const el = await mountTimes();
-      tabs(el).shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
-      await settle(el);
-      expect(tabs(el).value).toBe(key);
-      expect(location.pathname).toBe(`/manage/prep-stations/view/${key}`);
-      expect(times(el)).toBeNull();
-    },
-  );
-
-  it("an address naming a station on another tab drops the station without a history entry", async () => {
+  it("keeps Routes and drops a station child without pushing history", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/station/terrace");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mountTimes();
-    expect(tabs(el).value).toBe("routing");
+    const el = await mount(api());
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("routing");
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
     expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/routing"]);
     expect(push).not.toHaveBeenCalled();
-  });
-
-  it("a station's link on the Stations table opens Times on that station on the same page", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
-    const guard = new NavigationGuard(window, {
-      isDirty: () => false,
-      request: async () => "proceeded",
-    });
-    // What the dashboard shell does with a click on a /manage link (`dashboard-app.ts`, `#onAppLink`).
-    const follow = (event: MouseEvent) => {
-      const anchor = event
-        .composedPath()
-        .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
-      if (!anchor) return;
-      event.preventDefault();
-      void guard.write(new URL(anchor.href));
-    };
-    document.addEventListener("click", follow, true);
-    try {
-      const el = await mountTimes();
-      const link = stationTable(el)!.querySelector<HTMLAnchorElement>(
-        'a[href="/manage/prep-stations/view/times/station/terrace"]',
-      )!;
-      link.click();
-      await expect.poll(() => tabs(el).value).toBe("times");
-      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-      await expect.poll(() => times(el)?.stationId).toBe("terrace");
-    } finally {
-      document.removeEventListener("click", follow, true);
-      guard.dispose();
-    }
+    expect(await routingGrid(el)).not.toBeNull();
   });
 });
 
@@ -1983,7 +1793,6 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   for (const [key, actions] of [
     ["stations", ["new-station"]],
     ["routing", []],
-    ["times", []],
     ["stations", ["new-station"]],
   ] as const) {
     tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
@@ -2015,7 +1824,7 @@ it("at 320 px in Spanish, every tab shows whole and the tab row does not overflo
   const boxes = [...strip.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) =>
     tab.getBoundingClientRect(),
   );
-  expect(boxes).toHaveLength(3);
+  expect(boxes).toHaveLength(2);
   for (const box of boxes) {
     expect(box.left).toBeGreaterThanOrEqual(bounds.left - 1);
     expect(box.right).toBeLessThanOrEqual(bounds.right + 1);
@@ -2235,7 +2044,9 @@ it.each([
       });
       const rest = await openStationRest(el);
       expect(rest.label).toBe(
-        locale === "en" ? "Show the rest of the order" : "Mostrar el resto del pedido",
+        locale === "en"
+          ? "Also list the order's dishes from other stations"
+          : "Mostrar también los platos del pedido de otras estaciones",
       );
       await expectNoA11yViolations(host);
       rest.scrollIntoView({ block: "nearest", inline: "end" });
@@ -2420,89 +2231,6 @@ it("Stations row actions reuse default and permanent Delete writes", async () =>
   expect(stationTable(el)!.querySelector('[data-test="enable-upstairs"]')).toBeNull();
 });
 
-it("reorders Stations with the keyboard, retains focus and leaves routing cells unchanged", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockImplementation(async (ids: string[]) => {
-    ids.forEach((id, index) => {
-      next.stations.find((station) => station.id === id)!.displayOrder = index;
-    });
-  });
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  handle!.focus();
-  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
-  expect(stationTable(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
-  expect(next.routing.cells).toEqual(view.routing.cells);
-  expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
-});
-it("restores the Stations order after refusal and never moves disabled rows", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-  const order = vi.fn().mockRejectedValue({ code: "connection.failed" });
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  expect(stationTable(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  expect(q(el, '[role="alert"]')!.textContent).toContain("could not be saved");
-});
-it("persists a pointer reorder once on release and releases the drag on disconnect", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const summary = stationTable(el)!;
-  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  const target = summary
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle!.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 91,
-      clientY: handle!.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 91, clientY: target.top + target.height / 2 }),
-  );
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
-  await settle(el);
-  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-  const nextHandle = stationTable(el)!.querySelector<HTMLButtonElement>(
-    '[data-test="drag-upstairs"]',
-  )!;
-  nextHandle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 92,
-      clientY: nextHandle.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  el.remove();
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 92 }));
-  expect(order).toHaveBeenCalledTimes(1);
-  expect(document.body.style.cursor).not.toBe("grabbing");
-});
-
 it("keeps a general rename refusal below the field and permits retry", async () => {
   const { el, a } = await mountToday(withUpstairs({ open: true, why: "open" }), {
     updateStation: vi
@@ -2524,18 +2252,6 @@ it("keeps a general rename refusal below the field and permits retry", async () 
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(2);
   expect(q(el, '[data-test="station-editor"]')).toBeNull();
-});
-it("announces the reordered station and its position to a screen reader", async () => {
-  const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-    reorderStations: vi.fn().mockResolvedValue(undefined),
-  });
-  stationTable(el)!
-    .querySelector<HTMLElement>('[data-test="drag-upstairs"]')!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(q(el, '[data-test="station-order-status"]')?.textContent?.trim()).toBe(
-    "Upstairs bar is now 1 of 2.",
-  );
 });
 
 it.each([
@@ -2716,7 +2432,7 @@ it("Stations names each station's printers and the screens that show it, with a 
 });
 
 it.each(["light", "dark"] as const)(
-  "paints the Devices link in the link token, as the When it gets orders link is (%s)",
+  "paints the Devices link in the link token (%s)",
   async (theme) => {
     history.replaceState(null, "", "/manage/prep-stations/view/stations");
     const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
@@ -2726,8 +2442,6 @@ it.each(["light", "dark"] as const)(
     el.parentElement!.append(probe);
     const token = getComputedStyle(probe).color;
     const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices"]')!;
-    const serviceTimes = q(el, '[part="service-times"]')!;
-    expect(getComputedStyle(serviceTimes).color).toBe(token);
     expect(getComputedStyle(devices).color).toBe(token);
   },
 );
@@ -3127,61 +2841,6 @@ it("an old Tickets address opens Stations and rewrites the address", async () =>
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
 });
 
-it.each(["ArrowUp", "Enter", "ArrowLeft"])(
-  "Stations ignores %s when it cannot change the first row's position",
-  async (key) => {
-    const order = vi.fn();
-    const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-      reorderStations: order,
-    });
-    const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
-    handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-    await settle(el);
-    expect(order).not.toHaveBeenCalled();
-    expect(
-      [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-        row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-      ),
-    ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  },
-);
-
-it("Stations pointer drag ignores another pointer and outside rows, and a no-op release writes nothing", async () => {
-  const order = vi.fn();
-  const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-    reorderStations: order,
-  });
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
-  const first = stationTable(el)!
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", { pointerId: 811, button: 2, bubbles: true }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 811, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 811 }));
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 812, bubbles: true }));
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 813, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 813 }));
-  document.dispatchEvent(new PointerEvent("pointermove", { pointerId: 812, clientY: -100 }));
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 812 }));
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  expect(document.body.style.cursor).not.toBe("grabbing");
-});
-
 it("preserves an unknown printer id on the Stations table", async () => {
   const server = structuredClone(ticketView);
   server.stationPrinters = [{ stationId: "bar", printerId: "missing-station-printer" }];
@@ -3194,9 +2853,9 @@ it("preserves an unknown printer id on the Stations table", async () => {
 it("Stations orders tied station positions by name and omits deleted stations", async () => {
   const server = structuredClone(ticketView);
   server.stations = [
-    { ...upstairs, id: "zulu", name: "Zulu", displayOrder: 1 },
-    { ...upstairs, id: "disabled", name: "A disabled", displayOrder: 0, active: false },
-    { ...view.stations[0]!, name: "Alpha", displayOrder: 1 },
+    { ...upstairs, id: "zulu", name: "Zulu" },
+    { ...upstairs, id: "disabled", name: "A disabled", active: false },
+    { ...view.stations[0]!, name: "Alpha" },
   ];
   history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(server) }));
@@ -4738,172 +4397,6 @@ describe("Routing grid", () => {
  * Edge scroll moves a held row at most 16 px a frame, and this browser can draw fewer than 10
  * frames a second on a busy machine, so the wait counts frames rather than milliseconds.
  */
-async function scrollsPast(distance: number, scrolled: () => number) {
-  for (let frame = 0; frame < 90 && scrolled() <= distance; frame++)
-    await new Promise(requestAnimationFrame);
-  expect(scrolled()).toBeGreaterThan(distance);
-}
-
-it("edge scroll carries a held station past the visible summary and persists on release", async () => {
-  const next = {
-    ...view,
-    stations: Array.from({ length: 35 }, (_, i) => ({
-      ...view.stations[0]!,
-      id: `edge-${i}`,
-      name: `Station ${i}`,
-      displayOrder: i,
-      isDefault: i === 0,
-    })),
-  };
-  const order = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountToday(next, { reorderStations: order });
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
-  el.parentElement!.append(box);
-  box.append(el);
-  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
-  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
-  const start = handle.getBoundingClientRect();
-  const bounds = box.getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 91,
-      clientX: start.left + 10,
-      clientY: start.top + 10,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", {
-      pointerId: 91,
-      clientX: start.left + 10,
-      clientY: bounds.bottom - 8,
-    }),
-  );
-  const initial = box.scrollTop;
-  try {
-    await scrollsPast(150, () => box.scrollTop - initial);
-    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
-    await settle(el);
-    expect(order).toHaveBeenCalledTimes(1);
-    expect((order.mock.calls[0]![0] as string[]).indexOf("edge-0")).toBeGreaterThan(3);
-  } finally {
-    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 91 }));
-  }
-});
-
-it("edge scroll Escape stops a held station without another reorder on release", async () => {
-  const next = {
-    ...view,
-    stations: Array.from({ length: 35 }, (_, i) => ({
-      ...view.stations[0]!,
-      id: `escape-${i}`,
-      name: `Station ${i}`,
-      displayOrder: i,
-      isDefault: i === 0,
-    })),
-  };
-  const { el } = await mountToday(next);
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
-  el.parentElement!.append(box);
-  box.append(el);
-  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
-  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
-  const start = handle.getBoundingClientRect();
-  const bounds = box.getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 92,
-      clientX: start.left + 10,
-      clientY: start.top + 10,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", {
-      pointerId: 92,
-      clientX: start.left + 10,
-      clientY: bounds.bottom - 8,
-    }),
-  );
-  const initial = box.scrollTop;
-  try {
-    await scrollsPast(100, () => box.scrollTop - initial);
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await settle(el);
-    await new Promise(requestAnimationFrame);
-    const ended = box.scrollTop;
-    for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
-    expect(box.scrollTop).toBe(ended);
-    expect(document.body.style.cursor).not.toBe("grabbing");
-  } finally {
-    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 92 }));
-  }
-});
-
-it.each(["up", "leave", "cancel", "disconnect", "fits"])(
-  "edge scroll station drag handles %s",
-  async (action) => {
-    const next = {
-      ...view,
-      stations: Array.from({ length: action === "fits" ? 1 : 35 }, (_, i) => ({
-        ...view.stations[0]!,
-        id: `lifecycle-${i}`,
-        name: `Station ${i}`,
-        displayOrder: i,
-        isDefault: i === 0,
-      })),
-    };
-    const order = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountToday(next, { reorderStations: order });
-    const box = document.createElement("div");
-    box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:400px;overflow:auto";
-    el.parentElement!.append(box);
-    box.append(el);
-    const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
-    const handle = stationTable(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
-    if (action === "up")
-      box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
-    const start = handle.getBoundingClientRect();
-    const bounds = box.getBoundingClientRect();
-    const initial = box.scrollTop;
-    handle.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        pointerId: 93,
-        clientX: start.left + 10,
-        clientY: start.top + 10,
-        bubbles: true,
-      }),
-    );
-    const send = (type: string, y = action === "up" ? bounds.top + 8 : bounds.bottom - 8) =>
-      document.dispatchEvent(
-        new PointerEvent(type, { pointerId: 93, clientX: start.left + 10, clientY: y }),
-      );
-    send("pointermove");
-    try {
-      if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
-      else
-        await scrollsPast(250, () =>
-          action === "up" ? initial - box.scrollTop : box.scrollTop - initial,
-        );
-      if (action === "up") {
-        send("pointerup");
-        await settle(el);
-        expect((order.mock.calls[0]![0] as string[]).indexOf(key)).toBeLessThan(28);
-      } else if (action === "leave") send("pointermove", bounds.top + bounds.height / 2);
-      else if (action === "cancel") send("pointercancel");
-      else if (action === "disconnect") el.remove();
-      await settle(el);
-      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
-      const ended = box.scrollTop;
-      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
-      expect(box.scrollTop).toBe(ended);
-    } finally {
-      send("pointercancel");
-    }
-  },
-);
 
 describe("Save follows changes", () => {
   const modes = ["create", "rename", "printers", "timing"] as const;
@@ -4986,8 +4479,8 @@ describe("Save follows changes", () => {
     expect(form.button().variant).toBe("primary");
     expect(form.button().disabled).toBe(true);
     form
-      .query('wt-input[name="displayOrder"]')!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2" } }));
+      .query('wt-input[name="overdueAfterMinutes"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "12" } }));
     await settle(form.el);
     expect(form.button().disabled).toBe(true);
     form
@@ -5198,7 +4691,6 @@ describe("The station editor", () => {
     await settle(el);
     expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
       name: "Grill",
-      displayOrder: 0,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -5314,13 +4806,12 @@ it.each([
         fallbackStationId: "wrong-fallback",
       },
     );
-    next.stations.push({ ...upstairs, id: "open", name: "Open kitchen", displayOrder: 3 });
+    next.stations.push({ ...upstairs, id: "open", name: "Open kitchen" });
     next.stations.push({
       ...upstairs,
       id: "off",
       name: "Off kitchen",
       active: false,
-      displayOrder: 4,
     });
     next.routing.stationTimes.push({
       ...next.routing.stationTimes[1]!,
@@ -5362,37 +4853,30 @@ it.each([
   },
 );
 
-describe.each([
-  ["en", "When it gets orders"],
-  ["es", "Cuándo recibe pedidos"],
-] as const)("station service-times links (%s)", (locale, label) => {
-  it("links active non-default stations", async () => {
+it.each(["en", "es"] as const)(
+  "A725 station rows omit retired service-times links in %s",
+  async (locale) => {
     setLocale(locale);
     const loaded = withUpstairs({ open: false, why: "closed_by_hand" });
     loaded.stations.push(
-      { ...upstairs, id: "terrace", name: "Terrace", displayOrder: 3 },
-      { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 4 },
+      { ...upstairs, id: "terrace", name: "Terrace" },
+      { ...upstairs, id: "disabled", name: "Disabled bar", active: false },
     );
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
     await settle(el);
-    const links = [
-      ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/prep-stations"]'),
-    ];
-    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-      [label, "/manage/prep-stations/view/times/station/upstairs"],
-      [label, "/manage/prep-stations/view/times/station/terrace"],
+    expect(stationTable(el)!.querySelectorAll('a[href^="/manage/prep-stations"]')).toHaveLength(0);
+    const rows = [...stationTable(el)!.querySelectorAll("tbody tr")];
+    expect(rows.map((row) => row.querySelector('[part="name"]')!.textContent?.trim())).toEqual([
+      "Bar",
+      "Terrace",
+      "Upstairs bar",
     ]);
-    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
-      `Upstairs bar: ${label}`,
-      `Terrace: ${label}`,
-    ]);
-    expect(links.map((link) => link.closest("tr")?.textContent)).toEqual([
-      expect.stringContaining("Upstairs bar"),
-      expect.stringContaining("Terrace"),
-    ]);
-    expect(links.every((link) => link.tabIndex === 0)).toBe(true);
-  });
-});
+    expect(rows[0]!.textContent).toContain(locale === "en" ? "Default" : "Predeterminada");
+    expect(rows[2]!.textContent).toContain(
+      locale === "en" ? "Closed for today → Bar" : "Cerrada por hoy → Bar",
+    );
+  },
+);
 
 describe("a printer deleted elsewhere while a form holds it", () => {
   const withoutNext: PrepStationsView = {
@@ -5523,4 +5007,248 @@ it("permanent delete names current refusals and never offers a disposition", asy
     dialog.shadowRoot!.querySelector('[data-test="delete-confirm"]')!.hasAttribute("disabled"),
   ).toBe(true);
   expect(a.deleteStation).not.toHaveBeenCalled();
+});
+
+it.each(["en", "es"] as const)("A725 Add station uses the shared popup in %s", async (locale) => {
+  setLocale(locale);
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["red", "orange", ["amber", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  );
+  expect(chooser).not.toBeNull();
+  await chooser!.updateComplete;
+  expect(chooser!.name).toBe("colour");
+  expect(chooser!.required).toBe(true);
+  expect(chooser!.value).toBe("amber");
+  expect(chooser!.choices.map(({ value }) => value)).toEqual([...CALENDAR_COLOURS]);
+  expect(chooser!.choices.find(({ value }) => value === "orange")!.usedBy).toEqual(["Station 1"]);
+  expect(chooser!.choices.find(({ value }) => value === "amber")!.usedBy).toEqual([]);
+  const trigger = chooser!.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  trigger.click();
+  await chooser!.updateComplete;
+  expect(
+    chooser!.shadowRoot!.querySelector('[data-value="orange"]')!.getAttribute("aria-label"),
+  ).toBe(locale === "en" ? "Orange, used by Station 1" : "Naranja, en uso por Station 1");
+  const tile = chooser!.shadowRoot!.querySelector<HTMLButtonElement>('[data-value="teal"]')!;
+  expect(tile.getBoundingClientRect().width).toBeGreaterThan(0);
+  tile.click();
+  await settle(el);
+  await chooser!.updateComplete;
+  expect(chooser!.value).toBe("teal");
+  trigger.click();
+  await chooser!.updateComplete;
+  chooser!
+    .shadowRoot!.querySelector('[data-value="teal"]')!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+  await chooser!.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  expect(chooser!.value).toBe("teal");
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "teal",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 Add station ignores a colour outside the station palette", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  chooser.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "invalid-colour" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 ignores a colour event from a closed Add station opening", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const previous = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await modal.requestClose("cancel");
+  await closed;
+  await settle(el);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const current = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  expect(current).not.toBe(previous);
+  previous.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "teal" }, bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(current.value).toBe("red");
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 holds the colour popup closed while Add station is saving", async () => {
+  let finish!: (value: { id: string }) => void;
+  const createStation = vi.fn(
+    () =>
+      new Promise<{ id: string }>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const el = await mount(api({ createStation }));
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(chooser.disabled).toBe(true);
+  chooser.show();
+  await chooser.updateComplete;
+  expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  finish({ id: "terrace" });
+  await settle(el);
+  expect(createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 lists Stations by name with Default in place and no row grips", async () => {
+  setLocale("en");
+  const server = structuredClone(view);
+  server.stations = [
+    { ...view.stations[0]!, id: "zulu", name: "Zulu", isDefault: true },
+    { ...view.stations[0]!, id: "bar", name: "Bar", isDefault: false },
+    { ...view.stations[0]!, id: "alpha", name: "Alpha", isDefault: false },
+    { ...view.stations[0]!, id: "gone", name: "A deleted", active: false },
+  ];
+  server.routing.defaultStationId = "zulu";
+  const cells = structuredClone(server.routing.cells);
+  const a = api({ load: vi.fn().mockResolvedValue(server) });
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  await settle(el);
+  const rows = [...stationTable(el)!.querySelectorAll("tbody tr")];
+  expect(rows.map((row) => row.querySelector('[part="name"]')!.textContent)).toEqual([
+    "Alpha",
+    "Bar",
+    "Zulu",
+  ]);
+  expect(rows.map((row) => row.querySelector('[part="badge"]')?.textContent?.trim() ?? "")).toEqual(
+    ["", "", "Default"],
+  );
+  expect(stationTable(el)!.querySelector('[data-test^="drag-"]')).toBeNull();
+  expect(q(el, '[data-test="station-order-status"]')).toBeNull();
+  expect(server.routing.cells).toEqual(cells);
+  expect(server.routing.defaultStationId).toBe("zulu");
+  expect(a.updateStation).not.toHaveBeenCalled();
+  expect(document.body.style.cursor).not.toBe("grabbing");
+});
+
+it.each(["en", "es"] as const)(
+  "A725 replaces retired Times addresses with two Prep tabs in %s",
+  async (locale) => {
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/prep-stations/view/times/station/bar?dev=1#saved");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const el = await mount(api());
+    await settle(el);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(tabs.value).toBe("stations");
+    expect(tabs.items).toEqual(
+      locale === "en"
+        ? [
+            { key: "stations", label: "Stations" },
+            { key: "routing", label: "Routes" },
+          ]
+        : [
+            { key: "stations", label: "Estaciones" },
+            { key: "routing", label: "Rutas" },
+          ],
+    );
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.search).toBe("?dev=1");
+    expect(location.hash).toBe("#saved");
+    expect(push).not.toHaveBeenCalled();
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+    expect(el.shadowRoot!.querySelector('[slot="times"]')).toBeNull();
+  },
+);
+
+it("A725 Add station has no manual order field and sends no retired key", async () => {
+  const a = api();
+  const el = await mount(a);
+  await settle(el);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  expect(q(el, 'wt-input[name="displayOrder"]')).toBeNull();
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "A725 Kitchen");
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "A725 Kitchen",
+    colour: "red",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
 });

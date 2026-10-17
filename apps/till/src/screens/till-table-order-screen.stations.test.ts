@@ -11,7 +11,6 @@ afterEach(cleanupWidgets);
 const bar: Station = {
   id: "bar",
   name: "Upstairs bar",
-  displayOrder: 0,
   isDefault: false,
   active: true,
   open: false,
@@ -22,7 +21,6 @@ const bar: Station = {
 const kitchen: Station = {
   id: "kitchen",
   name: "Kitchen",
-  displayOrder: 1,
   isDefault: true,
   active: true,
   open: true,

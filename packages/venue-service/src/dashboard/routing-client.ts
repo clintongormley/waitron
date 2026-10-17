@@ -26,7 +26,6 @@ export interface PrepStation {
   name: string;
   active: boolean;
   isDefault: boolean;
-  displayOrder: number;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -56,7 +55,6 @@ export interface PrepStationsView {
 }
 export type StationInput = {
   name: string;
-  displayOrder: number;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -120,7 +118,7 @@ export class PrepStationsApi {
   updateStation(
     id: string,
     input: Partial<
-      Pick<StationInput, "name" | "displayOrder" | "colour"> &
+      Pick<StationInput, "name" | "colour"> &
         Pick<PrepStation, "showsRestOfOrder" | "printMovedSlips"> & {
           [Field in keyof StationThresholds]: number | null;
         } & {
@@ -130,9 +128,6 @@ export class PrepStationsApi {
     >,
   ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
-  }
-  reorderStations(ids: readonly string[]): Promise<void> {
-    return this.request("/management-api/stations/order", "PUT", { ids });
   }
   getStationDeleteImpact(id: string): Promise<DeleteImpact> {
     return this.#read<DeleteImpact>(

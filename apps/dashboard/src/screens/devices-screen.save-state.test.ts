@@ -24,7 +24,6 @@ afterEach(() => vi.restoreAllMocks());
 const station = (id: string, name: string, active = true): Station => ({
   id,
   name,
-  displayOrder: 0,
   isDefault: false,
   active,
   showsRestOfOrder: false,

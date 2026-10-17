@@ -199,7 +199,12 @@ export type {
   DepartmentReceiptDiagnostic,
   DepartmentReceiptScope,
 } from "./receipt-text.js";
-export { STATION_COLOURS, isStationColour, type StationColour } from "./station-colours.js";
+export {
+  STATION_COLOURS,
+  firstUnusedStationColour,
+  isStationColour,
+  type StationColour,
+} from "./station-colours.js";
 
 export type {
   RecordExportValue,
@@ -209,3 +214,7 @@ export type {
   RecordExportSection,
   RecordExportDocument,
 } from "./record-export-types.js";
+
+export { compareStationNames } from "./station-names.js";
+
+export { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";

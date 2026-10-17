@@ -5,7 +5,7 @@ import type { DeviceZoneSelectionInput } from "@waitron/module";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, compareStationNames } from "@waitron/shared";
 import {
   deviceProfiles,
   devices,
@@ -1023,11 +1023,12 @@ async function worksStation(
   return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
 }
 
-/** The location's stations, historical rows included, in display order. */
-function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
-  return tx
+/** The location's stations, historical rows included. */
+async function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
+  const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
-    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
+  return stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
 }

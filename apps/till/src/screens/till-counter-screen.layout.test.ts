@@ -53,7 +53,6 @@ const stations: Station[] = [
   {
     id: "bar",
     name: "Bar",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     open: true,
@@ -64,7 +63,6 @@ const stations: Station[] = [
   {
     id: "grill",
     name: "Grill",
-    displayOrder: 1,
     isDefault: false,
     active: true,
     open: true,

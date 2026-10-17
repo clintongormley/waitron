@@ -9,7 +9,7 @@ export function validateCoreConfiguration(
     if (!isStatusColor(row.color))
       throw new AppError("setup.request_invalid", { field: "table_service_statuses.color" });
   for (const row of tables.kitchen_stations ?? [])
-    if (!isStationColour(row.colour))
+    if (row.colour !== undefined && !isStationColour(row.colour))
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.colour" });
   for (const table of ["kitchen_courses", "kitchen_stations", "floor_zones"])
     for (const row of tables[table] ?? [])

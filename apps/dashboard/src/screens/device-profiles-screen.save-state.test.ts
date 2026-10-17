@@ -84,7 +84,6 @@ const station = (id: string, name: string, active = true): Station => ({
   id,
   name,
   active,
-  displayOrder: 0,
   isDefault: false,
   showsRestOfOrder: false,
   warmAfterMinutes: 5,

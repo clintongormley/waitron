@@ -1,3 +1,4 @@
+import { compareStationNames } from "@waitron/shared";
 import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
@@ -23,12 +24,12 @@ export type StationShow =
       departments: readonly MonthDepartment[];
     };
 
-export function activeStationsInOrder<
-  Station extends { active: boolean; displayOrder: number; name: string },
->(stations: readonly Station[]): Station[] {
+export function activeStationsInOrder<Station extends { active: boolean; name: string }>(
+  stations: readonly Station[],
+): Station[] {
   return stations
     .filter((station) => station.active)
-    .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    .sort((a, b) => compareStationNames(a.name, b.name));
 }
 
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));

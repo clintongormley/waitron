@@ -1,17 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { page, userEvent } from "vitest/browser";
+import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
-import { OpeningHoursApi } from "./opening-hours-client.js";
-import { monthModel } from "../testing/opening-hours-month-fixture.js";
-import { addDays } from "../hours-rules.js";
 // The screen opens on the tab its URL names, so each test starts from the page's own URL.
 const startUrl = location.href;
 afterEach(() => {
   cleanup();
+  setLocale("en");
   history.replaceState(null, "", startUrl);
 });
 const empty = {
@@ -124,7 +123,6 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                   name: "Bar",
                   active: true,
                   isDefault: true,
-                  displayOrder: 0,
                   warmAfterMinutes: 5,
                   overdueAfterMinutes: 10,
                   forgottenAfterMinutes: 15,
@@ -260,7 +258,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         name: "Kitchen",
         active: true,
         isDefault: true,
-        displayOrder: 0,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
@@ -276,7 +273,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         name: "Upstairs bar",
         active: state !== "inactive",
         isDefault: false,
-        displayOrder: 1,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
@@ -432,23 +428,62 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
   });
 });
 
-describe.each(["light", "dark"] as const)("prep stations Times tab accessibility (%s)", (theme) => {
-  it.each(["en", "es"] as const)(
-    "checks the three-tab strip with a station's month (%s)",
-    async (locale) => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-12-10T10:00:00Z"));
+describe.each(["light", "dark"] as const)(
+  "A725 Prep stations two tabs accessibility (%s)",
+  (theme) => {
+    it.each(["en", "es"] as const)("opens a retired address on Stations in %s", async (locale) => {
+      setLocale(locale);
+      history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
+      const container = await mountThemed("<div></div>", theme);
+      const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+      el.api = { load: vi.fn().mockResolvedValue(empty) } as unknown as PrepStationsApi;
+      container.append(el);
+      await expect.poll(() => el.shadowRoot!.querySelector("wt-tabs")?.value).toBe("stations");
+      expect(el.shadowRoot!.querySelector("wt-tabs")!.items.map((item) => item.key)).toEqual([
+        "stations",
+        "routing",
+      ]);
+      expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+      await expectNoA11yViolations(container);
+    });
+  },
+);
+
+describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme) => {
+  it.each([
+    ["en", 390],
+    ["es", 390],
+    ["en", 1280],
+    ["es", 1280],
+  ] as const)(
+    "keeps all used colours and a refusal accessible in %s at %ipx",
+    async (locale, width) => {
+      const previous = [window.innerWidth, window.innerHeight] as const;
       try {
+        await page.viewport(width, 1100);
         setLocale(locale);
-        history.replaceState(null, "", "/manage/prep-stations/view/times/station/grill");
-        const container = await mountThemed("<div></div>", theme);
-        const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-        const station = (id: string, name: string, isDefault: boolean, displayOrder: number) => ({
-          id,
-          name,
+        await mountThemed("<div></div>", theme);
+        const colours = [
+          "red",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "brown",
+          "grey",
+        ] as const;
+        const stations = colours.map((colour, index) => ({
+          id: colour,
+          name: `Station ${index} with a very long name for the kitchen team`,
+          colour,
           active: true,
-          isDefault,
-          displayOrder,
+          isDefault: index === 0,
           warmAfterMinutes: 5,
           overdueAfterMinutes: 10,
           forgottenAfterMinutes: 15,
@@ -463,59 +498,108 @@ describe.each(["light", "dark"] as const)("prep stations Times tab accessibility
             forgottenAfterMinutes: null,
           },
           showsRestOfOrder: false,
-        });
+          printMovedSlips: null,
+        }));
+        const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+        const createStation = vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } });
         el.api = {
-          load: vi.fn().mockResolvedValue({
-            ...empty,
-            routing: {
-              ...empty.routing,
-              periods: [
-                {
-                  id: "dinner",
-                  departmentId: "rest",
-                  departmentName: "Restaurant",
-                  name: "Dinner",
-                  colour: "red",
-                },
-              ],
-            },
-            stations: [station("bar", "Bar", true, 0), station("grill", "Grill", false, 1)],
-          }),
+          load: vi.fn().mockResolvedValue({ ...empty, stations }),
+          createStation,
         } as unknown as PrepStationsApi;
-        el.hoursApi = new OpeningHoursApi((async (path: string) => {
-          const url = new URL(path, location.origin);
-          if (url.pathname.endsWith("/opening-hours/month")) return monthModel();
-          const days = [];
-          const to = url.searchParams.get("to")!;
-          for (let date = url.searchParams.get("from")!; date <= to; date = addDays(date, 1))
-            days.push({
-              date,
-              departments: [
-                {
-                  departmentId: "rest",
-                  ranges: [{ periodId: "dinner", startsAt: "19:00", endsAt: "01:00" }],
-                },
+        host.append(el);
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector('[data-test="new-station"]')).not.toBeNull(),
+        );
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
+        await el.updateComplete;
+        const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+          "wt-modal wt-colour-chooser",
+        )!;
+        await chooser.updateComplete;
+        expect(chooser.value).toBe("red");
+        expect(chooser.choices.every(({ usedBy }) => usedBy!.length === 1)).toBe(true);
+        expect(chooser.choices.map(({ label }) => label)).toEqual(
+          locale === "en"
+            ? [
+                "Red",
+                "Orange",
+                "Amber",
+                "Lime",
+                "Green",
+                "Teal",
+                "Cyan",
+                "Blue",
+                "Indigo",
+                "Purple",
+                "Pink",
+                "Brown",
+                "Grey",
+              ]
+            : [
+                "Rojo",
+                "Naranja",
+                "Ámbar",
+                "Lima",
+                "Verde",
+                "Turquesa",
+                "Cian",
+                "Azul",
+                "Índigo",
+                "Morado",
+                "Rosa",
+                "Marrón",
+                "Gris",
               ],
-            });
-          return { always: null, days };
-        }) as DashboardRequest);
-        container.append(el);
-        await expect
-          .poll(() =>
-            el
-              .shadowRoot!.querySelector("prep-station-times")
-              ?.shadowRoot!.querySelector("opening-hours-month")
-              ?.shadowRoot!.querySelector('[data-date="2026-12-01"] .track'),
-          )
-          .toBeTruthy();
-        expect(el.shadowRoot!.querySelector("wt-tabs")!.items.map((item) => item.key)).toEqual([
-          "stations",
-          "routing",
-          "times",
-        ]);
-        await expectNoA11yViolations(container);
+        );
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-danger)";
+        host.append(probe);
+        expect(getComputedStyle(chooser.shadowRoot!.querySelector("[data-required]")!).color).toBe(
+          getComputedStyle(probe).color,
+        );
+        probe.remove();
+        expect(chooser.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        await expectNoA11yViolations(host);
+        await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+        const panel = chooser.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(panel.matches(":popover-open")).toBe(true);
+        const bounds = panel.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+        expect(bounds.top).toBeGreaterThanOrEqual(0);
+        expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
+        for (const tile of panel.querySelectorAll<HTMLElement>("[role=radio]")) {
+          expect(tile.scrollWidth).toBeLessThanOrEqual(tile.clientWidth + 1);
+          expect(tile.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+        }
+        await expectNoA11yViolations(host);
+        await userEvent.click(panel.querySelector('[data-value="teal"]')!);
+        await el.updateComplete;
+        expect(chooser.value).toBe("teal");
+        el.shadowRoot!.querySelector('wt-input[name="name"]')!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+        );
+        await el.updateComplete;
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station"]')!.click();
+        await vi.waitFor(() =>
+          expect(chooser.error).toBe(
+            locale === "en" ? "Choose one of these colours." : "Elige uno de estos colores.",
+          ),
+        );
+        expect(chooser.value).toBe("teal");
+        expect(
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            '[data-test="save-station"]',
+          )!.disabled,
+        ).toBe(false);
+        await expectNoA11yViolations(host);
+        await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+        expect(panel.matches(":popover-open")).toBe(true);
+        await expectNoA11yViolations(host);
       } finally {
-        vi.useRealTimers();
+        await page.viewport(previous[0], previous[1]);
         setLocale("en");
       }
     },

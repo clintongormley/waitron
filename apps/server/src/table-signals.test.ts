@@ -66,10 +66,10 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A bar station, at display position 1 unless another is given, after the venue's own "Cocina", taking every Caña. */
-async function withBar(v: PartyVenue, displayOrder = 1): Promise<string> {
+/** A bar station taking every Caña. */
+async function withBar(v: PartyVenue): Promise<string> {
   return inTx(v, async (tx) => {
-    const { id } = await createStation(tx, v.cfg, { name: "Barra", displayOrder });
+    const { id } = await createStation(tx, v.cfg, { name: "Barra" });
     await routeProductTo(tx, v.cfg, v.productId("Caña"), id);
     return id;
   });
@@ -178,6 +178,26 @@ async function lineId(v: PartyVenue, billId: string, lineNo: number): Promise<st
 }
 
 describe("the floor's attention signals", () => {
+  it("A725 ready signals sort opposite dish insertion order by station name", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await withBar(v);
+    const kitchen = await cocina(v);
+    const table = await v.table("Mesa 2");
+    const seated = await seat(v, table);
+    await order(v, seated.tabId, "Burger", "Caña");
+    await makeReady(v, seated.tabId, "Burger");
+    await makeReady(v, seated.tabId, "Caña");
+    expect((await floorRow(v, table)).signals).toEqual([
+      {
+        kind: "ready",
+        byStation: [
+          { stationId: bar, stationName: "Barra", count: 1 },
+          { stationId: kitchen, stationName: "Cocina", count: 1 },
+        ],
+      },
+    ]);
+  });
+
   it("does not signal a made-here drink as ready at Bar", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
@@ -266,7 +286,7 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, mesa2)).signals).toEqual([]);
   });
 
-  it("counts each station's ready dishes in units per table, and serving takes them off", async () => {
+  it("A725 counts ready dishes by station name and serving takes them off", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     const kitchen = await cocina(v);
@@ -294,8 +314,8 @@ describe("the floor's attention signals", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
           { stationId: bar, stationName: "Barra", count: 3 },
+          { stationId: kitchen, stationName: "Cocina", count: 1 },
         ],
       },
     ]);
@@ -313,8 +333,8 @@ describe("the floor's attention signals", () => {
       {
         kind: "ready",
         byStation: [
-          { stationId: kitchen, stationName: "Cocina", count: 1 },
           { stationId: bar, stationName: "Barra", count: 2 },
+          { stationId: kitchen, stationName: "Cocina", count: 1 },
         ],
       },
     ]);
@@ -330,9 +350,9 @@ describe("the floor's attention signals", () => {
     ]);
   });
 
-  it("counts a weighed dish as one, and puts stations at one position in name order", async () => {
+  it("counts a weighed dish as one and puts stations in name order", async () => {
     const v = await setupPartyVenue(suite.db);
-    const bar = await withBar(v, 0);
+    const bar = await withBar(v);
     const kitchen = await cocina(v);
     const pulpo = await inTx(v, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Pesados" });

@@ -60,13 +60,12 @@ async function resolveStationIds(tx: Transaction, locationId: string): Promise<S
     .insert(kitchenStations)
     .values(
       [
-        { name: "Downstairs bar", displayOrder: 1, colour: "blue" as const },
-        { name: "Upstairs bar", displayOrder: 2, colour: "indigo" as const },
-        { name: "Deli counter", displayOrder: 3, colour: "green" as const },
-      ].map(({ name, displayOrder, colour }) => ({
+        { name: "Downstairs bar", colour: "blue" as const },
+        { name: "Upstairs bar", colour: "indigo" as const },
+        { name: "Deli counter", colour: "green" as const },
+      ].map(({ name, colour }) => ({
         locationId,
         name,
-        displayOrder,
         colour,
         isDefault: false,
         active: true,

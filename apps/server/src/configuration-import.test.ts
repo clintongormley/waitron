@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 3,
+  version: 4,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -118,8 +118,16 @@ describe("staged configuration import", () => {
         tables: { ...bundle.tables, canvases: [{ id: "old-canvas", definition: {} }] },
       },
     ],
+    [
+      "A725 pre-station-order export with the column",
+      {
+        version: 3,
+        tables: { ...bundle.tables, kitchen_stations: [{ id: "legacy", display_order: 9 }] },
+      },
+    ],
+    ["A725 pre-station-order export without the column", { version: 3 }],
     ["old version", { version: 1 }],
-    ["future version", { version: 4 }],
+    ["future version", { version: 5 }],
     [
       "retired drawer value",
       {

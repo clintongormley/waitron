@@ -12,7 +12,6 @@ const STATIONS: Station[] = [
   {
     id: "s1",
     name: "Cocina",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     showsRestOfOrder: false,

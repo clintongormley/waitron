@@ -59,7 +59,6 @@ const stations: Station[] = [
   {
     id: "s1",
     name: "Cocina",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     showsRestOfOrder: false,
@@ -70,7 +69,6 @@ const stations: Station[] = [
   {
     id: "s2",
     name: "Barra",
-    displayOrder: 1,
     isDefault: false,
     active: true,
     showsRestOfOrder: false,
@@ -5099,7 +5097,7 @@ describe("a device's kitchen screens", () => {
   };
   type Switch = HTMLElement & { checked: boolean; label: string };
 
-  const deli: Station = { ...stations[0]!, id: "s3", name: "Deli", displayOrder: 2 };
+  const deli: Station = { ...stations[0]!, id: "s3", name: "Deli" };
   const ksStations = [...stations, deli];
   const zones = [
     { id: "z1", name: "Terraza", displayOrder: 0, active: true },

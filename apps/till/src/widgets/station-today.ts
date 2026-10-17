@@ -36,7 +36,7 @@ export class TillStationToday extends LitElement {
     `,
   ];
   @property({ attribute: false }) api?: TillApi;
-  @property({ attribute: false }) station?: Omit<Station, "displayOrder">;
+  @property({ attribute: false }) station?: Station;
   @property({ attribute: false }) stations: readonly Pick<Station, "id" | "name">[] = [];
   @property({ type: Boolean }) deviceMode = false;
   @state() private busy = false;

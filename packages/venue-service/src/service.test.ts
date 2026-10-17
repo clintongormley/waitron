@@ -208,13 +208,13 @@ async function stationFixture(tx: Transaction) {
 }
 
 describe("station day seats", () => {
-  it("lists the default first and omits the source and unavailable destinations", async () => {
+  it("lists destinations by name and omits the source and unavailable stations", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
       await setStationToday(tx, f.cfg, f.closed, "closed", AT);
       expect(await VENUE_SERVICE.stationDestinations(tx, f.cfg, f.grill, AT)).toEqual([
-        { id: f.kitchen, name: "Kitchen", isDefault: true },
         { id: f.bar, name: "Bar", isDefault: false },
+        { id: f.kitchen, name: "Kitchen", isDefault: true },
       ]);
     });
   });

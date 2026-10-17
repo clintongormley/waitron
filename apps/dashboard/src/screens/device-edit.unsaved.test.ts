@@ -55,7 +55,6 @@ const station: Station = {
   name: "Kitchen",
   active: true,
   isDefault: true,
-  displayOrder: 0,
   showsRestOfOrder: false,
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,

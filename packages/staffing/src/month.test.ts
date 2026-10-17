@@ -199,7 +199,7 @@ describe("readStaffingMonth", () => {
     const [pastry] = await inTx((tx) =>
       tx
         .insert(kitchenStations)
-        .values({ locationId: v.cfg.locationId, name: "Pastry", displayOrder: 1 })
+        .values({ locationId: v.cfg.locationId, name: "Pastry" })
         .returning({ id: kitchenStations.id }),
     );
     const month = await read(v.cfg);

@@ -396,7 +396,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 3,
+  version: 4,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -2320,6 +2320,109 @@ it("transfers a station's colour", async () => {
   expect(imported).toEqual([{ colour: "teal" }]);
 });
 
+it("A725 allocates omitted imported colours after reserving explicit colours later in the bundle", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const rows = await tx
+      .insert(kitchenStations)
+      .values([
+        { locationId: source.locationId, name: "Desserts", colour: "orange" },
+        { locationId: source.locationId, name: "Pastry", colour: "amber" },
+        { locationId: source.locationId, name: "Bar", colour: "blue" },
+      ])
+      .returning({ id: kitchenStations.id, name: kitchenStations.name });
+    await tx.insert(kitchenStationTiming).values({
+      stationId: rows.find(({ name }) => name === "Desserts")!.id,
+      warmAfterMinutes: 7,
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-17T10:00:00Z"),
+    versions,
+  );
+  const rows = transferred.tables.kitchen_stations!;
+  const missing = ["Desserts", "Pastry"].map((name) => rows.find((row) => row.name === name)!);
+  for (const row of missing) delete row.colour;
+  transferred.tables.kitchen_stations = [
+    ...missing,
+    ...rows.filter((row) => !missing.includes(row)),
+  ];
+  const before = structuredClone(transferred);
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({
+      id: kitchenStations.id,
+      name: kitchenStations.name,
+      colour: kitchenStations.colour,
+      isDefault: kitchenStations.isDefault,
+    })
+    .from(kitchenStations)
+    .orderBy(kitchenStations.name);
+  expect(imported.map(({ name, colour, isDefault }) => ({ name, colour, isDefault }))).toEqual([
+    { name: "Bar", colour: "blue", isDefault: false },
+    { name: "Cocina", colour: "red", isDefault: true },
+    { name: "Desserts", colour: "orange", isDefault: false },
+    { name: "Pastry", colour: "amber", isDefault: false },
+  ]);
+  const sourceIds = new Set(rows.map((row) => row.id));
+  expect(imported.every((row) => !sourceIds.has(row.id))).toBe(true);
+  expect(
+    await targetSuite.db
+      .select({ name: kitchenStations.name, warm: kitchenStationTiming.warmAfterMinutes })
+      .from(kitchenStationTiming)
+      .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenStationTiming.stationId)),
+  ).toEqual([{ name: "Desserts", warm: 7 }]);
+  expect(transferred).toEqual(before);
+});
+
+it.each([null, [], {}, 1, false, "invalid-colour"])(
+  "A725 refuses invalid imported station colour %j without retaining venue rows",
+  async (colour) => {
+    const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-17T10:00:00Z"),
+      versions,
+    );
+    transferred.tables.kitchen_stations![0]!.colour = colour;
+    await expect(
+      applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "kitchen_stations.colour" },
+    });
+    expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+      { n: 0 },
+    ]);
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from kitchen_stations`)).rows,
+    ).toEqual([{ n: 0 }]);
+  },
+);
+
 it("transfers a printer on two stations in configuration export", async () => {
   const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
     db: suite.db,
@@ -4206,7 +4309,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
   },
 );
 
-it("transfers department receipt choices and explicit or inherited zone choices in format 3", async () => {
+it("A725 transfers station and department choices in format 4", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -4246,7 +4349,10 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(3);
+  expect(exported.version).toBe(4);
+  expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
+  for (const station of exported.tables.kitchen_stations!)
+    expect(station).not.toHaveProperty("display_order");
   expect(exported.venue.location).not.toHaveProperty("receiptPrintMode");
   expect(exported.venue.location).not.toHaveProperty("drawerOpenPolicy");
   const decoded = decodeConfigurationBundle(
