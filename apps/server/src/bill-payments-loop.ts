@@ -1,9 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
-import { findPaymentByBillPayment } from "@waitron/payments";
+import { findPaymentByBillPayment, paymentResolutions } from "@waitron/payments";
 import { AppError, centsToDecimal, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
@@ -107,8 +107,23 @@ export async function settleFromProviderRow(
     await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
     return { settled: "failed" };
   }
-  // A `failed` row is not proof that nothing moved (SumUp fails a checkout it cannot find), and an
-  // `attempting` one may still be captured: both wait for a manager.
+  if (provided.state === "failed") {
+    const [resolved] = await tx
+      .select({ id: paymentResolutions.id })
+      .from(paymentResolutions)
+      .where(
+        and(
+          eq(paymentResolutions.paymentId, provided.id),
+          eq(paymentResolutions.outcome, "failed"),
+          isNull(paymentResolutions.personId),
+        ),
+      );
+    if (resolved !== undefined) {
+      await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
+      return { settled: "failed" };
+    }
+  }
+  // An unaudited failure can be an uncertain charge (SumUp's not-found checkout).
   if (!CHARGED.has(provided.state)) return { settled: "left", providerState: provided.state };
   const expected = centsToDecimal(payment.applied + payment.tip);
   if (compareDecimal(decimal(provided.amount), expected) !== 0) {
@@ -138,7 +153,7 @@ export async function settleFromProviderRow(
 /**
  * One pass: a pending card payment not live in this process whose provider row is charged for its
  * amount is completed as the live attempt's P3 would have (the invoice included); one with no
- * provider row is failed; one charged for another amount raises `payment.bill_capture_mismatch`
+ * provider row or with an automatic confirmed noncharge is failed; one charged for another amount raises `payment.bill_capture_mismatch`
  * and stays pending; any other stays pending for a manager. Each payment in its own transaction.
  */
 export async function settlePendingBillPayments(

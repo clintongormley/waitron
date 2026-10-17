@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, decimal } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, isAppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { UNIQUE_VIOLATION, refusalOn, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -23,6 +23,7 @@ import {
   failAttempting,
   getPaymentByRef,
   insertAttempting,
+  listAttempting,
   recordAttemptResolution,
   refundLookupOf,
   stampAttemptingRef,
@@ -31,6 +32,22 @@ import { billPaymentIdempotencyKey, fromMinorUnits, workingOrderIdempotencyKey }
 import type { StripeClient } from "./client.js";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
+
+interface Activity {
+  collecting: Set<string>;
+  resolving: Set<string>;
+}
+
+// A credential change replaces the provider, while its previous collect can still be running.
+const activities = new WeakMap<Database, Activity>();
+function activityOf(db: Database): Activity {
+  let activity = activities.get(db);
+  if (activity === undefined) {
+    activity = { collecting: new Set(), resolving: new Set() };
+    activities.set(db, activity);
+  }
+  return activity;
+}
 
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
@@ -88,7 +105,7 @@ function refundOutcomeOf(status: string): RefundOutcome {
 interface Settle {
   key: { provider: string; paymentRef: string };
   now: Date;
-  audit: AbandonedAttemptAudit;
+  personId: string | null;
 }
 
 export interface StripeTerminalProviderOptions {
@@ -97,12 +114,7 @@ export interface StripeTerminalProviderOptions {
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
 
-/** The server-driven Stripe Terminal `PaymentProvider`. `collect` commits an `attempting` row
- * BEFORE the network call, so a crash during it still leaves a local row; that is why, unlike the
- * on-device and hosted creates, it stamps no attribution metadata. A stalled or failed reader
- * resolves to `failed` rather than a throw.
- *
- * The row carries its PaymentIntent id before the reader is asked to process it, and a PaymentIntent
+/** The row carries its PaymentIntent id before the reader is asked to process it, and a PaymentIntent
  * the row could not claim is never processed. So an `attempting` row with no id never reached a
  * reader, which `resolveAbandonedAttempt` relies on. */
 export class StripeTerminalProvider implements PaymentProvider {
@@ -121,13 +133,23 @@ export class StripeTerminalProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
+    const paymentRef = randomUUID();
+    const activity = activityOf(this.opts.db);
+    activity.collecting.add(paymentRef);
+    try {
+      return await this.collectHeld(params, paymentRef);
+    } finally {
+      activity.collecting.delete(paymentRef);
+    }
+  }
+
+  private async collectHeld(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     // Per-collect, not per-provider: one cached provider serves every reader on this vendor.
     if (params.readerRef === undefined)
       throw new Error(
         "stripe collect requires a readerRef (the chosen reader's provider reference)",
       );
     const readerId = params.readerRef;
-    const paymentRef = randomUUID();
     const key = { provider: PROVIDER, paymentRef };
 
     // Commit the attempt before any network call.
@@ -155,6 +177,16 @@ export class StripeTerminalProvider implements PaymentProvider {
     const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey, (piId) =>
       this.stamp(key, piId),
     );
+
+    if (outcome.kind === "unknown") {
+      return {
+        provider: PROVIDER,
+        paymentRef,
+        state: "attempting",
+        amount: params.amount,
+        settledAt: null,
+      };
+    }
 
     if (outcome.kind === "unclaimed") {
       // A row already resolved by someone else stays as they left it.
@@ -212,20 +244,29 @@ export class StripeTerminalProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  /** `collect` resolves its own `attempting` row before it returns. A row a crash leaves between the
-   * two transactions is not resolved here: while a collect is live its PaymentIntent awaits the
-   * card, so an automatic cancel would cancel a payment a customer is about to make. A person
-   * resolves such a row through `resolveAbandonedAttempt`. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface
-  resolvePending(_now: Date): Promise<ForwardResult> {
-    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  async resolvePending(now: Date): Promise<ForwardResult> {
+    const rows = await this.inTransaction((tx) => listAttempting(tx, PROVIDER));
+    let forwarded = 0;
+    let declined = 0;
+    let pending = false;
+    for (const row of rows) {
+      try {
+        const result = await this.resolveInactiveAttempt(row.paymentRef, now, null);
+        if (result.outcome === "captured") forwarded++;
+        else if (result.outcome === "failed") declined++;
+        else pending = true;
+      } catch (error) {
+        if (!isAppError(error) || error.code !== "payment.not_found") throw error;
+      }
+    }
+    return {
+      nextDueAt: pending ? new Date(now.getTime() + 60_000) : null,
+      forwarded,
+      declined,
+      incidentsRaised: 0,
+    };
   }
 
-  /** The network half of `collect`, one row's PaymentIntent from creation to a final reader outcome.
-   * Every failure — an error at any step, a decline or a timeout — returns `failed`; a timeout or an
-   * error first cancels the reader action, best-effort, so the terminal is not left mid-action. A
-   * PaymentIntent `claim` could not stamp on the row is never processed, and its reader action is
-   * left alone: another payment may be using it. */
   private async drive(
     readerId: string,
     amount: Decimal,
@@ -233,6 +274,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     claim: (piId: string) => Promise<"stamped" | "held_elsewhere" | "not_attempting">,
   ): Promise<
     | { kind: "captured"; settledAt: Date; piId: string }
+    | { kind: "unknown" }
     | { kind: "failed"; failureReason?: string }
     | { kind: "unclaimed"; claim: "held_elsewhere" | "not_attempting" }
   > {
@@ -257,19 +299,20 @@ export class StripeTerminalProvider implements PaymentProvider {
       for (let attempt = 0; attempt < this.poll.maxAttempts; attempt++) {
         const o = await this.opts.client.readerOutcome(readerId);
         if (o.status === "succeeded") return { kind: "captured", settledAt: new Date(), piId };
-        if (o.status === "failed")
+        if (o.status === "failed") {
+          if (o.failureCode === "connection_error") return { kind: "unknown" };
           return {
             kind: "failed",
-            failureReason:
-              o.failureCode === "connection_error" ? "reader_unavailable" : o.failureCode,
+            failureReason: o.failureCode,
           };
+        }
         await this.poll.sleep(this.poll.intervalMs);
       }
       await this.cancelReaderAction(readerId);
-      return { kind: "failed", failureReason: "reader_unavailable" };
+      return { kind: "unknown" };
     } catch {
       await this.cancelReaderAction(readerId);
-      return { kind: "failed", failureReason: "reader_unavailable" };
+      return { kind: "unknown" };
     }
   }
 
@@ -281,19 +324,41 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  /** Called only for an attempt nothing in this process is still driving. Reads the row, asks
-   * Stripe with no transaction open, then writes: a PaymentIntent still awaiting its card is
-   * cancelled first and read again, because the cancel can lose a race to the card. */
-  async resolveAbandonedAttempt(
+  resolveAbandonedAttempt(
     paymentRef: string,
     now: Date,
     audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
+    return this.resolveInactiveAttempt(paymentRef, now, audit.personId);
+  }
+
+  private async resolveInactiveAttempt(
+    paymentRef: string,
+    now: Date,
+    personId: string | null,
+  ): Promise<AbandonedAttemptOutcome> {
+    const activity = activityOf(this.opts.db);
+    if (activity.collecting.has(paymentRef) || activity.resolving.has(paymentRef)) {
+      return { outcome: "unknown", reason: "ambiguous" };
+    }
+    activity.resolving.add(paymentRef);
+    try {
+      return await this.resolveOwnedAttempt(paymentRef, now, personId);
+    } finally {
+      activity.resolving.delete(paymentRef);
+    }
+  }
+
+  private async resolveOwnedAttempt(
+    paymentRef: string,
+    now: Date,
+    personId: string | null,
   ): Promise<AbandonedAttemptOutcome> {
     const key = { provider: PROVIDER, paymentRef };
     const row = await this.inTransaction((tx) => getPaymentByRef(tx, key));
     if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
 
-    const settle = { key, now, audit };
+    const settle = { key, now, personId };
     if (row.externalRef === null) {
       return this.resolveRow(settle, { outcome: "failed", cancelledAtProvider: false }, null);
     }
@@ -324,7 +389,7 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   /** A `canceled` PaymentIntent counts as cancelled at the provider whoever cancelled it: either way
    * the order's key must move on (`workingOrderIdempotencyKey`). Any status still awaiting the card
-   * here is one a cancel did not move, so it is left for a person. */
+   * here is one a cancel did not move, so it stays unknown. */
   private settleFrom(
     settle: Settle,
     amount: string,
@@ -361,7 +426,7 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** The row's new state and its `payment_resolutions` record commit together: the record is what
    * moves the order's idempotency key past a PaymentIntent the resolution left cancelled. */
   private async resolveRow(
-    { key, now, audit }: Settle,
+    { key, now, personId }: Settle,
     resolved:
       | { outcome: "captured"; externalRef: string }
       | { outcome: "failed"; cancelledAtProvider: boolean },
@@ -374,7 +439,7 @@ export class StripeTerminalProvider implements PaymentProvider {
         await failAttempting(tx, key);
       }
       await recordAttemptResolution(tx, key, {
-        personId: audit.personId,
+        personId,
         outcome: resolved.outcome,
         cancelledAtProvider: resolved.outcome === "failed" && resolved.cancelledAtProvider,
         providerStatus,

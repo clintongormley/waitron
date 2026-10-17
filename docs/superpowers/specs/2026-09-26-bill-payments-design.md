@@ -1,5 +1,10 @@
 # Several payments against one bill — the payment and billing design
 
+> **2026-10-17, A764:** The earlier Stripe no-op sweep and fail-on-reader-timeout account below is historical.
+> Uncertain reader outcomes now stay `attempting`; guarded automatic checks resolve inactive attempts,
+> record automatic actors without a person, and use the existing sale recovery. Confirmed automatic
+> noncharges release bill reservations. See the [A764 plan](../plans/2026-10-17-a764-stripe-unknown-outcome.md).
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

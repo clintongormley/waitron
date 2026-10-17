@@ -78,6 +78,35 @@ function countFor(workingOrderId: string, provider?: string): Promise<number> {
 }
 
 describe("recordResolution", () => {
+  it("records an automatic resolution without inventing a manager", async () => {
+    const automatic = await stuckPayment();
+    const manual = await stuckPayment();
+    const { id: automaticId } = await record(automatic, { personId: null });
+    const { id: manualId } = await record(manual, { cancelledAtProvider: false });
+    const { rows } = await suite.db.execute(sql`
+      select person_id, outcome, cancelled_at_provider, provider_status, resolved_at
+      from payment_resolutions where id in (${automaticId}, ${manualId})
+      order by case when id = ${automaticId} then 0 else 1 end`);
+    expect(rows).toEqual([
+      {
+        person_id: null,
+        outcome: "failed",
+        cancelled_at_provider: 1,
+        provider_status: "requires_payment_method",
+        resolved_at: "2026-09-26T12:00:00.000Z",
+      },
+      {
+        person_id: MANAGER,
+        outcome: "failed",
+        cancelled_at_provider: 0,
+        provider_status: "requires_payment_method",
+        resolved_at: "2026-09-26T12:00:00.000Z",
+      },
+    ]);
+    expect(await countFor(automatic.workingOrderId, "stripe")).toBe(1);
+    expect(await countFor(manual.workingOrderId, "stripe")).toBe(0);
+  });
+
   it("writes one audit row carrying what the manager's resolution decided", async () => {
     const p = await stuckPayment();
     const { id } = await record(p);

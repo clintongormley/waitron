@@ -3383,13 +3383,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
 
-- **What M7b2 left open (a manager clearing a stuck card payment, #702).** When the reader poll
-  times out or errors, `collect` cancels the reader action best-effort and fails the row. If that
-  cancel fails and the customer then taps, the money is captured while the local row says `failed`;
-  only reconciliation sees it. **A764, owner-approved 2026-10-16:** keep the attempt unknown and
-  check it automatically once collection stops, after demonstrating that a live collection cannot
-  be cancelled by the check. The manager action remains the fallback. After A739a.
-  [Detail](backlog/payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702)
 
 - **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.
   [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
@@ -3462,11 +3455,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   connections to the box; W18c #1145 and W48 #1162).
   [Detail](backlog/payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
-- **A Stripe card payment that a crash leaves `attempting` on a placed order has no manager way to
-  clear it**, and it refuses that order's collect, card payment and unpaid departure
-  (`order.payment_in_flight`). The stuck-payment resolve takes only open orders
-  (`apps/server/src/payments-api.ts`), and Stripe's sweep does nothing. Stripe is not in use. Read,
-  not run. Left open by A526.
+- **A placed order with an unknown Stripe payment has no manager fallback.** Automatic checks
+  retry it, but the stuck-payment manager route still takes only open orders
+  (`apps/server/src/payments-api.ts`). The route restriction is read, not run here. Left open by A526.
 
 - **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
   while the card's charge stays on no sale (`apps/server/src/till-sale.ts`). Measured before A526 by
@@ -4833,7 +4824,9 @@ the tree. What remains, largest first:
   failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
   descriptions of code that exists today. Open, among them: a cut-off primary keeps streaming, into
   its own copy (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner,
-  2026-09-26); mirror fidelity, which the detail does not cover.
+  2026-09-26); mirror fidelity, which the detail does not cover; and
+  [provider cancellation ownership](backlog/payments.md#decisions-and-deliberate-limits) before
+  enabling a second venue node (A764).
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 - **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted

@@ -4,7 +4,12 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { connectedCardProviderSweep, withPendingSweep, withStalePaymentRelease } from "./boot.js";
+import {
+  connectedCardProviderSweep,
+  withAutomaticCardRecovery,
+  withPendingSweep,
+  withStalePaymentRelease,
+} from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
 
@@ -12,6 +17,73 @@ import type { PassReport } from "./pass.js";
 // that runs, logs or throws.
 
 const REPORT: PassReport = { duties: [], nextDueAt: null };
+
+describe("automatic recovery in the pending-card pass", () => {
+  it("recovers after the sweep and before releasing stale marks", async () => {
+    const order: string[] = [];
+    const log = vi.fn();
+    const pass = withStalePaymentRelease(
+      withAutomaticCardRecovery(
+        async () => {
+          order.push("sweep");
+          return REPORT;
+        },
+        async () => {
+          order.push("recover");
+          return { filed: 1, errors: [] };
+        },
+        () => "primary",
+        log,
+      ),
+      async () => {
+        order.push("release");
+        return 0;
+      },
+      log,
+    );
+    expect(await pass(new Date())).toBe(REPORT);
+    expect(order).toEqual(["sweep", "recover", "release"]);
+    expect(log).toHaveBeenCalledWith("info", "payment.automatic_recovery", { filed: 1 });
+  });
+
+  it("leaves nonprimary filing alone and reads the role again each pass", async () => {
+    let role: "primary" | "secondary" = "secondary";
+    const recover = vi.fn(async () => ({ filed: 0, errors: [] }));
+    const pass = withAutomaticCardRecovery(
+      async () => REPORT,
+      recover,
+      () => role,
+      () => {},
+    );
+    expect(await pass(new Date())).toBe(REPORT);
+    expect(recover).not.toHaveBeenCalled();
+    role = "primary";
+    expect(await pass(new Date())).toBe(REPORT);
+    expect(recover).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs each retained error and contains a failed recovery without replacing the report", async () => {
+    const log = vi.fn();
+    const recover = vi
+      .fn(async () => ({ filed: 0, errors: [{ paymentId: "p1", error: "filing refused" }] }))
+      .mockRejectedValueOnce(new Error("read refused"));
+    const pass = withAutomaticCardRecovery(
+      async () => REPORT,
+      recover,
+      () => "primary",
+      log,
+    );
+    expect(await pass(new Date())).toBe(REPORT);
+    expect(log).toHaveBeenCalledWith("warn", "payment.automatic_recovery_failed", {
+      error: "Error: read refused",
+    });
+    expect(await pass(new Date())).toBe(REPORT);
+    expect(log).toHaveBeenCalledWith("warn", "payment.automatic_recovery_failed", {
+      paymentId: "p1",
+      error: "filing refused",
+    });
+  });
+});
 
 /** `withPendingSweep` reads only `provider` and `resolvePending`. */
 function fakeProvider(

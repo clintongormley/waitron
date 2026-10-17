@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, billPayments, incidents, type SingletonRole } from "@waitron/db";
-import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
+import {
+  insertCapturedPayment,
+  insertFailedPayment,
+  payments,
+  recordResolution,
+} from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import {
   centsToDecimal,
@@ -325,6 +330,44 @@ describe("recovery after a crash (design §8 test 13)", () => {
 });
 
 describe("the loop's own edges", () => {
+  it.each([true, false])(
+    "releases a confirmed noncharge only with automatic audit = %s",
+    async (automatic) => {
+      const billId = await tabWith(venue, "Paella");
+      const id = await strandedPending(billId, 2000);
+      const paymentRef = randomUUID();
+      await inTx(venue, async (tx) => {
+        await insertFailedPayment(tx, {
+          origin: venue.cfg.origin,
+          workingOrderId: brandWorkingOrderId(billId),
+          provider: "stripe",
+          paymentRef,
+          amount: decimal("20.00"),
+          billPaymentId: id,
+        });
+        const [provided] = await tx
+          .select({ id: payments.id })
+          .from(payments)
+          .where(eq(payments.paymentRef, paymentRef));
+        await recordResolution(tx, {
+          paymentId: provided!.id,
+          workingOrderId: billId,
+          personId: automatic ? null : venue.adminId,
+          outcome: "failed",
+          cancelledAtProvider: true,
+          providerStatus: "canceled",
+          resolvedAt: venue.clock.now().instant,
+        });
+      });
+      await settle();
+      expect(await stateOf(id)).toBe(automatic ? "failed" : "pending");
+      expect((await balance(billId)).json).toMatchObject({
+        reserved: automatic ? "0.00" : "20.00",
+      });
+      expect(registroCount(venue, billId)).toBe(0);
+    },
+  );
+
   it("dates a capture whose provider row carries no time at the pass", async () => {
     const billId = await tabWith(venue, "Paella", "Tarta");
     const id = await strandedPending(billId, 1000);

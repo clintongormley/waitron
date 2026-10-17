@@ -95,10 +95,6 @@ export async function freshVenue(): Promise<{ directory: string; store: VenueDat
   return { directory, store: await openVenueDatabase(directory) };
 }
 
-/**
- * Waits until `port` accepts a TCP connection. `startServer` resolves before its listener has bound,
- * and closing an unbound server rejects with `ERR_SERVER_NOT_RUNNING`.
- */
 export async function awaitListening(port: number): Promise<void> {
   for (let i = 0; i < POLL_TRIES; i += 1) {
     const up = await new Promise<boolean>((resolve) => {

@@ -158,6 +158,7 @@ import { recordAttendanceFact } from "./attendance-capture.js";
 import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
+import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
 import { createAttendanceEmailSender } from "./attendance-email.js";
 import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -447,6 +448,27 @@ export function withPendingSweep(
   };
 }
 
+export function withAutomaticCardRecovery(
+  inner: (now: Date) => Promise<PassReport>,
+  recover: () => ReturnType<typeof recoverAutomaticCardPayments>,
+  getRole: () => SingletonRole,
+  log: Logger,
+): (now: Date) => Promise<PassReport> {
+  return async (now) => {
+    const report = await inner(now);
+    if (getRole() !== "primary") return report;
+    try {
+      const result = await recover();
+      if (result.filed > 0) log("info", "payment.automatic_recovery", { filed: result.filed });
+      for (const failure of result.errors)
+        log("warn", "payment.automatic_recovery_failed", failure);
+    } catch (error) {
+      log("warn", "payment.automatic_recovery_failed", { error: String(error) });
+    }
+    return report;
+  };
+}
+
 /**
  * After each pass, release the in-flight marks (plan D22) no payment attempt is still behind
  * (`releaseStalePaymentAttempts`). After the inner pass, so a card attempt its sweep resolved in
@@ -543,6 +565,8 @@ export function connectedCardProviderSweep(deps: {
   };
 }
 
+const listenerBindFailures = new WeakMap<ReturnType<typeof serve>, Error>();
+
 /**
  * Bind the one HTTP listener and wire its listen-failure handler. Called LAST in each branch, so the
  * mounted app is complete before it binds.
@@ -574,6 +598,7 @@ function startListening(
     /* v8 ignore start */
     if (bound) return;
     /* v8 ignore stop */
+    listenerBindFailures.set(server, error);
     const failure = new AppError("server.listen_failed", {
       port: config.httpPort,
       // `code` is optional on the error TYPE; the fallback is type-required.
@@ -707,7 +732,11 @@ function makeStartedServer(
         teardown.stopWork,
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection.
-        () => closeListener(server),
+        async () => {
+          await closeListener(server);
+          const failure = listenerBindFailures.get(server);
+          if (failure !== undefined) throw failure;
+        },
         teardown.settleRequests,
         () => landing?.close().catch(() => {}),
         teardown.closePools,
@@ -2322,46 +2351,76 @@ async function bootServer(
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
     // `/health`. So on a non-singleton node `/health` reflects only process liveness: a mirror answers
     // healthy whatever its data.
+    pass: singletonPass(
+      () => holders.singletonRole.current,
+      (at) =>
+        runPass(
+          {
+            drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
+            // Asked per pass, so a credential provisioned while the host runs is served on the next
+            // pass; without one there is nothing to reconcile.
+            reconcile: async (at2) =>
+              (await credentialProvisioned(db, "payments.stripe"))
+                ? runDue(
+                    {
+                      db,
+                      duties: [duty],
+                      horizonDays: config.scheduler.horizonDays,
+                      maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                      maxAttempts: config.scheduler.maxAttempts,
+                      backoffBaseMs: config.scheduler.backoffBaseMs,
+                      staleAfterMs: config.scheduler.staleAfterMs,
+                      skipRetryMs: config.skipRetryMs,
+                    },
+                    at2,
+                  )
+                : NOTHING_TO_RECONCILE,
+            awaitingCert: awaitingFiscalCert,
+            monotonicMs: () => performance.now(),
+            log,
+          },
+          at,
+        ),
+    ),
+    now,
+    sleep: realSleep,
+    signal: controller.signal,
+    minTickMs: config.minTickMs,
+    maxTickMs: config.maxTickMs,
+    log,
+    onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
+  });
+  undoOnFailure.push(async () => {
+    controller.abort();
+    await loop;
+  });
+
+  const pendingCardController = new AbortController();
+  const pendingCardLoop = runPendingCardLoop({
     pass: withPendingBillPayments(
       withStalePaymentRelease(
-        withPendingSweep(
-          singletonPass(
-            () => holders.singletonRole.current,
-            (at) =>
-              runPass(
-                {
-                  drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-                  // Asked per pass, so a credential provisioned while the host runs is served on the next
-                  // pass; without one there is nothing to reconcile.
-                  reconcile: async (at2) =>
-                    (await credentialProvisioned(db, "payments.stripe"))
-                      ? runDue(
-                          {
-                            db,
-                            duties: [duty],
-                            horizonDays: config.scheduler.horizonDays,
-                            maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                            maxAttempts: config.scheduler.maxAttempts,
-                            backoffBaseMs: config.scheduler.backoffBaseMs,
-                            staleAfterMs: config.scheduler.staleAfterMs,
-                            skipRetryMs: config.skipRetryMs,
-                          },
-                          at2,
-                        )
-                      : NOTHING_TO_RECONCILE,
-                  awaitingCert: awaitingFiscalCert,
-                  monotonicMs: () => performance.now(),
-                  log,
-                },
-                at,
-              ),
+        withAutomaticCardRecovery(
+          withPendingSweep(
+            async () => ({ duties: [], nextDueAt: null }),
+            connectedCardProviderSweep({
+              db,
+              pool: cardPool,
+              contributions: CARD_PROVIDERS,
+              simulator: cardProvider,
+            }),
+            log,
           ),
-          connectedCardProviderSweep({
-            db,
-            pool: cardPool,
-            contributions: CARD_PROVIDERS,
-            simulator: cardProvider,
-          }),
+          () =>
+            recoverAutomaticCardPayments({
+              db,
+              backend: tillBackend,
+              clock: tillClock,
+              cfg: till,
+              pool: cardPool,
+              attendance: attendanceRecorder,
+              log,
+            }),
+          () => holders.singletonRole.current,
           log,
         ),
         () => releaseStalePaymentAttempts(db),
@@ -2380,16 +2439,12 @@ async function bootServer(
       log,
     ),
     now,
-    sleep: realSleep,
-    signal: controller.signal,
-    minTickMs: config.minTickMs,
-    maxTickMs: config.maxTickMs,
-    log,
-    onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
+    signal: pendingCardController.signal,
+    log: (level, event, fields) => log(level, event, { ...fields, loop: "pending_cards" }),
   });
   undoOnFailure.push(async () => {
-    controller.abort();
-    await loop;
+    pendingCardController.abort();
+    await pendingCardLoop;
   });
 
   const tenderRefundController = new AbortController();
@@ -2477,11 +2532,13 @@ async function bootServer(
     {
       stopWork: async () => {
         controller.abort();
+        pendingCardController.abort();
         cloudController.abort();
         invoiceEmailController.abort();
         attendanceController.abort();
         tenderRefundController.abort();
         await closeAll([
+          () => pendingCardLoop,
           () => tenderRefundLoop,
           () => attendanceLoop,
           () => attendanceEmailLoop,

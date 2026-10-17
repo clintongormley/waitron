@@ -8,8 +8,8 @@ import { payments } from "./schema/payments.js";
 export interface NewPaymentResolution {
   paymentId: string;
   workingOrderId: string;
-  /** The manager who asked for the resolution. */
-  personId: string;
+  /** The manager who asked, or null for an automatic resolution. */
+  personId: string | null;
   outcome: "captured" | "failed";
   cancelledAtProvider: boolean;
   providerStatus: string | null;

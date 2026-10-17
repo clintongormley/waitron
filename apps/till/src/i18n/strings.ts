@@ -644,6 +644,8 @@ export const en = {
   "card.cancel": "Cancel",
   "card.declined": "Card declined",
   "card.no_answer": "The card reader did not answer",
+  "card.pending_check":
+    "Waitron is checking the payment. This order stays locked until the result is known. If it stays unresolved, ask a manager to check Card payments.",
   "card.insufficient_funds": "Card declined: not enough funds",
   "card.expired": "Card declined: card expired",
   "card.wrong_pin": "Card declined: wrong PIN",
@@ -2168,6 +2170,8 @@ export const es: Record<StringKey, string> = {
   "card.cancel": "Cancelar",
   "card.declined": "Tarjeta rechazada",
   "card.no_answer": "El lector de tarjetas no ha respondido",
+  "card.pending_check":
+    "Waitron está comprobando el pago. El pedido sigue bloqueado hasta conocer el resultado. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta.",
   "card.insufficient_funds": "Tarjeta rechazada: fondos insuficientes",
   "card.expired": "Tarjeta rechazada: tarjeta caducada",
   "card.wrong_pin": "Tarjeta rechazada: PIN incorrecto",

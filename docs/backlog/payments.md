@@ -70,23 +70,10 @@ their full text.
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
 - **What M7b2 left open (a manager clearing a stuck card payment, #702).**
-  - Stripe Terminal's automatic `resolvePending` sweep is still a no-op, on purpose. During a LIVE
-    collect the row is `attempting` and its PaymentIntent waits for a card, so a sweep that cancels
-    would cancel a payment a customer is about to tap. Only the manager action, which first checks
-    that no attempt is running in this process, asks Stripe, and cancels the PaymentIntent if Stripe
-    still allows it.
   - SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
     one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
     keeps answering PENDING. The manager action refuses a SumUp payment
     (`payment.resolve_unsupported`).
-  - When the reader poll times out or errors, `collect` cancels the reader action best-effort and
-    fails the row. If that cancel fails and the customer then taps, the money is captured while the
-    local row says `failed`; only reconciliation sees it. Now that a resolver exists, leaving such a
-    row `attempting` would hand it to the manager action instead. That would also lock the order
-    until a manager acts. **Owner decision, 2026-10-16 (A764):** leave uncertain Stripe attempts
-    unknown and check them automatically once collection stops, with the manager action as
-    fallback. First demonstrate that the automatic check cannot cancel a live collection.
-    This remains separate from A739a's outcome panel; nothing has changed the stored states yet.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
     three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing
@@ -232,6 +219,16 @@ for reconciliation rather than show a receipt).
   connections to the box; W18c #1145 and W48 #1162).
 
 ## Decisions and deliberate limits
+
+- **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
+  Check them automatically after collection ends; keep the order locked until the outcome is known.
+  Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
+  a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
+  Collection ownership is process-local. The provider sweep runs in every node role; only sale
+  recovery and bill completion check for primary. Before enabling a second venue node, restrict
+  provider cancellation to its collection owner or add coordination between nodes. Today's venue
+  has one node (CLAUDE.md §5); this is not a claim of protection across nodes.
+  [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
   W102 part 0). The QR label and NFC text carry only the equipment kind and id. A general pick-up

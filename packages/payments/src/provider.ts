@@ -231,8 +231,7 @@ export interface PaymentProvider {
   readonly provider: string;
   readonly capabilities: ProviderCapabilities;
 
-  /** Single-message card-present purchase (authorize + capture). Returns `captured` on success,
-   * `failed` on a network refusal. */
+  /** An uncertain charge stays `attempting` until its provider can determine the outcome. */
   collect(params: CollectParams): Promise<PaymentResult>;
 
   /** One pass over this provider's `accepted_offline` rows: `settled` when the network cleared it,

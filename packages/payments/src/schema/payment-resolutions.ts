@@ -18,7 +18,7 @@ import { payments } from "./payments.js";
 export const paymentResolutionOutcome = enumType(["captured", "failed"]);
 
 /**
- * One row per `attempting` payment a manager resolved after nothing was left driving it. Declared
+ * One row per `attempting` payment resolved after nothing was left driving it. Declared
  * `appendOnly()` in `../classification.ts`.
  */
 export const paymentResolutions = table(
@@ -30,7 +30,8 @@ export const paymentResolutions = table(
     // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
     // require. The resolve route takes the id from `authorizeManager`, which read it through a
     // join to `persons` in an earlier transaction.
-    personId: id("person_id").notNull(),
+    /** Null for an automatic resolution; a manual one keeps its authorizing manager. */
+    personId: id("person_id"),
     outcome: paymentResolutionOutcome("outcome").notNull(),
     /** The provider's payment is cancelled, so the working order's next card payment needs a
      * fresh processor idempotency key (`countProviderCancelledResolutions`). */

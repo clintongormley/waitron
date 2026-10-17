@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { createServer } from "node:http";
+import { setImmediate } from "node:timers/promises";
 import { closeListener } from "./close-listener.js";
 
 /** A fake raw http/https listener. `resolveOnAllClosed` models Node's real behaviour: `close()`'s
@@ -31,6 +33,18 @@ const immediate = (_ms: number, fn: () => void) => {
 };
 
 describe("closeListener", () => {
+  it("cancels a bind that has not started listening without rejecting", async () => {
+    const server = createServer();
+    server.listen(0, "127.0.0.1");
+    try {
+      await expect(closeListener(server)).resolves.toBeUndefined();
+      await setImmediate();
+      expect(server.listening).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("force-closes all connections after the grace so a keep-alive socket cannot hang close()", async () => {
     // This fake resolves ONLY when closeAllConnections runs, so a closeListener that did not force
     // keep-alive connections closed would hang here.
@@ -65,10 +79,10 @@ describe("closeListener", () => {
     expect(s.calls.all).toBe(0);
   });
 
-  it("rejects when close() reports an error", async () => {
+  it.each([undefined, "ECONNRESET"])("rejects other close errors with code=%s", async (code) => {
     const s = fakeServer();
     const p = closeListener(s, { setTimer: immediate });
-    s.finish(new Error("boom"));
+    s.finish(Object.assign(new Error("boom"), code === undefined ? {} : { code }));
     await expect(p).rejects.toThrow("boom");
   });
 
