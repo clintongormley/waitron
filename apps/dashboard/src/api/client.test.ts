@@ -719,7 +719,14 @@ describe("DashboardApi", () => {
   });
 
   it("uses the canonical unit collection and item routes", async () => {
-    const unit = { id: "u1", name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 };
+    const unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u1",
+      name: { en: "portion" },
+      abbreviation: { en: "pt" },
+      precision: 2,
+    };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([unit]))
@@ -730,6 +737,8 @@ describe("DashboardApi", () => {
     await expect(api.listUnits()).resolves.toEqual([unit]);
     await expect(
       api.createUnit({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "portion" },
         abbreviation: { en: "pt" },
         precision: 2,
@@ -747,6 +756,8 @@ describe("DashboardApi", () => {
         "/management-api/units",
         "POST",
         JSON.stringify({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "portion" },
           abbreviation: { en: "pt" },
           precision: 2,

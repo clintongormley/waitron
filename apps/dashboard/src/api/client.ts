@@ -507,6 +507,8 @@ export type ShownFolderCounts = Pick<
 >;
 export interface Unit {
   id: string;
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
@@ -514,6 +516,8 @@ export interface Unit {
 }
 
 export interface UnitInput {
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;
@@ -521,6 +525,8 @@ export interface UnitInput {
 }
 
 export interface UnitPatch {
+  staffName?: string;
+  staffAbbreviation?: string;
   name?: Record<string, string>;
   abbreviation?: Record<string, string>;
   precision?: number;

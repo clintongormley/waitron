@@ -161,7 +161,15 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       {
         open: true,
         locales: ["en", "es"],
-        units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
+        units: [
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            id: "each",
+            name: { en: "Each" },
+            abbreviation: { en: "ea" },
+          },
+        ],
         taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
         value:
           state === "empty" || state === "errors"
@@ -391,7 +399,15 @@ describe.each(["light", "dark"] as const)(
         {
           open: true,
           locales: ["en", "es"],
-          units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
+          units: [
+            {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
+              id: "each",
+              name: { en: "Each" },
+              abbreviation: { en: "ea" },
+            },
+          ],
           taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
           value: coffee,
           fieldErrors: state === "refused" ? { unit: "The server rejected this value." } : {},

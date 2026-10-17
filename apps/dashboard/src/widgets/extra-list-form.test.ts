@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -8,7 +8,7 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 // `mountWidget` can create `dashboard-extra-list-form`.
 import { ExtraListForm } from "./extra-list-form.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -39,6 +39,8 @@ function product(overrides: Partial<Product> = {}): Product {
     customerName: { es: "Bacon ahumado" },
     unitId: "00000000-0000-0000-0000-000000000001",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "00000000-0000-0000-0000-000000000001",
       name: { es: "Unidad" },
       precision: 0,
@@ -1668,6 +1670,8 @@ it("refuses a maximum quantity of 0 TYPED into its stepper", async () => {
 });
 
 const KG = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-kg",
   name: { en: "Kilogram", es: "Kilogramo" },
   precision: 3,
@@ -1742,6 +1746,8 @@ it("marks malformed portion input beside its field without crashing the form", a
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 const PORTION = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-portion",
   name: { en: "Portion", es: "Ración" },
   precision: 0,
@@ -1749,6 +1755,9 @@ const PORTION = {
 };
 
 it("shows each price with its own product's unit, as text, abbreviated where it can be", async () => {
+  const before = currentLocale();
+  setLocale("en-GB");
+  onTestFinished(() => setLocale(before));
   const { el } = await mount({
     value: addons,
     products: [
@@ -1759,12 +1768,15 @@ it("shows each price with its own product's unit, as text, abbreviated where it 
   const first = field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price");
   const second = field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price");
 
-  expect([first.tagName, first.unit, second.unit]).toEqual(["WT-PRICE-INPUT", "kg", "Portion"]);
+  expect([first.tagName, first.unit, second.unit]).toEqual(["WT-PRICE-INPUT", "kg", "su"]);
   expect([first.fixedUnit, first.hideLabel, first.label]).toEqual([true, true, t("extras.price")]);
   expect(first.shadowRoot!.querySelector("button")).toBeNull();
 });
 
-it("reads a unit in the FIRST content language", async () => {
+it("reads a unit in the dashboard language before the configured default", async () => {
+  const before = currentLocale();
+  setLocale("en-GB");
+  onTestFinished(() => setLocale(before));
   const { el } = await mount({
     value: addons,
     languages: { defaultLanguage: "en", languages: ["es", "en"] },
@@ -1773,8 +1785,8 @@ it("reads a unit in the FIRST content language", async () => {
       product({ id: EGG, name: "Fried egg", unitPrice: "0.80", unitId: PORTION.id, unit: PORTION }),
     ],
   });
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").unit).toBe("kilo");
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price").unit).toBe("Ración");
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").unit).toBe("kg");
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price").unit).toBe("su");
 });
 
 it("removes a product with an icon-only bin button that keeps its spoken name", async () => {
@@ -1990,24 +2002,32 @@ it("marks Maximum quantity as optional when an item can have no limit", async ()
 });
 
 const GRAM = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-g",
   name: { en: "Gram", es: "Gramo" },
   precision: 0,
   abbreviation: { en: "g", es: "g" },
 };
 const LONG_ABBREVIATION = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-kilos",
   name: { en: "Kilogram", es: "Kilogramo" },
   precision: 3,
   abbreviation: { en: "kilogramos", es: "kilogramos" },
 };
 const ONE_LONG_WORD = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-pack",
   name: { en: "Packing unit", es: "Unidad de embalaje" },
   precision: 0,
   abbreviation: { en: "Unidadesdeembalaje", es: "Unidadesdeembalaje" },
 };
 const LONG_NAME = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-half",
   name: { en: "Large half portion", es: "Media ración grande" },
   precision: 0,
@@ -2470,6 +2490,8 @@ it("refuses to save a list holding a product with an Active variant, and saves o
  * packages/catalogue/src/unit-validation.ts). */
 const EACH_ID = "00000000-0000-0000-0000-000000000001";
 const EACH = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: EACH_ID,
   name: { en: "Each", es: "Unidad" },
   precision: 0,
@@ -2477,6 +2499,8 @@ const EACH = {
 };
 /** Like GRAM above, this measure has no decimals, so only the unit's identity tells it from Each. */
 const MILLILITRE = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-ml",
   name: { en: "Millilitre", es: "Mililitro" },
   precision: 0,
@@ -2819,4 +2843,25 @@ it("leaves archived products out of the extras picker while keeping active produ
       row.textContent!.trim(),
     ),
   ).toEqual(["Fried egg"]);
+});
+
+it("shows the staff abbreviation on an extras item's price when every translated field is blank", async () => {
+  const { el } = await mount({
+    value: addons,
+    products: [
+      product({
+        unitId: "staff-unit",
+        unit: {
+          id: "staff-unit",
+          staffName: "Staff tray",
+          staffAbbreviation: "st",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+      }),
+      product({ id: EGG, name: "Fried egg", unitPrice: "0.80", unitId: PORTION.id, unit: PORTION }),
+    ],
+  });
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").unit).toBe("st");
 });

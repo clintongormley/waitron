@@ -169,6 +169,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     const bacon = {
       portion: "1",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
         hardwareUnit: null,
         id: "00000000-0000-0000-0000-000000000001",

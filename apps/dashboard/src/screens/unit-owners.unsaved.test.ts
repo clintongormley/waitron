@@ -101,11 +101,15 @@ for (const succeeds of [true, false]) {
     await screen.updateComplete;
     const form = screen.shadowRoot!.querySelector("dashboard-unit-form")!;
     await form.updateComplete;
+    await field(form, "staffName", "Staff unit");
+    await field(form, "staffAbbreviation", "su");
     await field(form, "name-en", " Box ");
     await field(form, "abbreviation-en", " bx ");
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await vi.waitFor(() =>
       expect(client.createUnit).toHaveBeenCalledExactlyOnceWith({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Box" },
         abbreviation: { en: "bx" },
         precision: 0,
@@ -183,6 +187,8 @@ it("a dirty Related Unit blocks an ancestor leave request for its clean Product"
 });
 it("Related Unit Save commits the child before attaching its id and leaves the Product dirty", async () => {
   const { app, product, form } = await relatedUnit("Parent draft");
+  await field(form, "staffName", "Staff unit");
+  await field(form, "staffAbbreviation", "su");
   await field(form, "name-en", "Box");
   await field(form, "abbreviation-en", "bx");
   let childDirtyAtAttach: boolean | undefined;

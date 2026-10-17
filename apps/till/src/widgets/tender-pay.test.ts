@@ -13,6 +13,8 @@ const cafe: TillProduct = {
   name: "Café",
   customerName: { es: "Café para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
     abbreviation: { en: "ea", es: "ud" },
@@ -30,6 +32,8 @@ const jamon: TillProduct = {
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-kg",
     name: { en: "kg", es: "kg" },
     abbreviation: { en: "kg", es: "kg" },
@@ -46,6 +50,8 @@ const portion: TillProduct = {
   ...cafe,
   id: "portion",
   unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-portion",
     name: { en: "portion" },
     abbreviation: { en: "pt" },
@@ -1788,6 +1794,8 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
   const cheese = {
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",

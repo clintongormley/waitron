@@ -28,6 +28,8 @@ import type { OfferedExtraItem } from "./menu-types.js";
 expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
 expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
   id: string;
+  staffName: string;
+  staffAbbreviation: string;
   name: Record<string, string>;
   abbreviation: Record<string, string>;
   precision: number;

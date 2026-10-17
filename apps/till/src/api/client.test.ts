@@ -4820,6 +4820,8 @@ describe("menuOfferToTillProduct", () => {
         {
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
             hardwareUnit: null,
             id: "00000000-0000-0000-0000-000000000001",
@@ -4866,6 +4868,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: { es: "Burger carta" },
       kitchenName: "Burger KDS",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4910,6 +4914,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4947,6 +4953,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -4998,6 +5006,8 @@ describe("menuOfferToTillProduct", () => {
     // Every value the variant sells under differs from the parent's, so a mapping that read the
     // parent's for any of them fails here.
     const parentUnit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-each",
       name: { es: "unidad" },
       abbreviation: { es: "ud" },
@@ -5005,6 +5015,8 @@ describe("menuOfferToTillProduct", () => {
       hardwareUnit: null,
     };
     const litre = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-litre",
       name: { es: "litro" },
       abbreviation: { es: "l" },
@@ -5104,6 +5116,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5148,6 +5162,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: { es: "Beicon crujiente" },
       kitchenName: "BCN",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5186,6 +5202,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5227,6 +5245,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },
@@ -5252,6 +5272,8 @@ describe("menuOfferToTillProduct", () => {
     const item = (productId: string, available: boolean) => ({
       portion: "1",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
         hardwareUnit: null,
         id: "00000000-0000-0000-0000-000000000001",
@@ -5293,6 +5315,8 @@ describe("menuOfferToTillProduct", () => {
       customerName: null,
       kitchenName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-each",
         name: { es: "unidad" },
         abbreviation: { es: "ud" },

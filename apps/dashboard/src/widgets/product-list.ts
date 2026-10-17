@@ -1,14 +1,16 @@
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  currentContentLanguages,
   visuallyHiddenStyles,
   type DataTableColumn,
   type WtDataTable,
 } from "@waitron/ui";
-import { formatMoney, resolveContentText } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -405,8 +407,6 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  /** The content language a stored unit's abbreviation is read in. */
-  @property() unitLanguage = "en";
   @property() search = "";
   /** Whether a product can be made yet: the editor needs a content language and a unit. */
   @property({ type: Boolean }) canAddProduct = false;
@@ -1019,10 +1019,11 @@ export class ProductList extends LitElement {
 
   #unitWord(product: Product): string {
     if (product.unitId === EACH_UNIT_ID) return t("product.price_each");
-    const language = this.unitLanguage;
-    const name =
-      resolveContentText(product.unit.abbreviation, language, language) ||
-      resolveContentText(product.unit.name, language, language);
+    const name = unitPresentation(
+      product.unit,
+      currentLocale(),
+      currentContentLanguages(),
+    ).abbreviation;
     return fill("product.price_per", { unit: name });
   }
 

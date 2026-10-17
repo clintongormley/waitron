@@ -12,6 +12,8 @@ afterEach(cleanupWidgets);
 // Every field the form shows holds something, plus a name in a language it does not show, so a
 // field that rewrites its value on first draw would show as a change.
 const KILOGRAM: Unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "u1",
   name: { es: "kilogramo", en: "kilogram", ca: "quilogram" },
   abbreviation: { es: "kg", en: "kg" },
@@ -140,6 +142,8 @@ it("a changed unit's press sends what the form holds", async () => {
   expect(submit).toHaveBeenCalledOnce();
   expect((submit.mock.calls[0]![0] as CustomEvent).detail).toEqual({
     value: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "kilogramo", en: "kilo", ca: "quilogram" },
       abbreviation: { es: "kg", en: "kg" },
       precision: 3,
@@ -151,13 +155,13 @@ it("a changed unit's press sends what the form holds", async () => {
 it("a changed new unit that fails its own checks shows its errors after a press and holds Save until fixed", async () => {
   const el = await mount(null);
   const submit = submissions(el);
-  await type(el, "name-es", "litro");
+  await type(el, "staffName", "litro");
   expect(await saveState(el)).toEqual(ready);
   await press(el);
   expect(submit).not.toHaveBeenCalled();
-  expect(errorOf(el, "abbreviation-es")).toBe(t("units.abbreviation_required"));
+  expect(errorOf(el, "staffAbbreviation")).toBe(t("units.staff_abbreviation_required"));
   expect(await saveState(el)).toEqual(blocked);
-  await type(el, "abbreviation-es", "l");
+  await type(el, "staffAbbreviation", "l");
   expect(await saveState(el)).toEqual(ready);
 });
 

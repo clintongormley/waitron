@@ -209,6 +209,8 @@ export interface ZoneMenuOffer {
   readonly ordering?: "public" | "staff_only" | "not_sold_separately";
   readonly unit: {
     readonly id: string;
+    readonly staffName: string;
+    readonly staffAbbreviation: string;
     readonly name: Readonly<Record<string, string>>;
     // The printed short form, frozen onto a sold line as its unit label; the offer carries it so the
     // add-time pricing freeze does not re-read the unit.
@@ -260,6 +262,8 @@ export type ZoneOfferedModifier =
         readonly portion: string;
         readonly unit: {
           readonly id: string;
+          readonly staffName: string;
+          readonly staffAbbreviation: string;
           readonly name: Readonly<Record<string, string>>;
           readonly abbreviation: Readonly<Record<string, string>>;
           readonly precision: number;

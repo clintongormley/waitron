@@ -98,6 +98,8 @@ export interface EditorChoice {
   name: LocalizedText;
 }
 export interface UnitChoice extends EditorChoice {
+  staffName: string;
+  staffAbbreviation: string;
   abbreviation: LocalizedText;
 }
 export interface ProductRoutingChoice {

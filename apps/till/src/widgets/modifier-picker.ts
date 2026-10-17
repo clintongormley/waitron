@@ -1,4 +1,4 @@
-import { ContentLanguageController } from "@waitron/ui";
+import { ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -28,6 +28,7 @@ import { descriptionFor } from "./dish-format.js";
 import { lineNutrition } from "./line-nutrition.js";
 import { optionAnswers } from "./option-snapshot.js";
 import type { LineNutrition } from "../api/client.js";
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
 import type {
@@ -821,7 +822,11 @@ export class TillModifierPicker extends LitElement {
     if (item.portion === undefined || item.unit === undefined) return item.name;
     const places = Math.max(item.unit.precision, quantityPlaces(item.portion));
     const amount = toScale(decimal(item.portion), places);
-    const unit = descriptionFor(item.unit.abbreviation, "");
+    const unit = unitPresentation(
+      item.unit,
+      currentLocale(),
+      currentContentLanguages(),
+    ).abbreviation;
     return `${item.name} · ${amount}${unit ? ` ${unit}` : ""}`;
   }
 

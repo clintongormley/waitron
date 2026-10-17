@@ -108,7 +108,6 @@ export class CatalogueBrowser extends LitElement {
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ExtraList[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  @property() unitLanguage = "en";
   /** The category the address names; the browser opens it, and every category above it, once. */
   @property({ attribute: false }) categoryId: string | null = null;
   @property({ type: Boolean }) canAddProduct = false;
@@ -929,7 +928,6 @@ export class CatalogueBrowser extends LitElement {
         .routingFailed=${this.routingFailed}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
-        .unitLanguage=${this.unitLanguage}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
           this.nameError = "";

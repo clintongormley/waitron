@@ -24,7 +24,13 @@ vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
 const cana: PriceableProduct = {
   name: "Caña",
   descriptions: { "es-ES": "Caña" },
-  unit: { name: { "es-ES": "unidad" }, precision: 0, abbreviation: { "es-ES": "ud" } },
+  unit: {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    name: { "es-ES": "unidad" },
+    precision: 0,
+    abbreviation: { "es-ES": "ud" },
+  },
   unitPrice: "2.50",
   vatClass: "reduced",
   category: null,

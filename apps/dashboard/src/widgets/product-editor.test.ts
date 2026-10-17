@@ -1,7 +1,7 @@
 import { allergensFromChoices } from "./allergen-choices.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { registerIcons, setHelpMode, type ComboboxOption, type WtHelpTooltip } from "@waitron/ui";
+import { registerIcons, setContentLanguages, setHelpMode, type ComboboxOption, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
@@ -32,6 +32,7 @@ import { EACH_CHOICE } from "./variant-table.js";
 useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
+beforeEach(() => setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] }));
 
 it.each([0, 150])(
   "keeps unreviewed allergens null when only a dietary label is saved (press %s ms)",
@@ -74,22 +75,33 @@ it("keeps a variant's explicit empty diet when only its allergens change", async
 });
 
 it.each([
-  { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre", "Zucchini (z)"] },
-  { locale: "es-ES", labels: ["Unidad", "Calabacín (z)", "Litre", "Manzana (a)"] },
+  { locale: "en-GB", labels: ["Each", "Apple (a)", "Litre (su)", "Zucchini (z)"] },
+  { locale: "es-ES", labels: ["Unidad", "Calabacín (z)", "Litre (su)", "Manzana (a)"] },
 ])(
   "sorts pricing units in the dashboard language $locale in a Catalan venue",
   async ({ locale, labels }) => {
     const before = currentLocale();
     setLocale(locale);
     try {
+      setContentLanguages({ defaultLanguage: "ca", languages: ["ca", "es", "en"] });
       const units: UnitChoice[] = [
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "random-first",
           name: { ca: "Albergínia", en: "Zucchini", es: "Calabacín" },
           abbreviation: { ca: "ca-z", en: "z", es: "z" },
         },
-        { id: "random-middle", name: { ca: "Litre", en: "  " }, abbreviation: {} },
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          id: "random-middle",
+          name: { ca: "Litre", en: "  " },
+          abbreviation: {},
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "random-last",
           name: { ca: "Poma", en: "Apple", es: "Manzana" },
           abbreviation: { ca: "ca-a", en: "a", es: "a" },
@@ -115,7 +127,13 @@ it.each([
     }
   },
 );
-const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
+const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
+  id: "unit-each",
+  name: { en: "Each" },
+  abbreviation: { en: "ea" },
+};
 // Staff name and customer name differ in every fixture on purpose: an assertion cannot tell the two
 // apart when they hold the same text.
 const product: ProductEditorDraft = {
@@ -338,22 +356,38 @@ it("labels a unit option as its name then abbreviation", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    units: [{ id: "u", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+      },
+    ],
   });
   await openUnits(el);
   const option = combobox(el, "unit")!.options.find((choice) => choice.value === "u")!;
   expect(option.label).toBe("Kilogram (kg)");
 });
 
-it("labels a unit option as its name alone when it has no abbreviation", async () => {
+it("labels a unit option with its staff abbreviation when the translated abbreviation is absent", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    units: [{ id: "u", name: { en: "Portion" }, abbreviation: {} }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u",
+        name: { en: "Portion" },
+        abbreviation: {},
+      },
+    ],
   });
   await openUnits(el);
   const option = combobox(el, "unit")!.options.find((choice) => choice.value === "u")!;
-  expect(option.label).toBe("Portion");
+  expect(option.label).toBe("Portion (su)");
 });
 
 it('renders a short unit as "per unit" on the price control', async () => {
@@ -361,7 +395,15 @@ it('renders a short unit as "per unit" on the price control', async () => {
     open: true,
     value: { ...product, unitId: "litre" },
     locales: ["en"],
-    units: [{ id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "litre",
+        name: { en: "Litre" },
+        abbreviation: { en: "l" },
+      },
+    ],
     taxChoices: reduced,
   });
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("unit")).toBe(
@@ -369,7 +411,13 @@ it('renders a short unit as "per unit" on the price control', async () => {
   );
 });
 
-const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+const kg = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
+  id: "kg",
+  name: { en: "Kilogram" },
+  abbreviation: { en: "kg" },
+};
 it.each([
   { locale: "en-GB", unitId: null, variants: [], label: "Price", button: "Each" },
   { locale: "es-ES", unitId: null, variants: [], label: "Precio", button: "Unidad" },
@@ -504,7 +552,16 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
       open: true,
       value: { ...product, variants: [small, large] },
       locales: ["en"],
-      units: [unit, { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } }],
+      units: [
+        unit,
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          id: "litre",
+          name: { en: "Litre" },
+          abbreviation: { en: "l" },
+        },
+      ],
       taxChoices: reduced,
     });
     const table = variantTable(el)!;
@@ -518,7 +575,13 @@ it("puts the variant pricing unit chooser in the table header, not below the tab
 // A phone hides the variants table's price column and the unit button in its heading; the price
 // field's own unit button opens the same chooser.
 it("changes a product's unit from the price field when the table's heading dropdown is hidden", async () => {
-  const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
+  const litre = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "litre",
+    name: { en: "Litre" },
+    abbreviation: { en: "l" },
+  };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small, large] },
@@ -543,7 +606,13 @@ it("changes a product's unit from the price field when the table's heading dropd
 });
 
 it("opens the unit chooser from the variant table's heading, choosing there and offering Add unit", async () => {
-  const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
+  const litre = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "litre",
+    name: { en: "Litre" },
+    abbreviation: { en: "l" },
+  };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small, large] },
@@ -978,7 +1047,16 @@ it("retains a dirty draft through child open, lookup refresh and cancellation", 
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(submit).not.toHaveBeenCalled();
-  el.units = [...el.units, { id: "custom", name: { en: "Custom" }, abbreviation: {} }];
+  el.units = [
+    ...el.units,
+    {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "custom",
+      name: { en: "Custom" },
+      abbreviation: {},
+    },
+  ];
   el.childOpen = false;
   await el.updateComplete;
   save(el);
@@ -3525,7 +3603,15 @@ it("defaults a new product to Each (no unit)", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    units: [{ id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "kg",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+      },
+    ],
   });
   // Each is a chosen unit like any other, so the price field's button names it rather than asking
   // the person to choose — which is the only thing on screen until they open the chooser.
@@ -3543,7 +3629,15 @@ it("submits unitId null when Each stays selected", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    units: [{ id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+    units: [
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "kg",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+      },
+    ],
     taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
   });
   const submit = vi.fn();
@@ -3556,7 +3650,13 @@ it("submits unitId null when Each stays selected", async () => {
 });
 
 it("draws Each as a chosen unit on a product, not as the grey prompt for nothing chosen, and saves no unit", async () => {
-  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const kg = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "kg",
+    name: { en: "Kilogram" },
+    abbreviation: { en: "kg" },
+  };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, unitId: null },
@@ -3586,7 +3686,13 @@ it("draws Each as a chosen unit on a product, not as the grey prompt for nothing
 });
 
 it("submits the chosen real unit and marks it selected after load", async () => {
-  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const kg = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "kg",
+    name: { en: "Kilogram" },
+    abbreviation: { en: "kg" },
+  };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, unitId: kg.id },
@@ -4076,7 +4182,13 @@ it("reads a translation stored under a regional code as present, as the server d
 
 // The parent's value for every inherited field, each DIFFERENT from what the variant might set, so
 // an assertion can tell a hint read from the parent from a value read from the variant.
-const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
+const litre = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
+  id: "litre",
+  name: { en: "Litre" },
+  abbreviation: { en: "l" },
+};
 const parentValues: InheritedValues = {
   name: "Coffee",
   description: { en: "Roasted in house" },
@@ -5246,7 +5358,13 @@ it("separates Add variant from the Modifiers heading", async () => {
 });
 
 it("names the offered lists and menus before saving a product unit change", async () => {
-  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const kg = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "kg",
+    name: { en: "Kilogram" },
+    abbreviation: { en: "kg" },
+  };
   const usage = [
     {
       productId: "coffee",
@@ -5277,7 +5395,13 @@ it("drops a unit-usage reply after the editor is reseeded for another product", 
       .fn()
       .mockImplementation(() => new Promise((resolve) => (reply = resolve))),
   };
-  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const kg = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "kg",
+    name: { en: "Kilogram" },
+    abbreviation: { en: "kg" },
+  };
   const el = await mountPricing(saved, {
     units: [unit, kg],
     api: api as unknown as ProductEditor["api"],
@@ -6497,4 +6621,56 @@ describe("help mode", () => {
     await new Promise(requestAnimationFrame);
     expect(boxes()).toEqual(off);
   });
+});
+
+it("labels and sorts unit choices by their independent staff fallbacks when customer maps are empty", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["es", "en"],
+    units: [
+      { id: "z", staffName: "Zebra crates", staffAbbreviation: "zc", name: {}, abbreviation: {} },
+      { id: "a", staffName: "Alpha trays", staffAbbreviation: "at", name: {}, abbreviation: {} },
+    ],
+  });
+  await openUnits(el);
+  expect(
+    combobox(el, "unit")!.options.filter(({ value }) => value === "a" || value === "z"),
+  ).toEqual([
+    { value: "a", label: "Alpha trays (at)" },
+    { value: "z", label: "Zebra crates (zc)" },
+  ]);
+});
+
+it("refreshes live unit choice labels after a content default change without resetting the product draft", async () => {
+  const before = currentLocale();
+  setLocale("fr-FR");
+  try {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      locales: ["en", "es"],
+      units: [
+        {
+          id: "live",
+          staffName: "Staff crate",
+          staffAbbreviation: "sc",
+          name: { en: "English crate", es: "Spanish crate" },
+          abbreviation: { en: "ec", es: "se" },
+        },
+      ],
+    });
+    await openUnits(el);
+    expect(combobox(el, "unit")!.options.find(({ value }) => value === "live")!.label).toBe(
+      "English crate (ec)",
+    );
+    const draft = structuredClone(el.currentValue);
+    setContentLanguages({ defaultLanguage: "es", languages: ["en", "es"] });
+    await vi.waitFor(() =>
+      expect(combobox(el, "unit")!.options.find(({ value }) => value === "live")!.label).toBe(
+        "Spanish crate (se)",
+      ),
+    );
+    expect(el.currentValue).toEqual(draft);
+  } finally {
+    setLocale(before);
+  }
 });

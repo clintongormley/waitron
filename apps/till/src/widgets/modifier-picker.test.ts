@@ -32,6 +32,8 @@ function offeredItem(
   return {
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",
@@ -254,6 +256,39 @@ async function openPicker(product: TillProduct, tile: string, store: WorkingOrde
 }
 
 describe("till-modifier-picker", () => {
+  it("labels a portioned extra with its staff abbreviation when customer maps are empty", async () => {
+    const portioned = {
+      ...extrasList,
+      maxPicks: null,
+      items: [
+        {
+          ...offeredItem("p-ham", "Jamón", "5.00", 3),
+          portion: "0.050",
+          unit: {
+            id: "unit-kg",
+            staffName: "Staff mass",
+            staffAbbreviation: "staff-kg",
+            name: {},
+            abbreviation: {},
+            precision: 3,
+            hardwareUnit: "kg" as const,
+          },
+        },
+      ],
+    } satisfies OfferedModifier;
+    const { picker } = await openPicker(
+      { ...burger, offeredModifiers: [portioned] },
+      "Burger",
+      new WorkingOrderStore(),
+    );
+    expect(picker.shadowRoot!.querySelector(".option-name")!.textContent!.trim()).toBe(
+      "Jamón · 0.050 staff-kg",
+    );
+    expect(picker.shadowRoot!.querySelector(".option-delta")!.textContent!.trim()).toBe(
+      formatMoney("5.00", currentLocale()),
+    );
+  });
+
   it("shows the exact amount and unit supplied by a priced extra pick", async () => {
     const portioned = {
       ...extrasList,
@@ -263,6 +298,8 @@ describe("till-modifier-picker", () => {
           ...offeredItem("p-ham", "Jamón", "5.00", 3),
           portion: "0.050",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "unit-kg",
             name: { en: "Kilogram" },
             abbreviation: { en: "kg", es: "kg" },
@@ -694,6 +731,8 @@ describe("till-modifier-picker", () => {
       // Every selling value differs from the parent's (`cafe`'s), so a chosen product that kept
       // the parent's fails the pick tests below.
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-litre",
         name: { es: "litro" },
         abbreviation: { es: "l" },
@@ -1041,6 +1080,8 @@ describe("till-modifier-picker", () => {
     const litre: TillProduct = {
       ...burger,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: "unit-l",
         name: { en: "litre" },
         abbreviation: { en: "l" },

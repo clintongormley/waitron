@@ -25,7 +25,14 @@ function product(id: string, name: string, unitPrice: string): Product {
     name,
     customerName: { es: `${name} para el cliente` },
     unitId: "unit-each",
-    unit: { id: "unit-each", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "unit-each",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    },
     description: null,
     kitchenName: null,
     dietaryDeclarations: [],
@@ -161,6 +168,8 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
 
   it("renders a mixed list's fixed 1 and its required, refused Portion field accessibly", async () => {
     const each = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "00000000-0000-0000-0000-000000000001",
       name: { es: "Unidad" },
       precision: 0,
@@ -176,7 +185,14 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
           {
             ...product(EGG, "Fried egg", "0.80"),
             unitId: "unit-ml",
-            unit: { id: "unit-ml", name: { es: "Mililitro" }, precision: 0, abbreviation: {} },
+            unit: {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
+              id: "unit-ml",
+              name: { es: "Mililitro" },
+              precision: 0,
+              abbreviation: {},
+            },
           },
         ],
         value: {

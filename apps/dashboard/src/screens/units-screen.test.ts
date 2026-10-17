@@ -29,12 +29,16 @@ afterEach(() => setLocale("es-ES"));
 
 const units: Unit[] = [
   {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "u1",
     name: { es: "unidad", en: "each" },
     abbreviation: { es: "ud", en: "ea" },
     precision: 0,
   },
   {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "u2",
     name: { es: "kilogramo", en: "kilogram" },
     abbreviation: { es: "kg", en: "kg" },
@@ -56,6 +60,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     createUnit: vi.fn().mockResolvedValue({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "u3",
       name: { es: "caja" },
       abbreviation: { es: "cj" },
@@ -218,7 +224,14 @@ describe("units-screen", () => {
   });
 
   it("returns focus to the header's create button after the first unit is made from the empty table", async () => {
-    const made: Unit = { id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 };
+    const made: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u3",
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 0,
+    };
     const api = stubApi({ listUnits: vi.fn().mockResolvedValue([]) });
     (api.background.listUnits as ReturnType<typeof vi.fn>).mockResolvedValue([made]);
     const el = await mount(api);
@@ -285,7 +298,14 @@ describe("units-screen", () => {
   });
 
   it("renders precision as the locale decimal marker plus zeroes", async () => {
-    const litre: Unit = { id: "u", name: { es: "Litro" }, abbreviation: { es: "l" }, precision: 3 };
+    const litre: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u",
+      name: { es: "Litro" },
+      abbreviation: { es: "l" },
+      precision: 3,
+    };
     setLocale("es-ES");
     expect(precisionCellText(await mountWith([litre]), "u")).toBe(",000");
     cleanupWidgets();
@@ -313,7 +333,14 @@ describe("units-screen", () => {
   });
 
   it("narrows the list to the units of any precision chosen, naming two by their count", async () => {
-    const box: Unit = { id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 2 };
+    const box: Unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u3",
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 2,
+    };
     const el = await mountWith([...units, box]);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -432,7 +459,14 @@ describe("units-screen", () => {
     form.dispatchEvent(submit);
     form.dispatchEvent(submit);
     expect(api.createUnit).toHaveBeenCalledTimes(1);
-    resolveCreate({ id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 });
+    resolveCreate({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u3",
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 0,
+    });
     await flush(el);
     expect(form.open).toBe(false);
   });
@@ -446,6 +480,8 @@ describe("units-screen", () => {
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     await form.updateComplete;
     for (const [testId, value] of [
+      ["staffName", "Staff unit"],
+      ["staffAbbreviation", "su"],
       ["name-es", "caja"],
       ["abbreviation-es", "cj"],
     ])
@@ -457,6 +493,8 @@ describe("units-screen", () => {
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect(createUnit).toHaveBeenCalledWith({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "caja" },
       abbreviation: { es: "cj" },
       precision: 2,
@@ -881,8 +919,22 @@ describe("units-screen", () => {
     const list: Unit[] = [
       units[0]!,
       units[1]!,
-      { id: "u3", name: { en: "Litre" }, abbreviation: { en: "l" }, precision: 2 },
-      { id: "u4", name: { en: "Gram" }, abbreviation: { en: "g" }, precision: 1 },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u3",
+        name: { en: "Litre" },
+        abbreviation: { en: "l" },
+        precision: 2,
+      },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "u4",
+        name: { en: "Gram" },
+        abbreviation: { en: "g" },
+        precision: 1,
+      },
     ];
     const el = await mount(
       stubApi({
@@ -1107,6 +1159,8 @@ describe("units-screen", () => {
     expect(form.open).toBe(true);
     expect(form.value).toEqual(units[0]);
     const value = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "pieza", en: "piece" },
       abbreviation: units[0]!.abbreviation,
       precision: 0,
@@ -1280,14 +1334,64 @@ describe("units-screen", () => {
   it("sorts the units by abbreviation", async () => {
     setLocale("es-ES");
     const el = await mountWith([
-      { id: "a", name: { es: "alfa" }, abbreviation: { es: "zz" }, precision: 0 },
-      { id: "b", name: { es: "beta" }, abbreviation: { es: "aa" }, precision: 0 },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "a",
+        name: { es: "alfa" },
+        abbreviation: { es: "zz" },
+        precision: 0,
+      },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        id: "b",
+        name: { es: "beta" },
+        abbreviation: { es: "aa" },
+        precision: 0,
+      },
     ]);
     const table = unitsTable(el);
     await table.updateComplete;
     expect(keysOf(table)).toEqual(["a", "b"]);
     await sortBy(table, "abbreviation");
     expect(keysOf(table)).toEqual(["b", "a"]);
+  });
+
+  it("uses staff unit names and abbreviations for visible rows, search and sorting when translations are empty", async () => {
+    const el = await mountWith([
+      {
+        id: "z",
+        staffName: "Zebra crates",
+        staffAbbreviation: "aa",
+        name: {},
+        abbreviation: {},
+        precision: 0,
+      },
+      {
+        id: "a",
+        staffName: "Alpha trays",
+        staffAbbreviation: "zz",
+        name: {},
+        abbreviation: {},
+        precision: 0,
+      },
+    ]);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    expect(table.shadowRoot!.textContent).toContain("Zebra crates");
+    expect(table.shadowRoot!.textContent).toContain("Alpha trays");
+    expect(keysOf(table)).toEqual(["a", "z"]);
+    await sortBy(table, "name");
+    expect(keysOf(table)).toEqual(["z", "a"]);
+    await sortBy(table, "name");
+    expect(keysOf(table)).toEqual(["a", "z"]);
+    await sortBy(table, "abbreviation");
+    expect(keysOf(table)).toEqual(["z", "a"]);
+    await typeTableSearch(el, "Zebra crates");
+    expect(keysOf(table)).toEqual(["z"]);
+    await typeTableSearch(el, "zz");
+    expect(keysOf(table)).toEqual(["a"]);
   });
 
   it("writes precision with a full stop when the locale reports no decimal separator", async () => {

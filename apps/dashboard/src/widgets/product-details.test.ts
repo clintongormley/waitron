@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setContentLanguages } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { userEvent } from "vitest/browser";
 import type { ProductEditorValue } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./product-details.js";
+import type { ProductDetails } from "./product-details.js";
 
 registerIcons(DASHBOARD_ICONS);
 const locale = currentLocale();
@@ -206,4 +207,41 @@ it("names every cereal and nut kind on archived product details", async () => {
   });
   expect(el.shadowRoot!.textContent).toContain("Cereals containing gluten (Wheat, Barley)");
   expect(el.shadowRoot!.textContent).toContain("Nuts (Walnuts)");
+});
+
+it("shows the independent staff unit name on archived product details when translations are empty", async () => {
+  const { el } = await mountWidget<ProductDetails>("dashboard-product-details", {
+    open: true,
+    value,
+    units: [
+      { id: "cup", staffName: "Staff cup", staffAbbreviation: "sc", name: {}, abbreviation: {} },
+    ],
+  });
+  expect(el.shadowRoot!.textContent).toContain("Staff cup");
+});
+
+it("refreshes unit names on an open product detail after the content default changes", async () => {
+  const before = currentLocale();
+  setLocale("fr-FR");
+  try {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+    const { el } = await mountWidget<ProductDetails>("dashboard-product-details", {
+      open: true,
+      value,
+      units: [
+        {
+          id: "cup",
+          staffName: "Staff cup",
+          staffAbbreviation: "sc",
+          name: { en: "English cup", es: "Spanish cup" },
+          abbreviation: { en: "ec", es: "se" },
+        },
+      ],
+    });
+    expect(el.shadowRoot!.textContent).toContain("English cup");
+    setContentLanguages({ defaultLanguage: "es", languages: ["en", "es"] });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Spanish cup"));
+  } finally {
+    setLocale(before);
+  }
 });

@@ -32,6 +32,8 @@ import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 // (cheese) and an options list (rare / medium).
 
 const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { es: "unidad", en: "unit" },
   abbreviation: { es: "ud", en: "ea" },
@@ -89,6 +91,8 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
           {
             portion: "1",
             unit: {
+              staffName: "Staff unit",
+              staffAbbreviation: "su",
               name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
               hardwareUnit: null,
               id: "00000000-0000-0000-0000-000000000001",
@@ -523,6 +527,8 @@ describe("a basket that spans a publish", () => {
 
   it("shows Lemonade €3.00 each → €3.00/kg and waits when v2 sells it by the kilo at the same price", async () => {
     const kg = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-kg",
       name: { es: "kilo", en: "kilogram" },
       abbreviation: { es: "kg", en: "kg" },

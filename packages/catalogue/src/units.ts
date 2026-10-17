@@ -180,8 +180,8 @@ export async function updateUnit(
         values[field] = mergeOptionalTranslations(stored.unit[field], patch[field], config) ?? {};
       }
     }
-  if (patch.measure !== undefined) values.measure = patch.measure;
   }
+  if (patch.measure !== undefined) values.measure = patch.measure;
   if (Object.keys(values).length === 0) return getUnit(tx, unitId);
   const [row] = await tx
     .update(units)

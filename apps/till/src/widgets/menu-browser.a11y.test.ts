@@ -21,6 +21,8 @@ function product(key: string, name: string, available = true): TillProduct {
     pricingUnit: "each",
     unitPrice: "1.50",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-each",
       name: { en: "Each", es: "Unidad" },
       abbreviation: { en: "ea", es: "ud" },
@@ -111,6 +113,8 @@ const products = [
     ...product("jamon", "Jamón"),
     pricingUnit: "weight" as const,
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-kg",
       name: { en: "Kilogram", es: "Kilogramo" },
       abbreviation: { en: "kg", es: "kg" },

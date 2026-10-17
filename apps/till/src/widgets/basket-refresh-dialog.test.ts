@@ -25,6 +25,8 @@ const rows = (el: TillBasketRefreshDialog) =>
   );
 
 const each = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { en: "each", es: "unidad" },
   abbreviation: { en: "ea", es: "ud" },
@@ -33,6 +35,8 @@ const each = {
 };
 // Its abbreviation differs by language, so a row that ignored the operator's language would show.
 const kg = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-kg",
   name: { en: "kilogram", es: "kilo" },
   abbreviation: { en: "kg", es: "kilo" },
@@ -99,6 +103,8 @@ describe("till-basket-refresh-dialog", () => {
 
   it("prices a part per the dish's unit when the dish is not counted in whole units", async () => {
     const portion = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "unit-portion",
       name: { en: "portion", es: "ración" },
       abbreviation: { en: "portion", es: "ración" },

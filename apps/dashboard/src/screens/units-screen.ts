@@ -9,7 +9,8 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
-import { localizedName } from "../i18n/localized.js";
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -447,6 +448,10 @@ export class UnitsScreen extends LitElement {
       .map((precision) => ({ value: String(precision), label: this.#precisionLabel(precision) }));
   }
 
+  #unitText(unit: Unit) {
+    return unitPresentation(unit, currentLocale(), this.languages ?? currentContentLanguages());
+  }
+
   #columnKey = "";
   #columnList: DataTableColumn<Unit>[] = [];
 
@@ -465,17 +470,17 @@ export class UnitsScreen extends LitElement {
       {
         key: "name",
         label: t("units.name"),
-        cell: (unit) => localizedName(unit.name),
-        searchValue: (unit) => localizedName(unit.name),
-        sortValue: (unit) => localizedName(unit.name),
+        cell: (unit) => this.#unitText(unit).name,
+        searchValue: (unit) => this.#unitText(unit).name,
+        sortValue: (unit) => this.#unitText(unit).name,
       },
       {
         key: "abbreviation",
         label: t("units.abbreviation"),
         choosable: "shown",
-        cell: (unit) => localizedName(unit.abbreviation),
-        searchValue: (unit) => localizedName(unit.abbreviation),
-        sortValue: (unit) => localizedName(unit.abbreviation),
+        cell: (unit) => this.#unitText(unit).abbreviation,
+        searchValue: (unit) => this.#unitText(unit).abbreviation,
+        sortValue: (unit) => this.#unitText(unit).abbreviation,
       },
       {
         key: "precision",
@@ -499,7 +504,7 @@ export class UnitsScreen extends LitElement {
         label: t("units.actions"),
         pinned: "end",
         cell: (unit) => html`
-          <wt-row-actions label=${`${t("units.actions")}: ${localizedName(unit.name)}`}>
+          <wt-row-actions label=${`${t("units.actions")}: ${this.#unitText(unit).name}`}>
             <wt-button
               align="start"
               data-test=${`edit-${unit.id}`}
@@ -525,7 +530,7 @@ export class UnitsScreen extends LitElement {
     const otherUnits = this.units
       .filter((unit) => unit.id !== this.inUseUnitId)
       .sort((left, right) =>
-        unitNameCollator.compare(localizedName(left.name), localizedName(right.name)),
+        unitNameCollator.compare(this.#unitText(left).name, this.#unitText(right).name),
       );
     return html`
       <div class="heading">
@@ -572,7 +577,7 @@ export class UnitsScreen extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(unit: Unit) => unit.id}
         .rowClick=${(unit: Unit) => void this.#openUnitProducts(unit)}
-        .rowClickLabel=${(unit: Unit) => `${t("units.delete_unit")}: ${localizedName(unit.name)}`}
+        .rowClickLabel=${(unit: Unit) => `${t("units.delete_unit")}: ${this.#unitText(unit).name}`}
         .loading=${this.loading}
         emptyMessage=${t("units.empty")}
         >${this.units.length === 0 ? this.#renderCreate("empty-action") : nothing}</wt-data-table
@@ -663,7 +668,7 @@ export class UnitsScreen extends LitElement {
                         { value: REASSIGN_EACH, label: t("units.change_unit_each") },
                         ...otherUnits.map((unit) => ({
                           value: unit.id,
-                          label: localizedName(unit.name),
+                          label: this.#unitText(unit).name,
                         })),
                       ]}
                       .disabled=${this.busy}

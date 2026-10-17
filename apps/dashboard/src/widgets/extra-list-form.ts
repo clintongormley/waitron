@@ -1,3 +1,4 @@
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { sameValue } from "./product-editor-model.js";
 import {
   draftScopeFor,
@@ -14,7 +15,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
 import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
-import { decimal, toScale, resolveContentText, type ContentLanguages } from "@waitron/shared";
+import { decimal, toScale, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -400,19 +401,12 @@ export class ExtraListForm extends LitElement {
     }
   }
 
-  /** The abbreviation, else the name, and Each for a product with no unit — the word the product
-   * editor's price button shows for one. A product this form was given no row for claims no
-   * unit. */
   #unitLabel(productId: string): string {
     const product = this.#productById.get(productId);
     if (!product) return "";
     const unit = product.unit;
     if (!unit) return t("editor.unit_each");
-    const language = this.#primaryLanguage();
-    return (
-      resolveContentText(unit.abbreviation, language, language) ||
-      resolveContentText(unit.name, language, language)
-    );
+    return unitPresentation(unit, currentLocale(), this.languages).abbreviation;
   }
 
   /** The language a refusal naming a whole translated map is shown against: the first input on

@@ -350,6 +350,8 @@ export interface TillProduct {
   description?: Record<string, string> | null;
   unit?: {
     id: string;
+    staffName: string;
+    staffAbbreviation: string;
     name: Record<string, string>;
     abbreviation: Record<string, string>;
     precision: number;

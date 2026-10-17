@@ -1,3 +1,4 @@
+import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
   LitElement,
@@ -12,6 +13,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   ContentLanguageController,
+  currentContentLanguages,
   baseStyles,
   readableTextColor,
   reorder,
@@ -771,7 +773,11 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #productTile(offer: FrozenOffer, mode: HomeTileMode): TemplateResult {
-    const unit = localizedName(offer.unit.abbreviation) || offer.unit.id;
+    const unit = unitPresentation(
+      offer.unit,
+      currentLocale(),
+      currentContentLanguages(),
+    ).abbreviation;
     const price = `${formatMoney(offer.unitPrice, currentLocale())}/${unit}`;
     const fill = tileFill(mode, offer.image, offer.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;

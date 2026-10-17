@@ -7,6 +7,8 @@ type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
 
 const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { es: "unidad" },
   abbreviation: { es: "ud" },
@@ -46,6 +48,8 @@ function extraItem(productId: string, price: string, available = true) {
   return {
     portion: "1",
     unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
       hardwareUnit: null,
       id: "00000000-0000-0000-0000-000000000001",
@@ -481,6 +485,8 @@ describe("refreshBasket", () => {
   const live = new Map([["lunch", "v2"]]);
   const eachSide = { from: unit, to: unit };
   const kg = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-kg",
     name: { es: "kilo" },
     abbreviation: { es: "kg" },

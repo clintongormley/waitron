@@ -20,6 +20,8 @@ afterEach(() => {
   setLocale("en-GB");
 });
 const unit: Unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "kg",
   name: { en: "Kilogram", es: "Kilogramo", fr: "Kilogramme" },
   abbreviation: { en: "kg", es: "kg", fr: "kg" },
@@ -160,11 +162,20 @@ it("Unit change/revert uses trimmed translations and updates unload protection i
 it("an Add Unit starts clean, protects the first name and retains refused submissions", async () => {
   const { app, form } = await mount({ value: null });
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  await edit(form, "staffName", "Staff unit");
+  await edit(form, "staffAbbreviation", "su");
   await edit(form, "name-en", " Each ");
   await edit(form, "abbreviation-en", " ea ");
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
   expect(app.submitted).toEqual([
-    { name: { en: "Each" }, abbreviation: { en: "ea" }, precision: 0, measure: false },
+    {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      name: { en: "Each" },
+      abbreviation: { en: "ea" },
+      precision: 0,
+      measure: false,
+    },
   ]);
   form.fieldErrors = { name: "Refused by server" };
   await form.updateComplete;
@@ -209,6 +220,8 @@ it("Unit success commits submitted translations without clearing edits made duri
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
   const submitted = app.submitted[0] as UnitInput;
   expect(submitted).toEqual({
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     name: { en: "Saved name", es: "Kilogramo", fr: "Kilogramme" },
     abbreviation: { en: "kg", es: "kg", fr: "kg" },
     precision: 3,
@@ -271,6 +284,8 @@ async function unitSaveState(form: HTMLElement & { updateComplete: Promise<unkno
   };
 }
 const unitInput: UnitInput = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   name: unit.name,
   abbreviation: unit.abbreviation,
   precision: unit.precision,

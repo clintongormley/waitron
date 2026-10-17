@@ -63,6 +63,8 @@ const product: TillProduct = {
         {
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "each",
             name: { en: "Each", es: "Unidad" },
             abbreviation: { en: "ea", es: "ud" },
@@ -83,6 +85,8 @@ const product: TillProduct = {
         {
           portion: "1",
           unit: {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             id: "each",
             name: { en: "Each", es: "Unidad" },
             abbreviation: { en: "ea", es: "ud" },

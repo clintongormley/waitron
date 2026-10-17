@@ -272,6 +272,8 @@ function fromRecalledLine(
 
 const UNKNOWN_UNIT: NonNullable<TillProduct["unit"]> = {
   id: "",
+  staffName: "",
+  staffAbbreviation: "",
   name: {},
   abbreviation: {},
   precision: QUANTITY_SCALE,

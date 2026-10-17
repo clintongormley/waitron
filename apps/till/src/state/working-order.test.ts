@@ -975,6 +975,8 @@ describe("WorkingOrderStore", () => {
 
 describe("WorkingOrderStore: the VAT preview takes each class's rate today", () => {
   const unit = {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
     id: "unit-each",
     name: { es: "unidad" },
     abbreviation: { es: "ud" },

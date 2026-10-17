@@ -154,6 +154,8 @@ describe("buildLineExtras", () => {
           price: "0.01",
           unit: {
             id: "unit-kg",
+            staffName: "Staff kilogram",
+            staffAbbreviation: "staff-kg",
             name: { en: "Kilogram" },
             abbreviation: { en: "kg", es: "kg" },
             precision: 3,
@@ -759,6 +761,8 @@ describe("editLineExtras", () => {
           price: "0.01",
           unit: {
             id: "unit-kg",
+            staffName: "Staff kilogram",
+            staffAbbreviation: "staff-kg",
             name: { en: "Kilogram" },
             abbreviation: { en: "kg", es: "kg" },
             precision: 3,

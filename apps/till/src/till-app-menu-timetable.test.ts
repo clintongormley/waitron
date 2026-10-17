@@ -27,6 +27,8 @@ const ALMUERZO: Menu = { id: "almuerzo", name: "Almuerzo", product: "Menú del d
 const CENA: Menu = { id: "cena", name: "Cena", product: "Croquetas" };
 
 const unit = {
+  staffName: "Staff unit",
+  staffAbbreviation: "su",
   id: "unit-each",
   name: { es: "unidad", en: "unit" },
   abbreviation: { es: "ud", en: "ea" },

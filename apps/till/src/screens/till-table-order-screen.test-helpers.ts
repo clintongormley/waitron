@@ -65,6 +65,8 @@ const extrasList: OfferedModifier = {
     {
       portion: "1",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
         hardwareUnit: null,
         id: "00000000-0000-0000-0000-000000000001",

@@ -3038,6 +3038,8 @@ describe("till-table-order-screen", () => {
     const extraItem = (productId: string, name: string, preselected: boolean) => ({
       portion: "1",
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { en: "Each", es: "Unidad", ca: "Unitat", eu: "Unitatea", gl: "Unidade" },
         hardwareUnit: null,
         id: "00000000-0000-0000-0000-000000000001",
@@ -3644,6 +3646,8 @@ describe("till-table-order-screen", () => {
         ...burger,
         offeredModifiers: [cookedList, extrasList],
         unit: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           id: "unit-l",
           name: { en: "litre" },
           abbreviation: { en: "l" },

@@ -53,7 +53,14 @@ const categories: CategorySummary[] = [
   { id: "c1", name: "Entrantes", parentId: null, color: null },
 ];
 const units: Unit[] = [
-  { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
+  {
+    staffName: "Staff unit",
+    staffAbbreviation: "su",
+    id: "u1",
+    name: { es: "unidad" },
+    abbreviation: { es: "u" },
+    precision: 0,
+  },
 ];
 // The two kinds of modifier list the product editor attaches. Staff, customer-facing and kitchen
 // names differ in each, so an assertion on the editor's rows can tell which one a surface read.
@@ -107,7 +114,14 @@ const products: Product[] = [
     name: "Croquetas",
     customerName: { es: "Croquetas caseras de jamón" },
     unitId: "u1",
-    unit: { id: "u1", name: { es: "Unidad" }, precision: 0, abbreviation: { es: "ud" } },
+    unit: {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "u1",
+      name: { es: "Unidad" },
+      precision: 0,
+      abbreviation: { es: "ud" },
+    },
     description: null,
     kitchenName: null,
     dietaryDeclarations: [],
@@ -277,6 +291,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listSections: vi.fn().mockResolvedValue(sections),
     addSectionProducts: vi.fn().mockResolvedValue({ added: 1 }),
     createUnit: vi.fn().mockResolvedValue({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: "u2",
       name: { es: "ración" },
       abbreviation: { es: "ra" },
@@ -1461,6 +1477,8 @@ describe("catalogue-screen", () => {
     const el = await openNested(api, "unit");
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     await submitNested(el, form, {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "ración" },
       abbreviation: { es: "ra" },
       precision: 2,
@@ -1472,7 +1490,13 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
-    await submitNested(el, form, { name: { es: "ración" }, abbreviation: {}, precision: 2 });
+    await submitNested(el, form, {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      name: { es: "ración" },
+      abbreviation: {},
+      precision: 2,
+    });
     expect(errorBeside(form, "[data-test=abbreviation-es]")).toBe(
       codeMessage("unit.translation_required"),
     );
@@ -1490,6 +1514,12 @@ describe("catalogue-screen", () => {
     const el = await openNested(api, "unit");
     const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     await form.updateComplete;
+    emit(form.shadowRoot!.querySelector("[data-test=staffName]")!, "wt-change", {
+      value: "Staff unit",
+    });
+    emit(form.shadowRoot!.querySelector("[data-test=staffAbbreviation]")!, "wt-change", {
+      value: "su",
+    });
     emit(form.shadowRoot!.querySelector("[data-test=name-es]")!, "wt-change", { value: "ración" });
     emit(form.shadowRoot!.querySelector("[data-test=abbreviation-es]")!, "wt-change", {
       value: "ra",
@@ -1502,6 +1532,8 @@ describe("catalogue-screen", () => {
     await flush(el);
     await form.updateComplete;
     expect(api.createUnit).toHaveBeenCalledWith({
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "ración" },
       abbreviation: { es: "ra" },
       precision: 2,
@@ -1527,6 +1559,8 @@ describe("catalogue-screen", () => {
     const el = await openNested(api, "unit");
     const unitForm = el.shadowRoot!.querySelector("dashboard-unit-form")!;
     await submitNested(el, unitForm, {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "ración" },
       abbreviation: { es: "ra" },
       precision: 2,
@@ -1706,7 +1740,13 @@ describe("catalogue-screen", () => {
       const el = await mountWithProduct(api);
       const form = await openUnitForm(el);
       emit(form, "wt-submit", {
-        value: { name: { es: "ración" }, abbreviation: { es: "ra" }, precision: 2 },
+        value: {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "ración" },
+          abbreviation: { es: "ra" },
+          precision: 2,
+        },
       });
       await flush(el);
       await afterDialogCloses(el);
@@ -3394,37 +3434,48 @@ describe("catalogue-screen", () => {
     });
   });
 
-  it("hands the product list the content language unit names are read in", async () => {
+  it.each([
+    {
+      title: "uses the configured default when the dashboard language is disabled",
+      config: { defaultLanguage: "es", languages: ["es"] },
+      want: "/ ud",
+    },
+    {
+      title: "keeps the configured default when the enabled-language read is empty",
+      config: { defaultLanguage: "es", languages: [] },
+      want: "/ ud",
+    },
+    {
+      title: "uses the dashboard language before the first enabled language",
+      config: { defaultLanguage: "en", languages: ["es", "en"] },
+      want: "/ en-unit",
+    },
+  ])("renders the unit label ($title)", async ({ config, want }) => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(before));
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
-      api: stubApi(),
+      api: stubApi({
+        getContentLanguages: vi.fn().mockResolvedValue(config),
+        listProducts: vi.fn().mockResolvedValue([
+          {
+            ...products[0]!,
+            categoryId: null,
+            primaryCategoryId: null,
+            unit: { ...products[0]!.unit, abbreviation: { es: "ud", en: "en-unit" } },
+          },
+        ]),
+      }),
     });
     await flush(el);
-    expect(list(el).unitLanguage).toBe("es");
     await list(el).updateComplete;
-    const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
-    expect(products.unitLanguage).toBe("es");
-  });
-
-  it("reads unit names in the venue's default language when no content language is listed", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
-      api: stubApi({
-        getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: [] }),
-      }),
-    });
-    await flush(el);
-    expect(list(el).unitLanguage).toBe("es");
-  });
-
-  it("reads unit names in the first listed content language, not the venue's default", async () => {
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
-      api: stubApi({
-        getContentLanguages: vi
-          .fn()
-          .mockResolvedValue({ defaultLanguage: "en", languages: ["es", "en"] }),
-      }),
-    });
-    await flush(el);
-    expect(list(el).unitLanguage).toBe("es");
+    const productList = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
+    await productList.updateComplete;
+    const table = productList.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector('[data-test="price-unit"]')!.textContent!.trim()).toBe(
+      want,
+    );
   });
 
   it("tells the product list the catalogue has loaded only once its products have", async () => {
