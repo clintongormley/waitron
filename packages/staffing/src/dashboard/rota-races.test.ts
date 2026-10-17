@@ -443,14 +443,16 @@ it("a picker that closes as a page scroll takes its slot out of view stays close
   el.parentElement!.append(spacer);
   await openPicker(el);
   const scrolled = new Promise<void>((resolve) =>
-    // Runs after the popup's own scroll handler has hidden it, before its close event.
+    // Asked for after the popup's own scroll handler asks for its frame, so it runs in that frame
+    // once the popup has hidden, before its close event.
     window.addEventListener(
       "scroll",
-      () => {
-        expect(popupOpen(el)).toBe(false);
-        el.canWrite = false;
-        resolve();
-      },
+      () =>
+        requestAnimationFrame(() => {
+          expect(popupOpen(el)).toBe(false);
+          el.canWrite = false;
+          resolve();
+        }),
       { once: true },
     ),
   );

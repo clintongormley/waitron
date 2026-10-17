@@ -196,6 +196,7 @@ describe("rota-popup", () => {
     let scroll = scrolled(scroller);
     scroller.scrollLeft = 40;
     await scroll;
+    await new Promise(requestAnimationFrame);
     expect(anchor.getBoundingClientRect().right).toBeLessThan(220 - 30);
     near(box().left, anchor.getBoundingClientRect().right);
     expect(el.shown).toBe(true);
@@ -231,6 +232,7 @@ describe("rota-popup", () => {
     let scroll = scrolled(scroller);
     scroller.scrollLeft = 40;
     await scroll;
+    await new Promise(requestAnimationFrame);
     expect(anchor.getBoundingClientRect().right).toBeLessThan(220 - 30);
     near(box().left, anchor.getBoundingClientRect().right);
     expect(el.shown).toBe(true);
@@ -252,6 +254,26 @@ describe("rota-popup", () => {
     await scroll;
     expect(anchor.getBoundingClientRect().bottom).toBeLessThan(0);
     await closedOnce();
+  });
+
+  it("places at most once a frame however many scrolls arrive in it", async () => {
+    await useViewport(1280, 900);
+    const anchor = anchorAt(100, 300);
+    el.show(anchor);
+    // Its own size's first report lands in a later frame, and places it too.
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const measured = vi.spyOn(anchor, "getBoundingClientRect");
+    window.dispatchEvent(new Event("scroll"));
+    await new Promise(requestAnimationFrame);
+    const once = measured.mock.calls.length;
+    expect(once).toBeGreaterThan(0);
+    measured.mockClear();
+    for (let i = 0; i < 3; i++) window.dispatchEvent(new Event("scroll"));
+    expect(measured).not.toHaveBeenCalled();
+    await new Promise(requestAnimationFrame);
+    expect(measured).toHaveBeenCalledTimes(once);
+    expect(el.shown).toBe(true);
   });
 
   it("places again when the window is resized", async () => {
@@ -302,6 +324,8 @@ describe("rota-popup", () => {
     const scroll = scrolled(window);
     window.scrollBy(0, 100);
     await scroll;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
     expect(el.shown).toBe(false);
   });
 
@@ -319,6 +343,8 @@ describe("rota-popup", () => {
     const scroll = scrolled(window);
     window.scrollBy(0, 100);
     await scroll;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
     expect(el.shown).toBe(false);
   });
 

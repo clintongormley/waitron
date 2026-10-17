@@ -77,16 +77,18 @@ export class RotaPopup extends LitElement {
   #anchor: HTMLElement | undefined;
   #focusWasInside = false;
   #scrollTargets: EventTarget[] = [];
+  /** The frame a scroll or window resize asked for, so a burst of them places once per frame. */
+  #frame = 0;
   // A show() while it is closing follows again, so what it follows can fire once it has closed.
   readonly #resized = new ResizeObserver(() => {
     if (this.shown) this.#place();
   });
 
   /** Opens beside `anchor`, or below it when neither side has room, and follows it while open:
-   *  on each window resize, each change of its own size and each scroll of the page or of a box
-   *  `anchor` is drawn inside, it places itself again, or closes once no part of `anchor` is left
-   *  in view. A sheet sits at the foot of the window and does not follow. Called again after the
-   *  content changes, it places again without moving focus. */
+   *  on each change of its own size, and in the frame after a window resize or a scroll of the
+   *  page or of a box `anchor` is drawn inside, it places itself again, or closes once no part of
+   *  `anchor` is left in view. A sheet sits at the foot of the window and does not follow. Called
+   *  again after the content changes, it places again without moving focus. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
@@ -139,13 +141,19 @@ export class RotaPopup extends LitElement {
       target.removeEventListener("scroll", this.#onScroll, { capture: true });
     window.removeEventListener("resize", this.#onScroll);
     this.#resized.disconnect();
+    cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
   }
 
   // Held on screen, a menu whose anchor has gone would sit beside some other slot.
   readonly #onScroll = (): void => {
-    if (!this.shown) return;
-    if (this.#anchorInView()) this.#place();
-    else this.hide();
+    if (!this.shown || this.#frame) return;
+    this.#frame = requestAnimationFrame(() => {
+      this.#frame = 0;
+      if (!this.shown) return;
+      if (this.#anchorInView()) this.#place();
+      else this.hide();
+    });
   };
 
   // Mirrors `calendar-day-box.ts`'s check: the window and every ancestor that clips.
