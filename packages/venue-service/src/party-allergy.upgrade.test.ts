@@ -33,6 +33,18 @@ if (introduced < 0) throw new Error("Missing party allergy introduction");
 for (const entry of journal.entries.splice(introduced))
   rmSync(join(predecessor, `${entry.tag}.sql`));
 writeFileSync(journalPath, JSON.stringify(journal));
+// Stops at this migration: a later table rebuild drops that table's change-feed triggers, which
+// the server's start reinstalls (`installChangeFeed`, apps/server/src/boot.ts).
+const upgraded = mkdtempSync(join(tmpdir(), "party-allergy-upgraded-"));
+afterAll(() => rmSync(upgraded, { recursive: true, force: true }));
+cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, upgraded, { recursive: true });
+const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
+const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
+  entries: { tag: string }[];
+};
+for (const entry of upgradedJournal.entries.splice(introduced + 1))
+  rmSync(join(upgraded, `${entry.tag}.sql`));
+writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
@@ -98,7 +110,7 @@ it("upgrades a populated predecessor with change-feed triggers, preserving every
   const triggers = suite.db.all(
     sql`select name, sql from sqlite_master where type = 'trigger' order by name`,
   );
-  await applyMigrationSet(suite.db, VENUE_SERVICE_MIGRATIONS);
+  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
   expect(await suite.db.select().from(locations)).toEqual([location]);
   expect(await suite.db.select().from(parties)).toEqual([party]);
   expect(await suite.db.select().from(workingOrders)).toEqual([order]);
