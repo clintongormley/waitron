@@ -1927,8 +1927,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Design first: an approver never asked, limits nobody can approve, one kind per reason, role lists
   instead of a ranking, give-away against 100% discount, the bill-wide limit, staff meals, how a
   Square import sorts reasons, and a starter list. Then the page under Service, with search, drag
-  handles and Delete. Role lists with or after editable roles.
-  [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own)
+  handles and Delete. Role lists with or after editable roles. **Design written 2026-10-17, waiting
+  for the owner's answers (Q1–Q8).**
+  [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
+  [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
+  [mockups](backlog/mockups/a758-adjustment-reasons/)
 
 - **Review follow-up: nutrition for extras in Current orders.** The A668-5 reviewer’s
   read-only finding is that Current orders’ extra summaries carry names and quantities, while the

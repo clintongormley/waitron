@@ -1459,6 +1459,9 @@ seated, joined, paid and taken off. Three additions the owner asked for:
 and mock-ups before anything is built.** The owner: the page is ugly, the edit form assumes the
 roles are a ranking, and "does the logic work? are we asking the right questions?"
 
+**Design (2026-10-17):** [the rules worked through, the page, eight owner questions](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
+with [mock-ups](mockups/a758-adjustment-reasons/). Nothing is built until the owner answers.
+
 How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
 (void), give away (comp), a percentage discount and an amount discount; it may cap the percentage
 off one item (counting percentage discounts only) and the total off one bill (counting everything
