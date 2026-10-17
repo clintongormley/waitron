@@ -399,11 +399,12 @@ export const en = {
     "A selected extra is no longer available. Cancel and reopen the product to choose again.",
   "modifier.selected_total": "Selected",
   "modifier.unavailable_choices": "No available choices. This product cannot be added.",
-  // Login / operator selection
+  // Theme choice. light/dark/device also name the icon-only buttons in the person's menu.
   "theme.label": "Theme",
   "theme.light": "Light",
   "theme.dark": "Dark",
   "theme.device": "Follow device",
+  // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
   "login.loading": "Loading…",

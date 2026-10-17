@@ -101,6 +101,10 @@ the meaning allows.
    `aria-pressed` (`wt-button.ts:140-144`) and changing it means changing `@waitron/ui-core`; the
    buttons are styled in `dashboard-app.ts` from tokens to match the menu's ghost `wt-button`s. (A
    native button is not one of the field elements `scripts/native-form-fields.test.ts` holds back.)
+   **Changed 2026-10-17 after the re-look:** the group is one row — the visible label, then three
+   icon-only `aria-pressed` buttons, the pressed one filled with `--wt-color-primary` — shared as
+   `themeChoices` in `packages/ui/src/theme-choices.ts`; on the till it sits after Log out. See
+   design-system.md → Dashboard banner.
 
    **Signed out, the banner has room — measured, not estimated.** On 2026-10-17, in this worktree on
    e52c997c0, a scratch browser test (deleted after; never committed) mounted `dashboard-app` signed
@@ -1007,7 +1011,8 @@ Changed test checks (each a deliberate consequence of one more control in the ba
     its measurement).
   - "Navigation and language controls" (`:4539-4581`): the theme chooser sits just before the
     language chooser in setup's header, the till's bar and corner, and the till's sign-in and join
-    screens; on the till's bar it stays on the bar with the tabs and the language chooser; a theme
+    screens; on the till's bar it stays on the bar with the tabs and the language chooser (changed
+    2026-10-17: a signed-in till holds Theme in the person's menu instead, see decision 1a); a theme
     pick never asks about unsaved work, unlike a language pick on the till; the dashboard logo's
     `media` rule and the recovery page's `color-scheme` follow the choice.
   - Check every other sentence the change makes false: `grep -n "prefers-color-scheme\|data-theme\|follows the device\|language chooser" docs/developers/*.md`

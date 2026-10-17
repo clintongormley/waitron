@@ -54,10 +54,8 @@ export const themeChoicesStyles = css`
 `;
 
 /**
- * The Theme choices for a person's own menu, on one row: the visible `labels.theme`, which names
- * the group, then one icon-only `aria-pressed` button per choice, named by its label, `active` the
- * pressed and filled one. It never changes the theme itself:
- * `onPick` decides what a pick means. Its label has a fixed id, so a shadow root holds one at most.
+ * It never changes the theme itself: `onPick` decides what a pick means. Its label has a fixed id,
+ * so a shadow root holds one at most.
  */
 export function themeChoices(options: {
   active: ThemeChoice;

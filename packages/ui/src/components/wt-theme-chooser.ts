@@ -52,7 +52,6 @@ export class WtThemeChooser extends LitElement {
     `,
   ];
 
-  /** Any value other than a known choice draws as Follow device. */
   @property() active: ThemeChoice = "device";
 
   @property({ attribute: false }) labels: WtThemeLabels = {

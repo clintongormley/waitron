@@ -773,6 +773,7 @@ export const en = {
   // The next two label icon-only buttons, so each is the button's accessible name.
   "nav.toggle": "Toggle navigation",
   "nav.account_menu": "Account menu",
+  // Theme choice. light/dark/device also name the icon-only buttons in the account menu.
   "theme.label": "Theme",
   "theme.light": "Light",
   "theme.dark": "Dark",

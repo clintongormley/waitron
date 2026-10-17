@@ -4565,21 +4565,21 @@ static assets keep their own responses; setup continues to use its existing root
 
 The language controls display the names from `SUPPORTED_LOCALES` before their options load. Each
 app puts `wt-language-chooser` at the trailing end of its top bar: in the setup wizard's card
-header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and
-there on its own when nobody is signed in; in the till's shell bar, before the operator's name
+header, after the logo; in the dashboard's banner, before the alerts bell and the account menu, and,
+when nobody is signed in, just after the Theme chooser with nothing following it; in the till's shell bar, before the operator's name
 while that is on the bar, and before the More menu when the bar has one, as in the counter screen's
 own header (which it draws only when not embedded in the shell, and the
 app always embeds it). A till screen with no top bar — the sign-in and join screens, and the
 kitchen display, whose shell draws no bar — holds it at the top right, above the content.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card
-header, the till's sign-in and join screens and the kitchen display's corner, and in the
+header, the till's sign-in and join screens and the kitchen display's and kiosk mode's corner, and in the
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
 "Dashboard banner"). The counter screen's own header has none, because the till never shows that
 header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in
 person's menu (the menu under their name, or inside More once their name has moved there), the same
 row as the dashboard's account menu, just after Log out, so Log out keeps its place. Measured
-2026-10-17 in the re-look after 96a073603: as three rows before Log out, the group pushed Log out
+2026-10-17 in A681's re-look of the till's person menu: as three rows before Log out, the group pushed Log out
 below the visible More menu at 360×640, 360×740, 320×740 and 390×664. Measured 2026-10-17
 in the real-browser look for A681: with the chooser on the bar, at 360 px the tab strip got 148 px
 of the 178 px its tabs needed, and "Sala" showed as "Sa". A theme pick applies at once and never
@@ -4598,7 +4598,7 @@ query and server page for its own Back action.
 The other bar actions run left to right in priority order: Pass, Kitchen, My schedule,
 Profile, Equipment and Transfers (the count and its button together). More takes these from the
 right. The Waitron name hides first, followed by Transfers, Equipment, Profile, My
-schedule, Kitchen, Pass, and finally the operator's name with Log out after the language chooser.
+schedule, Kitchen, Pass, and finally the operator's name with Log out and the Theme row, after the language chooser.
 Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
 chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
 when the screen grows wider, the content other than the transfer count changes, or the language

@@ -3553,11 +3553,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
   #1828).** `wt-colour-chooser` copies the panel placement and the grid arrow-key handling that
-  several other `wt-*` components (`wt-combobox`, `wt-language-chooser` among them) each carry
-  their own copy of. Move both into shared helpers in `packages/ui` and have every copy use them;
-  each component's own tests and mutation score must hold. `wt-language-chooser`'s menu placement,
-  dismissal and arrow keys now live in `packages/ui/src/menu-popover.ts`, which `wt-theme-chooser`
-  also uses.
+  other `wt-*` components (`wt-combobox` among them) each carry their own copy of;
+  `wt-language-chooser` and `wt-theme-chooser` already share theirs through
+  `packages/ui/src/menu-popover.ts`. Move both into shared helpers in `packages/ui` and have every
+  copy use them; each component's own tests and mutation score must hold.
 
 - **The box's trust page and the favicon still follow the device's setting, not the Theme choice
   (left open by A681).** The trust page (`apps/server/src/trust-page.ts`, its logo in

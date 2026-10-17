@@ -9,6 +9,7 @@ import {
   type WtThemeChooser,
 } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
@@ -22,8 +23,11 @@ declare module "vitest/browser" {
   }
 }
 
+const originalLocale = currentLocale();
+
 afterEach(async () => {
   cleanupWidgets();
+  setLocale(originalLocale);
   chooseTheme("device");
   localStorage.removeItem(THEME_STORAGE_KEY);
   await commands.emulateColorScheme(null);

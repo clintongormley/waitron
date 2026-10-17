@@ -347,7 +347,8 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
  *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
- * Each screen owns its heading; the shell supplies navigation, logout and the language chooser.
+ * Each screen owns its heading; the shell supplies navigation, logout, and the language and Theme
+ * choices.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
