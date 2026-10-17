@@ -100,6 +100,10 @@ export interface TranslationPage {
   next: string | null;
   total: number;
 }
+export interface TranslationCellEdit extends TranslationCellRef {
+  expected: string;
+  text: string | null;
+}
 export interface TranslationEdit extends TranslationRef {
   expected: string;
   text: string;

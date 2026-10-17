@@ -1140,6 +1140,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   default-language blanks, unnamed extras lists and unit abbreviations, with a count-only read.
   Catalogue reads now project individual fields and pages of at most fifty rows across the viewed
   languages, with configuration-bound cursors; the HTTP routes and editor still need integration.
+  Cell-baseline parsing and root/default peer projection are checkpointed against real rereads.
   Obsolete boot callback cleanup waits for lane E. Atomic multilingual saves, the editor,
   automatic-translation review and their remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
