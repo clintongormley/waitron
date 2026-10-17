@@ -12,6 +12,7 @@ import {
   paintTarget,
   peopleInOrder,
   rolesShown,
+  rotaModel,
   slotMinutes,
   summary,
   weekCounts,
@@ -151,6 +152,53 @@ describe("the week's attention counts and their summary", () => {
     const read = noSlots();
     expect(summary(read, kitchen(read))).toBe("nothing_to_fill");
     expect(summary(read, everyone)).toBe("nothing_to_fill");
+  });
+});
+
+describe("the rota's model of one read", () => {
+  const kitchen = (read: RotaWeek) => chosenShow(read, "station:kitchen");
+  const everyone = { kind: "everyone" } as const;
+  it("holds what the helpers give for the read and the Show", () => {
+    const read = rotaWeek();
+    read.days[2]!.areas.push({
+      area: { kind: "department", id: "restaurant" },
+      match: {
+        slots: [
+          {
+            slot: { ...read.days[4]!.areas[0]!.match.slots[0]!.slot, key: "restaurant-empty" },
+            status: { kind: "unfilled" },
+          },
+        ],
+        over: [],
+      },
+    });
+    for (const show of [kitchen(read), everyone, chosenShow(read, "department:restaurant")]) {
+      const model = rotaModel(read, show);
+      expect(model.counts).toEqual(weekCounts(read, show));
+      expect(model.summary).toBe(summary(read, show));
+      expect(model.hasSlots).toBe(hasSlots(read, show));
+      expect(model.shiftCount).toBe(weekShiftCount(read));
+      expect(model.roles).toEqual(show.kind === "area" ? rolesShown(read, show) : []);
+      expect([...model.days]).toEqual(
+        read.days.map((d) => [
+          d.businessDay,
+          {
+            counts: dayCounts(read, show, d.businessDay),
+            closed: isClosed(read, show, d.businessDay),
+          },
+        ]),
+      );
+    }
+    expect(rotaModel(read, kitchen(read)).counts).not.toEqual(rotaModel(read, everyone).counts);
+    expect(rotaModel(read, everyone).days.get(read.days[2]!.businessDay)!.counts.unfilled).toBe(1);
+  });
+  it("is worked out once per read and Show, and again for a new read", () => {
+    const read = rotaWeek();
+    const model = rotaModel(read, kitchen(read));
+    expect(rotaModel(read, kitchen(read))).toBe(model);
+    expect(rotaModel(read, everyone)).not.toBe(model);
+    expect(rotaModel(read, everyone)).toBe(rotaModel(read, { kind: "everyone" }));
+    expect(rotaModel(rotaWeek(), kitchen(read))).not.toBe(model);
   });
 });
 

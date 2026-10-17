@@ -15,15 +15,9 @@ import {
   EVERYONE,
   attentionTargets,
   chosenShow,
-  dayCounts,
-  hasSlots,
-  isClosed,
   openSlots,
   paintTarget,
-  rolesShown,
-  summary,
-  weekCounts,
-  weekShiftCount,
+  rotaModel,
   type Show,
   type Target,
 } from "./rota-model.js";
@@ -323,6 +317,7 @@ export class RotaView extends LitElement {
   );
   #watching = "";
   #area = "";
+  #shown?: { read: RotaWeek; asked: string | undefined; show: Show };
   #anchor: HTMLElement | undefined;
   /** The pick the popup was last opened for: a slot key, or a person's day. */
   #shownFor: string | undefined;
@@ -666,8 +661,15 @@ export class RotaView extends LitElement {
       if (generation === this.#generation) this.busy = false;
     }
   }
+  /** The Show of `read`, the same object until the read or the area asked for changes. */
+  #showOf(read: RotaWeek): Show {
+    const asked = this.params.area;
+    if (this.#shown?.read !== read || this.#shown.asked !== asked)
+      this.#shown = { read, asked, show: chosenShow(read, asked) };
+    return this.#shown.show;
+  }
   #attention(read: RotaWeek, show: Show) {
-    const kind = summary(read, show);
+    const { summary: kind, counts } = rotaModel(read, show);
     if (kind !== "counts") {
       const words = t(`staffing.rota.${kind}`);
       return {
@@ -675,7 +677,6 @@ export class RotaView extends LitElement {
         body: html`<span class="summary" data-test="summary" data-summary=${kind}>${words}</span>`,
       };
     }
-    const counts = weekCounts(read, show);
     const kinds = (["unfilled", "partly", "over"] as const).filter((k) => counts[k] > 0);
     return {
       words: kinds.map((k) => countWords(k, counts[k])).join(" · "),
@@ -731,7 +732,7 @@ export class RotaView extends LitElement {
       ${count === 1 ? t("staffing.rota.labour_one") : tf("staffing.rota.labour_count", { count: String(count) })}</span
     >`;
   }
-  #action(read: RotaWeek) {
+  #action(read: RotaWeek, show: Show) {
     if (!this.canWrite) return nothing;
     if (read.version?.status === "published")
       return html`<wt-button
@@ -741,7 +742,7 @@ export class RotaView extends LitElement {
         @click=${() => void this.#changeWeek()}
         >${t("staffing.rota.change_week")}</wt-button
       >`;
-    const ready = !!this.warnings && weekShiftCount(read) > 0;
+    const ready = !!this.warnings && rotaModel(read, show).shiftCount > 0;
     return html`<wt-button
       data-test="publish-week"
       variant=${ready ? "primary" : "secondary"}
@@ -821,14 +822,14 @@ export class RotaView extends LitElement {
       data-test="strip"
     >
       ${read.days.map(({ businessDay }) => {
-        const counts = dayCounts(read, show, businessDay);
+        const { counts, closed } = rotaModel(read, show).days.get(businessDay)!;
         const attention = counts.unfilled + counts.partly + counts.over > 0;
         return html`<button
           type="button"
           data-day=${businessDay}
           aria-pressed=${businessDay === this.day ? "true" : "false"}
           ?data-attention=${attention}
-          ?data-closed=${isClosed(read, show, businessDay)}
+          ?data-closed=${closed}
           @click=${() => {
             this.day = businessDay;
           }}
@@ -887,7 +888,7 @@ export class RotaView extends LitElement {
         @edit-shift=${this.#editShift}
         @open-day=${this.#openDay}
       ></rota-by-person>`;
-    if (rolesShown(read, show).length === 0 && !read.days.some((d) => d.notInSlot.length > 0))
+    if (rotaModel(read, show).roles.length === 0 && !read.days.some((d) => d.notInSlot.length > 0))
       return nothing;
     return html`<rota-by-area
       .week=${read}
@@ -905,10 +906,10 @@ export class RotaView extends LitElement {
   }
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
-    const show = read ? chosenShow(read, this.params.area) : undefined;
+    const show = read ? this.#showOf(read) : undefined;
     const attention = read && show ? this.#attention(read, show) : undefined;
     const published = read?.version?.status === "published";
-    const action = read ? this.#action(read) : nothing;
+    const action = read ? this.#action(read, show!) : nothing;
     return html`<div class="head ${this.narrow ? "phone" : ""}" data-test="bar">
         <wt-button
           variant="secondary"
@@ -969,13 +970,13 @@ export class RotaView extends LitElement {
                 show!.kind === "everyone" &&
                 read.areas.length > 0 &&
                 this.canWrite &&
-                weekShiftCount(read) === 0
+                rotaModel(read, show!).shiftCount === 0
                   ? html`<p data-test="no-shifts-hint">
                       ${t(this.narrow ? "staffing.rota.no_shifts_hint_phone" : "staffing.rota.no_shifts_hint")}
                     </p>`
                   : nothing
               }
-              ${show!.kind === "area" && !hasSlots(read, show!) ? this.#unpainted(read, show!) : nothing}
+              ${show!.kind === "area" && !rotaModel(read, show!).hasSlots ? this.#unpainted(read, show!) : nothing}
               ${this.#grid(read, show!)}
               <rota-popup
                 .sheet=${this.narrow}

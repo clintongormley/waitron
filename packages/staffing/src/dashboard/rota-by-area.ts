@@ -7,14 +7,14 @@ import { areaKey, type AreaRef } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, dateLabel, utc } from "./format.js";
 import { notInSlotCard, overCard, slotCard } from "./rota-cards.js";
-import { dayCounts, isClosed, rolesShown, type Show, type Target } from "./rota-model.js";
+import { rotaModel, type Show, type Target } from "./rota-model.js";
 import { countWords, t, tf } from "./strings.js";
 
 /** What a day's header says below the date: its attention in scope, in the warning colour, or
  *  Closed. */
 export function dayNote(week: RotaWeek, show: Show, businessDay: string) {
-  if (isClosed(week, show, businessDay)) return html`<small>${t("staffing.rota.closed")}</small>`;
-  const counts = dayCounts(week, show, businessDay);
+  const { counts, closed } = rotaModel(week, show).days.get(businessDay)!;
+  if (closed) return html`<small>${t("staffing.rota.closed")}</small>`;
   const words = (["unfilled", "partly", "over"] as const)
     .filter((k) => counts[k] > 0)
     .map((k) => countWords(k, counts[k]))
@@ -234,7 +234,7 @@ export class RotaByArea extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${rolesShown(this.week, this.#show()).map(
+          ${rotaModel(this.week, this.#show()).roles.map(
             (role) =>
               html`<tr>
                 <th scope="row">

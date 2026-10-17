@@ -163,12 +163,60 @@ export function weekShiftCount(read: RotaWeek): number {
 
 export type Summary = "counts" | "all_filled" | "no_shifts" | "nothing_to_fill";
 
-export function summary(read: RotaWeek, show: Show): Summary {
-  const counts = weekCounts(read, show);
+function summaryOf(show: Show, counts: Counts, slots: boolean, shiftCount: number): Summary {
   if (counts.unfilled + counts.partly + counts.over > 0) return "counts";
-  if (hasSlots(read, show)) return "all_filled";
-  if (show.kind === "everyone" && weekShiftCount(read) === 0) return "no_shifts";
+  if (slots) return "all_filled";
+  if (show.kind === "everyone" && shiftCount === 0) return "no_shifts";
   return "nothing_to_fill";
+}
+
+export function summary(read: RotaWeek, show: Show): Summary {
+  return summaryOf(show, weekCounts(read, show), hasSlots(read, show), weekShiftCount(read));
+}
+
+/** What the rota draws from one read in one Show, worked out once. */
+export type RotaModel = {
+  counts: Counts;
+  summary: Summary;
+  hasSlots: boolean;
+  shiftCount: number;
+  /** In an area, `rolesShown`; in Everyone, none. */
+  roles: StaffRole[];
+  days: ReadonlyMap<string, { counts: Counts; closed: boolean }>;
+};
+
+const models = new WeakMap<RotaWeek, Map<string, RotaModel>>();
+
+/** The model of `read` in `show`, kept for as long as the read is: a read is never changed once
+ *  drawn, each refresh is a new one. */
+export function rotaModel(read: RotaWeek, show: Show): RotaModel {
+  const key = show.kind === "area" ? show.key : EVERYONE;
+  let byShow = models.get(read);
+  if (!byShow) models.set(read, (byShow = new Map()));
+  let model = byShow.get(key);
+  if (!model) {
+    const counts = weekCounts(read, show);
+    const slots = hasSlots(read, show);
+    const shiftCount = weekShiftCount(read);
+    model = {
+      counts,
+      summary: summaryOf(show, counts, slots, shiftCount),
+      hasSlots: slots,
+      shiftCount,
+      roles: show.kind === "area" ? rolesShown(read, show) : [],
+      days: new Map(
+        read.days.map(({ businessDay }) => [
+          businessDay,
+          {
+            counts: dayCounts(read, show, businessDay),
+            closed: isClosed(read, show, businessDay),
+          },
+        ]),
+      ),
+    };
+    byShow.set(key, model);
+  }
+  return model;
 }
 
 export type OpenSlot = { slot: Slot; areaName: string };
