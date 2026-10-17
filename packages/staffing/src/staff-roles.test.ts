@@ -401,12 +401,13 @@ describe("staff roles", () => {
     const marc = await person("Marc");
     const alvaro = await person("Álvaro", "suspended");
     const ana = await person("ana", "pending");
-    // The label comparator ignores case, so "Pau" and "pau" tie and only the person id orders
-    // them. The holder query scans `person_staff_roles` in the order its rows were written, so
-    // the higher id is written first: that order cannot pass for id order.
-    const [lowId, highId] = [randomUUID(), randomUUID()].sort();
+    // The comparator ignores case, so the three Paus tie and only the person id orders them.
+    // Here the engine scans person_staff_roles in write order (its query plan printed SCAN psr),
+    // so the higher ids are written first and that order cannot pass for id order.
+    const [lowId, midId, highId] = [randomUUID(), randomUUID(), randomUUID()].sort();
     const twinA = await person("Pau", "active", highId);
     const twinB = await person("pau", "suspended", lowId);
+    const twinC = await person("Pau", "suspended", midId);
     const sous = await inTx((tx) =>
       createStaffRole(tx, v.cfg, { name: "Sous chef", colour: "green" }),
     );
@@ -420,7 +421,7 @@ describe("staff roles", () => {
       createStaffRole(tx, other.cfg, { name: "Theirs", colour: "red" }),
     );
     await inTx((tx) => setStaffRoleHolders(tx, v.cfg, sous.id, [marc, alvaro, ana]));
-    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, waiter.id, [twinA, ana, twinB]));
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, waiter.id, [twinA, ana, twinC, twinB]));
     await inTx((tx) => setStaffRoleHolders(tx, other.cfg, theirs.id, [marc]));
 
     const listed = await inTx((tx) => listStaffRolesWithHolderNames(tx, v.cfg));
@@ -428,8 +429,8 @@ describe("staff roles", () => {
     const compare = createLabelComparator();
     const sousNames = ["Marc", "Álvaro", "ana"].sort(compare);
     expect(compare("Pau", "pau")).toBe(0);
-    expect(twinB < twinA).toBe(true);
-    const waiterNames = ["ana", "pau", "Pau"];
+    expect(twinB < twinC && twinC < twinA).toBe(true);
+    const waiterNames = ["ana", "pau", "Pau", "Pau"];
     expect(listed).toEqual([
       { ...plain[0]!, holderNames: sousNames },
       { ...plain[1]!, holderNames: [] },
