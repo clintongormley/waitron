@@ -3048,6 +3048,13 @@ export class TillTableOrderScreen extends LitElement {
               : this.#draftSections(draft, entries),
           )}
           ${this.#draftBar(draft)}
+          <wt-button
+            data-discard-draft
+            variant="secondary"
+            ?disabled=${draft.lineCount === 0 || draft.sending || draft.editsLocked || this.groupCommandBusy}
+            @click=${() => this.dispatchEvent(new CustomEvent("discard-draft", { bubbles: true, composed: true }))}
+            >${t("held.discard")}</wt-button
+          >
         </div>
       </div>`;
   }

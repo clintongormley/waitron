@@ -5664,8 +5664,12 @@ describe("recalled draft source splitting", () => {
     saved.lines = [reference("source-7", "8.62", "1"), reference("source-9", "8.63", "1")];
   }
 
-  async function cancellationOpening(overrides: Record<string, unknown> = {}) {
+  async function cancellationOpening(
+    overrides: Record<string, unknown> = {},
+    extraSources: SourceLine[] = [],
+  ) {
     seedSource();
+    server.drafts[0]!.lines.push(...extraSources);
     const mounted = await mountApp({
       listAdjustmentReasons: vi.fn().mockResolvedValue([
         {
@@ -5716,6 +5720,404 @@ describe("recalled draft source splitting", () => {
     });
     await flush(el);
   }
+
+  async function discardPreview(el: TillApp, order: TillTableOrderScreen): Promise<void> {
+    const button = order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]");
+    expect(button).not.toBeNull();
+    await userEvent.click(button!);
+    await flush(el);
+    expect(adjustment(el)).not.toBeNull();
+    emit(adjustment(el)!, "adjust-preview", {
+      action: "cancel",
+      reasonId: "mistake",
+      note: "Duplicate order",
+    });
+    await flush(el);
+  }
+
+  it("Discard sends one atomic command for all recalled families and fresh dishes", async () => {
+    const discardDraft = vi.fn(async () => {
+      server.drafts.splice(0);
+      return {
+        draftId: "draft-recalled",
+        billId: "wo-4",
+        revision: 4,
+        adjustmentIds: ["cancel-7", "cancel-9"],
+        party: { id: "v1", revision: 5 },
+      };
+    });
+    const { el, order } = await cancellationOpening({ discardDraft }, [
+      reference("source-9", "8.63", "1"),
+    ]);
+    await tap(el, "Beer");
+    await discardPreview(el, order);
+    expect(rows(el)).toEqual(["Recorded steak ×2", "Recorded steak ×1", "Beer ×1"]);
+    expect(adjustment(el)?.target).toMatchObject({
+      name: t("table.draft_title"),
+      total: "25.88",
+      unitTotal: null,
+    });
+    expect(api.previewAdjustment!.mock.calls.map((call) => call[1])).toEqual([
+      {
+        expectedRevision: 0,
+        lineId: "source-7",
+        action: "cancel",
+        reasonId: "mistake",
+        note: "Duplicate order",
+      },
+      {
+        expectedRevision: 0,
+        lineId: "source-9",
+        action: "cancel",
+        reasonId: "mistake",
+        note: "Duplicate order",
+      },
+    ]);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(discardDraft).toHaveBeenCalledOnce();
+    expect(discardDraft.mock.calls[0]).toEqual([
+      "v1",
+      "draft-recalled",
+      {
+        submissionId: expect.any(String),
+        revision: 3,
+        expectedRevision: 0,
+        reasonId: "mistake",
+        note: "Duplicate order",
+      },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual([]);
+    expect(adjustment(el)).toBeNull();
+    expect(draft(el).editsLocked).toBe(false);
+    expect(order.party?.revision).toBe(5);
+  });
+
+  it("Discard cancellation retains every draft row and sends no command", async () => {
+    const discardDraft = vi.fn();
+    const { el, order } = await cancellationOpening({ discardDraft });
+    await discardPreview(el, order);
+    expect(draft(el).editsLocked).toBe(true);
+    emit(adjustment(el)!, "adjust-close");
+    await flush(el);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(false);
+    expect(discardDraft).not.toHaveBeenCalled();
+  });
+
+  it("Discard of only fresh dishes saves first and sends no cancellation or reason request", async () => {
+    const discardDraft = vi.fn(async () => {
+      const saved = server.drafts[0]!;
+      server.drafts.splice(0);
+      return {
+        draftId: saved.id,
+        billId: "wo-4",
+        revision: 2,
+        adjustmentIds: [],
+        party: { id: "v1", revision: 4 },
+      };
+    });
+    const { el } = await mountApp({
+      discardDraft,
+      listAdjustmentReasons: vi.fn(),
+      applyAdjustment: vi.fn(),
+    });
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await order.updateComplete;
+    const button = order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]");
+    expect(button).not.toBeNull();
+    await userEvent.click(button!);
+    await flush(el);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(discardDraft).toHaveBeenCalledWith(
+      "v1",
+      expect.any(String),
+      {
+        submissionId: expect.any(String),
+        revision: 1,
+        expectedRevision: 0,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual([]);
+  });
+
+  it("Discard combines the source previews and requires the highest returned approval role", async () => {
+    const discardDraft = vi.fn(async () => {
+      server.drafts.splice(0);
+      return {
+        draftId: "draft-recalled",
+        billId: "wo-4",
+        revision: 3,
+        adjustmentIds: ["cancel-7", "cancel-9"],
+        party: { id: "v1", revision: 5 },
+      };
+    });
+    const { el, order } = await cancellationOpening(
+      {
+        discardDraft,
+        previewAdjustment: vi.fn(async (_id, ask) => ({
+          reduction: ask.lineId === "source-7" ? "17.25" : "8.63",
+          nominalValue: ask.lineId === "source-7" ? "17.25" : "8.63",
+          needsApproval: ask.lineId === "source-7" ? "admin" : "manager",
+          overBillDiscountLimit: ask.lineId === "source-9",
+          lines: [
+            {
+              lineId: ask.lineId,
+              lineNo: ask.lineId === "source-7" ? 7 : 9,
+              reduction: ask.lineId === "source-7" ? "17.25" : "8.63",
+              rows: [],
+            },
+          ],
+        })),
+        listAdjustmentApprovers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "admin-1", displayName: "Marta" }]),
+      },
+      [reference("source-9", "8.63", "1")],
+    );
+    await discardPreview(el, order);
+    expect(adjustment(el)?.preview).toEqual({
+      reduction: "25.88",
+      nominalValue: "25.88",
+      needsApproval: "admin",
+      overBillDiscountLimit: true,
+      lines: [
+        { lineId: "source-7", lineNo: 7, reduction: "17.25", rows: [] },
+        { lineId: "source-9", lineNo: 9, reduction: "8.63", rows: [] },
+      ],
+    });
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("admin");
+    expect(discardDraft).not.toHaveBeenCalled();
+    const prompt = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
+        "[data-adjust-approval]",
+      );
+    discardDraft.mockRejectedValueOnce({ code: "pin.invalid" });
+    emit(prompt()!, "override-confirm", { personId: "admin-1", pin: "0000" });
+    await flush(el, 6);
+    expect(prompt()?.error).toBe("pin.invalid");
+    expect(rows(el)).toEqual(["Recorded steak ×2", "Recorded steak ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
+    emit(prompt()!, "override-confirm", { personId: "admin-1", pin: "7777" });
+    await flush(el, 6);
+    expect(discardDraft).toHaveBeenCalledTimes(2);
+    expect(discardDraft.mock.calls[1]).toEqual([
+      "v1",
+      "draft-recalled",
+      {
+        submissionId: expect.any(String),
+        revision: 2,
+        expectedRevision: 0,
+        reasonId: "mistake",
+        note: "Duplicate order",
+        approver: { personId: "admin-1", pin: "7777" },
+      },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(rows(el)).toEqual([]);
+    expect(adjustment(el)).toBeNull();
+    expect(draft(el).editsLocked).toBe(false);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("Discard honours a higher approval requirement returned by its atomic command", async () => {
+    const discardDraft = vi.fn().mockRejectedValue({
+      code: "adjustment.approval_required",
+      params: { approverRole: "manager" },
+    });
+    const { el, order } = await cancellationOpening({
+      discardDraft,
+      listAdjustmentApprovers: vi
+        .fn()
+        .mockResolvedValue([{ personId: "manager-1", displayName: "Marta" }]),
+    });
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(adjustment(el)?.preview?.needsApproval).toBe("manager");
+    expect(draft(el).editsLocked).toBe(true);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(discardDraft).toHaveBeenCalledOnce();
+  });
+
+  it("Discard replaces a lower-role PIN prompt when the command requires a higher approver", async () => {
+    const { el, order } = await cancellationOpening({
+      discardDraft: vi.fn().mockRejectedValue({
+        code: "adjustment.approval_required",
+        params: { approverRole: "admin" },
+      }),
+      previewAdjustment: vi.fn().mockResolvedValue({
+        reduction: "17.25",
+        nominalValue: "17.25",
+        needsApproval: "manager",
+        overBillDiscountLimit: false,
+        lines: [],
+      }),
+      listAdjustmentApprovers: vi.fn(async (role) => [
+        { personId: `${role}-1`, displayName: role === "admin" ? "Alba" : "Marta" },
+      ]),
+    });
+    const prompt = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
+        "[data-adjust-approval]",
+      );
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(prompt()?.authorizers).toEqual([{ personId: "manager-1", displayName: "Marta" }]);
+    emit(prompt()!, "override-confirm", { personId: "manager-1", pin: "7777" });
+    await flush(el, 6);
+    expect(prompt()).toBeNull();
+    expect(adjustment(el)?.preview?.needsApproval).toBe("admin");
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(prompt()?.authorizers).toEqual([{ personId: "admin-1", displayName: "Alba" }]);
+    expect(api.listAdjustmentApprovers!.mock.calls.map((call) => call[0])).toEqual([
+      "manager",
+      "admin",
+    ]);
+  });
+
+  it("Discard ends its confirmation after takeover and shows the authoritative owner", async () => {
+    const { el, order } = await cancellationOpening({
+      discardDraft: vi.fn(async () => {
+        server.drafts[0]!.ownerId = "p2";
+        server.drafts[0]!.ownerName = "Luis";
+        throw { code: "draft.taken_over", ownerName: "Luis" };
+      }),
+    });
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(adjustment(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain("Luis");
+    expect(server.drafts[0]!.lines).toHaveLength(1);
+    expect(draft(el).editsLocked).toBe(false);
+  });
+
+  it("Discard locks stale source rows if the successful command cannot reload its draft", async () => {
+    const { el, order } = await cancellationOpening({
+      discardDraft: vi.fn(async () => {
+        server.drafts.splice(0);
+        server.listDrafts.mockRejectedValue(new Error("Offline"));
+        return {
+          draftId: "draft-recalled",
+          billId: "wo-4",
+          revision: 3,
+          adjustmentIds: ["cancel-7"],
+          party: { id: "v1", revision: 5 },
+        };
+      }),
+    });
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(adjustment(el)).toBeNull();
+    expect(draft(el).editsLocked).toBe(true);
+    expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+    expect(order.party?.revision).toBe(5);
+    draft(el).setLineExtras(0, { note: "Must not restore discarded charge" });
+    expect(draft(el).lines[0]!.note).toBe("Recorded note");
+  });
+
+  it("Discard sends nothing when the draft's preceding save fails", async () => {
+    const discardDraft = vi.fn();
+    const { el, order } = await cancellationOpening({ discardDraft });
+    draft(el).setLineExtras(0, { note: "Keep this unsaved note" });
+    server.saveDraft.mockRejectedValue(new Error("Offline"));
+    const button = order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!;
+    await userEvent.click(button);
+    await flush(el);
+    expect(adjustment(el)).toBeNull();
+    expect(discardDraft).not.toHaveBeenCalled();
+    expect(draft(el).lines[0]!.note).toBe("Keep this unsaved note");
+    expect(draft(el).editsLocked).toBe(false);
+    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+  });
+
+  it("Discard closes a refused confirmation when the recovery read also fails", async () => {
+    const { el, order } = await cancellationOpening({
+      discardDraft: vi.fn(async () => {
+        server.listDrafts.mockRejectedValue(new Error("Offline"));
+        throw { code: "order.payment_in_flight" };
+      }),
+    });
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(adjustment(el)).toBeNull();
+    expect(draft(el).editsLocked).toBe(true);
+    expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+  });
+
+  it("Discard drops a late command answer after navigation and releases the table action lock", async () => {
+    let answer!: () => void;
+    const { el, order } = await cancellationOpening({
+      discardDraft: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        server.drafts.splice(0);
+        return {
+          draftId: "draft-recalled",
+          billId: "wo-4",
+          revision: 3,
+          adjustmentIds: ["cancel-7"],
+          party: { id: "v1", revision: 99 },
+        };
+      }),
+    });
+    await discardPreview(el, order);
+    emit(adjustment(el)!, "adjust-confirm");
+    await flush(el);
+    expect(draft(el).sending).toBe(true);
+    emit(order, "back-to-floor");
+    await flush(el);
+    await userEvent.click(floor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-table=t7]")!);
+    await flush(el);
+    const nextMessage = banner(el)?.textContent;
+    answer();
+    await flush(el, 6);
+    expect(tableOrder(el)?.orderId).toBe("wo-7");
+    expect(tableOrder(el)?.party?.revision).not.toBe(99);
+    expect(adjustment(el)).toBeNull();
+    expect(tableOrder(el)?.groupCommandBusy).toBe(false);
+    expect(banner(el)?.textContent).toBe(nextMessage);
+  });
+
+  it("Discard of fresh dishes retains unsaved edits when its save is refused", async () => {
+    const discardDraft = vi.fn();
+    const { el } = await mountApp({ discardDraft });
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await order.updateComplete;
+    server.saveDraft.mockRejectedValue(new Error("Offline"));
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!);
+    await flush(el);
+    expect(discardDraft).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+    expect(draft(el).sending).toBe(false);
+  });
 
   it("source cancellation names its pending operation without announcing an order submission", async () => {
     let answer!: () => void;
