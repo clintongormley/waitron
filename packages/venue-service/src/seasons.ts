@@ -159,13 +159,17 @@ export async function saveSeasons(
 ): Promise<Season[]> {
   const all = await ensureDefaultSeasons(tx, cfg);
   const stored = new Map(all.map((season) => [season.id, season]));
-  for (const id of [...change.delete, ...change.save.flatMap((entry) => entry.id ?? [])])
+  const sentStrings = change.save.flatMap((entry) =>
+    typeof entry.id === "string" ? [entry.id] : [],
+  );
+  for (const id of [...change.delete, ...sentStrings])
     if (!stored.has(id)) throw new AppError("season.not_found", { seasonId: id });
   const deleted = new Set(change.delete);
   const sentIds = new Set<string>();
   const parsed = change.save.map((entry, i) => {
     if (entry.id !== undefined) {
-      if (sentIds.has(entry.id) || deleted.has(entry.id)) invalid({ field: `save.${i}.id` });
+      if (typeof entry.id !== "string" || sentIds.has(entry.id) || deleted.has(entry.id))
+        invalid({ field: `save.${i}.id` });
       sentIds.add(entry.id);
     }
     const name = typeof entry.name === "string" ? entry.name.trim() : "";
@@ -176,13 +180,25 @@ export async function saveSeasons(
     return { id: entry.id, name, startsOn, colour: entry.colour as CalendarColour };
   });
   const kept = all.filter((season) => !deleted.has(season.id) && !sentIds.has(season.id));
+  // A sent season keeping its own name or start holds it first, so a clash names the entry
+  // whose value changed.
+  const own = (entry: (typeof parsed)[number]) =>
+    entry.id === undefined ? undefined : stored.get(entry.id);
   const names = new Set(kept.map((season) => season.name));
   const starts = new Set(kept.map((season) => season.startsOn));
+  for (const entry of parsed) {
+    if (own(entry)?.name === entry.name) names.add(entry.name);
+    if (own(entry)?.startsOn === entry.startsOn) starts.add(entry.startsOn);
+  }
   parsed.forEach((entry, i) => {
-    if (names.has(entry.name)) invalid({ field: `save.${i}.name`, reason: "taken" });
-    if (starts.has(entry.startsOn)) invalid({ field: `save.${i}.startsOn`, reason: "taken" });
-    names.add(entry.name);
-    starts.add(entry.startsOn);
+    if (own(entry)?.name !== entry.name) {
+      if (names.has(entry.name)) invalid({ field: `save.${i}.name`, reason: "taken" });
+      names.add(entry.name);
+    }
+    if (own(entry)?.startsOn !== entry.startsOn) {
+      if (starts.has(entry.startsOn)) invalid({ field: `save.${i}.startsOn`, reason: "taken" });
+      starts.add(entry.startsOn);
+    }
   });
   if (names.size === 0) invalid({ field: "delete", reason: "last" });
 

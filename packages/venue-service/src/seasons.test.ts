@@ -713,6 +713,57 @@ describe("saveSeasons", () => {
     expect(await seasonsOf(v)).toEqual(THREE);
   });
 
+  it("refuses a delete under a stale clock revision before anything changes", async () => {
+    const v = await autumnVenue();
+    const weeksBefore = await everyWeek(v);
+    expect(await refusal(change(v, { delete: [v.winter] }, 1))).toEqual({
+      code: "hours.clock_changed",
+      params: {},
+    });
+    expect(await seasonsOf(v)).toEqual(THREE);
+    expect(await everyWeek(v)).toEqual(weeksBefore);
+  });
+
+  it("refuses an id that is not a string at its own path", async () => {
+    const v = await autumnVenue();
+    for (const id of [null, 7])
+      expect(
+        await refusal(
+          change(v, {
+            save: [
+              { id: id as unknown as string, name: "Cold", startsOn: "12-05", colour: "grey" },
+            ],
+          }),
+        ),
+      ).toEqual({ code: "season.invalid", params: { field: "save.0.id" } });
+    expect(await seasonsOf(v)).toEqual(THREE);
+  });
+
+  it("names the entry whose changed name or start clashes, not a later one keeping its own", async () => {
+    const v = await autumnVenue();
+    expect(
+      await refusal(
+        change(v, {
+          save: [
+            entry(v.lateAutumn, "Winter", "11-01"),
+            entry(v.winter, "Winter", "12-01", "teal"),
+          ],
+        }),
+      ),
+    ).toEqual({ code: "season.invalid", params: { field: "save.0.name", reason: "taken" } });
+    expect(
+      await refusal(
+        change(v, {
+          save: [
+            entry(v.lateAutumn, "Late autumn", "12-01"),
+            entry(v.winter, "Winter", "12-01", "teal"),
+          ],
+        }),
+      ),
+    ).toEqual({ code: "season.invalid", params: { field: "save.0.startsOn", reason: "taken" } });
+    expect(await seasonsOf(v)).toEqual(THREE);
+  });
+
   it("adds Christmas weeks, a copy of Winter's department and zone weeks", async () => {
     const v = await autumnVenue();
     const saved = await change(v, { save: [entry(undefined, "Christmas weeks", "12-20", "red")] });
