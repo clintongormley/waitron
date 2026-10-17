@@ -53,8 +53,9 @@ export class LiveConnection {
     queueMicrotask(() => {
       this.#scheduled = false;
       if (!this.#active) return;
-      const interests = this.data.interests;
-      const key = JSON.stringify(interests);
+      // Sorted, so a page whose watches change order but not types keeps its stream.
+      const interests = this.data.interests.map((identity) => JSON.stringify(identity)).sort();
+      const key = `[${interests.join(",")}]`;
       if (key === this.#key) return;
       this.#close();
       if (interests.length === 0) return;

@@ -167,6 +167,71 @@ describe("live connection lifecycle", () => {
     connection.stop();
   });
 
+  it("keeps its stream when a replaced view follows the same types in a different order", async () => {
+    const data = new LiveData();
+    const stream = new Stream();
+    const open = vi.fn(() => stream);
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const month = data.observe(
+      { key: "month/2026-12", dependencies: [{ type: "a" }, { type: "b" }], read },
+      () => {},
+    );
+    const stations = data.observe(
+      { key: "stations", dependencies: [{ type: "c" }], read },
+      () => {},
+    );
+    connection.start();
+    await Promise.resolve();
+    stream.dispatchEvent(new Event("open"));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+    const next = data.observe(
+      { key: "month/2027-01", dependencies: [{ type: "a" }, { type: "b" }], read },
+      () => {},
+    );
+    month.unsubscribe();
+    expect(data.interests).toEqual([{ type: "c" }, { type: "a" }, { type: "b" }]);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(5));
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledOnce();
+    expect(stream.close).not.toHaveBeenCalled();
+    stream.dispatchEvent(new Event("open"));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(7));
+    next.unsubscribe();
+    stations.unsubscribe();
+    connection.stop();
+  });
+
+  it("reopens its stream when a type is added, and again when one is removed", async () => {
+    const data = new LiveData();
+    const open = vi.fn<(url: string) => Stream>(() => new Stream());
+    const connection = new LiveConnection(data, { open });
+    const resources = (call: number): string | null =>
+      new URL(open.mock.calls[call]![0], "https://venue.test").searchParams.get("resources");
+    const a = data.observe(
+      { key: "a", dependencies: [{ type: "a" }], read: async () => 1 },
+      () => {},
+    );
+    connection.start();
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledOnce();
+    const b = data.observe(
+      { key: "b", dependencies: [{ type: "b" }], read: async () => 1 },
+      () => {},
+    );
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.results[0]!.value.close).toHaveBeenCalledOnce();
+    expect(resources(1)).toBe(JSON.stringify([{ type: "a" }, { type: "b" }]));
+    a.unsubscribe();
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(3);
+    expect(open.mock.results[1]!.value.close).toHaveBeenCalledOnce();
+    expect(resources(2)).toBe(JSON.stringify([{ type: "b" }]));
+    b.unsubscribe();
+    connection.stop();
+  });
+
   it("opens nothing when stopped before its first open, even if a view observes in that tick", async () => {
     const data = new LiveData();
     const open = vi.fn(() => new Stream());
