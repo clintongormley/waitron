@@ -9161,8 +9161,8 @@ export class TillApp extends LitElement {
   }
 
   /** At a sign-in: the server takes the person from the session, so a save sent from now on goes in
-   * as the person signing in: a new draft becomes theirs, and one naming another person's draft is
-   * refused. */
+   * as the person signing in: a new draft becomes theirs unless they already hold one there, and one
+   * naming another person's draft is refused. */
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
     for (const sync of [...this.#leavingDrafts.keys()])
