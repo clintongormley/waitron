@@ -968,6 +968,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   /** The practice simulator only. */
   simulationOutcome?: "captured" | "declined";
   allowOffline?: false;
+  guests?: number | null;
 }
 
 /** How one payment splits between the bill, change and tip, or the two ways an item payment that
@@ -2605,6 +2606,7 @@ export class TillApi {
     },
     receiptLanguage?: string,
     kitchenNote?: string | null,
+    guests?: number | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2614,6 +2616,7 @@ export class TillApi {
       ...invoice,
       receiptLanguage,
       kitchenNote,
+      ...(guests === undefined ? {} : { guests }),
     });
   }
 
@@ -2637,6 +2640,7 @@ export class TillApi {
     demoAttemptId?: string;
     receiptLanguage?: string;
     kitchenNote?: string | null;
+    guests?: number | null;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -2968,10 +2972,16 @@ export class TillApi {
    * order's stored lines — never a client basket. A still-open or absent id rejects with
    * `working_order.not_placed`.
    */
-  collectOrder(id: string, tender: Tender, receiptLanguage?: string): Promise<TillSaleResult> {
+  collectOrder(
+    id: string,
+    tender: Tender,
+    receiptLanguage?: string,
+    guests?: number | null,
+  ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
+      ...(guests === undefined ? {} : { guests }),
     });
   }
 

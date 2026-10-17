@@ -350,6 +350,59 @@ describe("TillApi", () => {
     ]);
   });
 
+  describe.each([
+    { label: "a guest count", guests: 5, sent: { guests: 5 } },
+    { label: "no guests line", guests: null, sent: { guests: null } },
+    { label: "no choice", guests: undefined, sent: {} },
+  ])("sending $label", ({ guests, sent }) => {
+    const tender = { method: "cash", amount: "5.00" } as const;
+    const lines = [{ menuItemId: "mi-cafe", quantity: "1" }];
+    const sentBody = (fetchStub: ReturnType<typeof vi.fn>): unknown =>
+      JSON.parse((fetchStub.mock.calls[0]![1] as RequestInit).body as string) as unknown;
+    const stub = () => vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
+
+    it("with a sale", async () => {
+      const fetchStub = stub();
+      await new TillApi("", fetchStub).recordSale(
+        lines,
+        tender,
+        "wo1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        guests,
+      );
+      expect(sentBody(fetchStub)).toStrictEqual({ lines, tender, workingOrderId: "wo1", ...sent });
+    });
+
+    it("with a card payment", async () => {
+      const fetchStub = stub();
+      await new TillApi("", fetchStub).pay({ id: "wo2", lines, guests });
+      expect(sentBody(fetchStub)).toStrictEqual({ id: "wo2", lines, ...sent });
+    });
+
+    it("with a collect", async () => {
+      const fetchStub = stub();
+      await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guests);
+      expect(sentBody(fetchStub)).toStrictEqual({ tender, ...sent });
+    });
+
+    it("with a bill payment", async () => {
+      const fetchStub = stub();
+      const billPayment: BillPaymentRequest = {
+        kind: "share",
+        shareOf: 2,
+        method: "cash",
+        submissionId: "sub-1",
+        applied: "5.00",
+        tip: "0.00",
+      };
+      await new TillApi("", fetchStub).takeBillPayment("wo4", { ...billPayment, guests });
+      expect(sentBody(fetchStub)).toStrictEqual({ ...billPayment, ...sent });
+    });
+  });
+
   it("cancels a pending pretend reader payment for the current order", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ cancelled: true }));
     const api = new TillApi("", fetchStub);
