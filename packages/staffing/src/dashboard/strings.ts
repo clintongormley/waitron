@@ -106,6 +106,16 @@ const en = {
   "staffing.rota.show_everyone": "Show everyone",
   "staffing.rota.week_link": "Rota for this week",
   "staffing.rota.empty": "No active areas.",
+  "staffing.rota.unpainted_title": "No staffing is painted for {area} this week",
+  "staffing.rota.unpainted_season":
+    "Slots come from the staffing you paint: who {area} needs, and when. Paint {season}'s standard week once and every week of the season gets its slots. You can still add shifts by person.",
+  "staffing.rota.unpainted_plain":
+    "Slots come from the staffing you paint: who {area} needs, and when. You can still add shifts by person.",
+  "staffing.rota.paint_week": "Paint {season}'s standard week",
+  "staffing.rota.no_shifts_hint":
+    "No shifts this week yet. Click a day in someone's row to fill a slot or add a shift.",
+  "staffing.rota.no_shifts_hint_phone":
+    "No shifts this week yet. Tap a person to fill a slot or add a shift.",
   "staffing.rota.choose": "Choose a person",
   "staffing.rota.no_holders": "Nobody holds this staff role. Show everyone to choose someone else.",
 
@@ -313,6 +323,16 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.show_everyone": "Mostrar a todo el mundo",
   "staffing.rota.week_link": "Turnos de esta semana",
   "staffing.rota.empty": "No hay áreas activas.",
+  "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
+  "staffing.rota.unpainted_season":
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana habitual de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos por persona.",
+  "staffing.rota.unpainted_plain":
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Puedes seguir añadiendo turnos por persona.",
+  "staffing.rota.paint_week": "Pintar la semana habitual de {season}",
+  "staffing.rota.no_shifts_hint":
+    "Aún no hay turnos esta semana. Haz clic en un día de la fila de alguien para cubrir un puesto o añadir un turno.",
+  "staffing.rota.no_shifts_hint_phone":
+    "Aún no hay turnos esta semana. Toca a una persona para cubrir un puesto o añadir un turno.",
   "staffing.rota.choose": "Elige una persona",
   "staffing.rota.no_holders":
     "Nadie tiene este rol de personal. Muestra a todo el mundo para elegir a otra persona.",

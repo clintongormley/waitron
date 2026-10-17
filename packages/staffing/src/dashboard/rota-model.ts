@@ -133,6 +133,26 @@ export function attentionTargets(
   });
 }
 
+export function hasSlots(read: RotaWeek, show: Show): boolean {
+  return matchesFor(read, show).some((m) => m.slots.length > 0);
+}
+
+export type PaintTarget =
+  | { painter: "season"; id: string; name: string }
+  | { painter: "special-day"; id: string; name: string };
+
+/** What an unpainted area's paint button opens: the season of the first day (of the week, or the
+ *  given day) that is not a special day, else the first special day's editor, else nothing. */
+export function paintTarget(read: RotaWeek, day?: string): PaintTarget | null {
+  const days = read.days.filter((d) => day === undefined || d.businessDay === day);
+  for (const d of days) {
+    const season = d.specialDay ? undefined : read.seasons.find((s) => s.id === d.seasonId);
+    if (season) return { painter: "season", id: season.id, name: season.name };
+  }
+  const special = days.find((d) => d.specialDay)?.specialDay;
+  return special ? { painter: "special-day", id: special.id, name: special.name } : null;
+}
+
 /** Shifts whose own business day is in the week; the read also carries the previous week's
  * shift that runs into Monday. */
 export function weekShiftCount(read: RotaWeek): number {
@@ -145,7 +165,7 @@ export type Summary = "counts" | "all_filled" | "no_shifts" | "nothing_to_fill";
 export function summary(read: RotaWeek, show: Show): Summary {
   const counts = weekCounts(read, show);
   if (counts.unfilled + counts.partly + counts.over > 0) return "counts";
-  if (matchesFor(read, show).some((m) => m.slots.length > 0)) return "all_filled";
+  if (hasSlots(read, show)) return "all_filled";
   if (show.kind === "everyone" && weekShiftCount(read) === 0) return "no_shifts";
   return "nothing_to_fill";
 }

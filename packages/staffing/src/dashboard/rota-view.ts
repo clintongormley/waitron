@@ -14,7 +14,10 @@ import {
   EVERYONE,
   attentionTargets,
   chosenShow,
+  hasSlots,
   openSlots,
+  paintTarget,
+  rolesShown,
   summary,
   weekCounts,
   weekShiftCount,
@@ -151,6 +154,24 @@ export class RotaView extends LitElement {
       }
       .error {
         color: var(--wt-color-danger);
+      }
+      .unpainted {
+        margin-block-end: var(--wt-space-3);
+        padding: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+      .unpainted h3 {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .unpainted p {
+        margin: 0 0 var(--wt-space-3);
+      }
+      .unpainted .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
     `,
   ];
@@ -514,6 +535,49 @@ export class RotaView extends LitElement {
       >${t(read.version?.changedSincePublished ? "staffing.rota.publish_changes" : "staffing.rota.publish")}</wt-button
     >`;
   }
+  /** Why an area with no slots this week has nothing to fill, and the painter that gives it some. */
+  #unpainted(read: RotaWeek, show: Show & { kind: "area" }) {
+    const target = paintTarget(read);
+    const words = { area: show.name, season: target?.name ?? "" };
+    const label =
+      target?.painter === "season"
+        ? this.canWriteStaffing
+          ? "staffing.rota.paint_week"
+          : "staffing.day.show_week"
+        : this.canWriteStaffing
+          ? "staffing.day.edit_special"
+          : "staffing.day.show_special";
+    return html`<section class="unpainted" data-test="unpainted">
+      <h3>${tf("staffing.rota.unpainted_title", { area: show.name })}</h3>
+      <p>
+        ${tf(target?.painter === "season" ? "staffing.rota.unpainted_season" : "staffing.rota.unpainted_plain", words)}
+      </p>
+      <div class="actions">
+        ${
+          target && this.canOpenStaffing
+            ? html`<wt-button
+                variant="primary"
+                data-test="paint"
+                @click=${() =>
+                  this.open("staffing", {
+                    month: this.week.slice(0, 7),
+                    area: show.key,
+                    painter: target.painter,
+                    [target.painter === "season" ? "season" : "special-day"]: target.id,
+                  })}
+                >${tf(label, { season: target.name, name: target.name })}</wt-button
+              >`
+            : nothing
+        }
+        <wt-button
+          variant="secondary"
+          data-test="show-everyone"
+          @click=${() => this.#go(this.week, EVERYONE)}
+          >${t("staffing.rota.show_everyone")}</wt-button
+        >
+      </div>
+    </section>`;
+  }
   #title(show: Show | undefined) {
     if (!this.week) return nothing;
     return weekTitleParts(this.week).map((part) => {
@@ -591,6 +655,15 @@ export class RotaView extends LitElement {
         read
           ? html`${read.areas.length === 0 ? html`<p>${t("staffing.rota.empty")}</p>` : nothing}
               ${
+                show!.kind === "everyone" &&
+                read.areas.length > 0 &&
+                this.canWrite &&
+                weekShiftCount(read) === 0
+                  ? html`<p data-test="no-shifts-hint">${t("staffing.rota.no_shifts_hint")}</p>`
+                  : nothing
+              }
+              ${show!.kind === "area" && !hasSlots(read, show!) ? this.#unpainted(read, show!) : nothing}
+              ${
                 show!.kind === "everyone"
                   ? html`<rota-by-person
                       .week=${read}
@@ -618,25 +691,32 @@ export class RotaView extends LitElement {
                         this.actionError = "";
                       }}
                     ></rota-by-person>`
-                  : html`<rota-by-area
-                      .week=${read}
-                      .breaches=${this.warnings?.breaches ?? []}
-                      .area=${show!.area}
-                      .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                      @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                        this.editor = e.detail;
-                      }}
-                      @add-shift=${(
-                        e: CustomEvent<{ businessDay: string; area: AreaRef; staffRoleId: string }>,
-                      ) => {
-                        this.editor = e.detail;
-                      }}
-                      @pick-slot=${(e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
-                        this.picked = e.detail.slot;
-                        this.#anchor = e.detail.anchor;
-                        this.actionError = "";
-                      }}
-                    ></rota-by-area>`
+                  : rolesShown(read, show!).length > 0 ||
+                      read.days.some((d) => d.notInSlot.length > 0)
+                    ? html`<rota-by-area
+                        .week=${read}
+                        .breaches=${this.warnings?.breaches ?? []}
+                        .area=${show!.area}
+                        .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
+                        @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
+                          this.editor = e.detail;
+                        }}
+                        @add-shift=${(
+                          e: CustomEvent<{
+                            businessDay: string;
+                            area: AreaRef;
+                            staffRoleId: string;
+                          }>,
+                        ) => {
+                          this.editor = e.detail;
+                        }}
+                        @pick-slot=${(e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
+                          this.picked = e.detail.slot;
+                          this.#anchor = e.detail.anchor;
+                          this.actionError = "";
+                        }}
+                      ></rota-by-area>`
+                    : nothing
               }
               <rota-popup
                 .heading=${this.picked ? slotHeading(read, this.picked) : this.openDay ? openHeading(read, this.openDay.personId, this.openDay.businessDay) : ""}

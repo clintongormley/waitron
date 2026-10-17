@@ -55,6 +55,8 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     "labour-count",
     "cell-add focused",
     "open-slots",
+    "unpainted",
+    "everyone-empty",
   ])("%s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -69,6 +71,13 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
         read.version = changing
           ? { id: "draft", status: "draft", changedSincePublished: true }
           : { id: "published", status: "published", changedSincePublished: false };
+      if (state === "unpainted" || state === "everyone-empty") {
+        read.shifts = [];
+        for (const day of read.days) {
+          day.notInSlot = [];
+          for (const a of day.areas) a.match = { slots: [], over: [] };
+        }
+      }
       if (state === "no-version") {
         read.version = null;
         read.shifts = [];
@@ -100,8 +109,10 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     el.week = "2026-11-30";
     el.canWrite = true;
     el.open = () => undefined;
-    if (state === "everyone" || state === "open-slots") el.params = { area: "everyone" };
-    if (state === "draft") el.canOpenStaffing = true;
+    if (state === "everyone" || state === "open-slots" || state === "everyone-empty")
+      el.params = { area: "everyone" };
+    if (state === "draft" || state === "unpainted") el.canOpenStaffing = true;
+    if (state === "unpainted") el.canWriteStaffing = true;
     host.append(el);
     if (state === "loading")
       await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
@@ -114,6 +125,21 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
       });
     else if (state === "everyone" || state === "open-slots")
       await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy());
+    else if (state === "everyone-empty")
+      await vi.waitFor(() => {
+        expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy();
+        expect(el.shadowRoot?.querySelector("[data-test=no-shifts-hint]")).toBeTruthy();
+      });
+    else if (state === "unpainted")
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot?.querySelector("[data-test=unpainted] [data-test=paint]"),
+        ).toBeTruthy(),
+      );
+    else if (state === "no-version")
+      await vi.waitFor(() =>
+        expect(el.shadowRoot?.querySelector("[data-test=unpainted]")).toBeTruthy(),
+      );
     else await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
     if (state === "draft")
       expect(el.shadowRoot!.querySelectorAll("[data-test=week] button")).toHaveLength(2);

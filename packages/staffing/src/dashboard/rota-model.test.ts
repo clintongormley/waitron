@@ -5,9 +5,11 @@ import {
   attentionTargets,
   chosenShow,
   dayCounts,
+  hasSlots,
   isClosed,
   matchesFor,
   openSlots,
+  paintTarget,
   peopleInOrder,
   rolesShown,
   summary,
@@ -414,5 +416,58 @@ describe("a day's open slots for a person", () => {
     expect(keys(openSlots(read, "ana", "2026-12-02"))).toEqual({ own: [], other: [] });
     expect(keys(openSlots(read, "gone", "2026-12-04")).own).toEqual([]);
     expect(keys(openSlots(read, "laia", "2027-01-01"))).toEqual({ own: [], other: [] });
+  });
+});
+
+describe("whether a Show choice has slots this week", () => {
+  it("is true when any day in scope has a slot, false for an area with none", () => {
+    const read = rotaWeek();
+    const kitchen = chosenShow(read, "station:kitchen");
+    const restaurant = chosenShow(read, "department:restaurant");
+    expect(hasSlots(read, kitchen)).toBe(true);
+    expect(hasSlots(read, { kind: "everyone" })).toBe(true);
+    expect(hasSlots(read, restaurant)).toBe(false);
+    for (const day of read.days) for (const a of day.areas) a.match.slots = [];
+    expect(hasSlots(read, kitchen)).toBe(false);
+    expect(hasSlots(read, { kind: "everyone" })).toBe(false);
+  });
+});
+
+describe("what the empty area's paint button opens", () => {
+  const special = (n: number) => ({ id: `sd${n}`, name: `Special ${n}` });
+  it("gives the season of the first day that is not a special day", () => {
+    const read = rotaWeek();
+    read.seasons.push({ id: "summer", name: "Summer" });
+    read.days[0]!.specialDay = special(0);
+    read.days[0]!.seasonId = "summer";
+    read.days[1]!.seasonId = null;
+    read.days[2]!.seasonId = "summer";
+    expect(paintTarget(read)).toEqual({ painter: "season", id: "summer", name: "Summer" });
+  });
+  it("gives the first special day when every day is one", () => {
+    const read = rotaWeek();
+    read.days.forEach((d, n) => {
+      d.specialDay = special(n);
+    });
+    expect(paintTarget(read)).toEqual({ painter: "special-day", id: "sd0", name: "Special 0" });
+  });
+  it("gives a given day's special day, or that day's season", () => {
+    const read = rotaWeek();
+    read.days[3]!.specialDay = special(3);
+    expect(paintTarget(read, read.days[3]!.businessDay)).toEqual({
+      painter: "special-day",
+      id: "sd3",
+      name: "Special 3",
+    });
+    expect(paintTarget(read, read.days[4]!.businessDay)).toEqual({
+      painter: "season",
+      id: "winter",
+      name: "Winter",
+    });
+  });
+  it("gives nothing with no season and no special day", () => {
+    const read = rotaWeek();
+    for (const d of read.days) d.seasonId = null;
+    expect(paintTarget(read)).toBeNull();
   });
 });

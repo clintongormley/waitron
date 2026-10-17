@@ -637,6 +637,9 @@ describe("the Rota's bar", () => {
           r.version = version as RotaWeek["version"];
           return r;
         }).api,
+        "1280px",
+        {},
+        "[data-test=unpainted]",
       );
       await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
       const publish = q<Button>(el, "[data-test=bar] [data-test=publish-week]")!;
@@ -721,7 +724,7 @@ describe("the Rota's bar", () => {
       "rota-by-person",
     );
     expect(normal(q(everyone, "[data-test=attention]")!.textContent!)).toBe("No shifts yet");
-    const kitchen = await mount(rotaApi(empty).api);
+    const kitchen = await mount(rotaApi(empty).api, "1280px", {}, "[data-test=unpainted]");
     expect(normal(q(kitchen, "[data-test=attention]")!.textContent!)).toBe("Nothing to fill");
   });
   it("a week whose only shift is carried in from the previous week reads No shifts yet and keeps Publish quiet", async () => {
@@ -1128,5 +1131,181 @@ describe("the Rota's count buttons and day headers", () => {
     expect(normal(dayHead(area(el).shadowRoot!, "2026-12-01").textContent!)).toContain(
       "1 unfilled · 1 partly uncovered",
     );
+  });
+});
+
+describe("the Rota's empty weeks", () => {
+  type Staffing = View & { canWriteStaffing: boolean; canOpenStaffing: boolean };
+  const unpainted = (change: (r: RotaWeek) => void = () => undefined) =>
+    rotaApi(async (w) => {
+      const r = noShifts(w);
+      change(r);
+      return r;
+    }).api;
+  async function mountUnpainted(
+    client: StaffingApi,
+    access: { canOpenStaffing?: boolean; canWriteStaffing?: boolean } = {},
+    grid = "[data-test=unpainted]",
+  ) {
+    const el = (await mount(client, "1280px", {}, grid)) as Staffing;
+    el.canOpenStaffing = access.canOpenStaffing ?? true;
+    el.canWriteStaffing = access.canWriteStaffing ?? true;
+    await el.updateComplete;
+    return el;
+  }
+  const message = (el: View) => q(el, "[data-test=unpainted]")!;
+  const paint = (el: View) => q<Button>(el, "[data-test=unpainted] [data-test=paint]");
+  it("an area with no paint this week says why and offers its season's painter and Show everyone", async () => {
+    const el = await mountUnpainted(unpainted());
+    expect(normal(message(el).querySelector("h3")!.textContent!)).toBe(
+      "No staffing is painted for Kitchen this week",
+    );
+    expect(normal(message(el).querySelector("p")!.textContent!)).toBe(
+      "Slots come from the staffing you paint: who Kitchen needs, and when. Paint Winter's standard week once and every week of the season gets its slots. You can still add shifts by person.",
+    );
+    expect(q(el, "rota-by-area")).toBeNull();
+    const button = paint(el)!;
+    expect(normal(button.textContent!)).toBe("Paint Winter's standard week");
+    expect(button.variant).toBe("primary");
+    button.click();
+    expect(el.open).toHaveBeenCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+      painter: "season",
+      season: "winter",
+    });
+    const everyoneButton = q<Button>(el, "[data-test=unpainted] [data-test=show-everyone]")!;
+    expect(normal(everyoneButton.textContent!)).toBe("Show everyone");
+    expect(everyoneButton.variant).toBe("secondary");
+    everyoneButton.click();
+    expect(el.open).toHaveBeenLastCalledWith("rota", { week: "2026-11-30", area: "everyone" });
+    expect(normal(q(el, "[data-test=attention]")!.textContent!)).toBe("Nothing to fill");
+    const publish = q<Button>(el, "[data-test=publish-week]")!;
+    expect(publish.variant).toBe("secondary");
+    expect(publish.disabled).toBe(true);
+  });
+  it("an area with no paint this week: shifts it already has show beneath, marked not needed", async () => {
+    const client = unpainted((r) => {
+      r.shifts = rotaWeek(r.week).shifts.filter((s) => s.shiftId === "over");
+      r.days[3]!.areas[0]!.match.over = ["over"];
+    });
+    const el = await mountUnpainted(client, {}, "rota-by-area");
+    expect(message(el)).toBeTruthy();
+    const r = area(el).shadowRoot!;
+    await area(el).updateComplete;
+    expect([...r.querySelectorAll("th[scope=row]")].map((n) => n.textContent!.trim())).toEqual([
+      "Sous chef",
+    ]);
+    expect(normal(r.querySelector("[data-shift=over]")!.textContent!)).toContain("not needed");
+    expect(
+      message(el).compareDocumentPosition(area(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+  it("an area with no paint this week keeps a carried-in shift's Not in a slot row beneath", async () => {
+    const client = unpainted((r) => {
+      r.shifts = rotaWeek(r.week).shifts.filter((s) => s.shiftId === "unlinked");
+      r.days[0]!.notInSlot = [{ shiftId: "unlinked", outsideWeek: true }];
+    });
+    const el = await mountUnpainted(client, {}, "rota-by-area");
+    expect(message(el)).toBeTruthy();
+    await area(el).updateComplete;
+    expect(
+      [...area(el).shadowRoot!.querySelectorAll("th[scope=row]")].map((n) => n.textContent!.trim()),
+    ).toEqual(["Not in a slot"]);
+  });
+  it("an area with no paint this week: a week of special days offers the special day's editor", async () => {
+    const client = unpainted((r) =>
+      r.days.forEach((d) => {
+        d.specialDay = { id: "nadal", name: "Nadal" };
+      }),
+    );
+    const el = await mountUnpainted(client);
+    expect(normal(message(el).querySelector("p")!.textContent!)).toBe(
+      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts by person.",
+    );
+    const button = paint(el)!;
+    expect(normal(button.textContent!)).toBe("Edit Nadal staffing");
+    expect(button.variant).toBe("primary");
+    button.click();
+    expect(el.open).toHaveBeenCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+      painter: "special-day",
+      "special-day": "nadal",
+    });
+    el.canWriteStaffing = false;
+    await el.updateComplete;
+    expect(normal(paint(el)!.textContent!)).toBe("Show Nadal staffing");
+  });
+  it("an area with no paint this week: without the Staffing view it offers no paint button", async () => {
+    const el = await mountUnpainted(unpainted(), {
+      canOpenStaffing: false,
+      canWriteStaffing: false,
+    });
+    expect(message(el)).toBeTruthy();
+    expect(paint(el)).toBeNull();
+    expect(q(el, "[data-test=unpainted] [data-test=show-everyone]")).toBeTruthy();
+    const seasonless = await mountUnpainted(
+      unpainted((r) => r.days.forEach((d) => (d.seasonId = null))),
+    );
+    expect(paint(seasonless)).toBeNull();
+    expect(normal(message(seasonless).querySelector("p")!.textContent!)).toBe(
+      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts by person.",
+    );
+  });
+  it("an area with no paint this week: a person who may only read Staffing gets Show {season}'s standard week", async () => {
+    const el = await mountUnpainted(unpainted(), { canWriteStaffing: false });
+    const button = paint(el)!;
+    expect(normal(button.textContent!)).toBe("Show Winter's standard week");
+    expect(button.variant).toBe("primary");
+    button.click();
+    expect(el.open).toHaveBeenCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+      painter: "season",
+      season: "winter",
+    });
+  });
+  it("Everyone with no shifts keeps everyone's rows with one line saying how to add one", async () => {
+    const el = await mount(
+      rotaApi(async (w) => noShifts(w)).api,
+      "1280px",
+      { area: "everyone" },
+      "rota-by-person",
+    );
+    const hint = q(el, "[data-test=no-shifts-hint]")!;
+    expect(normal(hint.textContent!)).toBe(
+      "No shifts this week yet. Click a day in someone's row to fill a slot or add a shift.",
+    );
+    const grid = q(el, "rota-by-person")!;
+    expect(hint.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((await everyone(el)).querySelectorAll("[data-person]")).toHaveLength(5);
+    expect(normal(q(el, "[data-test=attention]")!.textContent!)).toBe("No shifts yet");
+    const publish = q<Button>(el, "[data-test=publish-week]")!;
+    expect(publish.variant).toBe("secondary");
+    expect(publish.disabled).toBe(true);
+    expect(q(el, "[data-test=unpainted]")).toBeNull();
+    el.canWrite = false;
+    await el.updateComplete;
+    expect(q(el, "[data-test=no-shifts-hint]")).toBeNull();
+  });
+  it("Everyone with no active area keeps No active areas in place of the hint", async () => {
+    const el = await mount(
+      rotaApi(async (w) => {
+        const r = noShifts(w);
+        r.areas = [];
+        return r;
+      }).api,
+      "1280px",
+      {},
+      "rota-by-person",
+    );
+    expect(el.shadowRoot!.textContent).toContain("No active areas.");
+    expect(q(el, "[data-test=no-shifts-hint]")).toBeNull();
+    expect(q(el, "[data-test=unpainted]")).toBeNull();
+  });
+  it("Everyone with a shift this week draws no hint", async () => {
+    const el = await mount(undefined, "1280px", { area: "everyone" }, "rota-by-person");
+    expect(q(el, "[data-test=no-shifts-hint]")).toBeNull();
   });
 });
