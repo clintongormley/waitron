@@ -106,7 +106,7 @@ From the backlog entry ([till.md, A504](../../backlog/till.md#a504-floor-plans-p
 - **Layout**: where each of one zone's tables stands in one set, and which are put away (spares).
   Today's "saved plan" is a layout.
 - **Switch**: replacing a zone's today's plan with another set's layout during the business day.
-  It is a reset, with the rules in section 8.
+  It is a reset, with the rules in section 7.4.
 
 Every example uses one invented venue, **Casa Marina**, and the mock-ups draw the same one:
 
@@ -198,7 +198,7 @@ Mock-up: [1-floor-plans-page.png](../../backlog/mockups/a504-floor-plans/1-floor
   **Replace with**, the period delete dialog's wording, preselected to the default set. Unlike
   that dialog it has no "None", because every period needs a set. Cancel on the left, a danger
   **Delete {set}** on the right. Deleting a set a zone is using right now does not change the till
-  then (section 7).
+  then (section 7.2).
 - **The editor** keeps its contract, its header included (Undo, Redo, Cancel, Save). Its title
   gains the set's name, "Inside · Dinner", and a line under it says "Tables are shared by every set.
   Adding, renaming or deleting one here does it in every set." Its address becomes
