@@ -710,45 +710,114 @@ it("a refusal from an earlier opening shows nothing in the new one", async () =>
   expect(rowErrorsShown(el)).toBe(0);
 });
 
-it("a Discard restores the baseline but never reuses a new row's key", async () => {
-  type Owner = {
-    current(): unknown;
-    snapshot(value: unknown): unknown;
-    equal(a: unknown, b: unknown): boolean;
-    restore(value: unknown): void;
-  };
-  let owner: Owner | undefined;
-  let base: unknown;
+type Owner = {
+  current(): unknown;
+  snapshot(value: unknown): unknown;
+  equal(a: unknown, b: unknown): boolean;
+  restore(value: unknown): void;
+};
+/** A leave coordinator that hands out plain baselines and records every scope it registers. */
+function fakeCoordinator() {
+  const scopes: { owner: Owner; base: () => unknown; isDirty(): boolean; disposed: boolean }[] = [];
   const provide = (event: Event) => {
     (event as CustomEvent<{ accept(value: unknown): void }>).detail.accept({
-      register(registered: Owner) {
-        owner = registered;
-        base = registered.snapshot(registered.current());
+      register(owner: Owner) {
+        let base = owner.snapshot(owner.current());
+        const entry = {
+          owner,
+          base: () => base,
+          isDirty: () => !owner.equal(base, owner.current()),
+          disposed: false,
+        };
+        scopes.push(entry);
         return {
           id: {},
           changed() {},
-          isDirty: () => !registered.equal(base, registered.current()),
+          isDirty: entry.isDirty,
           commit(value: unknown) {
-            base = registered.snapshot(value);
+            base = owner.snapshot(value);
           },
-          dispose() {},
+          dispose() {
+            entry.disposed = true;
+          },
         };
       },
     });
   };
   document.body.addEventListener("wt-leave-coordinator", provide);
   listeners.push(() => document.body.removeEventListener("wt-leave-coordinator", provide));
-  const el = await mount();
-  expect(owner).toBeDefined();
+  return { scopes, live: () => scopes.filter((scope) => !scope.disposed) };
+}
+
+it("a Discard restores the baseline but never reuses a new row's key", async () => {
+  const leave = fakeCoordinator();
+  const el = await mount(false, {
+    saveSeasons: vi.fn(async () => {
+      throw { code: "hours.clock_changed" };
+    }),
+  });
+  expect(leave.live()).toHaveLength(1);
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => bottom(el)).toBe("The business-day start changed. Reload hours.");
   await press(el, button(el, "add-season")!);
   await press(el, button(el, "add-season")!);
   expect(rowKeys(el)).toContain("new-2");
-  owner!.restore(owner!.snapshot(base));
+  expect(fieldError(el, "season-4-name")).toBe("Enter a name.");
+  const [scope] = leave.live();
+  scope!.owner.restore(scope!.owner.snapshot(scope!.base()));
   await el.updateComplete;
   expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn"]);
   expect(save(el).disabled).toBe(true);
+  expect(bottom(el)).toBe("");
   await press(el, button(el, "add-season")!);
   expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn", "new-3"]);
+  expect(rowErrorsShown(el)).toBe(0);
+});
+
+it("a window taken off the page and put back after a redraw still guards and saves its edit", async () => {
+  const leave = fakeCoordinator();
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  el.remove();
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(leave.live()).toHaveLength(0);
+  document.body.append(el);
+  await el.updateComplete;
+  expect(leave.live()).toHaveLength(1);
+  expect(leave.live()[0]!.isDirty()).toBe(true);
+  expect([save(el).disabled, save(el).variant]).toEqual([false, "primary"]);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+});
+
+it("a refused field the request did not hold says the change could not be saved", async () => {
+  const el = await mount(false, {
+    saveSeasons: vi.fn(async () => {
+      throw { code: "season.invalid", params: { field: "save.5.name", reason: "taken" } };
+    }),
+  });
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => bottom(el)).toBe("The change could not be saved.");
+  expect(rowErrorsShown(el)).toBe(0);
+});
+
+it("binning the row a refusal marked takes the bottom message away", async () => {
+  const el = await mount(false, {
+    saveSeasons: vi.fn(async () => {
+      throw { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } };
+    }),
+  });
+  await change(el, "season-2-name", "High summer");
+  await press(el, save(el));
+  await expect.poll(() => fieldError(el, "season-2-name")).toBe("Another season has this name.");
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  await press(el, bins(el)[2]!);
+  expect(rowErrorsShown(el)).toBe(0);
+  expect(bottom(el)).toBe("");
 });
 
 it("an earlier opening's answer leaves the new opening's own Save busy", async () => {

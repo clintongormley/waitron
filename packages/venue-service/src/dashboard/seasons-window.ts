@@ -36,14 +36,17 @@ import {
   type SeasonRow,
   type SeasonRowErrors,
 } from "./season-draft.js";
-import { seasonRefusalField, seasonRefusalText } from "./season-refusal.js";
+import {
+  seasonRefusalField,
+  seasonRefusalText,
+  type SeasonRefusedField,
+} from "./season-refusal.js";
 import { refusalOf, type Refusal } from "./refusal.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 type RowField = "name" | "day" | "month" | "colour";
-type ErrorField = "name" | "startsOn" | "colour";
-const errorFieldOf = (field: RowField): ErrorField =>
+const errorFieldOf = (field: RowField): SeasonRefusedField =>
   field === "day" || field === "month" ? "startsOn" : field;
 
 @customElement("seasons-window")
@@ -91,13 +94,13 @@ export class SeasonsWindow extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       .name wt-input {
-        min-width: calc(var(--wt-space-8) * 4);
+        min-width: calc(var(--wt-space-6) * 6);
       }
       .start wt-combobox {
-        min-width: calc(var(--wt-space-8) * 2);
+        min-width: calc(var(--wt-space-6) * 3);
       }
       .start wt-combobox[name$="-month"] {
-        min-width: calc(var(--wt-space-8) * 3);
+        min-width: calc(var(--wt-space-6) * 4.5);
       }
       .until,
       .text {
@@ -171,6 +174,8 @@ export class SeasonsWindow extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.generation = {};
+    // The scope is taken in willUpdate; a host put back after a redraw has none until it redraws.
+    this.requestUpdate();
     this.dataset.test = "calendar-window";
     this.dataset.window = "seasons";
   }
@@ -195,6 +200,8 @@ export class SeasonsWindow extends LitElement {
         // The live counter is kept, so a Discard never hands a later row a key already used.
         restore: (snapshot) => {
           this.draft = { ...snapshot, next: Math.max(this.draft!.next, snapshot.next) };
+          this.attempted = false;
+          this.refusal = undefined;
         },
       });
       scope.commit(this.baseline!);
@@ -212,7 +219,7 @@ export class SeasonsWindow extends LitElement {
     this.scope?.changed();
   }
   /** The refused field, and the key of the row it belongs to. */
-  private refused(): { key: string; field: ErrorField; message: string } | undefined {
+  private refused(): { key: string; field: SeasonRefusedField; message: string } | undefined {
     if (!this.refusal) return undefined;
     const found = seasonRefusalField(this.refusal.refusal);
     const key = found ? this.refusal.keys[found.index] : undefined;
@@ -223,8 +230,8 @@ export class SeasonsWindow extends LitElement {
   private errorsOf(
     row: SeasonRow,
     own: Map<string, SeasonRowErrors>,
-  ): Partial<Record<ErrorField, string>> {
-    const errors: Partial<Record<ErrorField, string>> = {};
+  ): Partial<Record<SeasonRefusedField, string>> {
+    const errors: Partial<Record<SeasonRefusedField, string>> = {};
     const mine = own.get(row.key);
     if (mine?.name)
       errors.name = t(mine.name === "taken" ? "season.name_taken" : "prep.name_required");
@@ -492,10 +499,15 @@ export class SeasonsWindow extends LitElement {
     const action = saveActionState(this.scope);
     const own = this.ownErrors();
     const busy = this.busy;
-    const marked = this.refused() !== undefined || own.size > 0;
-    const refusal = this.refusal
-      ? seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays)
-      : "";
+    const refused = this.refused();
+    const marked = own.size > 0 || this.rows.some((row) => row.key === refused?.key);
+    const refusal = !this.refusal
+      ? ""
+      : seasonRefusalField(this.refusal.refusal)
+        ? refused
+          ? ""
+          : t("prep.save_error")
+        : seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays);
     return html`<wt-form-actions
       slot="footer"
       .error=${[refusal, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
