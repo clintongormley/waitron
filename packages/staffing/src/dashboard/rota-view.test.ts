@@ -50,6 +50,7 @@ const show = (el: View) => {
   return boxes[0]!;
 };
 const normal = (s: string) => s.replace(/\s+/g, " ").trim();
+const title = (el: View) => normal(el.shadowRoot!.querySelector("[data-test=week]")!.textContent!);
 const area = (el: View) => el.shadowRoot!.querySelector<LitElement>("rota-by-area")!;
 const text = (el: View) => area(el).shadowRoot!.textContent!;
 
@@ -205,7 +206,7 @@ describe("the Rota by area", () => {
     old(rotaWeek());
     await el.updateComplete;
     await Promise.resolve();
-    expect(el.shadowRoot!.querySelector("[data-test=week]")!.textContent).toContain("7 Dec");
+    expect(title(el)).toBe("7 – 13 Dec 2026");
   });
   it("updates from live changes and recovers load errors without hiding action errors", async () => {
     const live = new LiveData();
@@ -673,5 +674,67 @@ describe("the Rota's bar", () => {
     expect(box(q(el, "[data-test=swap-notice]")!).top).toBeGreaterThanOrEqual(
       box(q(el, "[data-test=bar]")!).bottom,
     );
+  });
+});
+
+describe("the Rota's week title", () => {
+  type Linked = View & { canOpenStaffing: boolean };
+  const months = (el: View) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-test=week] button"),
+  ];
+  it("the title is the week's range", async () => {
+    const el = await mount();
+    expect(title(el)).toBe("30 Nov – 6 Dec 2026");
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(title(el)).toBe("30 nov – 6 dic 2026");
+  });
+  it("the title keeps one width across weeks", async () => {
+    await useViewport(1280, 900);
+    const el = await mount();
+    const width = () => box(q(el, ".fixed-title")!).width;
+    await el.updateComplete;
+    const first = width();
+    el.week = "2026-12-28";
+    await vi.waitFor(() => {
+      expect(title(el)).toBe("28 Dec 2026 – 3 Jan 2027");
+      expect(q(el, "rota-by-area")).toBeTruthy();
+    });
+    await el.updateComplete;
+    expect(first).toBeGreaterThan(0);
+    expect(Math.abs(width() - first)).toBeLessThanOrEqual(0.5);
+  });
+  it("each month name opens that month's Staffing", async () => {
+    const el = (await mount()) as Linked;
+    expect(months(el)).toHaveLength(0);
+    el.canOpenStaffing = true;
+    await el.updateComplete;
+    const [nov, dec] = months(el);
+    expect(months(el).map((b) => normal(b.textContent!))).toEqual(["Nov", "Dec"]);
+    for (const link of [nov!, dec!]) {
+      const hint = el.shadowRoot!.getElementById(link.getAttribute("aria-describedby")!);
+      expect(normal(hint!.textContent!)).toBe("Opens this month's staffing");
+    }
+    nov!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+    });
+    dec!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", {
+      month: "2026-12",
+      area: "station:kitchen",
+    });
+    el.params = { area: "everyone" };
+    await vi.waitFor(() => expect(q(el, "rota-by-person")).toBeTruthy());
+    months(el)[0]!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", { month: "2026-11" });
+    months(el)[1]!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", { month: "2026-12" });
+    el.canOpenStaffing = false;
+    await el.updateComplete;
+    expect(q(el, "[data-test=week]")!.querySelector("button")).toBeNull();
+    expect(title(el)).toBe("30 Nov – 6 Dec 2026");
   });
 });

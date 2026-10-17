@@ -80,6 +80,7 @@ export const STAFFING_DASHBOARD: DashboardContribution = {
               .params=${host.params}
               .canWrite=${host.canWrite}
               .canWriteStaffing=${ctx.calendarViews?.some((entry) => entry.view.id === "staffing" && entry.canWrite) ?? false}
+              .canOpenStaffing=${ctx.calendarViews?.some((entry) => entry.view.id === "staffing") ?? false}
               .open=${host.open}
             ></staffing-rota>`,
         };

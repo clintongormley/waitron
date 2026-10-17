@@ -98,6 +98,7 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     el.canWrite = true;
     el.open = () => undefined;
     if (state === "everyone") el.params = { area: "everyone" };
+    if (state === "draft") el.canOpenStaffing = true;
     host.append(el);
     if (state === "loading")
       await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
@@ -111,6 +112,8 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     else if (state === "everyone")
       await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy());
     else await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
+    if (state === "draft")
+      expect(el.shadowRoot!.querySelectorAll("[data-test=week] button")).toHaveLength(2);
     if (state === "picker") {
       const area = el.shadowRoot!.querySelector("rota-by-area")!;
       await (area as import("lit").LitElement).updateComplete;

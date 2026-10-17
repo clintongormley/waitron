@@ -1,14 +1,15 @@
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import "./publish-dialog.js";
 import "./shift-edit-dialog.js";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/fixed-title";
 import { areaKey, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateLabel } from "./format.js";
+import { weekTitleParts } from "./format.js";
 import { hours } from "./rota-format.js";
 import {
   EVERYONE,
@@ -19,7 +20,7 @@ import {
   type Show,
 } from "./rota-model.js";
 import { breachText } from "./rota-warnings.js";
-import { countWords, t, tf } from "./strings.js";
+import { STAFFING_STRINGS, countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
 import "./rota-by-person.js";
 import "./slot-picker.js";
@@ -28,10 +29,28 @@ import "@waitron/ui/src/components/wt-combobox.js";
 
 const step = (day: string, n: number) =>
   new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+let widthCandidates: TemplateResult[] | undefined;
+/** The titles of every week whose Monday falls in 2026, in each interface language, its month
+ *  names shaped as the links are, as the Calendar Week sizes its title. */
+function titleCandidates(): TemplateResult[] {
+  if (!widthCandidates) {
+    widthCandidates = [];
+    for (const language of Object.keys(STAFFING_STRINGS))
+      for (let monday = "2026-01-05"; monday < "2027-01-01"; monday = step(monday, 7))
+        widthCandidates.push(
+          html`${weekTitleParts(monday, language).map((part) =>
+            part.month ? html`<span class="title-link">${part.text}</span>` : part.text,
+          )}`,
+        );
+  }
+  return widthCandidates;
+}
 @customElement("staffing-rota")
 export class RotaView extends LitElement {
   static override styles = [
     baseStyles,
+    fixedTitleStyles,
     css`
       :host {
         display: block;
@@ -45,9 +64,19 @@ export class RotaView extends LitElement {
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-3);
       }
-      h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
+      .title-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .title-link:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
       }
       .head wt-combobox {
         min-width: calc(var(--wt-tap-min) * 4);
@@ -176,6 +205,7 @@ export class RotaView extends LitElement {
   @property({ attribute: false }) params: Readonly<Record<string, string>> = {};
   @property({ type: Boolean }) canWrite = false;
   @property({ type: Boolean }) canWriteStaffing = false;
+  @property({ type: Boolean }) canOpenStaffing = false;
   @property({ attribute: false }) open!: (view: string, params: Record<string, string>) => void;
   @state() private read?: RotaWeek;
   @state() private loadError = "";
@@ -410,6 +440,22 @@ export class RotaView extends LitElement {
       >${t(read.version?.changedSincePublished ? "staffing.rota.publish_changes" : "staffing.rota.publish")}</wt-button
     >`;
   }
+  #title(show: Show | undefined) {
+    if (!this.week) return nothing;
+    return weekTitleParts(this.week).map((part) => {
+      const { month } = part;
+      if (!month || !this.canOpenStaffing) return part.text;
+      return html`<button
+        type="button"
+        class="title-link"
+        aria-describedby="month-hint"
+        @click=${() =>
+          this.open("staffing", { month, ...(show?.kind === "area" ? { area: show.key } : {}) })}
+      >
+        ${part.text}
+      </button>`;
+    });
+  }
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
     const show = read ? chosenShow(read, this.params.area) : undefined;
@@ -423,9 +469,7 @@ export class RotaView extends LitElement {
           @click=${() => this.#go(step(this.week, -7))}
           >‹</wt-button
         >
-        <h2 data-test="week">
-          ${this.week ? `${dateLabel(this.week)} – ${dateLabel(step(this.week, 6))}` : ""}
-        </h2>
+        ${fixedTitle(html`<h2 data-test="week">${this.#title(show)}</h2>`, titleCandidates())}
         <wt-button
           variant="secondary"
           data-test="next-week"
@@ -460,6 +504,7 @@ export class RotaView extends LitElement {
             : nothing
         }
       </div>
+      <span id="month-hint" class="visually-hidden">${t("staffing.rota.month_hint")}</span>
       <span class="visually-hidden" role="status" data-test="attention-status"
         >${attention?.words ?? ""}</span
       >
