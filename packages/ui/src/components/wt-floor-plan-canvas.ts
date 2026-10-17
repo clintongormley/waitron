@@ -5,20 +5,25 @@ import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { floorPlanTableStyles } from "../floor-plan-table-styles.js";
 import {
+  EXTENT_MARGIN,
   GRID_SQUARE_PX,
   type PlanPlacement,
+  type PlanCorner,
   type PlanRect,
   type PlanSide,
   bounds,
   clampToGrid,
+  cornerSides,
   gridExtent,
   outward,
   type ResizeCursor,
   resizeCursor,
   resizeFrom,
+  resizeFromCorner,
   rotatedRect,
   showsName,
   snapToSquare,
+  stepInside,
 } from "../floor-plan-geometry.js";
 import { ROTATION_STEP, snapRotation } from "../floor.js";
 import { Gestures, type GesturePoint } from "../gestures.js";
@@ -61,9 +66,13 @@ export interface TableMove {
   y: number;
 }
 
+/** `x` and `y`: where the table is after the turn, stepped in so it is no further past the plan's
+ *  top or left edge than it was before the turn. */
 export interface TableRotate {
   key: string;
   rotation: number;
+  x: number;
+  y: number;
 }
 
 export interface TableResize {
@@ -75,6 +84,23 @@ export interface TableResize {
 }
 
 const SIDES: readonly PlanSide[] = ["top", "right", "bottom", "left"];
+
+const CORNERS: readonly PlanCorner[] = ["top-left", "top-right", "bottom-right", "bottom-left"];
+
+const isCorner = (handle: PlanSide | PlanCorner): handle is PlanCorner =>
+  (CORNERS as readonly string[]).includes(handle);
+
+/** A side shorter than this, in squares, draws no dot; its corners resize it. */
+const SIDE_DOT_MIN_SQUARES = 4;
+
+/** Judged from `t.placement`, never the draft: the canvas does not change `t.placement` during a
+ *  drag, so a drag alone never makes a dot vanish under the pointer. */
+function sidesWithDots(t: PlanCanvasTable): PlanSide[] {
+  const { width, height } = t.placement;
+  return SIDES.filter(
+    (side) => (side === "top" || side === "bottom" ? width : height) >= SIDE_DOT_MIN_SQUARES,
+  );
+}
 
 const DEFAULT_COPY: Required<FloorPlanCanvasCopy> = {
   label: "Floor plan",
@@ -97,6 +123,20 @@ function sameBox(a: PlanPlacement, b: PlanPlacement): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
+/** How far right of and below a table's centre its turn arrow's furthest corner each way is drawn,
+ *  in the units of `half` (half the table's height), `gap` (from the top side to the arrow) and
+ *  `size` (the arrow's side). */
+function arrowReach(
+  rotation: number,
+  half: number,
+  gap: number,
+  size: number,
+): { right: number; below: number } {
+  const { x, y } = outward("top", rotation);
+  const along = (d: number) => Math.max((half + gap) * d, (half + gap + size) * d);
+  return { right: along(x) + (size * Math.abs(y)) / 2, below: along(y) + (size * Math.abs(x)) / 2 };
+}
+
 /** Degrees clockwise from straight up, round the centre. */
 function angleAround(centreX: number, centreY: number, clientX: number, clientY: number): number {
   return (Math.atan2(clientX - centreX, centreY - clientY) * 180) / Math.PI;
@@ -117,7 +157,7 @@ const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowUp: { dx: 0, dy: -1 },
 };
 
-type Grab = { kind: "move" | "rotate" } | { kind: "resize"; side: PlanSide };
+type Grab = { kind: "move" | "rotate" } | { kind: "resize"; handle: PlanSide | PlanCorner };
 
 type Drag = Grab & {
   table: PlanCanvasTable;
@@ -158,6 +198,7 @@ export class WtFloorPlanCanvas extends LitElement {
         height: 100%;
         overflow: auto;
         touch-action: none;
+        background-color: var(--wt-color-surface);
       }
 
       .grid {
@@ -166,6 +207,8 @@ export class WtFloorPlanCanvas extends LitElement {
         min-width: 100%;
         min-height: 100%;
         background-color: var(--wt-color-surface);
+        background-origin: content-box;
+        background-clip: content-box;
         background-image:
           linear-gradient(
             to right,
@@ -226,8 +269,11 @@ export class WtFloorPlanCanvas extends LitElement {
 
       .rotate-handle {
         position: absolute;
-        left: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
-        bottom: calc(100% + var(--wt-space-1) * var(--wt-plan-control-scale));
+        left: 50%;
+        bottom: calc(
+          100% + (var(--wt-space-5) / 2 + var(--wt-space-1)) * var(--wt-plan-control-scale)
+        );
+        translate: -50% 0;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -252,13 +298,16 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .resize-handle,
-      .resize-dot {
+      .resize-dot,
+      .resize-corner-handle,
+      .resize-corner {
         position: absolute;
       }
 
       /* Under the table's button, which takes a press where the two overlap, so a selected table
-         of any size can still be dragged; the dot is grabbed outside the table. */
-      .resize-handle {
+         of any size can still be dragged; a dot or corner is grabbed outside the table. */
+      .resize-handle,
+      .resize-corner-handle {
         width: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
         height: calc(var(--wt-space-5) * var(--wt-plan-control-scale));
         margin: calc(var(--wt-space-5) * var(--wt-plan-control-scale) / -2) 0 0
@@ -268,11 +317,15 @@ export class WtFloorPlanCanvas extends LitElement {
         pointer-events: auto;
       }
 
-      .resize-dot {
+      .resize-dot,
+      .resize-corner {
         width: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
         height: calc(var(--wt-space-3) * var(--wt-plan-control-scale));
         margin: calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2) 0 0
           calc(var(--wt-space-3) * var(--wt-plan-control-scale) / -2);
+      }
+
+      .resize-dot {
         border: calc(var(--wt-space-1) * var(--wt-plan-control-scale) / 2) solid
           var(--wt-color-primary);
         border-radius: var(--wt-radius-full);
@@ -280,6 +333,10 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .resize-dot[data-dragging] {
+        background: var(--wt-color-primary);
+      }
+
+      .resize-corner {
         background: var(--wt-color-primary);
       }
 
@@ -303,7 +360,27 @@ export class WtFloorPlanCanvas extends LitElement {
         left: 0;
       }
 
-      /* The drag listens on the window, so the pointer leaves the dot while the arrow should stay. */
+      [data-corner="top-left"] {
+        top: 0;
+        left: 0;
+      }
+
+      [data-corner="top-right"] {
+        top: 0;
+        left: 100%;
+      }
+
+      [data-corner="bottom-right"] {
+        top: 100%;
+        left: 100%;
+      }
+
+      [data-corner="bottom-left"] {
+        top: 100%;
+        left: 0;
+      }
+
+      /* The drag listens on the window, so the pointer leaves the dot or corner while the resize cursor should stay. */
       .viewport[data-resizing] * {
         cursor: inherit !important;
       }
@@ -345,7 +422,11 @@ export class WtFloorPlanCanvas extends LitElement {
 
   @state() private announcement = "";
 
-  @state() private resizing: { key: string; side: PlanSide; cursor: ResizeCursor } | null = null;
+  @state() private resizing: {
+    key: string;
+    handle: PlanSide | PlanCorner;
+    cursor: ResizeCursor;
+  } | null = null;
 
   @state() private zoom = 1;
 
@@ -359,8 +440,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #ignoreGridClick = false;
 
-  /** Squares drawn left of and above the plan's (0, 0): `#margin`, plus a turned table's overhang
-   *  past it, so its corners can be scrolled to. */
+  /** Squares drawn left of and above the plan's (0, 0): `#margin`, plus the overhang of a turned
+   *  table that arrives poking out past it, so its corners can be scrolled to. */
   #origin = { x: 0, y: 0 };
 
   /** Squares the grid is drawn, before `bottomInset`. */
@@ -371,7 +452,7 @@ export class WtFloorPlanCanvas extends LitElement {
    * tables show another layout or the box is resized, the room and the grid only grow, as during
    * the drag: less room at scroll 0, or a grid too short for its scroll, cannot be scrolled away,
    * so what was under the pointer would jump when it let go. After an arrow key's change (`key`),
-   * the room shrinks only by what is scrolled, so no other table moves.
+   * the room and the grid shrink only by what is out of view, so no other table moves.
    */
   #hold: {
     before: string;
@@ -388,6 +469,9 @@ export class WtFloorPlanCanvas extends LitElement {
 
   /** Squares kept above and left of the plan for a turn arrow. */
   #margin = 0;
+
+  /** The turn arrow's tokens in px, before `--wt-plan-control-scale`, read with `#margin`. */
+  #arrow = { gap: 0, size: 0 };
 
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
@@ -451,19 +535,28 @@ export class WtFloorPlanCanvas extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     const placements = this.tables.map((t) => this.#placementOf(t));
     const box = bounds(placements);
-    const plan = gridExtent(placements, { columns: 0, rows: 0 });
     const hold = this.#holding(changed.has("tables"));
     // Not while a drag holds the room, so nothing drawn moves under the pointer.
     if (changed.has("zoom") || (hold !== "drag" && (!this.hasUpdated || changed.has("tables")))) {
       const host = getComputedStyle(this);
-      // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
-      // either axis, so its reach past the table's turned box is the side times √2.
-      const reach =
-        (parseFloat(host.getPropertyValue("--wt-tap-min")) +
-          parseFloat(host.getPropertyValue("--wt-space-1"))) *
-        Math.SQRT2;
+      const tap = parseFloat(host.getPropertyValue("--wt-tap-min"));
+      this.#arrow = {
+        gap:
+          parseFloat(host.getPropertyValue("--wt-space-5")) / 2 +
+          parseFloat(host.getPropertyValue("--wt-space-1")),
+        size: tap,
+      };
+      // The arrow's furthest corner from the middle of the table's top side, which is never outside
+      // the table's turned box, so a turn can point that distance along either axis.
+      const reach = Math.hypot(this.#arrow.gap + tap, tap / 2);
       this.#margin = Math.ceil((reach * Math.max(1, 1 / this.zoom)) / GRID_SQUARE_PX);
     }
+    const extent = gridExtent(placements, { columns: 0, rows: 0 });
+    const arrows = this.#arrowExtent(placements);
+    const plan = {
+      columns: Math.max(extent.columns, arrows.columns),
+      rows: Math.max(extent.rows, arrows.rows),
+    };
     // Tolerates float error in a corner computed to land exactly on the edge.
     let x = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9)));
     let y = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9)));
@@ -476,19 +569,32 @@ export class WtFloorPlanCanvas extends LitElement {
       columns = Math.max(this.#size.columns + x - this.#origin.x, x + plan.columns);
       rows = Math.max(this.#size.rows + y - this.#origin.y, y + plan.rows);
     } else {
+      let view = { columns: 0, rows: 0 };
       if (hold === "key") {
         const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
-        x = Math.max(
-          x,
-          this.#origin.x - Math.floor(viewport.scrollLeft / (GRID_SQUARE_PX * this.zoom)),
-        );
-        y = Math.max(
-          y,
-          this.#origin.y - Math.floor(viewport.scrollTop / (GRID_SQUARE_PX * this.zoom)),
-        );
+        // Where `updated` scrolls from: a zoom's scroll is set there, at the new zoom.
+        const scroll = this.#scroll ?? { x: viewport.scrollLeft, y: viewport.scrollTop };
+        const square = GRID_SQUARE_PX * this.zoom;
+        x = Math.max(x, this.#origin.x - Math.floor(viewport.scrollLeft / square));
+        y = Math.max(y, this.#origin.y - Math.floor(viewport.scrollTop / square));
+        // The grid is drawn before `updated` scrolls by the change in `#origin`, so it reaches the
+        // view's far edge as it stands. Only along a scrolled axis: unscrolled, there is no scroll
+        // for the browser to pull back, and the edge rounded up to whole squares would overflow a
+        // box that is not whole squares.
+        view = {
+          columns: scroll.x > 0 ? Math.ceil((scroll.x + viewport.clientWidth) / square) : 0,
+          rows:
+            scroll.y > 0
+              ? Math.ceil((scroll.y + viewport.clientHeight - this.bottomInset) / square)
+              : 0,
+        };
       }
-      columns = Math.max(Math.floor(this.visible.columns / this.zoom), x + plan.columns);
-      rows = Math.max(Math.floor(this.visible.rows / this.zoom), y + plan.rows);
+      columns = Math.max(
+        Math.floor(this.visible.columns / this.zoom),
+        x + plan.columns,
+        view.columns,
+      );
+      rows = Math.max(Math.floor(this.visible.rows / this.zoom), y + plan.rows, view.rows);
     }
     // The first tables drawn take their room unscrolled, so their corners show from the start.
     if (this.#drewTables) {
@@ -497,6 +603,25 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#drewTables ||= box !== null;
     this.#origin = { x, y };
     this.#size = { columns, rows };
+  }
+
+  /** Columns and rows from the plan's top left to `gridExtent`'s margin past the furthest point
+   *  right and below any table's turn arrow would reach once that table is selected, so selecting a
+   *  table never resizes the grid. */
+  #arrowExtent(placements: readonly PlanPlacement[]): { columns: number; rows: number } {
+    const scale = Math.max(1, 1 / this.zoom);
+    const gap = this.#arrow.gap * scale;
+    const size = this.#arrow.size * scale;
+    let columns = 0;
+    let rows = 0;
+    for (const p of placements) {
+      const { right, below } = arrowReach(p.rotation, (p.height * GRID_SQUARE_PX) / 2, gap, size);
+      const across = Math.ceil(p.x + p.width / 2 + right / GRID_SQUARE_PX) + EXTENT_MARGIN;
+      const down = Math.ceil(p.y + p.height / 2 + below / GRID_SQUARE_PX) + EXTENT_MARGIN;
+      columns = Math.max(columns, across);
+      rows = Math.max(rows, down);
+    }
+    return { columns, rows };
   }
 
   /** `answered`: the tables were set in this update; set back to the layout before a change, they
@@ -535,6 +660,8 @@ export class WtFloorPlanCanvas extends LitElement {
       width: px(this.#size.columns),
       height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset / this.zoom}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
+      paddingLeft: px(this.#origin.x),
+      paddingTop: px(this.#origin.y),
       zoom: String(this.zoom),
       "--wt-plan-control-scale": String(Math.max(1, 1 / this.zoom)),
       minWidth: `${100 / this.zoom}%`,
@@ -613,13 +740,15 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   /** Outside the table's button, so a round table's clip never cuts it. Always below, past a
-   *  selected table's bottom dot: the grid runs `gridExtent`'s margin past the lowest table. */
+   *  selected table's bottom handles and turn arrow: the grid runs `gridExtent`'s margin past the
+   *  lowest table and every table's arrow. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
-    const dot =
-      t.key === this.selected ? " + var(--wt-space-5) * var(--wt-plan-control-scale) / 2" : "";
     const style = styleMap({
-      top: `calc(${px(box.y + box.height)}${dot} + var(--wt-space-1))`,
+      top:
+        t.key === this.selected
+          ? this.#underHandles(p)
+          : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
     });
     return html`<span
       class="refused-reason"
@@ -632,13 +761,13 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
-  /** The frame has the table's box and turn, so the arrow and the dots turn with the table. */
+  /** The frame has the table's box and turn, so the arrow, the dots and the corners turn with the table. */
   #renderHandles(
     t: PlanCanvasTable,
     p: PlanPlacement,
     copy: Required<FloorPlanCanvasCopy>,
   ): TemplateResult {
-    const dragged = this.resizing?.side ?? null;
+    const dragged = this.resizing?.handle ?? null;
     return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
         type="button"
@@ -651,7 +780,7 @@ export class WtFloorPlanCanvas extends LitElement {
       >
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
-      ${SIDES.map(
+      ${sidesWithDots(t).map(
         (side) =>
           html`<div
             class="resize-dot"
@@ -661,13 +790,22 @@ export class WtFloorPlanCanvas extends LitElement {
             style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
           ></div>`,
       )}
+      ${CORNERS.map(
+        (corner) =>
+          html`<div
+            class="resize-corner"
+            part="resize-corner"
+            data-corner=${corner}
+            style=${styleMap({ cursor: resizeCursor(corner, p.rotation) })}
+          ></div>`,
+      )}
     </div>`;
   }
 
-  /** Drawn before the table's button, so the button is above them; the dots are drawn after it. */
+  /** Drawn before the table's button, so the button is above them; the dots and corners are drawn after it. */
   #renderHitAreas(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     return html`<div class="frame" aria-hidden="true" style=${this.#frameStyle(p)}>
-      ${SIDES.map(
+      ${sidesWithDots(t).map(
         (side) =>
           html`<div
             class="resize-handle"
@@ -675,7 +813,19 @@ export class WtFloorPlanCanvas extends LitElement {
             data-side=${side}
             style=${styleMap({ cursor: resizeCursor(side, p.rotation) })}
             @click=${(e: Event) => e.stopPropagation()}
-            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", side })}
+            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", handle: side })}
+          ></div>`,
+      )}
+      ${CORNERS.map(
+        (corner) =>
+          html`<div
+            class="resize-corner-handle"
+            part="resize-corner-handle"
+            data-corner=${corner}
+            style=${styleMap({ cursor: resizeCursor(corner, p.rotation) })}
+            @click=${(e: Event) => e.stopPropagation()}
+            @pointerdown=${(e: PointerEvent) =>
+              this.#onPointerDown(e, t, { kind: "resize", handle: corner })}
           ></div>`,
       )}
     </div>`;
@@ -684,20 +834,31 @@ export class WtFloorPlanCanvas extends LitElement {
   /** Under the drawn box, where the reason goes; `updated` moves a reason below it. */
   #renderBadge(p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
-    const style = styleMap({
-      left: px(box.x + box.width / 2),
-      top: `calc(${px(box.y + box.height)} + var(--wt-space-5) * var(--wt-plan-control-scale) / 2 + var(--wt-space-1))`,
-    });
+    const style = styleMap({ left: px(box.x + box.width / 2), top: this.#underHandles(p) });
     return html`<span class="size-badge" part="size-badge" aria-hidden="true" style=${style}
       >${p.width} × ${p.height}</span
     >`;
   }
 
-  /** The table whose size badge shows: a dot drag's, else the selected table's after a keyboard
+  /** The table whose size badge shows: a dot or corner drag's, else the selected table's after a keyboard
    *  resize. */
   #badged(): string | null {
     if (this.resizing !== null) return this.resizing.key;
     return this.keyResized === this.selected ? this.keyResized : null;
+  }
+
+  /** A `top` `--wt-space-1` below the lower of half a handle's hit area past `p`'s drawn box and its
+   *  turn arrow's lowest corner; the CSS form of `arrowReach`'s `below`. */
+  #underHandles(p: PlanPlacement): string {
+    const box = this.#drawnBox(p);
+    const scale = "var(--wt-plan-control-scale)";
+    const { x, y } = outward("top", p.rotation);
+    const near = `${px(p.height / 2)} + (var(--wt-space-5) / 2 + var(--wt-space-1)) * ${scale}`;
+    const size = `var(--wt-tap-min) * ${scale}`;
+    const side = `${size} * ${Math.abs(x) / 2}`;
+    const dots = `${px(box.height / 2)} + var(--wt-space-5) * ${scale} / 2`;
+    const arrow = `(${near}) * ${y} + ${side}, (${near} + ${size}) * ${y} + ${side}`;
+    return `calc(${px(box.y + box.height / 2)} + max(${dots}, ${arrow}) + var(--wt-space-1))`;
   }
 
   /** `p`'s turned box in squares from the drawn grid's corner. */
@@ -780,9 +941,12 @@ export class WtFloorPlanCanvas extends LitElement {
     if (arrow === undefined) return;
     e.preventDefault();
     e.stopPropagation();
-    const x = clampToGrid(t.placement.x + arrow.dx);
-    const y = clampToGrid(t.placement.y + arrow.dy);
-    if (x === t.placement.x && y === t.placement.y) return;
+    const p = t.placement;
+    const { x, y } = stepInside(
+      { ...p, x: clampToGrid(p.x + arrow.dx), y: clampToGrid(p.y + arrow.dy) },
+      p,
+    );
+    if (x === p.x && y === p.y) return;
     this.#keyHold({ key: t.key, placement: { ...t.placement, x, y } });
     this.#move(t.key, x, y);
   }
@@ -795,6 +959,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const next = resizeFrom(t.placement, resize.side, resize.squares);
     if (sameBox(next, t.placement)) return;
     const { x, y, width, height } = next;
+    this.#keyHold({ key: t.key, placement: { ...t.placement, x, y, width, height } });
     this.#resize({ key: t.key, x, y, width, height });
     this.keyResized = t.key;
     this.announcement = this.#copy.size
@@ -812,9 +977,12 @@ export class WtFloorPlanCanvas extends LitElement {
     if (step === 0) return;
     e.preventDefault();
     e.stopPropagation();
-    const rotation = snapRotation(t.placement.rotation + step);
-    this.#keyHold({ key: t.key, placement: { ...t.placement, rotation } });
-    this.#rotate(t.key, rotation);
+    const placement = stepInside(
+      { ...t.placement, rotation: snapRotation(t.placement.rotation + step) },
+      t.placement,
+    );
+    this.#keyHold({ key: t.key, placement });
+    this.#rotate(t.key, placement);
   }
 
   readonly #onViewPointerDown = (e: PointerEvent): void => {
@@ -901,8 +1069,8 @@ export class WtFloorPlanCanvas extends LitElement {
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
     if (grab.kind === "resize") {
-      const cursor = resizeCursor(grab.side, p.rotation);
-      this.resizing = { key: t.key, side: grab.side, cursor };
+      const cursor = resizeCursor(grab.handle, p.rotation);
+      this.resizing = { key: t.key, handle: grab.handle, cursor };
       holdPageCursor(cursor);
     }
   }
@@ -914,24 +1082,40 @@ export class WtFloorPlanCanvas extends LitElement {
     const p = drag.table.placement;
     const now = this.draft?.placement ?? p;
     if (drag.kind === "move") {
-      const x = clampToGrid(p.x + snapToSquare((e.clientX - drag.startX) / this.zoom));
-      const y = clampToGrid(p.y + snapToSquare((e.clientY - drag.startY) / this.zoom));
+      const { x, y } = stepInside(
+        {
+          ...p,
+          x: clampToGrid(p.x + snapToSquare((e.clientX - drag.startX) / this.zoom)),
+          y: clampToGrid(p.y + snapToSquare((e.clientY - drag.startY) / this.zoom)),
+        },
+        p,
+      );
       if (x !== now.x || y !== now.y) {
         this.draft = { key: drag.table.key, placement: { ...p, x, y } };
       }
       return;
     }
     if (drag.kind === "resize") {
-      const out = outward(drag.side, p.rotation);
-      const along = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
-      const next = resizeFrom(p, drag.side, snapToSquare(along / this.zoom));
+      const along = (side: PlanSide) => {
+        const out = outward(side, p.rotation);
+        const moved = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
+        return snapToSquare(moved / this.zoom);
+      };
+      const { handle } = drag;
+      let next: PlanPlacement;
+      if (isCorner(handle)) {
+        const { vertical, horizontal } = cornerSides(handle);
+        next = resizeFromCorner(p, handle, along(horizontal), along(vertical));
+      } else {
+        next = resizeFrom(p, handle, along(handle));
+      }
       if (!sameBox(next, now)) this.draft = { key: drag.table.key, placement: next };
       return;
     }
     const turn = angleAround(drag.centreX, drag.centreY, e.clientX, e.clientY) - drag.startAngle;
     const rotation = snapRotation(p.rotation + turn);
     if (rotation !== now.rotation) {
-      this.draft = { key: drag.table.key, placement: { ...p, rotation } };
+      this.draft = { key: drag.table.key, placement: stepInside({ ...p, rotation }, p) };
     }
   };
 
@@ -950,7 +1134,7 @@ export class WtFloorPlanCanvas extends LitElement {
     // the pressed button instead, which stops it.
     this.#ignoreGridClick = true;
     setTimeout(() => (this.#ignoreGridClick = false));
-    if (turned) this.#rotate(drag.table.key, to.rotation);
+    if (turned) this.#rotate(drag.table.key, to);
     if (moved) this.#move(drag.table.key, to.x, to.y);
     if (resized)
       this.#resize({ key: drag.table.key, x: to.x, y: to.y, width: to.width, height: to.height });
@@ -989,8 +1173,8 @@ export class WtFloorPlanCanvas extends LitElement {
     );
   }
 
-  #rotate(key: string, rotation: number): void {
-    const detail: TableRotate = { key, rotation };
+  #rotate(key: string, { rotation, x, y }: PlanPlacement): void {
+    const detail: TableRotate = { key, rotation, x, y };
     this.dispatchEvent(
       new CustomEvent("wt-table-rotate", { detail, bubbles: true, composed: true }),
     );

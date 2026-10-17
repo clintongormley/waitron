@@ -266,9 +266,10 @@ size. Next: decide how a small table shows its name (smaller type, number only, 
 ## A562. A 2 × 2 table shows no name in the floor plan editor
 
 **A562 (2026-10-13).** In the dashboard floor plan editor a 2 × 2 table, for example one put back
-on the plan at its kept size, shows no visible name, and when selected its resize handles cover it
-(A503 part 3's look, shots `8-counter3-put-back-*`). Since #1604 a table comes back at its kept size
-rather than 8 × 8, so this is seen more. Next: the same decision as A561, in `wt-floor-plan-canvas`.
+on the plan at its kept size, shows no visible name (A503 part 3's look, shots
+`8-counter3-put-back-*`). Since #1604 a table comes back at its kept size rather than 8 × 8, so this
+is seen more. A672 decided its handles: a selected 2 × 2 shows its four corners and no side dots.
+Next: its name waits on the same decision as A561, in `wt-floor-plan-canvas`.
 
 ## A563. The till says "part of a joined table" for a joined table that has come apart
 
@@ -436,28 +437,20 @@ A503 part 2 (#1601). Next: an inline multi-pick primitive, and the owner's call 
 is in [design-system.md](../developers/design-system.md#departments-and-zones). The remaining open
 work here is the inline Made of picker and how its parts wrap.
 
-## A672. The floor plan editor's canvas: the top-left limit, corner handles, scroll bars on a turn
+## A turned floor plan table narrower than its unturned box stops short of the plan's left or top edge
 
-**A672 (owner, 2026-10-14).** In `wt-floor-plan-canvas` (`packages/ui/src/components/`) and
-`packages/ui/src/floor-plan-geometry.ts`.
-
-1. **A table at the plan's top-left limit cannot be moved or resized up or left, although empty grid
-   shows there.** Seen with a turned table: dragging its top handle grows it so far and then stops,
-   and the table cannot be dragged up or left at all. Likely cause, read and not run: a move clamps
-   the table's unturned top-left corner at 0 (`clampToGrid`), `resizeFrom` refuses growth that would
-   take it below 0, while the canvas draws a margin of empty grid beyond the plan's corner for the
-   turn arrow (`#margin` in `willUpdate`), so the limit looks like free space. Next: reproduce, then
-   decide whether the plan grows up and left when a table is taken there, or the margin stops looking
-   usable.
-2. **Corner resize handles** (owner: yes). Dragging a corner changes width and height together; the
-   side dots stay, for stretching one side. The turn arrow moves from outside the top-right corner to
-   above the top-centre dot, clear of the corner handle. A small table already has its name covered
-   by its handles (A562), so decide with A562 how a small table shows them — corners instead of side
-   dots below some size is one option. Shift+arrow resizing and the hit areas
-   (`#renderHitAreas`) need the corners too.
-3. **A small clockwise turn just after placing a table flashes scroll bars on the grid**, which then
-   disappear. Related to the open "a size reading just after a floor plan drop may shift the plan"
-   entry in `docs/backlog.md`; not measured whether it is the same cause.
+**Left open by A672 (2026-10-16).** A table's saved x and y are its corner before it is turned, and
+neither goes below 0 (`stepInside`, `packages/ui/src/floor-plan-geometry.ts`; `checkPlacement`,
+`apps/server/src/floor-plan.ts`). So a table that is narrower turned than unturned, such as an 8 × 4
+turned 90°, stops with a gap at the plan's left or top edge (2 squares for that table). At that edge
+a growth of several squares can end differently from the same growth a square at a time, and a
+growth then the same shrink need not put the table back
+(`packages/ui/src/floor-plan-geometry.test.ts`, "is not reversible square for square at the edge").
+Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a saved
+position go below 0 so the turned outline can touch the edge, a separate job in which the database
+and the server accept a wider range. Pictures:
+[keep the gap](mockups/a672-floor-plan-canvas/q4-a-keep-gap.png),
+[below 0](mockups/a672-floor-plan-canvas/q4-b-below-zero.png). Next: the owner's answer.
 
 ## A570. A table split off a joined table whose removal was refused cannot be moved
 
@@ -1587,7 +1580,7 @@ grey filled for a joined table's parts. Only the square changes placement; a pla
 selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
 Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and
 [a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
-handles belong to A672. The current contract is in
+handles belong to A672. (2026-10-16: A672 built those corner handles.) The current contract is in
 [design-system.md](../developers/design-system.md#departments-and-zones).
 
 
@@ -2194,13 +2187,20 @@ the server cheaply whether it changed.
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
   scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
-- **An arrow-key turn that makes a corner table poke further out still shifts the other tables a
-  square** (for example 15° to 30° on the turn arrow). A Shift+arrow resize of a turned corner
-  table was not tested for the same shift. Left open by A466 (A429 slice 2) / A502 part 3.
-- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots are hidden from
-  assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
+- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots and corners are
+  hidden from assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
   cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
-- **Small floor plan canvas details:** `reveal` does not count the side dots. Left open by A466 (A429 slice 2) / A502 part 3.
+- **Small floor plan canvas details:** `reveal` does not count the side dots or the corners. Left open by A466 (A429 slice 2) / A502 part 3.
+
+## Loose ends left by A672
+
+- **No key moves a floor plan table's top or left side or a corner.** Shift with the arrow keys
+  moves only its right and bottom sides. Left open by A672.
+- **Turning a floor plan table by key walks it away from the plan's top-left edge.** Each press
+  steps a table that would poke past the edge back in from where the last press left it, and
+  turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to (2, 2).
+  Part of the owner question in "A turned floor plan table narrower than its unturned box stops
+  short of the plan's left or top edge". Left open by A672.
 
 ## Loose ends left by A718
 

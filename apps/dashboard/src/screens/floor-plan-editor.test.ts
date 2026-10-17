@@ -254,6 +254,16 @@ it("a turn from the canvas turns the table", async () => {
   expectSaveAwake(el);
 });
 
+it("a turn from the canvas that steps the table in keeps its x and y, and one Undo puts all three back", async () => {
+  const el = await open();
+  const before = { ...placed(el, "m1") };
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 15, x: 1, y: 1 });
+  expect(placed(el, "m1")).toMatchObject({ rotation: 15, x: 1, y: 1 });
+  await press(el, "undo");
+  expect(placed(el, "m1")).toEqual(before);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
 it("a resize from the canvas changes the draft, wakes Save and is one Undo step each", async () => {
   const el = await open();
   expectSaveQuiet(el);

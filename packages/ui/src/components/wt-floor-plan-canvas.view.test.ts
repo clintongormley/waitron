@@ -1,7 +1,7 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
-import type { PlanCanvasTable, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
+import type { PlanCanvasTable, TableRotate, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
@@ -200,6 +200,49 @@ it("at twice the zoom a resize changes two squares for 48 screen pixels", async 
   expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 8 }]);
 });
 
+const corner = (el: WtFloorPlanCanvas, name: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(
+    `[part="resize-corner-handle"][data-corner="${name}"]`,
+  )!;
+
+it("at twice the zoom a corner drag changes two squares each way for 48 screen pixels", async () => {
+  const el = await canvas("T1");
+  await doubled(el);
+  const changes = events(el, "wt-table-resize");
+  const handle = corner(el, "bottom-right");
+  const at = centre(handle);
+  pointer(handle, "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x + 48, at.y + 48);
+  pointer(window, "pointerup", 1, at.x + 48, at.y + 48);
+  expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 10 }]);
+});
+
+it("a finger on a selected table's corner resizes it; once unselected, a finger at the same spot, on the grid, pans", async () => {
+  const el = await canvas("T1");
+  const changes = events(el, "wt-table-resize");
+  const selections = events(el, "wt-table-select");
+  const moves = events(el, "wt-table-move");
+  const at = centre(corner(el, "bottom-right"));
+  pointer(corner(el, "bottom-right"), "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x + 24, at.y + 24);
+  pointer(window, "pointerup", 1, at.x + 24, at.y + 24);
+  expect(changes).toEqual([{ key: "T1", x: 10, y: 10, width: 10, height: 10 }]);
+  el.selected = null;
+  await el.updateComplete;
+  const before = button(el).getBoundingClientRect();
+  const target = el.shadowRoot!.elementFromPoint(at.x, at.y)!;
+  pointer(target, "pointerdown", 1, at.x, at.y);
+  pointer(window, "pointermove", 1, at.x - 24, at.y - 36);
+  await el.updateComplete;
+  const after = button(el).getBoundingClientRect();
+  pointer(window, "pointerup", 1, at.x - 24, at.y - 36);
+  expect(changes).toHaveLength(1);
+  expect(moves).toEqual([]);
+  expect(selections).toEqual([]);
+  expect(after.left).toBeCloseTo(before.left - 24);
+  expect(after.top).toBeCloseTo(before.top - 36);
+});
+
 it("at twice the zoom a turn still follows the table's visible centre", async () => {
   const el = await canvas("T1");
   await doubled(el);
@@ -208,7 +251,7 @@ it("at twice the zoom a turn still follows the table's visible centre", async ()
   pointer(part(el, "rotate-handle"), "pointerdown", 1, at.x, at.y - 100);
   pointer(window, "pointermove", 1, at.x + 100, at.y);
   pointer(window, "pointerup", 1, at.x + 100, at.y);
-  expect(turns).toEqual([{ key: "T1", rotation: 90 }]);
+  expect(turns).toEqual([{ key: "T1", rotation: 90, x: 10, y: 10 }]);
 });
 
 it("Ctrl+wheel zooms around the pointer and plain wheel pans", async () => {
@@ -322,6 +365,21 @@ it("wheel zoom stays between half and four times the original grid", async () =>
   wheel(el, 10000);
   await el.updateComplete;
   expect(button(el).getBoundingClientRect().width).toBe(48);
+});
+
+it("zoomed to half, the blank margin still ends where a table at x 0 is drawn", async () => {
+  const el = await canvas();
+  el.tables = [table("T1", 0, 0)];
+  await settled(el);
+  wheel(el, 10000);
+  await settled(el);
+  const grid = part(el, "grid");
+  const g = grid.getBoundingClientRect();
+  const b = button(el).getBoundingClientRect();
+  const style = getComputedStyle(grid);
+  expect(b.width).toBe(48);
+  expect(parseFloat(style.paddingLeft) / 2).toBeCloseTo(b.left - g.left);
+  expect(parseFloat(style.paddingTop) / 2).toBeCloseTo(b.top - g.top);
 });
 
 it("an empty zoomed-out grid still fills the viewport without scrollbars", async () => {
@@ -460,10 +518,27 @@ it("zooming out keeps the turn handle and resize targets at their token sizes", 
   const arrow = part(el, "rotate-handle").getBoundingClientRect();
   expect(arrow.width).toBe(60);
   expect(arrow.height).toBe(60);
-  for (const handle of el.shadowRoot!.querySelectorAll<HTMLElement>('[part="resize-handle"]')) {
+  const areas = el.shadowRoot!.querySelectorAll<HTMLElement>(
+    '[part="resize-handle"], [part="resize-corner-handle"]',
+  );
+  expect(areas).toHaveLength(8);
+  for (const handle of areas) {
     expect(handle.getBoundingClientRect().width).toBe(28);
     expect(handle.getBoundingClientRect().height).toBe(28);
   }
+});
+
+it("zooming out keeps the turn handle its token gap above the middle of the table's top side", async () => {
+  const el = await canvas("T1");
+  el.style.setProperty("--wt-space-5", "28px");
+  el.style.setProperty("--wt-space-1", "6px");
+  wheel(el, 100);
+  await el.updateComplete;
+  const arrow = part(el, "rotate-handle").getBoundingClientRect();
+  const box = button(el).getBoundingClientRect();
+  // --wt-space-5 / 2 + --wt-space-1: 14 + 6.
+  expect(arrow.bottom).toBeCloseTo(box.top - 20, 0);
+  expect(arrow.left + arrow.width / 2).toBeCloseTo(box.left + box.width / 2, 0);
 });
 
 it("zoomed-out handles at the plan's corner remain inside the grid", async () => {
@@ -548,10 +623,10 @@ it("a keyboard turn at twice zoom gives back only the corner margin already scro
     table("T2", 70, 0),
   ];
   el.addEventListener("wt-table-rotate", (event) => {
-    const { key, rotation } = (event as CustomEvent<{ key: string; rotation: number }>).detail;
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
     queueMicrotask(() => {
       el.tables = el.tables.map((t) =>
-        t.key === key ? { ...t, placement: { ...t.placement, rotation } } : t,
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
       );
     });
   });
@@ -570,7 +645,7 @@ it("a keyboard turn at twice zoom gives back only the corner margin already scro
   expect(centre(other)).toEqual(before);
 });
 
-it("grid growth at twice zoom leaves a corner-bound table under the pointer", async () => {
+it("at twice zoom a corner-bound table stops at (2, 2), where its drawn outline meets the plan's edge", async () => {
   const el = await canvas("T1");
   el.tables = [
     { ...table("T1", 10, 10), placement: { ...table("T1", 10, 10).placement, rotation: 45 } },
@@ -578,12 +653,20 @@ it("grid growth at twice zoom leaves a corner-bound table under the pointer", as
   ];
   await settled(el);
   await doubled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const scroll = [part(el, "viewport").scrollLeft, part(el, "viewport").scrollTop];
   const at = centre(button(el));
   pointer(button(el), "pointerdown", 1, at.x, at.y);
   pointer(window, "pointermove", 1, at.x - 240, at.y - 240);
   await el.updateComplete;
-  expect(centre(button(el)).x).toBeCloseTo(at.x - 240);
-  expect(centre(button(el)).y).toBeCloseTo(at.y - 240);
+  expect(centre(button(el)).x).toBeCloseTo(at.x - 192);
+  expect(centre(button(el)).y).toBeCloseTo(at.y - 192);
+  const now = part(el, "grid").getBoundingClientRect();
+  expect({ width: now.width, height: now.height }).toEqual({
+    width: grid.width,
+    height: grid.height,
+  });
+  expect([part(el, "viewport").scrollLeft, part(el, "viewport").scrollTop]).toEqual(scroll);
   pointer(window, "pointercancel", 1, at.x - 240, at.y - 240);
 });
 
@@ -628,4 +711,649 @@ it("a fractional-width refusal remains centred after zoom without rounding its l
   const text = reason.getBoundingClientRect();
   const box = button(el).getBoundingClientRect();
   expect(text.left + text.width / 2).toBeCloseTo(box.left + box.width / 2);
+});
+
+const pokingOut: PlanCanvasTable = {
+  ...table("Corner", 0, 0),
+  placement: { ...table("Corner", 0, 0).placement, rotation: 45 },
+};
+
+/** `T1` at (20, 10) in a box `style`, at zoom 1 or doubled, pressed with a mouse and moved two
+ *  squares right and down without release; returns the pointer. */
+async function draggingIn(style: string, zoom: number) {
+  const el = (await mount(
+    `<wt-floor-plan-canvas style="${style}"></wt-floor-plan-canvas>`,
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("T1", 20, 10)];
+  await settled(el);
+  await settled(el);
+  if (zoom === 2) await doubled(el);
+  await settled(el);
+  const viewport = part(el, "viewport");
+  const grid = part(el, "grid").getBoundingClientRect();
+  const before = {
+    grid: { width: grid.width, height: grid.height },
+    scroll: { width: viewport.scrollWidth, height: viewport.scrollHeight },
+  };
+  const from = centre(button(el));
+  const to = { x: from.x + 24 * zoom, y: from.y + 24 * zoom };
+  pointer(button(el), "pointerdown", 1, from.x, from.y, "mouse");
+  pointer(window, "pointermove", 1, to.x, to.y, "mouse");
+  await settled(el);
+  return { el, to, before };
+}
+
+const offsetOf = (el: WtFloorPlanCanvas, node: Element) => {
+  const grid = part(el, "grid").getBoundingClientRect();
+  const box = node.getBoundingClientRect();
+  return { left: box.left - grid.left, top: box.top - grid.top };
+};
+
+it.each([1, 2])(
+  "at zoom %i, a table that pokes out set by the parent during a drag grows the room, scrolled away under the pointer, and an undo gives it back",
+  async (zoom) => {
+    const { el, to, before } = await draggingIn("width: 600px; height: 360px", zoom);
+    const viewport = part(el, "viewport");
+    const room = offsetOf(el, button(el));
+    const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+    const under = centre(button(el));
+    el.tables = [table("T1", 20, 10), pokingOut];
+    await settled(el);
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual({
+      left: room.left + 24 * zoom,
+      top: room.top + 24 * zoom,
+    });
+    expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+      left: scroll.left + 24 * zoom,
+      top: scroll.top + 24 * zoom,
+    });
+    expect(centre(button(el))).toEqual(under);
+    const corner = el.shadowRoot!.querySelector('[data-key="Corner"]')!.getBoundingClientRect();
+    const now = part(el, "grid").getBoundingClientRect();
+    expect(corner.left).toBeGreaterThanOrEqual(now.left);
+    expect(corner.top).toBeGreaterThanOrEqual(now.top);
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    await settled(el);
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    await settled(el);
+    const back = part(el, "grid").getBoundingClientRect();
+    expect({ width: back.width, height: back.height }).toEqual(before.grid);
+    expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }).toEqual(before.scroll);
+  },
+);
+
+it("a table that pokes out only on the left, set by the parent during a drag, grows the room on the left alone, scrolled away under the pointer", async () => {
+  const { el } = await draggingIn("width: 600px; height: 360px", 1);
+  const viewport = part(el, "viewport");
+  const room = offsetOf(el, button(el));
+  const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  const under = centre(button(el));
+  const leftOnly: PlanCanvasTable = {
+    ...table("Corner", 0, 20),
+    placement: { ...table("Corner", 0, 20).placement, rotation: 45 },
+  };
+  el.tables = [table("T1", 20, 10), leftOnly];
+  await settled(el);
+  await settled(el);
+  expect(offsetOf(el, button(el))).toEqual({ left: room.left + 24, top: room.top });
+  expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+    left: scroll.left + 24,
+    top: scroll.top,
+  });
+  expect(centre(button(el))).toEqual(under);
+});
+
+it.each([
+  ["an undo of a drop", true],
+  ["a refused drop", false],
+])(
+  "the room a parent-set table grew during a drag stays after the release, and %s gives it back",
+  async (_, applied) => {
+    const { el, to, before } = await draggingIn("width: 600px; height: 360px", 1);
+    const viewport = part(el, "viewport");
+    // T1 drawn at its draft, (22, 12).
+    const room = offsetOf(el, button(el));
+    const square = (dx: number, dy: number) => ({
+      left: room.left + 12 * dx,
+      top: room.top + 12 * dy,
+    });
+    el.tables = [table("T1", 20, 10), pokingOut];
+    await settled(el);
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual(square(2, 2));
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    await settled(el);
+    await settled(el);
+    // Back at (20, 10) until the parent answers, with the two squares of room kept.
+    expect(offsetOf(el, button(el))).toEqual(square(0, 0));
+    if (applied) {
+      el.tables = [table("T1", 22, 12)];
+      await settled(el);
+      await settled(el);
+      expect(offsetOf(el, button(el))).toEqual(square(2, 2));
+    }
+    el.tables = [table("T1", 20, 10)];
+    await settled(el);
+    await settled(el);
+    expect(offsetOf(el, button(el))).toEqual(square(-2, -2));
+    const back = part(el, "grid").getBoundingClientRect();
+    expect({ width: back.width, height: back.height }).toEqual(before.grid);
+    expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }).toEqual(before.scroll);
+  },
+);
+
+it.each([1, 2])(
+  "at zoom %i, a table that pokes out set by the parent during a drag grows a box that takes its height from the plan once, and steadily",
+  async (zoom) => {
+    const errors: string[] = [];
+    const onError = (e: ErrorEvent) => errors.push(e.message);
+    window.addEventListener("error", onError);
+    onTestFinished(() => window.removeEventListener("error", onError));
+    const { el, to } = await draggingIn("width: 600px", zoom);
+    const start = part(el, "grid").getBoundingClientRect().height;
+    const under = centre(button(el));
+    el.tables = [table("T1", 20, 10), pokingOut];
+    const heights: number[] = [];
+    for (let frame = 0; frame < 6; frame++) {
+      await settled(el);
+      heights.push(part(el, "grid").getBoundingClientRect().height);
+    }
+    // With no height of its own the box cannot scroll the room away, so the table drops below the
+    // pointer by the room.
+    expect(centre(button(el)).y).toBeCloseTo(under.y + 24 * zoom, 1);
+    pointer(window, "pointerup", 1, to.x, to.y, "mouse");
+    for (let frame = 0; frame < 4; frame++) {
+      await settled(el);
+      heights.push(part(el, "grid").getBoundingClientRect().height);
+    }
+    expect(heights.at(-1)).toBe(start + 24 * zoom);
+    expect(Math.max(...heights)).toBe(start + 24 * zoom);
+    expect(Math.min(...heights)).toBe(start + 24 * zoom);
+    expect(errors).toEqual([]);
+  },
+);
+
+function overlap(a: DOMRect, b: DOMRect): number {
+  const across = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const down = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return Math.max(0, across) * Math.max(0, down);
+}
+
+const refusedAt = (rotation: number, y: number): PlanCanvasTable => ({
+  ...table("T1", 10, y),
+  refused: "Table is in use",
+  placement: { ...table("T1", 10, y).placement, height: 4, rotation },
+});
+
+const ZOOMS = [
+  [0.5, 10000],
+  [1, 0],
+  [4, -10000],
+] as const;
+
+/** A refused 8 × 4 `T1` at (10, `y`) turned `rotation`, at `zoom` (reached by a Ctrl+wheel of
+ *  `deltaY`), with --wt-space-1 4px and --wt-space-5 24px; selected, it shows its size badge after
+ *  a keyboard resize the parent does not apply. */
+async function feedbackCanvas(
+  deltaY: number,
+  { y = 10, rotation = 0, selected = true } = {},
+): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 500px; --wt-space-1: 4px; --wt-space-5: 24px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [refusedAt(rotation, y)];
+  el.selected = selected ? "T1" : null;
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+  }
+  if (selected) {
+    button(el).focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    await settled(el);
+  }
+  return el;
+}
+
+it.each(ZOOMS)(
+  "at zoom %s, a selected table's size badge and refusal sit clear of its turn arrow at every turn, moved only where the arrow reaches lower than the table and its dots",
+  async (zoom, deltaY) => {
+    const el = await feedbackCanvas(deltaY);
+    // The bottom dot's hit area reaches --wt-space-5 / 2, at the control scale, past the table.
+    const dot = 12 * Math.max(1, 1 / zoom) * zoom;
+    let moved = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [refusedAt(rotation, 10)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const badge = part(el, "size-badge").getBoundingClientRect();
+      const reason = part(el, "refused-reason").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      expect(overlap(arrow, badge), at).toBe(0);
+      expect(overlap(arrow, reason), at).toBe(0);
+      expect(overlap(badge, reason), at).toBe(0);
+      expect(badge.top, at).toBeCloseTo(Math.max(box.bottom + dot, arrow.bottom) + 4 * zoom, 0);
+      if (arrow.bottom > box.bottom + dot) moved++;
+    }
+    // The turns whose arrow reaches below the dots, so both rules were checked.
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeLessThan(24);
+  },
+);
+
+it("an unselected refused table turned 180° keeps its reason one --wt-space-1 under it, with no turn arrow to clear", async () => {
+  const el = await feedbackCanvas(0, { rotation: 180, selected: false });
+  expect(el.shadowRoot!.querySelector('[part="rotate-handle"]')).toBeNull();
+  const box = button(el).getBoundingClientRect();
+  expect(part(el, "refused-reason").getBoundingClientRect().top).toBeCloseTo(box.bottom + 4, 0);
+});
+
+it.each(ZOOMS)(
+  "at zoom %s, the grid runs 8 squares past the lowest table or, lower still, its turn arrow, selected or not, so it holds the size badge and refusal at every turn and scrolls no further",
+  async (zoom, deltaY) => {
+    const unselected = await feedbackCanvas(deltaY, { y: 200, rotation: 180, selected: false });
+    const plain = part(unselected, "grid").getBoundingClientRect().height;
+    cleanup();
+    const el = await feedbackCanvas(deltaY, { y: 200, rotation: 180 });
+    expect(part(el, "grid").getBoundingClientRect().height).toBe(plain);
+    const square = 12 * zoom;
+    let lower = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [refusedAt(rotation, 200)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const lowest = (Math.max(box.bottom, arrow.bottom) - grid.top) / square;
+      expect(grid.height / square, at).toBe(Math.ceil(lowest - 0.01) + 8);
+      for (const name of ["size-badge", "refused-reason"]) {
+        const bottom = part(el, name).getBoundingClientRect().bottom;
+        expect(bottom, `${at} ${name}`).toBeLessThanOrEqual(grid.bottom);
+      }
+      expect(part(el, "viewport").scrollHeight, at).toBe(grid.height);
+      if (arrow.bottom > box.bottom) lower++;
+    }
+    expect(lower).toBeGreaterThan(0);
+  },
+);
+
+it.each([
+  [180, ...ZOOMS[0]],
+  [180, ...ZOOMS[1]],
+  [180, ...ZOOMS[2]],
+  [90, ...ZOOMS[0]],
+  [90, ...ZOOMS[1]],
+  [90, ...ZOOMS[2]],
+])(
+  "a table turned %s° at zoom %s, scrolled to the grid's far corner, stays put when the selection is cleared",
+  async (rotation, _zoom, deltaY) => {
+    const el = (await mount(
+      '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+    )) as WtFloorPlanCanvas;
+    el.tables = [
+      {
+        ...table("T1", 200, 200),
+        placement: { ...table("T1", 200, 200).placement, height: 4, rotation },
+      },
+    ];
+    el.selected = "T1";
+    await settled(el);
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth;
+    viewport.scrollTop = viewport.scrollHeight;
+    await settled(el);
+    const before = button(el).getBoundingClientRect();
+    el.selected = null;
+    await settled(el);
+    const after = button(el).getBoundingClientRect();
+    expect({ left: after.left, top: after.top }).toEqual({ left: before.left, top: before.top });
+  },
+);
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) => [8, 1].map((side) => [side, side, zoom, deltaY] as const)),
+)(
+  "a %s × %s table at zoom %s: the grid runs 8 squares right of and below the table or, further still, its turn arrow, and scrolls no further, at every turn",
+  async (side, _side, zoom, deltaY) => {
+    const el = (await mount(
+      '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+    )) as WtFloorPlanCanvas;
+    const at200 = (rotation: number): PlanCanvasTable => ({
+      ...table("T1", 200, 200),
+      placement: { ...table("T1", 200, 200).placement, width: side, height: side, rotation },
+    });
+    el.tables = [at200(0)];
+    el.selected = "T1";
+    await settled(el);
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    const square = 12 * zoom;
+    let further = 0;
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [at200(rotation)];
+      await el.updateComplete;
+      const at = `${rotation}°`;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const box = button(el).getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      const rightmost = (Math.max(box.right, arrow.right) - grid.left) / square;
+      const lowest = (Math.max(box.bottom, arrow.bottom) - grid.top) / square;
+      expect(grid.width / square, at).toBe(Math.ceil(rightmost - 0.01) + 8);
+      expect(grid.height / square, at).toBe(Math.ceil(lowest - 0.01) + 8);
+      expect(arrow.right, at).toBeLessThanOrEqual(grid.right);
+      const viewport = part(el, "viewport");
+      expect({ width: viewport.scrollWidth, height: viewport.scrollHeight }, at).toEqual({
+        width: grid.width,
+        height: grid.height,
+      });
+      if (arrow.right > box.right) further++;
+    }
+    expect(further).toBeGreaterThan(0);
+  },
+);
+
+it.each(ZOOMS)(
+  "at zoom %s, a table at the plan's (0, 0) keeps its turn arrow inside the grid's top and left at every turn",
+  async (_zoom, deltaY) => {
+    const el = await canvas("T1");
+    if (deltaY !== 0) {
+      wheel(el, deltaY);
+      await settled(el);
+    }
+    for (let rotation = 0; rotation < 360; rotation += 15) {
+      el.tables = [
+        { ...table("T1", 0, 0), placement: { ...table("T1", 0, 0).placement, rotation } },
+      ];
+      await el.updateComplete;
+      const grid = part(el, "grid").getBoundingClientRect();
+      const arrow = part(el, "rotate-handle").getBoundingClientRect();
+      expect(arrow.left, `${rotation}°`).toBeGreaterThanOrEqual(grid.left);
+      expect(arrow.top, `${rotation}°`).toBeGreaterThanOrEqual(grid.top);
+    }
+  },
+);
+
+const turning = (rotation: number): PlanCanvasTable => ({
+  ...table("T1", 300, 200),
+  placement: { x: 300, y: 200, width: 8, height: 4, rotation, shape: "rect" },
+});
+
+const small = (x: number): PlanCanvasTable => ({
+  ...table("T2", x, 190),
+  placement: { x, y: 190, width: 2, height: 2, rotation: 0, shape: "rect" },
+});
+
+/** A 600 × 300 canvas with a 60px `bottomInset`, holding `tables`, at the zoom a Ctrl+wheel of
+ *  `deltaY` reaches. */
+async function insetCanvas(tables: PlanCanvasTable[], deltaY: number): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px; height: 300px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.bottomInset = 60;
+  el.tables = tables;
+  el.selected = "T1";
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+  }
+  return el;
+}
+
+const sizeOf = (el: WtFloorPlanCanvas) => {
+  const grid = part(el, "grid").getBoundingClientRect();
+  return { width: grid.width, height: grid.height };
+};
+
+it.each(ZOOMS.flatMap(([zoom, deltaY]) => [0, 5].map((short) => [zoom, short, deltaY] as const)))(
+  "at zoom %s, scrolled to %spx short of the far corner, a full keyboard turn moves no other table on screen, and the room it held goes once the parent sets another layout",
+  async (_zoom, short, deltaY) => {
+    const el = await insetCanvas([turning(90), small(290)], deltaY);
+    el.addEventListener("wt-table-rotate", (event) => {
+      const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+      queueMicrotask(() => {
+        el.tables = el.tables.map((t) =>
+          t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+        );
+      });
+    });
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth - viewport.clientWidth - short;
+    viewport.scrollTop = viewport.scrollHeight - viewport.clientHeight - short;
+    await settled(el);
+    const start = sizeOf(el);
+    const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+    const before = other().getBoundingClientRect();
+    const press = async () => {
+      part(el, "rotate-handle").focus({ preventScroll: true });
+      await userEvent.keyboard("{ArrowRight}");
+      await settled(el);
+      const now = other().getBoundingClientRect();
+      const at = `rotation ${el.tables[0]!.placement.rotation}`;
+      expect({ left: now.left, top: now.top }, at).toEqual({
+        left: before.left,
+        top: before.top,
+      });
+    };
+    for (let i = 0; i < 24; i++) await press();
+    expect(el.tables[0]!.placement.rotation).toBe(90);
+    expect(sizeOf(el)).toEqual(start);
+    for (let i = 0; i < 6; i++) await press();
+    expect(el.tables[0]!.placement.rotation).toBe(180);
+    const held = sizeOf(el);
+    el.tables = [turning(180), small(291)];
+    await settled(el);
+    const after = sizeOf(el);
+    cleanup();
+    const alone = sizeOf(await insetCanvas([turning(180), small(291)], deltaY));
+    expect(after).toEqual(alone);
+    // The turn to 180° pulled the arrow's reach back, so the room held was more than it takes.
+    expect(held.width).toBeGreaterThan(alone.width);
+  },
+);
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) =>
+    ["{ArrowLeft}", "{ArrowUp}", "{Shift>}{ArrowLeft}{/Shift}", "{Shift>}{ArrowUp}{/Shift}"].map(
+      (keys) => [zoom, keys, deltaY] as const,
+    ),
+  ),
+)(
+  "at zoom %s, scrolled to the far corner, %s on the furthest table moves no other table on screen",
+  async (_zoom, keys, deltaY) => {
+    const el = await insetCanvas([turning(0), small(290)], deltaY);
+    const apply = (event: Event) => {
+      const { key, ...change } = (event as CustomEvent<{ key: string }>).detail;
+      queueMicrotask(() => {
+        el.tables = el.tables.map((t) =>
+          t.key === key ? { ...t, placement: { ...t.placement, ...change } } : t,
+        );
+      });
+    };
+    el.addEventListener("wt-table-move", apply);
+    el.addEventListener("wt-table-resize", apply);
+    const viewport = part(el, "viewport");
+    viewport.scrollLeft = viewport.scrollWidth;
+    viewport.scrollTop = viewport.scrollHeight;
+    await settled(el);
+    const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+    const before = other().getBoundingClientRect();
+    const { placement } = el.tables[0]!;
+    button(el).focus({ preventScroll: true });
+    await userEvent.keyboard(keys);
+    await settled(el);
+    expect(el.tables[0]!.placement).not.toEqual(placement);
+    const now = other().getBoundingClientRect();
+    expect({ left: now.left, top: now.top }).toEqual({ left: before.left, top: before.top });
+  },
+);
+
+it("zooming out after a keyboard turn at the far corner keeps the grid only out to the view or to what the plan takes", async () => {
+  const el = await insetCanvas([turning(90), small(290)], 0);
+  el.addEventListener("wt-table-rotate", (event) => {
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+      );
+    });
+  });
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = viewport.scrollWidth;
+  viewport.scrollTop = viewport.scrollHeight;
+  await settled(el);
+  part(el, "rotate-handle").focus({ preventScroll: true });
+  for (let i = 0; i < 6; i++) {
+    await userEvent.keyboard("{ArrowRight}");
+    await settled(el);
+  }
+  const held = sizeOf(el);
+  wheel(el, 100);
+  await settled(el);
+  const zoomed = sizeOf(el);
+  const right = viewport.scrollLeft + viewport.clientWidth;
+  const bottom = viewport.scrollTop + viewport.clientHeight - 60;
+  cleanup();
+  const alone = sizeOf(await insetCanvas([turning(180), small(290)], 100));
+  // Half zoom: 6px squares, the 60px inset unscaled.
+  expect(zoomed).toEqual({
+    width: Math.max(alone.width, Math.ceil(right / 6) * 6),
+    height: Math.max(alone.height, Math.ceil(bottom / 6) * 6 + 60),
+  });
+  expect(zoomed.width).toBeLessThan(held.width);
+});
+
+it("a keyboard turn at the far corner that gives back scrolled-away margin moves no other table on screen", async () => {
+  const big = (rotation: number): PlanCanvasTable => ({
+    ...table("T1", 0, 0),
+    placement: { ...table("T1", 0, 0).placement, width: 60, height: 60, rotation },
+  });
+  const el = await insetCanvas([big(45), table("T2", 70, 0)], 0);
+  el.addEventListener("wt-table-rotate", (event) => {
+    const { key, rotation, x, y } = (event as CustomEvent<TableRotate>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, rotation, x, y } } : t,
+      );
+    });
+  });
+  const viewport = part(el, "viewport");
+  viewport.scrollLeft = viewport.scrollWidth;
+  viewport.scrollTop = viewport.scrollHeight;
+  await settled(el);
+  const other = () => el.shadowRoot!.querySelector<HTMLElement>('[data-key="T2"]')!;
+  const before = other().getBoundingClientRect();
+  const scroll = { left: viewport.scrollLeft, top: viewport.scrollTop };
+  part(el, "rotate-handle").focus({ preventScroll: true });
+  await userEvent.keyboard("{ArrowLeft}");
+  await settled(el);
+  expect(el.tables[0]!.placement.rotation).toBe(30);
+  const now = other().getBoundingClientRect();
+  expect({ left: now.left, top: now.top }).toEqual({ left: before.left, top: before.top });
+  // The two squares of margin the turn gave back on the left and top were scrolled away.
+  expect({ left: viewport.scrollLeft, top: viewport.scrollTop }).toEqual({
+    left: scroll.left - 24,
+    top: scroll.top - 24,
+  });
+});
+
+/** A 605 × 305 canvas, not a whole number of squares either way, holding `tables`, at the zoom a
+ *  Ctrl+wheel of `deltaY` reaches and scrolled back to its top left; the parent applies every move,
+ *  resize and turn. */
+async function oddCanvas(tables: PlanCanvasTable[], deltaY: number): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 605px; height: 305px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = tables;
+  el.selected = "T1";
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+    part(el, "viewport").scrollTo(0, 0);
+    await settled(el);
+  }
+  const apply = (event: Event) => {
+    const { key, ...change } = (event as CustomEvent<{ key: string }>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, ...change } } : t,
+      );
+    });
+  };
+  for (const name of ["wt-table-move", "wt-table-resize", "wt-table-rotate"])
+    el.addEventListener(name, apply);
+  return el;
+}
+
+const extentOf = (el: WtFloorPlanCanvas) => {
+  const viewport = part(el, "viewport");
+  return {
+    scrollWidth: viewport.scrollWidth,
+    clientWidth: viewport.clientWidth,
+    scrollHeight: viewport.scrollHeight,
+    clientHeight: viewport.clientHeight,
+  };
+};
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) =>
+    (
+      [
+        ["button", "{ArrowRight}"],
+        ["button", "{Shift>}{ArrowRight}{/Shift}"],
+        ["rotate-handle", "{ArrowRight}"],
+      ] as const
+    ).map(([target, keys]) => [zoom, target, keys, deltaY] as const),
+  ),
+)(
+  "at zoom %s, unscrolled in a box that is not whole squares, %s %s leaves the canvas as scrollable as the same layout drawn fresh",
+  async (zoom, target, keys, deltaY) => {
+    const el = await oddCanvas([table("T1", 2, 2)], deltaY);
+    const start = el.tables[0]!.placement;
+    (target === "button" ? button(el) : part(el, "rotate-handle")).focus({ preventScroll: true });
+    await userEvent.keyboard(keys);
+    await settled(el);
+    const { placement } = el.tables[0]!;
+    expect(placement).not.toEqual(start);
+    const after = extentOf(el);
+    cleanup();
+    const alone = extentOf(await oddCanvas([{ ...table("T1", 2, 2), placement }], deltaY));
+    expect(after).toEqual(alone);
+    // At zoom 1 the plan fits inside the box, so nothing scrolls.
+    if (zoom === 1) {
+      expect(alone.scrollWidth).toBe(alone.clientWidth);
+      expect(alone.scrollHeight).toBe(alone.clientHeight);
+    }
+  },
+);
+
+it("unscrolled at zoom 1, arrow keys that bring a table back inside a box that is not whole squares leave the canvas as scrollable as the same layout drawn fresh", async () => {
+  const el = await oddCanvas([table("T1", 40, 20)], 0);
+  expect(extentOf(el).scrollWidth).toBeGreaterThan(605);
+  button(el).focus({ preventScroll: true });
+  for (let i = 0; i < 20; i++) {
+    await userEvent.keyboard("{ArrowLeft}{ArrowUp}");
+    await settled(el);
+  }
+  const { placement } = el.tables[0]!;
+  expect({ x: placement.x, y: placement.y }).toEqual({ x: 20, y: 0 });
+  const after = extentOf(el);
+  cleanup();
+  const alone = extentOf(await oddCanvas([{ ...table("T1", 0, 0), placement }], 0));
+  expect(after).toEqual(alone);
+  expect(alone.scrollWidth).toBe(alone.clientWidth);
+  expect(alone.scrollHeight).toBe(alone.clientHeight);
 });
