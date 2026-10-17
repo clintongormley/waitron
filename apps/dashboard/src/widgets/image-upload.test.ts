@@ -768,6 +768,10 @@ it("A651 chooses the full-size photo through the real nested picker and closes t
     createdAt: "2026-10-17T00:00:00Z",
     updatedAt: "2026-10-17T00:00:00Z",
     usageCount: 0,
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    revision: 1,
+    sourceFilename: mediaTestReference("bread.png"),
+    originalFilename: null,
   };
   const request = vi
     .fn()

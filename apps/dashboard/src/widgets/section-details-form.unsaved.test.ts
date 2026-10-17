@@ -1,3 +1,4 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
@@ -15,6 +16,7 @@ import "./section-details-form.js";
 import "@waitron/dashboard-modules";
 
 registerIcons(DASHBOARD_ICONS);
+useMediaPresentations();
 const section: SectionDetails = {
   id: "starters",
   internalName: "Starters",
@@ -250,11 +252,15 @@ it("a Section leave sees edited image names through its enclosing picker ancestr
         images: [
           {
             id: "photo",
-            filename: "photo.jpg",
+            filename: mediaTestReference("photo.jpg"),
             names: { en: "Bread", es: "Pan" },
             createdAt: "2026-09-12T12:00:00Z",
             updatedAt: "2026-09-12T12:00:00Z",
             usageCount: 0,
+            framing: { x: 5000, y: 5000, zoom: 100 },
+            revision: 1,
+            sourceFilename: mediaTestReference("photo.jpg"),
+            originalFilename: null,
           },
         ],
         total: 1,
