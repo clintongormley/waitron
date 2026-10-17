@@ -6,6 +6,7 @@ import { userEvent } from "vitest/browser";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import { SpecialDaysApi } from "./special-days-client.js";
 import type { SeasonPainter } from "./season-painter.js";
 import { drag, frame, grid, settle, withBar } from "../testing/season-painter-fixture.js";
 import { captureShellLinks } from "../testing/shell-link-capture.js";
@@ -914,7 +915,12 @@ describe("the Calendar window address", () => {
     const read = vi
       .spyOn(el.api.specialDays, "listSpecialDays")
       .mockResolvedValue([{ id: "sd1", name: "Town fair" }] as never);
-    expect(read).not.toHaveBeenCalled();
+    const year = el.shadowRoot!.querySelector("opening-hours-year")!;
+    const drawn = year.model;
+    el.api.rereadWatches();
+    await expect.poll(() => year.model).not.toBe(drawn);
+    await el.updateComplete;
+    expect(read, "no read while no Seasons window is open").not.toHaveBeenCalled();
     history.replaceState(null, "", "/manage/opening-hours/view/year/window/seasons");
     window.dispatchEvent(new PopStateEvent("popstate"));
     const win = await seasonsWindow(el);
@@ -926,6 +932,20 @@ describe("the Calendar window address", () => {
     await expect.poll(() => win.seasons).not.toBe(shown);
     await el.updateComplete;
     expect(read).toHaveBeenCalledTimes(1);
+  });
+  it("loading the page at window/seasons reads the special days once", async () => {
+    const read = vi
+      .spyOn(SpecialDaysApi.prototype, "listSpecialDays")
+      .mockResolvedValue([{ id: "sd1", name: "Town fair" }] as never);
+    const el = await mount("/manage/opening-hours/view/year/window/seasons");
+    const win = await seasonsWindow(el);
+    await expect.poll(() => win.specialDays).toEqual([{ id: "sd1", name: "Town fair" }]);
+    const shown = win.seasons;
+    el.api.rereadWatches();
+    await expect.poll(() => win.seasons).not.toBe(shown);
+    await el.updateComplete;
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith({ passive: true });
   });
   it("removes an unknown window by replacement without pushing an entry", async () => {
     const pushed = vi.spyOn(history, "pushState");
@@ -1219,6 +1239,47 @@ it("a Save re-reads the hours and closes the window, keeping the painter's paint
     expect(painterOf(el)).toBe(painter);
     expect(painter.edited()).toEqual(before);
     expect(app.leave.coordinator.isDirty()).toBe(true);
+  } finally {
+    guard.dispose();
+  }
+});
+
+it("after a Save the screen shows the re-read's seasons, never the Save's answer", async () => {
+  const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+  history.replaceState(null, "", base);
+  let app: PainterApp | undefined;
+  const guard = screenGuard(() => app);
+  try {
+    const mounted = await mountApp();
+    app = mounted.app;
+    const el = mounted.el;
+    const painter = await shownPainter(el);
+    await guard.write(`${base}/window/seasons`);
+    const win = await seasonsWindow(el);
+    await renameFirstSeason(win, "Deep winter");
+    vi.spyOn(el.api, "saveSeasons").mockResolvedValue([
+      { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+      { id: "feria", name: "Feria", startsOn: "09-01", colour: "red" },
+      { id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" },
+    ]);
+    const original = el.api.rereadWithSpecialDays.bind(el.api);
+    const reread = vi.spyOn(el.api, "rereadWithSpecialDays").mockImplementation(() => {});
+    const before = painter.model;
+    win.shadowRoot!.querySelector<HTMLElement>("[data-test=save-seasons]")!.click();
+    await expect.poll(() => reread.mock.calls.length).toBe(1);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    await el.updateComplete;
+    expect(painter.model, "nothing but the re-read replaces the model").toBe(before);
+    const live = withBar();
+    app.model = {
+      ...live,
+      seasons: live.seasons.map((season) =>
+        season.id === "winter" ? { ...season, name: "Deep winter" } : season,
+      ),
+    };
+    original();
+    await expect.poll(() => painter.model).not.toBe(before);
+    expect(painter.model.seasons.map(({ name }) => name)).toEqual(["Spring", "Deep winter"]);
   } finally {
     guard.dispose();
   }
