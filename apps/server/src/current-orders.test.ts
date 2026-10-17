@@ -1808,7 +1808,7 @@ describe("Sent panel read facts (A773)", () => {
 });
 
 describe("a paid held dish fired on its own", () => {
-  it("keeps every financial and fiscal fact while firing the dish and extras, leaving its companion held", async () => {
+  it("preserves the paid charge, adjustment, payment and fiscal snapshots while companions stay held", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const held = await group(v, s.partyId, "hold", [
