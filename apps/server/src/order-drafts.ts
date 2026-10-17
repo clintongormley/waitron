@@ -33,6 +33,7 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyZone,
+  partyRevisionOfOrder,
   requireBillOfParty,
   requireOpenParty,
   runServiceCommand,
@@ -40,6 +41,7 @@ import {
 import {
   prepareRecalledModifiers,
   readTabLines,
+  readOrderRevision,
   refusePaymentInFlight,
   screenNote,
 } from "./working-order.js";
@@ -48,6 +50,8 @@ import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { saveRecalledLine } from "./draft-recall.js";
+import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
+import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
@@ -666,6 +670,116 @@ export async function discardPartyDrafts(
       );
     }
   }
+}
+
+export interface DiscardDraftInput {
+  submissionId: string;
+  revision: number;
+  expectedRevision: number;
+  reasonId?: string;
+  note: string | null;
+  approver?: AdjustmentArgs["approver"];
+}
+
+export async function discardDraft(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  draftId: string,
+  operatorId: string,
+  input: DiscardDraftInput,
+  venueLocale: string,
+  attempts?: PinAttempts,
+  attendance?: OrderAttendance,
+): Promise<{
+  draftId: string;
+  billId: string;
+  revision: number;
+  adjustmentIds: string[];
+  party: { id: string; revision: number } | null;
+}> {
+  const { submissionId, approver, ...command } = input;
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.discard",
+    { ...command, draftId, operatorId, approverId: approver?.personId },
+    async () => {
+      const draft = await requireDraft(tx, draftId, partyId);
+      await requireOwnDraftAt(tx, draft, operatorId, input.revision);
+      const billId = uuid(draft.billId, "billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      const revision = await readOrderRevision(tx, billId);
+      if (revision !== input.expectedRevision)
+        throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
+      const sources = await tx
+        .select({ sourceLineId: orderDraftRecalledLines.sourceLineId })
+        .from(orderDraftRecalledLines)
+        .where(eq(orderDraftRecalledLines.draftId, draft.id))
+        .orderBy(orderDraftRecalledLines.position);
+      if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
+      const adjustmentIds: string[] = [];
+      for (const source of sources) {
+        const applied = await applyAdjustment(
+          tx,
+          cfg,
+          {
+            orderId: billId,
+            expectedRevision: await readOrderRevision(tx, billId),
+            submissionId: newId(),
+            lineId: source.sourceLineId,
+            action: "cancel",
+            reasonId: input.reasonId!,
+            note: input.note,
+            operatorId,
+            ...(approver === undefined ? {} : { approver }),
+          },
+          venueLocale,
+          attempts,
+          attendance,
+        );
+        adjustmentIds.push(...applied.adjustmentIds);
+      }
+      const at = nowIso();
+      await discardDrafts(tx, [draft.id]);
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance.recorder, at },
+        {
+          draftId: draft.id,
+          kind: "discarded",
+          fromPerson: operatorId,
+          toPerson: operatorId,
+          actorId: operatorId,
+          detail: {},
+        },
+      );
+      const [closed] = await tx
+        .select({ revision: orderDrafts.revision })
+        .from(orderDrafts)
+        .where(eq(orderDrafts.id, draft.id));
+      await captureDraft(
+        tx,
+        attendance?.recorder,
+        cfg.locationId,
+        operatorId,
+        draft.id,
+        closed!.revision,
+        "discard",
+        at,
+      );
+      return {
+        draftId: draft.id,
+        billId,
+        revision: closed!.revision,
+        adjustmentIds,
+        party: await partyRevisionOfOrder(tx, billId),
+      };
+    },
+    cfg.madeHereSink,
+  );
 }
 
 export interface SubmitDraftInput extends PartyCommandArgs {
