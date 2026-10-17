@@ -178,9 +178,10 @@ list does not exist.
    `station-colour-picker.ts` goes. Category colours keep their dialog.
 
 **Branch checkpoint (2026-10-17; not yet landed):** editor wording/layout, transactional unused
-colours, the Add/Edit shared popup, row swatches and sidebar placement are implemented.
-Times retirement and alphabetical station ordering across browser/server/storage remain open;
-the complete branch still needs its final review, push, CI and landing.
+colours, the Add/Edit shared popup, row swatches and sidebar placement are implemented. The
+Stations table and Calendar choices use name order, and the station row drag controls are removed.
+Times retirement, the Add form's order field and backend/storage order retirement remain open.
+The complete branch still needs its final review, push, CI and landing.
 
 ## Whole-order note correction volume
 

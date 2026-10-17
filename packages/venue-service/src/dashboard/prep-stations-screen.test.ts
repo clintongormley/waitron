@@ -545,35 +545,7 @@ it("without live data, starts no fifteen-second refresh", async () => {
     interval.mockRestore();
   }
 });
-it("a manager's drag reorder saves the new order with no health read", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockResolvedValue(undefined);
-  const a = api({
-    load: vi.fn().mockResolvedValue(next),
-    reorderStations: order,
-  } as Partial<PrepStationsApi>);
-  expect("readStationHealth" in a).toBe(false);
-  const el = await mount(a);
-  const summary = stationTable(el)!;
-  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
-  const target = summary
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 93,
-      clientY: handle.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 93, clientY: target.top + target.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 93 }));
-  await settle(el);
-  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-});
+
 function stationRow(el: PrepStationsScreen, stationId: string) {
   return stationTable(el)!.querySelector(`[data-test="station-menu-${stationId}"]`)!.closest("tr")!;
 }
@@ -815,9 +787,9 @@ it("makes a nondefault station the default", async () => {
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
-it("saves station name and order through their own controls and thresholds together through the editor", async () => {
+it("saves station name and thresholds together through the editor", async () => {
   const next = withUpstairs({ open: true, why: "open" });
-  const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
+  const a = api({ load: vi.fn().mockResolvedValue(next) });
   const el = await mount(a);
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
@@ -828,11 +800,6 @@ it("saves station name and order through their own controls and thresholds toget
   q(el, '[data-test="save-station-edit"]')!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenNthCalledWith(1, "bar", { name: "Terrace bar" });
-  q(el, '[data-test="drag-bar"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
-  );
-  await settle(el);
-  expect(a.reorderStations).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   for (const [field, value] of [
@@ -2428,89 +2395,6 @@ it("Stations row actions reuse default and permanent Delete writes", async () =>
   expect(stationTable(el)!.querySelector('[data-test="enable-upstairs"]')).toBeNull();
 });
 
-it("reorders Stations with the keyboard, retains focus and leaves routing cells unchanged", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockImplementation(async (ids: string[]) => {
-    ids.forEach((id, index) => {
-      next.stations.find((station) => station.id === id)!.displayOrder = index;
-    });
-  });
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  handle!.focus();
-  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
-  expect(stationTable(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
-  expect(next.routing.cells).toEqual(view.routing.cells);
-  expect(next.routing.defaultStationId).toBe(view.routing.defaultStationId);
-});
-it("restores the Stations order after refusal and never moves disabled rows", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
-  const order = vi.fn().mockRejectedValue({ code: "connection.failed" });
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  expect(stationTable(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  expect(q(el, '[role="alert"]')!.textContent).toContain("could not be saved");
-});
-it("persists a pointer reorder once on release and releases the drag on disconnect", async () => {
-  const next = withUpstairs({ open: true, why: "open" });
-  const order = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
-  const summary = stationTable(el)!;
-  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
-  expect(handle).not.toBeNull();
-  const target = summary
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle!.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 91,
-      clientY: handle!.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 91, clientY: target.top + target.height / 2 }),
-  );
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
-  await settle(el);
-  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-  const nextHandle = stationTable(el)!.querySelector<HTMLButtonElement>(
-    '[data-test="drag-upstairs"]',
-  )!;
-  nextHandle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 92,
-      clientY: nextHandle.getBoundingClientRect().top,
-      bubbles: true,
-    }),
-  );
-  el.remove();
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 92 }));
-  expect(order).toHaveBeenCalledTimes(1);
-  expect(document.body.style.cursor).not.toBe("grabbing");
-});
-
 it("keeps a general rename refusal below the field and permits retry", async () => {
   const { el, a } = await mountToday(withUpstairs({ open: true, why: "open" }), {
     updateStation: vi
@@ -2532,18 +2416,6 @@ it("keeps a general rename refusal below the field and permits retry", async () 
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledTimes(2);
   expect(q(el, '[data-test="station-editor"]')).toBeNull();
-});
-it("announces the reordered station and its position to a screen reader", async () => {
-  const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-    reorderStations: vi.fn().mockResolvedValue(undefined),
-  });
-  stationTable(el)!
-    .querySelector<HTMLElement>('[data-test="drag-upstairs"]')!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-  await settle(el);
-  expect(q(el, '[data-test="station-order-status"]')?.textContent?.trim()).toBe(
-    "Upstairs bar is now 1 of 2.",
-  );
 });
 
 it.each([
@@ -3133,61 +3005,6 @@ it("an old Tickets address opens Stations and rewrites the address", async () =>
   expect(el.shadowRoot!.querySelector('[slot="tickets"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="tickets-table"]')).toBeNull();
   expect(q(el, '[data-test="printed-on-bar"]')!.textContent).toContain("Old printer");
-});
-
-it.each(["ArrowUp", "Enter", "ArrowLeft"])(
-  "Stations ignores %s when it cannot change the first row's position",
-  async (key) => {
-    const order = vi.fn();
-    const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-      reorderStations: order,
-    });
-    const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
-    handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-    await settle(el);
-    expect(order).not.toHaveBeenCalled();
-    expect(
-      [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-        row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-      ),
-    ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  },
-);
-
-it("Stations pointer drag ignores another pointer and outside rows, and a no-op release writes nothing", async () => {
-  const order = vi.fn();
-  const { el } = await mountToday(withUpstairs({ open: true, why: "open" }), {
-    reorderStations: order,
-  });
-  const handle = stationTable(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]')!;
-  const first = stationTable(el)!
-    .querySelector('[data-test="station-menu-bar"]')!
-    .closest("tr")!
-    .getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", { pointerId: 811, button: 2, bubbles: true }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 811, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 811 }));
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 812, bubbles: true }));
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 813, clientY: first.top + first.height / 2 }),
-  );
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 813 }));
-  document.dispatchEvent(new PointerEvent("pointermove", { pointerId: 812, clientY: -100 }));
-  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 812 }));
-  await settle(el);
-  expect(order).not.toHaveBeenCalled();
-  expect(
-    [...stationTable(el)!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
-    ),
-  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
-  expect(document.body.style.cursor).not.toBe("grabbing");
 });
 
 it("preserves an unknown printer id on the Stations table", async () => {
@@ -4746,172 +4563,6 @@ describe("Routing grid", () => {
  * Edge scroll moves a held row at most 16 px a frame, and this browser can draw fewer than 10
  * frames a second on a busy machine, so the wait counts frames rather than milliseconds.
  */
-async function scrollsPast(distance: number, scrolled: () => number) {
-  for (let frame = 0; frame < 90 && scrolled() <= distance; frame++)
-    await new Promise(requestAnimationFrame);
-  expect(scrolled()).toBeGreaterThan(distance);
-}
-
-it("edge scroll carries a held station past the visible summary and persists on release", async () => {
-  const next = {
-    ...view,
-    stations: Array.from({ length: 35 }, (_, i) => ({
-      ...view.stations[0]!,
-      id: `edge-${i}`,
-      name: `Station ${i}`,
-      displayOrder: i,
-      isDefault: i === 0,
-    })),
-  };
-  const order = vi.fn().mockResolvedValue(undefined);
-  const { el } = await mountToday(next, { reorderStations: order });
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
-  el.parentElement!.append(box);
-  box.append(el);
-  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-edge-0"]')!;
-  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
-  const start = handle.getBoundingClientRect();
-  const bounds = box.getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 91,
-      clientX: start.left + 10,
-      clientY: start.top + 10,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", {
-      pointerId: 91,
-      clientX: start.left + 10,
-      clientY: bounds.bottom - 8,
-    }),
-  );
-  const initial = box.scrollTop;
-  try {
-    await scrollsPast(150, () => box.scrollTop - initial);
-    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
-    await settle(el);
-    expect(order).toHaveBeenCalledTimes(1);
-    expect((order.mock.calls[0]![0] as string[]).indexOf("edge-0")).toBeGreaterThan(3);
-  } finally {
-    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 91 }));
-  }
-});
-
-it("edge scroll Escape stops a held station without another reorder on release", async () => {
-  const next = {
-    ...view,
-    stations: Array.from({ length: 35 }, (_, i) => ({
-      ...view.stations[0]!,
-      id: `escape-${i}`,
-      name: `Station ${i}`,
-      displayOrder: i,
-      isDefault: i === 0,
-    })),
-  };
-  const { el } = await mountToday(next);
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:300px;overflow:auto";
-  el.parentElement!.append(box);
-  box.append(el);
-  const handle = stationTable(el)!.querySelector<HTMLElement>('[data-test="drag-escape-0"]')!;
-  box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top;
-  const start = handle.getBoundingClientRect();
-  const bounds = box.getBoundingClientRect();
-  handle.dispatchEvent(
-    new PointerEvent("pointerdown", {
-      pointerId: 92,
-      clientX: start.left + 10,
-      clientY: start.top + 10,
-      bubbles: true,
-    }),
-  );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", {
-      pointerId: 92,
-      clientX: start.left + 10,
-      clientY: bounds.bottom - 8,
-    }),
-  );
-  const initial = box.scrollTop;
-  try {
-    await scrollsPast(100, () => box.scrollTop - initial);
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await settle(el);
-    await new Promise(requestAnimationFrame);
-    const ended = box.scrollTop;
-    for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
-    expect(box.scrollTop).toBe(ended);
-    expect(document.body.style.cursor).not.toBe("grabbing");
-  } finally {
-    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 92 }));
-  }
-});
-
-it.each(["up", "leave", "cancel", "disconnect", "fits"])(
-  "edge scroll station drag handles %s",
-  async (action) => {
-    const next = {
-      ...view,
-      stations: Array.from({ length: action === "fits" ? 1 : 35 }, (_, i) => ({
-        ...view.stations[0]!,
-        id: `lifecycle-${i}`,
-        name: `Station ${i}`,
-        displayOrder: i,
-        isDefault: i === 0,
-      })),
-    };
-    const order = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountToday(next, { reorderStations: order });
-    const box = document.createElement("div");
-    box.style.cssText = "position:fixed;top:100px;left:40px;width:900px;height:400px;overflow:auto";
-    el.parentElement!.append(box);
-    box.append(el);
-    const key = action === "up" ? "lifecycle-30" : "lifecycle-0";
-    const handle = stationTable(el)!.querySelector<HTMLElement>(`[data-test="drag-${key}"]`)!;
-    if (action === "up")
-      box.scrollTop = handle.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;
-    const start = handle.getBoundingClientRect();
-    const bounds = box.getBoundingClientRect();
-    const initial = box.scrollTop;
-    handle.dispatchEvent(
-      new PointerEvent("pointerdown", {
-        pointerId: 93,
-        clientX: start.left + 10,
-        clientY: start.top + 10,
-        bubbles: true,
-      }),
-    );
-    const send = (type: string, y = action === "up" ? bounds.top + 8 : bounds.bottom - 8) =>
-      document.dispatchEvent(
-        new PointerEvent(type, { pointerId: 93, clientX: start.left + 10, clientY: y }),
-      );
-    send("pointermove");
-    try {
-      if (action === "fits") expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight);
-      else
-        await scrollsPast(250, () =>
-          action === "up" ? initial - box.scrollTop : box.scrollTop - initial,
-        );
-      if (action === "up") {
-        send("pointerup");
-        await settle(el);
-        expect((order.mock.calls[0]![0] as string[]).indexOf(key)).toBeLessThan(28);
-      } else if (action === "leave") send("pointermove", bounds.top + bounds.height / 2);
-      else if (action === "cancel") send("pointercancel");
-      else if (action === "disconnect") el.remove();
-      await settle(el);
-      for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
-      const ended = box.scrollTop;
-      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
-      expect(box.scrollTop).toBe(ended);
-    } finally {
-      send("pointercancel");
-    }
-  },
-);
 
 describe("Save follows changes", () => {
   const modes = ["create", "rename", "printers", "timing"] as const;
@@ -5387,16 +5038,16 @@ describe.each([
       ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/prep-stations"]'),
     ];
     expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-      [label, "/manage/prep-stations/view/times/station/upstairs"],
       [label, "/manage/prep-stations/view/times/station/terrace"],
+      [label, "/manage/prep-stations/view/times/station/upstairs"],
     ]);
     expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
-      `Upstairs bar: ${label}`,
       `Terrace: ${label}`,
+      `Upstairs bar: ${label}`,
     ]);
     expect(links.map((link) => link.closest("tr")?.textContent)).toEqual([
-      expect.stringContaining("Upstairs bar"),
       expect.stringContaining("Terrace"),
+      expect.stringContaining("Upstairs bar"),
     ]);
     expect(links.every((link) => link.tabIndex === 0)).toBe(true);
   });
@@ -5706,4 +5357,36 @@ it("A725 holds the colour popup closed while Add station is saving", async () =>
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
   });
+});
+
+it("A725 lists Stations by name with Default in place and no row grips", async () => {
+  setLocale("en");
+  const server = structuredClone(view);
+  server.stations = [
+    { ...view.stations[0]!, id: "zulu", name: "Zulu", displayOrder: 0, isDefault: true },
+    { ...view.stations[0]!, id: "bar", name: "Bar", displayOrder: 1, isDefault: false },
+    { ...view.stations[0]!, id: "alpha", name: "Alpha", displayOrder: 2, isDefault: false },
+    { ...view.stations[0]!, id: "gone", name: "A deleted", active: false },
+  ];
+  server.routing.defaultStationId = "zulu";
+  const cells = structuredClone(server.routing.cells);
+  const a = api({ load: vi.fn().mockResolvedValue(server) });
+  expect("readStationHealth" in a).toBe(false);
+  const el = await mount(a);
+  await settle(el);
+  const rows = [...stationTable(el)!.querySelectorAll("tbody tr")];
+  expect(rows.map((row) => row.querySelector('[part="name"]')!.textContent)).toEqual([
+    "Alpha",
+    "Bar",
+    "Zulu",
+  ]);
+  expect(rows.map((row) => row.querySelector('[part="badge"]')?.textContent?.trim() ?? "")).toEqual(
+    ["", "", "Default"],
+  );
+  expect(stationTable(el)!.querySelector('[data-test^="drag-"]')).toBeNull();
+  expect(q(el, '[data-test="station-order-status"]')).toBeNull();
+  expect(server.routing.cells).toEqual(cells);
+  expect(server.routing.defaultStationId).toBe("zulu");
+  expect(a.updateStation).not.toHaveBeenCalled();
+  expect(document.body.style.cursor).not.toBe("grabbing");
 });

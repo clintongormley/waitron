@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { StationServiceTimes } from "../station-service-times.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
-import { monthWeeks, stationShowModel, type TimesPeriod } from "./station-show.js";
+import {
+  activeStationsInOrder,
+  monthWeeks,
+  stationShowModel,
+  type TimesPeriod,
+} from "./station-show.js";
 
 const PERIODS: TimesPeriod[] = [
   {
@@ -137,4 +142,25 @@ describe("monthWeeks", () => {
   it("covers the month's whole Monday-to-Sunday weeks", () => {
     expect(monthWeeks("2026-12")).toEqual(["2026-11-30", "2027-01-03"]);
   });
+});
+
+it("A725 offers active stations alphabetically without changing their identity or default", () => {
+  const zulu = { id: "zulu", name: "Zulu", active: true, isDefault: true, displayOrder: 0 };
+  const alpha = { id: "alpha", name: "Alpha", active: true, isDefault: false, displayOrder: 2 };
+  const bar = { id: "bar", name: "Bar", active: true, isDefault: false, displayOrder: 1 };
+  const hidden = {
+    id: "hidden",
+    name: "A deleted",
+    active: false,
+    isDefault: false,
+    displayOrder: -1,
+  };
+  const input = [zulu, hidden, bar, alpha];
+  const ordered = activeStationsInOrder(input);
+  expect(ordered.map(({ id }) => id)).toEqual(["alpha", "bar", "zulu"]);
+  expect(ordered[0]).toBe(alpha);
+  expect(ordered[1]).toBe(bar);
+  expect(ordered[2]).toBe(zulu);
+  expect(ordered[2]!.isDefault).toBe(true);
+  expect(input).toEqual([zulu, hidden, bar, alpha]);
 });

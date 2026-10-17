@@ -24,19 +24,6 @@ export class StationTable extends LitElement {
         display: block;
         min-width: 0;
       }
-      wt-data-table::part(station-grip) {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        border: 0;
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        cursor: var(--reorder-drag-cursor, grab);
-        touch-action: none;
-      }
       wt-data-table::part(screens) {
         display: grid;
         gap: var(--wt-space-2);
@@ -45,11 +32,7 @@ export class StationTable extends LitElement {
       }
       wt-data-table::part(station-name-content) {
         display: grid;
-        grid-template-columns: max-content max-content minmax(0, 1fr);
-        align-items: center;
-      }
-      wt-data-table::part(station-name-handle) {
-        display: inline-flex;
+        grid-template-columns: max-content minmax(0, 1fr);
         align-items: center;
       }
       wt-data-table::part(station-name-details) {
@@ -80,7 +63,6 @@ export class StationTable extends LitElement {
   ];
   @property({ attribute: false }) statusNotes: Readonly<Record<string, string | TemplateResult>> =
     {};
-  @property({ attribute: false }) handles: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
   @property({ attribute: false }) outputs: Readonly<
@@ -89,7 +71,6 @@ export class StationTable extends LitElement {
 
   #name(station: PrepStation) {
     return html`<span part="station-name-content"
-      ><span part="station-name-handle">${this.handles[station.id] ?? nothing}</span
       ><span
         part=${`station-colour station-colour-${station.colour}`}
         data-station-colour=${station.colour}

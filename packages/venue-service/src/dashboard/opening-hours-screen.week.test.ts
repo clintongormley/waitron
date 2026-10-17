@@ -108,6 +108,7 @@ function stationTimes(stationId: string, from: string, to: string) {
   return { always: null, days };
 }
 interface Answers {
+  stations?: typeof STATIONS;
   /** Thrown by the station list read, or by every station-times read. */
   stationsFail?: unknown;
   /** The station list never answers. */
@@ -140,7 +141,7 @@ async function mount(
     if (path === "/management-api/stations") {
       if (answers.stationsFail) throw answers.stationsFail;
       if (answers.holdStations) return new Promise(() => {});
-      return STATIONS;
+      return answers.stations ?? STATIONS;
     }
     const times = /\/stations\/([^/]+)\/service-times\?from=([\d-]+)&to=([\d-]+)$/.exec(path);
     if (times) {
@@ -787,6 +788,37 @@ describe("a prep station in the Calendar", () => {
   const timesReads = (paths: readonly string[]) =>
     paths.filter((path) => path.includes("/service-times"));
   const STATION_LOAD_ERROR = "This station's times could not be loaded. It will be tried again.";
+
+  it("A725 offers stations by name in Calendar Week and Month with Default in place", async () => {
+    const { el } = await mount(grillWeek, undefined, false, {
+      stations: [
+        { ...STATIONS[0]!, name: "Zulu", displayOrder: 0 },
+        { ...STATIONS[1]!, id: "alpha", name: "Alpha", displayOrder: 2 },
+        { ...STATIONS[1]!, name: "Bar", displayOrder: 1 },
+        { ...STATIONS[1]!, id: "gone", name: "A deleted", active: false },
+      ],
+    });
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    const expected = [
+      { value: "station:alpha", label: "Alpha", group: "Prep stations" },
+      { value: "station:s1", label: "Bar", group: "Prep stations" },
+      { value: "station:s2", label: "Zulu", group: "Prep stations" },
+    ];
+    expect(
+      week(el)!
+        .shadowRoot!.querySelector("wt-combobox")!
+        .options.filter(({ value }) => value.startsWith("station:")),
+    ).toEqual(expected);
+    monthLink(el, "2026-12").click();
+    await expect.poll(() => monthView(el)?.station?.state).toBe("ready");
+    await monthView(el)!.updateComplete;
+    expect(
+      monthView(el)!
+        .shadowRoot!.querySelector("wt-combobox")!
+        .options.filter(({ value }) => value.startsWith("station:")),
+    ).toEqual(expected);
+    expect(monthView(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
+  });
 
   it("choosing a station in the Week's Show writes it and draws its rows", async () => {
     const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");

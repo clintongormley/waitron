@@ -1,4 +1,3 @@
-import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -11,15 +10,8 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
   submitOnEnter,
-  ReorderController,
-  reorder,
   UrlStateController,
 } from "@waitron/ui";
-import {
-  holdPageCursor,
-  releasePageCursor,
-  pointerElementsAt,
-} from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -120,8 +112,6 @@ function screenDevices(devices: PrepStationsView["devices"], stationId: string) 
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
-    ReorderController.styles,
-    ReorderController.tableStyles,
     css`
       :host {
         display: block;
@@ -185,9 +175,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private tab: PrepTab = "stations";
   /** The Times tab's station as its address names it; `#settleStation` replaces one not shown. */
   @state() private timesStation: string | null = null;
-  @state() private stationOrder?: string[];
-  @state() private stationAnnouncement = "";
-  #stationDrag?: { id: string; pointerId: number; changed: boolean };
   /** The station the editor opened for; `token` tells one opening from the next. */
   @state() private stationEdit?: { token: object; station: PrepStation };
   @state() private stationEditBusy = false;
@@ -430,7 +417,6 @@ export class PrepStationsScreen extends LitElement {
     this.#leave = undefined;
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
-    this.#endStationDrag();
   }
   async #load() {
     try {
@@ -665,132 +651,6 @@ export class PrepStationsScreen extends LitElement {
     this.#releaseCellScope();
     this.pending = undefined;
     this.cellChoice = null;
-  }
-  #activeStationOrder() {
-    return (
-      this.stationOrder ??
-      activeStationsInOrder(this.view?.stations ?? []).map((station) => station.id)
-    );
-  }
-  #stationTable() {
-    return this.renderRoot
-      .querySelector("prep-station-table")
-      ?.shadowRoot?.querySelector("wt-data-table");
-  }
-  #moveStation(id: string, to: number) {
-    const previous = this.#activeStationOrder();
-    const next = reorder(previous, previous.indexOf(id), to);
-    if (next.join() === previous.join()) return false;
-    this.stationOrder = next;
-    this.stationAnnouncement = format("prep.station_reordered", {
-      name: this.#stationName(id),
-      index: String(to + 1),
-      total: String(next.length),
-    });
-    return true;
-  }
-  async #saveStationOrder(id: string) {
-    if (this.busy || !this.stationOrder) return;
-    const ids = [...this.stationOrder];
-    await this.#act(() => this.api.reorderStations(ids));
-    this.stationOrder = undefined;
-    await this.updateComplete;
-    const stations = this.renderRoot.querySelector("prep-station-table");
-    if (stations) await stations.updateComplete;
-    const table = this.#stationTable();
-    if (table) await table.updateComplete;
-    table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
-  }
-  readonly #stationScroll = new DragEdgeScroll();
-  #stationPoint = { x: 0, y: 0 };
-
-  #startStationDrag(event: PointerEvent, id: string) {
-    if (this.busy || this.#stationDrag || event.button !== 0) return;
-    event.preventDefault();
-    this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
-    this.#stationPoint = { x: event.clientX, y: event.clientY };
-    this.#stationScroll.start(event.currentTarget as Element, this.#stationPoint, () => {
-      const root = this.#stationTable()?.shadowRoot;
-      const row = pointerElementsAt(this.#stationPoint.x, this.#stationPoint.y).find(
-        (element) => element.matches("tbody tr") && root?.contains(element),
-      );
-      this.#trackStationDrag(row ? [row] : []);
-    });
-    holdPageCursor();
-    document.addEventListener("pointermove", this.#moveStationDrag);
-    document.addEventListener("pointerup", this.#dropStationDrag);
-    document.addEventListener("pointercancel", this.#dropStationDrag);
-    document.addEventListener("keydown", this.#stationDragKey, true);
-  }
-  readonly #moveStationDrag = (event: PointerEvent) => {
-    const drag = this.#stationDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    this.#stationPoint = { x: event.clientX, y: event.clientY };
-    this.#stationScroll.update(this.#stationPoint);
-    this.#trackStationDrag();
-  };
-  #trackStationDrag(
-    rows: Iterable<Element> = this.#stationTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? [],
-  ): void {
-    const drag = this.#stationDrag;
-    if (!drag) return;
-    const order = this.#activeStationOrder();
-    for (const row of rows) {
-      const bounds = row.getBoundingClientRect();
-      if (this.#stationPoint.y < bounds.top || this.#stationPoint.y >= bounds.bottom) continue;
-      const id = row.querySelector<HTMLElement>("[data-station-id]")?.dataset.stationId;
-      if (id && order.includes(id) && this.#moveStation(drag.id, order.indexOf(id)))
-        drag.changed = true;
-      break;
-    }
-  }
-
-  readonly #dropStationDrag = (event: PointerEvent) => {
-    const drag = this.#stationDrag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    this.#endStationDrag();
-    if (drag.changed) void this.#saveStationOrder(drag.id);
-  };
-  readonly #stationDragKey = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || !this.#stationDrag) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const drag = this.#stationDrag;
-    this.#endStationDrag();
-    if (drag.changed) void this.#saveStationOrder(drag.id);
-  };
-
-  #endStationDrag() {
-    this.#stationScroll.stop();
-    if (!this.#stationDrag) return;
-    this.#stationDrag = undefined;
-    releasePageCursor();
-    document.removeEventListener("pointermove", this.#moveStationDrag);
-    document.removeEventListener("pointerup", this.#dropStationDrag);
-    document.removeEventListener("pointercancel", this.#dropStationDrag);
-    document.removeEventListener("keydown", this.#stationDragKey, true);
-  }
-  #stationGrip(station: PrepStation) {
-    return station.active
-      ? html`<button
-          type="button"
-          part="station-grip"
-          data-test=${`drag-${station.id}`}
-          aria-label=${format("prep.reorder_station", { name: station.name })}
-          ?disabled=${this.busy}
-          @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
-          @keydown=${(event: KeyboardEvent) => {
-            const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-            if (!delta || this.busy) return;
-            event.preventDefault();
-            const order = this.#activeStationOrder();
-            if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
-              void this.#saveStationOrder(station.id);
-          }}
-        >
-          <wt-icon name="grip"></wt-icon>
-        </button>`
-      : nothing;
   }
   #stationMenu(station: PrepStation) {
     return html`<wt-row-actions
@@ -1571,17 +1431,8 @@ export class PrepStationsScreen extends LitElement {
                     </div>`
               }
               <div slot="stations">
-                <div
-                  class="reorder-status"
-                  data-test="station-order-status"
-                  role="status"
-                  aria-live="polite"
-                >
-                  ${this.stationAnnouncement}
-                </div>
                 <prep-station-table
-                  .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
-                  .handles=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationGrip(station)]))}
+                  .stations=${view.stations}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(

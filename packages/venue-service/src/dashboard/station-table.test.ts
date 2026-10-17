@@ -26,7 +26,6 @@ type StationTable = HTMLElement & {
   stations: readonly PrepStation[];
   statusNotes: Record<string, string>;
   actions: Record<string, unknown>;
-  handles: Record<string, unknown>;
   outputs: Record<string, { printedOn: unknown; shownOn: unknown }>;
 };
 async function mount(stations: readonly PrepStation[] = [bar], theme: "light" | "dark" = "light") {
@@ -60,18 +59,17 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   expect(table(el)?.querySelector("button")).toBeNull();
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
 });
-it("puts the grip before the name and the row menu in its own Actions column, pinned to the end", async () => {
+it("puts the row menu in its own Actions column, pinned to the end, without a grip", async () => {
   const el = await mount();
-  el.handles = { bar: html`<button type="button" data-test="grip-bar">⠿</button>` };
   el.actions = { bar: html`<button type="button" data-test="menu-bar">⋮</button>` };
   await new Promise((resolve) => setTimeout(resolve, 0));
   const cells = [...table(el)!.querySelectorAll("tbody tr td")];
-  expect(cells[0]!.querySelector('[data-test="grip-bar"]')).not.toBeNull();
+  expect(cells[0]!.querySelector("button")).toBeNull();
   expect(cells[0]!.querySelector('[data-test="menu-bar"]')).toBeNull();
   const last = cells.at(-1)!;
   expect(last.getAttribute("data-pinned")).toBe("end");
   expect(last.querySelector('[data-test="menu-bar"]')).not.toBeNull();
-  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(2);
+  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(1);
 });
 it("names its columns in Spanish, and says so when there are no stations", async () => {
   setLocale("es");
@@ -96,7 +94,7 @@ it("omits deleted stations and their supplied status while preserving Default", 
   expect(table(el)?.textContent).not.toContain("Switched off");
   expect(table(el)?.textContent).not.toContain("Old kitchen");
 });
-it("orders tied stations by name", async () => {
+it("orders stations by name despite legacy positions", async () => {
   const el = await mount([
     station({ id: "zulu", name: "Zulu", displayOrder: 1 }),
     station({ id: "alpha", name: "Alpha", displayOrder: 1 }),
@@ -105,8 +103,8 @@ it("orders tied stations by name", async () => {
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
   ).toEqual([
-    expect.stringContaining("Yankee"),
     expect.stringContaining("Alpha"),
+    expect.stringContaining("Yankee"),
     expect.stringContaining("Zulu"),
   ]);
 });

@@ -39,15 +39,6 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
             ]),
           )
         : {};
-    el.handles =
-      state === "manager"
-        ? Object.fromEntries(
-            stations.map((station) => [
-              station.id,
-              html`<button type="button" aria-label=${`Reorder ${station.name}`}>⠿</button>`,
-            ]),
-          )
-        : {};
     if (state === "manager")
       el.outputs = {
         bar: {
