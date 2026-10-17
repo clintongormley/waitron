@@ -521,8 +521,8 @@ owner's A579 design and left as it is.
   `menu_scheduled_publications`, `packages/catalogue/src/schema/publication.ts`). Today a saved plan
   reaches the till at the next reset.
 - **Different layouts for different periods** of the day, for example lunch and dinner. This needs
-  deciding how a change of layout meets tables that are occupied when the period changes. A506's
-  Periods page and period dialog already leave a Floor plan column and field for it.
+  deciding how a change of layout meets tables that are occupied when the period changes. A504 adds
+  the Floor plan column to the Periods window and the field to the period dialog.
 - **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
   floor plans, one layout per zone, and a period picks the set it uses. The departments table's
   per-zone floor-plan link (`packages/venue-service/src/dashboard/departments-list.ts:239`) goes

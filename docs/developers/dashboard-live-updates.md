@@ -42,7 +42,7 @@ whether the message came from a read (Payments' `#readErrorShown`, set only thro
 only a read's message; a reload that runs after a successful action and can finish after another
 action failed (the screen's actions are not serialised) clears only a read's message too; and a
 read's failure does not replace an action's message, except the period delete dialog's changed-clock
-refusal, whose impact the refusal dropped (design-system.md → Periods page). A read an action takes before its write
+refusal, whose impact the refusal dropped (design-system.md → Periods window). A read an action takes before its write
 counts as a read's, and when an action writes and then re-reads, a failure after the write counts
 as a read's. A screen whose most recent load stopped before it started its later reads (on opening,
 on being reattached, or in the reload after a save) runs the unfinished part again from `recovered`,
@@ -91,12 +91,12 @@ a day the draft has not changed takes the stored paint, and a day it changed kee
 (`refresh` and `mayFollow`, `packages/venue-service/src/dashboard/season-painter.ts`). A save in
 flight, and the time until the first read that started after the latest successful save answered,
 still hold the edited weeks whole.
-2026-10-14, A506-11: the Periods page reads `/menu-periods/painted-in` through
+2026-10-14, A506-11: the Periods window reads `/menu-periods/painted-in` through
 `OpeningHoursApi.watchPaintedIn` on the `menu-periods-painted-in` dependencies. Its delete dialog
-reads `…/delete-impact` again, passively, when a page read (the hours model or Painted in) that
-started after its last impact read answers (`rereadImpact`, `periods-screen.ts`; `nextReadNumber`,
+reads `…/delete-impact` again, passively, when a list read (the hours model or Painted in) that
+started after its last impact read answers (`rereadImpact`, `periods-list.ts`; `nextReadNumber`,
 `model-watch.ts`), and after a delete refused as `hours.clock_changed`. The impact answer carries
-the clock revision it was read under, and the delete sends that one, so the order the page's reads
+the clock revision it was read under, and the delete sends that one, so the order the list's reads
 answer in decides nothing about the revision sent.
 2026-10-14, A506-12: Prep stations' Times tab reads `/opening-hours/month` through
 `OpeningHoursApi.watchMonth`, as the Month does, and the station's `…/service-times` through
