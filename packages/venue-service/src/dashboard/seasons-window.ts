@@ -62,6 +62,12 @@ const listOf = (names: readonly string[]): string =>
   new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" }).format(names);
 
 type RowField = "name" | "day" | "month" | "colour";
+type Refused = { key: string; field: SeasonRefusedField; message: string };
+interface Marks {
+  own: Map<string, SeasonRowErrors>;
+  refused?: Refused;
+  gone: Set<string>;
+}
 const errorFieldOf = (field: RowField): SeasonRefusedField =>
   field === "day" || field === "month" ? "startsOn" : field;
 
@@ -265,7 +271,7 @@ export class SeasonsWindow extends LitElement {
     this.scope?.changed();
   }
   /** The refused field, and the key of the row it belongs to. */
-  private refused(): { key: string; field: SeasonRefusedField; message: string } | undefined {
+  private refused(): Refused | undefined {
     if (!this.refusal) return undefined;
     const found = seasonRefusalField(this.refusal.refusal);
     const key = found ? this.refusal.keys[found.index] : undefined;
@@ -275,7 +281,7 @@ export class SeasonsWindow extends LitElement {
   }
   private errorsOf(
     row: SeasonRow,
-    own: Map<string, SeasonRowErrors>,
+    { own, refused, gone }: Marks,
   ): Partial<Record<SeasonRefusedField, string>> {
     const errors: Partial<Record<SeasonRefusedField, string>> = {};
     const mine = own.get(row.key);
@@ -285,9 +291,8 @@ export class SeasonsWindow extends LitElement {
       errors.startsOn = t(
         mine.startsOn === "taken" ? "season.start_taken" : "season.start_required",
       );
-    const refused = this.refused();
     if (refused?.key === row.key) errors[refused.field] = refused.message;
-    if (this.gone().has(row.key)) errors.name = t("season.not_found");
+    if (gone.has(row.key)) errors.name = t("season.not_found");
     return errors;
   }
   private gone(): Set<string> {
@@ -478,9 +483,9 @@ export class SeasonsWindow extends LitElement {
   private readonly monthOptions = () =>
     MONTHS.map((month) => ({ value: month, label: formatMonthName(Number(month)) }));
 
-  private editableRow(row: SeasonRow, index: number, own: Map<string, SeasonRowErrors>) {
+  private editableRow(row: SeasonRow, index: number, marks: Marks) {
     const busy = this.busy;
-    const errors = this.errorsOf(row, own);
+    const errors = this.errorsOf(row, marks);
     const startError = errors.startsOn ?? "";
     const startErrorId = `start-error-${row.key}`;
     const on =
@@ -581,9 +586,8 @@ export class SeasonsWindow extends LitElement {
       <td class="until" data-test="runs-until">${this.until(row.key)}</td>
     </tr>`;
   }
-  private table() {
+  private table(marks: Marks) {
     const editable = !this.readOnly;
-    const own = this.ownErrors();
     return html`<div
       class="table-wrap"
       tabindex="0"
@@ -618,13 +622,14 @@ export class SeasonsWindow extends LitElement {
           ${repeat(
             this.rows,
             (row) => row.key,
-            (row, index) => (editable ? this.editableRow(row, index, own) : this.readOnlyRow(row)),
+            (row, index) =>
+              editable ? this.editableRow(row, index, marks) : this.readOnlyRow(row),
           )}
         </tbody>
       </table>
     </div>`;
   }
-  private footer() {
+  private footer({ own, refused, gone }: Marks) {
     if (this.readOnly)
       return html`<wt-form-actions slot="footer">
         <wt-button
@@ -636,11 +641,9 @@ export class SeasonsWindow extends LitElement {
         >
       </wt-form-actions>`;
     const action = saveActionState(this.scope);
-    const own = this.ownErrors();
     const busy = this.busy;
-    const refused = this.refused();
-    const gone = this.gone().size > 0;
-    const marked = own.size > 0 || gone || this.rows.some((row) => row.key === refused?.key);
+    const marked =
+      own.size > 0 || gone.size > 0 || this.rows.some((row) => row.key === refused?.key);
     const refusal = !this.refusal
       ? ""
       : seasonRefusalField(this.refusal.refusal)
@@ -663,7 +666,7 @@ export class SeasonsWindow extends LitElement {
       <wt-button
         data-test="save-seasons"
         variant=${action.variant}
-        ?disabled=${action.unchanged || busy || own.size > 0 || gone}
+        ?disabled=${action.unchanged || busy || own.size > 0 || gone.size > 0}
         ?loading=${busy}
         @click=${() => void this.save()}
         >${t("prep.save")}</wt-button
@@ -671,6 +674,9 @@ export class SeasonsWindow extends LitElement {
     </wt-form-actions>`;
   }
   override render() {
+    const marks: Marks = this.readOnly
+      ? { own: new Map(), gone: new Set() }
+      : { own: this.ownErrors(), refused: this.refused(), gone: this.gone() };
     return html`<wt-modal
       open
       heading=${t("season.seasons")}
@@ -679,7 +685,7 @@ export class SeasonsWindow extends LitElement {
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
     >
-      ${this.table()} ${this.readOnly ? nothing : this.deleteNotes()}
+      ${this.table(marks)} ${this.readOnly ? nothing : this.deleteNotes()}
       ${
         this.readOnly
           ? nothing
@@ -696,7 +702,7 @@ export class SeasonsWindow extends LitElement {
               <p class="hint" data-test="window-hint">${t("season.window_hint")}</p>
             </div>`
       }
-      ${this.footer()}
+      ${this.footer(marks)}
     </wt-modal>`;
   }
 }
