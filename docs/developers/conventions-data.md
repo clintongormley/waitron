@@ -2730,7 +2730,12 @@ absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`)
 `apps/server/src/till-api.parties.test.ts`, `clears the count with null` and `refuses the guest count
 %j as a bad field, changing nothing` pin the two halves, and in
 `apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
-null` and `refuses guests %j as a bad %s, changing nothing` do.
+null` and `refuses guests %j as a bad %s, changing nothing` do. The payment routes' `guests`
+(`POST /api/sales`, `/api/pay`, `/api/working-orders/:id/collect`, and
+`/api/working-orders/:id/payments` for the payment that completes the bill) keeps an explicit null
+as no guests line, while an absent key takes the party's default (`recordReceiptGuests`,
+`apps/server/src/receipt-guests.ts`). In `apps/server/src/receipt-guests.routes.test.ts` a pair of
+cases on a party's bill pins the two halves on each of the four routes.
 
 An extras item's `maxQuantity` keeps an explicit null as no cap on that item, while an absent field
 defaults to one (`parseExtraListInput`, `packages/catalogue/src/extra-contract.ts`); the case

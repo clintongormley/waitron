@@ -4142,6 +4142,12 @@ seat run twice, the second told to set this plan's checklist aside.
   `(await readReceiptGuests(tx, saleId)) ?? null`. `readPrintedGuests` reads the sale left-joined to
   `sale_receipt_guests`: simplified and a row present → the row's `guests ?? undefined`; otherwise
   `readReceiptGuests(tx, saleId)`.
+
+  > **2026-10-17 (finish-branch review):** the five header-then-guests pairs are one call,
+  > `recordSaleReceiptFacts(tx, cfg, { saleId, workingOrderId, counterparty }, guests)`.
+  > `recordReceiptGuests` takes that `RecordedSale`, skips on its `counterparty` and reads no `sales`
+  > row; its default reads the bill (`readBillGuests`). The till checks the guests and the tip again
+  > when the check before payment answers.
 - Modify: `apps/server/src/receipt-print.ts:216` — `buildReceiptBytes` calls `readPrintedGuests`.
   `invoice-document.ts` keeps `readReceiptGuests` (full invoices only, see above).
 - Test: `apps/server/src/receipt-guests.test.ts` (the helpers), `apps/server/src/receipt-print.test.ts`
@@ -4372,9 +4378,9 @@ the counter's (`screens/till-counter-screen.ts:465-482`) and a table bill's
   in the code today).
 - It shows `receiptGuests`, or empty when null, until the waiter changes it. A change is held in a
   state (`guestsEntry`) that resets when `store.id` changes (beside the reset in `willUpdate`,
-  `:455-466`) and after a payment is dispatched. Untouched, it follows a new `receiptGuests` (a live
-  update of the party's count). It saves nothing, so it joins no draft scope (not
-  `#extrasScope`) and leaving asks nothing.
+  `:455-466`). Untouched, it follows a new `receiptGuests` (a live
+  update of the party's count). It joins no draft scope (not `#extrasScope`), so leaving asks
+  nothing.
 - The value rides on every event that charges: `ConfirmPaymentDetail` (`:43-44`, dispatched by
   `#confirm` `:678` and `#confirmCard` `:694`, as `confirm-payment` or `collect-order`) and
   `CollectCardDetail` (`:50-57`, `#onCardTap` `:525-547`) gain `guests?: number | null` — `null`
