@@ -272,7 +272,7 @@ special-day write routes.
 
 ## A753. Calendar colours: more of them
 
-**A753 (owner, 2026-10-16; left open by #NNNN).**
+**A753 (owner, 2026-10-16; left open by #1828).**
 
 1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
    from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
@@ -325,14 +325,14 @@ Re-check when a new year's list is added.
   default, sent to the owner as an FYI).** The names come from the Staff roles list route, which
   `venue.view` opens, not from the people list, which needs `person.manage`. Every active person's
   name was already readable without signing in (`GET /management-api/staff-roster`); a pending or
-  suspended holder's name is the one widening. The receipt is in #NNNN.
+  suspended holder's name is the one widening. The receipt is in #1828.
 
 - **The Staff roles list shows five holders' names, then "plus N more" (A753 plan, Decision 7;
   chosen on the screen, 2026-10-17, and sent to the owner as an FYI).** `HOLDER_NAMES_SHOWN`
   (`packages/staffing/src/dashboard/staff-roles-screen.ts`) stays 5, chosen on the demo venue: at
   1280 px wide, ten names (a role held by 12 people) overflowed the People cell and hid "plus 2
   more", while five fit on one line; at 390 px the table scrolls sideways at either value. The
-  pictures are in #NNNN.
+  pictures are in #1828.
 
 - **The Calendar has no Year | Month switch; the title moves between views (A759, owner
   2026-10-16).** A month's name in the Year opens that month; in the Month's "‹ February 2026 ›" the

@@ -168,7 +168,7 @@ list does not exist.
    becomes "Print a slip when sent dishes move table", its options "Venue setting: Print" (or
    "Venue setting: Don't print"), "Print" and "Don't print" — owner: not "As the venue". Spanish to
    match.
-7. **The colour is chosen in a popup:** the shared `wt-colour-chooser` (A753, #NNNN), a field
+7. **The colour is chosen in a popup:** the shared `wt-colour-chooser` (A753, #1828), a field
    showing the colour's square and name, opens a small panel of colours, which still marks those
    other stations use. It is already used by the period and staff role dialogs. A725 hands
    it the twelve station colours from `STATION_COLOUR_TOKENS` with `usedBy`, and
