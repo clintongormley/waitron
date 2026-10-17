@@ -36,6 +36,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  it("allows a background profile setup read to be aborted with its owning scope read", async () => {
+    const controller = new AbortController();
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ capabilities: ["take-orders"] }));
+    const api = new TillApi("", fetchStub);
+    expect(await api.getTill({ signal: controller.signal })).toEqual({
+      capabilities: ["take-orders"],
+    });
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/till", {
+      method: "GET",
+      credentials: "include",
+      signal: controller.signal,
+    });
+  });
   it("reads a filed F1 ticket with GET and returns its recorded recipient and amounts", async () => {
     const ticket = {
       invoiceType: "F1",

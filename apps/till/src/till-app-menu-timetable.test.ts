@@ -187,7 +187,9 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   return {
     getDeviceZones: vi
       .fn()
-      .mockResolvedValue(deviceZonesFixture(["zone-barra", "zone-terraza"], ["z1"])),
+      .mockResolvedValue(
+        deviceZonesFixture(["zone-barra", "zone-terraza"], ["z1", "zone-comedor"]),
+      ),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

@@ -1173,6 +1173,7 @@ export class TillTableOrderScreen extends LitElement {
   };
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
+  @property({ type: Boolean }) orderingAllowed = true;
   @property() departmentName = "";
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
@@ -1449,6 +1450,7 @@ export class TillTableOrderScreen extends LitElement {
     const store = this.draftStore === undefined ? this.#ownDraft : this.draftStore;
     if (store !== null)
       store.canSelectProduct = (product) =>
+        this.orderingAllowed &&
         this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
     return store;
   }
@@ -2591,11 +2593,12 @@ export class TillTableOrderScreen extends LitElement {
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
     store.canSelectProduct = (product) =>
+      this.orderingAllowed &&
       this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
       class="round-control"
-      ?inert=${store.sending}
+      ?inert=${store.sending || !this.orderingAllowed}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}

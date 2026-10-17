@@ -1,7 +1,7 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeviceZoneSelection } from "@waitron/venue-service";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import { cleanupWidgets, draftServer, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillApi, FloorZone, ZoneOfferCatalogue } from "./api/client.js";
 import type { TillShell } from "./widgets/till-shell.js";
@@ -195,6 +195,342 @@ async function mount(
 const shell = (el: TillApp) => el.shadowRoot!.querySelector<TillShell>("till-shell")!;
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
+
+describe("live device zones", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] }));
+  afterEach(() => vi.useRealTimers());
+  async function tick(el: TillApp) {
+    vi.advanceTimersByTime(15_000);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+    }
+  }
+  const emit = (source: Element, type: string, detail?: unknown) =>
+    source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+
+  it.each(["floor-only", "empty"])(
+    "recovers a %s device without needing a counter poll",
+    async (kind) => {
+      const chosen =
+        kind === "empty" ? { ...selection([], null), zones: [] } : selection(["room"], "room");
+      const { el, api } = await mount(chosen);
+      api.getDeviceZones.mockResolvedValue({
+        ...selection(["bar", "room"], "bar"),
+        snapshot: "restored",
+      });
+      await tick(el);
+      expect(shell(el).counterZones.map((zone) => zone.id)).toEqual(["bar"]);
+      expect(api.getDeviceZones.mock.calls[1]?.[0]?.signal).toBeInstanceOf(AbortSignal);
+      expect(api.setDeviceZones).not.toHaveBeenCalled();
+      expect(api.listDefaultZoneOffers).not.toHaveBeenCalled();
+    },
+  );
+
+  it("narrows an idle Counter to Floor and restores retained counters on a later snapshot", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")!.zones.map((zone) => zone.id)).toEqual(
+      ["room"],
+    );
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["bar", "room"], "bar"),
+      snapshot: "restored",
+    });
+    await tick(el);
+    expect(shell(el).counterZones.map((zone) => zone.id)).toEqual(["bar"]);
+    expect(api.setServiceZone).toHaveBeenCalledExactlyOnceWith("bar");
+  });
+
+  it("retains a narrowed basket's identity and prices, refuses new picks, and reconciles after clearing", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    const store = counter(el)!.store;
+    const product = counter(el)!.products[0]!;
+    store.addProduct(product, "1");
+    const id = store.id;
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)?.store).toBe(store);
+    expect(counter(el)?.selectedServiceZoneId).toBe("bar");
+    expect(store.id).toBe(id);
+    expect(
+      el.shadowRoot!.querySelector("[data-device-zones-pending]")?.textContent ?? "",
+    ).toContain("Hold, send or cancel this order");
+    store.addProduct(product, "1");
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["coffee", "1", "2.00"]]);
+    expect(api.setServiceZone).toHaveBeenCalledExactlyOnceWith("bar");
+    expect(api.setDeviceZones).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "").not.toContain(
+      "Last orders have ended",
+    );
+    store.clear();
+    await el.updateComplete;
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
+  it("defers zone navigation while the payment submission flag is active", async () => {
+    const cancelCardPayment = vi.fn();
+    const recordSale = vi.fn();
+    const { el, api } = await mount(selection(["bar", "room"], "bar"), {
+      cancelCardPayment,
+      recordSale,
+    });
+    const store = counter(el)!.store;
+    Object.assign(el, { submitting: true });
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)?.store).toBe(store);
+    expect(counter(el)?.selectedServiceZoneId).toBe("bar");
+    expect(api.setServiceZone).toHaveBeenCalledExactlyOnceWith("bar");
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+    expect(recordSale).not.toHaveBeenCalled();
+    Object.assign(el, { submitting: false });
+    await tick(el);
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
+  it("keeps the latest scope through a transient read failure and retries on the next tick", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    api.getDeviceZones.mockRejectedValueOnce(new TypeError("offline"));
+    await tick(el);
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
+  it("aborts a disconnected read and refuses its late scope after reconnecting", async () => {
+    let answer!: (value: DeviceZoneSelection) => void;
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    api.getDeviceZones.mockImplementationOnce(
+      () =>
+        new Promise<DeviceZoneSelection>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await tick(el);
+    expect(api.getDeviceZones).toHaveBeenCalledTimes(2);
+    const signal = api.getDeviceZones.mock.calls[1]![0]!.signal as AbortSignal;
+    const parent = el.parentElement!;
+    el.remove();
+    expect(signal.aborted).toBe(true);
+    parent.append(el);
+    answer({ ...selection(["room"], "room"), snapshot: "old" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+  });
+
+  it("an old poll cannot overwrite a successful own save or repaint its newer editor", async () => {
+    let answer!: (value: DeviceZoneSelection) => void;
+    const chosen = selection(["bar", "room"], "bar");
+    const { el, api } = await mount(chosen, {
+      setDeviceZones: vi.fn().mockResolvedValue(selection(["bar", "room"], "room")),
+    });
+    api.getDeviceZones.mockImplementationOnce(
+      () =>
+        new Promise<DeviceZoneSelection>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await tick(el);
+    expect(api.getDeviceZones).toHaveBeenCalledTimes(2);
+    const dialog = await openZones(el);
+    emit(dialog, "save-device-zones", {
+      profileId: "profile",
+      snapshot: "scope",
+      selectedZoneIds: ["bar", "room"],
+      startingZoneId: "room",
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).toBeNull(),
+    );
+    answer({ ...selection(["shop"], "shop"), snapshot: "old" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(shell(el).counterZones.map((zone) => zone.id)).toEqual(["bar"]);
+    expect(counter(el)!.selectedServiceZoneId).toBe("bar");
+    expect(api.setDeviceZones).toHaveBeenCalledOnce();
+  });
+
+  it("reads changed profile capabilities before applying the matching navigation snapshot", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    const setup = await api.getTill.mock.results[0]!.value;
+    api.getTill.mockResolvedValue({ ...setup, capabilities: [] });
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["room"], "room"),
+      snapshot: "capabilities-changed",
+    });
+    await tick(el);
+    expect(api.getTill).toHaveBeenCalledTimes(2);
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")!.canChangeToday).toBe(false);
+  });
+
+  it("blocks new picks while a changed profile setup is unavailable, and recovers without losing its basket", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    const setup = await api.getTill.mock.results[0]!.value;
+    const store = counter(el)!.store;
+    const product = counter(el)!.products[0]!;
+    store.addProduct(product, "1");
+    api.getTill.mockRejectedValueOnce(new TypeError("offline"));
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    store.addProduct(product, "1");
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["coffee", "1", "2.00"]]);
+    api.getTill.mockResolvedValue(setup);
+    await tick(el);
+    store.clear();
+    await el.updateComplete;
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  });
+
+  it("does not reload unchanged profile setup and does not replace an action's refusal", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    Object.assign(el, { errorKey: "service_zone.basket_active" });
+    await tick(el);
+    await tick(el);
+    expect(api.getDeviceZones).toHaveBeenCalledTimes(3);
+    expect(api.getTill).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+      "Clear the basket before changing service area",
+    );
+  });
+
+  it("applies a changed profile's inactivity limit when its scope can reconcile", async () => {
+    const activity = new SessionActivity();
+    const configure = vi.spyOn(activity, "configure");
+    const { el, api } = await mount(
+      selection(["bar", "room"], "bar"),
+      {},
+      { sessionActivity: activity },
+    );
+    const setup = await api.getTill.mock.results[0]!.value;
+    api.getTill.mockResolvedValue({ ...setup, inactivityTimeoutSeconds: 45 });
+    api.getDeviceZones.mockResolvedValue({
+      ...selection(["room"], "room"),
+      snapshot: "new-idle-limit",
+    });
+    await tick(el);
+    expect(counter(el)).toBeNull();
+    expect(configure.mock.calls.at(-1)![0]).toMatchObject({ loggedIn: true, timeoutSeconds: 45 });
+  });
+
+  it("a background scope change with an unchanged idle limit does not count as activity", async () => {
+    const activity = new SessionActivity();
+    const configure = vi.spyOn(activity, "configure");
+    const { el, api } = await mount(
+      selection(["bar", "room"], "bar"),
+      {},
+      { sessionActivity: activity },
+    );
+    const calls = configure.mock.calls.length;
+    api.getDeviceZones.mockResolvedValue({ ...selection(["room"], "room"), snapshot: "narrow" });
+    await tick(el);
+    expect(counter(el)).toBeNull();
+    expect(configure).toHaveBeenCalledTimes(calls);
+  });
+
+  it("a live snapshot invalidates the open editor's scope without changing its draft", async () => {
+    const { el, api } = await mount(selection(["bar", "room"], "bar"));
+    const dialog = await openZones(el);
+    await userEvent.click(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>(
+        'input[name="starting-zone"][value="room"]',
+      )!,
+    );
+    const changed = { ...selection(["bar"], "bar"), zones: [zones[0]!], snapshot: "narrow" };
+    api.getDeviceZones.mockResolvedValue(changed);
+    await tick(el);
+    expect(dialog.selection?.snapshot).toBe("narrow");
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-zones-save]")!
+        .disabled,
+    ).toBe(true);
+    expect(api.setDeviceZones).not.toHaveBeenCalled();
+  });
+
+  it("a narrowed table keeps its real draft and bill while refusing new product picks", async () => {
+    const drafts = draftServer(() => ({ tabId: "bill", revision: 1, groups: [] }));
+    const table = {
+      id: "table",
+      label: "1",
+      zoneId: "room",
+      state: "open-tab",
+      hasOpenTab: true,
+      tabLineCount: 0,
+      tabTotal: "0.00",
+      pendingDeliveries: 0,
+      pendingToServe: 0,
+      readyToServe: 0,
+      enRoute: 0,
+      timingBand: "fresh",
+      status: null,
+      nextReservation: null,
+      today: null,
+      signals: [],
+      party: {
+        kitchenNote: { scope: { partyId: "party" }, note: null, revision: 0, ownerRevision: 1 },
+        id: "party",
+        revision: 1,
+        guestCount: 2,
+        state: "open",
+        mainBillId: "bill",
+        outstanding: "0.00",
+        billCount: 1,
+        tableIds: ["table"],
+      },
+    };
+    const { el, api } = await mount(selection(["bar", "room"], "room"), {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("bar")),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 1, groups: [] }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+    });
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("till-floor-screen")!.tables.map((row) => row.id),
+      ).toEqual(["table"]),
+    );
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "table",
+      seated: true,
+    });
+    const screen = () => el.shadowRoot!.querySelector("till-table-order-screen")!;
+    await vi.waitFor(() => expect(screen()?.draftStore).toBeTruthy());
+    const store = screen().draftStore!;
+    const product = screen().products[0]!;
+    store.addProduct(product, "1");
+    await el.updateComplete;
+    api.getDeviceZones.mockResolvedValue({ ...selection(["bar"], "bar"), snapshot: "narrow" });
+    await tick(el);
+    expect(screen().draftStore).toBe(store);
+    expect(screen().orderId).toBe("bill");
+    expect(screen().party?.id).toBe("party");
+    expect(screen().zoneId).toBe("room");
+    store.addProduct(product, "1");
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["coffee", "1", "2.00"]]);
+    expect(drafts.submitDraft).not.toHaveBeenCalled();
+    expect(api.setDeviceZones).not.toHaveBeenCalled();
+  });
+});
 
 it("a table-only device starts on Floor and never asks for an unrestricted counter", async () => {
   const { el, api } = await mount(selection(["room"], "room"));

@@ -1908,6 +1908,11 @@ export class TillApp extends LitElement {
     });
     this.#store.on("refused", (payload) => {
       const refusal = payload as BasketRefusal;
+      if (
+        refusal.code === "menu_period.not_running" &&
+        !this.#deviceZoneAllows(this.counterServiceZoneId)
+      )
+        return;
       this.errorKey =
         refusal.code === "menu_period.not_running"
           ? "menu.last_orders_ended"
@@ -2180,7 +2185,7 @@ export class TillApp extends LitElement {
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
-    onTick: () => {
+    onTick: (signal) => {
       const tab = this.#activeTab();
       if (
         this.#inShell() &&
@@ -2189,6 +2194,7 @@ export class TillApp extends LitElement {
         this.#tabNeedsFloorData(tab)
       )
         void this.#refreshFloorZones();
+      return this.#readLiveDeviceZones(signal);
     },
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -2252,6 +2258,8 @@ export class TillApp extends LitElement {
   #deviceZonesRead = 0;
   #deviceZonesWrite = 0;
   #pendingDeviceZoneSelection: DeviceZoneSelection | null = null;
+  #pendingDeviceZoneSetup?: TillInfo;
+  #pendingDeviceZoneSetupRead = false;
   @state() private profileServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
@@ -2788,6 +2796,7 @@ export class TillApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    this.#reconcileSavedDeviceZones();
     if (changed.has("nfcNotice") && this.nfcNotice !== null)
       this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
   }
@@ -4351,6 +4360,7 @@ export class TillApp extends LitElement {
   ): void {
     this.#counterOffers.load(catalogue, loaded);
     this.#store.canSelectProduct = (product) =>
+      this.#deviceZoneAllows(this.counterServiceZoneId) &&
       this.#counterOffers.selectable.has(product.catalogueId ?? "");
     this.menus = catalogue.menus;
     this.counterService = loaded ? catalogue.service : null;
@@ -7444,10 +7454,77 @@ export class TillApp extends LitElement {
     );
   }
 
+  #deviceZoneAllows(zoneId: string): boolean {
+    if (this.formFactor !== "till") return true;
+    const scope = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
+    return scope?.selectedZoneIds.includes(zoneId) === true;
+  }
+
+  async #readLiveDeviceZones(signal: AbortSignal): Promise<void> {
+    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const profile = this.activeProfileId;
+    const opening = this.#deviceZonesOpening;
+    const write = this.#deviceZonesWrite;
+    const current = () =>
+      !signal.aborted &&
+      this.isConnected &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      profile === this.activeProfileId &&
+      opening === this.#deviceZonesOpening &&
+      write === this.#deviceZonesWrite;
+    const selection = await api.getDeviceZones({ signal });
+    if (!current()) return;
+    const previous = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
+    if (
+      !this.#pendingDeviceZoneSetupRead &&
+      previous?.snapshot === selection.snapshot &&
+      previous.profileId === selection.profileId &&
+      previous.startingZoneId === selection.startingZoneId &&
+      previous.selectedZoneIds.length === selection.selectedZoneIds.length &&
+      previous.selectedZoneIds.every((id) => selection.selectedZoneIds.includes(id))
+    ) {
+      this.#reconcileSavedDeviceZones();
+      return;
+    }
+    this.#pendingDeviceZoneSelection = selection;
+    this.#pendingDeviceZoneSetupRead = true;
+    this.requestUpdate();
+    if (this.deviceZonesOpen) {
+      this.#deviceZonesRead++;
+      this.deviceZonesReading = false;
+      this.deviceZonesEditing = selection;
+    }
+    const setup = await api.getTill({ signal });
+    if (!current()) return;
+    this.#pendingDeviceZoneSetupRead = false;
+    this.#pendingDeviceZoneSetup = setup;
+    this.#reconcileSavedDeviceZones();
+  }
+
   #reconcileSavedDeviceZones(): void {
     const selection = this.#pendingDeviceZoneSelection;
-    if (!selection || this.#hidesOrderZone(selection) || this.#requestsOut()) return;
+    if (
+      !this.isConnected ||
+      this.operatorName === "" ||
+      !selection ||
+      this.#pendingDeviceZoneSetupRead ||
+      this.#hidesOrderZone(selection) ||
+      this.#requestsOut()
+    )
+      return;
     this.#pendingDeviceZoneSelection = null;
+    if (this.#pendingDeviceZoneSetup) {
+      const previousTimeout = this.#inactivityTimeoutSeconds;
+      this.#applyProfileSetup(this.#pendingDeviceZoneSetup);
+      this.#pendingDeviceZoneSetup = undefined;
+      this.activeProfileId = selection.profileId;
+      if (this.#inactivityTimeoutSeconds !== previousTimeout) this.#configureSessionActivity();
+    }
     this.deviceZoneSelection = selection;
     this.profileServiceZones = [...selection.zones];
     const tab = this.#resolveScreen(this.activeTabKey ?? null);
@@ -7500,6 +7577,8 @@ export class TillApp extends LitElement {
       this.shadowRoot!.querySelector("till-device-zones-dialog")?.acceptSaved(input);
       this.#closeDeviceZones();
       this.#pendingDeviceZoneSelection = selection;
+      this.#pendingDeviceZoneSetup = undefined;
+      this.#pendingDeviceZoneSetupRead = false;
       this.deviceZonesNotice = "";
       this.#reconcileSavedDeviceZones();
       const savedWrite = this.#deviceZonesWrite;
@@ -11219,6 +11298,8 @@ export class TillApp extends LitElement {
     this.deviceZonesEditing = null;
     this.deviceZonesNotice = "";
     this.#pendingDeviceZoneSelection = null;
+    this.#pendingDeviceZoneSetup = undefined;
+    this.#pendingDeviceZoneSetupRead = false;
     this.#clearTenderRefundSession();
     this.#stopClocking();
     this.#readerPayments.clear();
@@ -12105,6 +12186,7 @@ export class TillApp extends LitElement {
     return html`<till-table-order-screen
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
+      .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
@@ -12226,6 +12308,7 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
+          .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
@@ -12631,6 +12714,13 @@ export class TillApp extends LitElement {
         }
         ${this.errorKey ? html`<p class="error" role="alert">${errorMessage}</p>` : nothing}
         ${this.deviceZonesNotice ? html`<p role="status">${this.deviceZonesNotice}</p>` : nothing}
+        ${
+          this.#pendingDeviceZoneSelection && this.#hidesOrderZone(this.#pendingDeviceZoneSelection)
+            ? html`<p role="status" data-device-zones-pending>
+                ${t("device_zones.order_in_zone")}
+              </p>`
+            : nothing
+        }
         ${
           this.deviceSettingsOpen
             ? html`<wt-dialog

@@ -2414,8 +2414,8 @@ export class TillApi {
     );
   }
 
-  getTill(): Promise<TillInfo> {
-    return this.#request<TillInfo>("/api/till", "GET");
+  getTill(options: ReadOptions = {}): Promise<TillInfo> {
+    return this.#request<TillInfo>("/api/till", "GET", undefined, options.signal);
   }
 
   getContentLanguages(): Promise<ContentLanguages> {
