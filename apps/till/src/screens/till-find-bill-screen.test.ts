@@ -554,6 +554,25 @@ it("reconnecting during the options read requests fresh options and ignores the 
   expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(2);
   expect(requests(fetcher)).toHaveLength(1);
 });
+it("names a filter chip by its drawn text, then what tapping it does", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const grid = table(el);
+  grid.chooseFilter("state", ["held"]);
+  await el.updateComplete;
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(
+      grid.querySelector('[data-chip="state"]')?.shadowRoot?.querySelector("button"),
+    ).toBeInstanceOf(HTMLButtonElement),
+  );
+  const chip = grid.querySelector('[data-chip="state"]')!;
+  const drawn = chip.textContent!.replace("×", "").trim();
+  expect(drawn).toMatch(/^State: \S/);
+  await expect
+    .element(page.elementLocator(chip.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleName(`${drawn}, Remove State filter`);
+});
 it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
   const { el, fetcher } = await mount();
   await ready(el);

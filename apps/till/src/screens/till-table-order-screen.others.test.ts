@@ -354,8 +354,8 @@ describe("till-table-order-screen: Take over draft", () => {
       step.getAttribute("aria-label"),
     );
     expect(steps).toEqual([
-      `${t("basket.decrease")} · ${t("basket.not_offered")}`,
-      `${t("basket.increase")} · ${t("basket.not_offered")}`,
+      `${t("basket.decrease")} −1 · ${t("basket.not_offered")}`,
+      `${t("basket.increase")} +1 · ${t("basket.not_offered")}`,
     ]);
   });
 

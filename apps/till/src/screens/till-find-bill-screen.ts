@@ -503,6 +503,16 @@ export class TillFindBillScreen extends LitElement {
       }
     </div>`;
   }
+  /** The name starts with the chip's drawn text so it holds what is seen (WCAG 2.5.3). */
+  #chip(key: string, text: string, remove: string, onClick: () => void) {
+    return html`<wt-button
+      variant="secondary"
+      data-chip=${key}
+      aria-label=${`${text}, ${remove}`}
+      @click=${onClick}
+      >${text} ×</wt-button
+    >`;
+  }
   #table(tab: Tab) {
     const view = this.#views[tab],
       columns = this.#columns(tab);
@@ -561,8 +571,8 @@ export class TillFindBillScreen extends LitElement {
     >
       ${tab === "transactions" ? this.#dateControls() : nothing}
       <div slot="toolbar-bottom" class="chips">
-        ${tab === "transactions" && this.dates.preset !== "any" ? html`<wt-button variant="secondary" data-chip="dates" aria-label=${label("remove_dates")} @click=${() => this.#setDates("any")}>${label(this.dates.preset)}${!this.dateInvalid && this.resolved ? ` · ${this.resolved.from} – ${this.resolved.to}` : ""} ×</wt-button>` : nothing}
-        ${chips.map(([key, value]) => html`<wt-button variant="secondary" data-chip=${key} aria-label=${label("remove_filter").replace("{filter}", label(key))} @click=${() => this.#grid(tab)?.chooseFilter(key, [])}>${label(key)}: ${columns.find((c) => c.key === key)?.filter?.options.find((o) => o.value === value)?.label ?? value} ×</wt-button>`)}
+        ${tab === "transactions" && this.dates.preset !== "any" ? this.#chip("dates", `${label(this.dates.preset)}${!this.dateInvalid && this.resolved ? ` · ${this.resolved.from} – ${this.resolved.to}` : ""}`, label("remove_dates"), () => this.#setDates("any")) : nothing}
+        ${chips.map(([key, value]) => this.#chip(key, `${label(key)}: ${columns.find((c) => c.key === key)?.filter?.options.find((o) => o.value === value)?.label ?? value}`, label("remove_filter").replace("{filter}", label(key)), () => this.#grid(tab)?.chooseFilter(key, [])))}
         ${view.error ? html`<wt-button variant="secondary" @click=${() => this.#schedule()}>${label("retry")}</wt-button>` : nothing}
       </div>
     </wt-data-table>`;

@@ -2648,7 +2648,6 @@ export class TillTableOrderScreen extends LitElement {
             class="drawer-handle"
             data-open-drawer
             variant="secondary"
-            aria-label=${t("table.open_drawer")}
             @click=${() => this.#toggleDrawer()}
           >
             ${t("table.open_drawer")}
@@ -2866,7 +2865,7 @@ export class TillTableOrderScreen extends LitElement {
         variant="secondary"
         data-last-added-step=${by}
         ?disabled=${by === 1 && store.canSelectProduct?.(line.product) === false}
-        aria-label=${`${t(key)} · ${name}`}
+        aria-label=${`${t(key)} ${text} · ${name}`}
         @click=${() =>
           count + by < 1
             ? store.removeLine(index)
