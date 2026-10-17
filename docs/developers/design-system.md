@@ -860,9 +860,9 @@ edge, as `data-held`'s), until a move off it, a new `tables` that draws it insid
 not head or not at all, or the end of the drag. The pointer is not looked under again between
 moves, so after the view refits under a still finger the release sends the marked table,
 wherever the finger now is. A held group with a `fixed` member is not drawn moved: a copy of its
-shapes at half opacity (`part="ghost"`) is drawn where the drag would put it, and over a target
-a 1 px `--wt-color-primary` line (`<svg part="drag-link">`) joins the group's centre and the
-target's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
+shapes at half opacity (`part="ghost"`) is drawn where the drag would put it, and while a table
+is marked `data-drop-target` a 1 px `--wt-color-primary` line (`<svg part="drag-link">`) joins the
+group's centre and that table's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
 longer has the held table ends the drag, and its release sends nothing; one that keeps it keeps the
 drag. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is

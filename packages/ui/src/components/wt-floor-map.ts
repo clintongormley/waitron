@@ -657,18 +657,25 @@ export class WtFloorMap extends LitElement {
     );
   }
 
+  /** The drag's target while it still heads a group: the table `data-drop-target` marks, the drag
+   * link points at and a release sends. */
+  #markedTarget(drag: Drag | null): Group | null {
+    const targetId = drag?.targetId ?? null;
+    if (targetId === null) return null;
+    const group = this.#groupOf.get(targetId);
+    return group?.members[0]!.id === targetId ? group : null;
+  }
+
   /** Sends the table `data-drop-target` marks, not the one under the pointer at release: a refit
    * since the last move can make the two differ. */
   #sendDrop(drag: Drag): void {
-    const { targetId } = drag;
-    const marked = targetId !== null && this.#groupOf.get(targetId)?.members[0]!.id === targetId;
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
         detail: {
           tableId: drag.tableId,
           x: drag.x,
           y: drag.y,
-          targetId: marked ? targetId : null,
+          targetId: this.#markedTarget(drag)?.members[0]!.id ?? null,
         },
         bubbles: true,
         composed: true,
@@ -886,7 +893,7 @@ export class WtFloorMap extends LitElement {
       data-table-id=${first.id}
       data-fill=${first.fill}
       ?data-merge=${merged}
-      ?data-drop-target=${this.#drag?.targetId === first.id}
+      ?data-drop-target=${this.#markedTarget(this.#drag) === group}
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
@@ -927,15 +934,16 @@ export class WtFloorMap extends LitElement {
     </svg>`;
   }
 
-  /** A fixed group's copy where the drag would put it, and a line to the table under the pointer. */
+  /** A fixed group's copy where the drag would put it, and a line to the table marked as the drop
+   * target. */
   #renderFixedDrag(view: View): TemplateResult | typeof nothing {
     const drag = this.#drag;
     const group = drag === null ? undefined : this.#groupOf.get(drag.tableId);
     if (!group?.fixed) return nothing;
     const { box, members } = group;
-    const target = drag!.targetId === null ? undefined : this.#groupOf.get(drag!.targetId);
+    const target = this.#markedTarget(drag);
     const from = centreOf(box, view);
-    const to = target === undefined ? null : centreOf(target.box, view);
+    const to = target === null ? null : centreOf(target.box, view);
     return html`<span
         part="ghost"
         aria-hidden="true"

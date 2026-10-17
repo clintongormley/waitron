@@ -295,6 +295,29 @@ it("a release after the marked table joined a merge it does not head drops on no
   expect(drops).toEqual([expect.objectContaining({ tableId: "t1", targetId: null })]);
 });
 
+it("a fixed table's drag draws no line to a marked table that joined a merge it does not head", async () => {
+  const t2 = t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 });
+  const fixed = { ...t1, fixed: true };
+  const el = await growingMap([fixed, t2]);
+  const from = centreOf(el, "t1");
+  const to = centreOf(el, "t2");
+  hold(el, from.x, from.y);
+  move(el, to.x, to.y);
+  await settled(el);
+  expect(marked(el)).toEqual(["t2"]);
+  expect(el.shadowRoot!.querySelector('[part="drag-link"]')).not.toBeNull();
+  el.tables = [
+    fixed,
+    { ...t2, joinId: "j" },
+    { ...t("t0", "T0", { x: 26, y: 5, width: 4, height: 4 }), joinId: "j" },
+  ];
+  await settled(el);
+  expect(marked(el)).toEqual([]);
+  expect(el.shadowRoot!.querySelector('[part="drag-link"]')).toBeNull();
+  up(el, to.x, to.y);
+  expect(drops).toEqual([expect.objectContaining({ tableId: "t1", targetId: null })]);
+});
+
 it("dragging the edge table inward does not shrink the plan during the drag", async () => {
   const el = await growingMap([t1, t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 })]);
   const before = heightOfHost(el);
