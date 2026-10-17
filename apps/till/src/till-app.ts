@@ -12898,6 +12898,7 @@ export class TillApp extends LitElement {
         ${
           this.deviceSettingsOpen
             ? html`<wt-dialog
+                ${trackDialog()}
                 .open=${true}
                 .heading=${t("device_zones.settings")}
                 @wt-close=${() => (this.deviceSettingsOpen = false)}

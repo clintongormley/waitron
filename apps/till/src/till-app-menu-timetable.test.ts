@@ -611,6 +611,33 @@ describe("device and zone period memory", () => {
     expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["4.00", "4.00"]);
   });
 
+  it("recovers a deferred boundary offers read after its first safe-order read fails", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    Object.assign(el, { submitting: true });
+    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    await poll(el);
+    api.listZoneOffers.mockRejectedValueOnce(new TypeError("offline"));
+    Object.assign(el, { submitting: false });
+    await flush(el);
+    expect(names(el)).toEqual(["Tostada"]);
+    await poll(el);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.parkOrder).not.toHaveBeenCalled();
+  });
+
   it("respects an explicit null default after memory expires instead of selecting the first menu", async () => {
     let current: ZoneOfferCatalogue = running(BARRA);
     const { el } = await mountApp({
@@ -1266,6 +1293,53 @@ describe("an open table's order", () => {
     await flush(el);
     expect(tableScreen(el).selectedMenuId).toBe("cena");
     expect(names()).toEqual(["Croquetas"]);
+  });
+
+  it("waits for Settings to close before asking to refresh a table draft", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      zoneId === "zone-comedor"
+        ? {
+            service: current.service,
+            defaultMenuId: current.defaultMenuId,
+            menus: current.menus.map((menu) => ({
+              menuId: menu.id,
+              versionId: menu.versionId,
+              orderable: menu.orderable,
+              sendable: menu.sendable,
+            })),
+            unavailable: { products: [], optionLabels: [] },
+          }
+        : state([DESAYUNOS, ALMUERZO]),
+    );
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "open-settings");
+    await flush(el);
+    const settings = el.shadowRoot!.querySelector<import("@waitron/ui").WtDialog>("wt-dialog")!;
+    expect(settings.open).toBe(true);
+    current = {
+      ...runningTable(),
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).toBeNull();
+    const closed = new Promise<void>((resolve) =>
+      settings.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await settings.requestClose("cancel");
+    await closed;
+    await poll(el);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).not.toBeNull();
+    expect(browser.store.lines.map((line) => [line.quantity, line.product.unitPrice])).toEqual([
+      ["1", "3.00"],
+    ]);
   });
 
   it("refuses an increased table quantity from a grid retained under an obsolete version", async () => {

@@ -156,12 +156,13 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     },
   );
 
-  it("the full bar with Find a bill in More, closed and open, has no violations", async () => {
+  it("the full bar with Find a bill and Settings in More, closed and open, has no violations", async () => {
     await atViewport(2560, 844, async () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", full, theme);
       const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
-      await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(1));
+      await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(2));
       expect(menu.querySelector("wt-button.find-bill")).not.toBeNull();
+      expect(menu.querySelector("wt-button.settings")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
       await expectNoA11yViolations(host);
       await userEvent.click(menu.shadowRoot!.querySelector<HTMLElement>("button")!);

@@ -243,6 +243,16 @@ async function populatePredecessor(db: Database) {
     await tx
       .insert(service.deviceProfileZones)
       .values({ deviceProfileId: profileId, zoneId: access!.startingZoneId });
+    await tx.insert(service.deviceZoneSelections).values({
+      deviceId: venue.deviceId,
+      deviceProfileId: profileId,
+      startingZoneId: access!.startingZoneId,
+    });
+    await tx.insert(service.deviceZoneSelectionZones).values({
+      deviceId: venue.deviceId,
+      deviceProfileId: profileId,
+      zoneId: access!.startingZoneId,
+    });
     await tx
       .insert(service.departmentTransferDesks)
       .values({ departmentId: access!.departmentId, receivingProfileId: profileId });

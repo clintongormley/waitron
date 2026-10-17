@@ -836,6 +836,37 @@ it("the real header's Settings click closes its menu and exposes Equipment and Z
     expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).not.toBeNull(),
   );
 });
+it("opens Equipment from Settings without replacing the basket when its read fails", async () => {
+  const { el, api } = await mount(selection(["bar", "room"], "bar"), {
+    getDeviceEquipment: vi.fn().mockRejectedValue(new TypeError("offline")),
+  });
+  const store = counter(el)!.store;
+  store.addProduct(counter(el)!.products[0]!, "1");
+  const id = store.id;
+  shell(el).dispatchEvent(new CustomEvent("open-settings", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-settings-equipment]")!);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-equipment-dialog")?.open).toBe(true),
+  );
+  expect(el.shadowRoot!.querySelector("[data-settings-equipment]")).toBeNull();
+  expect(store.id).toBe(id);
+  expect(
+    store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+  ).toEqual([["coffee", "1", "2.00"]]);
+  expect(api.setDeviceZones).not.toHaveBeenCalled();
+});
+it("recovers empty device scope through the visible Retry action without changing operator", async () => {
+  const { el, api } = await mount({ ...selection([], null), zones: [] });
+  expect(counter(el)).toBeNull();
+  api.getDeviceZones.mockResolvedValue({ ...selection(["bar"], "bar"), snapshot: "restored" });
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-retry-device-zones]")!);
+  await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("bar"));
+  expect(counter(el)!.products.map((product) => product.productId)).toEqual(["coffee"]);
+  expect(shell(el).operatorName).toBe("Ana");
+  expect(api.logout).not.toHaveBeenCalled();
+  expect(api.setDeviceZones).not.toHaveBeenCalled();
+});
 it("a basket created while settings save is out retains its zone and prices", async () => {
   let answer!: (value: DeviceZoneSelection) => void;
   const pending = new Promise<DeviceZoneSelection>((resolve) => {
