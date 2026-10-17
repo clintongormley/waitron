@@ -209,9 +209,50 @@ What an unchanged build would print, written before the run: one
 
 No second or third open sent an offers read, so the run disproves the unchanged-build prediction.
 The loading line was seen in only 3 of the 15 opens, at 321–369 ms after the click, and never in
-the first 300 ms. The probe shows it within 20 ms. I did not establish why the real page draws no
-frame with the loading line in most opens, nor when it draws its first frame after the click.
-Every request in a window is a `GET`: no draft save fell inside the third case's window.
+the first 300 ms. Every request in a window is a `GET`: no draft save fell inside the third case's
+window.
+
+#### Why the loading line was late: the script clicked with a mouse
+
+The floor's Dining room is a floor plan (`wt-floor-map`), and the map holds a MOUSE click on a table
+for 300 ms (`DOUBLE_TAP_MS`, `packages/ui/src/gestures.ts`) in case a second click makes it a double
+click, which opens the table's details instead (`#pendingTap`, `packages/ui/src/components/wt-floor-map.ts`;
+it landed in #1517, before this branch's base, and this branch does not touch either file). A touch
+or pen tap is sent at once. Playwright's `click()` is a mouse click, so in every run above the till
+heard `open-table` about 300 ms after the `pointerdown` the timer starts from. The BEFORE table was
+taken the same way, so its times carry the same 300 ms.
+
+Measured 2026-10-17 on this branch at `5d0399ca3` (product code as at `26bb32862`), with a probe
+that logs `pointerdown`, `click` and `open-table` times and the order screen's state each frame:
+a mouse click's `click` came 1.8 ms after `pointerdown` and `open-table` 303 ms after it; a touch
+tap's `open-table` came 1.4 ms after it, and the first frame after it (72 ms, headless Chromium drew
+frames 70–140 ms apart here) showed the order screen with `loading` true and a 1200 px wide loading
+line. With a mouse, the draft pane followed `open-table` within about 200 ms, so the loading line
+lasted at most that long and was seen only when a frame happened to fall inside it.
+
+`measure.mjs` now taps by touch by default (`hasTouch` page, `tap()`), as a till's touchscreen does,
+and takes `mouse` as a second argument for the old behaviour. Same stack, venue, device, waiter and
+scenarios as above; commands, both finished by 2026-10-17 16:53:
+
+```sh
+node /tmp/a768-real-till/measure.mjs 5 touch
+node /tmp/a768-real-till/measure.mjs 5 mouse   # the control
+```
+
+What would have shown the explanation false, written before the run: the touch run's loading line
+still absent from most opens, or first seen at 300 ms or later.
+
+| Open (touch) | ready (ms), runs 1–5 | median | loading line (ms), runs 1–5 | median |
+| --- | --- | --- | --- | --- |
+| First seated table in the zone (table 1) | 35 / 175 / 249 / 117 / 143 | 143 | 10 / 55 / 108 / 68 / 82 | 68 |
+| Back, then a second seated table, same zone (table 2) | 175 / 194 / 151 / 218 / 134 | 175 | 41 / 79 / 42 / 77 / 42 | 42 |
+| Tap a dish, Back at once, then another party's table (table 3) | 204 / 183 / 204 / 101 / 170 | 183 | 114 / 42 / 77 / 51 / 123 | 77 |
+
+The loading line was seen in all 15 touch opens, 10–123 ms after the tap. Each open sent the same
+requests as in the mouse run above. The mouse control, run straight after, reproduced the earlier
+result: ready medians 450 / 400 / 448 ms, and the loading line seen in 6 of 15 opens, each at
+312–390 ms. A touch run's ready time is not comparable with the BEFORE table, which was taken by
+mouse; the mouse control is.
 
 ---
 
@@ -1168,15 +1209,20 @@ The device id is the demo seed's `Mostrador` in slot 0's venue on 2026-10-17; a 
 id (`GET /api/dev/devices` lists them). The dev chooser keeps the choice in `sessionStorage`, not
 `localStorage`.
 
+The scripts below are as they stood for Task 8's touch run. Task 0 and Task 8's first AFTER run
+clicked with the mouse and did not take an input argument; `node measure.mjs 5 mouse` clicks the
+same way.
+
 `common.mjs`:
 
 ```js
 import { chromium } from "/Users/clintongormley/workspace/worktrees/waitron-feat-a768-till-open-table-fast/apps/till/node_modules/playwright/index.mjs";
 export const TILL = process.env.TILL_URL ?? "http://localhost:5190";
 export const DEVICE = "18ce33bc-4ff8-4015-a8b7-afb2061d0e98"; // Mostrador, counter till
-export async function signedIn() {
+// A real till is a touchscreen; a mouse click on the floor map is held DOUBLE_TAP_MS (300 ms) in case it is a double.
+export async function signedIn({ touch = false } = {}) {
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 }, hasTouch: touch });
   await p.goto(TILL + "/");
   await p.evaluate((d) => sessionStorage.setItem("waitron.devDeviceId", d), DEVICE);
   await p.reload();
@@ -1213,16 +1259,20 @@ await b.close();
 `measure.mjs`:
 
 ```js
-// A768 Task 0/8: time table opens on a real till page. Usage: node measure.mjs [runs]
+// A768 Task 0/8: time table opens on a real till page. Usage: node measure.mjs [runs] [touch|mouse]
+// Taps by touch by default, as on a till; a mouse click on the floor map waits 300 ms for a possible double click
+// (wt-floor-map.ts #pendingTap) before the till hears it.
 import { signedIn } from "./common.mjs";
 const RUNS = Number(process.argv[2] ?? 5);
 const SETTLE_MS = 1500;
+const INPUT = process.argv[3] ?? "touch";
+if (INPUT !== "touch" && INPUT !== "mouse") throw new Error("input must be touch or mouse");
 
 const installTimer = (p) => p.evaluate(() => {
-  const deep = (root) => {
-    const hit = root.querySelector("[data-draft-pane]");
+  const deep = (root, sel = "[data-draft-pane]") => {
+    const hit = root.querySelector(sel);
     if (hit) return hit;
-    for (const el of root.querySelectorAll("*")) if (el.shadowRoot) { const h = deep(el.shadowRoot); if (h) return h; }
+    for (const el of root.querySelectorAll("*")) if (el.shadowRoot) { const h = deep(el.shadowRoot, sel); if (h) return h; }
     return null;
   };
   window.__a768 = { deep };
@@ -1231,10 +1281,14 @@ const installTimer = (p) => p.evaluate(() => {
     window.__a768.armed = false;
     const t0 = performance.now();
     window.__a768.result = new Promise((resolve) => {
+      let loading;
       const tick = () => {
+        const now = performance.now() - t0;
+        const l = deep(document, "[data-loading]");
+        if (loading === undefined && l && l.getBoundingClientRect().width > 0) loading = now;
         const el = deep(document);
-        if (el && el.getBoundingClientRect().width > 0) resolve(performance.now() - t0);
-        else if (performance.now() - t0 > 10000) resolve(-1);
+        if (el && el.getBoundingClientRect().width > 0) resolve({ ready: now, loading: loading ?? -1 });
+        else if (now > 10000) resolve({ ready: -1, loading: loading ?? -1 });
         else requestAnimationFrame(tick);
       };
       tick();
@@ -1249,18 +1303,19 @@ async function timedOpen(p, log, label) {
   await p.evaluate(() => { window.__a768.armed = true; });
   log.length = 0;
   log.on = true;
-  await p.getByRole("button", { name: `${label}, Seated` }).click();
-  const ms = await p.evaluate(() => window.__a768.result);
+  const table = p.getByRole("button", { name: `${label}, Seated` });
+  await (INPUT === "touch" ? table.tap() : table.click());
+  const t = await p.evaluate(() => window.__a768.result);
   await p.waitForTimeout(SETTLE_MS);
   log.on = false;
-  return { ms: Math.round(ms), requests: [...log] };
+  return { ms: Math.round(t.ready), loading: Math.round(t.loading), requests: [...log] };
 }
 
 const back = async (p) => { await p.getByRole("button", { name: "Back to floor" }).click(); };
 
 const results = { first: [], second: [], leftUnsaved: [] };
 for (let run = 0; run < RUNS; run++) {
-  const { b, p } = await signedIn();
+  const { b, p } = await signedIn({ touch: INPUT === "touch" });
   const log = [];
   p.on("request", (r) => {
     const u = new URL(r.url());
@@ -1282,7 +1337,7 @@ for (let run = 0; run < RUNS; run++) {
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 const tally = (reqs) => { const c = {}; for (const r0 of reqs) { const r = r0.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ":id"); c[r] = (c[r] ?? 0) + 1; } return c; };
 for (const [name, rs] of Object.entries(results)) {
-  console.log(`A768-REAL ${name}: ms ${rs.map((r) => r.ms).join(" / ")}, median ${median(rs.map((r) => r.ms))}`);
+  console.log(`A768-REAL (${INPUT}) ${name}: ready ms ${rs.map((r) => r.ms).join(" / ")}, median ${median(rs.map((r) => r.ms))}; loading line ms ${rs.map((r) => r.loading).join(" / ")}, median ${median(rs.map((r) => r.loading))}`);
   rs.forEach((r, i) => console.log(`  run ${i + 1} requests (${r.requests.length}): ${JSON.stringify(tally(r.requests))}`));
 }
 ```
