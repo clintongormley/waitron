@@ -398,9 +398,21 @@ describe.each(["light", "dark"] as const)("Google button tokens (%s)", (theme) =
   });
 });
 
-// The Hours calendar's day colours: six a special date may pick, and two reserved ones no special
-// date can take (a standard day, and a day every department is Closed).
-const PALETTE = ["red", "amber", "grey", "blue", "green", "purple"] as const;
+const PALETTE = [
+  "red",
+  "orange",
+  "amber",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "brown",
+  "grey",
+] as const;
 const CALENDAR_FILLS = [
   ...PALETTE.map((name) => `--wt-color-palette-${name}`),
   "--wt-color-day-standard",
