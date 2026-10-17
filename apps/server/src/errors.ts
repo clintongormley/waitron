@@ -4,6 +4,7 @@ import "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
+import type { CancellationContext } from "./line-cancel-context.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -672,6 +673,7 @@ declare module "@waitron/shared" {
      * on a party's bills, is an open order of no party: a counter order.
      */
     "tab.not_open": { tabId: string };
+    "tab.cancel_context_changed": { context: CancellationContext };
     /**
      * No such line on the open bill: an adjustment names its line by id, every other caller by number.
      */
