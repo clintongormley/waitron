@@ -86,6 +86,9 @@ function expectWholeWords(names: Element[]): string[] {
 describe.each(["en", "es"] as const)("a day's name at a phone's width (%s)", (locale) => {
   async function phone() {
     setLocale(locale);
+    // With the page's language declared, Chromium hyphenates where it has that language's
+    // dictionary (local macOS headless Chromium, measured: Spanish yes, English no), so a rule
+    // letting a name hyphenate can show here.
     document.documentElement.lang = locale;
     await resizeViewport(390, 800);
     expect(window.innerWidth).toBe(390);
@@ -139,12 +142,10 @@ describe.each(["en", "es"] as const)("a day's name at a phone's width (%s)", (lo
   });
 });
 
-describe("a too-long word in the Week's phone day", () => {
-  it("is cut with an ellipsis and kept whole in the name's title", async () => {
-    await resizeViewport(390, 800);
-    const word = LONG_WORD.repeat(3);
+describe("a word wider than its place", () => {
+  function weekWith(word: string) {
     const base = model();
-    const el = await mount("opening-hours-week", {
+    return mount("opening-hours-week", {
       model: {
         ...base,
         days: base.days.map((day) =>
@@ -154,9 +155,25 @@ describe("a too-long word in the Week's phone day", () => {
       date: "2026-12-14",
       departments: DEPARTMENTS,
     });
+  }
+
+  it("in the Week's phone day is cut with an ellipsis and kept whole in the name's title", async () => {
+    await resizeViewport(390, 800);
+    const word = LONG_WORD.repeat(3);
+    const el = await weekWith(word);
     const names = [...el.shadowRoot!.querySelectorAll(".day-names .name")];
     expect(expectWholeWords(names)).toEqual([word]);
     expect(names[0]!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+  });
+
+  it("in the wide Week's day heading is cut with an ellipsis and kept whole in the name's title", async () => {
+    await resizeViewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    const word = LONG_WORD.repeat(8);
+    const el = await weekWith(word);
+    const names = [...el.shadowRoot!.querySelectorAll('section[data-date="2026-12-14"] h3 .name')];
+    expect(expectWholeWords(names)).toEqual([word]);
+    expect(names[0]!.getAttribute("title")).toBe(word);
   });
 
   it("is shown whole in the day box, carried onto as many lines as it needs", async () => {

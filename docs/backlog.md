@@ -1524,7 +1524,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
 
 - **Cosmetic points from A722 Part 3's look, #1834:** the Spanish phone Month breaks "Sin
-  pedidos" mid-word, as holiday names already do; at 320 px a 45-letter station name scrolls
+  pedidos" mid-word (`.no-orders` in `opening-hours-month.ts` still allows a break anywhere; a
+  day's name breaks only between its words since A784); at 320 px a 45-letter station name scrolls
   Show's open list sideways (the page does not widen); a station's Month has no key naming which
   bar is which department (hover shows it; the All departments Month has none either).
 
@@ -1561,6 +1562,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Public holidays' names show in Spanish in the English interface**: the official lists carry
   one name per holiday. Believed to predate A506-7; not checked against the year view's history —
   left open by A506-7, #1623.
+
+- **On a phone, a holiday name cut with "…" on a date that also has a special day cannot be read
+  whole**: the tooltip needs a pointer, and the day box shows only the special day's name
+  (`openingHoursDay`, `opening-hours-day.ts`) — left open by A784.
 
 - **Season colours differ between Opening hours' Year and its month**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the

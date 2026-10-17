@@ -4113,10 +4113,11 @@ Opening hours' Year.
   neighbouring months' dates faint, and each date heading carries only the day's number (the
   column heading names the weekday) and a Today marker. Each date shows its special day's name
   and its public holiday's name, the holiday's in red and given once when the two are the same
-  (a day's name, here, in the Week and in the day box, breaks only between its words; here and in
-  the Week a word too wide for its place is cut with an ellipsis, and the name's tooltip holds it
-  whole; the day box shows the whole name, carrying only a word wider than the box onto the next
-  line),
+  (in the Month and the Week a day's name breaks only between its words, and a word too wide for
+  its place is cut with an ellipsis, the name's tooltip holding it whole for a pointer; the day box
+  shows one name, the special day's where the date has one and otherwise the holiday's, whole,
+  moving a word that does not fit onto the next line and breaking only a word wider than the box
+  inside itself),
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
   less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
@@ -4159,7 +4160,7 @@ Opening hours' Year.
   the last is left out when the last, kept inside the track, would come within `--wt-space-2` of it. A department's blocks carry
   their period's colour, name and times; a zone's piece that only follows its department is faded
   and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
-  labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
+  labelled. A row with no hours is an empty track in `--wt-color-track`; only a day closed all day writes "Closed
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
   when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
   hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can

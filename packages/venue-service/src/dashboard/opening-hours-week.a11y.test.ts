@@ -127,7 +127,9 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     expect(window.innerWidth).toBe(1280);
   });
 
-  // axe scores no contrast for a shape with no text; 1.4 is the Month's track against its date.
+  // axe scores no contrast for a shape with no text; 1.4 is the floor --wt-color-track holds
+  // against --wt-color-bg and --wt-color-surface (the "bar track" cases in
+  // packages/ui-core/src/tokens/colors.test.ts).
   test.each([
     ["the page", 1280],
     ["a phone's card", 390],

@@ -1,7 +1,7 @@
 import { css, html, nothing } from "lit";
 
 /** A day's name breaks only between its words; a word wider than its place is cut with an
- *  ellipsis, so the element showing the name carries the whole name as its `title`. */
+ *  ellipsis, so a caller must put the whole name in the `title` of the element holding these words. */
 export const dayNameWordStyles = css`
   .word {
     display: inline-block;

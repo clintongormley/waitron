@@ -1151,7 +1151,7 @@ describe("Opening hours week on a phone", () => {
     expect(sent).toEqual([]);
   });
 
-  it("a long name with no spaces wraps inside the page", async () => {
+  it("a long name with no spaces stays inside the page", async () => {
     const long = "Desayunocontinentalconzumodenaranjaycafedelacasaporlasmanana";
     expect(long).toHaveLength(60);
     const departments = DEPARTMENTS.map((d) =>

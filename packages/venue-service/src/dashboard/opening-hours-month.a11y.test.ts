@@ -51,8 +51,9 @@ function contrastRatio(a: string, b: string): number {
 }
 
 describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s)", (theme) => {
-  // axe scores no contrast for a shape with no text; light's track against its date, about 1.4,
-  // is the bar dark must match.
+  // axe scores no contrast for a shape with no text; 1.4 is the floor --wt-color-track holds
+  // against --wt-color-bg and --wt-color-surface (the "bar track" cases in
+  // packages/ui-core/src/tokens/colors.test.ts).
   test("draws a bar's empty track apart from its date", async () => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");
@@ -78,7 +79,7 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     host.append(el, probe);
     await el.updateComplete;
     const track = el.shadowRoot!.querySelector<HTMLElement>('[data-date="2026-12-09"] .track')!;
-    expect(getComputedStyle(probe).backgroundColor).toMatch(/^rgb/);
+    expect(getComputedStyle(probe).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(track).backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
   });
 
