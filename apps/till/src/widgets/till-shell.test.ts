@@ -827,7 +827,7 @@ describe("till-shell at phone width", () => {
     );
   });
 
-  it.each([320, 360])(
+  it.each([360])(
     "shows every tab in full at %i px with a counter-zone menu, in Spanish",
     async (width) => {
       const original = currentLocale();

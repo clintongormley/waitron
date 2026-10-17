@@ -1959,6 +1959,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and 390×664 that row is the part that needs a scroll. Decide whether More should show that it
   scrolls, or hold fewer items on a short screen.
 
+- **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
+  2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
+  strip's content at 196 px in a 182 px box; locally the same check measured 178 px in 184 px. A681
+  leaves the bar's markup as it is on `main`, so this is believed to hold on `main` too (not run
+  there); the bar's design lets the tabs scroll sideways once everything else has moved. Decide
+  whether 320 px should show both tabs in full, and if so add a 320 px case to the "shows every
+  tab in full" check in `apps/till/src/widgets/till-shell.test.ts`.
+
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones
   (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
   whether clocking is offered change the till's layout, so they are applied only where the till
