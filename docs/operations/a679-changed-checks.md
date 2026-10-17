@@ -666,3 +666,21 @@ assertion, and each exact restoration passes. The first control receipt classifi
 “resolved instead of rejecting” assertion text; the corrected classifier and both attempts are retained.
 Six protected writer/golden files match the continuation base byte for byte. Types, scoped lint,
 source formatting and four focused root suites also pass. No complete-package coverage claim follows.
+
+## Command recovery document delivery (2026-10-17)
+
+The command accepts `--recovery-pdf` with an absolute path outside its state and venue
+directories. Its module contribution renders the same key-only document used by the browser.
+The shared host binds the saved bytes and requires explicit kept confirmation plus a fresh
+setup-password check. Recovered ownership can confirm the exact saved document without
+regenerating the key or selecting another hour. Activation and checked publication remain
+unwired in the command; this checkpoint still refuses `setup.not_ready` after delivery.
+
+No existing behavioral matcher or fixture changed. New cases in
+`first-setup-command-document.test.ts`, `cli-first-setup.test.ts`, `cli.test.ts` and
+`initial-hour-setup.test.ts` exercise the command delivery path. Existing fiscal writer,
+hash, immutability, invoice-counter, permission and root-guard checks remain unchanged.
+
+Verification receipts are in the lane's local
+`receipts/a679-command-document-20261017` directory. Whole-package coverage and remaining
+A679 acceptance gates are recorded separately; a focused pass is not a readiness claim.

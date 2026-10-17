@@ -208,6 +208,21 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       for (const [module, grant] of grants)
         if (grant.manifest.attemptId === attemptId) grants.delete(module);
     },
+    readRecoveryDocument(owner: FirstSetupOwnerAttempt, module: string) {
+      return inside(undefined, async () => {
+        const state = await options.owner.authorize(owner);
+        const manifest = await read(state, module);
+        if (manifest === null) return null;
+        return structuredClone({
+          module: manifest.module,
+          stageId: manifest.stageId,
+          inputDigest: manifest.inputDigest,
+          bindingDigest: manifest.bindingDigest,
+          documentDigest: manifest.documentDigest,
+          statement: manifest.statement,
+        });
+      });
+    },
     registerRecoveryDocumentDelivery(
       owner: FirstSetupOwnerAttempt,
       supplied: RecoveryDeliveryInput,

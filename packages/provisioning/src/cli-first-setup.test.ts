@@ -378,3 +378,33 @@ it("ownership lost after recovery refuses before opening the database", async ()
   expect(f.deps.openVenue).not.toHaveBeenCalled();
   expect((await f.runtime.store.read())!.ownerGeneration).toBe(3);
 });
+
+it("the actual venue command saves its selected recovery PDF and asks for kept despite --yes", async () => {
+  const f = await fixture("no");
+  const path = join(f.root, "selected-recovery.pdf");
+  f.deps.io.prompt = async (question) => {
+    f.prompts.push(question);
+    return question.startsWith("Have you kept") ? "yes" : "no";
+  };
+  expect(await runCli([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
+  await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
+  const pdf = await readFile(path);
+  expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  expect(f.prompts).toContain("Have you kept this recovery PDF? [y/N]: ");
+  const state = (await f.runtime.store.read())!;
+  expect(state.status).toBe("consumption-intent");
+  expect(f.output).toContain("setup.not_ready {}");
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+});
+
+it("declining kept in the actual venue command preserves the saved PDF and leaves setup unactivated", async () => {
+  const f = await fixture("no");
+  const path = join(f.root, "declined-recovery.pdf");
+  expect(await runCli([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
+  await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
+  expect(f.prompts).toContain("Have you kept this recovery PDF? [y/N]: ");
+  expect(f.output).not.toContain("setup.not_ready {}");
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+});

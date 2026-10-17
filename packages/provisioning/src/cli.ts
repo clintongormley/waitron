@@ -84,10 +84,11 @@ const USAGE = [
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
+  "           [--recovery-pdf <absolute path outside box state and venue directories>]",
   "",
-  "Every option is prompted for when omitted, except --admin-first-names and",
-  "--admin-last-names: the admin's real name is left unset when neither is given, so a",
-  "script driving this command is never stopped by a question it did not expect.",
+  "Missing venue details are prompted for. --full-series-code defaults to FF.",
+  "The admin's real name is left unset when --admin-first-names and --admin-last-names",
+  "are omitted. Select --recovery-pdf explicitly; --yes never confirms that you kept it.",
   "",
   "--venue-dir is the directory holding this node's two SQLite files. Omitted, it is",
   "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
@@ -169,6 +170,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "admin-first-names": { type: "string" },
       "admin-last-names": { type: "string" },
       "admin-email": { type: "string" },
+      "recovery-pdf": { type: "string" },
       yes: { type: "boolean" },
     }));
   } catch {
@@ -290,6 +292,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const requested = resolveEnvironment(deps.env);
     const owned =
       runtime !== undefined && modules.some((module) => initialSetupFor(modules, module.name));
+    if (values["recovery-pdf"] !== undefined && !owned) throw new AppError("setup.not_ready", {});
     let owner: FirstSetupOwnerAttempt | undefined;
     if (owned) {
       if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
@@ -384,7 +387,16 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
           }
           const prepared = await prepareFirstSetupCommand(runtime, owner, deps.io);
           if (prepared.status !== "ready") return 1;
-          // Prepared inputs alone do not satisfy document delivery or checked publication.
+          const destination = values["recovery-pdf"];
+          if (destination !== undefined) {
+            const delivered = await runtime.commandDelivery.deliver(
+              prepared.owner,
+              deps.io,
+              destination,
+              invoiceLocales[0]?.startsWith("es") ? "es" : "en",
+            );
+            if (delivered.status !== "ready") return 1;
+          }
           throw new AppError("setup.not_ready", {});
         }
 

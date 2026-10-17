@@ -9,7 +9,11 @@ import { AppError } from "@waitron/shared";
 import { encodeHourIdentity, decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
-import { parseRecoveryDocumentPublic } from "./recovery-document.js";
+import {
+  parseRecoveryDocumentPublic,
+  recoveryDocumentPublic,
+  type RecoveryDocument,
+} from "./recovery-document.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 
 function refuse(reason = "event_mismatch"): never {
@@ -82,6 +86,26 @@ export function createHourInitialSetup(
     ...base,
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
+    async commandRecoveryDocument(context, imported, document) {
+      readHourSetupInput(context, imported.input);
+      if (document.key.nodeId !== context.binding.targetNodeId) refuse();
+      const recovery: RecoveryDocument = {
+        kind: "waitron-recovery-document",
+        version: 1,
+        scope: {
+          taxpayerNif: context.taxId,
+          softwareId: WAITRON_ID_SISTEMA,
+          environment: context.environment,
+        },
+        taxpayerName: document.identity.taxpayerName,
+        venueName: document.identity.venueName,
+        createdAt: new Date().toISOString(),
+        nodeKey: document.key,
+      };
+      const { renderRecoveryPdf } = await import("./recovery-pdf-node.js");
+      const bytes = await renderRecoveryPdf(recovery, document.locale);
+      return { bytes, statement: recoveryDocumentPublic(recovery) };
+    },
     async command(context, actions) {
       if (record(context.request) && context.request.status === "selected")
         return { status: "ready", input: readHourSetupInput(context, context.request.input) };

@@ -1,3 +1,4 @@
+import "./recovery-font.js";
 import fontAsset from "./assets/register-noto-sans.ttf?inline" with { type: "bytes" };
 import { renderRecoveryPdfWithFont } from "./recovery-pdf-content.js";
 import type { RecoveryDocument } from "./recovery-document.js";

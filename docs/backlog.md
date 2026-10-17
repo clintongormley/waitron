@@ -361,12 +361,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   terminal preparation stage now checks clock agreement, taxpayer-wide answers, password confirmation,
   retained waits and exact input replay. The actual command now reaches this stage through its owned
   claim and password-recovery path. Built-command checks use a migrated synthetic database and an
-  offline time reply. Missing delivery/publication support still refuses after preparation;
+  offline time reply. Without complete checked publication the command still refuses after preparation;
   a successor workspace without a retired-evidence adapter refuses before clock selection.
   Staged recovery keys and public document-delivery bindings now share the provisioning runtime.
   The key-only PDF has a Node adapter sharing the browser renderer; focused checks run its
-  English/Spanish output through a standalone bundle with the font embedded. The command still
-  needs complete delivery, activation and checked-publication composition.
+  English/Spanish output through a standalone bundle with the font embedded. The command now
+  saves the module-owned PDF to an explicitly selected external path and checks its exact bytes
+  before password-confirmed kept authority. A recovered owner can reconfirm the same saved PDF
+  without a new key or hour. Actual activation and checked-publication composition remain open.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
   Key-only recovery PDF components now have generated-document and transient-delivery checks.

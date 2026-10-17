@@ -28,6 +28,7 @@ import { createFirstSetupPreparation } from "./first-setup-preparation.js";
 import { readFirstSetupRetirements } from "./first-setup-workspace.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
+import { createFirstSetupCommandDelivery } from "./first-setup-command-document.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -256,16 +257,25 @@ export function createFirstSetupRuntime(options: {
       return replacementAuthority.run(authorize, run);
     },
   };
+  const setupPreparation = createFirstSetupPreparation({
+    ...options,
+    readRetiredSetup,
+    ...authorization,
+    modules,
+    owner,
+    store,
+    coordinator,
+  });
   return {
     ...authorization,
-    ...createFirstSetupPreparation({
+    ...setupPreparation,
+    commandDelivery: createFirstSetupCommandDelivery({
       ...options,
-      readRetiredSetup,
-      ...authorization,
       modules,
       owner,
-      store,
-      coordinator,
+      keys,
+      recoveryDelivery,
+      assertSelection: setupPreparation.assertSelection,
     }),
     coordinator,
     store,

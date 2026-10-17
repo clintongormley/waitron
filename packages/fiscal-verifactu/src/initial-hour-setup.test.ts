@@ -7,6 +7,7 @@ import {
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { readHourSetupInput } from "./initial-hour-setup.js";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const context: InitialSetupContext = {
   attemptId: "attempt",
@@ -64,6 +65,104 @@ function fixture() {
     request: { kind: "waitron-hour-setup", status: "selected", identity: "06RB", input },
   });
 }
+
+it.each(["en", "es"] as const)(
+  "the command document seat renders the frozen identity and staged key in %s",
+  async (locale) => {
+    const f = configured();
+    const saved = fixture();
+    const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
+      key: {
+        nodeId: "node",
+        name: "2026-10-16 · ACRY",
+        secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+      },
+      identity: { taxpayerName: "Olivo Restauración SL", venueName: "Olivo Centro" },
+      locale,
+    });
+    expect(document.statement).toEqual({
+      kind: "waitron-recovery-document",
+      version: 1,
+      scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
+      taxpayerName: "Olivo Restauración SL",
+      venueName: "Olivo Centro",
+      createdAt: "2026-10-16T11:40:00.000Z",
+      nodeKey: { nodeId: "node", name: "2026-10-16 · ACRY" },
+    });
+    const task = getDocument({
+      data: document.bytes.slice(),
+      useSystemFonts: false,
+      disableFontFace: true,
+      useWorkerFetch: false,
+      useWasm: false,
+    });
+    try {
+      const pdf = await task.promise;
+      const page = await pdf.getPage(1);
+      const text = (await page.getTextContent()).items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      expect(text).toContain(
+        locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+      );
+      expect(text).toContain("Olivo Restauración SL");
+      expect(text).toContain("Olivo Centro");
+      expect(text).toContain("89890001K");
+      expect(text).toContain("2026-10-16 · ACRY");
+      const attached = JSON.parse(
+        Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(),
+      );
+      expect(attached).toEqual({
+        ...(document.statement as object),
+        nodeKey: {
+          nodeId: "node",
+          name: "2026-10-16 · ACRY",
+          secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        },
+      });
+    } finally {
+      await task.destroy();
+    }
+  },
+);
+
+it("the command document seat refuses a foreign staged node and changed hour input", async () => {
+  const f = configured();
+  const saved = fixture();
+  const document = {
+    key: {
+      nodeId: "foreign",
+      name: "2026-10-16 · ACRY",
+      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    },
+    identity: { taxpayerName: "Olivo", venueName: "Centro" },
+    locale: "en" as const,
+  };
+  await expect(
+    f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), document),
+  ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+  await expect(
+    f.seat.commandRecoveryDocument!(
+      saved,
+      { input: {}, summary: null },
+      { ...document, key: { ...document.key, nodeId: "node" } },
+    ),
+  ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+});
+
+it("dates a delayed recovery document when it is created without selecting another installation hour", async () => {
+  const f = configured();
+  const saved = fixture();
+  vi.setSystemTime(new Date("2026-10-17T12:30:00Z"));
+  const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
+    key: { nodeId: "node", name: "2026-10-17 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    identity: { taxpayerName: "Olivo", venueName: "Centro" },
+    locale: "en",
+  });
+  expect(document.statement).toMatchObject({ createdAt: "2026-10-17T12:30:00.000Z" });
+  expect(saved.request.input.allocation.installationIdentity).toBe("06RB");
+  expect(f.history).toEqual([]);
+});
 const refusal = { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } };
 it("checks the entire frozen request and returns a detached exact input", () => {
   const saved = fixture();

@@ -88,6 +88,16 @@ const VENUE_ENV = {
   WAITRON_ADMIN_PASSWORD: "dashPass123",
 };
 
+it("refuses a selected recovery PDF when no owned setup runtime can deliver it", async () => {
+  const h = harness({ env: VENUE_ENV });
+  expect(
+    await runCli([...VENUE_ARGS, "--yes", "--recovery-pdf", "/tmp/recovery.pdf"], h.deps),
+  ).toBe(1);
+  expect(h.lines).toContain("setup.not_ready {}");
+  expect(h.openVenue).not.toHaveBeenCalled();
+  expect(h.applyVenue).not.toHaveBeenCalled();
+});
+
 interface Harness {
   deps: CliDeps;
   /** Everything written to either stream, in order. */
