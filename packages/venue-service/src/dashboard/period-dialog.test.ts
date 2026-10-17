@@ -494,7 +494,7 @@ it("LOOK L9: the end-offset explanation is small muted hint text", async () => {
   const name =
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
   await name.updateComplete;
-  const text = getComputedStyle(name.shadowRoot!.querySelector("label")!).color;
+  const text = getComputedStyle(name.shadowRoot!.querySelector("input")!).color;
   const explanation = getComputedStyle(
     el.shadowRoot!.querySelector("[data-test=offset-explanation]")!,
   );
