@@ -12,6 +12,7 @@ import {
   specialDayDates,
   specialDays,
 } from "@waitron/venue-service";
+import { CALENDAR_COLOURS } from "@waitron/venue-service/hours-types";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { STAFFING_MIGRATIONS } from "../migrations.js";
 import { shiftAssignments, staffRoles, staffingBlocks, staffingDays } from "./staffing.js";
@@ -80,6 +81,18 @@ function insertDay(row: typeof staffingDays.$inferInsert) {
 async function count(table: typeof staffingDays | typeof staffingBlocks) {
   return (await suite.db.select().from(table)).length;
 }
+
+it("lets the colour CHECK take every calendar colour and refuses an unknown one", async () => {
+  const v = await venue();
+  const insert = (colour: string) =>
+    withTransaction(suite.db, (tx) =>
+      tx
+        .insert(staffRoles)
+        .values({ locationId: v.locationId, name: `Role ${colour}`, colour: colour as never }),
+    );
+  for (const colour of CALENDAR_COLOURS) await insert(colour);
+  await expect(insert("magenta")).rejects.toThrow("CHECK constraint failed: staff_roles_colour_ck");
+});
 
 it("refuses a staffing day for both a department and a station", async () => {
   const v = await venue();

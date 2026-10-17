@@ -29,6 +29,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { addDays } from "./hours-rules.js";
+import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
   readOpeningHoursModel,
@@ -482,7 +483,7 @@ describe("service-period writers", () => {
     ]);
   });
 
-  it.each([null, "pink", 1])("refuses an explicit invalid colour %s", async (colour) => {
+  it.each([null, "magenta", 1])("refuses an explicit invalid colour %s", async (colour) => {
     const v = await venue({ timetable: false });
     await expect(
       scoped((tx) =>
@@ -590,10 +591,48 @@ describe("service-period writers", () => {
     expect(await staff()).toEqual([]);
   });
 
-  it("chooses the first unused department colour, repeating red after all six", async () => {
+  it("saves and updates a period in a newer calendar colour", async () => {
+    const v = await venue({ timetable: false });
+    const { id } = await scoped((tx) =>
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        { name: "Lunch", menuId: v.menus.Bebidas, staffMenuIds: [], colour: "indigo" },
+        0,
+      ),
+    );
+    const colour = async () =>
+      (
+        await db
+          .select({ colour: menuPeriods.colour })
+          .from(menuPeriods)
+          .where(eq(menuPeriods.id, id))
+      )[0]!.colour;
+    expect(await colour()).toBe("indigo");
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { colour: "brown" }, 0));
+    expect(await colour()).toBe("brown");
+  });
+
+  it("lets the colour CHECK take every calendar colour and refuses an unknown one", async () => {
+    const v = await venue({ timetable: false });
+    const insert = (colour: string) =>
+      db.insert(menuPeriods).values({
+        departmentId: v.restaurant,
+        name: `Period ${colour}`,
+        menuId: v.menus.Bebidas,
+        colour: colour as never,
+      });
+    for (const colour of CALENDAR_COLOURS) await insert(colour);
+    await expect(insert("magenta")).rejects.toThrow(
+      "CHECK constraint failed: menu_periods_colour_ck",
+    );
+  });
+
+  it("chooses the first unused department colour, repeating red after all thirteen", async () => {
     const v = await venue({ timetable: false });
     const colours = [];
-    for (let index = 0; index < 7; index++) {
+    for (let index = 0; index < 14; index++) {
       const { id } = await scoped((tx) =>
         saveMenuPeriod(
           tx,
@@ -613,7 +652,22 @@ describe("service-period writers", () => {
         .where(eq(menuPeriods.id, id));
       colours.push(row!.colour);
     }
-    expect(colours).toEqual(["red", "amber", "grey", "blue", "green", "purple", "red"]);
+    expect(colours).toEqual([
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+      "grey",
+      "red",
+    ]);
   });
 
   it.each(["customer", "staff"] as const)(
@@ -2003,7 +2057,7 @@ describe("the editor's model", () => {
           id: periods.madrugada,
           name: "Madrugada",
           menuId: menus.Copas,
-          colour: "blue",
+          colour: "lime",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(5),
@@ -2023,7 +2077,7 @@ describe("the editor's model", () => {
           id: periods.mediodia,
           name: "Mediodía",
           menuId: menus.Almuerzo,
-          colour: "amber",
+          colour: "orange",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(0, 1, 2, 3, 4, 5, 6),
@@ -2033,7 +2087,7 @@ describe("the editor's model", () => {
           id: periods.noches,
           name: "Noches",
           menuId: menus.Cena,
-          colour: "grey",
+          colour: "amber",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           weekdays: weekdays(1, 2, 3, 4, 5),

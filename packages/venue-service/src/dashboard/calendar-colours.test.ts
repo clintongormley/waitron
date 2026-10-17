@@ -32,22 +32,29 @@ it("names on each colour the users that have it, in the order given", () => {
   const usedBy = Object.fromEntries(choices.map((choice) => [choice.value, choice.usedBy ?? []]));
   expect(usedBy).toEqual({
     red: ["Lunch", "Brunch"],
+    orange: [],
     amber: [],
-    grey: [],
-    blue: ["Dinner"],
+    lime: [],
     green: [],
+    teal: [],
+    cyan: [],
+    blue: ["Dinner"],
+    indigo: [],
     purple: [],
+    pink: [],
+    brown: [],
+    grey: [],
   });
 });
 
 it("a user whose colour is not in the palette marks nothing", () => {
-  const choices = calendarColourChoices((colour) => colour, [{ name: "Odd", colour: "pink" }]);
+  const choices = calendarColourChoices((colour) => colour, [{ name: "Odd", colour: "magenta" }]);
   expect(choices.every((choice) => (choice.usedBy ?? []).length === 0)).toBe(true);
 });
 
 it("the first unused colour is the first in palette order no entry takes, and red when all are taken", () => {
   expect(firstUnusedCalendarColour([])).toBe("red");
-  expect(firstUnusedCalendarColour([{ colour: "red" }, { colour: "amber" }])).toBe("grey");
+  expect(firstUnusedCalendarColour([{ colour: "red" }, { colour: "orange" }])).toBe("amber");
   expect(firstUnusedCalendarColour(CALENDAR_COLOURS.map((colour) => ({ colour })))).toBe("red");
 });
 

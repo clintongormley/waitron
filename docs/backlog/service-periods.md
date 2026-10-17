@@ -270,18 +270,6 @@ special-day write routes.
    shift-click adds a run; one hint line says so. `DayPicker` (`day-picking.ts`), with `dragOnTouch` on
    inside the dialog.
 
-## A753. Calendar colours: more of them
-
-**A753 (owner, 2026-10-16; left open by #1828).**
-
-1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
-   from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
-   `packages/venue-service/src/hours-types.ts:6`; their tokens are the `--wt-color-palette-*`
-   pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette. The owner's swatch board
-   is `docs/backlog/mockups/a753-calendar-colours/` (question in lane B's `questions.md`,
-   2026-10-17). Two CHECK constraints list the six, so growing it is a migration:
-   `menu_periods_colour_ck` (venue-service) and `staff_roles_colour_ck` (staffing).
-
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
 **A762 (owner, 2026-10-16).** Owner: "we need to make it more obvious that we're editing a standard
@@ -313,6 +301,13 @@ Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
 
+- **Periods and staff roles pick from thirteen calendar colours, in rainbow order (owner,
+  2026-10-17, option (a) of the A753 swatch board, `docs/backlog/mockups/a753-calendar-colours/`).**
+  Red, orange, amber, lime, green, teal, cyan, blue, indigo, purple, pink, brown, grey
+  (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`). The order is the board's; it
+  is the order the colour panel shows and the order a new period or staff role takes the first
+  unused colour in.
+
 - **A new staff role's colour is chosen once, when its dialog opens
   ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 5; plan default,
   sent to the owner as an FYI).** It is the first colour, in `CALENDAR_COLOURS` order, that no other
@@ -321,13 +316,13 @@ Re-check when a new year's list is added.
   roles never include the one being edited, nor the one the dialog has just created and stays open
   on when only its people failed to save.
 
-- **The Staff roles list names every holder, whatever their status (A753 plan, Decision 6; plan
+- **The Staff roles list names every holder, whatever their status ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 6; plan
   default, sent to the owner as an FYI).** The names come from the Staff roles list route, which
   `venue.view` opens, not from the people list, which needs `person.manage`. Every active person's
   name was already readable without signing in (`GET /management-api/staff-roster`); a pending or
   suspended holder's name is the one widening. The receipt is in #1828.
 
-- **The Staff roles list shows five holders' names, then "plus N more" (A753 plan, Decision 7;
+- **The Staff roles list shows five holders' names, then "plus N more" ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 7;
   chosen on the screen, 2026-10-17, and sent to the owner as an FYI).** `HOLDER_NAMES_SHOWN`
   (`packages/staffing/src/dashboard/staff-roles-screen.ts`) stays 5, chosen on the demo venue: at
   1280 px wide, ten names (a role held by 12 people) overflowed the People cell and hid "plus 2

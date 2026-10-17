@@ -3,6 +3,7 @@ import { breachText, shiftBreaches } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { periodColourStyles } from "@waitron/venue-service/painter";
 import { areaKey, type AreaRef, type Slot, type SlotStatus } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, utc } from "./format.js";
@@ -13,6 +14,7 @@ import { t, tf } from "./strings.js";
 export class RotaByArea extends LitElement {
   static override styles = [
     baseStyles,
+    periodColourStyles,
     css`
       :host {
         display: block;
@@ -96,24 +98,7 @@ export class RotaByArea extends LitElement {
         height: var(--wt-space-2);
         margin-inline-end: var(--wt-space-1);
         border-radius: var(--wt-radius-sm);
-      }
-      .swatch[data-colour="red"] {
-        background: var(--wt-color-palette-red);
-      }
-      .swatch[data-colour="amber"] {
-        background: var(--wt-color-palette-amber);
-      }
-      .swatch[data-colour="grey"] {
-        background: var(--wt-color-palette-grey);
-      }
-      .swatch[data-colour="blue"] {
-        background: var(--wt-color-palette-blue);
-      }
-      .swatch[data-colour="green"] {
-        background: var(--wt-color-palette-green);
-      }
-      .swatch[data-colour="purple"] {
-        background: var(--wt-color-palette-purple);
+        background: var(--period-fill);
       }
     `,
   ];

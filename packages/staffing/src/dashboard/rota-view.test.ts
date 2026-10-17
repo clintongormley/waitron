@@ -75,6 +75,23 @@ describe("the Rota by area", () => {
       el.shadowRoot!.querySelector("[data-person=joan]")!.hasAttribute("data-over-contract"),
     ).toBe(true);
   });
+  it("paints a staff role's swatch in a calendar colour beyond the first six", async () => {
+    const el = await mount(
+      rotaApi(async (week) => {
+        const r = rotaWeek(week);
+        r.staffRoles[0]!.colour = "brown";
+        return r;
+      }).api,
+    );
+    const swatch = area(el).shadowRoot!.querySelector<HTMLElement>(".swatch")!;
+    expect(swatch.dataset.colour).toBe("brown");
+    const painted = getComputedStyle(swatch).backgroundColor;
+    const probe = document.createElement("span");
+    probe.style.background = "var(--wt-color-palette-brown)";
+    frames[0]!.append(probe);
+    expect(painted).toBe(getComputedStyle(probe).backgroundColor);
+    expect(painted).not.toBe("rgba(0, 0, 0, 0)");
+  });
   it("steps real weeks through the host and keeps the selected area in the address", async () => {
     const el = await mount();
     el.params = { area: "station:kitchen" };

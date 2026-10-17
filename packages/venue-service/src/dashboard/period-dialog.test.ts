@@ -376,11 +376,11 @@ it("maps a refused customer menu before a submission, but an unrelated catalogue
   ).toBe("This could not be saved. Try again.");
 });
 
-it("a stored colour outside the six is refused by the form's own check", async () => {
+it("a stored colour outside the palette is refused by the form's own check", async () => {
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.period = { ...structuredClone(period), colour: "magenta" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -400,16 +400,23 @@ it("a stored colour outside the six is refused by the form's own check", async (
   expect(save(el).disabled).toBe(false);
 });
 
-it("colour is the shared chooser of the six period colours; choosing one makes Save ready", async () => {
+it("colour is the shared chooser of the thirteen period colours; choosing one makes Save ready", async () => {
   const el = await mount(true);
   expect(chooser(el).label).toBe("Colour");
   expect(chooser(el).choices.map((choice) => [choice.value, choice.label])).toEqual([
     ["red", "Red"],
+    ["orange", "Orange"],
     ["amber", "Amber"],
-    ["grey", "Grey"],
-    ["blue", "Blue"],
+    ["lime", "Lime"],
     ["green", "Green"],
+    ["teal", "Teal"],
+    ["cyan", "Cyan"],
+    ["blue", "Blue"],
+    ["indigo", "Indigo"],
     ["purple", "Purple"],
+    ["pink", "Pink"],
+    ["brown", "Brown"],
+    ["grey", "Grey"],
   ]);
   expect(chooser(el).value).toBe("blue");
   expect(save(el).disabled).toBe(true);
@@ -465,7 +472,7 @@ it("the keyboard opens the colour chooser, an arrow chooses the next colour and 
   await userEvent.keyboard("{Escape}");
   await el.updateComplete;
   expect(chooserPanel(el).matches(":popover-open")).toBe(false);
-  expect(checkedColour(el)).toBe("green");
+  expect(checkedColour(el)).toBe("indigo");
   expect(save(el).disabled).toBe(false);
 });
 
@@ -473,7 +480,7 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.period = { ...structuredClone(period), colour: "magenta" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -483,10 +490,22 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
   await userEvent.click(chooserTrigger(el));
   await expect.poll(() => chooserPanel(el).matches(":popover-open")).toBe(true);
   expect(
-    ["red", "amber", "grey", "blue", "green", "purple"].map(
-      (colour) => chooserTile(el, colour).tabIndex,
-    ),
-  ).toEqual([0, -1, -1, -1, -1, -1]);
+    [
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+      "grey",
+    ].map((colour) => chooserTile(el, colour).tabIndex),
+  ).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
 });
 
 it("LOOK L9: the end-offset explanation is small muted hint text", async () => {
@@ -509,7 +528,7 @@ it("a Save refused only for its colour moves focus to the colour field", async (
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "pink" as never };
+  el.period = { ...structuredClone(period), colour: "magenta" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -959,7 +978,7 @@ const departments = [
     name: "Restaurant",
     colourUsers: [
       { name: "Lunch", colour: "red" },
-      { name: "Dinner", colour: "amber" },
+      { name: "Dinner", colour: "orange" },
     ],
   },
   { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
@@ -994,7 +1013,7 @@ it("from the page, Add asks for the department first, preselects a lone departme
   expect(writes[0]!.departmentId).toBe("bar");
   expect(writes[0]!.input).toEqual({
     name: "Dinner",
-    colour: "amber",
+    colour: "orange",
     menuId: "lunch",
     staffMenuIds: [],
     endOffsetMinutes: 0,
@@ -1009,9 +1028,9 @@ it("with two departments, the preselected colour follows the department chosen u
   const el = await mountAdd(departments);
   expect(field(el, "departmentId").value).toBe("");
   await change(el, "departmentId", { value: "restaurant" });
-  expect(checkedColour(el)).toBe("grey");
-  await change(el, "departmentId", { value: "bar" });
   expect(checkedColour(el)).toBe("amber");
+  await change(el, "departmentId", { value: "bar" });
+  expect(checkedColour(el)).toBe("orange");
   await change(el, "colour", { value: "blue" });
   await change(el, "departmentId", { value: "restaurant" });
   expect(checkedColour(el)).toBe("blue");
@@ -1081,7 +1100,7 @@ it("adding, the chooser names the periods that use each colour, and the new peri
   el.departmentName = "Restaurant";
   el.colourUsers = [
     { name: "Lunch", colour: "red" },
-    { name: "Dinner", colour: "amber" },
+    { name: "Dinner", colour: "orange" },
   ];
   el.open = true;
   applyTokens(el);
@@ -1090,24 +1109,45 @@ it("adding, the chooser names the periods that use each colour, and the new peri
   await el.updateComplete;
   expect(usedBy(el)).toEqual({
     red: ["Lunch"],
-    amber: ["Dinner"],
-    grey: [],
+    orange: ["Dinner"],
+    amber: [],
+    lime: [],
     green: [],
+    teal: [],
+    cyan: [],
     blue: [],
+    indigo: [],
     purple: [],
+    pink: [],
+    brown: [],
+    grey: [],
   });
-  expect(checkedColour(el)).toBe("grey");
+  expect(checkedColour(el)).toBe("amber");
 });
 
 it("with two departments, no colour is marked until one is chosen, then the chosen department's periods are", async () => {
   const el = await mountAdd(departments);
-  expect(usedBy(el)).toEqual({ red: [], amber: [], grey: [], green: [], blue: [], purple: [] });
+  expect(usedBy(el)).toEqual({
+    red: [],
+    orange: [],
+    amber: [],
+    lime: [],
+    green: [],
+    teal: [],
+    cyan: [],
+    blue: [],
+    indigo: [],
+    purple: [],
+    pink: [],
+    brown: [],
+    grey: [],
+  });
   await change(el, "departmentId", { value: "restaurant" });
   expect(usedBy(el).red).toEqual(["Lunch"]);
-  expect(usedBy(el).amber).toEqual(["Dinner"]);
+  expect(usedBy(el).orange).toEqual(["Dinner"]);
   await change(el, "departmentId", { value: "bar" });
   expect(usedBy(el).red).toEqual(["All day"]);
-  expect(usedBy(el).amber).toEqual([]);
+  expect(usedBy(el).orange).toEqual([]);
 });
 
 it("in Spanish a marked tile is named by its colour and the period using it", async () => {
@@ -1134,7 +1174,21 @@ it("typing in another field keeps the chooser's choices; a language change rebui
     el.requestUpdate();
     await el.updateComplete;
     expect(chooser(el).choices).not.toBe(before);
-    expect(chooser(el).choices[0]!.label).toBe("Rojo");
+    expect(chooser(el).choices.map((choice) => [choice.value, choice.label])).toEqual([
+      ["red", "Rojo"],
+      ["orange", "Naranja"],
+      ["amber", "Ámbar"],
+      ["lime", "Lima"],
+      ["green", "Verde"],
+      ["teal", "Turquesa"],
+      ["cyan", "Cian"],
+      ["blue", "Azul"],
+      ["indigo", "Índigo"],
+      ["purple", "Morado"],
+      ["pink", "Rosa"],
+      ["brown", "Marrón"],
+      ["grey", "Gris"],
+    ]);
   } finally {
     setLocale("en");
   }

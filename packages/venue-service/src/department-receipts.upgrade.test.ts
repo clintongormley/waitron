@@ -30,6 +30,18 @@ if (receiptIntroduction < 0) throw new Error("Missing department receipt introdu
 for (const candidate of journal.entries.splice(receiptIntroduction))
   rmSync(join(predecessor, `${candidate.tag}.sql`));
 writeFileSync(journalPath, JSON.stringify(journal));
+// Stops at this migration: a later table rebuild drops that table's change-feed triggers, which
+// the server's start reinstalls (`installChangeFeed`, apps/server/src/boot.ts).
+const upgraded = mkdtempSync(join(tmpdir(), "receipt-upgraded-"));
+afterAll(() => rmSync(upgraded, { recursive: true, force: true }));
+cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, upgraded, { recursive: true });
+const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
+const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
+  entries: { tag: string }[];
+};
+for (const entry of upgradedJournal.entries.splice(receiptIntroduction + 1))
+  rmSync(join(upgraded, `${entry.tag}.sql`));
+writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   // This single-case probe changes the schema after the opener captures its reset table set.
   resetPerTest: false,
@@ -90,7 +102,7 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
       sql`select name from sqlite_master where type = 'table' and name = 'department_receipts'`,
     ),
   ).toEqual([]);
-  await applyMigrationSet(suite.db, VENUE_SERVICE_MIGRATIONS);
+  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
   expect(
     suite.db.all(sql`select name from sqlite_master where type = 'trigger' order by name`),
   ).toEqual(before);

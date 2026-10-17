@@ -168,7 +168,7 @@ list does not exist.
    becomes "Print a slip when sent dishes move table", its options "Venue setting: Print" (or
    "Venue setting: Don't print"), "Print" and "Don't print" — owner: not "As the venue". Spanish to
    match.
-7. **The colour is chosen in a popup:** the shared `wt-colour-chooser` (A753, #1828), a field
+7. **The colour is chosen in a popup:** the shared `wt-colour-chooser` (#1828), a field
    showing the colour's square and name, opens a small panel of colours, which still marks those
    other stations use. It is already used by the period and staff role dialogs. A725 hands
    it the twelve station colours from `STATION_COLOUR_TOKENS` with `usedBy`, and
@@ -399,7 +399,9 @@ confirm the new wording when A756 is picked up.
   period differs from its row's Every zone's saved station for the period. "Always opens on All
   periods" is read as each time the page opens: the choice is the grid's own state, never written to
   the address or to storage. Mockups:
-  [mockups/a584-station-colours/](mockups/a584-station-colours/).
+  [mockups/a584-station-colours/](mockups/a584-station-colours/). **2026-10-17, A753 point 1:**
+  periods now pick from thirteen colours and stations still from twelve, so decision (1)'s "bigger
+  set than the periods use" no longer holds.
 
 - **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and

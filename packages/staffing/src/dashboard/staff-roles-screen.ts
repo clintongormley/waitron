@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import { PERIOD_COLOUR_TOKENS } from "@waitron/venue-service/dashboard/period-colour-styles";
 import type { ListedStaffRole, StaffRole, StaffingApi } from "./client.js";
 import { staffRoleDeleteCopy } from "./staff-role-delete-copy.js";
 import { holderNames, t, tf } from "./strings.js";
@@ -17,6 +18,12 @@ import "./staff-role-dialog.js";
 export const HOLDER_NAMES_SHOWN = 5;
 
 const NO_STAFF_ROLES: readonly ListedStaffRole[] = [];
+
+const swatchColours = unsafeCSS(
+  Object.entries(PERIOD_COLOUR_TOKENS)
+    .map(([colour, { fill }]) => `wt-data-table::part(swatch-${colour}) { background: ${fill}; }`)
+    .join("\n"),
+);
 
 type Deletion = {
   staffRoleId: string;
@@ -67,25 +74,8 @@ export class StaffRolesScreen extends LitElement {
         block-size: var(--wt-space-4);
         border-radius: var(--wt-radius-sm);
       }
-      wt-data-table::part(swatch-red) {
-        background: var(--wt-color-palette-red);
-      }
-      wt-data-table::part(swatch-amber) {
-        background: var(--wt-color-palette-amber);
-      }
-      wt-data-table::part(swatch-grey) {
-        background: var(--wt-color-palette-grey);
-      }
-      wt-data-table::part(swatch-blue) {
-        background: var(--wt-color-palette-blue);
-      }
-      wt-data-table::part(swatch-green) {
-        background: var(--wt-color-palette-green);
-      }
-      wt-data-table::part(swatch-purple) {
-        background: var(--wt-color-palette-purple);
-      }
     `,
+    swatchColours,
   ];
 
   @property({ attribute: false }) api!: StaffingApi;

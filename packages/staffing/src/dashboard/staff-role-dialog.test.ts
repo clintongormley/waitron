@@ -108,7 +108,7 @@ function closed() {
 }
 
 describe("staff-role dialog", () => {
-  it("offers a required name, the six calendar colours and the venue's people", async () => {
+  it("offers a required name, the thirteen calendar colours and the venue's people", async () => {
     await mount();
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add staff role");
     expect(field("wt-input", "name").required).toBe(true);
@@ -117,11 +117,18 @@ describe("staff-role dialog", () => {
     expect(colour.label).toBe("Colour");
     expect(colour.choices.map((option) => [option.value, option.label])).toEqual([
       ["red", "Red"],
+      ["orange", "Orange"],
       ["amber", "Amber"],
-      ["grey", "Grey"],
-      ["blue", "Blue"],
+      ["lime", "Lime"],
       ["green", "Green"],
+      ["teal", "Teal"],
+      ["cyan", "Cyan"],
+      ["blue", "Blue"],
+      ["indigo", "Indigo"],
       ["purple", "Purple"],
+      ["pink", "Pink"],
+      ["brown", "Brown"],
+      ["grey", "Grey"],
     ]);
     expect(colour.value).toBe("red");
     const people = field("wt-combobox", "people");
@@ -656,20 +663,43 @@ describe("staff-role dialog", () => {
 
   it("a new staff role starts on the first colour no other role uses, and names who uses each", async () => {
     await mountWith(roles);
-    expect(chooser().value).toBe("amber");
+    expect(chooser().value).toBe("orange");
     expect(usedBy()).toEqual({
       red: ["Waiter"],
+      orange: [],
       amber: [],
-      grey: [],
-      blue: ["Runner", "Cook"],
+      lime: [],
       green: [],
+      teal: [],
+      cyan: [],
+      blue: ["Runner", "Cook"],
+      indigo: [],
       purple: [],
+      pink: [],
+      brown: [],
+      grey: [],
     });
   });
 
   it("a new staff role starts on red when every colour is taken", async () => {
     await mountWith(
-      (["red", "amber", "grey", "blue", "green", "purple"] as const).map((colour, index) => ({
+      (
+        [
+          "red",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "brown",
+          "grey",
+        ] as const
+      ).map((colour, index) => ({
         id: `role-${index}`,
         name: `Role ${index}`,
         colour,
@@ -701,11 +731,18 @@ describe("staff-role dialog", () => {
     await el.updateComplete;
     expect(usedBy()).toEqual({
       red: [],
+      orange: [],
       amber: [],
-      grey: [],
-      blue: ["Waiter"],
+      lime: [],
       green: [],
+      teal: [],
+      cyan: [],
+      blue: ["Waiter"],
+      indigo: [],
       purple: [],
+      pink: [],
+      brown: [],
+      grey: [],
     });
     expect(chooser().value).toBe("red");
   });

@@ -524,6 +524,16 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0123_devices_lose_binding": {
     refused: ["DROP TABLE `devices`", "FOREIGN KEY constraint failed"],
   },
+  // Rebuilds `menu_periods` to widen its colour CHECK; the DROP empties its cascading children, and
+  // is refused while a day range names a period (`department_day_ranges`, no action).
+  "venue-service/0057_black_shadow_king": {
+    lost: ["menu_period_staff_menus", "period_extensions", "routing_cell_periods"],
+  },
+  // Rebuilds `staff_roles` to widen its colour CHECK; dropping the old one is refused while a
+  // non-cascading child holds rows.
+  "staffing/0002_charming_black_widow": {
+    refused: ["DROP TABLE `staff_roles`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `menu_item_variant_overrides` with a price required; a copied row's price is null.
   "catalogue/0024_drop_menu_offered": {
     refused: [

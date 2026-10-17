@@ -275,6 +275,18 @@ describe("the staff roles page", () => {
     expect(swatch.right).toBeLessThan(name.left);
   });
 
+  it("paints a swatch in a calendar colour beyond the first six", async () => {
+    await mount(fakeRequest(() => [{ ...waiter, colour: "brown" }]));
+    const painted = getComputedStyle(
+      row("role-w").querySelector("[part~=swatch]")!,
+    ).backgroundColor;
+    const probe = document.createElement("span");
+    probe.style.background = "var(--wt-color-palette-brown)";
+    host.append(probe);
+    expect(painted).toBe(getComputedStyle(probe).backgroundColor);
+    expect(painted).not.toBe("rgba(0, 0, 0, 0)");
+  });
+
   it("pins the actions column to the end", async () => {
     await mount(fakeRequest(() => [waiter]));
     const columns = table()!.columns as readonly DataTableColumn<StaffRole>[];
@@ -433,7 +445,7 @@ describe("the staff roles page", () => {
     const colour = dialog().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
       "wt-colour-chooser[name=colour]",
     )!;
-    expect(colour.value).toBe("amber");
+    expect(colour.value).toBe("orange");
   });
 
   it("hands an edited staff role's dialog every staff role, its own included", async () => {

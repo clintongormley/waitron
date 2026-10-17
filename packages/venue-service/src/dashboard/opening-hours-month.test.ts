@@ -241,6 +241,25 @@ describe("Opening hours month", () => {
     await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(containing("Restaurant closed"));
   });
 
+  it("paints a range in a calendar colour beyond the first six", async () => {
+    const departments = DEPARTMENTS.map((department) => ({
+      ...department,
+      periods: department.periods.map((period) =>
+        period.id === "breakfast" ? { ...period, colour: "brown" as const } : period,
+      ),
+    }));
+    const el = await mount(monthModel(), { departments });
+    applyTokens(el);
+    const breakfast = cell(el, "2026-12-07").querySelector<HTMLElement>(".segment")!;
+    expect(breakfast.dataset.colour).toBe("brown");
+    const painted = getComputedStyle(breakfast).backgroundColor;
+    const probe = document.createElement("span");
+    probe.style.background = "var(--wt-color-palette-brown)";
+    el.shadowRoot!.append(probe);
+    expect(painted).toBe(getComputedStyle(probe).backgroundColor);
+    expect(painted).not.toBe("rgba(0, 0, 0, 0)");
+  });
+
   it("draws a bar per department, each range placed from changeover to changeover in its period's colour", async () => {
     const el = await mount();
     const tracks = [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".track")];

@@ -32,6 +32,25 @@ if (introduced < 0) throw new Error("Missing whole-order kitchen note introducti
 for (const entry of journal.entries.splice(introduced))
   rmSync(join(predecessor, `${entry.tag}.sql`));
 writeFileSync(journalPath, JSON.stringify(journal));
+// Stops at the migration adding `order_note_change`, the last this test is about: a later table
+// rebuild drops that table's change-feed triggers, which the server's start reinstalls
+// (`installChangeFeed`, apps/server/src/boot.ts).
+const upgraded = mkdtempSync(join(tmpdir(), "kitchen-note-upgraded-"));
+afterAll(() => rmSync(upgraded, { recursive: true, force: true }));
+cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, upgraded, { recursive: true });
+const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
+const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
+  entries: { tag: string }[];
+};
+const changeIntroduced = upgradedJournal.entries.findIndex(({ tag }) =>
+  /ALTER TABLE `kitchen_notices` ADD `order_note_change`/.test(
+    readFileSync(join(upgraded, `${tag}.sql`), "utf8"),
+  ),
+);
+if (changeIntroduced < 0) throw new Error("Missing kitchen note change introduction");
+for (const entry of upgradedJournal.entries.splice(changeIntroduced + 1))
+  rmSync(join(upgraded, `${entry.tag}.sql`));
+writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
@@ -98,7 +117,7 @@ it("adds order instructions to a populated predecessor without changing its dish
       .map((r) => r.name),
   ).not.toContain("order_note_change");
 
-  await applyMigrationSet(suite.db, VENUE_SERVICE_MIGRATIONS);
+  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
 
   expect(await suite.db.select().from(locations)).toEqual([location]);
   expect(await suite.db.select().from(workingOrderLines)).toEqual([line]);
