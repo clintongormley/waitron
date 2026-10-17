@@ -43,7 +43,7 @@ for (const theme of ["light", "dark"] as const) {
     await vi.waitFor(() => expect(dialogElement.open).toBe(true));
     const dialog = measured(dialogElement);
 
-    const file = library.shadowRoot!.querySelector("input[type=file]")!;
+    const file = library.shadowRoot!.querySelector("wt-file-input[name=image-file]")!;
     const fileBox = measured(file);
     expect(fileBox.left).toBeGreaterThanOrEqual(dialog.left);
     expect(fileBox.right).toBeLessThanOrEqual(dialog.right);
@@ -100,7 +100,7 @@ function token(element: Element, name: string): number {
 for (const locale of ["en-GB", "es-ES"] as const) {
   for (const picker of [false, true]) {
     for (const theme of ["light", "dark"] as const) {
-      it(`keeps each image's Edit and Delete buttons on one line inside its card from 300 to 1240px and at each column count's narrowest card, with Use image above them in the picker (${locale}, ${picker ? "picker" : "library"}, ${theme})`, async () => {
+      it(`keeps each image's name and menu inside its card from 300 to 1240px and at each column count's narrowest card, with full-width Use image below them in the picker (${locale}, ${picker ? "picker" : "library"}, ${theme})`, async () => {
         setLocale(locale);
         await page.viewport(1280, 800);
         const library = await mountLibrary(picker, theme);
@@ -138,28 +138,25 @@ for (const locale of ["en-GB", "es-ES"] as const) {
               ).toBeLessThan(1);
             }
             const id = article.getAttribute("data-image")!;
-            const edit = measured(article.querySelector(`[data-test=edit-${id}]`)!);
-            const remove = measured(article.querySelector(`[data-test=delete-${id}]`)!);
-            expect(remove.top, `${width}px: Delete below Edit`).toBe(edit.top);
-            expect(edit.left, `${width}px: Edit outside its card`).toBeGreaterThanOrEqual(box.left);
-            expect(remove.right, `${width}px: Delete outside its card`).toBeLessThanOrEqual(
-              box.right,
+            const menu = article.querySelector("wt-row-actions")!;
+            await menu.updateComplete;
+            const trigger = measured(menu.shadowRoot!.querySelector("button")!);
+            const title = measured(article.querySelector("h2")!);
+            expect(title.left, `${width}px: name outside card`).toBeGreaterThanOrEqual(box.left);
+            expect(title.right, `${width}px: name beyond menu`).toBeLessThanOrEqual(trigger.left);
+            expect(trigger.right, `${width}px: menu outside card`).toBeLessThanOrEqual(box.right);
+            expect(trigger.width, `${width}px: menu tap target`).toBeGreaterThanOrEqual(
+              token(library, "--wt-tap-min"),
             );
-            const thumb = measured(article.querySelector(".thumb")!);
-            const chip = measured(article.querySelector(".chip")!);
-            expect(chip.left, `${width}px: Preview chip outside its photo`).toBeGreaterThanOrEqual(
-              thumb.left,
-            );
-            expect(chip.right, `${width}px: Preview chip outside its photo`).toBeLessThanOrEqual(
-              thumb.right,
-            );
-            const chipText = document.createRange();
-            chipText.selectNodeContents(article.querySelector(".chip")!);
-            expect(chipText.getClientRects(), `${width}px: Preview chip wraps`).toHaveLength(1);
+            expect(article.querySelector(".chip")).toBeNull();
             if (picker) {
               const use = measured(article.querySelector(`[data-test=select-${id}]`)!);
-              expect(use.bottom, `${width}px: Use image not above Edit`).toBeLessThanOrEqual(
-                edit.top,
+              expect(use.top, `${width}px: Use image not below menu`).toBeGreaterThanOrEqual(
+                trigger.bottom,
+              );
+              expect(use.width, `${width}px: Use image not full width`).toBeCloseTo(
+                measured(article.querySelector(".thumb")!).width,
+                0,
               );
               expect(use.left, `${width}px: Use image outside its card`).toBeGreaterThanOrEqual(
                 box.left,
@@ -178,29 +175,30 @@ for (const locale of ["en-GB", "es-ES"] as const) {
 for (const locale of ["en-GB", "es-ES"] as const) {
   for (const picker of [false, true]) {
     for (const theme of ["light", "dark"] as const) {
-      it(`puts Delete at the start of each card's action row and Edit at its end, with a gap between them, from 300 to 1240px (${locale}, ${picker ? "picker" : "library"}, ${theme})`, async () => {
+      it(`keeps Edit and Delete reachable inside the tile menu (${locale}, ${picker ? "picker" : "library"}, ${theme})`, async () => {
         setLocale(locale);
         await page.viewport(1280, 800);
         const library = await mountLibrary(picker, theme);
-        const gap = token(library, "--wt-space-4");
         for (let width = 300; width <= 1240; width += 20) {
           host.style.width = `${width}px`;
           await frame();
           for (const article of library.shadowRoot!.querySelectorAll("article")) {
+            const menu = article.querySelector("wt-row-actions")!;
+            await menu.updateComplete;
+            menu.show();
+            const popup = measured(menu.shadowRoot!.querySelector("[popover]")!);
             const id = article.getAttribute("data-image")!;
-            const row = measured(article.querySelector(".actions")!);
-            const edit = measured(article.querySelector(`[data-test=edit-${id}]`)!);
-            const remove = measured(article.querySelector(`[data-test=delete-${id}]`)!);
-            expect(remove.top, `${width}px: Delete and Edit on one line`).toBe(edit.top);
-            expect(
-              Math.abs(remove.left - row.left),
-              `${width}px: Delete not at the start`,
-            ).toBeLessThan(1);
-            expect(
-              Math.abs(row.right - edit.right),
-              `${width}px: Edit not at the end`,
-            ).toBeLessThan(1);
-            expect(edit.left - remove.right, `${width}px: gap`).toBeGreaterThanOrEqual(gap);
+            const edit = measured(menu.querySelector(`[data-test=edit-${id}]`)!);
+            const remove = measured(menu.querySelector(`[data-test=delete-${id}]`)!);
+            expect(remove.top).toBeGreaterThanOrEqual(edit.bottom);
+            for (const action of [edit, remove]) {
+              expect(action.left).toBeGreaterThanOrEqual(popup.left);
+              expect(action.right).toBeLessThanOrEqual(popup.right);
+              expect(action.height).toBeGreaterThanOrEqual(token(library, "--wt-tap-min"));
+            }
+            expect(popup.left).toBeGreaterThanOrEqual(0);
+            expect(popup.right).toBeLessThanOrEqual(window.innerWidth);
+            menu.hide();
           }
         }
       });

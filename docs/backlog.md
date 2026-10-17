@@ -95,8 +95,7 @@ Everything not listed here needs more spec work first.
    (_Modules, data and code health_). Its revised design awaits agreement.
 5. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-6. **A651 and A652 — drop photos to upload them, tidy the image library and its picker, and frame
-   a photo for its thumbnails** (_Menus and the catalogue_).
+6. **A652 — frame a photo for its thumbnails** (_Menus and the catalogue_).
 7. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 8. **A681 — a light / dark / follow-device theme choice in the apps** (_Users, sign-in and the
@@ -684,15 +683,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
   online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
   till's Allergens screen goes.
-
-- **A651 — drop photos to upload them, and tidy the image library and its picker (owner,
-  2026-10-14; open).** Photos dropped anywhere on the library page upload at once, several at a
-  time, each named in the default language from its file name; one dropped in the upload window
-  fills its Photo field, which becomes a drop area instead of the browser's grey button. The
-  library's Upload photos button is drawn blue, the Preview label on each photo goes, and Edit and
-  Delete move into a ⋮ menu per photo.
-  [Detail](backlog/catalogue.md#a651--drop-photos-to-upload-them-and-tidy-the-image-library-and-its-picker),
-  [mockups](backlog/mockups/a651-image-library/)
 
 - **A652 — frame a photo for its thumbnails (owner, 2026-10-14; open).** Edit photo gains
   "Adjust framing", a window where the person drags the photo inside a square frame and zooms, with
