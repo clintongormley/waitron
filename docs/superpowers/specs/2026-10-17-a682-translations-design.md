@@ -1,10 +1,10 @@
 # A682: optional translations, one editor, deliberate saves
 
-**Current status (2026-10-17, after 16:25): unit option A is approved.** Full design approval,
-implementation and the detailed plan await only the Spanish-text conflict in the
-[reconciliation addendum](#2026-10-17-reconciliation-spanish-and-approved-unit-option-a).
-The original proposal below is preserved as history, including its superseded pending unit question
-and initial status. The addendum records the current decisions and author's recommendation.
+**Current status (2026-10-17, after 16:40): design approved for planning and build.** Unit A and
+Spanish A are closed in the [dated closure](#2026-10-17-closure-unit-a-and-spanish-a).
+The [implementation plan](../plans/2026-10-17-a682-translations.md) covers one complete future PR.
+The original proposal and reconciliation below remain historical, including their superseded
+pending questions. Product implementation and verification remain open.
 
 **Status: NOT APPROVED. Product implementation and its detailed plan wait for the units choice below.** Design only, based on source
 at `6a4331b4d5e038ecdfc482318eaa6c9e5a5abefe`, read on 2026-10-17. Recommendations below are proposals, not owner approval.
@@ -260,3 +260,29 @@ fiscal data, published documents or hashes. Any new fallback applies to future s
 Reuse the editor, Translate all, Use fix and deliberate-save design above unchanged. Full design
 approval, implementation and the detailed plan wait for this one visible conflict. No H2 permission
 is requested or granted here.
+
+## 2026-10-17 closure: unit A and Spanish A
+
+At **16:25**, the owner approved **unit A**: a unit has a required language-independent staff name
+and staff abbreviation. Every translated name and abbreviation is optional. You can clear both maps
+to `{}` and keep the staff pair. No automatic copying from staff values or another language is
+authorized.
+
+At **16:40**, the owner approved **Spanish A**: in the `Patatas` / `PAPAS` / English `Potatoes`
+example, Save succeeds with Spanish customer text blank. Spanish stays enabled everywhere in Spain,
+whatever the province, including an unknown province, the Basque Country and Navarre. Its missing
+customer text remains a gap. Keep the other regional required-enabled languages, defaults, notices
+and receipt rules; enabling a language is separate from requiring entered text.
+
+These decisions close the unit and Spanish questions in the preserved proposal and reconciliation.
+They authorize the design's planning and build, including all five A682 points and Use fix in
+**one complete future production PR**. The [executable plan](../plans/2026-10-17-a682-translations.md)
+settles the proposed interfaces, tasks, reservation waits and verification. A fresh-context
+plan-versus-spec read is complete, with field-specific unit fallback and additive-upgrade checks
+made explicit. A682 and Use fix remain OPEN until product implementation and validation are delivered.
+
+Keep historical snapshot reading unchanged. Apply requested/default/staff fallback only while
+producing future presentation snapshots, preserving receipt-language keys and old recorded names,
+documents and hashes. H2 grants no fiscal-writer, alta-builder, hash/numbering or fiscal-test edit;
+an actual need parks that task for the owner. A760's squash plan is approved, but squash execution
+is not cleared and is not part of this authorization.

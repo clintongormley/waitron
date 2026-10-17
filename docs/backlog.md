@@ -1012,12 +1012,16 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Delete is wanted.
 
 - **A682. Translations: every missing name reported, all languages side by side
-  (owner, 2026-10-14; clarification pending, 2026-10-17).** The translations dialog shows one
+  (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
   field per enabled language on each row. Translate all and its "Use fix" action use the same editor.
-  The owner approved required staff names and abbreviations for units, with optional translations.
-  The [design reconciliation](superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-reconciliation-spanish-and-approved-unit-option-a)
-  asks whether Spanish must stay enabled or its customer text must be filled before saving.
-  Implementation and its detailed plan await that clarification.
+  At 16:25 the owner approved unit A: required staff name and abbreviation, all translations optional,
+  with no automatic copying. At 16:40 the owner approved Spanish A: Save succeeds with blank Spanish
+  customer text, Spanish stays enabled everywhere in Spain whatever the province, and gaps remain.
+  The [dated design closure](superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
+  authorizes planning and build. The [executable plan](superpowers/plans/2026-10-17-a682-translations.md)
+  covers all five points and Use fix in one future PR. A fresh-context plan read is complete;
+  field-specific fallback and additive-upgrade checks are explicit. **OPEN:** implementation and
+  validation, respecting the plan's G/C/E reservations.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

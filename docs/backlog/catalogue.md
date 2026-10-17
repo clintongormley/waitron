@@ -845,6 +845,18 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 
 ## A682. Translations: nothing required, every missing name reported, all languages side by side (owner, 2026-10-14)
 
+**Current checkpoint, 2026-10-17, after 16:40:** the owner approved unit A at 16:25: required staff
+name and abbreviation, all translations optional, no automatic copying. Spanish A was approved at
+16:40: Save succeeds with Spanish customer text blank; Spanish stays enabled everywhere in Spain,
+including unknown province, Basque Country and Navarre, and its gaps remain. Other regional rules
+stay. The [dated design closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a)
+closes both decisions and authorizes planning/build. The [executable plan](../superpowers/plans/2026-10-17-a682-translations.md)
+covers all five points and Use fix in one complete future production PR. **A682 and Use fix remain
+OPEN** for implementation and validation. Fresh-context plan review is complete, with field-specific
+staff fallback and the additive-upgrade check made explicit. Implement in one production PR after
+the relevant G/C/E handoffs. The original points and earlier checkpoint below remain historical.
+
+**Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
 **Current checkpoint, 2026-10-17, after the unit answer:** unit option A is approved: required staff
 name and abbreviation, with every translated value optional. The [design addendum](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-reconciliation-spanish-and-approved-unit-option-a)
 records the remaining Spanish-text conflict. Keeping Spanish enabled and refusing a save for blank
@@ -872,6 +884,7 @@ checkpoint below remain as history; their pending unit A/B question is closed.
   a gap. Translate all fills the same dialog; its "Use fix" button waits for this change
   (its own entry in `docs/backlog.md`).
 
+  **Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
   **Design checkpoint, 2026-10-17:** the [proposal](../superpowers/specs/2026-10-17-a682-translations-design.md)
   covers all five points and Use fix in one future PR. Its unit choice is still open: add a required
   staff name and abbreviation with optional translations (recommended), or retain at least one
