@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LitElement } from "lit";
+import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
@@ -27,6 +28,25 @@ async function mount() {
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[data-person=marc]")).toBeTruthy());
   return el;
 }
+const rules: WorkTimeRuleset = {
+  workingDaysPerWeek: 5,
+  overtimeModel: "daily-accrual",
+  referencePeriodDays: null,
+  compensationWindowDays: null,
+  dailyTargetMinutes: null,
+  maxWeeklyMinutes: 2400,
+  minInterShiftRestMinutes: 720,
+  maxOrdinaryDailyMinutes: 540,
+  breakThresholdMinutes: 360,
+  minBreakMinutes: 15,
+  weeklyRestMinutes: 2160,
+  annualOvertimeCapHours: 80,
+  nightWindowStartMinute: 1320,
+  nightWindowEndMinute: 360,
+  nightPremiumPct: null,
+  splitShiftPremium: null,
+  breaksCountAsWorked: false,
+};
 describe("the slot picker", () => {
   it("lists staff-role holders first with leave, overlapping work and week hours, then shows everyone else", async () => {
     const el = await mount();
@@ -42,6 +62,30 @@ describe("the slot picker", () => {
     expect(
       [...r.querySelectorAll("[data-person]")].map((p) => (p as HTMLElement).dataset.person),
     ).toEqual(["marc", "laia", "joan", "ana", "ibra"]);
+  });
+  it("shows each listed person only the warnings filling the slot would add, with Show everyone too", async () => {
+    const el = await mount();
+    const late = {
+      ...el.week.shifts[0]!,
+      shiftId: "late",
+      personId: "marc",
+      businessDay: "2026-12-03",
+      startsAt: "2026-12-03T17:00:00Z",
+      endsAt: "2026-12-03T23:00:00Z",
+    };
+    el.week = { ...el.week, shifts: [late] };
+    (el as Picker & { ruleset: WorkTimeRuleset | null }).ruleset = rules;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-everyone]")!.click();
+    await el.updateComplete;
+    const person = (id: string) =>
+      el.shadowRoot!.querySelector(`[data-person=${id}]`)!.textContent!;
+    expect(person("marc")).toContain("9 h rest; minimum 12 h");
+    expect(person("marc")).not.toContain("night work");
+    for (const id of ["laia", "joan", "ana", "ibra"]) {
+      expect(person(id)).not.toContain("rest; minimum");
+      expect(person(id)).not.toContain("night work");
+    }
   });
   it("reports actual overlapping shifts, including another area's overnight shift", async () => {
     const el = await mount();

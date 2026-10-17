@@ -20,11 +20,19 @@ export function shiftBreaches(breaches: readonly RosterBreach[], shiftId: string
   return breaches.filter((b) => "shiftId" in b && b.shiftId === shiftId);
 }
 
+/** The week's warnings before any candidate, which `candidateWarnings` leaves out. */
+export function rosterBaseline(week: RotaWeek, ruleset: WorkTimeRuleset): ReadonlySet<string> {
+  return new Set(validateRoster(week.shifts, ruleset).map((b) => JSON.stringify(b)));
+}
+
+/** What filling `slot` with the person would add to their warnings; `baseline` is
+ *  `rosterBaseline` of the same week and ruleset, worked out here when not given. */
 export function candidateWarnings(
   week: RotaWeek,
   slot: Slot,
   personId: string,
   ruleset: WorkTimeRuleset | null,
+  baseline?: ReadonlySet<string>,
 ): RosterBreach[] {
   if (!ruleset) return [];
   const at = slotInstants(week, slot);
@@ -38,8 +46,8 @@ export function candidateWarnings(
     startsOffsetMinutes: offsetMinutes(start.getTime(), week.timeZone),
     endsOffsetMinutes: offsetMinutes(end.getTime(), week.timeZone),
   };
-  const baseline = new Set(validateRoster(week.shifts, ruleset).map((b) => JSON.stringify(b)));
+  const before = baseline ?? rosterBaseline(week, ruleset);
   return validateRoster([...week.shifts, candidate], ruleset).filter(
-    (b) => b.personId === personId && !baseline.has(JSON.stringify(b)),
+    (b) => b.personId === personId && !before.has(JSON.stringify(b)),
   );
 }

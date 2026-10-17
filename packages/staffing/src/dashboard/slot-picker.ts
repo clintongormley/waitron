@@ -1,5 +1,5 @@
 import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
-import { candidateWarnings, breachText } from "./rota-warnings.js";
+import { candidateWarnings, breachText, rosterBaseline } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -151,6 +151,7 @@ export class SlotPicker extends LitElement {
     const dayStart = Date.parse(`${this.pickedSlot.businessDay}T${cutover}:00Z`);
     const start = dayStart + this.pickedSlot.start * 60000;
     const end = dayStart + this.pickedSlot.end * 60000;
+    const baseline = this.ruleset ? rosterBaseline(this.week, this.ruleset) : undefined;
     // The popup it sits in carries this text as its heading, which is what a screen reader hears.
     return html`<div>
       <p class="title" data-test="picker-title" aria-hidden="true">
@@ -187,7 +188,7 @@ export class SlotPicker extends LitElement {
                 >`
               : nothing
           }
-          ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
+          ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset, baseline).map((b) => html`<small>${breachText(b)}</small>`)}
         </button>`;
       })}
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
