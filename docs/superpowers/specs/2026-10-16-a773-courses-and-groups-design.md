@@ -2,8 +2,16 @@
 
 Status: written 2026-10-16 from an owner brainstorm; **revised 2026-10-17** from a second owner
 brainstorm on the table screen's order panel. Every decision in the revision is the owner's unless it
-is marked "builder's call"; its wording awaits the owner's review. Built so far, on the unlanded
-A773-1 branch: the course switch, the draft line's placement fields and a placement model.
+is marked "builder's call". **Ownership amendment, 2026-10-17:** the owner's final answer, after
+its relay correction, approves **one editor per bill**, the empty-bill first accepted save and the
+three EN/ES messages in the [ownership design](2026-10-17-a773-one-editor-design.md). That design's
+transaction, version, local-recovery and conflict contracts govern every affected path here.
+The earlier whole-table proposal and five named/count Pay strings are withdrawn. Twelve cancellation
+translations stay approved. English till actions read **Void / Comp**, Spanish **Cancelar / Descuento**;
+internal cancel/comp actions and financial rules retain their meanings. Other newly introduced
+wording still follows the existing review rule. This amendment is docs-only; it establishes no
+runtime result. Preserve implementation checkpoints through `d17d4571` and the parent's active
+Task 15 paid service-group work; see the plan's dated progress addendum.
 
 It replaces three things in the service design
 ([2026-09-20-service-ordering-and-billing-design.md](2026-09-20-service-ordering-and-billing-design.md)
@@ -18,8 +26,7 @@ is grouped and sent.
   first version goes.
 - Sent dishes have no tick boxes. A sent dish is acted on through A738's line window, whose ⋯ More
   menu replaces the six buttons on every row (section 3.7).
-- Give away and Discount become one **Discount…** window (section 3.8). Cancel becomes **Cancel
-  item…** (section 3.9).
+- Give away and Discount become one **Comp…** window (section 3.8). Cancel becomes **Void…** (section 3.9).
 - **Recall brings a sent dish back into the New order** (section 3.10). Today it returns a fired
   dish to held.
 - The later-addition placement rule is corrected (section 2).
@@ -51,7 +58,7 @@ Added by the 2026-10-17 revision, in
 
 12. [The order panel, collapsed and opened](../../backlog/mockups/a773-order-panel/01-order-panel.png)
 13. [Sending empties the New order](../../backlog/mockups/a773-order-panel/02-sending-empties-the-new-order.png)
-14. [The line window after sending, and Discount…](../../backlog/mockups/a773-order-panel/03-line-window-after-sending.png)
+14. [The line window after sending, and Comp…](../../backlog/mockups/a773-order-panel/03-line-window-after-sending.png)
 
 Pictures 1, 3 and 4 show the first version's merged list: their arrangement of Fire now and held
 groups still holds inside the New order box, but where they show already-sent lines, pictures 12–14
@@ -81,7 +88,7 @@ The life of a dish:
 not sent ──Send──► held ──Fire──► [requested ──pass Fire──►] waiting ──► preparing ──► ready ──► served
    ▲                 │                                         │
    └──── Recall ─────┴─────────────────────────────────────────┘   (only while not started)
-any state ──Cancel item──► off the kitchen (charged or not: 3.9)            served ──Not served──► back to where it was
+any state ──Void──► off the kitchen (charged or not: 3.9)            served ──Not served──► back to where it was
 ```
 
 The waiter may mark a dish served from any fired state: a printer-only station never marks anything
@@ -192,6 +199,21 @@ Everything fired and not yet served, in **one list with no groups**: groups are 
 An outbox. What the waiter adds waits here; **Send all empties it**, which is the waiter's sign that
 everything went (picture 13). Held groups never reopen into it.
 
+**One saved outbox and one editor per bill.** If Ana edits Bill 1 and Luis edits Bill 2 at the
+same table, both can continue. Opening Ana's bill shows her saved New order read-only, with its
+bill heading and the existing Take over confirmation. Takeover transfers only that bill's saved
+fresh/recalled dishes in place, retaining their arrangement, source identities and allergy ticks.
+It sends nothing and changes no money. Once that bill's outbox empties, it releases its editor even
+if another bill remains unsent. Opening an empty bill reserves nothing; the first accepted
+nonempty save or Recall wins. A blank save does not acquire ownership.
+
+A refused first save, stale revision or takeover keeps any local unsaved candidate separately on
+its original device. A refresh never overwrites it or automatically merges/resends it. The first
+device becomes read-only for that bill, cancels autosaves and invalidates stale editors/selections.
+Same-person devices need no takeover but still compare revisions. Passive ownership refresh,
+late-response fencing, navigation/API/sign-out preservation and explicit candidate review follow
+ownership design §§4–5. Server checks apply inside each write transaction before a screen refresh.
+
 **Its parts:** **Fire now**, then any **new groups**, then **"Joins Group N · Course"** for dishes
 going into a held group of the table, placed by section 2. A "Joins" part shows only the new dishes,
 not the group's sent ones.
@@ -254,8 +276,14 @@ Everything above works on a handheld at phone width (picture 4's width), in both
 
 ### 3.7 The line window
 
-A738's line window (its board 2a), opened from a row's ⓘ or a long press, as A738 says. A tap on a
-Fired row marks it served (3.3); a tap on a New order row does what A738 and the tick boxes say.
+A738's line window (its board 2a), opened from a row's ⓘ or a long press, as A738 says.
+Ownership is an additional action gate: Recall, Void, Comp, station moves and other order changes
+require the affected bill's editor while it has unsent dishes. A window open during takeover
+becomes read-only before another write. Serve/Undo and firing already-sent held food remain shared
+under existing permissions, including whole-group firing across bills. Reordering/snoozing held
+service headings remains shared too. No sent service action releases a recalled source reservation.
+
+A tap on a Fired row marks it served (3.3); a tap on a New order row does what A738 and the tick boxes say.
 
 - **Not sent yet:** A738's editing window, plus a **Course** field. Changing the course re-places the
   line (section 2). It has no ⋯ menu: a discount is given once the dish is sent (builder's call), and
@@ -270,18 +298,18 @@ Fired row marks it served (3.3); a tap on a New order row does what A738 and the
     the station's "changes after sending".
   - **Recall** — section 3.10.
   - **Move to station…** — as today's button.
-  - **Discount…** — section 3.8.
-  - **Cancel item…** — section 3.9.
+  - **Comp…** — section 3.8.
+  - **Void…** — section 3.9.
   - **Not served** — a served dish.
 - A dish in Fired also gets **Mark served** as the window's main button, with − n + for part of the
   line.
 - **The footer button reads Close**, so "Cancel" never means two things in one window.
-- On a **paid bill**, the More menu holds only Fire now and Cancel item (section 4, 3.9).
+- On a **paid bill**, the More menu holds only Fire now and Void (section 4, 3.9).
 
 Extras have no actions of their own: changing an extra is editing the dish, and a discount on one
-extra is chosen inside Discount….
+extra is chosen inside Comp….
 
-### 3.8 Discount…
+### 3.8 Comp…
 
 One window replaces today's Give away and Discount buttons: every difference between them comes from
 the adjustment reason (`AdjustmentReason`, `packages/adjustments/src/policy.ts`), which already says
@@ -302,17 +330,17 @@ required.
 The receipt keeps printing a free dish and a discount differently, as today
 (`apps/server/src/receipt-adjustments.ts`). Discount the bill stays by the total.
 
-### 3.9 Cancel item…
+### 3.9 Void…
 
-**Cancel item means "the guest no longer wants it"** (owner, 2026-10-17). Always the whole dish
+**Void means "the guest no longer wants it"** (owner, 2026-10-17). Always the whole dish
 (never one extra), with − n + for how many. The kitchen is always told, by slip and on its screens,
 marked started where it was started. What happens to the money depends on where the dish is:
 
-| Where the dish is | Cancel item offers |
+| Where the dish is | Void offers |
 |---|---|
-| held, or fired and not started (unpaid bill) | **Cancel**: off the kitchen and off the bill, no question |
-| being prepared or ready (unpaid bill) | **Cancel, still charge** (it stays on the bill) or **Cancel, don't charge** (it comes off the bill) |
-| paid bill, any stage | **Cancel, keep the payment**, or **Cancel and refund** once A737 Part 2 exists |
+| held, or fired and not started (unpaid bill) | **Void**: off the kitchen and off the bill, no question |
+| being prepared or ready (unpaid bill) | **Void, still charge** (it stays on the bill) or **Void, don't charge** (it comes off the bill) |
+| paid bill, any stage | **Void, keep the payment**, or **Void and refund** once A737 Part 2 exists |
 
 - **"Don't charge" and "refund" take a reason and a note**, as today's cancel does, so a reason
   that needs a manager's PIN still asks for one. "Still charge" and "keep the payment" move no money
@@ -339,7 +367,10 @@ dish is placed by section 2.
   dish whose HOLD ticket was already printed is told as a cancelled held dish is today (builder's
   call).
 - **Server change:** today `recallLines` returns a fired dish to held and leaves it sent. Recall now
-  takes the dish off the kitchen and shows it, arranged, in the person's New order for that bill.
+  takes the dish off the kitchen and shows it, arranged, in that bill's one New order. If another
+  person edits the bill, Recall refuses before any kitchen/bill/reference write and requires an
+  explicit takeover first. On an unowned bill, Recall acquires ownership in the same transaction.
+  It cannot create a second personal draft or claim another draft's source.
 - **A recalled dish keeps its bill line, its price and any discount already given**; sending it
   again does not re-check that it can still be sold, because the guest already ordered it
   (builder's call). Whether it stays a bill line marked unsent or moves into the draft is the plan's
@@ -349,22 +380,32 @@ dish is placed by section 2.
 ## 4. Bills
 
 - **New lines go on the bill on screen.** To order for another bill, switch to it.
-- **Each bill keeps its own New order.** Lines added for Bill 1 wait on Bill 1 while the waiter
-  is on Bill 2.
+- **Each bill keeps its own New order and editor.** Lines added for Bill 1 wait on Bill 1 while
+  you edit Bill 2. Bill 1/Ana and Bill 2/Luis can both be nonempty at one table. Takeover, release,
+  first-save arbitration and local-candidate preservation are independent for each bill.
 - The "Send to" choice and the "New orders" tag on the main bill go. Before removing anything,
   trace every reader of `parties.main_bill_id` (`#sendToChoices`,
   `apps/till/src/screens/till-table-order-screen.ts`), because other paths read it too.
 - Groups stay table-wide. A line on Bill 2 can join a held group that holds Bill 1's lines, and the
   kitchen sees one group.
-- **Pay is refused while the bill has unsent dishes**, anyone's. The refusal names whose ("Ana has 2
-  unsent dishes on Bill 1"), so the paying waiter can ask them or take the table over.
+- **Pay checks only its own bill.** Take over that bill first if its nonempty outbox belongs to
+  someone else. Flush local edits; refuse a new payment while that bill has fresh/recalled unsent
+  dishes. Another bill's ownership or unsent work does not block it. Use exactly **“Send or remove
+  the unsent dishes before paying.” / “Envía o quita los platos sin enviar antes de cobrar.”** with
+  the existing table/bill heading, for both detailed refusal and code fallback. No name/count variants.
+  Compare ownership in the new-payment transaction; preserve completed replay and already-captured
+  reconciliation before new-work checks, as ownership design §§4/7 specifies.
 - **A paid bill's held dishes can still be fired and served.** Read, not run: `fireGroup`
   (`apps/server/src/order-groups.ts`) checks the party is open, not the bill, and `releaseHeld`
   (`apps/server/src/working-order.ts`) fires a placed order's held lines ("a placed order's held
-  work is committed"). The plan pins it with a test. Recall and Discount are not offered
+  work is committed"). The plan pins it with a test. Recall and Comp are not offered
   on a paid bill: its invoice is issued, so money comes back only by refund (A737 Part 2, not
-  built). Today `recallLines` already refuses a bill that is not open (`assertPartyBillOpen`).
-- **Cancel item on a paid bill** stops the kitchen and keeps the payment; giving money back is a
+  built in the original design). A737 Part 2's public refund seam has since landed; the plan uses it.
+  Today `recallLines` already refuses a bill that is not open (`assertPartyBillOpen`).
+  The owner separately approved Task 15's narrow paid-line service-group exception on 2026-10-17:
+  only group changes are allowed, with every financial/frozen field protected. That in-progress
+  implementation belongs to the parent; this ownership revision does not redo it.
+- **Void on a paid bill** stops the kitchen and keeps the payment; giving money back is a
   refund (3.9, A737 Part 2). Guests who paid and left are the usual case (section 10).
 
 ## 5. Firing and the pass
@@ -488,14 +529,20 @@ These are requirements; the plan picks the shapes.
   take-over keeps it. Today a draft line stores its course but not its group (`order_draft_lines`,
   `packages/db/src/schema/order-drafts.ts`). Each draft line needs its place: Fire now, a new unsent
   group (with an order among the new groups), or an existing held group.
-- **A draft belongs to a bill.** Today one person has one open draft per party (the partial unique
-  index `order_drafts_open_owner_uq`). That becomes one per party and bill.
+- **A draft belongs to a bill, with one open saved draft per bill across all people.** Replace
+  the person-based partial unique key with `bill_id WHERE state = 'open'`. Store the bill's editor
+  and monotonic ownership version in core `bill_edit_states`, retaining the version after release.
+  Ownership design §4 fixes exact schema, request/read/result and 409 refusal contracts. Draft
+  revisions still protect content; a party revision alone is not the bill's ownership version.
+  Empty/terminal drafts grant no authority; old requests cannot become valid after reacquisition.
 - **One submission can join several held groups.** Today a submission joins at most one
   (`joinGroupId`, `placeGroups`, `apps/server/src/order-groups.ts`).
 - **A line can be requested.** A sent kitchen item today is held (`fired_at` null) or fired. A
   requested item needs its own marker, and a group needs a way to say it is waiting for the pass.
 - **A recalled dish returns to a draft** (3.10), with its place.
-- **Paying checks the bill's drafts** (section 4).
+- **Paying checks that bill's outbox** (section 4); direct mutation routes and internal writers
+  enforce ownership too, including source reservations. Move/join commands compare every affected
+  bill's state before any write; they never silently combine different editors (section 10).
 - **`away_at` and the pass's Done marks go**, and the pass's clearing moves to served or table
   cleared (section 5).
 - **Courses gain `held_until_fired`; stations gain `waits_for_pass`; `locations.fire_control` goes.**
@@ -507,16 +554,27 @@ These are requirements; the plan picks the shapes.
   silently hold them in a group that is now cooking. The server refuses (`group.not_held`, as
   today), and nothing from that attempt is sent. The till re-reads and re-places those lines by
   section 2, which puts them in Fire now (the table is past that course), says so in one line, and
-  the waiter sends again.
+  the waiter sends again. Use the two exact approved EN/ES recovery messages in ownership design
+  §7. If ownership changed meanwhile, retain the candidate and stop before the corrective save.
 - **A refused submission keeps the whole New order**, arrangement included (D9 today).
 - **A sold-out line, or one with nowhere to be made,** stays in the list and is never sent (section 3).
 - **A requested group is changed** (a line cancelled, moved or recalled) before the pass fires it.
   These follow today's rules for held lines. The pass card updates.
-- **Two waiters on one table:** each has their own New order per bill, as today per party.
-  Another person's stays read-only.
+- **Two waiters on one table:** Ana edits Bill 1 while Luis edits Bill 2. On the same bill,
+  only its editor changes/sends/recalls; a second person sees it read-only until explicit takeover.
+  Test first-save and Send/takeover races both ways, same-person devices and release/reacquisition.
+  A completed Send retry returns its original facts without restoring editing authority.
+- **Join/move conflicts:** ownership design §6 defines the exact affected set and refusal. Party
+  joins compare every bill in both parties; a bill move compares that bill and destination bills, leaving unrelated source bills alone. Different editors of nonempty outboxes require explicit per-bill takeovers
+  before retry; bill merges/dish transfers require the actor's ownership of both nonempty bills.
+  Compare even empty bills' expected versions to catch a new editor racing the move. No silent
+  discard/merge/send, repricing or payment reallocation resolves a conflict. A relocation into empty
+  tables retains the editor with the bill and advances versions to invalidate the old scope.
+- **Live floor:** list every nonempty bill/editor pair, such as “Bill 1 · Ana” and “Bill 2 · Luis”.
+  Taking or releasing Bill 1 changes/removes only its pair. Ready/held indicators remain independent.
 - **A bill paid while dishes wait unsent** cannot happen: Pay is refused (section 4).
 - **Finishing a table with held or requested dishes asks first** (owner, 2026-10-17): "2 dishes are
-  still held: Entrecot ×2", with **Fire** or **Cancel item** (3.9); either answer lets the table
+  still held: Entrecot ×2", with **Fire** or **Void** (3.9); either answer lets the table
   finish.
   Today `finishTable` (`apps/server/src/parties.ts`) refuses only an unpaid bill or an open one with
   items, so a paid table could close with its mains held for ever.
@@ -564,12 +622,18 @@ Each rule above gets a test that fails if the rule is removed. In particular:
 - the line window offers only the actions that apply, by state, by the station's setting and on a
   paid bill;
 - Recall brings a held dish and a waiting dish back into the New order, and is refused once started;
-- Discount… asks What only with priced extras and How much only for a reason with more than one kind;
-- Pay is refused while the bill has anyone's unsent dishes;
+- Comp… asks What only with priced extras and How much only for a reason with more than one kind;
+- independent Bill 1/Ana and Bill 2/Luis edits, per-bill takeover/release and floor pairs;
+- first-save races, stale direct writes, Send/takeover both ways and same-person revision conflicts;
+- local candidates survive passive/stale reads, failed/unknown takeover, navigation and API replacement
+  without auto-merge or loss; account switching cannot expose another person's candidate;
+- Recall cannot bypass ownership/source reservations; move/join conflicts refuse atomically;
+- Pay is refused while its own bill has unsent dishes, but not because another bill does;
+  completed payment replay and captured reconciliation still work after ownership changes;
 - a paid bill's held group can be fired;
-- Cancel item offers, by the dish's state and the bill's, exactly the choices in 3.9's table, and
+- Void offers, by the dish's state and the bill's, exactly the choices in 3.9's table, and
   only "don't charge" and "refund" change the money;
-- finishing a table with held dishes asks Fire or Cancel item;
+- finishing a table with held dishes asks Fire or Void;
 - a station that waits for the pass receives nothing until the pass fires, and one that does not
   wait receives it at once;
 - a pass fires only the lines it sees, by station and zone, and two passes each fire their own part
@@ -588,7 +652,9 @@ The questions are in [`docs/backlog/mockups/a773-1-open-points/`](../../backlog/
 1. **Held groups in two places — neither.** The drawer's Current orders goes entirely; serving moves
    to Fired, reminders to the Held line.
 2. **New and sent selections together — neither.** Sent dishes have no tick boxes (3.4).
-3. **A bill paid before Send — neither.** Pay is refused while the bill has unsent dishes (section 4).
+3. **A bill paid before Send — neither.** Pay is refused while that bill has unsent dishes
+   (section 4); the 2026-10-17 ownership answer makes it one editor per bill and approves its simple
+   EN/ES refusal. Another bill's unsent dishes never block this Pay.
 4. **Changes after sending — A.** Today's venue-wide `edit_sent_lines` governs Recall until A756
    (3.10).
 5. **Where the course switch lives — A.** On today's course list, moved by A756 (section 1).

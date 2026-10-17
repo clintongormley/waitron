@@ -1980,24 +1980,29 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
-  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). A [one-editor proposal](superpowers/specs/2026-10-17-a773-one-editor-design.md)
-  with light/dark pictures now addresses the owner’s 2026-10-17 request for explicit takeover across
-  a table’s bills; ownership and simpler Pay wording await approval. **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands. **Revised 2026-10-17** (owner):
-  the table screen's panel becomes a Sent box (Served, Fired, Held) above a New order that empties
-  on send; sent dishes are acted on through the line window; Recall returns a dish to the New order;
-  Pay waits for unsent dishes; Away and the pass's Done go. The
-  [six choices](backlog/mockups/a773-1-open-points/README.md) are answered in the spec's §14; the
-  A773-1 [plan revision](superpowers/plans/2026-10-16-a773-1-unsent-list.md) now maps the
-  revised spec to executable tasks, retaining completed T1/T6/T14 and partial T2/T7. It adds
-  bill-line-backed Recall, stage-based cancellation, payment guards for anyone's unsent dishes,
-  held-table finish choices and stable group display numbers. Implementation remains unlanded;
-  A773-2 keeps Requested/pass release, Away/Done removal, station settings and counter changes.
-  [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
+- **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
+  **A773-1**, the table screen's Sent/New order panel, remains unlanded. Its
+  [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
+  `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
+  target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
+  branch at `e65f6005e`; its visible sent-line menu follows in T16.
+  The approved [ownership design](superpowers/specs/2026-10-17-a773-one-editor-design.md) is
+  **one editor per bill**: Ana can edit Bill 1 while Luis edits Bill 2 at one table. Takeover,
+  read-only/local unsaved recovery, first accepted nonempty save and release are per bill; Pay
+  checks only its own bill. Shared firing/serving stays shared. Join/move conflicts require explicit
+  needed takeovers. T24 and its affected-task map add concrete ownership/version/route/recovery
+  contracts and floor bill/editor pairs. Ownership remains to build; this docs revision verifies
+  no product behavior. The empty-bill first-save rule and three exact EN/ES messages have final
+  approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
+  cancellation translations stay approved; English Void/Comp naming stands.
+  **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
+  removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
+  are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work
+  stay open. [Detail](backlog/till.md#a773-courses-groups-and-the-pass),
   [Spec](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [mockups](backlog/mockups/a773-courses-and-groups/),
-  [panel mockups](backlog/mockups/a773-order-panel/)
+  [course mockups](backlog/mockups/a773-courses-and-groups/),
+  [panel mockups](backlog/mockups/a773-order-panel/),
+  [ownership pictures](backlog/mockups/a773-one-editor/)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
