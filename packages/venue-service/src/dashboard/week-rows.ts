@@ -154,3 +154,32 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
       return [department, ...zones];
     });
 }
+
+/** A prep station's day, its `departments` the ones that send it orders: one row per department,
+ *  its blocks the times it sends, its words "No orders" when it sends none. */
+export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
+  const place = placeOnDay(day);
+  return day.departments.map((read) => {
+    const name = names.name(read.departmentId);
+    const blocks = read.ranges.map((range): WeekBlock => {
+      const text = serviceRangeText(range, names);
+      return {
+        kind: "open",
+        periodId: range.periodId,
+        ...place(range),
+        text,
+        label: format("week.block_label", { name, text }),
+        faded: false,
+      };
+    });
+    return {
+      key: read.departmentId,
+      name,
+      zone: false,
+      strong: true,
+      blocks,
+      empty: "",
+      words: blocks.length ? blocks.map((block) => block.text).join(" · ") : t("month.no_orders"),
+    };
+  });
+}
