@@ -60,9 +60,18 @@ export function placeFor(
   }
 
   if (!ctx.firstOrder) {
-    return held.length === 0
-      ? { place: { kind: "fire" } }
-      : { place: { kind: "new", slot: (newPlaces.at(-1)?.slot ?? 0) + 1 } };
+    const laterThanHeld =
+      course !== undefined &&
+      held.length > 0 &&
+      held.every((group) =>
+        [...group.courseIds].every((id) => {
+          const previous = ctx.courses.find((candidate) => candidate.id === id);
+          return previous !== undefined && course.displayOrder > previous.displayOrder;
+        }),
+      );
+    return laterThanHeld
+      ? { place: { kind: "new", slot: (newPlaces.at(-1)?.slot ?? 0) + 1 } }
+      : { place: { kind: "fire" } };
   }
   const rank = (id: string | null) =>
     ctx.courses.find((candidate) => candidate.id === id)?.displayOrder ?? Number.MAX_SAFE_INTEGER;

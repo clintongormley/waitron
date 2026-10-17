@@ -119,6 +119,104 @@ describe("placeFor: later additions", () => {
     });
   });
 
+  it("fires a late main when only Desserts remains held", () => {
+    expect(
+      placeFor(
+        "mains",
+        context({
+          firstOrder: false,
+          held: [{ id: "dessert-group", position: 4, courseIds: new Set(["desserts"]) }],
+        }),
+      ),
+    ).toEqual({ place: { kind: "fire" } });
+  });
+
+  it("compares a late main with every held course, not only the last group", () => {
+    expect(
+      placeFor(
+        "mains",
+        context({
+          firstOrder: false,
+          held: [
+            { id: "dessert-group", position: 4, courseIds: new Set(["desserts"]) },
+            { id: "manually-late-starter", position: 8, courseIds: new Set(["starters"]) },
+          ],
+        }),
+      ),
+    ).toEqual({ place: { kind: "fire" } });
+  });
+
+  it("includes later courses in a mixed held group when placing a late main", () => {
+    expect(
+      placeFor(
+        "mains",
+        context({
+          firstOrder: false,
+          held: [{ id: "mixed", position: 4, courseIds: new Set(["starters", "desserts"]) }],
+        }),
+      ),
+    ).toEqual({ place: { kind: "fire" } });
+  });
+
+  it("fires a retained course with no known rank when it has no existing destination", () => {
+    expect(placeFor("retained", context({ firstOrder: false, held }))).toEqual({
+      place: { kind: "fire" },
+    });
+  });
+
+  it("fires a new dessert when a retained held course has no known rank", () => {
+    expect(
+      placeFor(
+        "desserts",
+        context({
+          firstOrder: false,
+          held: [...held, { id: "retained-group", position: 5, courseIds: new Set(["retained"]) }],
+        }),
+      ),
+    ).toEqual({ place: { kind: "fire" } });
+  });
+
+  it("does not place a different course with the same rank after a held course", () => {
+    expect(
+      placeFor(
+        "another-main",
+        context({
+          firstOrder: false,
+          courses: [
+            ...courses,
+            { id: "another-main", name: "Another main", displayOrder: 2, heldUntilFired: true },
+          ],
+          held,
+        }),
+      ),
+    ).toEqual({ place: { kind: "fire" } });
+  });
+
+  it("still joins an unknown retained course in its existing held group", () => {
+    expect(
+      placeFor(
+        "retained",
+        context({
+          firstOrder: false,
+          held: [{ id: "retained-group", position: 5, courseIds: new Set(["retained"]) }],
+        }),
+      ),
+    ).toEqual({ place: { kind: "join", groupId: "retained-group" } });
+  });
+
+  it("still joins an unknown retained course in its existing manually placed slot", () => {
+    expect(
+      placeFor(
+        "retained",
+        context({
+          firstOrder: false,
+          held,
+          placed: [{ courseId: "retained", place: { kind: "new", slot: 2, afterGroupId: "g3" } }],
+        }),
+      ),
+    ).toEqual({ place: { kind: "new", slot: 2, afterGroupId: "g3" } });
+  });
+
   it("joins draft Desserts and keeps its manually chosen anchor", () => {
     expect(
       placeFor(
