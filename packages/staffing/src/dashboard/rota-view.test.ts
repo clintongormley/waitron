@@ -787,6 +787,41 @@ describe("the Rota's bar", () => {
       box(q(el, "[data-test=bar]")!).bottom,
     );
   });
+  it("a ' · ' in the bar sits on the line of the words after it, at every width, in English and Spanish", async () => {
+    await useViewport(1280, 900);
+    const el = await mount(withWarnings(undefined, null).api);
+    await vi.waitFor(() => expect(q(el, "[data-test=no-rules]")).toBeTruthy());
+    const frame = frames[0]!;
+    const charBox = (node: Text, at: number) => {
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + 1);
+      return range.getBoundingClientRect();
+    };
+    const stranded: string[] = [];
+    for (const language of ["en", "es"]) {
+      setLocale(language);
+      el.requestUpdate();
+      for (let width = 300; width <= 1200; width += 20) {
+        frame.style.width = `${width}px`;
+        for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+        await el.updateComplete;
+        const walker = document.createTreeWalker(q(el, "[data-test=bar]")!, NodeFilter.SHOW_TEXT);
+        const texts: Text[] = [];
+        while (walker.nextNode()) texts.push(walker.currentNode as Text);
+        texts.forEach((node, i) => {
+          const at = node.data.indexOf("·");
+          if (at < 0) return;
+          const after = texts.slice(i + 1).find((n) => n.data.trim() !== "")!;
+          const dot = charBox(node, at);
+          const word = charBox(after, after.data.search(/\S/));
+          if (Math.abs(dot.top + dot.height / 2 - (word.top + word.height / 2)) > 2)
+            stranded.push(`${language} ${width}px before "${after.data.trim()}"`);
+        });
+      }
+    }
+    expect(stranded).toEqual([]);
+  }, 60_000);
 });
 
 describe("the Rota's week title", () => {

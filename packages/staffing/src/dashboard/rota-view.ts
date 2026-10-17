@@ -145,6 +145,13 @@ export class RotaView extends LitElement {
         align-items: center;
         column-gap: var(--wt-space-1);
       }
+      /* A separator travels with the words after it, so a wrap never leaves it alone. */
+      .joined {
+        white-space: nowrap;
+      }
+      .joined.note {
+        white-space: normal;
+      }
       .count {
         min-block-size: var(--wt-tap-min);
         padding: 0;
@@ -667,17 +674,17 @@ export class RotaView extends LitElement {
     const kinds = (["unfilled", "partly", "over"] as const).filter((k) => counts[k] > 0);
     return {
       words: kinds.map((k) => countWords(k, counts[k])).join(" · "),
-      body: kinds.map(
-        (k, i) =>
-          html`${i ? " · " : nothing}<button
-              type="button"
-              class="count"
-              data-kind=${k}
-              @click=${() => void this.#step(read, show, k)}
-            >
-              ${countWords(k, counts[k])}
-            </button>`,
-      ),
+      body: kinds.map((k, i) => {
+        const button = html`<button
+          type="button"
+          class="count"
+          data-kind=${k}
+          @click=${() => void this.#step(read, show, k)}
+        >
+          ${countWords(k, counts[k])}
+        </button>`;
+        return i ? html`<span class="joined"> ·&nbsp;${button}</span>` : button;
+      }),
     };
   }
   async #step(read: RotaWeek, show: Show, kind: "unfilled" | "partly" | "over") {
@@ -708,10 +715,11 @@ export class RotaView extends LitElement {
   #labour() {
     if (!this.warnings) return nothing;
     if (this.warnings.ruleset === null)
-      return html`<span class="note" aria-hidden="true">·</span>
-        <span class="note" role="status" data-test="no-rules"
+      return html`<span class="joined note"
+        ><span aria-hidden="true">·</span>&nbsp;<span role="status" data-test="no-rules"
           >${t("staffing.rota.no_rules")}</span
-        >`;
+        ></span
+      >`;
     const count = this.warnings.breaches.length;
     return html`<span class="labour" role="status" data-test="labour-count"
       ><span aria-hidden="true">⚠</span>
