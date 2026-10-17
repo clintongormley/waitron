@@ -2215,3 +2215,71 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect([...quantities]).toEqual([[body.lineId, paid * 1000]]);
   });
 });
+
+describe("per-group HTTP destinations direct", () => {
+  async function prepared() {
+    const party = await seated();
+    const initial = await call("POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party.revision,
+      groups: [
+        { release: "hold", lines: [dish("Tarta")] },
+        { release: "hold", lines: [dish("Croquetas")] },
+      ],
+    });
+    expect(initial.status).toBe(200);
+    const [first, second] = (initial.json as unknown as { groups: { id: string }[] }).groups;
+    return { party, first: first!.id, second: second!.id };
+  }
+
+  it("preserves joins and insert-after through the real request", async () => {
+    const { party, first, second } = await prepared();
+
+    const groups = [
+      { release: "fire", lines: [dish("Caña")] },
+      { release: "hold", joinGroupId: first.toUpperCase(), lines: [dish("Pulpo")] },
+      { release: "hold", joinGroupId: second, lines: [dish("Croquetas")] },
+      { release: "hold", afterGroupId: first.toUpperCase(), lines: [dish("Tarta")] },
+    ];
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      groups,
+    };
+    const response = await call("POST", `/api/parties/${party.partyId}/groups`, body);
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({
+      groups: [
+        { state: "fired", displayNumber: 3 },
+        { id: first, state: "held", displayNumber: 1 },
+        { id: second, state: "held", displayNumber: 2, position: 3 },
+        { state: "held", displayNumber: 4, position: 2 },
+      ],
+    });
+    const before = await snapshot(party);
+    expect(await call("POST", `/api/parties/${party.partyId}/groups`, body)).toEqual(response);
+    expect(await snapshot(party)).toEqual(before);
+  });
+
+  it.each(["joinGroupId", "afterGroupId"] as const)(
+    "refuses malformed %s values instead of ignoring them",
+    async (field) => {
+      const { party } = await prepared();
+
+      for (const value of [null, 2, [], {}, "", "missing"]) {
+        const before = await snapshot(party);
+        const refused = await call("POST", `/api/parties/${party.partyId}/groups`, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await revisionOf(party.partyId),
+          groups: [{ release: "hold", [field]: value, lines: [dish("Caña")] }],
+        });
+        expect(refused.status).toBe(400);
+        expect(refused.json).toMatchObject({
+          code: "management.request_invalid",
+          params: { field },
+        });
+        expect(await snapshot(party)).toEqual(before);
+      }
+    },
+  );
+});

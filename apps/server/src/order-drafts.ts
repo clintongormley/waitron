@@ -507,7 +507,12 @@ export async function discardPartyDrafts(
 export interface SubmitDraftInput extends PartyCommandArgs {
   draftRevision: number;
   /** Lines of the draft's current revision, each named once across the groups. */
-  groups: { lineIds: string[]; release: GroupRelease }[];
+  groups: {
+    lineIds: string[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
 }
@@ -533,9 +538,11 @@ export async function submitDraft(
   const at = nowIso();
   const { operatorId } = input;
   const id = foldIfUuid(draftId);
-  const groups = input.groups.map(({ lineIds, release }) => ({
+  const groups = input.groups.map(({ lineIds, release, joinGroupId, afterGroupId }) => ({
     lineIds: lineIds.map(foldIfUuid),
     release,
+    ...(joinGroupId === undefined ? {} : { joinGroupId: foldIfUuid(joinGroupId) }),
+    ...(afterGroupId === undefined ? {} : { afterGroupId: foldIfUuid(afterGroupId) }),
   }));
   const joinGroupId = input.joinGroupId === undefined ? undefined : foldIfUuid(input.joinGroupId);
   return runServiceCommand(
@@ -564,10 +571,12 @@ export async function submitDraft(
         cfg,
         partyId,
         {
-          groups: groups.map(({ lineIds, release }) => {
+          groups: groups.map(({ lineIds, release, joinGroupId, afterGroupId }) => {
             const inGroup = new Set(lineIds);
             return {
               release,
+              joinGroupId,
+              afterGroupId,
               lines: lines
                 .filter(isFresh)
                 .filter((line) => inGroup.has(line.id))

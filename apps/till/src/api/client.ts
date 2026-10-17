@@ -661,7 +661,12 @@ export interface BillRequestCommand extends GroupCommand {
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
-  groups: { lines: GroupLine[]; release: GroupRelease }[];
+  groups: {
+    lines: GroupLine[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   joinGroupId?: string;
 }
 
@@ -787,7 +792,12 @@ export interface DraftSave {
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
   draftRevision: number;
-  groups: { lineIds: string[]; release: GroupRelease }[];
+  groups: {
+    lineIds: string[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   joinGroupId?: string;
   billId?: string;
 }

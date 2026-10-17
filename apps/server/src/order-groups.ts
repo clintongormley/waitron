@@ -2,7 +2,7 @@ import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
@@ -60,7 +60,12 @@ export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
 export interface SubmitGroupsInput {
   submissionId: string;
   expectedPartyRevision: number;
-  groups: { lines: GroupLine[]; release: GroupRelease }[];
+  groups: {
+    lines: GroupLine[];
+    release: GroupRelease;
+    joinGroupId?: string;
+    afterGroupId?: string;
+  }[];
   /** Add to this HELD group instead of creating one: then `groups` holds one group, `hold`. */
   joinGroupId?: string;
   operatorId: string;
@@ -110,8 +115,7 @@ export interface SubmittedGroups {
 /**
  * Put each submitted group's lines on the party's main bill, or on the bill of the party it names,
  * released to the kitchen now (`fire`) or held until {@link fireGroup}. Every line is credited to
- * the operator. A group never matches another by course; only `joinGroupId` adds to an existing
- * one. A new held group prints its HOLD ticket where the venue prints held work in advance
+ * the operator. A new held group prints its HOLD ticket where the venue prints held work in advance
  * ({@link printHoldTickets}); lines joining a group whose HOLD ticket was queued print `+N` for it.
  */
 export async function submitGroups(
@@ -169,11 +173,33 @@ export async function placeGroups(
   if (input.groups.length === 0) {
     throw new AppError("management.request_invalid", { field: "groups" });
   }
-  if (input.joinGroupId !== undefined) {
-    if (input.groups.length !== 1 || input.groups[0]!.release !== "hold") {
-      throw new AppError("management.request_invalid", { field: "joinGroupId" });
+  if (
+    input.joinGroupId !== undefined &&
+    (input.groups.length !== 1 ||
+      input.groups[0]!.release !== "hold" ||
+      input.groups.some(
+        (group) => group.joinGroupId !== undefined || group.afterGroupId !== undefined,
+      ))
+  )
+    throw new AppError("management.request_invalid", { field: "joinGroupId" });
+  const groups = input.groups.map((group) => ({
+    ...group,
+    joinGroupId: group.joinGroupId ?? input.joinGroupId,
+  }));
+  const joined = new Set<string>();
+  for (const group of groups) {
+    const { joinGroupId, afterGroupId } = group;
+    if ((joinGroupId !== undefined || afterGroupId !== undefined) && group.release !== "hold") {
+      throw new AppError("management.request_invalid", { field: "release" });
     }
-    await requireHeldGroup(tx, partyId, input.joinGroupId);
+    if (joinGroupId !== undefined) {
+      if (afterGroupId !== undefined || joined.has(joinGroupId)) {
+        throw new AppError("management.request_invalid", { field: "joinGroupId" });
+      }
+      joined.add(joinGroupId);
+      await requireHeldGroup(tx, partyId, joinGroupId);
+    }
+    if (afterGroupId !== undefined) await requireHeldGroup(tx, partyId, afterGroupId);
   }
   const lines = input.groups.flatMap((group) =>
     group.lines.map((line) => ({
@@ -195,11 +221,20 @@ export async function placeGroups(
     throw new AppError("sale.empty_basket", {});
   }
   const groupIds: string[] = [];
-  if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
-  else {
-    for (const group of input.groups) {
-      groupIds.push(await startGroup(tx, partyId, group.release, operatorId));
-    }
+  const insertedAfter = new Map<string, string>();
+  for (const group of groups) {
+    let groupId: string;
+    if (group.joinGroupId !== undefined) groupId = group.joinGroupId;
+    else if (group.afterGroupId !== undefined) {
+      groupId = await startGroupAfter(
+        tx,
+        partyId,
+        insertedAfter.get(group.afterGroupId) ?? group.afterGroupId,
+        operatorId,
+      );
+      insertedAfter.set(group.afterGroupId, groupId);
+    } else groupId = await startGroup(tx, partyId, group.release, operatorId);
+    groupIds.push(groupId);
   }
   // The k-th parent row is input line k; an extras child goes with its dish.
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
@@ -226,7 +261,7 @@ export async function placeGroups(
     );
   }
   const routing = routingOnce(tx, cfg, new Date());
-  for (const [i, group] of input.groups.entries()) {
+  for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;
     const fire = group.release === "fire";
     await fireLines(
@@ -238,12 +273,14 @@ export async function placeGroups(
         .map((row) => ({ ...row, hold: !fire, release: fire })),
       { routing },
     );
-    if (input.joinGroupId !== undefined) {
+    if (group.joinGroupId !== undefined) {
       await correctJoin(
         tx,
         cfg,
         groupId,
-        inserted.filter((row) => row.parentLineId == null).map((row) => row.id!),
+        inserted
+          .filter((row) => row.groupId === groupId && row.parentLineId == null)
+          .map((row) => row.id!),
       );
     } else if (!fire) {
       await printHoldTickets(tx, cfg, [groupId]);
@@ -254,7 +291,7 @@ export async function placeGroups(
       {
         partyId,
         groupId,
-        kind: input.joinGroupId === undefined ? "submitted" : "joined",
+        kind: group.joinGroupId === undefined ? "submitted" : "joined",
         actorId: operatorId,
         detail: { workingOrderId: tabId, release: group.release },
       },
@@ -963,6 +1000,35 @@ export async function startGroup(
     })
     .returning({ id: orderGroups.id });
   return group!.id;
+}
+
+export async function startGroupAfter(
+  tx: Transaction,
+  partyId: string,
+  afterGroupId: string,
+  operatorId: string,
+): Promise<string> {
+  await requireHeldGroup(tx, partyId, afterGroupId);
+  const [anchor] = await tx
+    .select({ position: orderGroups.position })
+    .from(orderGroups)
+    .where(eq(orderGroups.id, afterGroupId));
+  const groupId = await startGroup(tx, partyId, "hold", operatorId);
+  await tx
+    .update(orderGroups)
+    .set({ position: sql`${orderGroups.position} + 1`, remindAt: null })
+    .where(
+      and(
+        eq(orderGroups.partyId, partyId),
+        gt(orderGroups.position, anchor!.position),
+        ne(orderGroups.id, groupId),
+      ),
+    );
+  await tx
+    .update(orderGroups)
+    .set({ position: anchor!.position + 1 })
+    .where(eq(orderGroups.id, groupId));
+  return groupId;
 }
 
 /**

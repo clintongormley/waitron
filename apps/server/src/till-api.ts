@@ -969,6 +969,18 @@ function joinGroupOf(body: Record<string, unknown>): { joinGroupId?: string } {
   return { joinGroupId };
 }
 
+function groupDestinationOf(body: Record<string, unknown>): {
+  joinGroupId?: string;
+  afterGroupId?: string;
+} {
+  const result: { joinGroupId?: string; afterGroupId?: string } = {};
+  for (const field of ["joinGroupId", "afterGroupId"] as const) {
+    if (body[field] !== undefined)
+      result[field] = requireBodyUuid(body[field], field).toLowerCase();
+  }
+  return result;
+}
+
 /** A submission's bill, when it names one: a UUID, in lower case as ids are stored. */
 function billOf(body: Record<string, unknown>): { billId?: string } {
   const { billId } = body;
@@ -994,7 +1006,11 @@ function parseSubmittedGroups(value: unknown): SubmitGroupsInput["groups"] {
       throw invalid("lines");
     }
     if (release !== "fire" && release !== "hold") throw invalid("release");
-    return { lines: lines as GroupLine[], release };
+    return {
+      lines: lines as GroupLine[],
+      release,
+      ...groupDestinationOf(entry as Record<string, unknown>),
+    };
   });
 }
 
@@ -1028,7 +1044,11 @@ function parseDraftGroups(value: unknown): SubmitDraftInput["groups"] {
       throw invalid("lineIds");
     }
     if (release !== "fire" && release !== "hold") throw invalid("release");
-    return { lineIds: lineIds as string[], release };
+    return {
+      lineIds: lineIds as string[],
+      release,
+      ...groupDestinationOf(entry as Record<string, unknown>),
+    };
   });
 }
 

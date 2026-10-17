@@ -5802,6 +5802,8 @@ describe("A668 nutrition after table-order names", () => {
     const { el } = await mount({
       currentOrders: {
         revision: 1,
+        hasGroups: false,
+        retainedCourses: [],
         reminder: null,
         groups: [],
         ungrouped: [
@@ -5809,6 +5811,7 @@ describe("A668 nutrition after table-order names", () => {
             lineId: "other-bill-line",
             workingOrderId: "other-bill",
             lineNo: 5,
+            courseId: null,
             name: "Other bill dish",
             quantity: "1.000",
             unitPrecision: 0,

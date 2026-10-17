@@ -992,3 +992,110 @@ describe("source-backed draft HTTP boundary", () => {
     expect(await snapshot()).toEqual(before);
   });
 });
+
+describe("per-group HTTP destinations draft", () => {
+  async function prepared() {
+    const party = await seated();
+    const initial = await ana("POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party.revision,
+      groups: [
+        { release: "hold", lines: [dish("Tarta")] },
+        { release: "hold", lines: [dish("Croquetas")] },
+      ],
+    });
+    expect(initial.status).toBe(200);
+    const [first, second] = (initial.json as unknown as { groups: { id: string }[] }).groups;
+    return { party, first: first!.id, second: second!.id };
+  }
+
+  it("preserves joins and insert-after through the real request", async () => {
+    const { party, first, second } = await prepared();
+    const draft = await newDraft(ana, party.partyId, [
+      dish("Caña"),
+      dish("Pulpo"),
+      dish("Croquetas"),
+      dish("Tarta"),
+    ]);
+    const groups = [
+      { release: "fire", lineIds: [draft.lines[0]!.id] },
+      { release: "hold", joinGroupId: first.toUpperCase(), lineIds: [draft.lines[1]!.id] },
+      { release: "hold", joinGroupId: second, lineIds: [draft.lines[2]!.id] },
+      { release: "hold", afterGroupId: first.toUpperCase(), lineIds: [draft.lines[3]!.id] },
+    ];
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: (await submitBody(party.partyId, draft)).expectedPartyRevision,
+      groups,
+      draftRevision: draft.revision,
+    };
+    const response = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
+      body,
+    );
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({
+      groups: [
+        { state: "fired", displayNumber: 3 },
+        { id: first, state: "held", displayNumber: 1 },
+        { id: second, state: "held", displayNumber: 2, position: 3 },
+        { state: "held", displayNumber: 4, position: 2 },
+      ],
+      draft: null,
+    });
+    const before = await snapshot();
+    expect(
+      await ana("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, body),
+    ).toEqual(response);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("keeps the entire draft and all stored rows when a later join target is missing", async () => {
+    const { party, first } = await prepared();
+    const draft = await newDraft(ana, party.partyId, [dish("Caña"), dish("Pulpo")]);
+    const before = await snapshot();
+    const refused = await ana("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, {
+      ...(await submitBody(party.partyId, draft)),
+      groups: [
+        { release: "hold", joinGroupId: first, lineIds: [draft.lines[0]!.id] },
+        { release: "hold", joinGroupId: randomUUID(), lineIds: [draft.lines[1]!.id] },
+      ],
+    });
+    expect(refused.status).toBe(404);
+    expect(refused.json).toMatchObject({ code: "group.not_found" });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each(["joinGroupId", "afterGroupId"] as const)(
+    "refuses malformed %s values instead of ignoring them",
+    async (field) => {
+      const { party } = await prepared();
+      const draft = await newDraft(ana, party.partyId, [
+        dish("Caña"),
+        dish("Pulpo"),
+        dish("Croquetas"),
+        dish("Tarta"),
+      ]);
+      for (const value of [null, 2, [], {}, "", "missing"]) {
+        const before = await snapshot();
+        const refused = await ana(
+          "POST",
+          `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
+          {
+            submissionId: randomUUID(),
+            expectedPartyRevision: (await submitBody(party.partyId, draft)).expectedPartyRevision,
+            draftRevision: draft.revision,
+            groups: [{ release: "hold", [field]: value, lineIds: [draft.lines[0]!.id] }],
+          },
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.json).toMatchObject({
+          code: "management.request_invalid",
+          params: { field },
+        });
+        expect(await snapshot()).toEqual(before);
+      }
+    },
+  );
+});
