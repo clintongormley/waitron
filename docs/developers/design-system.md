@@ -123,7 +123,7 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-field-line`, `--wt-color-field-label-focus`, `--wt-color-field-fill-disabled`,
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
-`--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
+`--wt-color-palette-{red,orange,amber,lime,green,teal,cyan,blue,indigo,purple,pink,brown,grey}`, `--wt-color-day-standard` and
 `--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
 `--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
@@ -202,21 +202,30 @@ never relies on colour.
 below remains available as shared tokens; Calendar's named mode uses only the red, purple, blue,
 standard and Closed fills. (2026-10-13, A506-5: the blue Working day fill went with named days.
 A506-6 replaced the Calendar with the Year, above.) The earlier six-colour date choice is recorded in the historical
-[Hours plan](../superpowers/plans/2026-10-05-hours.md).
+[Hours plan](../superpowers/plans/2026-10-05-hours.md). **2026-10-17, A753:** the palette grew to
+thirteen, in the owner's rainbow order, and periods and staff roles pick from all of it
+(`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`).
 
 | Fill                        | Light     | Text on it | Dark      | Text on it |
 | --------------------------- | --------- | ---------- | --------- | ---------- |
 | `--wt-color-palette-red`    | `#c62828` | `#ffffff`  | `#ff7a70` | `#2a0705`  |
+| `--wt-color-palette-orange` | `#ef7a1e` | `#2a1000`  | `#ff8a3d` | `#2a1000`  |
 | `--wt-color-palette-amber`  | `#f5a623` | `#241500`  | `#f5b34a` | `#241500`  |
-| `--wt-color-palette-grey`   | `#6b6e78` | `#ffffff`  | `#8b8d98` | `#101216`  |
-| `--wt-color-palette-blue`   | `#2f55d4` | `#ffffff`  | `#7aa2ff` | `#06101f`  |
+| `--wt-color-palette-lime`   | `#84cc16` | `#121d00`  | `#a6dc4a` | `#142000`  |
 | `--wt-color-palette-green`  | `#1e7a4f` | `#ffffff`  | `#4ac08d` | `#06190f`  |
+| `--wt-color-palette-teal`   | `#0c7480` | `#ffffff`  | `#1fa596` | `#03201c`  |
+| `--wt-color-palette-cyan`   | `#22b8d8` | `#04161c`  | `#8be0f2` | `#04181e`  |
+| `--wt-color-palette-blue`   | `#2f55d4` | `#ffffff`  | `#7aa2ff` | `#06101f`  |
+| `--wt-color-palette-indigo` | `#3730a3` | `#ffffff`  | `#8b7bff` | `#120c3a`  |
 | `--wt-color-palette-purple` | `#7e3fb8` | `#ffffff`  | `#c39bf0` | `#1d0b33`  |
+| `--wt-color-palette-pink`   | `#c2185b` | `#ffffff`  | `#ff8cc6` | `#2e0619`  |
+| `--wt-color-palette-brown`  | `#7a4b2a` | `#ffffff`  | `#c9976e` | `#1f1006`  |
+| `--wt-color-palette-grey`   | `#6b6e78` | `#ffffff`  | `#8b8d98` | `#101216`  |
 | `--wt-color-day-standard`   | `#dff3e8` | `#16181d`  | `#183626` | `#eceef2`  |
 | `--wt-color-day-closed`     | `#3a3b42` | `#ffffff`  | `#d5d7de` | `#101216`  |
 
 The "calendar day colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both
-themes, that each text colour is 4.5:1 or more on its fill, that the six palette fills differ from
+themes, that each text colour is 4.5:1 or more on its fill, that the palette fills differ from
 each other and from both reserved fills, that the standard and Closed fills are 3:1 or more apart,
 and that the `prefers-color-scheme` blocks give the same values as the explicit themes. They do not
 hold that two palette colours are told apart by eye: the light standard fill, for one, is only
