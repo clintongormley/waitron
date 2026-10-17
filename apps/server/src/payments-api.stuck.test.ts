@@ -70,7 +70,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import "./errors.js";

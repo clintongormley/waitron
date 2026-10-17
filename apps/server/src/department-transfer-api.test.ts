@@ -42,7 +42,7 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   collectOrderOrchestration as collectOrder,
   settleIssuedOwingNothing,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./parties.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";

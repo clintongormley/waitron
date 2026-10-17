@@ -50,7 +50,7 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   readSettledTicket,
   type TillSaleResult,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import {
   advanceTicketItem,
   parkOrder,

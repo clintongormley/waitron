@@ -92,7 +92,7 @@ import {
   readSettledTicket,
   recordTillSaleOrchestration as recordTillSale,
   reprintSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";

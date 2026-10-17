@@ -50,7 +50,7 @@ import {
   printSaleReceipt,
   recordTillSaleOrchestration as recordTillSale,
   reprintSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import {
   createOpenOrder,

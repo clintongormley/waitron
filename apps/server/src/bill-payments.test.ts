@@ -96,7 +96,7 @@ import {
   readSettledTicket,
   printSaleReceipt,
   reprintSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { moveOrderLines } from "./working-order.js";
 import "./errors.js";

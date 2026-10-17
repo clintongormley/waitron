@@ -8,7 +8,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { collectOrder, payWorkingOrder, recordTillSale } from "./till-sale.js";
+import { collectOrder, payWorkingOrder, recordTillSale } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,

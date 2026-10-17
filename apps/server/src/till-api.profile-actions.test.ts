@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -757,6 +758,7 @@ describe("a refund checks the action its payment was taken with", () => {
     await order(v, bill, "Paella", "Paella", "Paella");
     const take = async (body: Record<string, unknown>) => {
       const answer = await send(cookie, "POST", `/api/working-orders/${bill}/payments`, {
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, bill)),
         kind: "contribution",
         amount: "1.00",
         submissionId: randomUUID(),

@@ -14,7 +14,7 @@ import {
   payWorkingOrderIntegrated,
   payWorkingOrderIntegratedOrchestration,
   type IntegratedPayRequest,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,

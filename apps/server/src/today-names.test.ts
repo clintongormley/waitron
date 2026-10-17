@@ -52,7 +52,7 @@ import {
   withZoneRevision,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
 

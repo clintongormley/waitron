@@ -1,3 +1,4 @@
+import { observedWholePaymentBody } from "./whole-payment-fixture.js";
 import { observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -339,7 +340,10 @@ export async function send(
   body?: unknown,
 ): Promise<Answer> {
   const database = appDatabases.get(app);
-  const payload = database === undefined ? body : await observedPaymentBody(database, path, body);
+  const payload =
+    database === undefined
+      ? body
+      : observedWholePaymentBody(database, path, await observedPaymentBody(database, path, body));
   const res = await app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },

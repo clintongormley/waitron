@@ -61,7 +61,7 @@ import type { DeviceRequestConfig } from "./till-config.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";

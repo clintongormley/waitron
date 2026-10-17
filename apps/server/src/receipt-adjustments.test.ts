@@ -30,7 +30,7 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
-import { payWorkingOrder, readSettledTicket } from "./till-sale.js";
+import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
 import { readStoredOrder } from "./working-order.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";

@@ -21,7 +21,7 @@ import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
   payWorkingOrderIntegratedOrchestration as payIntegrated,
   payWorkingOrder,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";

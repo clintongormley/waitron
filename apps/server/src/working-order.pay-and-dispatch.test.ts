@@ -78,7 +78,7 @@ import {
   collectOrderOrchestration as collectOrder,
   fireDishesAtPayment,
   payWorkingOrder,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

@@ -7,7 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { enqueueReceiptCopy } from "./receipt-print.js";
-import { recordTillSale } from "./till-sale.js";
+import { recordTillSale } from "./testing/whole-payment-fixture.js";
 import { readOrderKitchenNotes, setOrderKitchenNote } from "./order-kitchen-note.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { inTx, OPERATOR, order, revisionOf, seat, setupPartyVenue } from "./testing/party-venue.js";

@@ -19,7 +19,10 @@ import {
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import { payWorkingOrder, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
+import {
+  payWorkingOrder,
+  payWorkingOrderIntegratedOrchestration,
+} from "./testing/whole-payment-fixture.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

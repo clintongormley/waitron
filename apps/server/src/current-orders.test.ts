@@ -62,7 +62,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./parties.js";
 import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";

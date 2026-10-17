@@ -36,7 +36,7 @@ import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   recordTillSaleOrchestration as recordTillSale,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";

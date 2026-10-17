@@ -72,7 +72,7 @@ export async function recoverAutomaticCardPayments(
       await payWorkingOrderIntegratedOrchestration(
         { ...deps, provider: recoveryProvider },
         { ...deps.cfg, origin: storedDeviceOrigin(payment) },
-        { id: candidate.orderId, lines: [] },
+        { id: candidate.orderId, lines: [], expectedEdit: null },
       );
       filed++;
     } catch (error) {

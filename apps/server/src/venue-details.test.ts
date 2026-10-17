@@ -16,7 +16,7 @@ import { recordDailyClose, businessDayStart, computeDailyClose } from "@waitron/
 import { createOpenOrder } from "./working-order.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
+import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { sql } from "drizzle-orm";

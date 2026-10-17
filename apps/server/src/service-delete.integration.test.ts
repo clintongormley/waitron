@@ -64,7 +64,7 @@ import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { handOverOrder, listTablesWithState, parkOrder } from "./working-order.js";
 import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
-import { collectOrder } from "./till-sale.js";
+import { collectOrder } from "./testing/whole-payment-fixture.js";
 import { WorkforceBackend } from "@waitron/workforce";
 import { recordDailyClose } from "@waitron/reporting";
 import { jobOrigin } from "@waitron/shared";

@@ -24,7 +24,7 @@ import {
 } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import type {} from "./till-config.js";
-import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
+import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 

@@ -1,3 +1,4 @@
+import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -39,7 +40,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import { fingerprint, seatTable } from "./parties.js";
-import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -256,6 +257,7 @@ async function sell(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
+      ...(observedWholePaymentBody(v.db, "/api/sales", { workingOrderId: id }) as object),
       workingOrderId: id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       tender,
@@ -425,7 +427,12 @@ async function collect(
   const res = await v.app.request(`/api/working-orders/${id}/collect`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
-    body: JSON.stringify({ tender: CASH, ...extra }),
+    body: JSON.stringify(
+      observedWholePaymentBody(v.db, `/api/working-orders/${id}/collect`, {
+        tender: CASH,
+        ...extra,
+      }),
+    ),
   });
   return { status: res.status, body: await res.json() };
 }
@@ -496,6 +503,7 @@ async function payByReader(
     method: "POST",
     headers: { "content-type": "application/json", cookie: v.till },
     body: JSON.stringify({
+      ...(observedWholePaymentBody(v.db, "/api/pay", { id }) as object),
       id,
       lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
       simulationOutcome: "captured",

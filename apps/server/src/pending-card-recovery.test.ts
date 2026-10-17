@@ -15,7 +15,7 @@ import { decimal } from "@waitron/shared";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { payWorkingOrderIntegratedOrchestration as pay } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as pay } from "./testing/whole-payment-fixture.js";
 import * as tillSale from "./till-sale.js";
 import { withAutomaticCardRecovery, withPendingSweep } from "./boot.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
@@ -162,7 +162,7 @@ describe("automatic card capture recovery", () => {
       errors: [
         {
           paymentId: expect.any(String),
-          error: "Error: automatic recovery must never collect a payment",
+          error: "AppError: management.request_invalid",
         },
       ],
     });

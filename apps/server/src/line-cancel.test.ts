@@ -25,7 +25,7 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
 import { advanceTicketItem } from "./working-order.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { recallToDraft } from "./draft-recall.js";
 import {

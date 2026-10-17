@@ -31,7 +31,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { createStation } from "./kitchen.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { advanceTicketItem } from "./working-order.js";

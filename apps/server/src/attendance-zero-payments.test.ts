@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { collectOrderOrchestration } from "./till-sale.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { newId, saleSettlements, tenders, withTransaction, workingOrders } from "@waitron/db";
@@ -11,7 +13,7 @@ import { payments } from "@waitron/payments";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { collectOrder, collectOrderOrchestration, payWorkingOrderIntegrated } from "./till-sale.js";
+import { collectOrder, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,
@@ -189,13 +191,21 @@ describe("a human zero-owing command remains attendance evidence", () => {
     expect(await suite.db.select().from(saleSettlements)).toEqual([]);
     await noMoney();
   });
-  it("an unattributed zero collection invents no worker", async () => {
+  it("requires an actor for a zero party bill without inventing a worker", async () => {
     const id = await zeroBill(true);
     at();
-    expect(
-      (await collectOrderOrchestration(deps(), v.cfg, { id, lines: [], tender: tender("cash") }))
-        .total,
-    ).toBe("0.00");
+    const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, id));
+    await expect(
+      collectOrderOrchestration(deps(), v.cfg, {
+        id,
+        lines: [],
+        tender: tender("cash"),
+        expectedEdit,
+      }),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "operatorId" },
+    });
     expect(await operations()).toEqual([]);
     await noMoney();
   });

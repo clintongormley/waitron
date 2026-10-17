@@ -78,7 +78,7 @@ import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import type { IntegratedPayDeps, IntegratedPayOutcome } from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";

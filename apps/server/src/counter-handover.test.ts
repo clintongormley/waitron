@@ -28,7 +28,7 @@ import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.

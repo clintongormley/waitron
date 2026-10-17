@@ -10,7 +10,7 @@ import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { recordTillSale, payWorkingOrderIntegrated } from "./till-sale.js";
+import { recordTillSale, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {

@@ -1086,7 +1086,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           attendance: deps.attendance,
         },
         { ...deps.cfg, origin: stuck.origin },
-        { id: stuck.workingOrderId, lines: [] },
+        { id: stuck.workingOrderId, lines: [], expectedEdit: null },
         stuck.personId,
       );
       /* v8 ignore start -- unreachable: every path that returns another outcome goes through

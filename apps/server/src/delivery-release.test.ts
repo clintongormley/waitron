@@ -17,7 +17,10 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { collectOrderOrchestration as collectOrder, payWorkingOrder } from "./till-sale.js";
+import {
+  collectOrderOrchestration as collectOrder,
+  payWorkingOrder,
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, handOverOrder } from "./working-order.js";
 
 const suite = useVenueDb({

@@ -2586,8 +2586,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // `collectOrder` files the placed order's frozen composition, never a client basket, so the body
-  // carries only the tender.
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
@@ -2596,6 +2594,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{
+        expectedEdit: BillEditExpected | null;
         tender: TillTender;
         receiptLanguage?: string;
         guests?: unknown;
@@ -2608,7 +2607,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         cfg,
-        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage, guests },
+        {
+          id,
+          lines: [],
+          expectedEdit: body.expectedEdit,
+          tender: body.tender,
+          receiptLanguage: body.receiptLanguage,
+          guests,
+        },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);

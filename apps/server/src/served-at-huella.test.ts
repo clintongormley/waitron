@@ -38,7 +38,7 @@ import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";

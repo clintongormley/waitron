@@ -76,7 +76,7 @@ import {
   receiptQr,
   recordTillSaleOrchestration as recordTillSale,
   type TillSaleRequest,
-} from "./till-sale.js";
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
