@@ -2232,7 +2232,10 @@ describe("till-app counter: the guests the receipt prints", () => {
   }
 
   async function counterWithCafe() {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(cashTill) });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      collectOrder: vi.fn().mockResolvedValue(saleResult),
+    });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
     await flush(el);
@@ -2261,6 +2264,17 @@ describe("till-app counter: the guests the receipt prints", () => {
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
     expect(call[7]).toBe(2);
+  });
+
+  it("collecting a placed counter order sends the count beside a bare tender", async () => {
+    const { el, c } = await counterWithCafe();
+
+    emit(c, "collect-order", { method: "cash", amount: "5", guests: 2 });
+    await flush(el);
+
+    expect(vi.mocked(api.collectOrder).mock.calls).toStrictEqual([
+      [c.store.id, { method: "cash", amount: "5" }, undefined, 2],
+    ]);
   });
 
   it("a sale with a full invoice chosen shows no field and sends no guests", async () => {
