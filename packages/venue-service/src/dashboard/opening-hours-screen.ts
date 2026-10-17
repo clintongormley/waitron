@@ -1059,7 +1059,7 @@ export class OpeningHoursScreen extends LitElement {
         this.shadowRoot?.querySelector(this.painter ? "season-painter" : "special-day-painter")
     );
   }
-  /** A painter's Periods link opens the window over the painter, keeping its unsaved paint. */
+  /** The link carries `data-own-click`, so the dashboard shell leaves its plain click to this. */
   private readonly periodsLinkClicked = (event: MouseEvent) => {
     const link = event
       .composedPath()

@@ -757,6 +757,37 @@ describe("links into the special-day painter", () => {
   });
 });
 
+class AddingGuardedApp extends GuardedApp {
+  model = painterModel();
+  override readonly api = new OpeningHoursApi((async (
+    path: string,
+    method: string,
+    body: unknown,
+  ) => {
+    if (method === "POST" && path.endsWith("/departments/d1/menu-periods")) {
+      this.recorded.writes.push([path, method, body]);
+      const restaurant = this.model.departments[0]!;
+      this.model = {
+        ...this.model,
+        departments: [
+          {
+            ...restaurant,
+            periods: [
+              ...restaurant.periods,
+              { ...restaurant.periods[0]!, id: "p-new", name: "Brunch", colour: "blue" },
+            ],
+          },
+          ...this.model.departments.slice(1),
+        ],
+      };
+      return { id: "p-new" };
+    }
+    if (method === "GET" && path.endsWith("/opening-hours")) return this.model;
+    return request(this.recorded)(path, method, body);
+  }) as DashboardRequest);
+}
+customElements.define("special-day-adding-test-app", AddingGuardedApp);
+
 describe("the special-day painter's Periods link", () => {
   const base = "/manage/opening-hours/view/special-day/special-day/sd1";
   const link = (painter: SpecialDayPainter) =>
@@ -803,6 +834,69 @@ describe("the special-day painter's Periods link", () => {
     expect(nameOf(painter)).toBe("Staff party");
     expect(app.leave.coordinator.isDirty()).toBe(true);
     expect(app.recorded.writes).toEqual([]);
+  });
+
+  it("a period added in the window reaches the special-day painter underneath, which keeps its unsaved day", async () => {
+    history.replaceState(null, "", base);
+    const app = document.createElement("special-day-adding-test-app") as AddingGuardedApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const painter = await shownPainter(el);
+    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Staff party" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')).toBeNull();
+    await userEvent.click(link(painter));
+    await expect.poll(() => periodsWindow(el)).not.toBeNull();
+    const list = periodsWindow(el) as HTMLElementTagNameMap["periods-list"];
+    await expect.poll(() => list.shadowRoot?.querySelector("[data-test=add-period]")).toBeTruthy();
+    list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
+    await list.updateComplete;
+    const dialog = list.shadowRoot!.querySelector("period-dialog")!;
+    await dialog.updateComplete;
+    for (const [name, value] of [
+      ["departmentId", "d1"],
+      ["name", "Brunch"],
+      ["menuId", "m1"],
+    ])
+      dialog
+        .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    await dialog.updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+    await expect.poll(() => list.shadowRoot!.querySelector("period-dialog")).toBeNull();
+    expect(app.recorded.writes).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/menu-periods",
+        "POST",
+        expect.objectContaining({ name: "Brunch", menuId: "m1" }),
+      ],
+    ]);
+    el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-test=calendar-window] [data-test=close-calendar-window]",
+    )!.click();
+    await expect.poll(() => location.pathname).toBe(base);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    expect(painterOf(el)).toBe(painter);
+    await expect
+      .poll(() => painter.shadowRoot!.querySelector('[data-test="paint-p-new"]'))
+      .not.toBeNull();
+    expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')!.textContent).toContain(
+      "Brunch",
+    );
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(app.recorded.writes).toHaveLength(1);
   });
 
   it("a modified click on its Periods link is left to the browser", async () => {

@@ -1295,6 +1295,51 @@ describe("the painters' Periods link", () => {
     expect(app.writes).toHaveLength(1);
   });
 
+  it("Review Focus 1 through the link: Back asks about the window's period draft, Keep stays and Discard closes the window over the same paint", async () => {
+    history.replaceState(null, "", base);
+    let app: PainterApp | undefined;
+    const guard = screenGuard(() => app);
+    try {
+      const mounted = await mountApp();
+      app = mounted.app;
+      const el = mounted.el;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      const before = painter.edited();
+      expect(before).toEqual({ departments: ["d1"], zones: [] });
+      await userEvent.click(link(painter));
+      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+      const { dialog } = await openPeriod(el);
+      dialog.shadowRoot!.querySelector<HTMLElement>("[name=name]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Brunch" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await dialog.updateComplete;
+      history.back();
+      await choose(app, "keep");
+      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+      expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).not.toBeNull();
+      expect(
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+      ).toBe("Brunch");
+      history.back();
+      await choose(app, "discard");
+      await expect.poll(() => location.pathname).toBe(base);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]"))
+        .toBeNull();
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expect(app.writes).toEqual([]);
+    } finally {
+      guard.dispose();
+    }
+  });
+
   it("a modified click on the Periods link is left to the browser", async () => {
     const el = await mount(base);
     const painter = await shownPainter(el);
@@ -1320,6 +1365,67 @@ describe("the painters' Periods link", () => {
     } finally {
       window.removeEventListener("click", record);
     }
+  });
+
+  it.each(["shiftKey", "metaKey"] as const)(
+    "a click on the Periods link with %s held is left to the browser",
+    async (modifier) => {
+      const el = await mount(base);
+      const painter = await shownPainter(el);
+      const seen: boolean[] = [];
+      // Bubbling on window runs after the screen's own listener, so it sees what the screen did.
+      const record = (event: Event) => {
+        seen.push(event.defaultPrevented);
+        event.preventDefault();
+      };
+      window.addEventListener("click", record);
+      try {
+        link(painter).dispatchEvent(
+          new MouseEvent("click", {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            [modifier]: true,
+          }),
+        );
+        await el.updateComplete;
+        expect(seen).toEqual([false]);
+        expect(location.pathname).toBe(base);
+        expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+      } finally {
+        window.removeEventListener("click", record);
+      }
+    },
+  );
+
+  it("a Periods link click something above the painter has already cancelled opens nothing", async () => {
+    const el = await mount(base);
+    const painter = await shownPainter(el);
+    const pushes = pushedPaths();
+    const press = () =>
+      link(painter).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+      );
+    // Capturing on document runs before the screen's listener on the painter. With no guard and
+    // no leave coordinator, the screen pushes its address within the click itself.
+    const cancel = (event: Event) => event.preventDefault();
+    document.addEventListener("click", cancel, { capture: true });
+    try {
+      press();
+    } finally {
+      document.removeEventListener("click", cancel, { capture: true });
+    }
+    expect(pushes()).toEqual([]);
+    expect(location.pathname).toBe(base);
+    const record = (event: Event) => event.preventDefault();
+    window.addEventListener("click", record);
+    try {
+      press();
+    } finally {
+      window.removeEventListener("click", record);
+    }
+    expect(pushes()).toEqual([`${base}/window/periods`]);
+    await periodsWindow(el);
   });
 
   it("a calendar-window-open sent inside the screen does not reach the screen's parent", async () => {
