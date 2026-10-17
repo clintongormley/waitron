@@ -16,6 +16,8 @@ import {
 import {
   applyLiveFields,
   buildMenuDocument,
+  NO_LIVE_FIELDS,
+  readLiveState,
   diffMenuDocuments,
   documentImages,
   menuDocumentHash,
@@ -636,7 +638,7 @@ describe("applyLiveFields", () => {
       await updateProduct(tx, f.extraLemon, { available: false });
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
     });
-    const live = await app((tx) => applyLiveFields(tx, [lunch, dinner]));
+    const live = (await app((tx) => applyLiveFields(tx, [lunch, dinner]))).offers;
     const lunchOffers = live.get(f.lunch)!;
     expect(lunchOffers.map((offer) => [offer.name, offer.available])).toEqual([
       ["Lemonade", false],
@@ -678,7 +680,7 @@ describe("applyLiveFields", () => {
     const f = await menusFixture(fx.db);
     const lunch = await build(f.lunch);
     await plantStoredCategory(fx.db, f.large, f.coldDrinks);
-    const live = await app((tx) => applyLiveFields(tx, [lunch]));
+    const live = (await app((tx) => applyLiveFields(tx, [lunch]))).offers;
     const lemonade = live.get(f.lunch)!.find((offer) => offer.productId === f.lemonade)!;
     expect(lemonade.category).toBe("Soft drinks");
     expect(lemonade.variants[0]).toMatchObject({ id: f.large, category: "Soft drinks" });
@@ -692,7 +694,7 @@ describe("applyLiveFields", () => {
       await updateProduct(tx, f.large, { vatClass: "zero" });
       await updateProduct(tx, f.extraLemon, { vatClass: "general" });
     });
-    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).offers.get(f.lunch)!;
     expect(lemonade).toMatchObject({ vatClass: "reduced" });
     expect(lemonade!.variants[0]).toMatchObject({ vatClass: "reduced" });
     const extras = lemonade!.offeredModifiers[0]!;
@@ -708,7 +710,7 @@ describe("applyLiveFields", () => {
     await app((tx) =>
       tx.update(optionLabels).set({ available: true }).where(eq(optionLabels.id, WITH_ICE)),
     );
-    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+    const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).offers.get(f.lunch)!;
     const options = lemonade!.offeredModifiers[1]!;
     expect(options.kind === "options" && options.labels.map((label) => label.available)).toEqual([
       true,
@@ -750,7 +752,7 @@ describe("applyLiveFields", () => {
             .set({ available: false })
             .where(inArray(optionLabels.id, [...unavailable])),
         );
-      const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).get(f.lunch)!;
+      const [lemonade] = (await app((tx) => applyLiveFields(tx, [document]))).offers.get(f.lunch)!;
       const options = lemonade!.offeredModifiers[1]!;
       if (options.kind !== "options") throw new Error("options");
       expect(options.labels.map((label) => label.id)).toEqual([NO_ICE, WITH_ICE, CRUSHED_ICE]);
@@ -810,7 +812,7 @@ describe("applyLiveFields", () => {
         [lagerOffer]: { ...document.offers[lagerOffer]!, productId: missing },
       },
     };
-    const offers = (await app((tx) => applyLiveFields(tx, [edited]))).get(f.dinner)!;
+    const offers = (await app((tx) => applyLiveFields(tx, [edited]))).offers.get(f.dinner)!;
     expect(offers.map((offer) => offer.name)).toEqual(["Lemonade", "Burger"]);
     expect(offers[0]!.variants).toEqual([]);
     const extras = offers[0]!.offeredModifiers[0]!;
@@ -818,7 +820,52 @@ describe("applyLiveFields", () => {
   });
 
   it("answers an empty map for no documents", async () => {
-    expect(await app((tx) => applyLiveFields(tx, []))).toEqual(new Map());
+    expect((await app((tx) => applyLiveFields(tx, []))).offers).toEqual(new Map());
+  });
+});
+
+describe("the live-fields digest", () => {
+  const fromApply = async (document: MenuDocument) =>
+    (await app((tx) => applyLiveFields(tx, [document]))).liveFields;
+
+  it("is the same from both reads of the same documents", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    expect(await fromApply(lunch)).toBe((await app((tx) => readLiveState(tx, [lunch]))).liveFields);
+  });
+
+  it("moves when a dish changes course", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    const before = await fromApply(lunch);
+    await app((tx) =>
+      tx.update(products).set({ courseId: f.course }).where(eq(products.id, f.lemonade)),
+    );
+    expect(await fromApply(lunch)).not.toBe(before);
+  });
+
+  it("moves when a dish changes reporting category", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    const before = await fromApply(lunch);
+    await app((tx) => updateProduct(tx, f.soup, { categoryId: f.coldDrinks }));
+    expect(await fromApply(lunch)).not.toBe(before);
+  });
+
+  it("stays when only availability changes", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await build(f.lunch);
+    const before = await app((tx) => readLiveState(tx, [lunch]));
+    expect(before.unavailable.products).not.toContain(f.lemonade);
+    await app((tx) => updateProduct(tx, f.lemonade, { available: false }));
+    const after = await app((tx) => readLiveState(tx, [lunch]));
+    expect(after.liveFields).toBe(before.liveFields);
+    expect(after.unavailable.products).toContain(f.lemonade);
+  });
+
+  it("names one fixed digest when there are no documents", async () => {
+    expect((await app((tx) => applyLiveFields(tx, []))).liveFields).toBe(NO_LIVE_FIELDS);
+    expect((await app((tx) => readLiveState(tx, []))).liveFields).toBe(NO_LIVE_FIELDS);
   });
 });
 

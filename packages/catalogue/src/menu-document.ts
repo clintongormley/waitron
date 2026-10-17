@@ -473,15 +473,27 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
   return { products: productRows, labels };
 }
 
+/** Digest of each product row's course and reporting category, in id order; not its availability. */
+function liveFieldsDigest(products: ReadonlyMap<string, LiveProductRow>): string {
+  const rows = [...products]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([id, row]) => [id, row.courseId, row.category]);
+  return createHash("sha256").update(canonicalJson(rows)).digest("hex");
+}
+
+/** The digest of no rows, which every read of no documents answers. */
+export const NO_LIVE_FIELDS = liveFieldsDigest(new Map());
+
 /**
  * Each product, variant or extras item's product the documents' offers name that is Inactive or
- * Unavailable, and each option label they name that is unavailable or deleted.
+ * Unavailable, each option label they name that is unavailable or deleted, and the digest
+ * {@link applyLiveFields} answers for the same documents.
  */
-export async function readUnavailable(
+export async function readLiveState(
   tx: Transaction,
   documents: readonly MenuDocument[],
-): Promise<MenuUnavailable> {
-  const offers = documents.flatMap((document) => Object.values(document.offers));
+): Promise<{ unavailable: MenuUnavailable; liveFields: string }> {
+  const offers = documents.flatMap(documentOffers);
   const rows = await readLiveRows(tx, offers);
   const unsellableProducts = new Set<string>();
   const labels = new Set<string>();
@@ -501,15 +513,16 @@ export async function readUnavailable(
         }
   }
   return {
-    products: [...unsellableProducts],
-    optionLabels: [...labels],
+    unavailable: { products: [...unsellableProducts], optionLabels: [...labels] },
+    liveFields: liveFieldsDigest(rows.products),
   };
 }
 
 /**
  * The documents' offers, per menu and in menu order, with the live fields put back from the current
  * rows: availability, and the course and reporting category that are not menu content.
- * With `menuItemIds`, only the offers it names are read and returned.
+ * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
+ * only their rows, so it is not comparable with {@link readLiveState}'s.
  *
  * An item whose product row no longer exists is left out, as is an offer whose product is gone.
  */
@@ -517,9 +530,9 @@ export async function applyLiveFields(
   tx: Transaction,
   documents: readonly MenuDocument[],
   menuItemIds?: ReadonlySet<string>,
-): Promise<Map<string, LiveOffer[]>> {
+): Promise<{ offers: Map<string, LiveOffer[]>; liveFields: string }> {
   const live = new Map<string, LiveOffer[]>();
-  if (documents.length === 0) return live;
+  if (documents.length === 0) return { offers: live, liveFields: NO_LIVE_FIELDS };
   const offersOf = new Map(
     documents.map((document) => [
       document.menuId,
@@ -587,7 +600,7 @@ export async function applyLiveFields(
         ];
       }),
     );
-  return live;
+  return { offers: live, liveFields: liveFieldsDigest(rows.products) };
 }
 
 export interface DiffEntry {

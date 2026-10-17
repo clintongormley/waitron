@@ -852,7 +852,7 @@ describe("a live version published while its document froze a VAT rate", () => {
 /** Each live offer's colour on the menu's live version, by product id. */
 async function liveColors(menuId: string): Promise<Map<string, string | null | undefined>> {
   const document = (await app((tx) => readLiveDocuments(tx, [menuId]))).get(menuId)!.document;
-  const offers = (await app((tx) => applyLiveFields(tx, [document]))).get(menuId)!;
+  const offers = (await app((tx) => applyLiveFields(tx, [document]))).offers.get(menuId)!;
   return new Map(offers.map((offer) => [offer.productId, offer.color]));
 }
 
@@ -987,9 +987,9 @@ describe("a live version whose offers carry no colour", () => {
       colorChange(f.lager, "Lager"),
       colorChange(f.soup, "Soup"),
     ]);
-    const offers = (await app((tx) => applyLiveFields(tx, [live.get(f.lunch)!.document]))).get(
-      f.lunch,
-    )!;
+    const offers = (
+      await app((tx) => applyLiveFields(tx, [live.get(f.lunch)!.document]))
+    ).offers.get(f.lunch)!;
     expect(offers).toHaveLength(3);
     for (const offer of offers) expect(offer).not.toHaveProperty("color");
   });
@@ -1914,7 +1914,7 @@ describe("a published menu serves each variant as sellable as it is itself", () 
   const serve = (menuId: string) =>
     app(async (tx) => {
       const live = await readLiveDocuments(tx, [menuId]);
-      return (await applyLiveFields(tx, [live.get(menuId)!.document])).get(menuId)!;
+      return (await applyLiveFields(tx, [live.get(menuId)!.document])).offers.get(menuId)!;
     });
   const setLargeAvailable = (f: MenusFixture, available: boolean) =>
     app(async (tx) =>

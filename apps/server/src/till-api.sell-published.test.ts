@@ -992,6 +992,7 @@ describe("GET /api/menu-state", () => {
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: nothing,
       defaultMenuId: v.menuId,
+      liveFields: expect.any(String),
     });
 
     const setBurger = (available: boolean) =>
@@ -1015,6 +1016,7 @@ describe("GET /api/menu-state", () => {
       menus: [{ menuId: v.menuId, versionId: v1, orderable: true, sendable: true }],
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
+      liveFields: expect.any(String),
     });
     const status = await withTransaction(suite.db, (tx) => menuStatus(tx, [v.menuId]));
     expect(status.get(v.menuId)?.state).toBe("current");

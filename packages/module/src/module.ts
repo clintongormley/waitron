@@ -311,6 +311,9 @@ export interface ZoneOffers {
   readonly defaultMenuId: string | null;
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
+  /** Digest of the course and reporting category behind every offer; moves when either
+   *  changes on any dish, which no menu version records. */
+  readonly liveFields: string;
 }
 
 /** What a zone's live menus hold that cannot be sold now. */
@@ -350,6 +353,9 @@ export interface ZoneMenuState {
     readonly sendable: boolean;
   }[];
   readonly unavailable: ZoneUnavailable;
+  /** Digest of the course and reporting category behind every offer; moves when either
+   *  changes on any dish, which no menu version records. */
+  readonly liveFields: string;
 }
 
 export interface ZoneMenuOfferVariant {

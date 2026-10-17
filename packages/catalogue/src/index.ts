@@ -90,7 +90,8 @@ export {
   diffMenuDocuments,
   documentOffers,
   menuDocumentHash,
-  readUnavailable,
+  NO_LIVE_FIELDS,
+  readLiveState,
   type OmittedShortcut,
 } from "./menu-document.js";
 export type * from "./menu-document-types.js";
