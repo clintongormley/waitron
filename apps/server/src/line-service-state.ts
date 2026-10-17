@@ -1,5 +1,21 @@
 import { eq, inArray } from "drizzle-orm";
 import { lineServiceCancellations, nowIso, workingOrderLines, type Transaction } from "@waitron/db";
+import { decimal, divideDecimal, multiplyDecimal } from "@waitron/shared";
+
+function componentCancellation(
+  quantity: number,
+  parentQuantity: number,
+  cancelled: number,
+): number {
+  // Divide last so a recurring parent fraction cannot round the extra count early.
+  return Number(
+    divideDecimal(
+      multiplyDecimal(decimal(String(quantity)), decimal(String(cancelled))),
+      decimal(String(parentQuantity)),
+      0,
+    ),
+  );
+}
 
 export function serviceQuantities(
   quantity: number,
@@ -20,14 +36,46 @@ export async function readLineCancellations(
   lineIds: readonly string[],
 ): Promise<Map<string, number>> {
   if (lineIds.length === 0) return new Map();
-  const rows = await tx
+  const lines = await tx
     .select({
-      lineId: lineServiceCancellations.lineId,
-      quantity: lineServiceCancellations.quantity,
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      parentId: workingOrderLines.parentLineId,
     })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, [...lineIds]));
+  const parentIds = [
+    ...new Set(lines.flatMap((line) => (line.parentId === null ? [] : [line.parentId]))),
+  ];
+  const parents =
+    parentIds.length === 0
+      ? []
+      : await tx
+          .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+          .from(workingOrderLines)
+          .where(inArray(workingOrderLines.id, parentIds));
+  const parentQuantities = new Map(parents.map((parent) => [parent.id, parent.quantity]));
+  const rows = await tx
+    .select()
     .from(lineServiceCancellations)
-    .where(inArray(lineServiceCancellations.lineId, [...lineIds]));
-  return new Map(rows.map((row) => [row.lineId, row.quantity]));
+    .where(
+      inArray(lineServiceCancellations.lineId, [
+        ...new Set(lines.map((line) => line.parentId ?? line.id)),
+      ]),
+    );
+  const byParent = new Map(rows.map((row) => [row.lineId, row.quantity]));
+  const result = new Map<string, number>();
+  for (const line of lines) {
+    const count = byParent.get(line.parentId ?? line.id);
+    if (count !== undefined)
+      result.set(
+        line.id,
+        line.parentId === null
+          ? count
+          : componentCancellation(line.quantity, parentQuantities.get(line.parentId)!, count),
+      );
+  }
+  return result;
 }
 
 // The target row exists; the source still holds its pre-split quantity, in whole thousandths.
@@ -42,6 +90,7 @@ export async function splitLineServiceState(
       quantity: workingOrderLines.quantity,
       served: workingOrderLines.servedQuantity,
       servedAt: workingOrderLines.servedAt,
+      parentId: workingOrderLines.parentLineId,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.id, sourceLineId));
@@ -49,7 +98,28 @@ export async function splitLineServiceState(
     .select()
     .from(lineServiceCancellations)
     .where(eq(lineServiceCancellations.lineId, sourceLineId));
-  const cancelled = cancellation?.quantity ?? 0;
+  let cancelled = cancellation?.quantity ?? 0;
+  if (source!.parentId !== null) {
+    const [target] = await tx
+      .select({ parentId: workingOrderLines.parentLineId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, targetLineId));
+    // The parent has already split, while this extra still has its original quantity.
+    const parents = await tx
+      .select({
+        id: workingOrderLines.id,
+        quantity: workingOrderLines.quantity,
+        cancelled: lineServiceCancellations.quantity,
+      })
+      .from(workingOrderLines)
+      .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
+      .where(inArray(workingOrderLines.id, [source!.parentId, target!.parentId!]));
+    const left = parents.find((parent) => parent.id === source!.parentId)!;
+    const right = parents.find((parent) => parent.id === target!.parentId)!;
+    cancelled =
+      componentCancellation(source!.quantity - moved, left.quantity, left.cancelled ?? 0) +
+      componentCancellation(moved, right.quantity, right.cancelled ?? 0);
+  }
   const movedCancelled = Math.min(moved, cancelled);
   const leftCancelled = cancelled - movedCancelled;
   const actual = serviceQuantities(source!.quantity, source!.served, cancelled);

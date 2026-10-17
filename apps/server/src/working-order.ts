@@ -1,4 +1,5 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import { readLineCancellations, splitLineServiceState } from "./line-service-state.js";
 import { copyRecalledSplit, isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -4288,20 +4289,7 @@ async function carveLines(
       moved: Decimal,
       parentLineId: string | null,
     ): Promise<string> => {
-      await tx
-        .update(workingOrderLines)
-        .set({
-          quantity: decimalToThousandths(remaining),
-          lineTotal: decimalToCents(
-            grossLineTotal(row.unitPriceGross, remaining, row.priceQuantity),
-          ),
-        })
-        .where(eq(workingOrderLines.id, row.id));
-      await clampServed(tx, [row.id]);
-      // What was served stays on the source as far as it still holds; the rest goes with the split.
       const movedThousandths = decimalToThousandths(moved);
-      const splitServed =
-        row.servedQuantity - Math.min(row.servedQuantity, decimalToThousandths(remaining));
       const splitRowId = randomUUID();
       const lineNo = ++nextLineNo;
       await tx.insert(workingOrderLines).values({
@@ -4327,8 +4315,8 @@ async function carveLines(
         kitchenName: row.kitchenName,
         classification: row.classification,
         sentAt: row.sentAt,
-        servedQuantity: splitServed,
-        servedAt: splitServed === movedThousandths ? (row.servedAt ?? nowIso()) : null,
+        servedQuantity: 0,
+        servedAt: null,
         courseId: row.courseId,
         makeAtStationId: row.makeAtStationId,
         note: row.note,
@@ -4337,6 +4325,16 @@ async function carveLines(
         creditedTo: row.creditedTo,
         listUnitPriceGross: row.listUnitPriceGross,
       });
+      await splitLineServiceState(tx, row.id, splitRowId, movedThousandths);
+      await tx
+        .update(workingOrderLines)
+        .set({
+          quantity: decimalToThousandths(remaining),
+          lineTotal: decimalToCents(
+            grossLineTotal(row.unitPriceGross, remaining, row.priceQuantity),
+          ),
+        })
+        .where(eq(workingOrderLines.id, row.id));
       splitLines.set(row.id, { id: splitRowId, lineNo });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
       return splitRowId;
@@ -4360,10 +4358,12 @@ async function carveLines(
               splitChildId,
               child.moved,
             );
-            splitFrom.set(splitTicketId, child.row.ticketItemId);
-            copiedLineIds.push(splitChildId);
-            await copyKitchenJobLines(tx, child.row.id, splitChildId);
-            movedLineIds.push(child.row.id);
+            if (splitTicketId !== null) {
+              splitFrom.set(splitTicketId, child.row.ticketItemId);
+              copiedLineIds.push(splitChildId);
+              await copyKitchenJobLines(tx, child.row.id, splitChildId);
+              movedLineIds.push(child.row.id);
+            }
           }
         }
         if (line.ticketItemId !== null) {
@@ -4375,10 +4375,12 @@ async function carveLines(
             splitLineId,
             quantity,
           );
-          splitFrom.set(splitTicketId, line.ticketItemId);
-          copiedLineIds.push(splitLineId);
-          await copyKitchenJobLines(tx, line.id, splitLineId);
-          movedLineIds.push(line.id);
+          if (splitTicketId !== null) {
+            splitFrom.set(splitTicketId, line.ticketItemId);
+            copiedLineIds.push(splitLineId);
+            await copyKitchenJobLines(tx, line.id, splitLineId);
+            movedLineIds.push(line.id);
+          }
         }
 
         line = {
@@ -4476,10 +4478,6 @@ export async function splitUnitsWithinOrder(
   });
 }
 
-/**
- * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
- * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
- */
 async function splitTicketItem(
   tx: Transaction,
   ticketItemId: string,
@@ -4487,9 +4485,11 @@ async function splitTicketItem(
   toOrderId: string,
   splitLineId: string,
   moved: string,
-): Promise<string> {
+): Promise<string | null> {
   const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
-  const movedThousandths = stringToThousandths(moved);
+  const cancellations = await readLineCancellations(tx, [splitLineId]);
+  const movedThousandths = stringToThousandths(moved) - (cancellations.get(splitLineId) ?? 0);
+  if (movedThousandths === 0) return null;
   const asked = ticket!.quantity ?? decimalToThousandths(decimal(lineQuantity));
   await tx
     .update(ticketItems)
