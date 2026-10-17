@@ -3,11 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Dependency upgrades". This file holds
 their full text.
 
-## Open Dependabot pull requests
-
-- **#1179 (Vitest 5)** waits on Stryker (owner): see _A Vitest 5 retry has to re-measure mutation_
-  below.
-
 ## Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed
 
 **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed — OPEN (found 2026-10-03 by #1139's
@@ -49,8 +44,9 @@ installed code, and only their number is stale.
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210). Stryker 10.0.0's release notes mention neither issue,
   and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
-  retry must also check whether #766's stored Dependabot ignore of `@vitest/browser-playwright` 5.x
-  holds that package back, and clear it if so (`docs/developers/workflow-guide.md` → Dependabot pull
+  retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
+  PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
+  `@vitest/browser-playwright` 5.x holds that package back, and clear it if so (`docs/developers/workflow-guide.md` → Dependabot pull
   requests).
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
