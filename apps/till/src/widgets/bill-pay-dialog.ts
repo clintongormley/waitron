@@ -439,7 +439,6 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) readers: TillActiveReader[] = [];
   /** The device's own reader, shown chosen until another is picked; it is never sent. */
   @property() defaultReaderId?: string;
-  /** Asked only on the payment that pays what is left. */
   @property({ type: Boolean }) asksGuests = false;
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;

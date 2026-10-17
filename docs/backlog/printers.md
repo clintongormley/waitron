@@ -336,9 +336,12 @@ just a green typecheck.
 ## Find a bill's pay offers no guests field
 
 - **Find a bill's pay offers no guests field (left open by A663 Part 3b).** A bill collected from
-  Find a bill (`apps/till/src/widgets/find-bill-dialog.ts`) sends no guests count, so the sale
-  stores the count that would print by default at that moment, and every receipt of it prints
-  that. The waiter cannot choose another number, or leave the line out, there. The owner's decision
+  Find a bill (`apps/till/src/widgets/find-bill-dialog.ts`) sends no guests count. A bill with no
+  invoice yet is recorded then, and stores the count that would print by default at that moment;
+  one already invoiced by an unpaid departure keeps the count stored at the departure
+  (`issueUnpaidInvoice`, `apps/server/src/working-order.ts`), because collecting it records no new
+  sale (`runCollectOrder`, `apps/server/src/till-sale.ts`). Either way the waiter cannot choose
+  another number, or leave the line out, there. The owner's decision
   of 2026-10-16 put the «Comensales» field on the payment screen only; this records the gap
   without deciding whether Find a bill should ask too.
 

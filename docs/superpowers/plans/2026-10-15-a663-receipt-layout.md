@@ -22,7 +22,7 @@ reads the same filed figures and lays them out differently.
 `@waitron/printing` raster builder, and PDFKit and sharp for A4.
 
 **Spec:** `docs/backlog/printers.md`, section "A663 — receipts and full invoices that are easier to
-read", with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
+read" (section deleted 2026-10-17 when A663 closed; see git history), with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
 and `2-full-invoice.png`. Read the section and look at both pictures before starting any task. The
 mockups are "drawn, not rendered": where this plan departs from a drawing, it says so and why. The
 owner changed one point of `1-simplified-receipt.png` on 2026-10-15 (Q11): a one-rate simplified

@@ -2103,10 +2103,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change under it (re-pick the first, or close) and fix it test-first.
   [Detail](backlog/till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
 
-- **A booking or a seated party can count more than 999 guests, which a receipt never prints**
-  (found by A663 Part 3b). Bookings refuse only a party size below 1, and seating one passes it on
-  unchecked; a receipt's guests count is bounded 1 to 999, so such a party's receipt prints no
-  guests line. [Detail](backlog/till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
+- **A booking or a seated party can count more than 999 guests, which a simplified receipt
+  recorded since A663 Part 3b never prints** (found by Part 3b). Bookings refuse only a party size
+  below 1, and seating one passes it on unchecked; the guests count stored for such a receipt is
+  bounded 1 to 999, so such a party's simplified receipt prints no guests line. [Detail](backlog/till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
 
 - **Five till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25, review of PR #641). **Next action:** decide whether
   discard, advance and mark-collected go through `#refreshAfterWrite` with their own "X succeeded,
@@ -3082,9 +3082,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   `<dialog>`'s scroll height. `.body { position: relative }` removed the excess in the probe.
   [Detail](backlog/printers.md#a-wt-dialog-holding-hinted-fields-is-taller-inside-than-it-shows)
 
-- **Find a bill's pay offers no guests field** (left open by A663 Part 3b). A bill collected there
-  stores the default guests count at that moment, and the waiter cannot choose another number;
-  the owner put the field on the payment screen only. Not decided.
+- **Find a bill's pay offers no guests field** (left open by A663 Part 3b). A bill with no invoice
+  yet stores the default guests count at that moment; one invoiced by an unpaid departure keeps the
+  count stored then. The waiter cannot choose another number; the owner put the field on the
+  payment screen only. Not decided.
   [Detail](backlog/printers.md#find-a-bills-pay-offers-no-guests-field)
 
 - **Loose ends left by A661 (#1745).**
