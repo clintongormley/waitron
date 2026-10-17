@@ -26,6 +26,8 @@ import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
 import { createFirstSetupPreparation } from "./first-setup-preparation.js";
 import { readFirstSetupRetirements } from "./first-setup-workspace.js";
+import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
+import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -115,7 +117,10 @@ export function createFirstSetupRuntime(options: {
     coordinator,
     bootId,
     resolution,
-    onOwnershipRecovered: options.onOwnershipRecovered,
+    onOwnershipRecovered: (attemptId) => {
+      recoveryDelivery.invalidate(attemptId);
+      options.onOwnershipRecovered?.(attemptId);
+    },
     freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
         modules,
@@ -146,6 +151,15 @@ export function createFirstSetupRuntime(options: {
         })),
       };
     },
+  });
+  const keys = createFirstSetupNodeKeys({ ...options, store, coordinator, owner });
+  const recoveryDelivery = createFirstSetupRecoveryDelivery({
+    ...options,
+    modules,
+    store,
+    coordinator,
+    owner,
+    keys,
   });
   preparation.current = createSetupPreparationHost({
     ...options,
@@ -259,5 +273,7 @@ export function createFirstSetupRuntime(options: {
     resolution,
     modules,
     bootId,
+    keys,
+    recoveryDelivery,
   };
 }

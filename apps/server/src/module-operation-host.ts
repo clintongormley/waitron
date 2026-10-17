@@ -20,11 +20,7 @@ import {
   createFirstFiscalDelivery,
   readFirstFiscalDeliverySnapshot,
 } from "./first-fiscal-delivery.js";
-import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
-import {
-  createFirstSetupRecoveryDelivery,
-  readFirstSetupRecoveryDeliverySnapshot,
-} from "./first-setup-recovery-delivery.js";
+import { readFirstSetupRecoveryDeliverySnapshot } from "./first-setup-recovery-delivery.js";
 import {
   firstSetupModuleContext,
   createFirstFiscalEvidence,
@@ -91,7 +87,8 @@ export function createFirstSetupModuleHost(options: {
     readRetiredSetup,
     onOwnershipRecovered: (attemptId) => evidence.current?.invalidate(attemptId),
   });
-  const { coordinator, store, owner, resolution, modules, bootId } = runtime;
+  const { coordinator, store, owner, resolution, modules, bootId, keys, recoveryDelivery } =
+    runtime;
   const legacyEvidence = createFirstFiscalEvidence({
     ...options,
     modules,
@@ -100,7 +97,6 @@ export function createFirstSetupModuleHost(options: {
     bootId,
     owner,
   });
-  const keys = createFirstSetupNodeKeys({ ...options, store, coordinator, owner });
   const delivery = createFirstFiscalDelivery({
     ...options,
     modules,
@@ -111,14 +107,6 @@ export function createFirstSetupModuleHost(options: {
     bootId,
   });
   const { assertFreshAssignment, assertSelection, preparation } = runtime;
-  const recoveryDelivery = createFirstSetupRecoveryDelivery({
-    ...options,
-    modules,
-    store,
-    coordinator,
-    owner,
-    keys,
-  });
   const configuredEvidence = {
     ...legacyEvidence,
     invalidate(attemptId: string) {

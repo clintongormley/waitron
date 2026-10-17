@@ -103,3 +103,18 @@ export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";
 export { createModuleOperationHost, createFirstSetupRuntime } from "./first-setup-runtime.js";
 export { prepareFirstSetupCommand } from "./first-setup-command.js";
 export { firstSetupModuleContext } from "./first-setup-module-context.js";
+
+export {
+  createFirstSetupNodeKeys,
+  firstSetupFrozenDigest,
+  readFirstSetupStagedKey,
+  type StagedNodeKey,
+} from "./first-setup-node-key.js";
+export { firstFiscalPublicDigest, firstFiscalPublicJson } from "./first-setup-public-digest.js";
+export {
+  createFirstSetupRecoveryDelivery,
+  readFirstSetupRecoveryDeliverySnapshot,
+  type RecoveryDeliveryReference,
+  type RecoveryDeliveryInput,
+  type RecoveryKeptInput,
+} from "./first-setup-recovery-delivery.js";

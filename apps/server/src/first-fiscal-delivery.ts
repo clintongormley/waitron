@@ -71,31 +71,9 @@ function exact(v: unknown, keys: readonly string[]): v is Record<string, unknown
 const hex = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 const name = (v: unknown): v is string =>
   typeof v === "string" && /^[a-z][a-z0-9-]*$/.test(v) && v.length <= 128;
-function canonical(value: unknown, depth = 0): string {
-  if (depth > 32) invalid();
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string" ||
-    (typeof value === "number" && Number.isFinite(value))
-  )
-    return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((v) => canonical(v, depth + 1)).join(",")}]`;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Object.getPrototypeOf(value) !== Object.prototype
-  )
-    invalid();
-  return `{${Object.keys(value)
-    .sort()
-    .map(
-      (k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k], depth + 1)}`,
-    )
-    .join(",")}}`;
-}
 const hash = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
-export const firstFiscalPublicDigest = (value: unknown) => hash(canonical(value));
+export { firstFiscalPublicDigest } from "@waitron/provisioning";
+import { firstFiscalPublicDigest, firstFiscalPublicJson as canonical } from "@waitron/provisioning";
 const CHUNK = 32768,
   MAX = 8 * 1024 * 1024;
 function input(value: unknown, kept: boolean): FirstFiscalDeliveryInput | FirstFiscalKeptInput {

@@ -470,3 +470,136 @@ it("keeps clock confirmations tied to the old owner when a durable wait survives
     }),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
 });
+
+async function recoveryDeliveryFixture() {
+  const f = await fixture();
+  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  expect(prepared.status).toBe("ready");
+  expect(f.runtime).toHaveProperty("keys.stageInitialNodeKey", expect.any(Function));
+  expect(f.runtime).toHaveProperty("recoveryDelivery.consume", expect.any(Function));
+  const owner = prepared.owner;
+  const staged = await f.runtime.keys.stageInitialNodeKey(
+    owner,
+    await f.runtime.owner.reconfirm(owner, PASSWORD, "block-use"),
+  );
+  const statement = {
+    kind: "waitron-recovery-document",
+    version: 1,
+    scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
+    taxpayerName: request.legalName,
+    venueName: request.location.name,
+    createdAt: "2026-10-16T11:40:00.000Z",
+    nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+  };
+  const { firstFiscalPublicDigest } = await import("./first-setup-public-digest.js");
+  const reference = {
+    module: MODULE,
+    stageId: staged.stage.stageId,
+    inputDigest: firstFiscalPublicDigest(prepared.state.inputs[MODULE]),
+    bindingDigest: firstFiscalPublicDigest(statement),
+    documentDigest: "a".repeat(64),
+  };
+  await f.runtime.recoveryDelivery.registerRecoveryDocumentDelivery(owner, {
+    ...reference,
+    statement,
+  });
+  const kept = async () =>
+    f.runtime.recoveryDelivery.confirmRecoveryDocumentKept(
+      owner,
+      { ...reference, kept: true },
+      await f.runtime.owner.reconfirm(owner, PASSWORD, "activation"),
+    );
+  return { ...f, owner, prepared, staged, statement, reference, kept };
+}
+
+it("the command runtime retains public delivery bindings but requires a fresh kept confirmation", async () => {
+  const f = await recoveryDeliveryFixture();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  const manifest = JSON.parse(
+    await readFile(join(f.root, "state/first-fiscal-documents", `${MODULE}.recovery.json`), "utf8"),
+  );
+  expect(manifest).toMatchObject({
+    ...f.reference,
+    statement: f.statement,
+    attemptId: f.owner.attemptId,
+    revision: f.owner.revision,
+    ownerGeneration: f.owner.ownerGeneration,
+  });
+  expect(JSON.stringify(manifest)).not.toContain(f.staged.key.secret);
+  expect(JSON.stringify(manifest)).not.toContain(PASSWORD);
+  await f.kept();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
+    rows: [{ count: 0 }],
+  });
+});
+
+it("a recovered command owner cannot reuse the earlier kept-document authority", async () => {
+  const f = await recoveryDeliveryFixture();
+  await f.kept();
+  const inspection = await f.runtime.resolution.inspectFirstSetupResolution();
+  const recovered = await f.runtime.owner.recoverFirstSetupOwner({
+    inspectionId: inspection.inspectionId,
+    revision: f.owner.revision,
+    ownerGeneration: f.owner.ownerGeneration,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const owner = { ...recovered.state, capability: recovered.capability };
+  await expect(f.runtime.recoveryDelivery.consume(owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(await f.runtime.keys.readStage(owner)).toEqual(f.staged.stage);
+  expect((await f.runtime.store.read())!.inputs[MODULE]).toEqual(f.prepared.state.inputs[MODULE]);
+});
+
+it.each(["stageId", "inputDigest", "bindingDigest", "documentDigest"] as const)(
+  "the command runtime refuses a kept confirmation for a changed %s",
+  async (field) => {
+    const f = await recoveryDeliveryFixture();
+    const value = field === "stageId" ? "00000000-0000-4000-8000-000000000000" : "b".repeat(64);
+    await expect(
+      f.runtime.recoveryDelivery.confirmRecoveryDocumentKept(
+        f.owner,
+        { ...f.reference, [field]: value, kept: true },
+        await f.runtime.owner.reconfirm(f.owner, PASSWORD, "activation"),
+      ),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    await f.kept();
+    await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  },
+);
+
+it("a restarted command runtime reads the staged verifier but has no delivery grant or raw key", async () => {
+  const f = await recoveryDeliveryFixture();
+  await f.kept();
+  const runtime = createFirstSetupRuntime({
+    environment: {},
+    stateDir: join(f.root, "state"),
+    venueDir: join(f.root, "venue"),
+    modules: ALL_MODULES,
+    database: () => venue.db,
+  });
+  expect(await runtime.keys.readStage(f.owner)).toEqual(f.staged.stage);
+  await expect(runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await expect(
+    runtime.keys.stageInitialNodeKey(
+      f.owner,
+      await runtime.owner.reconfirm(f.owner, PASSWORD, "block-use"),
+    ),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(join(f.root, "state/first-setup-node-key.json"), "utf8")).not.toContain(
+    f.staged.key.secret,
+  );
+});
