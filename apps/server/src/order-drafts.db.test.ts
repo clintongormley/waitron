@@ -914,6 +914,162 @@ describe("draft bill ownership", () => {
   });
 });
 
+describe("stable fresh draft line identities", () => {
+  it("keeps retained IDs, updates every choice and placement, and assigns only new rows a new ID", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const first = await save(v, partyId, ALEX, null, 0, [item(v, "burger"), item(v, "fish")]);
+    const [burgerLine, fishLine] = first.lines;
+    const changed = {
+      ...item(v, "burger"),
+      id: burgerLine!.id.toUpperCase(),
+      quantity: "3",
+      note: "No salt",
+      courseId: v.courseId,
+      options: [v.rare],
+      extras: withSauce(v),
+      slot: 2,
+      noMerge: true,
+    };
+    const second = await save(v, partyId, ALEX, first.id, first.revision, [
+      { ...item(v, "fish"), id: fishLine!.id },
+      changed,
+      item(v, "beer"),
+    ]);
+    expect(second.lines).toMatchObject([
+      { id: fishLine!.id, quantity: "1.000" },
+      { ...changed, id: burgerLine!.id, quantity: "3.000" },
+      { menuItemId: v.offer("beer"), quantity: "1.000" },
+    ]);
+    expect(second.lines[2]!.id).not.toBe(burgerLine!.id);
+    expect(second.lines[2]!.id).not.toBe(fishLine!.id);
+    expect((await storedLines(first.id)).map(({ id, position }) => ({ id, position }))).toEqual([
+      { id: fishLine!.id, position: 1 },
+      { id: burgerLine!.id, position: 2 },
+      { id: second.lines[2]!.id, position: 3 },
+    ]);
+    expect((await draftsOf(v, partyId))[0]!.lines).toEqual(second.lines);
+    const taken = await takeOver(v, partyId, second.id, SAM, second.revision);
+    expect(taken.lines).toEqual(second.lines);
+    const savedAgain = await save(v, partyId, SAM, taken.id, taken.revision, taken.lines);
+    expect(savedAgain.lines).toEqual(second.lines);
+  });
+
+  it.each([null, "", "not-an-id", 4, [], {}])(
+    "refuses malformed explicit row ID %j",
+    async (id) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+      await refusedWritingNothing(
+        () => save(v, partyId, ALEX, draft.id, draft.revision, [{ ...item(v, "fish"), id }]),
+        { code: "management.request_invalid", params: { field: "lines.0.id" } },
+      );
+    },
+  );
+
+  it.each(["unknown", "other owner", "other bill", "new draft"])(
+    "refuses a row ID from %s without changing either draft",
+    async (origin) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      const own = await save(v, partyId, ALEX, null, 0, [item(v, "burger")]);
+      const other = await save(v, partyId, SAM, null, 0, [item(v, "fish")]);
+      const anotherTable = await seated(v, "Other table");
+      const anotherBill = await save(v, anotherTable.partyId, ALEX, null, 0, [item(v, "wine")]);
+      const id =
+        origin === "unknown"
+          ? randomUUID()
+          : origin === "other bill"
+            ? anotherBill.lines[0]!.id
+            : other.lines[0]!.id;
+      await refusedWritingNothing(
+        () =>
+          save(
+            v,
+            partyId,
+            origin === "new draft" ? SAM : ALEX,
+            origin === "new draft" ? null : own.id,
+            0,
+            [{ ...item(v, "beer"), id }],
+          ),
+        { code: "management.request_invalid", params: { field: "lines.0.id" } },
+      );
+    },
+  );
+
+  it("refuses duplicate retained IDs before writing even when their dishes differ", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    const id = draft.lines[0]!.id;
+    await refusedWritingNothing(
+      () =>
+        save(v, partyId, ALEX, draft.id, draft.revision, [
+          { ...item(v, "beer"), id },
+          { ...item(v, "fish"), id: id.toUpperCase() },
+        ]),
+      { code: "management.request_invalid", params: { field: "lines.1.id" } },
+    );
+  });
+
+  it("retains each guest's tick when identical assigned dishes are saved and taken over", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { noMerge: true }),
+      item(v, "beer", { noMerge: true }),
+    ]);
+    const allergy = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window", allergens: { milk: {} } },
+            { who: "Door", allergens: { eggs: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(
+        tx,
+        partyId,
+        draft.lines.map((line, index) => ({
+          guestId: allergy.guests[index]!.id,
+          draftLineId: line.id,
+        })),
+      ),
+    );
+    const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    const saved = await save(
+      v,
+      partyId,
+      ALEX,
+      draft.id,
+      draft.revision,
+      draft.lines.map((line) => ({ ...line, quantity: "2", noMerge: false })),
+    );
+    expect(saved.lines.map(({ id, quantity }) => ({ id, quantity }))).toEqual([
+      { id: draft.lines[0]!.id, quantity: "2.000" },
+      { id: draft.lines[1]!.id, quantity: "2.000" },
+    ]);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(ticks);
+    const taken = await takeOver(v, partyId, saved.id, SAM, saved.revision);
+    expect(taken.lines).toEqual(saved.lines);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(ticks);
+    const reduced = await save(v, partyId, SAM, taken.id, taken.revision, [taken.lines[1]!]);
+    expect(reduced.lines[0]!.id).toBe(draft.lines[1]!.id);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual([
+      { guestId: allergy.guests[1]!.id, draftLineId: draft.lines[1]!.id, workingLineId: null },
+    ]);
+  });
+});
+
 describe("draft placement persistence", () => {
   it.each(["fire", "new", "join", "after"] as const)(
     "keeps the %s destination through save, replacement, read and takeover",

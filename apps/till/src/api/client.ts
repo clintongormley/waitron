@@ -675,9 +675,8 @@ export interface SubmittedGroups {
 
 /**
  * One line of a person's unsent order on a party (`apps/server/src/order-drafts.ts`). A draft line
- * carries offer ids and no product name or price. Its course metadata is read-only. Every save gives
- * every line a NEW id, so an id names a line of
- * one revision only. `unavailable` is worked out by the server on each read, never stored.
+ * carries offer ids and no product name or price. Its course metadata is read-only.
+ * `unavailable` is worked out by the server on each read, never stored.
  */
 export interface DraftLine {
   id: string;
@@ -705,7 +704,7 @@ export interface DraftLine {
 }
 
 /** A draft line as the till saves it. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
+export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course"> & { id?: string };
 
 export interface DeadEndAnswer {
   sends: boolean;

@@ -286,10 +286,9 @@ export function draftServer(
   let ids = 0;
   const replies = new Map<string, SubmittedDraft>();
   const clone = <T>(value: T): T => structuredClone(value);
-  /** Merges as the server does, and gives every line a new id, recorded by that id. */
   const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
     normaliseDraftLines(lines).map((line) => {
-      const saved = { ...line, id: `line-${++ids}`, unavailable: false };
+      const saved = { ...line, id: line.id ?? `line-${++ids}`, unavailable: false };
       server.linesById.set(saved.id, saved);
       return saved;
     });

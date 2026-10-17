@@ -60,6 +60,7 @@ export interface LineSelection {
 
 export interface OrderLine {
   place?: Place;
+  draftLineId?: string;
   workingOrderLineId?: string;
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
@@ -532,7 +533,11 @@ export class WorkingOrderStore {
     line.quantity = "1";
     line.noMerge = true;
     if (this.#lastAdded === line) this.#lastAdded = undefined;
-    const rest = Array.from({ length: count - 1 }, () => copyLine(line));
+    const rest = Array.from({ length: count - 1 }, () => {
+      const copy = copyLine(line);
+      delete copy.draftLineId;
+      return copy;
+    });
     this.#lines.splice(index + 1, 0, ...rest);
     this.#changedLines();
   }

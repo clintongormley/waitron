@@ -73,8 +73,7 @@ export interface Draft {
 
 export { normaliseDraftLines };
 
-/** A line as the till saves it: without the id a save gives it or the flag a read works out. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course">;
+export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course"> & { id?: string };
 
 export interface SaveDraftInput {
   billId: unknown;
@@ -123,11 +122,17 @@ export async function saveDraft(
     if (draft.billId !== billId) throw invalid("billId");
     previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
   }
+  const owned = new Set(previous.map((line) => line.id));
+  const named = new Set<string>();
+  for (const [index, line] of lines.entries()) {
+    if (line.id === undefined) continue;
+    if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
+    named.add(line.id);
+  }
   await requireBillOfParty(tx, partyId, billId);
   await refusePaymentInFlight(tx, [billId]);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, lines, previous);
-  // The lines replace the draft's, so these are every offer the read at the end needs.
   const offers = await offersFor(
     tx,
     cfg,
@@ -180,11 +185,22 @@ export async function saveDraft(
     if (held > 0) priorChoices.set(key, held - 1);
     else await requireMakeAtStation(tx, cfg, line.makeAt);
   }
+  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  const assigned = new Set(
+    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+  );
   await replaceLines(
     tx,
     [draftId],
     draftId,
-    normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
+    normaliseDraftLines(
+      lines.map((line) => ({
+        ...line,
+        id: line.id ?? newId(),
+        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+        unavailable: false,
+      })),
+    ),
   );
   const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
   await captureDraft(
@@ -608,6 +624,7 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     if (joinGroupId !== null && slot !== 0) throw invalid(field("slot"));
     if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
     return {
+      ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
       menuItemId,
       variantId: optionalId(entry.variantId, field("variantId")),
       menuVersionId: optionalId(entry.menuVersionId, field("menuVersionId")),
@@ -910,6 +927,14 @@ async function replaceLines(
       set: {
         draftId: intoDraftId,
         position: sql`excluded.position`,
+        menuItemId: sql`excluded.menu_item_id`,
+        variantId: sql`excluded.variant_id`,
+        menuVersionId: sql`excluded.menu_version_id`,
+        options: sql`excluded.options`,
+        extras: sql`excluded.extras`,
+        note: sql`excluded.note`,
+        courseId: sql`excluded.course_id`,
+        makeAtStationId: sql`excluded.make_at_station_id`,
         quantity: sql`excluded.quantity`,
         noMerge: sql`excluded.no_merge`,
         slot: sql`excluded.slot`,

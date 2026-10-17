@@ -30,6 +30,7 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
   }
   const note = line.note?.trim() ?? "";
   return {
+    ...(line.draftLineId === undefined ? {} : { id: line.draftLineId }),
     menuItemId: product.menuItemId,
     variantId: product.variantId ?? null,
     menuVersionId: product.menuVersionId ?? null,
@@ -67,7 +68,7 @@ export function orderLineMergeKey(line: OrderLine): string | null {
  * unit widened to the quantity scale, so pricing the preview does not refuse it.
  */
 export function fromDraftLine(
-  line: Omit<DraftLine, "id">,
+  line: Omit<DraftLine, "id"> & { id?: string },
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions?: ReadonlyMap<string, string>,
 ): OrderLine {
@@ -90,6 +91,7 @@ export function fromDraftLine(
   );
   const snapshots = line.options.flatMap((answer) => snapshotOf(offer, answer));
   return {
+    ...(line.id === undefined ? {} : { draftLineId: line.id }),
     product,
     ...(line.joinGroupId !== null
       ? { place: { kind: "join" as const, groupId: line.joinGroupId } }

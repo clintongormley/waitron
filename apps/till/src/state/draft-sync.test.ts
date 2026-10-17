@@ -203,6 +203,53 @@ describe("DraftSync: bill ownership", () => {
 });
 
 describe("DraftSync: saving", () => {
+  it("retains saved row IDs on load, save answers and later edits", async () => {
+    const initial = seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    expect(draft.store.lines[0]).toHaveProperty("draftLineId", initial.lines[0]!.id);
+    draft.store.setLineQuantity(0, "2");
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[0]![1].lines[0]).toMatchObject({
+      id: initial.lines[0]!.id,
+      quantity: "2",
+    });
+    draft.store.addProduct(steak, "1");
+    await draft.flush();
+    const saved = server.drafts[0]!;
+    expect(draft.store.lines[1]).toHaveProperty("draftLineId", saved.lines[1]!.id);
+    draft.store.setLineQuantity(1, "3");
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[2]![1].lines).toMatchObject([
+      { id: saved.lines[0]!.id },
+      { id: saved.lines[1]!.id, quantity: "3" },
+    ]);
+  });
+
+  it("attaches an answering save's IDs to the same lines after an in-flight edit", async () => {
+    let answer!: () => void;
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(partyId, save));
+    });
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    draft.store.addProduct(steak, "1");
+    const saving = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+    draft.store.removeLine(0);
+    draft.store.setLineQuantity(0, "3");
+    answer();
+    await saving;
+    const steakId = server.drafts[0]!.lines[1]!.id;
+    expect(draft.store.lines[0]).toMatchObject({ draftLineId: steakId, quantity: "3" });
+    await draft.flush();
+    expect(server.saveDraft.mock.calls[1]![1].lines).toMatchObject([
+      { id: steakId, menuItemId: "offer-steak", quantity: "3" },
+    ]);
+  });
+
   it("saves three taps on Beer once, as one Beer ×3, after the edits stop", async () => {
     const draft = sync();
     await draft.load();

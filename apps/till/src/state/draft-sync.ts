@@ -371,7 +371,8 @@ export class DraftSync {
     if (this.#dropped || (this.#closed && !closing)) return "failed";
     if (!this.#unsaved) return "saved";
     const read = this.#reads;
-    const lines = this.store.lines.map((line) => toDraftLineInput(line));
+    const pending = [...this.store.lines];
+    const lines = pending.map((line) => toDraftLineInput(line));
     this.#unsaved = false;
     const limit = limited(this.#options.requestLimitMs, signal);
     let saved: Draft;
@@ -390,8 +391,10 @@ export class DraftSync {
       limit.done();
     }
     if (this.#dropped || read !== this.#reads) return "failed";
-    if (this.#unsaved) this.#take(saved);
-    else if (sameLines(lines, saved.lines)) this.#keep(saved);
+    if (this.#unsaved) {
+      this.#take(saved);
+      this.#attachSavedIds(saved, pending, lines);
+    } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     return "saved";
   }
@@ -416,9 +419,34 @@ export class DraftSync {
     this.#lineIds = draft?.lines.map((line) => line.id) ?? [];
   }
 
+  #attachSavedIds(
+    draft: Draft,
+    pending: readonly OrderLine[],
+    inputs: readonly DraftLineInput[],
+  ): void {
+    const retained = new Set(inputs.flatMap((line) => (line.id === undefined ? [] : [line.id])));
+    const available = new Map(draft.lines.map((line) => [line.id, line]));
+    for (const [index, line] of pending.entries()) {
+      const input = inputs[index]!;
+      const saved =
+        input.id === undefined
+          ? [...available.values()].find(
+              (candidate) => !retained.has(candidate.id) && lineKey(input) === lineKey(candidate),
+            )
+          : available.get(input.id);
+      if (saved !== undefined) available.delete(saved.id);
+      if (!this.store.lines.includes(line)) continue;
+      if (saved === undefined) delete line.draftLineId;
+      else line.draftLineId = saved.id;
+    }
+  }
+
   /** The server's draft is the store's lines, which stay, with the server's flag on each. */
   #keep(draft: Draft): void {
     this.#take(draft);
+    this.store.lines.forEach((line, index) => {
+      line.draftLineId = draft.lines[index]!.id;
+    });
     this.#quietly(() =>
       this.store.setUnavailableOnServer(draft.lines.map((line) => line.unavailable)),
     );
@@ -429,6 +457,9 @@ export class DraftSync {
     this.#take(draft);
     this.#unsaved = false;
     const lines = draft === null ? [] : this.#options.rebuild(draft.lines);
+    lines.forEach((line, index) => {
+      line.draftLineId = draft!.lines[index]!.id;
+    });
     this.#quietly(() => this.store.loadFrom(this.store.id, lines));
     this.#options.onReplaced?.();
   }
