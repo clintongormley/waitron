@@ -1447,7 +1447,7 @@ describe("the painters' Periods link", () => {
     const el = await mount(base);
     const painter = await shownPainter(el);
     const seen: boolean[] = [];
-    // Bubbling on window runs after the screen's own listener, so it sees what the screen did.
+    // Bubbling on window runs after the link's own listener, so it sees what the link did.
     const record = (event: Event) => {
       seen.push(event.defaultPrevented);
       event.preventDefault();
@@ -1476,7 +1476,7 @@ describe("the painters' Periods link", () => {
       const el = await mount(base);
       const painter = await shownPainter(el);
       const seen: boolean[] = [];
-      // Bubbling on window runs after the screen's own listener, so it sees what the screen did.
+      // Bubbling on window runs after the link's own listener, so it sees what the link did.
       const record = (event: Event) => {
         seen.push(event.defaultPrevented);
         event.preventDefault();
@@ -1509,7 +1509,7 @@ describe("the painters' Periods link", () => {
       link(painter).dispatchEvent(
         new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
       );
-    // Capturing on document runs before the screen's listener on the painter. With no guard and
+    // Capturing on document runs before the link's own listener. With no guard and
     // no leave coordinator, the screen pushes its address within the click itself.
     const cancel = (event: Event) => event.preventDefault();
     document.addEventListener("click", cancel, { capture: true });

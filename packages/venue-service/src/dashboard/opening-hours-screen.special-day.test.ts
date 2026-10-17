@@ -903,7 +903,7 @@ describe("the special-day painter's Periods link", () => {
     const { el } = await mount(base);
     const painter = await shownPainter(el);
     const seen: boolean[] = [];
-    // Bubbling on window runs after the screen's own listener, so it sees what the screen did.
+    // Bubbling on window runs after the link's own listener, so it sees what the link did.
     const record = (event: Event) => {
       seen.push(event.defaultPrevented);
       event.preventDefault();

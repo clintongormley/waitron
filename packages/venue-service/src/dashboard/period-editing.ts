@@ -15,8 +15,33 @@ type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
+function openPeriodsWindow(event: MouseEvent) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  )
+    return;
+  event.preventDefault();
+  (event.currentTarget as HTMLElement).dispatchEvent(
+    new CustomEvent("calendar-window-open", {
+      detail: { window: "periods" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
 export function periodsLink() {
-  return html`<a slot="link" data-test="periods-link" data-own-click href=${periodsWindowPath}
+  return html`<a
+    slot="link"
+    data-test="periods-link"
+    data-own-click
+    href=${periodsWindowPath}
+    @click=${openPeriodsWindow}
     >${t("period.title")}</a
   >`;
 }

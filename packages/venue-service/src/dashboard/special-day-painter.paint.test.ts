@@ -516,6 +516,41 @@ describe("periods from the painter", () => {
     ).toBe(true);
   });
 
+  it("a plain click on its Periods link asks for the Periods window; a click already cancelled asks nothing", async () => {
+    const { painter } = await mount();
+    const link = part<HTMLAnchorElement>(painter, "periods-link")!;
+    const asked: unknown[] = [];
+    const seen: boolean[] = [];
+    const record = (event: Event) => asked.push((event as CustomEvent).detail);
+    const cancel = (event: Event) => event.preventDefault();
+    // Bubbling on window runs after the link's own listener; cancelling here keeps the test page.
+    const settled = (event: Event) => {
+      seen.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    const press = () =>
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+      );
+    document.addEventListener("calendar-window-open", record);
+    window.addEventListener("click", settled);
+    try {
+      document.addEventListener("click", cancel, { capture: true });
+      try {
+        press();
+      } finally {
+        document.removeEventListener("click", cancel, { capture: true });
+      }
+      expect(asked).toEqual([]);
+      press();
+      expect(seen).toEqual([true, true]);
+      expect(asked).toEqual([{ window: "periods" }]);
+    } finally {
+      document.removeEventListener("calendar-window-open", record);
+      window.removeEventListener("click", settled);
+    }
+  });
+
   it("+ New period opens the period dialog, saves the period on its own, keeps the painting and chooses it", async () => {
     const { painter, writes } = await mount({
       answer: ({ url }) => (url.endsWith("/menu-periods") ? { id: "p-new" } : undefined),

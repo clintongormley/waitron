@@ -1059,24 +1059,6 @@ export class OpeningHoursScreen extends LitElement {
         this.shadowRoot?.querySelector(this.painter ? "season-painter" : "special-day-painter")
     );
   }
-  /** The link carries `data-own-click`, so the dashboard shell leaves its plain click to this. */
-  private readonly periodsLinkClicked = (event: MouseEvent) => {
-    const link = event
-      .composedPath()
-      .some((node) => node instanceof HTMLAnchorElement && node.dataset["test"] === "periods-link");
-    if (
-      !link ||
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    event.preventDefault();
-    void this.openWindow("periods");
-  };
   /** Closes either painter: back to the entry it was pushed over, else to the view it drew over. */
   private closePainter() {
     const pushed = this.atPushedPainter();
@@ -1107,7 +1089,6 @@ export class OpeningHoursScreen extends LitElement {
         event.stopPropagation();
         if (this.currentPainter(event)) this.closePainter();
       }}
-      @click=${this.periodsLinkClicked}
     ></season-painter>`;
   }
   private specialPainter() {
@@ -1154,7 +1135,6 @@ export class OpeningHoursScreen extends LitElement {
         event.stopPropagation();
         if (this.currentPainter(event)) this.closePainter();
       }}
-      @click=${this.periodsLinkClicked}
     ></special-day-painter>`;
   }
   private openSeasonWeek(event: CustomEvent<{ seasonId: string }>) {

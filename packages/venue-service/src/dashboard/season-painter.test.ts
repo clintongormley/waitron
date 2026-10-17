@@ -966,3 +966,40 @@ it("a period the live model no longer lists leaves the draft, which is clean whe
   expect(grid(painter).days.get("1")).toEqual([]);
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
 });
+
+it("the Periods link asks for the Periods window on a plain left click, and leaves every other click to the browser", async () => {
+  const { painter } = await mount();
+  const link = chip(painter, "periods-link")!;
+  const asked: unknown[] = [];
+  const seen: boolean[] = [];
+  const record = (event: Event) => asked.push((event as CustomEvent).detail);
+  // Bubbling on window runs after the link's own listener; cancelling here keeps the test page.
+  const settled = (event: Event) => {
+    seen.push(event.defaultPrevented);
+    event.preventDefault();
+  };
+  document.addEventListener("calendar-window-open", record);
+  window.addEventListener("click", settled);
+  try {
+    const press = (init: MouseEventInit = {}) =>
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
+      );
+    for (const init of [
+      { ctrlKey: true },
+      { metaKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ])
+      press(init);
+    expect(seen).toEqual([false, false, false, false, false]);
+    expect(asked).toEqual([]);
+    press();
+    expect(seen.at(-1)).toBe(true);
+    expect(asked).toEqual([{ window: "periods" }]);
+  } finally {
+    document.removeEventListener("calendar-window-open", record);
+    window.removeEventListener("click", settled);
+  }
+});
