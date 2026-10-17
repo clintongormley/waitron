@@ -459,7 +459,6 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     "venue-operations",
     "prep-stations",
     "opening-hours",
-    "periods",
   ]);
 });
 
