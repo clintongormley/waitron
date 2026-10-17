@@ -1,25 +1,29 @@
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
-import { breachText, shiftBreaches } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { periodColourStyles } from "@waitron/venue-service/painter";
-import { areaKey, type AreaRef, type Slot, type SlotStatus } from "../slots.js";
+import { areaKey, type AreaRef } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, dateLabel, utc } from "./format.js";
-import { minuteTime, shiftTime } from "./rota-format.js";
+import { notInSlotCard, overCard, slotCard } from "./rota-cards.js";
 import { dayCounts, isClosed, rolesShown, type Show, type Target } from "./rota-model.js";
 import { countWords, t, tf } from "./strings.js";
 
-/** A day's header: the date, then what needs attention in scope, or Closed. */
-export function dayHead(week: RotaWeek, show: Show, businessDay: string) {
+/** What a day's header says below the date: its attention in scope, or Closed. */
+export function dayWords(week: RotaWeek, show: Show, businessDay: string): string {
   const counts = dayCounts(week, show, businessDay);
-  const words = isClosed(week, show, businessDay)
+  return isClosed(week, show, businessDay)
     ? t("staffing.rota.closed")
     : (["unfilled", "partly", "over"] as const)
         .filter((k) => counts[k] > 0)
         .map((k) => countWords(k, counts[k]))
         .join(" · ");
+}
+
+/** A day's header: the date, then what needs attention in scope, or Closed. */
+export function dayHead(week: RotaWeek, show: Show, businessDay: string) {
+  const words = dayWords(week, show, businessDay);
   return html`<th scope="col" data-day-head=${businessDay}>
     ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(businessDay))}${words ? html`<small>${words}</small>` : nothing}
   </th>`;
@@ -29,7 +33,7 @@ export function dayHead(week: RotaWeek, show: Show, businessDay: string) {
  *  False when the grid does not draw it. */
 export function focusIn(root: ShadowRoot, target: Target, bySlot: boolean): boolean {
   const selector = target.header
-    ? `th[data-day-head="${target.businessDay}"]`
+    ? `[data-day-head="${target.businessDay}"]`
     : bySlot && target.slotKey
       ? `[data-slot="${target.slotKey}"]`
       : target.shiftId
@@ -176,20 +180,6 @@ export class RotaByArea extends LitElement {
   focusTarget(target: Target): boolean {
     return focusIn(this.renderRoot as ShadowRoot, target, true);
   }
-  #person(shiftId: string) {
-    const s = this.week.shifts.find((s) => s.shiftId === shiftId)!;
-    return this.week.people.find((p) => p.personId === s.personId)?.name ?? "";
-  }
-  #pick(slot: Slot, anchor: HTMLElement) {
-    this.dispatchEvent(
-      new CustomEvent("pick-slot", { detail: { slot, anchor }, bubbles: true, composed: true }),
-    );
-  }
-  #edit(shiftId: string) {
-    this.dispatchEvent(
-      new CustomEvent("edit-shift", { detail: { shiftId }, bubbles: true, composed: true }),
-    );
-  }
   #add(day: string, role: StaffRole) {
     this.dispatchEvent(
       new CustomEvent("add-shift", {
@@ -199,68 +189,13 @@ export class RotaByArea extends LitElement {
       }),
     );
   }
-  #notes(shiftId: string) {
-    const shift = this.week.shifts.find((s) => s.shiftId === shiftId)!;
-    const daily = this.breaches.filter(
-      (b) =>
-        b.kind === "exceeds_daily_max" &&
-        b.personId === shift.personId &&
-        b.workDate === shift.businessDay,
-    );
-    return html`${this.week.openSwaps.some((s) => s.fromShiftId === shiftId || s.toShiftId === shiftId) ? html`<small>${t("staffing.shift.swap_heading")}</small>` : nothing}${[...shiftBreaches(this.breaches, shiftId), ...daily].map((b) => html`<small>${breachText(b)}</small>`)}`;
-  }
-  #card(shiftId: string, content: unknown, kind?: string) {
-    return this.editable
-      ? html`<button
-          class="card"
-          data-shift=${shiftId}
-          data-kind=${kind ?? nothing}
-          @click=${() => this.#edit(shiftId)}
-        >
-          ${content}${this.#notes(shiftId)}
-        </button>`
-      : html`<div class="card" data-shift=${shiftId} data-kind=${kind ?? nothing}>
-          ${content}${this.#notes(shiftId)}
-        </div>`;
-  }
-  #slot(slot: Slot, status: SlotStatus, cutover: string) {
-    const assigned =
-      status.kind === "unfilled"
-        ? nothing
-        : html` <strong>${this.#person(status.shiftId)}</strong>
-            ${status.kind === "partly_uncovered" ? html`<small>${tf("staffing.rota.uncovered", { times: status.uncovered.map((u) => `${minuteTime(u.start, cutover)}–${minuteTime(u.end, cutover)}`).join(", ") })}</small>` : nothing}
-            ${status.outsideRole ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}
-            ${this.#notes(status.shiftId)}`;
-    const content = html`<span>${slot.startsAt}–${slot.endsAt}</span>
-      ${status.kind === "unfilled" ? html`· <strong>${t("staffing.rota.fill")}</strong>` : assigned}`;
-    return this.editable
-      ? html`<button
-          class="card"
-          data-kind=${status.kind}
-          data-slot=${slot.key}
-          @click=${(e: Event) =>
-            status.kind === "unfilled"
-              ? this.#pick(slot, e.currentTarget as HTMLElement)
-              : this.#edit(status.shiftId)}
-        >
-          ${content}
-        </button>`
-      : html`<div class="card" data-kind=${status.kind} data-slot=${slot.key}>${content}</div>`;
-  }
   #cell(role: StaffRole, day: RotaWeek["days"][number]) {
     const match = day.areas.find((a) => areaKey(a.area) === areaKey(this.area))?.match;
     return html`<div class="cell">
-      ${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => this.#slot(s.slot, s.status, day.cutover))}${match?.over
+      ${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => slotCard(this, s.slot, s.status, day.cutover))}${match?.over
         .map((id) => this.week.shifts.find((s) => s.shiftId === id)!)
         .filter((s) => s.staffRoleId === role.id)
-        .map((s) =>
-          this.#card(
-            s.shiftId,
-            html`${shiftTime(s)} <strong>${this.#person(s.shiftId)}</strong
-              ><small>${t("staffing.rota.over")}</small>`,
-            "over",
-          ),
-        )}${
+        .map((s) => overCard(this, s))}${
         this.editable
           ? html`<button
               class="add"
@@ -305,18 +240,7 @@ export class RotaByArea extends LitElement {
               ? html`<tr>
                   <th scope="row">${t("staffing.rota.not_in_slot")}</th>
                   ${this.week.days.map(
-                    (day) =>
-                      html`<td>
-                        ${day.notInSlot.map((n) => {
-                          const s = this.week.shifts.find((s) => s.shiftId === n.shiftId)!;
-                          return this.#card(
-                            n.shiftId,
-                            html`${shiftTime(s)}
-                              <strong>${this.#person(n.shiftId)}</strong
-                              >${n.outsideWeek ? html`<small class="note">${t(s.businessDay < this.week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}`,
-                          );
-                        })}
-                      </td>`,
+                    (day) => html`<td>${day.notInSlot.map((n) => notInSlotCard(this, n))}</td>`,
                   )}
                 </tr>`
               : nothing
