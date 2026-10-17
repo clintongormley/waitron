@@ -3,13 +3,12 @@ import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import { holidayDateName } from "../holiday-naming.js";
 import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
-import { monthNames, type MonthNames } from "./opening-hours-day.js";
+import { dayNameLines, monthNames, type MonthNames } from "./opening-hours-day.js";
 import {
   dateAroundDay,
   format,
@@ -23,7 +22,7 @@ import { closedHatch } from "./period-colour-styles.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
-import { showPicker } from "./calendar-show.js";
+import { chosenDepartment, showPicker } from "./calendar-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -349,13 +348,6 @@ export class OpeningHoursMonthView extends LitElement {
     return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
   }
 
-  /** The chosen department's id when the read carries it, else "" for every department. */
-  #chosen(model: OpeningHoursMonth): string {
-    return model.days[0]!.departments.some((d) => d.departmentId === this.departmentId)
-      ? this.departmentId
-      : "";
-  }
-
   #rows(day: Day, chosen: string, { name }: MonthNames): Row[] {
     const place = placeOnDay(day);
     const placed = (ranges: readonly ServiceRange[]) =>
@@ -433,13 +425,9 @@ export class OpeningHoursMonthView extends LitElement {
     const rows = this.#rows(day, chosen, names);
     const none = this.#noOrders(rows);
     const place = this.#placer(day);
-    const holidayName = holidayDateName(day.holidays, day.date, "");
-    const special = day.specialDay?.name ?? "";
     const isToday = day.date === model.today;
-    const lines = [
-      ...(special && special !== holidayName ? [{ name: special, kind: "special" }] : []),
-      ...(holidayName ? [{ name: holidayName, kind: "holiday" }] : []),
-    ];
+    const named = dayNameLines(day);
+    const lines = [...named];
     if (day.closedAllDay)
       lines[0] = lines[0]
         ? { ...lines[0], name: format("hours.calendar.special_closed", { name: lines[0].name }) }
@@ -462,8 +450,7 @@ export class OpeningHoursMonthView extends LitElement {
     });
     const label = [
       formatLongDate(day.date),
-      special !== holidayName ? special : "",
-      holidayName,
+      ...named.map((line) => line.name),
       day.closedAllDay ? t("hours.closed") : "",
       isToday ? t("hours.today") : "",
       ...this.#describe(day, rows, names),
@@ -552,6 +539,8 @@ export class OpeningHoursMonthView extends LitElement {
     const current = this.month || this.model?.month;
     if (!current) return nothing;
     const model = this.model?.month === current ? this.model : undefined;
+    const chosen = model ? chosenDepartment(model.days[0]!, this.departmentId) : "";
+    const names = monthNames(this.departments);
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
       const target = stepMonth(current, by);
       const blocked = target < FIRST_MONTH || target > LAST_MONTH;
@@ -592,26 +581,25 @@ export class OpeningHoursMonthView extends LitElement {
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
         ${fixedTitle(html`<h2 data-test="month" aria-live="polite">${heading}</h2>`, titles)}
-        ${step(1, "next-month", "month.next", "›")} ${model ? this.#tools(model) : nothing}
+        ${step(1, "next-month", "month.next", "›")}
+        ${model ? this.#tools(model, chosen, names) : nothing}
       </div>
       ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
-      ${model ? this.#grid(model) : nothing}`;
+      ${model ? this.#grid(model, chosen, names) : nothing}`;
   }
 
-  #tools(model: OpeningHoursMonth) {
+  #tools(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     if (this.stationMode) return nothing;
     return showPicker({
       model,
-      chosen: this.#chosen(model),
-      names: monthNames(this.departments),
+      chosen,
+      names,
       onDepartment: (departmentId) => this.#emit("month-department-change", { departmentId }),
     });
   }
 
-  #grid(model: OpeningHoursMonth) {
-    const chosen = this.#chosen(model);
+  #grid(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     const tints = seasonTints(model.seasons);
-    const names = monthNames(this.departments);
     const stop =
       [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),

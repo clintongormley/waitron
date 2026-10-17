@@ -99,7 +99,8 @@ export function columnMenu(
   >`;
 }
 
-const POPOVER_MARGIN = 8;
+/** How far a popover is kept from the window's edges. */
+export const POPOVER_MARGIN = 8;
 
 /** Opens `popup` below `trigger`, lined up with its start or end edge, kept on screen; with
  *  `flipAbove`, it sits above `trigger` instead when only there it fits without covering it. */

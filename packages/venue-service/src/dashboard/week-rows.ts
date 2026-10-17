@@ -1,22 +1,31 @@
 import type { LocalDate } from "../hours-types.js";
-import { addDays, weekdayOf } from "../hours-rules.js";
+import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { placeOnDay, zoneOwnHours } from "../zone-own-hours.js";
+import { mondayOf } from "./calendar-grid.js";
+import { chosenDepartment } from "./calendar-show.js";
 import { format } from "./hours-view.js";
-import { departmentRows, serviceRangeText, type MonthNames } from "./opening-hours-day.js";
+import { departmentRow, serviceRangeText, zoneRow, type MonthNames } from "./opening-hours-day.js";
+import { FIRST_MONTH, LAST_MONTH } from "./opening-hours-month.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
 /** Monday to Sunday of the week holding `date`. */
 export function weekDates(date: LocalDate): LocalDate[] {
-  const monday = addDays(date, -((weekdayOf(date) + 6) % 7));
+  const monday = mondayOf(date);
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 }
 
 /** The `YYYY-MM` of that week's Monday: the month read that holds the whole week. */
 export function weekMonth(date: LocalDate): string {
-  return weekDates(date)[0]!.slice(0, 7);
+  return mondayOf(date).slice(0, 7);
+}
+
+/** Whether the month read holding the week of `date` is one the calendar can show. */
+export function weekInRange(date: LocalDate): boolean {
+  const month = weekMonth(date);
+  return month >= FIRST_MONTH && month <= LAST_MONTH;
 }
 
 /** The week's seven days from `model`, or undefined when the read does not hold all seven. */
@@ -44,7 +53,6 @@ export interface WeekBlock {
 }
 
 export interface WeekRow {
-  /** Department or zone id. */
   key: string;
   name: string;
   zone: boolean;
@@ -60,13 +68,12 @@ export interface WeekRow {
 /** `chosen` "" (or an id the day's read lacks): one row per department. A department id: it,
  *  then its zones. */
 export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[] {
-  const known = day.departments.some((d) => d.departmentId === chosen);
+  const one = chosenDepartment(day, chosen);
   const place = placeOnDay(day);
   const label = (name: string, text: string) => format("week.block_label", { name, text });
   return day.departments
-    .filter((read) => !known || read.departmentId === chosen)
+    .filter((read) => !one || read.departmentId === one)
     .flatMap((read): WeekRow[] => {
-      const words = departmentRows(read, day, names);
       const name = names.name(read.departmentId);
       const department: WeekRow = {
         key: read.departmentId,
@@ -85,10 +92,10 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
           };
         }),
         empty: !read.ranges.length && day.closedAllDay ? t("week.closed_all_day") : "",
-        words: words[0]!.text,
+        words: departmentRow(read, names).text,
       };
-      if (!known) return [department];
-      const zones = read.zones.map((zone, i): WeekRow => {
+      if (!one) return [department];
+      const zones = read.zones.map((zone): WeekRow => {
         const zoneName = names.name(zone.zoneId);
         const own = zoneOwnHours(read.ranges, zone.closed, day);
         const open = own.ranges.map((piece): WeekBlock => {
@@ -137,7 +144,7 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
           strong: own.closed.length > 0,
           blocks: [...open, ...closed].sort((a, b) => a.start - b.start),
           empty: "",
-          words: words[i + 1]!.text,
+          words: zoneRow(own, zoneName, name, names).text,
         };
       });
       return [department, ...zones];

@@ -23,14 +23,10 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
-import {
-  FIRST_MONTH,
-  LAST_MONTH,
-  type CalendarDayOpen,
-  type CalendarDaysOpen,
-} from "./opening-hours-month.js";
+import "./opening-hours-month.js";
+import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import "./opening-hours-week.js";
-import { weekDates, weekMonth } from "./week-rows.js";
+import { weekDates, weekInRange, weekMonth } from "./week-rows.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -334,10 +330,7 @@ export class OpeningHoursScreen extends LitElement {
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
     const week = this.url.read("week");
-    this.requestedWeekDate =
-      isLocalDate(week) && weekMonth(week) >= FIRST_MONTH && weekMonth(week) <= LAST_MONTH
-        ? week
-        : "";
+    this.requestedWeekDate = isLocalDate(week) && weekInRange(week) ? week : "";
   }
   private calendarView(id: string | null) {
     return this.calendar?.views.find(({ view }) => view.id === id);

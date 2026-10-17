@@ -12,10 +12,14 @@ export function addMonths(month: Month, months: number): Month {
   return new Date(Date.UTC(year, number - 1 + months, 1)).toISOString().slice(0, 7);
 }
 
+export function mondayOf(date: LocalDate): LocalDate {
+  return addDays(date, -((weekdayOf(date) + 6) % 7));
+}
+
 /** Every date of the weeks that hold `month`, Monday first: the month and its real neighbours. */
 export function monthGrid(month: Month): LocalDate[] {
   const first = `${month}-01`;
-  const start = addDays(first, -((weekdayOf(first) + 6) % 7));
+  const start = mondayOf(first);
   const last = addDays(`${addMonths(month, 1)}-01`, -1);
   const end = addDays(last, (7 - weekdayOf(last)) % 7);
   const dates: LocalDate[] = [];

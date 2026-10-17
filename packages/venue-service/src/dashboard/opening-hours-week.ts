@@ -3,26 +3,29 @@ import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import { holidayDateName } from "../holiday-naming.js";
+import { clockAt } from "../day-paint.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import { showPicker } from "./calendar-show.js";
+import { chosenDepartment, showPicker } from "./calendar-show.js";
 import { formatDayHeading, formatWeekTitleParts } from "./hours-view.js";
-import { monthNames, type MonthNames } from "./opening-hours-day.js";
-import {
-  FIRST_MONTH,
-  LAST_MONTH,
-  type CalendarDayOpen,
-  type MonthDepartment,
-} from "./opening-hours-month.js";
+import { dayNameLines, monthNames, type MonthNames } from "./opening-hours-day.js";
+import type { CalendarDayOpen, MonthDepartment } from "./opening-hours-month.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { scrollTargets, visibleTop } from "./flat-tree.js";
+import { POPOVER_MARGIN } from "./paint-grid-parts.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
-import { weekDates, weekDays, weekMonth, weekRows, type WeekRow } from "./week-rows.js";
+import { weekDates, weekDays, weekInRange, weekRows, type WeekRow } from "./week-rows.js";
 
 type Day = OpeningHoursMonth["days"][number];
+
+interface Drawn {
+  model: OpeningHoursMonth;
+  days: Day[];
+  chosen: string;
+  names: MonthNames;
+}
 
 const RULER_STEP = 120;
 /** How many steps apart the ruler's labels may be drawn, the closest that fits chosen. */
@@ -31,9 +34,9 @@ const RULER_SPACINGS = [1, 2, 3, 4, 6, 12];
 type TitlePart = ReturnType<typeof formatWeekTitleParts>[number];
 
 let widthCandidates: TemplateResult[] | undefined;
-/** The titles of every week whose Monday falls in 2026, in each interface language. A candidate
- *  is shaped as the title is, its links inline-blocks; shaped otherwise, Chromium measured the
- *  Month's title a hair wider. */
+/** The titles of every week whose Monday falls in 2026, in each interface language, each shaped
+ *  as the title is, its links inline-blocks, since a candidate shaped otherwise can measure a
+ *  different width. */
 function titleCandidates(): TemplateResult[] {
   if (!widthCandidates) {
     const parts: TitlePart[][] = [];
@@ -50,7 +53,6 @@ function titleCandidates(): TemplateResult[] {
   return widthCandidates;
 }
 
-const TIP_EDGE = 8;
 /** How long an unpinned tip outlasts the pointer leaving its block or itself: long enough for a
  *  path from any point of the block to reach the tip, which the bridge alone does not cover. */
 const TIP_LEAVE_DELAY = 300;
@@ -62,7 +64,7 @@ function placeTip(tip: HTMLElement, block: HTMLElement): void {
   if (!tip.matches(":popover-open")) tip.showPopover();
   tip.style.left = "0px";
   tip.style.top = "0px";
-  tip.style.maxWidth = `${window.innerWidth - 2 * TIP_EDGE}px`;
+  tip.style.maxWidth = `${window.innerWidth - 2 * POPOVER_MARGIN}px`;
   const gap = parseFloat(getComputedStyle(tip).getPropertyValue("--wt-space-1"));
   const at = block.getBoundingClientRect();
   const size = tip.getBoundingClientRect();
@@ -70,14 +72,7 @@ function placeTip(tip: HTMLElement, block: HTMLElement): void {
   const fits = above >= visibleTop(block);
   tip.dataset.side = fits ? "above" : "below";
   tip.style.top = `${fits ? above : at.bottom + gap}px`;
-  tip.style.left = `${Math.max(TIP_EDGE, Math.min(at.left, window.innerWidth - TIP_EDGE - size.width))}px`;
-}
-
-function clockText(cutover: string, minutes: number): string {
-  const [h, m] = cutover.split(":").map(Number) as [number, number];
-  const total = (h * 60 + m + minutes) % 1440;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`;
+  tip.style.left = `${Math.max(POPOVER_MARGIN, Math.min(at.left, window.innerWidth - POPOVER_MARGIN - size.width))}px`;
 }
 
 /** The Monday-to-Sunday week holding `date`, each day a section of rows with its hours drawn as
@@ -290,14 +285,18 @@ export class OpeningHoursWeekView extends LitElement {
     if (!tip) return;
     this.#stayShown();
     tip.textContent = label;
-    this.#shownFor = block;
-    this.#pinned = pinned ? block : null;
-    placeTip(tip, block);
-    if (!this.#scrollTargets.length) {
+    if (!this.#shownFor) {
       this.#scrollTargets = scrollTargets(block);
       for (const target of this.#scrollTargets)
         target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
+      // Added during the click that pins a tip, the click listener still sees that click; the
+      // block in its path keeps it from hiding the tip.
+      window.addEventListener("click", this.#onWindowClick);
+      window.addEventListener("keydown", this.#onWindowKeydown, { capture: true });
     }
+    this.#shownFor = block;
+    this.#pinned = pinned ? block : null;
+    placeTip(tip, block);
   }
 
   #hideTip(): void {
@@ -306,6 +305,8 @@ export class OpeningHoursWeekView extends LitElement {
     this.#shownFor = null;
     for (const target of this.#scrollTargets.splice(0))
       target.removeEventListener("scroll", this.#onScroll, { capture: true });
+    window.removeEventListener("click", this.#onWindowClick);
+    window.removeEventListener("keydown", this.#onWindowKeydown, { capture: true });
     const tip = this.#tip();
     if (tip?.matches(":popover-open")) tip.hidePopover();
   }
@@ -322,7 +323,6 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #onWindowClick = (event: MouseEvent): void => {
-    if (!this.#shownFor) return;
     const path = event.composedPath();
     const tip = this.#tip();
     if (
@@ -339,15 +339,13 @@ export class OpeningHoursWeekView extends LitElement {
   };
 
   #onWindowKeydown = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || !this.#shownFor) return;
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     this.#hideTip();
   };
 
-  #onScroll = (): void => {
-    if (this.#shownFor) this.#hideTip();
-  };
+  #onScroll = (): void => this.#hideTip();
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("model") || changed.has("date") || changed.has("departmentId")) this.#hideTip();
@@ -391,15 +389,11 @@ export class OpeningHoursWeekView extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#resizes.observe(this);
-    window.addEventListener("click", this.#onWindowClick);
-    window.addEventListener("keydown", this.#onWindowKeydown, { capture: true });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#resizes.disconnect();
-    window.removeEventListener("click", this.#onWindowClick);
-    window.removeEventListener("keydown", this.#onWindowKeydown, { capture: true });
     this.#hideTip();
   }
 
@@ -413,19 +407,12 @@ export class OpeningHoursWeekView extends LitElement {
     );
   }
 
-  #chosen(model: OpeningHoursMonth): string {
-    return model.days[0]!.departments.some((d) => d.departmentId === this.departmentId)
-      ? this.departmentId
-      : "";
-  }
-
   override render() {
     if (!this.date) return nothing;
     const dates = weekDates(this.date);
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
       const target = addDays(this.date, by);
-      const month = weekMonth(target);
-      const blocked = month < FIRST_MONTH || month > LAST_MONTH;
+      const blocked = !weekInRange(target);
       return html`<wt-button
         variant="secondary"
         data-test=${test}
@@ -463,16 +450,23 @@ export class OpeningHoursWeekView extends LitElement {
         </button>`;
       return part.text;
     })}`;
-    const days = this.model ? weekDays(this.model, this.date) : undefined;
+    const model = this.model;
+    const days = model && weekDays(model, this.date);
+    const drawn = model &&
+      days && {
+        model,
+        days,
+        chosen: chosenDepartment(model.days[0]!, this.departmentId),
+        names: monthNames(this.departments),
+      };
     return html`<div class="head">
         ${step(-7, "previous-week", "week.previous", "‹")}
         ${fixedTitle(html`<h2 data-test="week" aria-live="polite">${heading}</h2>`, titleCandidates())}
-        ${step(7, "next-week", "week.next", "›")}
-        ${days && this.model ? this.#show(this.model) : nothing}
+        ${step(7, "next-week", "week.next", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${days && this.model ? this.#week(this.model, days) : nothing}
+      ${drawn ? this.#week(drawn) : nothing}
       <div
         popover="manual"
         class="tip"
@@ -483,18 +477,16 @@ export class OpeningHoursWeekView extends LitElement {
       ></div>`;
   }
 
-  #show(model: OpeningHoursMonth) {
+  #show({ model, chosen, names }: Drawn) {
     return showPicker({
       model,
-      chosen: this.#chosen(model),
-      names: monthNames(this.departments),
+      chosen,
+      names,
       onDepartment: (departmentId) => this.#emit("week-department-change", { departmentId }),
     });
   }
 
-  #week(model: OpeningHoursMonth, days: Day[]) {
-    const chosen = this.#chosen(model);
-    const names = monthNames(this.departments);
+  #week({ days, chosen, names }: Drawn) {
     const longest = Math.max(...days.map((day) => day.endMinute));
     const labels = Array.from(
       { length: Math.floor(longest / RULER_STEP) + 1 },
@@ -507,7 +499,7 @@ export class OpeningHoursWeekView extends LitElement {
               html`<span
                 class="label"
                 style=${styleMap({ left: `min(${(minute / longest) * 100}%, calc(100% - 2.5ch))` })}
-                >${clockText(days[0]!.dayCutover, minute)}</span
+                >${clockAt(minute, days[0]!.dayCutover)}</span
               >`,
           )}
         </div>
@@ -516,12 +508,6 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #day(day: Day, chosen: string, names: MonthNames, longest: number) {
-    const holiday = holidayDateName(day.holidays, day.date, "");
-    const special = day.specialDay?.name ?? "";
-    const lines = [
-      ...(special && special !== holiday ? [{ name: special, kind: "special" }] : []),
-      ...(holiday ? [{ name: holiday, kind: "holiday" }] : []),
-    ];
     return html`<section data-date=${day.date}>
       <h3>
         <button
@@ -537,7 +523,7 @@ export class OpeningHoursWeekView extends LitElement {
         >
           ${formatDayHeading(day.date)}
         </button>
-        ${lines.map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
+        ${dayNameLines(day).map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
       </h3>
       ${weekRows(day, chosen, names).map((row) => this.#row(row, day, names, longest))}
     </section>`;
