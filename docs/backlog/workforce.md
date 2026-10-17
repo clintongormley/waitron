@@ -134,36 +134,6 @@ confirmations (open point 7). Decide whether to add a shared deletion-impact sea
 can ask contributing modules for that count, or deliberately keep the confirmation without it.
 The completed rota retirement does not depend on that choice.
 
-## A761. The staffing grid: a drag paints unless a block is picked, and a wide block editor
-
-**A761 (owner, 2026-10-16).** Files: `packages/staffing/src/dashboard/staffing-grid.ts` and the two
-staffing painters that host it.
-
-1. **A drag paints a new block unless you have clicked an existing one first.** Today a drag that
-   starts on a block acts on it: its top and bottom quarters resize it and the rest opens its menu
-   (`staffing-grid.ts:62-63`, the `.edge` rule at `:140`). A block fills its column's width for its
-   hours, so painting a second role over the same hours almost always lands on the first and
-   resizes it. Owner: "if you want to edit an existing one then you should click it first. once it
-   loses focus then dragging paints a new one instead". An unpicked block lets a drag paint through
-   it; clicking a block picks it, and only then do its edges resize it and its editor open. The
-   keyboard keeps working: picking a block also focuses it.
-2. **The block's editor becomes wide, with a Save.** Today it lists one button per staff role, the
-   current one drawn disabled so it reads as unavailable; a role click and the "How many" stepper
-   save at once; Delete is a large red button; the contents do not line up. Owner: a dropdown of
-   roles, wide rather than long, and a Save rather than saving on a click outside.
-
-   ```
-   Staff role                How many
-   [ Sous chef         ▾ ]   [ −  3  + ]
-
-   [Cancel] [Delete]                [Save]
-   ```
-
-   The role field is the shared combobox (searchable); Save stays quiet until something changes; a
-   click outside or Cancel throws the change away; the bottom row follows the house rule for a
-   destructive action (design-system.md → Forms). A707's note that on a phone the block menu can
-   cover its block is checked against the new editor.
-
 ## A763. The Rota view redesigned: one Show menu, no button per cell, an empty week that says why
 
 **A763 (owner, 2026-10-16).** The owner, on the Santet venue: "the rota screen is completely
