@@ -172,14 +172,14 @@ export function mountAdjustmentsApi(
               ? undefined
               : { recorder: deps.attendance, clock: deps.clock },
           );
+          await issueIfFullyPaid(
+            tx,
+            fiscal,
+            sendingCfg(cfg, c, session.device),
+            applied.billId,
+            session.personId,
+          );
           if (applied.adjustmentIds.length > 0) {
-            await issueIfFullyPaid(
-              tx,
-              fiscal,
-              sendingCfg(cfg, c, session.device),
-              applied.billId,
-              session.personId,
-            );
             await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
           }
           return applied;
@@ -189,7 +189,6 @@ export function mountAdjustmentsApi(
     }),
   );
 
-  // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });

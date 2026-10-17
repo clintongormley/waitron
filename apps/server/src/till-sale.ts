@@ -1,4 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
+import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
@@ -667,6 +668,7 @@ async function runPayWorkingOrder(
         throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
       if (locked !== undefined) {
+        await assertBillHasNoUnsent(tx, req.id);
         // Before the in-flight check, so the answer names the money already on the bill.
         await refuseBillWithPayments(tx, req.id);
         // A card payment of this order would file its own sale after this one (plan D22).
@@ -1165,6 +1167,8 @@ async function payIntegrated(
       }
 
       if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
+
+      await assertBillHasNoUnsent(tx, req.id);
 
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
@@ -2072,6 +2076,8 @@ async function runCollectOrder(
     }
     await refuseBillWithPayments(tx, req.id);
     await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
+
+    await assertBillHasNoUnsent(tx, req.id);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {

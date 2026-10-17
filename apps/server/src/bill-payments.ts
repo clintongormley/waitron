@@ -1,4 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
+import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -664,6 +665,9 @@ async function issueWhenFullyPaid(
   if (received.length === 0 || rows.some((row) => row.state === "pending")) return notYet;
   // A card refund still pending leaves the bill's received money unknown.
   if (refunds.some((refund) => refund.state === "pending")) return notYet;
+  // A captured reservation must finish even if a restored draft is still open.
+  if (options.moneyMoved !== true && (await readBillUnsent(tx, workingOrderId)).length > 0)
+    return notYet;
   const held = moneyOf(rows, refunds);
   const total = options.total ?? (await storedOrderTotal(tx, workingOrderId));
   if (compareDecimal(total, ZERO) === 0) return { invoice: null, total };
@@ -785,15 +789,6 @@ async function issueWhenFullyPaid(
   return { invoice: ticket, total };
 }
 
-/**
- * Issue the bill's invoice when a write has left it fully paid (design §7): it is open, holds no
- * pending payment or refund, has at least one line and one received payment, and the net applied
- * of its received payments equals its total. Answers the ticket, or null when the bill is not
- * fully paid; a bill holding no payment is left alone.
- *
- * One tender per received payment that still holds money, dated when the money moved; every card
- * payment's provider row is linked to the sale, a fully refunded one included.
- */
 export async function issueIfFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
@@ -939,6 +934,7 @@ export async function previewBillPayment(
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
     await requireOpenBill(tx, workingOrderId);
+    await assertBillHasNoUnsent(tx, workingOrderId);
     const held = await readPaymentMoney(tx, [workingOrderId]);
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
     const funds = fundsOf(workingOrderId, await storedOrderTotal(tx, workingOrderId), held);
@@ -1059,6 +1055,7 @@ async function beginBillPayment(
   }
 
   await requireOpenBill(tx, workingOrderId);
+  await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseUnavailableFullInvoice(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);

@@ -580,6 +580,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "group.held_leaves_party": 409,
   "group.line_held": 409,
   "bill.nothing_outstanding": 409,
+  "bill.unsent_dishes": 409,
   "bill.tip_not_allowed": 422,
   "bill.allocation_changed": 409,
   "bill.line_paid": 409,
@@ -3312,7 +3313,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return saveDraft(
+        const result = await saveDraft(
           tx,
           cfg,
           partyId,
@@ -3320,6 +3321,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           { billId: body.billId, draftId, revision, lines: body.lines },
           deps.attendance,
         );
+        await issueIfFullyPaid(
+          tx,
+          fiscal,
+          sendingCfg(cfg, c, session.device),
+          result.billId,
+          personId,
+        );
+        return result;
       });
       return c.json(draft);
     }),
@@ -3421,7 +3430,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const submitted = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
+        const result = await submitDraft(tx, sendCfg, partyId, draftId, input, deps.attendance);
+        await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
+        return result;
       });
       return c.json(submitted);
     }),
