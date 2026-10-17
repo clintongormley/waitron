@@ -1443,6 +1443,27 @@ describe("Opening hours week, a station shown", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("on a phone a station row's No orders is muted, as the whole day's is, and its orders are not", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const el = await mount({ date: "2026-12-06", stations: STATIONS, station: grill() });
+      const card = testId(el, "day-card")!;
+      const words = (key: string) =>
+        card.querySelector<HTMLElement>(`.row[data-row="${key}"] .words`)!;
+      expect(text(words("rest"))).toBe("No orders");
+      expect(text(words("bar"))).toBe("All day 10:00–02:00");
+      const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
+      const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;
+      expect(muted).not.toBe(normal);
+      expect(getComputedStyle(words("rest")).color).toBe(muted);
+      expect(getComputedStyle(words("bar")).color).toBe(normal);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
 });
 
 /** An element painted in `token`, beside `el`, to compare a text colour against. */

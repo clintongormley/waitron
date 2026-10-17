@@ -379,7 +379,8 @@ export class OpeningHoursWeekView extends LitElement {
         white-space: normal;
       }
       .card .row-name:not(.strong),
-      .card .row-name:not(.strong) + .words {
+      .card .row-name:not(.strong) + .words,
+      .card .words[data-no-orders] {
         color: var(--wt-color-text-muted);
       }
       .words {
@@ -741,7 +742,7 @@ export class OpeningHoursWeekView extends LitElement {
         data-test="day-card"
         @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
       >
-        ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#phoneRow(row, day!, names))}
+        ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#phoneRow(row, day!, names, orders))}
       </div>`;
   }
 
@@ -782,11 +783,11 @@ export class OpeningHoursWeekView extends LitElement {
     window.removeEventListener("pointercancel", this.#swipeEnd);
   }
 
-  #phoneRow(row: WeekRow, day: Day, names: MonthNames) {
+  #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
     const span = day.endMinute;
     return html`<div class="row" data-row=${row.key}>
       <span class="row-name ${row.strong ? "strong" : ""}">${row.name}</span>
-      <span class="words">${row.words}</span>
+      <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
       <div class="track" aria-hidden="true">
         ${row.blocks.map(
           (block) =>
