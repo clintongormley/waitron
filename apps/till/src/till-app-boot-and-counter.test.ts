@@ -98,7 +98,14 @@ function zoneOffers(
   defaultMenuId: string | null = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null,
 ): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId,
@@ -6025,6 +6032,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   open: true,
                   zoneOpen: true,
                   periodName: null,
+                  periodOccurrenceKey: null,
                   keepOpen: null,
                   zoneKeepOpen: null,
                 },

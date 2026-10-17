@@ -51,6 +51,7 @@ import {
   createDepartment,
   listDepartments,
   listZoneOffers,
+  menuState,
   listVenueReadiness,
   resolveZoneContext,
   recordOrderServiceContext,
@@ -177,6 +178,7 @@ describe("Always fixture periods", () => {
           zoneOpen: true,
           zoneKeepOpen: null,
           periodName: "Always",
+          periodOccurrenceKey: expect.any(String),
           keepOpen: {
             periodId: expect.any(String),
             periodName: "Always",
@@ -828,6 +830,7 @@ describe("the menu a zone starts on", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: "Mañanas",
+      periodOccurrenceKey: expect.any(String),
       keepOpen: {
         periodId: periods.mananas,
         periodName: "Mañanas",
@@ -1891,6 +1894,7 @@ describe("statements", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: null,
+      periodOccurrenceKey: null,
       keepOpen: null,
     });
     expect(priced.menus.map((menu) => menu.id).sort()).toEqual(
@@ -2318,6 +2322,7 @@ describe("department service periods", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: "Lunch",
+      periodOccurrenceKey: expect.any(String),
       keepOpen: {
         periodId: v.lunch,
         periodName: "Lunch",
@@ -2352,6 +2357,7 @@ describe("department service periods", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: "Afternoon",
+      periodOccurrenceKey: expect.any(String),
       keepOpen: {
         periodId: v.afternoon,
         periodName: "Afternoon",
@@ -2445,6 +2451,7 @@ describe("department service periods", () => {
         zoneOpen: true,
         zoneKeepOpen: null,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
       },
       menus: [],
@@ -2467,6 +2474,7 @@ describe("department service periods", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: null,
+      periodOccurrenceKey: null,
       keepOpen: {
         periodId: v.afternoon,
         periodName: "Afternoon",
@@ -2496,6 +2504,7 @@ describe("department service periods", () => {
       zoneOpen: true,
       zoneKeepOpen: null,
       periodName: null,
+      periodOccurrenceKey: null,
       keepOpen: null,
     });
     expect(result.menus).toHaveLength(4);
@@ -2819,6 +2828,7 @@ describe("department service periods", () => {
       open: true,
       periodId: v.lunch,
       periodName: "Lunch",
+      periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Almuerzo,
       orderableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
       sendableMenuIds: [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café],
@@ -2836,6 +2846,7 @@ describe("department service periods", () => {
       open: true,
       periodId: v.afternoon,
       periodName: "Afternoon",
+      periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Café,
       orderableMenuIds: [v.menus.Café],
       sendableMenuIds: [v.menus.Café],
@@ -2857,6 +2868,7 @@ describe("department service periods", () => {
       open: true,
       periodId: v.night,
       periodName: "Night",
+      periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Cena,
       orderableMenuIds: [v.menus.Cena],
       sendableMenuIds: [v.menus.Cena],
@@ -2874,6 +2886,7 @@ describe("department service periods", () => {
       open: false,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
       sendableMenuIds: [],
@@ -2885,6 +2898,7 @@ describe("department service periods", () => {
       open: false,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
       sendableMenuIds: [],
@@ -2906,6 +2920,7 @@ describe("department service periods", () => {
       open: false,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
       sendableMenuIds: [],
@@ -2917,6 +2932,7 @@ describe("department service periods", () => {
       open: false,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
       sendableMenuIds: [],
@@ -3002,6 +3018,7 @@ describe("department service periods", () => {
       open: true,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       endedMenuIds: [],
     });
@@ -3019,6 +3036,7 @@ describe("department service periods", () => {
       open: false,
       periodId: null,
       periodName: null,
+      periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
       sendableMenuIds: [],
@@ -3511,5 +3529,148 @@ describe("the routing that names a period", () => {
       { rowKind: "no_category", rowLabel: null, zoneName: null },
       { rowKind: "product", rowLabel: "Bread", zoneName: null },
     ]);
+  });
+});
+
+describe("a service period occurrence", () => {
+  async function occurrenceVenue() {
+    const v = await venue({ timetable: false });
+    await db
+      .update(locations)
+      .set({ dayCutover: "06:00:00" })
+      .where(eq(locations.id, v.locationId));
+    const period = await scoped((tx) =>
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        { name: "Same name", menuId: v.menus.Almuerzo, staffMenuIds: [] },
+        0,
+      ),
+    );
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => [
+          slot(period.id, "12:00", "14:00"),
+          slot(period.id, "18:00", "20:00"),
+          slot(period.id, "22:00", "02:00"),
+        ]),
+        AT,
+        0,
+      ),
+    );
+    return { ...v, periodId: period.id };
+  }
+
+  it("distinguishes repeated days and runs and shares the authoritative key across zone offers and polls", async () => {
+    const v = await occurrenceVenue();
+    const key = (date: string, time: string) =>
+      scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(date, time)));
+    const lunch = await key(MONDAY, "13:00");
+    expect(lunch.periodOccurrenceKey).toBe(
+      JSON.stringify([v.restaurant, MONDAY, v.periodId, "12:00"]),
+    );
+    expect((await key(MONDAY, "13:30")).periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
+    expect((await key(MONDAY, "18:30")).periodOccurrenceKey).toBe(
+      JSON.stringify([v.restaurant, MONDAY, v.periodId, "18:00"]),
+    );
+    expect((await key(TUESDAY, "13:00")).periodOccurrenceKey).toBe(
+      JSON.stringify([v.restaurant, TUESDAY, v.periodId, "12:00"]),
+    );
+    expect((await key(TUESDAY, "01:00")).periodOccurrenceKey).toBe(
+      JSON.stringify([v.restaurant, MONDAY, v.periodId, "22:00"]),
+    );
+    for (const zoneId of [v.sala, v.barra]) {
+      const offers = await scoped((tx) =>
+        listZoneOffers(tx, v.cfg, zoneId, { at: madrid(MONDAY, "13:00") }),
+      );
+      const poll = await scoped((tx) => menuState(tx, v.cfg, zoneId, madrid(MONDAY, "13:00")));
+      expect(offers.service.periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
+      expect(poll.service.periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
+      expect(offers.defaultMenuId).toBe(v.menus.Almuerzo);
+      expect(offers.menus.find((menu) => menu.id === v.menus.Almuerzo)).toMatchObject({
+        isDefault: true,
+        orderable: true,
+        sendable: true,
+      });
+    }
+    expect((await key(MONDAY, "16:00")).periodOccurrenceKey).toBeNull();
+    await scoped((tx) =>
+      tx.insert(periodExtensions).values({
+        departmentId: v.restaurant,
+        businessDay: MONDAY,
+        periodId: v.periodId,
+        startsAt: "14:00:00",
+        endsAt: "15:00:00",
+      }),
+    );
+    expect((await key(MONDAY, "14:30")).periodOccurrenceKey).toBe(lunch.periodOccurrenceKey);
+    expect((await key(MONDAY, "15:00")).periodOccurrenceKey).toBeNull();
+  });
+
+  it("uses the actual special-day range and returns null without a readable clock or running period", async () => {
+    const v = await occurrenceVenue();
+    await saveDay(v, CHRISTMAS, { paint: [slot(v.periodId, "11:00", "16:00")] });
+    expect(
+      (
+        await scoped((tx) =>
+          resolveDepartmentService(tx, v.cfg, v.restaurant, madrid(CHRISTMAS, "13:00")),
+        )
+      ).periodOccurrenceKey,
+    ).toBe(JSON.stringify([v.restaurant, CHRISTMAS, v.periodId, "11:00"]));
+    expect(
+      (
+        await scoped((tx) =>
+          resolveDepartmentService(tx, v.cfg, v.deli, madrid(CHRISTMAS, "13:00")),
+        )
+      ).periodOccurrenceKey,
+    ).toBeNull();
+    expect(
+      (await scoped((tx) => menuState(tx, v.cfg, randomUUID(), madrid(CHRISTMAS, "13:00")))).service
+        .periodOccurrenceKey,
+    ).toBeNull();
+    await db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.locationId));
+    const service = await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, AT));
+    expect(service.periodOccurrenceKey).toBeNull();
+    expect(service.open).toBe(true);
+    expect(service.orderableMenuIds).toEqual([v.menus.Almuerzo]);
+  });
+
+  it("leaves pricing-only offers without an occurrence or a venue clock read", async () => {
+    const v = await occurrenceVenue();
+    const read = (withDefault: boolean) =>
+      scoped(async (tx) => {
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        try {
+          const offers = await listZoneOffers(tx, v.cfg, v.sala, {
+            at: madrid(MONDAY, "13:00"),
+            ...(withDefault ? {} : { withDefault: false as const }),
+          });
+          const clockReads = prepared.mock.calls.filter(([query]) =>
+            /from "locations"/.test((query as unknown as { sql: string }).sql),
+          ).length;
+          return { offers, clockReads };
+        } finally {
+          prepared.mockRestore();
+        }
+      });
+    expect((await read(true)).clockReads).toBeGreaterThan(0);
+    const pricing = await read(false);
+    expect(pricing.clockReads).toBe(0);
+    expect(pricing.offers.service.periodOccurrenceKey).toBeNull();
+    expect(pricing.offers.defaultMenuId).toBeNull();
+    expect(pricing.offers.menus.find((menu) => menu.id === v.menus.Almuerzo)).toMatchObject({
+      orderable: true,
+      sendable: true,
+    });
   });
 });

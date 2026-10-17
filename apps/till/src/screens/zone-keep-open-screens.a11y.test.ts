@@ -47,6 +47,7 @@ for (const locale of ["en", "es"] as const)
                   open: true,
                   zoneOpen: !closed,
                   periodName: locale === "en" ? "Dinner" : "Cena",
+                  periodOccurrenceKey: '["department","2026-10-12","period","08:00"]',
                   keepOpen: null,
                   zoneKeepOpen:
                     state === "open"

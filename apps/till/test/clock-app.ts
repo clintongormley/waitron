@@ -143,6 +143,7 @@ export async function clockApp(
         open: true,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       },

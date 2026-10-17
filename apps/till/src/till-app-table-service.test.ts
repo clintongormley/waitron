@@ -153,7 +153,14 @@ const till = {
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId: floorZone.id,
@@ -2559,6 +2566,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           open: true,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },
@@ -2612,6 +2620,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           open: true,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },

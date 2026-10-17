@@ -326,6 +326,7 @@ export interface ZoneMenuState {
     readonly open: boolean;
     readonly zoneOpen: boolean;
     readonly periodName: string | null;
+    readonly periodOccurrenceKey: string | null;
     readonly zoneKeepOpen: {
       readonly zoneId: string;
       readonly zoneName: string;

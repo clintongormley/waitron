@@ -111,6 +111,7 @@ describe("closed zone ordering", () => {
           open: true,
           zoneOpen: false,
           periodName: "Lunch",
+          periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
           keepOpen: null,
           zoneKeepOpen: null,
         },
@@ -128,6 +129,7 @@ describe("closed zone ordering", () => {
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
+        periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       };
@@ -635,6 +637,7 @@ it.each(retirementLooks)(
               open: true,
               zoneOpen: true,
               periodName: null,
+              periodOccurrenceKey: null,
               keepOpen: null,
               zoneKeepOpen: null,
             },

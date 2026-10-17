@@ -19,6 +19,7 @@ for (const kind of ["counter", "table"] as const) {
           open: true,
           zoneOpen: state !== "closed",
           periodName: "Dinner",
+          periodOccurrenceKey: '["department","2026-10-12","Dinner","08:00"]',
           keepOpen: null,
           zoneKeepOpen:
             state === "no closing"

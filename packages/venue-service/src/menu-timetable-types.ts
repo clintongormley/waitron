@@ -26,6 +26,7 @@ export interface DepartmentService {
   departmentId: string;
   open: boolean;
   periodId: string | null;
+  periodOccurrenceKey: string | null;
   periodName: string | null;
   customerMenuId: string | null;
   orderableMenuIds: readonly string[];

@@ -126,7 +126,14 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
 
 function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -167,7 +174,14 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
     unavailable: { ...NOTHING, ...unavailable },
   };
@@ -2049,7 +2063,14 @@ describe("the menu's Device Home Page", () => {
     await toCounter(el);
     const shown = browser(el).menu;
     api.menuState.mockResolvedValue({
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: null,
+        periodOccurrenceKey: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: [{ menuId: "lunch", versionId: "v2", orderable: true, sendable: true }],
       unavailable: NOTHING,
     } satisfies MenuState);
@@ -2110,6 +2131,7 @@ describe("keep-open changes refresh the order screen", () => {
     open: true,
     zoneOpen: true,
     periodName: "Lunch",
+    periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
     zoneKeepOpen: null,
     keepOpen: {
       periodId: "lunch",
@@ -2222,6 +2244,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
     open: false,
     zoneOpen: true,
     periodName: null,
+    periodOccurrenceKey: null,
     zoneKeepOpen: null,
     keepOpen: {
       periodId: "lunch",
@@ -2247,6 +2270,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
           open: true,
           zoneOpen: true,
           periodName: "Lunch",
+          periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
           zoneKeepOpen: null,
           keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
         },
@@ -2264,6 +2288,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
               open: true,
               zoneOpen: true,
               periodName: "Lunch",
+              periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
               zoneKeepOpen: null,
               keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
             },
@@ -2343,6 +2368,7 @@ for (const kind of ["counter", "table"] as const) {
       open: true,
       zoneOpen: true,
       periodName: "Lunch",
+      periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
       keepOpen: null,
       zoneKeepOpen: {
         zoneId: kind === "counter" ? "zone-counter" : "zone-dining",

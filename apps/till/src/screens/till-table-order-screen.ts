@@ -1167,6 +1167,7 @@ export class TillTableOrderScreen extends LitElement {
     open: true,
     zoneOpen: true,
     periodName: null,
+    periodOccurrenceKey: null,
     zoneKeepOpen: null,
     keepOpen: null,
   };

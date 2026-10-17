@@ -979,6 +979,7 @@ describe("GET /api/menu-state", () => {
         open: true,
         zoneOpen: true,
         periodName: "Always",
+        periodOccurrenceKey: expect.any(String),
         zoneKeepOpen: null,
         keepOpen: {
           periodId: expect.any(String),
@@ -1001,6 +1002,7 @@ describe("GET /api/menu-state", () => {
         open: true,
         zoneOpen: true,
         periodName: "Always",
+        periodOccurrenceKey: expect.any(String),
         zoneKeepOpen: null,
         keepOpen: {
           periodId: expect.any(String),

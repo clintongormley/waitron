@@ -559,6 +559,7 @@ export async function priceOrderLines(
           open: false,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },
