@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { saveActionState } from "@waitron/ui";
+import { saveActionState, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -349,6 +349,8 @@ export class StaffingGrid extends LitElement {
       !sameBlock(this.#day(this.picked.key)[this.picked.index], this.picked.block)
     )
       this.#unpick();
+    // A stroke that stretches is a click outside the editor: it changes the day the draft began from.
+    if (this.#stroke.preview !== null && this.selected !== null) this.#closeMenu();
     const resizing = this.#resizing;
     if (
       changes.has("days") &&
@@ -468,7 +470,7 @@ export class StaffingGrid extends LitElement {
     if (this.selected?.key === key && this.selected.index === index) {
       // A press on the menu's own block light-dismisses it before this click; showing it again
       // in the same task keeps the draft, as the close's toggle event then reads "open".
-      if (!this.menu.matches(":popover-open")) placePopover(this.menu, trigger, false);
+      if (!this.menu.matches(":popover-open")) placePopover(this.menu, trigger, false, true);
       return;
     }
     this.selected = { key, index, block };
@@ -477,7 +479,7 @@ export class StaffingGrid extends LitElement {
       headcount: block.headcount,
     };
     await this.updateComplete;
-    placePopover(this.menu, trigger, false);
+    placePopover(this.menu, trigger, false, true);
     this.menu.querySelector<HTMLElement>("wt-combobox")?.focus();
   }
   #closeMenu(): void {
@@ -524,8 +526,13 @@ export class StaffingGrid extends LitElement {
   #onMenuKeydown(event: KeyboardEvent): void {
     const selected = this.selected;
     if (selected === null) return;
-    const target = event.composedPath()[0];
-    if (isDeleteKey(event) && !(target instanceof HTMLInputElement)) {
+    const inField = event
+      .composedPath()
+      .some(
+        (node) =>
+          node instanceof HTMLElement && /^wt-(combobox|number-stepper)$/.test(node.localName),
+      );
+    if (isDeleteKey(event) && !inField) {
       event.preventDefault();
       this.#closeMenu();
       this.#deleteAt(selected.key, selected.index);
@@ -774,6 +781,11 @@ export class StaffingGrid extends LitElement {
                       showHeadcount(control, next);
                     }
                   }}
+                  @keydown=${(event: KeyboardEvent) =>
+                    submitOnEnter(
+                      event,
+                      this.menu.querySelector<HTMLElement>('[data-test="save-block"]'),
+                    )}
                   @focusout=${(event: FocusEvent) => {
                     if (this.draft !== null) {
                       const control =

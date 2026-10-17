@@ -969,16 +969,190 @@ test("Delete in the menu removes the block; Backspace on a focused block removes
   expect(seen[1]).toEqual({ key: "mon", blocks: [headChef] });
 });
 
-test("Delete or Backspace inside an open menu deletes, but not while typing in How many", async () => {
+test("Delete or Backspace in the editor deletes the block from its buttons but not from the role field or How many", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);
   await userEvent.click(block(el, "mon", 0));
+  await el.updateComplete;
+  roleField(el).focus();
+  expect(el.shadowRoot!.activeElement).toBe(roleField(el));
+  await userEvent.keyboard("{Backspace}");
   stepper(el).shadowRoot!.querySelector("input")!.focus();
   await userEvent.keyboard("{Backspace}");
-  expect(seen.filter((change) => change.blocks?.length === 1)).toEqual([]);
+  await userEvent.click(roleField(el));
+  await roleField(el).updateComplete;
+  const search = roleField(el).shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+  expect(roleField(el).shadowRoot!.activeElement).toBe(search);
+  await userEvent.keyboard("{Backspace}");
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
   cancel(el).focus();
   await userEvent.keyboard("{Delete}");
-  expect(seen.at(-1)).toEqual({ key: "mon", blocks: [sous] });
+  expect(seen).toEqual([{ key: "mon", blocks: [sous] }]);
+});
+
+test("Escape with the role list open closes only the list; a second Escape closes the editor", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  await userEvent.click(roleField(el));
+  await roleField(el).updateComplete;
+  const list = roleField(el).shadowRoot!.querySelector("[popover]")!;
+  expect(list.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(list.matches(":popover-open")).toBe(false);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(seen).toEqual([]);
+  expect(picked(el)).toBe(block(el, "mon"));
+});
+
+test("Enter in How many saves", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  const input = () => stepper(el).shadowRoot!.querySelector("input")!;
+  input().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await step(el, 1);
+  input().focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  await twoFrames();
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...sous, headcount: 3 }] }]);
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.activeElement).toBe(block(el, "mon"));
+  expect(picked(el)).toBe(block(el, "mon"));
+});
+
+test("Tab out of the editor's last button closes it without sending and unpicks the block", async () => {
+  const el = await grid({ mon: [headChef, sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon", 0));
+  await step(el, 1);
+  save(el).focus();
+  expect(el.shadowRoot!.activeElement).toBe(save(el));
+  await userEvent.tab();
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  expect(menu(el).contains(el.shadowRoot!.activeElement)).toBe(false);
+  expect(seen).toEqual([]);
+  expect(picked(el)).toBeNull();
+  await userEvent.click(block(el, "mon", 0));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+});
+
+test("an edge drag of the picked block with its editor open closes the editor when it first stretches, drops the draft, and resizes", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: undefined });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  // Dispatched, so the browser's light dismiss plays no part: only the grid can close the editor.
+  point(el, "mon", 630, "pointerdown", edge(el, "mon", 0, "end"));
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  point(el, "mon", 720, "pointermove");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  point(el, "mon", 720, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "mon", blocks: [{ ...headChef, endsAt: "18:00" }] }]);
+  await userEvent.click(block(el, "mon"));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+  expect(save(el).disabled).toBe(true);
+});
+
+test("a press and release on the picked block's edge with no movement keeps the editor and its draft", async () => {
+  const el = await grid({ mon: [sous] }, { chosen: undefined });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  const end = edge(el, "mon", 0, "end");
+  const strip = end.getBoundingClientRect();
+  const y = strip.top + strip.height / 2;
+  // Dispatched: the browser does not light-dismiss, so this checks the grid keeps the editor.
+  pointAt(el, "mon", y, "pointerdown", end);
+  await el.updateComplete;
+  pointAt(el, "mon", y, "pointerup");
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  // A real press: the browser light-dismisses the editor, and the click on its block shows it again.
+  await userEvent.click(end);
+  await el.updateComplete;
+  await twoFrames();
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  expect(stepper(el).value).toBe("3");
+  expect(save(el).variant).toBe("primary");
+  expect(picked(el)).toBe(block(el, "mon"));
+  expect(seen).toEqual([]);
+});
+
+test("a paint drag from the picked block's body with its editor open closes the editor, drops the draft, and adds a block", async () => {
+  const el = await grid({ mon: [headChef] }, { chosen: "sc" });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  point(el, "mon", 300, "pointerdown", block(el, "mon"));
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  point(el, "mon", 420, "pointermove");
+  await el.updateComplete;
+  expect(menu(el).matches(":popover-open")).toBe(false);
+  point(el, "mon", 420, "pointerup");
+  await el.updateComplete;
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      blocks: [headChef, { staffRoleId: "sc", headcount: 1, startsAt: "11:00", endsAt: "13:00" }],
+    },
+  ]);
+  await userEvent.click(block(el, "mon"));
+  await el.updateComplete;
+  expect(stepper(el).value).toBe("1");
+  expect(save(el).disabled).toBe(true);
+});
+
+test("at 390×844 the editor fits inside the window, and sits above a block low in the view when there is room", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const late: StaffingBlock = {
+      staffRoleId: "sc",
+      headcount: 1,
+      startsAt: "22:00",
+      endsAt: "00:00",
+    };
+    const el = await grid({ mon: [late] });
+    // Pushes the block down until its foot is a little above the window's.
+    const spacer = document.createElement("div");
+    spacer.style.height = `${innerHeight - 40 - block(el, "mon").getBoundingClientRect().bottom}px`;
+    el.before(spacer);
+    await userEvent.click(block(el, "mon"));
+    await el.updateComplete;
+    const box = menu(el).getBoundingClientRect();
+    const at = block(el, "mon").getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(innerWidth);
+    expect(at.top - box.height).toBeGreaterThanOrEqual(8);
+    expect(box.bottom).toBeLessThanOrEqual(at.top + 0.5);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
 
 test("keyboard: blocks are buttons in tab order, Enter opens one, Escape closes and refocuses it", async () => {
