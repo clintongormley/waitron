@@ -6193,10 +6193,10 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)?.open ?? false).toBe(false);
   });
 
-  describe("a partial submission that lands on the party's next bill", () => {
-    const toNextBill = (over: Record<string, unknown> = {}) => ({
+  describe("a partial submission after the party's main bill changes", () => {
+    const onRecordedBill = (over: Record<string, unknown> = {}) => ({
       ...withCourses(),
-      submitDraft: answering({ tabId: "wo-next", revision: 4, groups: [] }),
+      submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
       ...over,
     });
     const partyOnNextBill = () =>
@@ -6216,15 +6216,15 @@ describe("till-app: submitting the draft", () => {
       summary,
     });
 
-    it("keeps the rest of a first order a first order, with its course choice and its count, on the bill it follows, though the party now has a group", async () => {
+    it("keeps the rest of a first order a first order, with its course choice and its count, on its recorded bill, though the party now has a group", async () => {
       const { el } = await mountApp(
-        toNextBill({
+        onRecordedBill({
           submitDraft: vi.fn(async (...args: SubmitArgs) => {
             vi.mocked(api.listGroups).mockResolvedValue({
               revision: 4,
               groups: [firedGroup("g1", "1 × Beer")],
             });
-            return { ...drafts.apply(...args), tabId: "wo-next", revision: 4, groups: [] };
+            return { ...drafts.apply(...args), tabId: "wo-4", revision: 4, groups: [] };
           }),
         }),
       );
@@ -6239,7 +6239,7 @@ describe("till-app: submitting the draft", () => {
       await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
-      expect(next.orderId).toBe("wo-next");
+      expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
       expect(courseOf(next, 0)).toBe("desserts");
       expect(next.shadowRoot!.querySelector('[data-draft-action="send-all"]')).not.toBeNull();
@@ -6258,7 +6258,7 @@ describe("till-app: submitting the draft", () => {
     it("keeps a later addition's rest a later addition", async () => {
       const prior = firedGroup("g-prior", "1 × Coffee");
       const { el } = await mountApp(
-        toNextBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
+        onRecordedBill({ listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [prior] }) }),
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
@@ -6268,7 +6268,7 @@ describe("till-app: submitting the draft", () => {
       await act(el, order, "submit");
 
       const next = tableOrder(el)!;
-      expect(next.orderId).toBe("wo-next");
+      expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
       expect(next.shadowRoot!.querySelector("[data-destination-choice]")).not.toBeNull();
     });
@@ -6281,7 +6281,7 @@ describe("till-app: submitting the draft", () => {
         firedAt: null,
       });
       const { el } = await mountApp(
-        toNextBill({
+        onRecordedBill({
           listGroups: vi
             .fn()
             .mockResolvedValue({ revision: 3, groups: [held("g-a", 1), held("g-b", 2)] }),
@@ -6301,7 +6301,7 @@ describe("till-app: submitting the draft", () => {
       const next = tableOrder(el)!;
       const pressed = (selector: string) =>
         next.shadowRoot!.querySelector(selector)!.getAttribute("aria-pressed");
-      expect(next.orderId).toBe("wo-next");
+      expect(next.orderId).toBe("wo-4");
       expect(vi.mocked(api.submitDraft).mock.calls[0]![2].joinGroupId).toBe("g-b");
       expect(pressed('[data-destination="add-to-held"]')).toBe("true");
       expect(pressed('[data-held-group="g-b"]')).toBe("true");

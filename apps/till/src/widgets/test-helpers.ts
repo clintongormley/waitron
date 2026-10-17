@@ -321,7 +321,10 @@ export function draftServer(
     },
     save(partyId: string, save: DraftSave): Draft {
       const own = server.drafts.find(
-        (draft) => draft.partyId === partyId && draft.ownerId === server.personId,
+        (draft) =>
+          draft.partyId === partyId &&
+          draft.ownerId === server.personId &&
+          draft.billId === save.billId,
       );
       let draft: Draft;
       if (save.draftId === null) {
@@ -329,6 +332,7 @@ export function draftServer(
         draft = {
           id: `draft-${++ids}`,
           partyId,
+          billId: save.billId,
           ownerId: server.personId,
           ownerName: server.personName,
           revision: 0,
@@ -353,7 +357,10 @@ export function draftServer(
       if (draft.ownerId === server.personId) return draft;
       if (draft.revision !== revision) throw refusal("draft.out_of_date", draft);
       const own = server.drafts.find(
-        (candidate) => candidate.partyId === partyId && candidate.ownerId === server.personId,
+        (candidate) =>
+          candidate.partyId === partyId &&
+          candidate.ownerId === server.personId &&
+          candidate.billId === draft.billId,
       );
       if (own === undefined) {
         draft.takenOverFrom = { personId: draft.ownerId, name: draft.ownerName };

@@ -8885,6 +8885,7 @@ export class TillApp extends LitElement {
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
   async #loadTabLines(): Promise<void> {
+    await this.#followPartyDraft();
     const read = ++this.#tabLinesRead;
     const partyId = this.orderParty?.id ?? null;
     if (this.activeTabId === undefined) {
@@ -9087,17 +9088,19 @@ export class TillApp extends LitElement {
     const held = this.orderParty;
     const older = floor !== null && floor.id === held?.id && floor.revision < held.revision;
     if (row !== undefined && !older) this.orderParty = floor;
-    this.#followPartyDraft();
+    void this.#followPartyDraft();
   }
 
-  /** The draft the open order shows: the person's on its party, whichever of the party's bills is on
-   * screen. It waits for the party's own groups, since the screen decides from them whether its first
-   * line is a later addition. */
+  /** The draft the open order shows belongs to the bill on screen. It waits for the party's own
+   * groups, since the screen decides from them whether its first line is a later addition. */
   #tableDraft(): WorkingOrderStore | null {
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
     const party = this.orderParty.id;
-    return this.#draftReady && sync?.partyId === party && this.#groupsReadFor === party
+    return this.#draftReady &&
+      sync?.partyId === party &&
+      sync.billId === this.activeTabId &&
+      this.#groupsReadFor === party
       ? sync.store
       : null;
   }
@@ -9111,10 +9114,11 @@ export class TillApp extends LitElement {
     this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
-    if (party === null) return { sync: undefined, read: true };
+    const billId = this.activeTabId;
+    if (party === null || billId === undefined) return { sync: undefined, read: true };
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
-    if (kept?.personId === this.#sessionPersonId) {
+    if (kept?.personId === this.#sessionPersonId && kept.billId === billId) {
       this.#draftSync = kept;
       void this.#flushDraft();
       return { sync: kept, read: true };
@@ -9123,6 +9127,7 @@ export class TillApp extends LitElement {
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
+      billId,
       personId: this.#sessionPersonId,
       rebuild: (lines) =>
         lines.map((line) =>
@@ -9213,27 +9218,32 @@ export class TillApp extends LitElement {
 
   /** At a point the person leaves the draft: an edit no save reached is said, unless the operator
    * session has ended by the time the save answers, since the next person may have signed in. */
-  async #flushDraft(): Promise<void> {
-    if (this.#draftSync === undefined) return;
+  async #flushDraft(): Promise<boolean> {
+    const sync = this.#draftSync;
+    if (sync === undefined) return true;
     const session = this.#operatorSession;
-    const saved = await this.#draftSync.flush();
-    if (saved === "failed" && session === this.#operatorSession)
+    const saved = await sync.flush();
+    if (saved === "failed" && session === this.#operatorSession && sync === this.#draftSync)
       this.errorKey = "table.draft_save_failed";
+    return saved === "saved";
   }
 
   /** An order that moved to another party, by a merge or a move, takes that party's draft; the
    * person's edits are saved to the party they were made on first. */
-  #followPartyDraft(): void {
+  async #followPartyDraft(): Promise<void> {
     const sync = this.#draftSync;
-    if (sync === undefined || sync.partyId === this.orderParty?.id) return;
+    if (
+      sync === undefined ||
+      (sync.partyId === this.orderParty?.id && sync.billId === this.activeTabId)
+    )
+      return;
     const session = this.#operatorSession;
-    void this.#flushDraft().then(async () => {
-      if (this.#draftSync !== sync) return;
-      const party = this.orderParty?.id;
-      await this.#savesOutFor(party);
-      if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
-      this.#showDraft(await this.#openDraft(true, session));
-    });
+    if (!(await this.#flushDraft())) return;
+    if (this.#draftSync !== sync) return;
+    const party = this.orderParty?.id;
+    await this.#savesOutFor(party);
+    if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
+    this.#showDraft(await this.#openDraft(true, session));
   }
 
   /** A save refused. An edit made after the session ended is lost: nothing can send it now. A line
@@ -11692,6 +11702,16 @@ export class TillApp extends LitElement {
   /** Charges another bill of the party from the same screen. */
   async #onTakePayment(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const billId = this.activeTabId;
+    if (!(await this.#flushDraft())) return;
+    if (
+      session !== this.#operatorSession ||
+      visit !== this.#orderVisit ||
+      billId !== this.activeTabId
+    )
+      return;
     this.errorKey = undefined;
     this.finishRefused = false;
     this.activeTabId = workingOrderId;

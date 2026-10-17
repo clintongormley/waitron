@@ -722,6 +722,7 @@ export interface DeadEndAnswer {
 export interface Draft {
   id: string;
   partyId: string;
+  billId: string;
   ownerId: string;
   ownerName: string;
   revision: number;
@@ -733,6 +734,7 @@ export interface Draft {
 
 /** A save of the signed-in person's draft: `draftId` null and `revision` 0 start a new one. */
 export interface DraftSave {
+  billId: string;
   draftId: string | null;
   revision: number;
   lines: DraftLineInput[];
@@ -744,8 +746,6 @@ export interface DraftSubmission extends GroupCommand {
   draftRevision: number;
   groups: { lineIds: string[]; release: GroupRelease }[];
   joinGroupId?: string;
-  /** The party's bill to put the lines on; the server refuses one that is not an open bill of the
-   * party. Absent, they go on the party's main bill, which the server makes if there is none. */
   billId?: string;
 }
 

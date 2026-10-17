@@ -4201,6 +4201,7 @@ describe("TillApi: a party's drafts", () => {
   const draft = {
     id: "d1",
     partyId: "v1",
+    billId: "wo-4",
     ownerId: "p-alex",
     ownerName: "Alex",
     revision: 1,
@@ -4216,7 +4217,11 @@ describe("TillApi: a party's drafts", () => {
     const signal = new AbortController().signal;
 
     await api.listDrafts("v1", { signal });
-    await api.saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }, { signal });
+    await api.saveDraft(
+      "v1",
+      { billId: "wo-4", draftId: null, revision: 0, lines: [beer] },
+      { signal },
+    );
 
     expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
   });
@@ -4236,23 +4241,33 @@ describe("TillApi: a party's drafts", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(draft));
 
     await expect(
-      new TillApi("", fetchStub).saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }),
+      new TillApi("", fetchStub).saveDraft("v1", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        lines: [beer],
+      }),
     ).resolves.toEqual(draft);
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts",
-      send("PUT", { draftId: null, revision: 0, lines: [beer] }),
+      send("PUT", { billId: "wo-4", draftId: null, revision: 0, lines: [beer] }),
     );
   });
 
   it("saveDraft PUTs an existing draft's id and the revision it was read at", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ...draft, revision: 2 }));
 
-    await new TillApi("", fetchStub).saveDraft("v1", { draftId: "d1", revision: 1, lines: [] });
+    await new TillApi("", fetchStub).saveDraft("v1", {
+      billId: "wo-4",
+      draftId: "d1",
+      revision: 1,
+      lines: [],
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts",
-      send("PUT", { draftId: "d1", revision: 1, lines: [] }),
+      send("PUT", { billId: "wo-4", draftId: "d1", revision: 1, lines: [] }),
     );
   });
 
@@ -4270,7 +4285,12 @@ describe("TillApi: a party's drafts", () => {
     );
 
     await expect(
-      new TillApi("", fetchStub).saveDraft("v1", { draftId: "d1", revision: 1, lines: [beer] }),
+      new TillApi("", fetchStub).saveDraft("v1", {
+        billId: "wo-4",
+        draftId: "d1",
+        revision: 1,
+        lines: [beer],
+      }),
     ).rejects.toEqual({
       code: "draft.taken_over",
       status: 409,
@@ -4291,7 +4311,12 @@ describe("TillApi: a party's drafts", () => {
       );
 
     await expect(
-      new TillApi("", fetchStub).saveDraft("v1", { draftId: null, revision: 0, lines: [beer] }),
+      new TillApi("", fetchStub).saveDraft("v1", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        lines: [beer],
+      }),
     ).rejects.toEqual({ code: "draft.out_of_date", status: 409, draftId: "d1", revision: 3 });
   });
 

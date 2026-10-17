@@ -61,6 +61,7 @@ export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 export interface DraftSyncOptions {
   api: Pick<TillApi, "listDrafts" | "saveDraft" | "takeOverDraft">;
   partyId: string;
+  billId: string;
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
@@ -177,15 +178,16 @@ function sameLines(till: readonly DraftLineInput[], saved: readonly DraftLine[])
 }
 
 /**
- * One person's draft on one party, kept on the server. Every edit to {@link store} is saved after
+ * One person's draft on one bill, kept on the server. Every edit to {@link store} is saved after
  * {@link DRAFT_SAVE_DELAY_MS}; saves go one at a time, and edits made while one is out go in the
  * next. Each save names the draft id and revision the last one answered.
  */
 export class DraftSync {
   readonly store = new DraftStore();
   readonly partyId: string;
+  readonly billId: string;
   readonly personId: string;
-  /** Other people's open drafts on the party, as last read. */
+  /** Other people's open drafts on this bill, as last read. */
   others: Draft[] = [];
   readonly #options: DraftSyncOptions;
   #draftId: string | null = null;
@@ -209,6 +211,7 @@ export class DraftSync {
   constructor(options: DraftSyncOptions) {
     this.#options = options;
     this.partyId = options.partyId;
+    this.billId = options.billId;
     this.personId = options.personId;
     this.#unsubscribe = this.store.subscribe(() => this.#onChange());
   }
@@ -246,6 +249,7 @@ export class DraftSync {
       limit.done();
     }
     if (this.#dropped || read !== this.#reads) return false;
+    drafts = drafts.filter((draft) => draft.billId === this.billId);
     const own = drafts.find((draft) => draft.ownerId === this.personId) ?? null;
     this.others = drafts.filter((draft) => draft !== own);
     this.#show(own);
@@ -375,7 +379,7 @@ export class DraftSync {
     try {
       saved = await this.#options.api.saveDraft(
         this.partyId,
-        { draftId: this.#draftId, revision: this.#revision, lines },
+        { billId: this.billId, draftId: this.#draftId, revision: this.#revision, lines },
         { signal: limit.signal },
       );
     } catch (error) {

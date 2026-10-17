@@ -56,10 +56,11 @@ let refused: string[];
 
 let replaced: number;
 
-function sync(personId = "p1"): DraftSync {
+function sync(personId = "p1", billId = "wo-4"): DraftSync {
   return new DraftSync({
     api: server,
     partyId: "v1",
+    billId,
     personId,
     rebuild,
     onRefused: (code) => refused.push(code),
@@ -78,6 +79,7 @@ function seed(ownerId: string, ...products: TillProduct[]): Draft {
   const personId = server.personId;
   server.personId = ownerId;
   const draft = server.save("v1", {
+    billId: "wo-4",
     draftId: null,
     revision: 0,
     lines: products.map((product) => ({
@@ -135,6 +137,71 @@ describe("DraftSync: reading a party's drafts", () => {
   });
 });
 
+describe("DraftSync: bill ownership", () => {
+  it("loads only this bill's own draft and colleagues", async () => {
+    const ownOther = seed("p1", steak);
+    const colleagueOther = seed("p2", beer);
+    server.drafts = [
+      { ...ownOther, billId: "wo-check" },
+      { ...colleagueOther, billId: "wo-check" },
+      { ...ownOther, id: "own-here", billId: "wo-4", lines: colleagueOther.lines },
+      { ...colleagueOther, id: "colleague-here", billId: "wo-4", lines: ownOther.lines },
+    ];
+    const draft = sync();
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.draftId).toBe("own-here");
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.others.map((other) => other.id)).toEqual(["colleague-here"]);
+  });
+
+  it("starts empty on another bill owned by the same person", async () => {
+    const other = seed("p1", steak);
+    server.drafts = [{ ...other, billId: "wo-4" }];
+    const draft = sync("p1", "wo-check");
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.draftId).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.others).toEqual([]);
+  });
+
+  it("takes over this bill's colleague without absorbing another bill's own draft", async () => {
+    const elsewhere = seed("p1", beer);
+    elsewhere.billId = "wo-check";
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
+
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(
+      server.drafts.map((each) => [each.billId, each.ownerId, each.lines[0]!.menuItemId]),
+    ).toEqual([
+      ["wo-check", "p1", "offer-beer"],
+      ["wo-4", "p1", "offer-steak"],
+    ]);
+    expect(draft.others).toEqual([]);
+  });
+
+  it("saves each edit with the sync's recorded bill", async () => {
+    const draft = sync("p1", "wo-check");
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toBe("saved");
+
+    expect(server.saveDraft).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ billId: "wo-check" }),
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+});
+
 describe("DraftSync: saving", () => {
   it("saves three taps on Beer once, as one Beer ×3, after the edits stop", async () => {
     const draft = sync();
@@ -152,6 +219,7 @@ describe("DraftSync: saving", () => {
     expect(server.saveDraft).toHaveBeenCalledWith(
       "v1",
       {
+        billId: "wo-4",
         draftId: null,
         revision: 0,
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
@@ -173,6 +241,7 @@ describe("DraftSync: saving", () => {
     expect(server.saveDraft).toHaveBeenLastCalledWith(
       "v1",
       {
+        billId: "wo-4",
         draftId: server.drafts[0]!.id,
         revision: 1,
         lines: [expect.anything(), expect.anything()],
@@ -203,6 +272,7 @@ describe("DraftSync: saving", () => {
 
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
     expect(server.saveDraft.mock.calls[1]![1]).toEqual({
+      billId: "wo-4",
       draftId: server.drafts[0]!.id,
       revision: 1,
       lines: [
@@ -578,6 +648,7 @@ describe("DraftSync: a party's draft store", () => {
       const draft = new DraftSync({
         api: server,
         partyId: "v1",
+        billId: "wo-4",
         personId: "p1",
         rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
         onRefused: (code) => refused.push(code),
@@ -930,6 +1001,7 @@ describe("DraftSync: taking over another person's draft", () => {
     const draft = new DraftSync({
       api: server,
       partyId: "v1",
+      billId: "wo-4",
       personId: "p1",
       rebuild,
       onRefused: (_code, ownerName) => names.push(ownerName),

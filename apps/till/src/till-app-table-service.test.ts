@@ -733,6 +733,7 @@ it("clears a saved draft station missing from the station list", async () => {
   drafts.drafts.push({
     id: "draft-1",
     partyId: "v-2",
+    billId: "wo-7",
     ownerId: "p1",
     ownerName: "Ana",
     revision: 1,

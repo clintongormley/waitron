@@ -985,6 +985,120 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 describe("till-app: a table's draft is kept on the server", () => {
+  it("keeps each bill's draft separate when switching and returning", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    expect(server.drafts.map((each) => [each.billId, each.lines.length])).toEqual([["wo-4", 1]]);
+    expect(rows(el)).toEqual([]);
+    await tap(el, "Steak");
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-4" });
+    await flush(el);
+
+    expect(server.drafts.map((each) => [each.billId, each.lines[0]!.menuItemId])).toEqual([
+      ["wo-4", "offer-beer"],
+      ["wo-check", "offer-steak"],
+    ]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("waits for the old bill's save before showing the next bill's draft", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    let answer!: () => void;
+    api.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(partyId, save));
+    });
+
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    answer();
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(rows(el)).toEqual([]);
+    expect(server.drafts[0]!.billId).toBe("wo-4");
+  });
+
+  it("retains the current bill and edits when its draft save gets no answer", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    api.saveDraft.mockRejectedValue(new TypeError("offline"));
+
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    api.saveDraft.mockImplementation(async (partyId, save) =>
+      structuredClone(server.save(partyId, save)),
+    );
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(server.drafts[0]!.billId).toBe("wo-4");
+  });
+
+  it("ignores a late draft response from the bill left behind", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    let answer!: () => void;
+    api.listDrafts.mockImplementationOnce(async (partyId) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return server.listDrafts(partyId);
+    });
+
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(tableOrder(el)!.draftStore).toBeNull();
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-4" });
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    answer();
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("saves an edit made during the bill switch to the original bill", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    let answer!: () => void;
+    api.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return structuredClone(server.save(partyId, save));
+    });
+
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    await tap(el, "Steak");
+    answer();
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(rows(el)).toEqual([]);
+    expect(
+      server.drafts.map((each) => [each.billId, each.lines.map((line) => line.menuItemId)]),
+    ).toEqual([["wo-4", ["offer-beer", "offer-steak"]]]);
+  });
+
   it("saves the draft on leaving the table, and sends nothing to the kitchen", async () => {
     const { el } = await mountApp();
     await openMesa(el);
@@ -1116,7 +1230,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(server.drafts[0]!.lines.map((line) => line.courseId)).toEqual(["mains"]);
   });
 
-  it("keeps showing the party's draft on a bill split off the party's bill", async () => {
+  it("keeps unsent dishes on their original bill when a sent dish is split off", async () => {
     const { el } = await mountApp({
       splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       getTabLines: vi.fn().mockResolvedValue({
@@ -1151,6 +1265,13 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     expect(browser(el)).not.toBeNull();
     expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-action]")).not.toBeNull();
+    expect(rows(el)).toEqual([]);
+    expect(server.drafts.map((each) => [each.billId, each.lines[0]!.menuItemId])).toEqual([
+      ["wo-4", "offer-beer"],
+    ]);
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-4" });
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
   });
 });
 
@@ -1161,6 +1282,7 @@ describe("till-app: an order that moves to another party", () => {
     });
     await openMesa(el);
     server.save("v9", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -1492,6 +1614,7 @@ describe("till-app: a save the server refuses", () => {
     const { el } = await mountApp();
     await openMesa(el);
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -2589,6 +2712,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
       }),
     });
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -2653,7 +2777,7 @@ describe("till-app: a table open that another overtakes", () => {
         return server.listDrafts(partyId);
       }),
     });
-    server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
+    server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [beerLine] });
     await flush(el);
     await signIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -2681,7 +2805,7 @@ describe("till-app: a table open that another overtakes", () => {
         return catalogue("v1");
       }),
     });
-    server.save("v1", { draftId: null, revision: 0, lines: [beerLine] });
+    server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [beerLine] });
     await flush(el);
     await signIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -2723,6 +2847,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     });
     await openMesa(el);
     server.save("v9", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -2990,6 +3115,7 @@ describe("till-app: the next person after an ordinary sign-out", () => {
     server.personId = "p2";
     server.personName = "Sam";
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -3213,7 +3339,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
   it("on Review, shows the server's draft there, says so, and sends nothing again", async () => {
     const { el } = await mountApp();
     await openMesa(el);
-    server.save("v1", { draftId: null, revision: 0, lines: [steakLine] });
+    server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Beer");
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
     await flush(el);
@@ -3232,7 +3358,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
   it("keeps the bar on the dish tapped when the server's draft still orders it", async () => {
     const { el } = await mountApp();
     await openMesa(el);
-    server.save("v1", { draftId: null, revision: 0, lines: [steakLine] });
+    server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Steak");
     expect(bar(el)).toContain("Steak ×1");
 
@@ -3271,7 +3397,12 @@ describe("till-app: other people's drafts and taking one over", () => {
     server.personId = personId;
     server.personName = personName;
     const saved = structuredClone(
-      server.save("v1", { draftId: null, revision: 0, lines: menuItemIds.map((id) => line(id)) }),
+      server.save("v1", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        lines: menuItemIds.map((id) => line(id)),
+      }),
     );
     server.personId = signedIn;
     server.personName = name;
@@ -3691,6 +3822,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     await openAs(el, SAM, "Sam");
     server.personId = ALEX;
     server.save("v1", {
+      billId: "wo-4",
       draftId: alexs.id,
       revision: alexs.revision,
       lines: [line("offer-beer", "2")],
@@ -3883,6 +4015,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     server.personId = "p-alex";
     server.personName = "Alex";
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -4000,6 +4133,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     server.personId = "p-alex";
     server.personName = "Alex";
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -4078,6 +4212,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
   /** Beer saved on Mesa 4 under v0, a version this till never read. */
   function savedUnderV0(): void {
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -4201,6 +4336,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
 
   it("does not ask again about a line put aside when a publish's offers cannot be read", async () => {
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -4273,6 +4409,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     server.personId = "p-alex";
     server.personName = "Alex";
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: [
@@ -4312,6 +4449,7 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 
   function savedAt(version: string, ...menuItemIds: string[]): void {
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: menuItemIds.map((menuItemId) => ({
@@ -4498,6 +4636,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
   it("flags a line of a draft read from the server that the table's offers say is sold out", async () => {
     server.save("v1", {
+      billId: "wo-4",
       draftId: null,
       revision: 0,
       lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
@@ -4637,6 +4776,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
     function savedBeerAndFlan(): void {
       server.save("v1", {
+        billId: "wo-4",
         draftId: null,
         revision: 0,
         lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
@@ -4866,6 +5006,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
     function savedBeer(over: Partial<DraftLineInput> = {}): void {
       server.save("v1", {
+        billId: "wo-4",
         draftId: null,
         revision: 0,
         lines: [
