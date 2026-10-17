@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
@@ -62,6 +62,31 @@ async function readStaffRole(tx: Transaction, cfg: Cfg, staffRoleId: string): Pr
   return (await readStaffRoles(tx, cfg, staffRoleId))[0]!;
 }
 
+function staffRoleRows(tx: Transaction, scope: SQL | undefined) {
+  return tx
+    .select({
+      id: staffRoles.id,
+      name: staffRoles.name,
+      colour: staffRoles.colour,
+      position: staffRoles.position,
+    })
+    .from(staffRoles)
+    .where(scope)
+    .orderBy(asc(staffRoles.position), asc(staffRoles.name));
+}
+
+function byStaffRole<Row extends { staffRoleId: string }>(
+  rows: readonly Row[],
+): Map<string, Row[]> {
+  const grouped = new Map<string, Row[]>();
+  for (const row of rows) {
+    const held = grouped.get(row.staffRoleId);
+    if (held) held.push(row);
+    else grouped.set(row.staffRoleId, [row]);
+  }
+  return grouped;
+}
+
 /** Every query is narrowed to `only` when it is given, so a write's answer reads one staff role. */
 async function readStaffRoles(
   tx: Transaction,
@@ -72,25 +97,18 @@ async function readStaffRoles(
     eq(staffRoles.locationId, cfg.locationId),
     only === null ? undefined : eq(staffRoles.id, only),
   );
-  const rows = await tx
-    .select({
-      id: staffRoles.id,
-      name: staffRoles.name,
-      colour: staffRoles.colour,
-      position: staffRoles.position,
-    })
-    .from(staffRoles)
-    .where(scope)
-    .orderBy(asc(staffRoles.position), asc(staffRoles.name));
-  const holders = await tx
-    .select({ staffRoleId: personStaffRoles.staffRoleId, personId: personStaffRoles.personId })
-    .from(personStaffRoles)
-    .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
-    .where(scope)
-    .orderBy(asc(personStaffRoles.personId));
+  const rows = await staffRoleRows(tx, scope);
+  const holders = byStaffRole(
+    await tx
+      .select({ staffRoleId: personStaffRoles.staffRoleId, personId: personStaffRoles.personId })
+      .from(personStaffRoles)
+      .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
+      .where(scope)
+      .orderBy(asc(personStaffRoles.personId)),
+  );
   return rows.map((staffRole) => ({
     ...staffRole,
-    holderIds: holders.filter((h) => h.staffRoleId === staffRole.id).map((h) => h.personId),
+    holderIds: (holders.get(staffRole.id) ?? []).map((h) => h.personId),
   }));
 }
 
@@ -104,25 +122,30 @@ export async function listStaffRolesWithHolderNames(
   tx: Transaction,
   cfg: Cfg,
 ): Promise<ListedStaffRole[]> {
-  const staffRoleList = await listStaffRoles(tx, cfg);
-  const compare = createLabelComparator();
-  const holders = (
+  const scope = eq(staffRoles.locationId, cfg.locationId);
+  const rows = await staffRoleRows(tx, scope);
+  const holders = byStaffRole(
     await tx
       .select({
         staffRoleId: personStaffRoles.staffRoleId,
-        personId: persons.id,
+        personId: personStaffRoles.personId,
         name: persons.displayName,
       })
       .from(personStaffRoles)
       .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
       .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
-      .where(eq(staffRoles.locationId, cfg.locationId))
-      .orderBy(asc(persons.id))
-  ).sort((a, b) => compare(a.name, b.name));
-  return staffRoleList.map((staffRole) => ({
-    ...staffRole,
-    holderNames: holders.filter((h) => h.staffRoleId === staffRole.id).map((h) => h.name),
-  }));
+      .where(scope)
+      .orderBy(asc(personStaffRoles.personId)),
+  );
+  const compare = createLabelComparator();
+  return rows.map((staffRole) => {
+    const held = holders.get(staffRole.id) ?? [];
+    return {
+      ...staffRole,
+      holderIds: held.map((h) => h.personId),
+      holderNames: held.map((h) => h.name).sort(compare),
+    };
+  });
 }
 
 /** Adds a staff role after the location's last one. */
