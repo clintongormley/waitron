@@ -146,7 +146,7 @@ so in the dark theme a sold-out tile sits at the page's own level, below an avai
 `--wt-color-surface`.
 
 `--wt-color-track` is the empty track behind the Opening hours Week's bars, on the page on a wide
-screen and on a card on a phone: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
+screen and on a card on a phone, and behind the Opening hours Month's bars on each date: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
 dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--wt-color-text` at
 4.5:1 or more on it (the "bar track" cases in `packages/ui-core/src/tokens/colors.test.ts`).
 
@@ -4112,12 +4112,17 @@ Opening hours' Year.
   holding the venue's today. It draws the whole Monday-to-Sunday weeks covering the month, the
   neighbouring months' dates faint, and each date heading carries only the day's number (the
   column heading names the weekday) and a Today marker. Each date shows its special day's name
-  and its public holiday's name, the holiday's in red and given once when the two are the same,
+  and its public holiday's name, the holiday's in red and given once when the two are the same
+  (in the Month and the Week a day's name breaks only between its words, and a word too wide for
+  its place is cut with an ellipsis, the name's tooltip holding it whole for a pointer; the day box
+  shows one name, the special day's where the date has one and otherwise the holiday's, whole,
+  moving a word that does not fit onto the next line and breaking only a word wider than the box
+  inside itself),
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
   less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
   closes, a closed time inside the department's hours is hatched while the zone has some hours that
-  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
+  day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty bar in `--wt-color-track`, as in the Week, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
   colour. Above the dates, ‹, the month's name and year, › and the Show picker share one
@@ -4155,7 +4160,7 @@ Opening hours' Year.
   the last is left out when the last, kept inside the track, would come within `--wt-space-2` of it. A department's blocks carry
   their period's colour, name and times; a zone's piece that only follows its department is faded
   and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
-  labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
+  labelled. A row with no hours is an empty track in `--wt-color-track`; only a day closed all day writes "Closed
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
   when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
   hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can

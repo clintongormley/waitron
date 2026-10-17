@@ -25,6 +25,7 @@ import {
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
+import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
@@ -83,6 +84,7 @@ export class OpeningHoursMonthView extends LitElement {
     seasonTintStyles,
     fixedTitleStyles,
     periodColourStyles,
+    dayNameWordStyles,
     css`
       :host {
         display: block;
@@ -241,6 +243,8 @@ export class OpeningHoursMonthView extends LitElement {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 4;
         overflow: hidden;
+      }
+      .no-orders {
         overflow-wrap: anywhere;
         hyphens: auto;
       }
@@ -262,7 +266,7 @@ export class OpeningHoursMonthView extends LitElement {
         display: block;
         height: var(--wt-space-2);
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-border);
+        background: var(--wt-color-track);
         overflow: hidden;
       }
       .segment,
@@ -449,7 +453,8 @@ export class OpeningHoursMonthView extends LitElement {
         html`${index || isToday ? separator : nothing}<span
             class="name ${line.kind}"
             data-test="name"
-            >${line.name}</span
+            title=${line.name}
+            >${dayNameWords(line.name)}</span
           >`,
     );
     const around = dateAroundDay(day.date, {

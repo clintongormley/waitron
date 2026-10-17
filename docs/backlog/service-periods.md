@@ -259,6 +259,11 @@ Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
 
+- **In the Calendar's Month and Week a day's name breaks only between its words, a word too wide
+  for its place cut with "…" and kept whole in the name's title; the day box shows the name whole,
+  breaking only a word wider than the box. The Month's empty track is `--wt-color-track`, as the
+  Week's (owner, 2026-10-17, A784).**
+
 - **The Periods window's "+ Add period" sits beside its heading (A719, owner 2026-10-17).**
   `wt-modal` has no header slot, so the window has no modal heading: it is named by its
   `aria-label`, and `periods-list` draws an `h2` "Periods" with "+ Add period" beside it.

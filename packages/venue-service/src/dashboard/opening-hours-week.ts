@@ -21,6 +21,7 @@ import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { scrollTargets, visibleTop } from "./flat-tree.js";
 import { POPOVER_MARGIN } from "./paint-grid-parts.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
+import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
   daysAt,
@@ -151,6 +152,7 @@ export class OpeningHoursWeekView extends LitElement {
   static override styles = [
     baseStyles,
     periodColourStyles,
+    dayNameWordStyles,
     fixedTitleStyles,
     css`
       :host {
@@ -247,6 +249,8 @@ export class OpeningHoursWeekView extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
       .name {
+        min-width: 0;
+        max-width: 100%;
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
       }
@@ -351,7 +355,6 @@ export class OpeningHoursWeekView extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-        overflow-wrap: anywhere;
       }
       .card {
         touch-action: pan-y;
@@ -735,7 +738,12 @@ export class OpeningHoursWeekView extends LitElement {
     return html`${
         lines.length
           ? html`<div class="day-names">
-              ${lines.map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
+              ${lines.map(
+                (line) =>
+                  html`<span class="name ${line.kind}" title=${line.name}
+                    >${dayNameWords(line.name)}</span
+                  >`,
+              )}
             </div>`
           : nothing
       }
@@ -857,7 +865,12 @@ export class OpeningHoursWeekView extends LitElement {
         >
           ${formatDayHeading(day.date)}
         </button>
-        ${dayNameLines(day).map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
+        ${dayNameLines(day).map(
+          (line) =>
+            html`<span class="name ${line.kind}" title=${line.name}
+              >${dayNameWords(line.name)}</span
+            >`,
+        )}
       </h3>
       ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#row(row, day, names, longest))}
     </section>`;

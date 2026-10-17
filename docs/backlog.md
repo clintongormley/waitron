@@ -1511,12 +1511,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The Week's title and ruler scroll away with the days**; whether to pin them is open — left open
   by A722 Part 1, #1823.
 
-- **The Month's empty track is a lighter grey than the Week's in light mode.** The Week reads
-  `--wt-color-track` (#cdd0d8, 1.44 against the page); the Month still reads the border grey
-  (#d6d9e0, 1.41 on its card). Switching the Month to the track token would raise it to 1.54 and
-  leave dark unchanged. **Next action:** an owner call — the 2026-10-17 "darken it" covered the
-  Week only — left open by A722's follow-up, #1835.
-
 - **Calendar Month and Week repeat the station loading, "Always open" and ready cases.**
   A725 retired the separate Times tab and its watcher; a shared drawing of the Calendar's
   station states remains a possible cleanup (`opening-hours-month.ts`, `opening-hours-week.ts`).
@@ -1530,7 +1524,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
 
 - **Cosmetic points from A722 Part 3's look, #1834:** the Spanish phone Month breaks "Sin
-  pedidos" mid-word, as holiday names already do; at 320 px a 45-letter station name scrolls
+  pedidos" mid-word (`.no-orders` in `opening-hours-month.ts` still allows a break anywhere; a
+  day's name breaks only between its words since A784); at 320 px a 45-letter station name scrolls
   Show's open list sideways (the page does not widen); a station's Month has no key naming which
   bar is which department (hover shows it; the All departments Month has none either).
 
@@ -1568,10 +1563,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   one name per holiday. Believed to predate A506-7; not checked against the year view's history —
   left open by A506-7, #1623.
 
-- **At 390 px a long name in a month cell breaks mid-word ("Christ|mas")**: the dashboard page
-  declares no language, so the browser cannot hyphenate — left open by A506-7, #1623. Seen again in
-  A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
-  (`overflow-wrap: anywhere` and the four-line clamp on `.name` in `opening-hours-month.ts`).
+- **On a phone, a holiday name cut with "…" on a date that also has a special day cannot be read
+  whole**: the tooltip needs a pointer, and the day box shows only the special day's name
+  (`openingHoursDay`, `opening-hours-day.ts`) — left open by A784.
 
 - **Season colours differ between Opening hours' Year and its month**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
