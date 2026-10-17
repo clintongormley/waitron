@@ -43,25 +43,38 @@
 1. **"Picked" is one block per grid, `picked: { key, index, block } | null`.** A click on a block picks it. That is a pointer click, or Enter or Space on the focused block, both of which reach `#select`. Tab focus alone does not pick, because picking only changes what a pointer drag does. A click that ends a drag picks nothing.
 2. **The edges are drawn only on the picked block**, and it carries `data-picked`, which the focus-ring rule also matches. Why: the person needs to see which block's edges will resize it. `#onPointerdown` does not change: with no edge under the pointer, the press paints.
 3. **"Loses focus" means a `focusout` from the picked block or from its editor whose `relatedTarget` is neither the picked block nor inside `.menu`.** The `relatedTarget` may be `null`, for example on a click on the page outside the grid. Inside `wt-combobox` or `wt-number-stepper`, the related target is retargeted to the field element, which is inside `.menu`, so the picked state stays. A press on an empty part of a column moves focus to that column (`.day` has `tabindex="-1"`, `:744`), so the block is unpicked. Two exceptions follow:
-   - The grid's own closes are ignored. Save, Cancel, Escape and a role change in the old menu set a `#closingOwn` flag around `hidePopover()` and then focus the block again. Why: hiding a popover that holds the focus moves the focus, and that must not unpick.
+   - The grid's own closes keep the pick. Save, Cancel, Escape and a role change in the old menu **first focus the block, then hide the editor**, and a `#closingOwn` flag stays set until that refocus has happened.
+     - Why: the plan's reviewer measured this on 2026-10-17 in real Chromium under Vitest browser mode. With focus on a button inside the open menu, `hidePopover()` fired no focusout at once, and focus stayed on the now-hidden button. Two animation frames later, a focusout fired with `relatedTarget` null and focus went to `body`. The browser did not focus the block again.
+     - So a flag set only around `hidePopover()` would guard nothing.
+     - Every test of an own close asserts the block's focus and `data-picked` after two `requestAnimationFrame`s, not only after `updateComplete`. Add a helper `twoFrames()` that awaits two `requestAnimationFrame` callbacks.
    - A focusout while `document.hasFocus()` is false is ignored. Why: switching to another app should not throw away a draft.
+     - Note for implementers: in a Vitest browser file, `document.hasFocus()` is false until something takes focus. A test that sends a focusout before anything was focused trips this guard, so focus something first.
 4. **Unpicking also closes an open editor and discards its draft.** The keyboard works the same way as a click outside: Tab out of the editor discards.
 5. **The picked block follows the grid's own change of it.** After a resize or a Save, `picked.block` becomes the changed block at the same index. `resizeBlock` and `changeBlock` keep the index (`block-model.ts:69-104`). An echo from the host therefore keeps it picked. Any other `days` change that leaves a different block at `picked.index` unpicks it, by the same `sameBlock` check `willUpdate` uses for the menu (`:315-320`). A new `target`, or turning `readOnly`, also unpicks.
-6. **Pressing the picked block's edge while its editor is open closes the editor, discarding its draft, and starts the resize.** Why: the draft was opened on a block the resize is about to change.
+6. **Any stroke that stretches closes an open editor and drops its draft, whether it resizes from the picked block's edge or paints from its body.** The close happens when the stroke first stretches, at its first preview: `willUpdate` sees `this.#stroke.preview !== null` while `selected !== null`. It does not happen on the press. A press and release with no movement keeps the editor and its draft, on the edge as on the body (Decision 11).
+   - Why: a stretched stroke changes the day, and the draft was opened on the block as it was. In the owner's sense, a stroke is a click outside the editor.
+   - This close does not use `#closingOwn`: the pick follows wherever the press put the focus.
+   - Note for implementers: a press on the block the editor was opened from does not light-dismiss the editor. `placePopover` opens it with `showPopover({ source: trigger })` (`paint-grid-parts.ts:113`), and the plan's reviewer measured on 2026-10-17 that pressing that source block left the editor open. The grid has to close it itself.
 7. **The editor:**
    - Its body is a `.fields` row holding `wt-combobox name="staff-role"` (label "Staff role", `required`, the default `search="always"`, options `staffRoles` in order) and `wt-number-stepper name="headcount"` (1–`MAX_HEADCOUNT`).
    - Below that is `wt-form-actions`. Its `cancel` slot holds a `.cancel-group` with Cancel (`secondary`) then Delete (`danger`). Its default slot holds Save. This is the same as `routing-cell-editor.ts:684-726`.
    - Focus opens on the combobox.
-   - Save uses `saveActionState({ isDirty: () => !sameBlock({ ...block, ...draft }, block) })` for its variant and `disabled`, and returns early when that state is `unchanged`.
+   - Save uses `saveActionState({ isDirty: () => roleKnown && !sameBlock({ ...block, ...draft }, block) })` for its variant and `disabled`, and returns early when that state is `unchanged`. Here `roleKnown` means `staffRoles` holds `draft.staffRoleId`.
+   - **A block whose staff role was deleted:** the role field opens empty, with its required mark. Save stays quiet and disabled until a known role is chosen, so a How many change alone does not enable it.
+     - The Forms rule's messages for a refused submission (beside the field and at the bottom) do not apply. They speak only after the first press of the action, and here the action never enables while the role is unknown.
    - Enter in How many presses Save (`submitOnEnter`).
    - Delete still deletes at once and closes the editor, as it does today. The painter's own Save is the real commit.
-8. **No draft scope and no `*.unsaved.test.ts` for the editor.** The owner says a click outside throws the change away, and leaving the painter is a click outside. A scope registered through `draftScopeFor` would instead ask "Discard unsaved changes?". `saveActionState` needs only `Pick<DraftScope, "isDirty">` (`packages/ui/src/leave-controller.ts:141-147`). Precedents for passing a bare `isDirty` are `painter-frame.ts:160` and the till's `profile-dialog.ts:80`. Task 3 tests that the editor's draft asks nothing and does not set off the browser's leave warning. The painter's draft keeps its own scope and tests.
+8. **No draft scope and no `*.unsaved.test.ts` for the editor.** The owner says a click outside throws the change away, and leaving the painter through its own controls is a click outside. Closing the tab, reloading or the browser's Back with an open, changed editor also throws the change away silently, with no warning; the PR's opening lines say so. A scope registered through `draftScopeFor` would instead ask "Discard unsaved changes?". `saveActionState` needs only `Pick<DraftScope, "isDirty">` (`packages/ui/src/leave-controller.ts:141-147`). Precedents for passing a bare `isDirty` are `painter-frame.ts:160` and the till's `profile-dialog.ts:80`. Task 3 tests that the editor's draft asks nothing and does not set off the browser's leave warning. The painter's draft keeps its own scope and tests.
 9. **Delete and Backspace in the editor delete the block only when the focus is outside both fields.** That means focus on Cancel, Delete, Save or the editor itself. They do nothing in the role field or How many: the check is a `wt-combobox` or `wt-number-stepper` in `composedPath()`. Why: those fields are where a person types and clears, and the role field's closed trigger is not an `<input>`, so today's `<input>` check would let a Backspace there delete the block. Backspace on a focused block still deletes it (`:479-484`).
 10. **Escape** with the role list open closes only the list, because `wt-combobox` stops it (`wt-combobox.ts:863-865`). Otherwise Escape works like Cancel.
 11. **Clicking the block whose editor is open leaves the editor and its draft as they are.**
 12. **Placement:** the staffing call becomes `placePopover(this.menu, trigger, false, true)`. That `flipAbove` argument already exists (`paint-grid-parts.ts:107-112`) and is used by `calendar-day-box.ts:123`. The shared helper does not change. A707's shared work (Opening hours' block menu and the Copy to… chooser) stays out of scope. Task 4 records what the look shows.
 13. **Strings: no new keys.** Cancel, Save, the search placeholder and "no results" reuse `staffing.role.cancel`, `staffing.role.save`, `staffing.role.search` and `staffing.role.no_results`, which already exist in English and Spanish (`strings.ts:145-149`, `:339-343`). The labels reuse `staffing.grid.staff_role`, `staffing.grid.how_many` and `staffing.grid.delete`.
 14. **Shared styles:** `.menu wt-button { width: 100% }` comes from `paintGridStyles` (`paint-grid-parts.ts`, the `.menu wt-button` rule). The grid overrides it locally for the buttons in `wt-form-actions`. Sizes use `--wt-*` tokens only.
+
+## Assumptions (not tested)
+
+- **Safari and WebKit are not tested.** Safari does not focus a button when it is pressed, so focus may go to the `.day` column instead, which would unpick the block on every press. It was not tested because Playwright 1.64 wants WebKit build 2370 and only 2311 is installed (the plan's reviewer, 2026-10-17). The PR states this assumption.
 
 ## Global constraints
 
@@ -77,10 +90,10 @@
 
 ## Review focus
 
-1. **Hiding the editor while it holds the focus:** the focusout this fires must not unpick the block on Save, Cancel or Escape. Tasks 1 and 2a test this: after each, the block has focus and keeps `data-picked`.
+1. **Hiding the editor while it holds the focus:** the late focusout this fires, two frames later with `relatedTarget` null (Decision 3), must not unpick the block on Save, Cancel or Escape. Tasks 1 and 2a test this: after each, and after two animation frames, the block has focus and keeps `data-picked`.
 2. **`wt-combobox`'s own popover inside the editor's auto popover:** opening the role list, and clicking a row in it, must not light-dismiss the editor. Task 2a does this with real `userEvent` clicks.
 3. **A `days` refresh while a draft is open:** the same block at the same index keeps the editor and its draft, and a different block there closes both. Task 2a.
-4. **A block whose staff role no longer exists:** the role field opens empty, Save stays quiet, and choosing a role makes Save loud. Task 2a.
+4. **A block whose staff role no longer exists:** the role field opens empty, Save stays quiet even after a How many change, and choosing a known role makes Save loud. Task 2a.
 5. **An app switch:** a focusout while the document has no focus keeps the pick and the draft. Task 1 tests it with `vi.spyOn(document, "hasFocus").mockReturnValue(false)` and a dispatched `FocusEvent`.
 
 ---
@@ -98,22 +111,23 @@
   - `#unpick(): void`, which clears `picked` and calls `#closeMenu()`
   - the `#closingOwn` flag
   - the attribute `data-picked` on the picked `button.block`
-  - the test helper `async function pick(el, key, index = 0)`: `userEvent.click(block)`, then `userEvent.keyboard("{Escape}")`, then `el.updateComplete`
+  - the test helper `async function pickBlock(el, key, index = 0)`: `userEvent.click(block)`, then `userEvent.keyboard("{Escape}")`, then `el.updateComplete`, then `twoFrames()`. It is not named `pick`, because `staffing-special-day-painter.test.ts:86` already has a `pick` helper that means something else.
 
 - [ ] **Step 1: Write the failing tests** in `staffing-grid.test.ts`, next to the resize tests:
   - `"an unpicked block has no edges, and a drag from its top quarter paints a new block"`: `grid({ mon: [headChef] }, { chosen: "sc" })`. Expect `block(el,"mon").querySelector(".edge")` to be null. Press where a person would: the target is `el.shadowRoot!.elementFromPoint(x, top + 2)`, with `x` the block's horizontal middle and `top` the block's top. Today that point hits the start `.edge`; after this task it hits the block button. A bare `drag` dispatches on the column and paints even today, so it would prove nothing. Run `drag(el,"mon",180,300,that)`. Expect the changes to equal `[{ key:"mon", blocks:[headChef, { staffRoleId:"sc", headcount:1, startsAt:"09:00", endsAt:"11:00" }] }]`.
-  - `"clicking a block picks it: focused, marked, and only its edges resize it"`: `[headChef, sous]`. `pick(el,"mon",0)`. Expect `el.shadowRoot!.activeElement` to be `block(0)` and `block(0).hasAttribute("data-picked")`. Expect `block(1).querySelector(".edge")` to be null. Drag `edge(el,"mon",0,"end")` from 630 to 720 and expect `{ ...headChef, endsAt:"18:00" }`.
-  - `"a picked block stays picked while focus is in its menu, and is unpicked when focus goes anywhere else"`:
+  - `"clicking a block picks it: focused, marked, and only its edges resize it"`: `[headChef, sous]`. `pickBlock(el,"mon",0)`. Expect `el.shadowRoot!.activeElement` to be `block(0)` and `block(0).hasAttribute("data-picked")`. Expect `block(1).querySelector(".edge")` to be null. Drag `edge(el,"mon",0,"end")` from 630 to 720 and expect `{ ...headChef, endsAt:"18:00" }`.
+  - `"a picked block stays picked while focus is in its menu, and is unpicked when focus goes anywhere else"`. Use the fixture `grid({ mon: [headChef, sous], tue: [] })`, so a `tue` column exists.
     - `userEvent.click(block(0))`: still `data-picked`.
     - `userEvent.click(column(el,"tue"))` (an empty column): no `[data-picked]`, and the menu is closed.
-    - `pick` again, then `userEvent.tab()` onto `block(1)`: no `[data-picked]`.
+    - `pickBlock` again, then `userEvent.tab()` onto `block(1)`: no `[data-picked]`.
+  - `"a click on a button outside the grid unpicks the block"`: append a plain `<button>` to `host` beside the grid. Run `pickBlock(el,"mon",0)`, then `userEvent.click` that button. No `[data-picked]`, and a drag from where the edge was paints.
   - `"picking a second block unpicks the first"`.
   - `"a resized picked block stays picked once the host echoes it, so a second edge drag resizes again"`: the host echoes the changes through `el.days = new Map([[key, blocks]])`. Drag the end edge, then the start edge, and expect two resize changes.
   - `"the host replacing the picked block, a new target, or turning read-only unpicks it; the same block sent again keeps it"`.
   - `"a focusout while the document has no focus keeps the pick"`: spy `document.hasFocus` to return false, then dispatch `new FocusEvent("focusout", { bubbles:true, composed:true, relatedTarget:null })` on the picked block. It is still `data-picked`.
-  - `"Escape and a role chosen in the menu leave the block focused and picked"`. This uses the old menu's role button. Task 2a rewrites it for Save and Cancel.
+  - `"Escape and a role chosen in the menu leave the block focused and picked"`. This uses the old menu's role button and asserts after `twoFrames()`. Task 2a rewrites it for Save and Cancel.
 
-- [ ] **Step 2: Change the existing edge tests to pick first.** Add `await pick(el, "mon", i)` before the first edge press in each of these tests (`staffing-grid.test.ts` line):
+- [ ] **Step 2: Change the existing edge tests to pick first.** Add `await pickBlock(el, "mon", i)` before the first edge press in each of these tests (`staffing-grid.test.ts` line):
 
   | Line | Test |
   |---|---|
@@ -168,16 +182,21 @@
     - The stepper reads 2 (min 1, max 50).
     - At `page.viewport(1280, 900)`: the role field's and the stepper's `top`s are within 1 px of each other, Save's `left` is greater than Delete's `right`, and Cancel comes before Delete.
     - Save has `disabled` and the variant `secondary`, and the focus is on the role field.
+    - Cancel's variant is `secondary` and Delete's is `danger`. Both are inside the `[slot="cancel"]` group, Cancel first. Save has no `slot` and is a child of `wt-form-actions`.
+  - `"typing in the role field filters the list"`: click the field to open its list, type "dis" into its search box, and expect "Dishwasher" to be the only row shown.
   - `"a changed role or How many makes Save loud; changing it back makes it quiet; nothing is sent before Save"`: use `chooseOption(roleField, "dw")`, then step +1 and −1, and `chooseOption` back to "sc".
-  - `"Save sends the role and How many together, closes the editor, and leaves the block focused and picked"`: the changes equal `[{ key:"mon", blocks:[headChef, { ...sous, staffRoleId:"dw", headcount:3 }] }]`.
+  - `"Save sends the role and How many together, closes the editor, and leaves the block focused and picked"` (asserted after `twoFrames()`): the changes equal `[{ key:"mon", blocks:[headChef, { ...sous, staffRoleId:"dw", headcount:3 }] }]`.
   - `"Cancel, Escape and a click outside throw the change away"`, three cases in a loop:
     - Each case changes How many, then closes the editor its own way. A click outside is `userEvent.click(column(el,"tue"))`.
     - No change is sent, and reopening the editor shows the stored values.
-    - After Cancel or Escape, the block is focused and picked.
+    - After Cancel or Escape, and after `twoFrames()`, the block is focused and picked.
   - `"opening the role list and choosing from it with clicks keeps the editor open"`: real `userEvent.click` on the field, then on the row named "Dishwasher" in its shadow root. The editor is still `:popover-open` and Save is loud.
   - `"the editor keeps its draft when the host sends the same block back, and closes when another block takes its place"`.
   - `"clicking the block whose editor is open keeps the draft"`.
-  - `"a block whose staff role is gone opens with an empty role; Save stays quiet until a role is chosen"`.
+  - `"a block whose staff role is gone opens with an empty role; Save stays quiet, even after a How many change, until a known role is chosen"`:
+    - Use `{ ...headChef, staffRoleId: "gone" }`. The role field's value is `""` and `required` is true.
+    - Step How many by +1: Save is still disabled and `secondary`.
+    - `chooseOption(roleField, "dw")`: Save is enabled and `primary`.
   - `"How many in the editor stays within 1 to 50 and puts back the last count for other text"`: the clamp table from today's test at 507 (`0→1`, `51→50`, `2.5→50`, blank restored on focusout, `2→2`), now applied to the draft. Then Save sends only the final count.
   - `"the editor's text is Spanish under the Spanish locale"`: labels "Rol de personal" and "Cuántas personas", and buttons "Cancelar", "Eliminar" and "Guardar".
 
@@ -191,7 +210,7 @@
   | Task 1's "Escape and a role chosen…" | — | role button | Escape, Cancel and Save each leave the block focused and picked |
 
 - [ ] **Step 3: Run the tests and watch them fail**, with the same command as Task 1. The new tests fail on the missing `wt-combobox[name=staff-role]`.
-- [ ] **Step 4: Implement Decisions 6, 7, 11, 13 and 14.** Two details:
+- [ ] **Step 4: Implement Decisions 7, 11, 13 and 14.** Decision 6 belongs to Task 2b, where its tests are. Two details:
   - The `toggle` closed handler clears both `selected` and `draft`.
   - The stepper keeps `showHeadcount` on its correction paths (`headcount-control.ts`).
 - [ ] **Step 5: Run the grid test and the a11y test.** Expected: every case passes. Then run typecheck, lint and prettier.
@@ -200,7 +219,7 @@
 ### Task 2b: The editor's keyboard, focus leaving, edge press and placement
 
 **Files:**
-- Modify `staffing-grid.ts`: `#onMenuKeydown`, `#onFocusout`, `#onPointerdown` (the edge branch only) and `#select`'s `placePopover` call.
+- Modify `staffing-grid.ts`: `#onMenuKeydown`, `#onFocusout`, `willUpdate` (the check that a stroke has stretched, for Decision 6) and `#select`'s `placePopover` call.
 - Modify `staffing-grid.test.ts` and `staffing-grid.a11y.test.ts`.
 
 **Interfaces:**
@@ -212,8 +231,15 @@
   - `"Escape with the role list open closes only the list; a second Escape closes the editor"`.
   - `"Enter in How many saves"`.
   - `"Tab out of the editor's last button closes it without sending and unpicks the block"`.
-  - `"pressing the picked block's edge while its editor is open closes the editor, drops its draft, and resizes"`.
-  - `"at 390×844 the editor fits inside the window"`: its box is within `[0, innerWidth]`. Do not assert about covering the block: Task 4 records that.
+  - `"an edge drag of the picked block with its editor open closes the editor when it first stretches, drops the draft, and resizes"`: change How many, then press the end edge and move. After the first `pointermove` and `updateComplete`, the editor is closed. On release, the one change sent is the resize, with the stored headcount.
+  - `"a press and release on the picked block's edge with no movement keeps the editor and its draft"`.
+  - `"a paint drag from the picked block's body with its editor open closes the editor, drops the draft, and adds a block"`.
+  - `"at 390×844 the editor fits inside the window, and sits above a block low in the view when there is room"`:
+    - Use a block from 22:00 to 00:00, so it is low in the column, and open its editor.
+    - Expect the editor's box to be within `[0, innerWidth]`.
+    - First assert the precondition, so the check cannot pass empty: the block's top minus the editor's height is at least 8 (`POPOVER_MARGIN`).
+    - Then assert that the editor's bottom is at or above the block's top, within 0.5 px.
+    - Control: run it once with `flipAbove` left out of the `placePopover` call and see it fail, then put it back.
 
 - [ ] **Step 2: Change these existing tests:**
 
@@ -239,7 +265,8 @@ A grep for block-menu or edge use in all six painter test files (`*.test.ts`, `*
   - Season, unsaved: `"a block editor's unsaved change asks nothing: Save stays quiet, the page has no leave warning, and Cancel closes the painter at once"`:
     - Open the editor and change How many.
     - Expect `frameButton(painter,"save").disabled` to be true and `unload()` to be false.
-    - Click the frame's Cancel. The painter closes with no `wt-unsaved-changes` open, and `app.open` is called once.
+    - Assert the editor is still `:popover-open`. Then call `frameButton(painter,"cancel").click()`, a DOM `.click()`, as this file already does. A `userEvent.click` would move the focus first and close the editor, so the test could not tell whether the painter closed with the editor's change still open.
+    - The painter closes with no `wt-unsaved-changes` open, and `app.open` is called once.
   - Season, unsaved: `"the block editor's Save becomes a painter edit that asks before leaving"`. After the editor's Save, the frame's Save is `primary` and `unload()` is true.
   - Special day: `"the block editor's Save reaches the special day's draft"`. The grid's `days` holds the new headcount, and the frame's Save is enabled.
 - [ ] **Step 2: Run** `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/staffing exec vitest run src/dashboard/staffing-season-painter.unsaved.test.ts src/dashboard/staffing-special-day-painter.test.ts`. Expected: they pass. If one fails, fix the grid and keep the test.
@@ -270,7 +297,7 @@ A grep for block-menu or edge use in all six painter test files (`*.test.ts`, `*
 - `docs/backlog/workforce.md`
 - `docs/developers/design-system.md`
 
-- [ ] Delete the A761 entry in `docs/backlog.md` (lines 4225-4229) and the `## A761.` section in `docs/backlog/workforce.md` (lines 137-166, up to `## A763`). Check with `/usr/bin/grep -rn "A761\|a761" docs --include='*.md' | /usr/bin/grep -v superpowers`, which should print nothing.
+- [ ] Delete the A761 entry in `docs/backlog.md` (lines 4225-4229) and the `## A761.` section in `docs/backlog/workforce.md` (lines 137-166, up to `## A763`). Check with `/usr/bin/grep -rn "A761\|a761" docs/backlog.md docs/backlog/`, which should print nothing. `design-system.md` keeps its new A761 bullet.
 - [ ] Edit A707's entry only if Task 4 found something new. For example, if `flipAbove` keeps the staffing editor off its block where the space allows, say so and note that Opening hours' block menu and the chooser are what remains.
 - [ ] Update `design-system.md` in three places:
   - **The staffing painter paragraph** (around line 2220). Replace "dragging a block's top or bottom edge resizes it, and clicking a block offers another staff role, How many and Delete" with text saying:
@@ -287,4 +314,8 @@ A grep for block-menu or edge use in all six painter test files (`*.test.ts`, `*
 
 ### After the tasks
 
-The driver runs `/finish-branch` with the worktree path. This is the light path: the diff touches no risk trigger, so there are no per-task reviewers, but the Codex run-it seat still runs. The PR body carries the merged "Changed test checks" table, Decision 8 (no draft scope) with its reason, and the A707 finding.
+The driver runs `/finish-branch` with the worktree path. This is the light path: the diff touches no risk trigger, so there are no per-task reviewers, but the Codex run-it seat still runs. The PR's opening lines say that a changed, unsaved block editor is thrown away without warning when the tab is closed or reloaded, or on Back (Decision 8). The body carries:
+- the merged "Changed test checks" table;
+- Decision 8 with its reason;
+- the untested Safari and WebKit assumption;
+- the A707 finding.
