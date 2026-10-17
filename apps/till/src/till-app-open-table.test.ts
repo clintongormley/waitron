@@ -352,6 +352,31 @@ async function reopen(el: TillApp, tableId: string): Promise<TillTableOrderScree
   return tableOrder(el)!;
 }
 
+async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Promise<void> }> {
+  const data = new Map<string, string>();
+  const router = new ServerRouter({
+    origin: "https://box.deli.test",
+    fetchImpl: vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch,
+    storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
+  });
+  api = stubApi();
+  const { el } = await mountWidget<TillApp>("till-app", {
+    api: api as unknown as TillApi,
+    router,
+  });
+  const switchServer = async () => {
+    router.dispatchEvent(
+      new CustomEvent("server-changed", {
+        detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
+      }),
+    );
+    await flush(el);
+  };
+  return { el, switchServer };
+}
+
 describe("A768 a moved course or category is read again", () => {
   beforeEach(() => {
     server = draftServer();
@@ -446,30 +471,34 @@ describe("A768 a held zone's menu", () => {
   });
 
   it("a server switch forgets every held menu", async () => {
-    const data = new Map<string, string>();
-    const router = new ServerRouter({
-      origin: "https://box.deli.test",
-      fetchImpl: vi.fn(async () => {
-        throw new TypeError("Failed to fetch");
-      }) as unknown as typeof fetch,
-      storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
-    });
-    api = stubApi();
-    const { el } = await mountWidget<TillApp>("till-app", {
-      api: api as unknown as TillApi,
-      router,
-    });
+    const { el, switchServer } = await mountWithRouter();
     await openMesa(el);
     await back(el);
-    router.dispatchEvent(
-      new CustomEvent("server-changed", {
-        detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
-      }),
+    await switchServer();
+    api.listZoneOffers.mockClear();
+    await openMesa(el, "t7");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+  });
+
+  it("a server switch forgets a menu the old server answers after it", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    let answerOld!: (value: ZoneOfferCatalogue) => void;
+    api.listZoneOffers.mockImplementationOnce(
+      () => new Promise<ZoneOfferCatalogue>((resolve) => (answerOld = resolve)),
     );
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await switchServer();
+    answerOld(catalogue("v1", { Beer: "9.99" }));
     await flush(el);
     api.listZoneOffers.mockClear();
     await openMesa(el, "t7");
     expect(api.listZoneOffers).toHaveBeenCalledWith("z1");
+    expect(beer(el)!.unitPrice).toBe("5.00");
   });
 
   it("a new api forgets every held menu", async () => {
@@ -760,6 +789,86 @@ describe("A768 the left draft saves in the background", () => {
     expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
     release();
     await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    await tap(el, "Steak");
+    await back(el);
+    expect(banner(el)).toBeNull();
+    expect(savedLines()).toEqual(["offer-beer ×1", "offer-steak ×1"]);
+  });
+
+  it("a server switch lets go of a left draft's save sent to the old server", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    await openMesa(el);
+    await tap(el, "Beer");
+    holdNextSave();
+    await moveToMesa7(el);
+    await switchServer();
+    await openMesa(el, "t4");
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(rows(el)).toEqual([]);
+  });
+
+  it("a background save that fails leaves the next table's own error showing", async () => {
+    const { el } = await mountApp({
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        if (args[0] === "v7") throw new TypeError("Failed to fetch");
+        return server.listDrafts(...args);
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    expect(banner(el)!.textContent).toContain(t("table.draft_read_failed"));
+    release(new TypeError("Failed to fetch"));
+    await flush(el);
+    expect(banner(el)!.textContent).toContain(t("table.draft_read_failed"));
+  });
+
+  it("signing in again resumes the left party's draft only once its save answers", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(shell(el), "logout");
+    await flush(el);
+    const reads = api.listDrafts.mock.calls.length;
+    await signIn(el);
+    expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
+    release();
+    await flush(el, 6);
+    expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).toContain("v1");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("moving guests onto the table just left waits for its own save", async () => {
+    const { el } = await mountApp({
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    api.getTablesState.mockResolvedValue([
+      table("t4", "4", party({ revision: 4, tableIds: ["t4", "t7"] })),
+      table("t7", "7", party({ revision: 4, tableIds: ["t4", "t7"] })),
+      mesa9,
+    ]);
+    const reads = api.listDrafts.mock.calls.length;
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t4", bills: "merge" });
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
+    release();
+    await flush(el, 6);
     expect(rows(el)).toEqual(["Beer ×1"]);
     await tap(el, "Steak");
     await back(el);

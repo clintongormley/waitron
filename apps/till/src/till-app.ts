@@ -2062,6 +2062,8 @@ export class TillApp extends LitElement {
   /** Each zone's latest offers read from {@link api}, numbered by when the read was sent. */
   readonly #zoneCatalogues = new Map<string, { read: number; catalogue: ZoneOfferCatalogue }>();
   #zoneOfferReads = 0;
+  /** Moved on by each clear of {@link #zoneCatalogues}, so a read sent before it keeps nothing. */
+  #zoneCatalogueGeneration = 0;
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -2829,7 +2831,7 @@ export class TillApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("api")) {
-      this.#zoneCatalogues.clear();
+      this.#forgetZoneCatalogues();
       this.#cancelFindBillRead();
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
@@ -2903,7 +2905,7 @@ export class TillApp extends LitElement {
 
   /** `from`: the kind of screen a kitchen display showed when a press on it was refused. */
   async #boot(from?: KitchenScreenKind): Promise<void> {
-    this.#zoneCatalogues.clear();
+    this.#forgetZoneCatalogues();
     this.#stopClocking();
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
@@ -4757,9 +4759,16 @@ export class TillApp extends LitElement {
     zoneId?: string,
   ): Promise<ZoneOfferCatalogue> {
     const read = ++this.#zoneOfferReads;
+    const generation = this.#zoneCatalogueGeneration;
     const catalogue = await send(api);
-    if (api === this.api) this.#rememberZoneCatalogue(read, catalogue, zoneId);
+    if (api === this.api && generation === this.#zoneCatalogueGeneration)
+      this.#rememberZoneCatalogue(read, catalogue, zoneId);
     return catalogue;
+  }
+
+  #forgetZoneCatalogues(): void {
+    this.#zoneCatalogues.clear();
+    this.#zoneCatalogueGeneration++;
   }
 
   #rememberZoneCatalogue(
@@ -8481,8 +8490,9 @@ export class TillApp extends LitElement {
         this.#leavingDrafts.delete(sync);
         sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
-        if (saved === "failed") this.errorKey = "table.draft_save_failed";
-        else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
+        if (saved === "failed") {
+          if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
+        } else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
       }),
     );
   }
@@ -8972,7 +8982,20 @@ export class TillApp extends LitElement {
 
   #resumeOrderDraft(): void {
     const session = this.#operatorSession;
-    void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
+    const party = this.orderParty?.id;
+    if (![...this.#leavingDrafts.keys()].some((sync) => sync.partyId === party)) {
+      void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
+      return;
+    }
+    void this.#savesOutFor(party).then(async () => {
+      if (
+        session !== this.#operatorSession ||
+        this.orderParty?.id !== party ||
+        this.#draftSync !== undefined
+      )
+        return;
+      this.#showDraft(await this.#openDraft(true, session));
+    });
   }
 
   /** A draft that could not be read is not shown, so an empty one never stands in for it. A draft
@@ -9016,6 +9039,9 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     void this.#flushDraft().then(async () => {
       if (this.#draftSync !== sync) return;
+      const party = this.orderParty?.id;
+      await this.#savesOutFor(party);
+      if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
       this.#showDraft(await this.#openDraft(true, session));
     });
   }
