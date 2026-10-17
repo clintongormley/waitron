@@ -32,7 +32,12 @@ function stubApi(
     getContentLanguages: vi.fn(read),
     getContentLanguageRules: vi.fn().mockResolvedValue(rules),
     updateContentLanguages: vi.fn(save),
-    getContentTranslationGaps: vi.fn().mockResolvedValue(gaps),
+    getContentTranslationGaps: vi.fn(async () =>
+      (gaps as LanguageTranslationGaps[]).map(({ language, gaps }) => ({
+        language,
+        count: gaps.length,
+      })),
+    ),
     getContentSuggestions: vi.fn(async (language: string) => ({
       language,
       run: null,

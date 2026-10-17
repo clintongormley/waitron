@@ -16,7 +16,7 @@ import {
   writeContentLanguages,
   type ContentSuggestionRead,
   type TranslationContext,
-  type TranslationPage,
+  type TranslationItemPage,
 } from "@waitron/catalogue";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
@@ -395,13 +395,22 @@ it("saving the name through the translations route removes its suggestion", asyn
   const targets = await send(
     http,
     "GET",
-    `/management-api/content-translations/en?target=product:${id}`,
+    `/management-api/content-translations?language=en&target=product:${id}`,
   );
-  const page = (await targets.json()) as TranslationPage;
+  const page = (await targets.json()) as TranslationItemPage;
 
-  const save = await send(http, "PUT", "/management-api/content-translations/en", {
+  const save = await send(http, "PUT", ORIGIN + "/management-api/content-translations", {
     body: JSON.stringify({
-      edits: [{ kind: "product", id, expected: page.rows[0]!.expected, text: "CLIENT-en Bread" }],
+      edits: [
+        {
+          kind: "product",
+          id,
+          language: "en",
+          field: "name",
+          expected: page.rows[0]!.cells[0]!.expected,
+          text: "CLIENT-en Bread",
+        },
+      ],
     }),
   });
   expect(save.status).toBe(200);

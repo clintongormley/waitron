@@ -854,12 +854,12 @@ describe("A420 content language table", () => {
     const el = await mount(
       api({
         getContentTranslationGaps: vi.fn().mockResolvedValue([
-          { language: "ca", gaps: [] },
+          { language: "ca", count: 0 },
           {
             language: "en",
-            gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+            count: 1,
           },
-          { language: "de", gaps: [] },
+          { language: "de", count: 0 },
         ]),
       }),
     );
@@ -890,10 +890,10 @@ it("shows completeness only from a successful report and refreshes the language 
   const client = api({
     liveData,
     getContentTranslationGaps: vi.fn().mockResolvedValue([
-      { language: "ca", gaps: [] },
+      { language: "ca", count: 0 },
       {
         language: "en",
-        gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
+        count: 1,
       },
     ]),
   });
@@ -907,7 +907,7 @@ it("shows completeness only from a successful report and refreshes the language 
   vi.mocked(client.getContentTranslationGaps).mockRejectedValueOnce(new Error("offline"));
   liveData.invalidate([{ type: "products" }]);
   await vi.waitFor(() => expect(completeness()).toBe(t("content_gaps.load_error")));
-  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([{ language: "en", gaps: [] }]);
+  vi.mocked(client.getContentTranslationGaps).mockResolvedValue([{ language: "en", count: 0 }]);
   liveData.invalidate([{ type: "products" }]);
   await vi.waitFor(() => expect(completeness()).toBe(t("content_gaps.none")));
 });
@@ -929,10 +929,7 @@ it("opens fresh translation fields for a language just added", async () => {
     getContentTranslationGaps: vi.fn(async () =>
       config.languages.map((language) => ({
         language,
-        gaps:
-          language === "fr"
-            ? [{ kind: "product", id: "cheese", name: "STAFF Cheese", reason: "partial" }]
-            : [],
+        count: language === "fr" ? 1 : 0,
       })),
     ),
     getContentSuggestions: vi.fn(async (language: string) => ({
@@ -1069,12 +1066,12 @@ it.each(["es-ES", "en-GB"])(
         .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "ca", "en"] }),
       getContentLanguageRules: vi.fn().mockResolvedValue(BARCELONA),
       getContentTranslationGaps: vi.fn().mockResolvedValue([
-        { language: "es", gaps: [] },
+        { language: "es", count: 0 },
         {
           language: "ca",
-          gaps: [{ kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" }],
+          count: 1,
         },
-        { language: "en", gaps: [] },
+        { language: "en", count: 0 },
       ]),
     });
     const el = await mount(client);
@@ -1092,9 +1089,9 @@ it.each(["es-ES", "en-GB"])(
     expect(q(el, "[data-test=retry]")).toBeNull();
     expect(warning()).toBeNull();
     vi.mocked(client.getContentTranslationGaps).mockResolvedValue([
-      { language: "es", gaps: [] },
-      { language: "ca", gaps: [] },
-      { language: "en", gaps: [] },
+      { language: "es", count: 0 },
+      { language: "ca", count: 0 },
+      { language: "en", count: 0 },
     ]);
     q(el, "[data-test=gaps-retry]")!.click();
     await flush(el);
@@ -1111,7 +1108,7 @@ it("reports the initial completeness failure without blocking languages or selec
     getContentTranslationGaps: vi
       .fn()
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue([{ language: "ca", gaps: [] }]),
+      .mockResolvedValue([{ language: "ca", count: 0 }]),
   });
   const el = await mount(client);
   expect(q(el, "[data-test=gaps-error]")).not.toBeNull();
@@ -1219,13 +1216,7 @@ describe("Valencian names on the content languages screen", () => {
 
 it("puts a language tag holding a replacement pattern into its required-translation warning as written", async () => {
   const language = "x-$&";
-  const gap = {
-    kind: "product",
-    id: "p",
-    staffName: "STAFF",
-    defaultName: "DEFAULT",
-    reason: "absent",
-  };
+
   const el = await mount(
     api({
       getContentLanguages: vi
@@ -1234,9 +1225,7 @@ it("puts a language tag holding a replacement pattern into its required-translat
       getContentLanguageRules: vi
         .fn()
         .mockResolvedValue({ required: [language], official: ["es"] }),
-      getContentTranslationGaps: vi
-        .fn()
-        .mockResolvedValue([{ language, gaps: [gap, { ...gap, id: "q" }] }]),
+      getContentTranslationGaps: vi.fn().mockResolvedValue([{ language, count: 2 }]),
     }),
   );
   await vi.waitFor(() => expect(q(el, `[data-test="required-gaps-${language}"]`)).not.toBeNull());
@@ -1265,15 +1254,7 @@ it.each([
       getContentTranslationGaps: vi.fn().mockResolvedValue([
         {
           language,
-          gaps: [
-            {
-              kind: "product",
-              id: "p",
-              staffName: "STAFF",
-              defaultName: "DEFAULT",
-              reason: "absent",
-            },
-          ],
+          count: 1,
         },
       ]),
     }),

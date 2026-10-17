@@ -20,7 +20,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
-import type { DashboardApi, LanguageTranslationGaps } from "../api/client.js";
+import type { DashboardApi, LanguageTranslationGapCount } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -102,7 +102,7 @@ export class ContentLanguagesScreen extends LitElement {
   @state() private translationLanguage = "";
   @state() private busy = false;
   @state() private saveError = "";
-  @state() private gaps: LanguageTranslationGaps[] | null = null;
+  @state() private gaps: LanguageTranslationGapCount[] | null = null;
   @state() private gapsFailed = false;
   @state() private receiptLanguage: string | null = null;
   readonly #queries = new DashboardQueries(
@@ -314,10 +314,10 @@ export class ContentLanguagesScreen extends LitElement {
           const report = this.gaps?.find((entry) => entry.language === code);
           return !report
             ? t("content_gaps.loading")
-            : report.gaps.length === 0
+            : report.count === 0
               ? t("content_gaps.none")
-              : html`${t("content_gaps.count").replace("{count}", String(report.gaps.length))}
-                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${fill(report.gaps.length === 1 ? "content_gaps.required_warning_one" : "content_gaps.required_warning", { count: String(report.gaps.length), language: languageDisplayName(code, currentLocale(), false) })}</span>` : nothing}`;
+              : html`${t("content_gaps.count").replace("{count}", String(report.count))}
+                ${rules.required.includes(code) ? html`<span part="language-meta" role="note" data-test=${`required-gaps-${code}`}>${fill(report.count === 1 ? "content_gaps.required_warning_one" : "content_gaps.required_warning", { count: String(report.count), language: languageDisplayName(code, currentLocale(), false) })}</span>` : nothing}`;
         },
       },
       {

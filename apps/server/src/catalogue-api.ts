@@ -28,7 +28,7 @@ import {
   readCatalogueSettings,
   saveCatalogueDefaultColor,
   readContentLanguages,
-  listTranslationGapReport,
+  listTranslationGapCounts,
   writeContentLanguages,
   createCatalogue,
   duplicateMenu,
@@ -125,6 +125,7 @@ import { inArray } from "drizzle-orm";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
+  managementOrigin?: string;
   /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   contentTranslationGaps?: (
@@ -887,7 +888,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
   mountMenuHomeRoutes(app, gated, log);
-  mountContentTranslationsApi(app, gated, log, translationContextFor(deps));
+  mountContentTranslationsApi(app, gated, log, translationContextFor(deps), deps.managementOrigin);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
@@ -918,7 +919,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       return c.json(
         await gated(c, sessionId, async (tx) =>
-          listTranslationGapReport(
+          listTranslationGapCounts(
             tx,
             await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
           ),

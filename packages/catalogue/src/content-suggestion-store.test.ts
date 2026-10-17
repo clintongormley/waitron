@@ -5,6 +5,7 @@ import { products, withTransaction } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
+import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { setProductVariants } from "./variants.js";
 import {
@@ -142,21 +143,21 @@ it("a name entered during the job is not overwritten or suggested", async () => 
   const venue = await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
   await app(async (tx) => {
-    const { targets } = await resolveTranslationTargets(
+    const { cells } = await resolveTranslationCells(
       tx,
-      "es",
-      [{ kind: "product", id: venue.bread }],
+      [{ kind: "product", id: venue.bread, language: "es", field: "name" }],
       context,
     );
     await saveContentTranslations(
       tx,
-      "es",
       {
         edits: [
           {
             kind: "product",
             id: venue.bread,
-            expected: targets[0]!.target.expected,
+            language: "es",
+            field: "name",
+            expected: cells[0]!.expected,
             text: "CLIENT-ES Pan de la casa",
           },
         ],

@@ -52,7 +52,7 @@ import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
+import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import {
   customerPresentationText,
@@ -163,15 +163,23 @@ describe("preview live snapshot", () => {
       "unidad",
     ];
     const context = { fallbackLanguage: "en", required: [] };
-    const targets = await app((tx) => resolveTranslationTargets(tx, "es", refs, context));
+    const targets = await app((tx) =>
+      resolveTranslationCells(
+        tx,
+        refs.map((ref) => ({ ...ref, language: "es", field: "name" as const })),
+        context,
+      ),
+    );
     await app((tx) =>
       saveContentTranslations(
         tx,
-        "es",
         {
-          edits: targets.targets.map((entry, i) => ({
-            ...refs[i]!,
-            expected: entry.target.expected,
+          edits: targets.cells.map(({ kind, id, language, field, expected }, i) => ({
+            kind,
+            id,
+            language,
+            field,
+            expected,
             text: texts[i]!,
           })),
         },

@@ -201,18 +201,34 @@ export type {
 };
 import type {
   LanguageTranslationGaps,
+  LanguageTranslationGapCount,
   TranslationGap,
   TranslationGapKind,
   TranslationGapReason,
 } from "@waitron/catalogue/src/content-translation-report-types.js";
-export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
+export type {
+  LanguageTranslationGaps,
+  LanguageTranslationGapCount,
+  TranslationGap,
+  TranslationGapKind,
+  TranslationGapReason,
+};
 import type {
   TranslationBatch,
+  TranslationCellRef,
+  TranslationCellPage,
   TranslationPage,
   TranslationRef,
   TranslationTarget,
 } from "@waitron/catalogue/src/content-translation-types.js";
-export type { TranslationBatch, TranslationPage, TranslationRef, TranslationTarget };
+export type {
+  TranslationBatch,
+  TranslationCellRef,
+  TranslationCellPage,
+  TranslationPage,
+  TranslationRef,
+  TranslationTarget,
+};
 import type {
   ContentSuggestionRead,
   ContentSuggestionView,
@@ -2405,11 +2421,21 @@ export class DashboardApi {
     return this.#request<ContentLanguageRules>("/management-api/content-language-rules", "GET");
   }
 
-  getContentTranslationGaps(): Promise<LanguageTranslationGaps[]> {
-    return this.#request<LanguageTranslationGaps[]>(
+  getContentTranslationGaps(): Promise<LanguageTranslationGapCount[]> {
+    return this.#request<LanguageTranslationGapCount[]>(
       "/management-api/content-translation-gaps",
       "GET",
     );
+  }
+
+  getContentTranslationCells(cells: readonly TranslationCellRef[]): Promise<TranslationCellPage> {
+    const params = new URLSearchParams(
+      cells.map(({ kind, id, language, field }) => [
+        "cell",
+        JSON.stringify([kind, id, language, field]),
+      ]),
+    );
+    return this.#request(`/management-api/content-translations/cells?${params}`, "GET");
   }
 
   getContentTranslationTargets(

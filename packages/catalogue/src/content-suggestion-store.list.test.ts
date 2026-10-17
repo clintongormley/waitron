@@ -4,7 +4,9 @@ import { products } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
-import type { TranslationBatch } from "./content-translation-types.js";
+import type { TranslationCellEdit } from "./content-translation-types.js";
+type TranslationBatch = { edits: TranslationCellEdit[] };
+import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { BATCH_SIZE } from "./batches.js";
 import { pruneSuggestions } from "./content-suggestion-collect.js";
@@ -311,22 +313,23 @@ it("discarding a suggestion deletes it, and discarding it again is content.sugge
 describe("saving a name", () => {
   async function saveWine(id: string): Promise<TranslationBatch> {
     return app(async (tx) => {
-      const { targets } = await resolveTranslationTargets(
+      const { cells } = await resolveTranslationCells(
         tx,
-        "es",
-        [{ kind: "product", id }],
+        [
+          { kind: "product", id, language: "es", field: "name" },
+          { kind: "product", id, language: "ca", field: "name" },
+        ],
         context,
       );
       return {
-        edits: [
-          {
-            kind: "product",
-            id,
-            expected: targets[0]!.target.expected,
-            text: "CLIENT-ES Vino de la casa",
-            defaultText: "CLIENT-CA Vi de la casa",
-          },
-        ],
+        edits: cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text: language === "es" ? "CLIENT-ES Vino de la casa" : "CLIENT-CA Vi de la casa",
+        })),
       };
     });
   }
@@ -338,13 +341,20 @@ describe("saving a name", () => {
   it("deletes its suggestion and its default companion's", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
   it("deletes each saved item's suggestions in the saved languages, and nothing else", async () => {
     const venue = await storedVenue();
     const request = await app(async (tx) => {
+      const refs = [venue.bread, venue.wine, venue.cheese].flatMap((id) => [
+        { kind: "product" as const, id, language: "es", field: "name" as const },
+        ...(id === venue.wine
+          ? [{ kind: "product" as const, id, language: "ca", field: "name" as const }]
+          : []),
+      ]);
+      const { cells } = await resolveTranslationCells(tx, refs, context);
       const { targets } = await resolveTranslationTargets(
         tx,
         "es",
@@ -352,16 +362,20 @@ describe("saving a name", () => {
         context,
       );
       return {
-        edits: targets.map(({ target }) => ({
-          kind: "product" as const,
-          id: target.id,
-          expected: target.expected,
-          text: `CLIENT-ES ${target.name}`,
-          ...(target.id === venue.wine ? { defaultText: "CLIENT-CA Vi de la casa" } : {}),
+        edits: cells.map(({ kind, id, language, field, expected }) => ({
+          kind,
+          id,
+          language,
+          field,
+          expected,
+          text:
+            language === "ca"
+              ? "CLIENT-CA Vi de la casa"
+              : `CLIENT-ES ${targets.find((entry) => entry.target.id === id)!.target.name}`,
         })),
       };
     });
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     const languages = async (itemId: string) =>
       (await app(suggestionRows)).filter((row) => row.itemId === itemId).map((row) => row.language);
     expect(await languages(venue.bread)).toEqual([null, "en"]);
@@ -372,7 +386,7 @@ describe("saving a name", () => {
   it("deletes a suggestion that arrived before a retried save", async () => {
     const venue = await storedVenue();
     const request = await saveWine(venue.wine);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     await app((tx) =>
       tx.insert(contentSuggestions).values({
         kind: "product",
@@ -383,7 +397,7 @@ describe("saving a name", () => {
       }),
     );
     expect(await wineLanguages(venue)).toEqual(["en", "es"]);
-    await app((tx) => saveContentTranslations(tx, "es", request, context));
+    await app((tx) => saveContentTranslations(tx, request, context));
     expect(await wineLanguages(venue)).toEqual(["en"]);
   });
 
@@ -392,7 +406,7 @@ describe("saving a name", () => {
     const request = await saveWine(venue.wine);
     await expect(
       app(async (tx) => {
-        await saveContentTranslations(tx, "es", request, context);
+        await saveContentTranslations(tx, request, context);
         expect((await suggestionRows(tx)).filter((row) => row.itemId === venue.wine)).toHaveLength(
           1,
         );

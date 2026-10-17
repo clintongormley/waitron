@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, categories, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, categories, locations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -910,6 +910,12 @@ describe("the missing-translations report", () => {
       (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
     ).toBe(204);
     const menu = await createCatalogueVia(app, "Gap report");
+    const beforeCountResponse = await send(app, "GET", PATH);
+    expect(beforeCountResponse.status).toBe(200);
+    const beforeCounts = (await beforeCountResponse.json()) as {
+      language: string;
+      count: number;
+    }[];
     const created = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId: menu,
@@ -927,17 +933,19 @@ describe("the missing-translations report", () => {
 
     const response = await send(app, "GET", PATH);
     expect(response.status).toBe(200);
-    const report = (await response.json()) as {
-      language: string;
-      gaps: { kind: string; id: string; name: string; reason: string }[];
-    }[];
+    const report = (await response.json()) as { language: string; count: number }[];
     expect(report.map((entry) => entry.language)).toEqual(["es", "ca", "en"]);
-    const gapsIn = (language: string) =>
-      report.find((entry) => entry.language === language)!.gaps.filter((gap) => gap.id === id);
-    expect(gapsIn("ca")).toEqual([
-      { kind: "product", id, name: "STAFF Pan gap report", reason: "partial" },
-    ]);
-    expect(gapsIn("es")).toEqual([]);
+    const stored = await suite.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, id));
+    expect(stored).toEqual([{ id }]);
+    expect(report).toEqual(
+      beforeCounts.map(({ language, count }) => ({
+        language,
+        count: count + (language === "es" ? 0 : 1),
+      })),
+    );
   });
 
   it("answers the report only under the content-languages read's authorisation", async () => {

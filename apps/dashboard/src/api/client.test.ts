@@ -3248,3 +3248,30 @@ it.each(["Zone", "Department"] as const)(
 it("does not offer reversible zone removal", () => {
   expect(new DashboardApi()).not.toHaveProperty("deactivateZone");
 });
+
+it("encodes retained translation cell tuples and keeps their background read passive", async () => {
+  const cells = [
+    { kind: "unit" as const, id: "u:a&b", language: "es", field: "abbreviation" as const },
+    { kind: "product" as const, id: "dish / two", language: "en", field: "name" as const },
+  ];
+  const reply = {
+    config: { defaultLanguage: "es", languages: ["es", "en"] },
+    required: ["es"],
+    configuration: "configuration",
+    cells: [],
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.background.getContentTranslationCells(cells)).toEqual(reply);
+  const [path, init] = fetchImpl.mock.calls[0]!;
+  const url = new URL(path, "http://localhost");
+  expect(url.pathname).toBe("/management-api/content-translations/cells");
+  expect([...url.searchParams]).toEqual([
+    ["cell", '["unit","u:a&b","es","abbreviation"]'],
+    ["cell", '["product","dish / two","en","name"]'],
+  ]);
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
+});

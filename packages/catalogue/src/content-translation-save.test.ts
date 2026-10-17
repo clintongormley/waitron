@@ -14,7 +14,7 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
-import { saveTranslationCells } from "./content-translations.js";
+import { saveContentTranslations } from "./content-translations.js";
 import { addMember } from "./sections.js";
 import { sections, sectionMembers } from "./schema/sections.js";
 import { menuDetails, contentLanguages } from "./schema/menu.js";
@@ -165,7 +165,7 @@ async function snapshot() {
   }));
 }
 const save = (batch: { edits: TranslationCellEdit[] }) =>
-  app((tx) => saveTranslationCells(tx, batch, context));
+  app((tx) => saveContentTranslations(tx, batch, context));
 
 describe("atomic multilingual cell saves", () => {
   it("saves two languages on one item and removes the last enabled keys without losing disabled text", async () => {
@@ -235,7 +235,7 @@ describe("atomic multilingual cell saves", () => {
     await app(async (tx) => {
       const update = vi.spyOn(tx, "update");
       try {
-        await saveTranslationCells(tx, batch, context);
+        await saveContentTranslations(tx, batch, context);
         expect(update).toHaveBeenCalledTimes(1);
       } finally {
         update.mockRestore();
@@ -488,7 +488,7 @@ describe("translation cell batch boundaries", () => {
       app(async (tx) => {
         const spy = vi.spyOn(tx, "execute");
         try {
-          return await saveTranslationCells(
+          return await saveContentTranslations(
             tx,
             mutate(e!) as { edits: TranslationCellEdit[] },
             context,
@@ -566,7 +566,7 @@ describe("translation cell batch boundaries", () => {
       app(async (tx) => {
         const spy = vi.spyOn(tx, "update");
         try {
-          return await saveTranslationCells(tx, batch, context);
+          return await saveContentTranslations(tx, batch, context);
         } finally {
           writes = spy.mock.calls.length;
           spy.mockRestore();
@@ -630,7 +630,7 @@ describe("translation cell batch boundaries", () => {
     const reply = await app(async (tx) => {
       const spy = vi.spyOn(tx, "update");
       try {
-        return await saveTranslationCells(tx, batch, context);
+        return await saveContentTranslations(tx, batch, context);
       } finally {
         writes = spy.mock.calls.length;
         spy.mockRestore();
@@ -685,7 +685,7 @@ describe("translation cell batch boundaries", () => {
     const before = await snapshot();
     await expect(
       app((tx) =>
-        saveTranslationCells(
+        saveContentTranslations(
           tx,
           batch,
           change === "required" ? { ...context, required: ["es", "ca"] } : context,
