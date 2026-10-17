@@ -176,6 +176,8 @@ describe("POST /api/parties/:id/groups", () => {
         {
           id: lines[0]!.groupId,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: party.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
@@ -186,6 +188,8 @@ describe("POST /api/parties/:id/groups", () => {
         {
           id: lines[1]!.groupId,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -786,6 +790,8 @@ describe("GET /api/parties/:id/groups", () => {
         {
           id: party.fired.id,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: party.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
@@ -796,6 +802,8 @@ describe("GET /api/parties/:id/groups", () => {
         {
           id: party.tarta.id,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -806,6 +814,8 @@ describe("GET /api/parties/:id/groups", () => {
         {
           id: party.croquetas.id,
           position: 3,
+          displayNumber: 3,
+          numberPartyId: party.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,

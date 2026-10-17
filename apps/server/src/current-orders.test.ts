@@ -1165,12 +1165,15 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read).toEqual({
       revision: await revisionOf(s.partyId),
       hasGroups: true,
+      nextDisplayNumber: 3,
       retainedCourses: [],
       reminder: { groupId: mains.id, dueAt: null },
       groups: [
         {
           id: starters.id,
           position: 1,
+          displayNumber: 1,
+          numberPartyId: s.partyId,
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
@@ -1214,6 +1217,8 @@ describe("readCurrentOrders (spec §4)", () => {
         {
           id: mains.id,
           position: 2,
+          displayNumber: 2,
+          numberPartyId: s.partyId,
           state: "held",
           firedAt: null,
           remindAt: null,
@@ -1322,6 +1327,7 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(await currentOrders(s.partyId)).toEqual({
       revision: await revisionOf(s.partyId),
       hasGroups: false,
+      nextDisplayNumber: 1,
       retainedCourses: [],
       reminder: null,
       groups: [],

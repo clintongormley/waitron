@@ -80,6 +80,8 @@ export type Firer = { personId: string } | { deviceId: string };
 export interface OrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
@@ -951,6 +953,8 @@ export async function startGroup(
     .values({
       partyId,
       position: (await lastPosition(tx, partyId)) + 1,
+      displayNumber: await nextGroupNumber(tx, partyId),
+      numberPartyId: partyId,
       state: fire ? "fired" : "held",
       firedAt: fire ? fired.at : null,
       firedBy: fire && "personId" in fired.by ? fired.by.personId : null,
@@ -1035,6 +1039,8 @@ async function readGroups(
     .select({
       id: orderGroups.id,
       position: orderGroups.position,
+      displayNumber: orderGroups.displayNumber,
+      numberPartyId: orderGroups.numberPartyId,
       state: orderGroups.state,
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
@@ -1089,6 +1095,7 @@ async function readGroups(
     }
     return {
       ...group,
+      ...groupNumberIdentity(group),
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
       ...(awayGroups.has(group.id) ? { away: true as const } : {}),
@@ -1251,6 +1258,8 @@ export interface CurrentOrderRow {
 export interface CurrentOrderGroup {
   id: string;
   position: number;
+  displayNumber: number;
+  numberPartyId: string;
   state: "held" | "fired";
   firedAt: string | null;
   /** A snooze's time, until it is cleared or the group fires, empties or moves in a reorder. */
@@ -1266,6 +1275,7 @@ export interface CurrentOrderGroup {
 export interface CurrentOrders {
   revision: number;
   hasGroups: boolean;
+  nextDisplayNumber: number;
   retainedCourses: { id: string; name: string; displayOrder: number; heldUntilFired: boolean }[];
   reminder: ReleaseReminder | null;
   /** In sequence, removed ones left out. */
@@ -1294,10 +1304,13 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .where(eq(parties.id, partyId));
   if (party === undefined) throw new AppError("party.not_open", { partyId });
   const family = await partyFamily(tx, partyId);
+  const nextDisplayNumber = await nextGroupNumber(tx, partyId);
   const groups = await tx
     .select({
       id: orderGroups.id,
       position: orderGroups.position,
+      displayNumber: orderGroups.displayNumber,
+      numberPartyId: orderGroups.numberPartyId,
       state: orderGroups.state,
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
@@ -1388,6 +1401,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .filter((group) => group.state !== "removed")
     .map(({ createdAt, ...group }) => ({
       ...group,
+      ...groupNumberIdentity(group),
       state: group.state as "held" | "fired",
       // `order_groups_fired_at_ck` requires `fired_at` exactly when the group is fired.
       sentAt: group.state === "fired" ? group.firedAt! : createdAt,
@@ -1437,7 +1451,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     party.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
   return {
     revision: party.revision,
-    hasGroups: groups.length > 0,
+    hasGroups: nextDisplayNumber > 1,
+    nextDisplayNumber,
     retainedCourses: [...retainedCourses.values()].sort(
       (a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id),
     ),
@@ -1645,6 +1660,34 @@ async function lastPosition(tx: Transaction, partyId: string): Promise<number> {
     .from(orderGroups)
     .where(eq(orderGroups.partyId, partyId));
   return last;
+}
+
+async function nextGroupNumber(tx: Transaction, partyId: string): Promise<number> {
+  const groups = await tx
+    .select({
+      id: orderGroups.id,
+      displayNumber: orderGroups.displayNumber,
+      numberPartyId: orderGroups.numberPartyId,
+    })
+    .from(orderGroups)
+    .where(or(eq(orderGroups.partyId, partyId), eq(orderGroups.numberPartyId, partyId)));
+  let last = 0;
+  for (const group of groups) last = Math.max(last, groupNumberIdentity(group).displayNumber);
+  return last + 1;
+}
+
+function groupNumberIdentity(group: { displayNumber: number; numberPartyId: string | null }): {
+  displayNumber: number;
+  numberPartyId: string;
+} {
+  if (
+    !Number.isSafeInteger(group.displayNumber) ||
+    group.displayNumber < 1 ||
+    group.numberPartyId === null
+  ) {
+    throw new AppError("management.request_invalid", { field: "groupId" });
+  }
+  return { displayNumber: group.displayNumber, numberPartyId: group.numberPartyId };
 }
 
 async function currentRevision(tx: Transaction, partyId: string): Promise<number> {
