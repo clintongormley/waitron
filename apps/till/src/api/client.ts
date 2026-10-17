@@ -4048,6 +4048,14 @@ export class TillApi {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
   }
 
+  recallToDraft(
+    partyId: string,
+    lineId: string,
+    command: { submissionId: string; expectedPartyRevision: number },
+  ): Promise<{ revision: number; draft: Draft }> {
+    return this.#request(`/api/parties/${partyId}/lines/${lineId}/recall`, "POST", command);
+  }
+
   /** The active reasons a cancel, a give-away or a discount can be made under →
    * `GET /api/adjustment-reasons`. */
   listAdjustmentReasons(): Promise<AdjustmentReason[]> {

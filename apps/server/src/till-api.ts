@@ -169,6 +169,7 @@ import {
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import { recallToDraft } from "./draft-recall.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
 import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
@@ -3256,6 +3257,31 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.json(moved);
+    }),
+  );
+
+  app.post("/api/parties/:id/lines/:lineId/recall", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const partyId = requirePartyParam(c.req.param("id"));
+      const lineId = c.req.param("lineId");
+      if (!isUuid(lineId)) throw new AppError("group.not_found", { lineId });
+      const args = groupCommand(session.personId, asObject(await readRawJsonBody<unknown>(c)));
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return recallToDraft(
+          tx,
+          cfg,
+          partyId,
+          lineId,
+          args,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
+      return c.json(answer);
     }),
   );
 

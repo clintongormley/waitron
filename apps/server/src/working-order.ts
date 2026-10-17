@@ -1,4 +1,5 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import { isRecalledDish } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import {
@@ -54,7 +55,19 @@ import {
 } from "./parties.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { and, eq, exists, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  not,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
@@ -3030,6 +3043,7 @@ async function servableLines(
       and(
         where,
         isNull(workingOrderLines.parentLineId),
+        not(isRecalledDish(tx)),
         inArray(workingOrders.partyId, family),
         onShownBill(),
       ),

@@ -80,6 +80,7 @@ import {
  * | POST /api/working-orders/:id/cancel                       | take-orders                | take-orders           |
  * | PUT /api/working-orders/:id/make-at                       | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/lines/move-station, /send, /recall | take-orders          | take-orders           |
+ * | POST /api/parties/:id/lines/:lineId/recall | take-orders | own refusing row below; allowed: draft-recall.test.ts |
  * | PUT /api/working-orders/:id/lines/:lineNo                 | take-orders                | take-orders           |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course        | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/adjustments                  | take-orders                | take-orders           |
@@ -453,6 +454,7 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/parties/${id}/drafts`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/take-over`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/submit`),
+  ordering("POST", `/api/parties/${id}/lines/${id}/recall`),
   ordering("POST", `/api/parties/${id}/unpaid-departure`),
   ordering("POST", `/api/bills/${id}/split`),
   ordering("POST", `/api/bills/${id}/merge`),

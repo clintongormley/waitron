@@ -27,7 +27,7 @@ import {
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { placeGroups } from "./order-groups.js";
+import { listOrderGroups, placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
@@ -38,7 +38,7 @@ import {
   runServiceCommand,
 } from "./parties.js";
 import { readTabLines, refusePaymentInFlight, screenNote } from "./working-order.js";
-import type { TabLine } from "./working-order.js";
+import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
@@ -144,6 +144,114 @@ export async function readDrafts(
   partyId: string,
 ): Promise<Draft[]> {
   return readOpenDrafts(tx, cfg, partyId);
+}
+
+export async function appendRecalledLine(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  billId: string,
+  operatorId: string,
+  sourceLineId: string,
+  joinGroupId: string | null,
+  attendance?: OrderAttendance,
+): Promise<Draft> {
+  const [own] = await openDraftsOn(tx, partyId, operatorId, billId);
+  const draftId = own?.id ?? newId();
+  if (own === undefined) {
+    await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
+    await recordDraftEvents(
+      tx,
+      attendance === undefined
+        ? undefined
+        : {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+      {
+        draftId,
+        kind: "created",
+        fromPerson: null,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
+  } else
+    await tx
+      .update(orderDrafts)
+      .set({ revision: own.revision + 1, updatedAt: nowIso() })
+      .where(eq(orderDrafts.id, draftId));
+  const held = await storedLines(tx, cfg, [draftId]);
+  const position = held.reduce((maximum, line) => Math.max(maximum, line.position), 0) + 1;
+  const place =
+    joinGroupId === null
+      ? await recalledPlace(
+          tx,
+          cfg,
+          partyId,
+          sourceLineId,
+          held.map((row) => row.line),
+        )
+      : { joinGroupId, slot: 0, afterGroupId: null };
+  await tx.insert(orderDraftRecalledLines).values({ draftId, sourceLineId, position, ...place });
+  return readOpenDraft(tx, cfg, partyId, draftId);
+}
+
+async function recalledPlace(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  sourceLineId: string,
+  own: readonly DraftLine[],
+): Promise<{ slot: number; joinGroupId: string | null; afterGroupId: string | null }> {
+  const fire = { slot: 0, joinGroupId: null, afterGroupId: null };
+  const [source] = await tx
+    .select({ courseId: workingOrderLines.courseId })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, sourceLineId));
+  if (source!.courseId === null) return fire;
+  const courses = await tx
+    .select()
+    .from(kitchenCourses)
+    .where(eq(kitchenCourses.locationId, cfg.locationId));
+  const course = courses.find((candidate) => candidate.id === source!.courseId);
+  if (course?.heldUntilFired === false) return fire;
+  const groups = (await listOrderGroups(tx, partyId)).groups.filter(
+    (group) => group.state === "held",
+  );
+  const slots = [
+    ...new Map(own.filter((line) => line.slot > 0).map((line) => [line.slot, line])).values(),
+  ].sort((a, b) => a.slot - b.slot);
+  const atSlot = (slot: number) =>
+    own.some((line) => line.slot === slot && line.courseId === source!.courseId);
+  const placeOf = (line: DraftLine) => ({
+    slot: line.slot,
+    joinGroupId: null,
+    afterGroupId: line.afterGroupId,
+  });
+  for (const group of groups) {
+    if (
+      group.courseIds.includes(source!.courseId) ||
+      own.some((line) => line.joinGroupId === group.id && line.courseId === source!.courseId)
+    )
+      return { ...fire, joinGroupId: group.id };
+    const match = slots.find((line) => line.afterGroupId === group.id && atSlot(line.slot));
+    if (match !== undefined) return placeOf(match);
+  }
+  const ids = new Set(groups.map((group) => group.id));
+  const match = slots.find((line) => !ids.has(line.afterGroupId ?? "") && atSlot(line.slot));
+  if (match !== undefined) return placeOf(match);
+  const later =
+    course !== undefined &&
+    groups.length > 0 &&
+    groups.every((group) =>
+      group.courseIds.every((id) => {
+        const previous = courses.find((candidate) => candidate.id === id);
+        return previous !== undefined && course.displayOrder > previous.displayOrder;
+      }),
+    );
+  return later ? { ...fire, slot: (slots.at(-1)?.slot ?? 0) + 1 } : fire;
 }
 
 export async function saveDraft(
@@ -1044,7 +1152,7 @@ async function storedLines(
   tx: Transaction,
   cfg: TillConfig,
   draftIds: readonly string[],
-): Promise<{ draftId: string; line: DraftLine }[]> {
+): Promise<{ draftId: string; position: number; line: DraftLine }[]> {
   const rows = await tx
     .select({
       line: orderDraftLines,

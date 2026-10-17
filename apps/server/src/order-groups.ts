@@ -2,7 +2,20 @@ import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  not,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
@@ -58,6 +71,7 @@ import "./errors.js";
 import { stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
+import { isRecalledDish } from "./draft-source.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -603,8 +617,15 @@ async function releaseGroup(
     .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(workingOrderLines.groupId, groupId), isNull(workingOrderLines.parentLineId)))
+    .where(
+      and(
+        eq(workingOrderLines.groupId, groupId),
+        isNull(workingOrderLines.parentLineId),
+        not(isRecalledDish(tx)),
+      ),
+    )
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
+  if (lines.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   const byOrder = new Map<string, string[]>();
   for (const line of lines) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
@@ -1154,6 +1175,7 @@ async function readGroups(
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
       courseId: workingOrderLines.courseId,
+      recalled: isRecalledDish(tx).mapWith(Boolean),
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -1187,7 +1209,7 @@ async function readGroups(
   return groups.map((group) => {
     const own = linesByGroup.get(group.id) ?? [];
     const counts = new Map<string, number>();
-    for (const line of own) {
+    for (const line of own.filter((line) => !line.recalled)) {
       const label = staffPresentationName(line);
       counts.set(label, (counts.get(label) ?? 0) + line.quantity);
     }
@@ -1198,7 +1220,7 @@ async function readGroups(
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
       ...(awayGroups.has(group.id) ? { away: true as const } : {}),
-      lineIds: own.map((line) => line.id),
+      lineIds: own.filter((line) => !line.recalled).map((line) => line.id),
       courseIds: [
         ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
       ],
@@ -1294,10 +1316,12 @@ export async function readReleaseReminders(
         ),
         isNull(workingOrderLines.parentLineId),
         onShownBill(),
+        not(isRecalledDish(tx)),
       ),
     );
   for (const partyId of new Set(groups.map((group) => group.partyId))) {
-    const own = groups.filter((group) => group.partyId === partyId);
+    const active = new Set(lines.map((line) => line.groupId));
+    const own = groups.filter((group) => group.partyId === partyId && active.has(group.id));
     const ids = new Set(own.map((group) => group.id));
     reminders.set(
       partyId,
@@ -1444,6 +1468,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         displayOrder: kitchenCourses.displayOrder,
         heldUntilFired: kitchenCourses.heldUntilFired,
       },
+      recalled: isRecalledDish(tx).mapWith(Boolean),
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -1515,10 +1540,11 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
     if (line.parentLineId !== null) continue;
+    if (line.course !== null) retainedCourses.set(line.course.id, line.course);
+    if (line.recalled) continue;
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
     dishes.push(line);
-    if (line.course !== null) retainedCourses.set(line.course.id, line.course);
     const row: CurrentOrderRow = {
       lineId: line.id,
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
@@ -1558,7 +1584,11 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     retainedCourses: [...retainedCourses.values()].sort(
       (a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id),
     ),
-    reminder: releaseReminder(shown, dishes, minutes),
+    reminder: releaseReminder(
+      shown.filter((group) => group.rows.length > 0),
+      dishes,
+      minutes,
+    ),
     groups: shown,
     ungrouped,
   };

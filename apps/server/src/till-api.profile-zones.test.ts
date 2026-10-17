@@ -160,6 +160,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
  * | POST /api/parties/:id/groups/move, /groups/split-line   | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
+ * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | POST /api/parties/:id/drafts/:did/take-over, /submit    | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |
  * | POST /api/dead-ends/draft                               | body party             | refuses POST /api/dead-ends/draft                    |
@@ -1028,6 +1029,13 @@ const ROUTES: readonly Row[] = [
     }),
     deliTableZone,
   ]),
+  [
+    "POST /api/parties/:id/lines/:lineId/recall",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/lines/${id}/recall`,
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0 }),
+    deliTableZone,
+  ],
   [
     "POST /api/parties/:id/unpaid-departure",
     "POST",
