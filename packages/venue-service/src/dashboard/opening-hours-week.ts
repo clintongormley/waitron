@@ -35,6 +35,8 @@ type Day = OpeningHoursMonth["days"][number];
 /** Below this many pixels of the Week's own width it draws its date's day alone, the Month's
  *  breakpoint. */
 export const PHONE_WIDTH = 560;
+/** The least a finger moves across the day card to step a day. */
+const SWIPE_PX = 48;
 
 interface Drawn {
   model: OpeningHoursMonth;
@@ -327,6 +329,7 @@ export class OpeningHoursWeekView extends LitElement {
         margin-block-end: var(--wt-space-2);
       }
       .card {
+        touch-action: pan-y;
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -670,9 +673,33 @@ export class OpeningHoursWeekView extends LitElement {
             </div>`
           : nothing
       }
-      <div class="card" data-test="day-card">
+      <div
+        class="card"
+        data-test="day-card"
+        @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
+        @pointerup=${(event: PointerEvent) => this.#swipeEnd(event)}
+        @pointercancel=${() => (this.#swipeFrom = undefined)}
+      >
         ${weekRows(day!, chosen, names).map((row) => this.#phoneRow(row, day!, names))}
       </div>`;
+  }
+
+  #swipeFrom: { x: number; y: number } | undefined;
+
+  #swipeStart(event: PointerEvent) {
+    this.#swipeFrom =
+      event.pointerType === "mouse" ? undefined : { x: event.clientX, y: event.clientY };
+  }
+
+  #swipeEnd(event: PointerEvent) {
+    const from = this.#swipeFrom;
+    this.#swipeFrom = undefined;
+    if (!from) return;
+    const across = event.clientX - from.x;
+    const down = event.clientY - from.y;
+    if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
+    const target = addDays(this.date, across < 0 ? 1 : -1);
+    if (weekInRange(target)) this.#emit("week-change", { date: target });
   }
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames) {

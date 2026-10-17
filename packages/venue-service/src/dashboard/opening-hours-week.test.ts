@@ -970,6 +970,62 @@ describe("Opening hours week on a phone", () => {
     expect(testId(el, "block-tip")).toBeNull();
   });
 
+  const cardAt = 'opening-hours-week [data-test="day-card"]';
+
+  it("a swipe left shows the next day", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }, { date: "2026-11-30" }]);
+  });
+
+  it("a finger moving down scrolls and steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const tall = document.createElement("div");
+    tall.style.height = "3000px";
+    document.body.append(tall);
+    hosts.push(tall);
+    expect(document.documentElement.scrollHeight).toBeGreaterThan(window.innerHeight);
+    expect(window.scrollY).toBe(0);
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 0, y: -200 } });
+    await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(0));
+    expect(sent).toEqual([]);
+  });
+
+  it("a short or slanted move steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -30, y: 0 } });
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -60, y: -50 } });
+    expect(sent).toEqual([]);
+  });
+
+  it("a mouse drag steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const blocks = `${cardAt} .row[data-row="rest"] .block`;
+    const first = card(el).querySelector<HTMLElement>('.row[data-row="rest"] .block:first-child')!;
+    const last = card(el).querySelector<HTMLElement>('.row[data-row="rest"] .block:last-child')!;
+    expect(last.getBoundingClientRect().left - first.getBoundingClientRect().right).toBeGreaterThan(
+      48,
+    );
+    await commands.mouseDrag([`${blocks}:first-child`, `${blocks}:last-child`]);
+    expect(sent).toEqual([]);
+  });
+
+  it("a tap on the day's name still opens the day box", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: 'opening-hours-week [data-test="day-name"]' });
+    await vi.waitFor(() => expect(opened).toHaveLength(1));
+    expect(opened[0]!.date).toBe("2026-12-01");
+    expect(sent).toEqual([]);
+  });
+
   it("nothing runs off the side", async () => {
     const el = await mount({ date: "2026-12-01", departmentId: "rest" });
     await vi.waitFor(() => expect(root(el).querySelector("wt-combobox")).not.toBeNull());
