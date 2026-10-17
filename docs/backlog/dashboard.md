@@ -1138,16 +1138,6 @@ still asks, and a full page's own Cancel leaves without asking too.
   Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
   that asserts Cancel asks is now asserting the old rule.
 
-## A681. A light / dark / follow-device theme choice in the apps
-
-**A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
-screen follows the device's own light or dark setting: the token layer honours a `data-theme`
-attribute (`packages/ui-core/src/tokens/colors.css`), but outside tests and the UI demo nothing in
-the product sets it. So staff on a locked-down till or a kiosk tablet cannot change it. Add a
-Theme choice with three options (Light, Dark, Follow device, the default) to the dashboard, the
-till and setup. It is saved in that browser on that device, not in the venue's database. Open:
-one choice per device, or one per person on a shared till (suggested: per device).
-
 ## A form's bottom message in a full-height dialog sits far above its buttons
 
 **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's

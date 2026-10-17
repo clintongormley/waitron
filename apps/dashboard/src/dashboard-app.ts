@@ -8,9 +8,15 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
+  chooseTheme,
   iconButtonStyles,
+  ThemeChoiceController,
+  themeChoices,
+  themeChoicesStyles,
+  themeLabelsPerLocale,
   trackIconTooltip,
   UrlStateController,
+  type ThemeChoice,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -51,6 +57,7 @@ import {
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
+import "@waitron/ui/src/components/wt-theme-chooser.js";
 import "@waitron/ui/src/components/wt-demo-bar.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
@@ -173,6 +180,12 @@ const WAITRON_LOGO_DARK_URL = new URL(
   "../../../packages/ui/brand/waitron-lockup-dark.svg",
   import.meta.url,
 ).href;
+
+function darkLogoMedia(choice: ThemeChoice): string {
+  if (choice === "dark") return "all";
+  if (choice === "light") return "not all";
+  return "(prefers-color-scheme: dark)";
+}
 
 type AccessRule = {
   requiresManager?: boolean;
@@ -334,13 +347,15 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
  *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
- * Each screen owns its heading; the shell supplies navigation, logout and the language chooser.
+ * Each screen owns its heading; the shell supplies navigation, logout, and the language and Theme
+ * choices.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
   static override styles = [
     baseStyles,
     iconButtonStyles,
+    themeChoicesStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -980,6 +995,14 @@ export class DashboardApp extends LitElement {
    * session probe whose answer was decided BEFORE the pick took effect carries the language from
    * before it, so that answer must not repaint over the person's choice. */
   #sessionLocaleChoice = 0;
+  readonly #theme = new ThemeChoiceController(this, { applies: true });
+
+  readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
+    theme: t("theme.label"),
+    light: t("theme.light"),
+    dark: t("theme.dark"),
+    device: t("theme.device"),
+  }));
 
   constructor() {
     super();
@@ -1699,7 +1722,7 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <picture class="brand-logo-picture">
-          <source media="(prefers-color-scheme: dark)" srcset=${WAITRON_LOGO_DARK_URL} />
+          <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOGO_DARK_URL} />
           <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
         </picture>
         <span class="venue-row"
@@ -1716,6 +1739,15 @@ export class DashboardApp extends LitElement {
         >
       </div>
       <div class="banner-actions">
+        ${
+          authenticated
+            ? nothing
+            : html`<wt-theme-chooser
+                data-test="theme-chooser"
+                .active=${this.#theme.choice}
+                .labels=${this.#themeLabelsFor(currentLocale())}
+              ></wt-theme-chooser>`
+        }
         <wt-language-chooser
           data-test="language-chooser"
           .active=${currentLocale()}
@@ -1758,6 +1790,11 @@ export class DashboardApp extends LitElement {
                     @click=${() => this.#openProfile()}
                     >${t("action.account_settings")}</wt-button
                   >
+                  ${themeChoices({
+                    active: this.#theme.choice,
+                    labels: this.#themeLabelsFor(currentLocale()),
+                    onPick: chooseTheme,
+                  })}
                   <wt-button
                     variant="ghost"
                     align="start"

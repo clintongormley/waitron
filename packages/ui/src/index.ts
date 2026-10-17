@@ -105,6 +105,19 @@ export {
   setContentLanguages,
   subscribeContentLanguages,
 } from "./content-languages.js";
+export {
+  THEME_CHOICES,
+  THEME_SELECTED_EVENT,
+  THEME_STORAGE_KEY,
+  ThemeChoiceController,
+  chooseTheme,
+  currentThemeChoice,
+  isThemeChoice,
+  startThemeChoice,
+  subscribeThemeChoice,
+} from "./theme-choice.js";
+export type { ThemeChoice } from "./theme-choice.js";
+export { themeChoices, themeChoicesStyles, themeLabelsPerLocale } from "./theme-choices.js";
 
 export {
   UrlStateController,
@@ -133,6 +146,7 @@ export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
 export { WtBanner } from "./components/wt-banner.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
+export { WtThemeChooser, type WtThemeLabels } from "./components/wt-theme-chooser.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";

@@ -1,6 +1,14 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
-import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import {
+  THEME_SELECTED_EVENT,
+  ThemeChoiceController,
+  baseStyles,
+  currentThemeChoice,
+  themeChoices,
+  themeChoicesStyles,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -16,6 +24,7 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
+import { themeChooser, themeLabels } from "./theme-chooser.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -25,7 +34,7 @@ export type ShellAffordance = "station" | "expo" | "schedule" | "find-bill";
 type ActionVariant = "secondary" | "ghost";
 
 /** An item of the bar that can move into More; "transfers" is the count and its button together,
- * "operator" the name and Log out together. */
+ * "operator" the name and everything in its menu together. */
 type BarItem =
   | "transfers"
   | "find-bill"
@@ -80,11 +89,13 @@ export class TillShell extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    new ThemeChoiceController(this);
   }
 
   static override styles = [
     baseStyles,
     languageChooserStyles,
+    themeChoicesStyles,
     css`
       :host {
         display: flex;
@@ -663,7 +674,11 @@ export class TillShell extends LitElement {
         align=${variant === "ghost" ? "start" : nothing}
         @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
-      >`;
+      >${themeChoices({
+        active: currentThemeChoice(),
+        labels: themeLabels(),
+        onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
+      })}`;
   }
 
   #menu(moved: ReadonlySet<BarItem>): TemplateResult {
@@ -718,7 +733,7 @@ export class TillShell extends LitElement {
         ${
           this.kiosk || this.formFactor === "kds"
             ? this.loadLocales !== undefined
-              ? html`<div class="language-corner">${this.#chooser()}</div>`
+              ? html`<div class="language-corner">${themeChooser()}${this.#chooser()}</div>`
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>

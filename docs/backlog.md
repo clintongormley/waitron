@@ -98,11 +98,9 @@ Everything not listed here needs more spec work first.
    protection and legal compliance_). Adviser agreement, build and verification remain open.
 6. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
-7. **A681 — a light / dark / follow-device theme choice in the apps** (_Users, sign-in and the
-   dashboard shell_).
 
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
-come after the eight above:
+come after the list above:
 
 - **Finish table service and paying a bill in parts** (_The till, devices and table service_).
   What Task 16 (counter handover, #981) and Task 17 (#991) left open is in their entries under that
@@ -1953,6 +1951,22 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   two requests one after the other. A768's after-change probe timed it at 241–266 ms, against
   113–120 ms for a second table in the same zone.
 
+- **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
+  2026-10-17).** At 320×568, with the person's name moved into More, the menu's content (625 px)
+  overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
+  the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
+  believed to predate A681 (not run on `main`). A681 puts the Theme row after Log out, so at 360×640
+  and 390×664 that row is the part that needs a scroll. Decide whether More should show that it
+  scrolls, or hold fewer items on a short screen.
+
+- **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
+  2026-10-17).** With a counter-zone menu, `test-till (1)` of run 39069802267 measured the tab
+  strip's content at 196 px in a 182 px box; locally the same check measured 178 px in 184 px. A681
+  leaves the bar's markup as it is on `main`, so this is believed to hold on `main` too (not run
+  there); the bar's design lets the tabs scroll sideways once everything else has moved. Decide
+  whether 320 px should show both tabs in full, and if so add a 320 px case to the "shows every
+  tab in full" check in `apps/till/src/widgets/till-shell.test.ts`.
+
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones
   (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
   whether clocking is offered change the till's layout, so they are applied only where the till
@@ -3547,15 +3561,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
   #1828).** `wt-colour-chooser` copies the panel placement and the grid arrow-key handling that
-  several other `wt-*` components (`wt-combobox`, `wt-language-chooser` among them) each carry
-  their own copy of. Move both into shared helpers in `packages/ui` and have every copy use them;
-  each component's own tests and mutation score must hold.
+  other `wt-*` components (`wt-combobox` among them) each carry their own copy of;
+  `wt-language-chooser` and `wt-theme-chooser` already share theirs through
+  `packages/ui/src/menu-popover.ts`. Move both into shared helpers in `packages/ui` and have every
+  copy use them; each component's own tests and mutation score must hold.
 
-- **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
-  screen follows the device's own light or dark setting. Add a Theme choice with three options
-  (Light, Dark, Follow device, the default) to the dashboard, the till and setup. It is saved in
-  that browser on that device, not in the venue's database.
-  [Detail](backlog/dashboard.md#a681-a-light--dark--follow-device-theme-choice-in-the-apps)
+- **The box's trust page and the favicon still follow the device's setting, not the Theme choice
+  (left open by A681).** The trust page (`apps/server/src/trust-page.ts`, its logo in
+  `trust-page-logo.ts`) is rendered by the server with no script, so it never reads the choice
+  saved in the browser; it is the only server-rendered page under `apps/server/src` that reads the
+  device's setting at all. The favicon (`packages/ui/brand/public/favicon.svg`) is drawn by the
+  browser from the operating system's setting. Open.
 
 - **A653 — every long dashboard table scrolls the same way, with less above it (owner,
   2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows

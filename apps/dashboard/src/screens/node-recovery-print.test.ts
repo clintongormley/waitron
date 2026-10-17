@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { applyTokens } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { renderNodeRecoveryPack } from "./node-recovery-print.js";
@@ -47,3 +48,33 @@ it.each(["en-GB", "es-ES"] as const)(
     }
   },
 );
+
+it("gives the printed page the colour scheme of the screen it copies its colours from", () => {
+  const scheme = (source: HTMLElement): string => {
+    const page = new DOMParser().parseFromString(renderNodeRecoveryPack(pack, source), "text/html");
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(page.querySelector("style")!.textContent!);
+    const root = [...sheet.cssRules].find(
+      (rule): rule is CSSStyleRule => rule instanceof CSSStyleRule && rule.selectorText === ":root",
+    )!;
+    return root.style.getPropertyValue("color-scheme");
+  };
+  const themed = (theme: "light" | "dark"): HTMLElement => {
+    const div = document.createElement("div");
+    document.body.append(div);
+    applyTokens(div);
+    div.setAttribute("data-theme", theme);
+    return div;
+  };
+  const dark = themed("dark");
+  const light = themed("light");
+  try {
+    expect(scheme(dark)).toBe("dark");
+    expect(scheme(light)).toBe("light");
+    expect(getComputedStyle(document.body).colorScheme).toBe("normal");
+    expect(scheme(document.body)).toBe("light dark");
+  } finally {
+    dark.remove();
+    light.remove();
+  }
+});

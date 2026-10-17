@@ -399,6 +399,11 @@ export const en = {
     "A selected extra is no longer available. Cancel and reopen the product to choose again.",
   "modifier.selected_total": "Selected",
   "modifier.unavailable_choices": "No available choices. This product cannot be added.",
+  // Theme choice. light/dark/device also name the icon-only buttons in the person's menu.
+  "theme.label": "Theme",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.device": "Follow device",
   // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
@@ -1958,6 +1963,10 @@ export const es: Record<StringKey, string> = {
     "Un extra seleccionado ya no está disponible. Cancela y vuelve a abrir el producto para elegir de nuevo.",
   "modifier.selected_total": "Seleccionados",
   "modifier.unavailable_choices": "No hay opciones disponibles. No se puede añadir este producto.",
+  "theme.label": "Tema",
+  "theme.light": "Claro",
+  "theme.dark": "Oscuro",
+  "theme.device": "Según el dispositivo",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",
   "login.loading": "Cargando…",
