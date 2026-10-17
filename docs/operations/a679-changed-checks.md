@@ -885,3 +885,20 @@ still fails its unchanged gate at 94.79% statements, 92.76% branches, 97.51% fun
 The 43 new cases pass in the feature tree and the independently installed candidate. The
 unchanged fiscal pair passes 20 cases, and the selected root guards pass 1,756 cases.
 Task 4 and the remaining branch gates stay open.
+
+### Exact HTTP-fixture approval applied at 19:45
+
+The owner approved the exact `b62e30c2…` patch above at 19:45 on 2026-10-17. It is now
+applied unchanged to `apps/server/src/boot.setup-routes.test.ts`. Its equality checks at lines
+637, 649 and 1549 use `06RB` in place of `S000001`; the invalid-import requests at lines
+1381, 1404 and 1511 use the owned claim route with their original refusal checks. The full
+before/after expectation list is in the lane's `assertion-audit.json`. No other existing
+expectation changes.
+
+The final feature-tree setup/readiness selection passes 105 cases in eight files, including all
+46 retained consumer cases. The disposable-allocation, hour-activation and unchanged fiscal pair
+pass 87 cases in five files. Server typecheck, scoped lint and formatting pass. These fixture
+checks control internet-clock observations and register a synthetic public PDF digest; they do
+not qualify real internet clocks, an actual PDF, custody or owner acceptance. The full
+provisioning coverage result above still fails its unchanged gate. The later hour-plan work
+and final acceptance/review/CI remain open.

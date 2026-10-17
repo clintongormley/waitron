@@ -384,9 +384,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks, transaction rollback, and exact Finish after staged cleanup. A relocated compiled-command
   check preserves the selected PDF and hour while importing dishes with fresh counters.
   The owner's exact 2026-10-17 19:00 fixture approval is applied. The retained direct provisioning
-  and demo-seed cases pass with controlled hour preparation and unchanged assertions. Four HTTP
-  cases still fail in the feature checkout; their separate owned-hour fixture conversion passes
-  all three retained suites in an installed candidate and awaits exact fiscal-check approval.
+  and demo-seed cases pass with controlled hour preparation and unchanged assertions. The owner's
+  exact 19:45 HTTP-fixture approval is also applied. All 46 retained consumer cases and the
+  final setup/readiness group pass, using owned-hour Live setup and automatic disposable setup.
   New package checks cover staged-import recovery and tampering, transfer boundaries, kitchen
   defaults, staged key validation, verifier publication and the complete frozen purpose set.
   Omission controls exercise their refusal and recovery paths.
