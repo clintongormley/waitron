@@ -25,6 +25,7 @@ import {
   orderGroupEvents,
   orderGroups,
   orderDraftRecalledLines,
+  orderDrafts,
   ticketItems,
   parties,
   workingOrderLines,
@@ -979,6 +980,71 @@ export async function splitHeldLineIntoUnits(
     { partyId, lineId, operatorId: args.operatorId },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      const [source] = await tx
+        .select({ draft: orderDrafts, line: workingOrderLines, ownerName: persons.displayName })
+        .from(orderDraftRecalledLines)
+        .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
+        .innerJoin(
+          workingOrderLines,
+          eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId),
+        )
+        .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
+        .where(
+          and(eq(orderDraftRecalledLines.sourceLineId, lineId), eq(orderDrafts.state, "open")),
+        );
+      if (source !== undefined) {
+        if (
+          source.draft.partyId !== partyId ||
+          source.line.parentLineId !== null ||
+          source.draft.billId !== source.line.workingOrderId
+        )
+          throw new AppError("group.not_found", { lineId });
+        if (source.draft.ownerId !== args.operatorId)
+          throw new AppError("draft.taken_over", {
+            draftId: source.draft.id,
+            ownerId: source.draft.ownerId,
+            ownerName: source.ownerName ?? "",
+          });
+        await requireBillOfParty(tx, partyId, source.line.workingOrderId);
+        await refusePaymentInFlight(tx, [source.line.workingOrderId]);
+        if (
+          source.line.unitPrecision !== 0 ||
+          source.line.quantity < 2000 ||
+          source.line.quantity % 1000 !== 0
+        )
+          throw new AppError("tab.transfer_quantity_invalid", {
+            tabId: source.line.workingOrderId,
+            lineNo: source.line.lineNo,
+            quantity: thousandthsToDecimal(source.line.quantity),
+          });
+        for (let unit = 1; unit < source.line.quantity / 1000; unit += 1)
+          await splitLinesWithinOrder(
+            tx,
+            cfg,
+            source.line.workingOrderId,
+            [{ lineNo: source.line.lineNo, quantity: "1" }],
+            { splitExtras: true },
+          );
+        await tx
+          .update(orderDrafts)
+          .set({ revision: source.draft.revision + 1, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, source.draft.id));
+        await bumpRevision(tx, [source.line.workingOrderId]);
+        await recordGroupEvent(
+          tx,
+          {
+            partyId,
+            groupId: source.line.groupId,
+            kind: "lines_moved",
+            actorId: args.operatorId,
+            detail: { splitLineId: lineId },
+          },
+          attendance === undefined
+            ? undefined
+            : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+        );
+        return { revision };
+      }
       const [line] = await tx
         .select({
           workingOrderId: workingOrderLines.workingOrderId,
