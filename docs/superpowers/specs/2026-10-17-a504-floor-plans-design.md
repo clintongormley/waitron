@@ -54,12 +54,20 @@ From the backlog entry ([till.md, A504](../../backlog/till.md#a504-floor-plans-p
   per table (`apps/till/src/api/client.ts:3412-3414`; server `apps/server/src/till-api.ts:2675-2685`),
   which runs `ensureToday` first, so any such read can be the one that resets a zone. Zones come
   from a separate read, `GET /api/zones` (`client.ts:3403`; `till-api.ts:2689`), which does not run
-  `ensureToday`. While a zone's map is on screen the floor screen asks for a re-read every 15
-  seconds (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts:691-701`), and that re-read
-  fetches the tables only (`#pollFloor` and `#refreshFloor`, `apps/till/src/till-app.ts:7883-7911`).
-  Both are read when the floor is first loaded (`till-app.ts:7798-7808`) and when the till moves to
-  the floor (`till-app.ts:7852-7857`). The list view is not re-read on a timer (backlog, till.md
-  "Refresh the floor without a staff action in a zone's list view").
+  `ensureToday`. Two 15-second timers re-read them, both read in the code, not run:
+  - **Tables, on the map only.** While a zone's map is on screen the floor screen asks for a
+    re-read every 15 seconds (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts:691-701`),
+    which fetches the tables only (`#pollFloor` and `#refreshFloor`, `apps/till/src/till-app.ts:7883-7911`).
+    The list's tables are not re-read on a timer (backlog, till.md "Refresh the floor without a
+    staff action in a zone's list view").
+  - **Zones, on the map and the list.** The menu-checking timer, started at sign-in
+    (`till-app.ts:3892`), ticks every 15 seconds (`POLL_MS`, `apps/till/src/state/menu-state-poll.ts:4`,
+    `42`, `56`), and each tick re-reads the zones whenever the floor screen shows and no order is open
+    (`onTick`, `till-app.ts:2176-2185`).
+
+  Both are also read when the floor is first loaded (`till-app.ts:7798-7808`) and when the till
+  moves to the floor (`till-app.ts:7852-7857`), and the zones after "keep open" changes and when a
+  held order's move opens (`till-app.ts:12338`, `12390`).
 - **Periods.** A period belongs to one department (`menu_periods.department_id`,
   `packages/venue-service/src/schema/menus.ts:10-36`), and a zone belongs to one department
   (`zone_service_policies`, `packages/venue-service/src/schema/service.ts:51-79`). Which period is
@@ -198,7 +206,9 @@ Mock-up: [1-floor-plans-page.png](../../backlog/mockups/a504-floor-plans/1-floor
   **Replace with**, the period delete dialog's wording, preselected to the default set. Unlike
   that dialog it has no "None", because every period needs a set. Cancel on the left, a danger
   **Delete {set}** on the right. Deleting a set a zone is using right now does not change the till
-  then (section 7.2).
+  then (section 7.2), and the dialog says so per case: for zones using it now, "{zones} keep today's
+  layout until {period} ends", where {period} is the period each zone recorded (deleted at 14:00:
+  "until Lunch ends"; at 17:00: "until Dinner ends"); when no zone is using it, no such line.
 - **The editor** keeps its contract, its header included (Undo, Redo, Cancel, Save). Its title
   gains the set's name, "Inside · Dinner", and a line under it says "Tables are shared by every set.
   Adding, renaming or deleting one here does it in every set." Its address becomes
@@ -274,7 +284,9 @@ move the till's tables within seconds.
 it for and the moment its rule can next give another answer** (the end of the running period, or of
 the next period when none runs, or the end of the business day). Until that moment the zone keeps
 its set whatever is changed on the dashboard; at that moment the rule is worked out again with the
-settings as they then stand.
+settings as they then stand. **If the answer is the set already in use, nothing is reset:** only the
+recorded period and moment move on. Two periods that share one set therefore follow each other with
+no reset, and a period kept open before it ends just moves the moment.
 
 > At 14:00 the owner changes Dinner's Floor plan from "Dinner" to "Private party". Nothing moves on
 > the till. At 16:00, when Lunch ends, Inside and Terrace switch to Private party.
@@ -286,14 +298,36 @@ settings as they then stand.
 > At 17:00 the owner deletes "Dinner", replacing it with "Standard". The till keeps today's copy of
 > Dinner's layout until Dinner ends at 23:30; "Reset to … plan" in the zone menu, pressed meanwhile,
 > uses Standard.
+>
+> At 15:50 a manager keeps Lunch open until 16:45, so at 16:00 the rule still gives Standard: nothing
+> is reset, and the recorded moment becomes 16:45. At 16:10 the manager cancels the keep open; the
+> floor keeps Standard until 16:45, the moment it recorded, then switches to Dinner's set.
+>
+> Monday is a day with no period, so the zones take the default set, Standard, until the day ends.
+> At 11:00 the owner paints a lunch for today: the menus offer it at once, but the floor takes its
+> set only from tomorrow's start.
 
-The explicit "Reset to … plan" button is the one way to bring a dashboard change onto the till early,
-as "Reset to saved plan" is today. It resets onto the recorded set's current layout, or, if that set
-has been deleted, onto the set the period now picks.
+**"Reset to … plan" in the till's zone menu (default: onto the recorded set).** It resets onto the
+recorded set's current layout, as "Reset to saved plan" does today. So it brings early an edit to
+that set's layouts, and, when that set has been deleted, the replacement chosen in the delete
+dialog. It does not bring early a changed Floor plan field, a new default set or a repaint: they
+wait for the recorded moment.
 
-This also keeps the floor read cheap: today `ensureToday` finds the zones needing work in one query
-(`floor-today-store.ts:541-565`); with the recorded moment, that query gains one comparison, and the
-department's periods are worked out only for zones whose moment has passed.
+> At 14:00 a manager repaints today so Lunch ends at 15:00. At 15:10 a waiter presses "Reset to
+> Standard plan": the zone resets onto Standard, the set it recorded, not onto Dinner's set.
+
+Its label names the set it would reset onto: the recorded set, or, after that set is deleted, the
+replacement ("Reset to Standard plan" in the 17:00 example above).
+
+**Alternative for the button: it works the rule out afresh.** Pressed at 15:10 in the example above,
+it resets onto Dinner's set and records Dinner. The button then brings every dashboard change early,
+but staff pressing it to tidy the room can change the whole layout by surprise.
+
+**The cost of the floor read.** Today `ensureToday` finds the zones needing work in one query that
+starts from `floor_plans` (`floor-today-store.ts:541-565`, `.from(floorPlans)` at line 543). With
+one row per set plus a waiting row there, that query has to be rebuilt to start from the zones and
+today's rows, and gains the test on the recorded moment; the department's periods are worked out only
+for zones whose moment has passed, so between boundaries a read does no more than that one query.
 
 **Alternative: the switch follows the settings live.** Every floor read works out each department's
 running period and switches any zone whose answer changed, so the 14:00 changes above move the
@@ -320,12 +354,13 @@ it switches to Dinner again.
 **Default: a switch is the reset the till already performs, onto the new set's layout, with one
 difference: tables taken off for today stay off.**
 
-There is still no timer on the server. Any `GET /api/tables/state` after a zone's recorded moment
-performs the switch (`ensureToday` runs inside it, `till-api.ts:2675-2685`). A till showing that
-zone's map makes that read at its next 15-second re-read (`till-floor-screen.ts:691-701`), so the
-new layout normally shows within about 15 seconds of the boundary; this was read, not measured. A
-till showing the list, or another screen, shows it after its next floor read: a staff action on the
-floor, or moving to the floor (`till-app.ts:7852-7857`).
+There is still no timer on the server. Any floor read after a zone's recorded moment performs the
+switch: `GET /api/tables/state` already runs `ensureToday` (`till-api.ts:2675-2685`), and under
+section 10's default `GET /api/zones` runs it too. A till on the floor screen, map or list, re-reads
+the zones every 15 seconds, and on the map the tables too (section 2), so it shows the change within
+about 15 seconds of the boundary; this was read in the code, not measured. On the list, the table
+rows themselves are refreshed only after a staff action or when the till comes back to the floor,
+as today. A till on another screen shows it when it comes back to the floor.
 
 What each kind of table does, from today's reset rules (`floor-reset-plan.ts:80-87`), at Inside at
 16:00:
@@ -367,11 +402,11 @@ and [4-till-switch-notice-phone.png](../../backlog/mockups/a504-floor-plans/4-ti
 
 **Default: a one-line notice under the zone tabs**, "Dinner plan since 16:00. 2 tables move when
 their guests leave." The count falls as tables catch up; at none the sentence ends at "since 16:00".
-It has a close button, stays closed on that till for that switch, and blocks nothing. It appears on
-the map at the read that performs or follows the switch, and on the list only at the list's next
-read (section 7.4). The zone menu's "Reset to saved plan" (`floor.reset_plan`,
-`apps/till/src/i18n/strings.ts:855`) becomes "Reset to Dinner plan", naming the set in use; its
-question keeps today's words.
+It has a close button, stays closed on that till for that switch, and blocks nothing. It comes from
+the zones read, so it appears on the map and on the list at the next 15-second zones re-read
+(section 7.4). The zone menu's "Reset to saved plan" (`floor.reset_plan`,
+`apps/till/src/i18n/strings.ts:855`) becomes "Reset to Dinner plan", naming the set it would reset
+onto (section 7.2); its question keeps today's words.
 
 **Alternatives:** also draw a dashed outline where each waiting table will go (clearer, but outlines
 can sit over other tables, the A600 gap); or no notice.
@@ -416,7 +451,8 @@ from the Floor plans page, takes a date and no time, and keeps the editor's head
 - **"Goes live" means the start of that business day:** the first floor read on or after it puts the
   waiting layout in place of the set's layout, and resets the zone if that set is in use, as a new
   day's reset does today.
-- **One waiting layout per set and zone.** The zone row shows "From 1 Jun 2027"; the chip's menu has
+- **One waiting layout per set and zone.** While one waits, the zone row's menu does not offer
+  Publish later… (it is hidden, not refused). The zone row shows "From 1 Jun 2027"; the chip's menu has
   **Edit**, **Change date** and **Cancel this layout**, the cancel asking "Cancel the layout scheduled
   for 1 Jun 2027?" with **Keep it**. Editing it keeps its date.
 - **Saving the layout in use while one waits is allowed, and the editor says what happens:** a line
@@ -470,8 +506,9 @@ A sketch for the plan to settle, not a final schema.
   width, height, shape, turn; no row means put away). `floor_plan_table_sizes` gains `plan_id`.
   `floor_plan_table_parts` stays per joined table, shared by every layout.
 - **`floor_today_zones`** gains `set_id` (the set in use), `period_id` (the period it was taken for,
-  null on a day with none) and `holds_until` (the moment of section 7.2). `ensureToday`'s query
-  gains `holds_until <= now` beside its current tests.
+  null on a day with none) and `holds_until` (the moment of section 7.2). `ensureToday`'s query is
+  rebuilt to start from the zones and gains `holds_until <= now` (section 7.2, "The cost of the floor
+  read").
 - **`floor_reset_tables`** works as today; a switch writes it as a reset does, copying `taken_off`
   from today's row instead of clearing it.
 
@@ -484,12 +521,15 @@ A sketch for the plan to settle, not a final schema.
   `resolveDepartmentService`'s periods and runs, which the core floor code calls as it already calls
   `VENUE_SERVICE` (`apps/server/src/working-order.ts:168`).
 
-**What the till reads.** `GET /api/tables/state` stays the floor read, and since it is the read that
-performs a switch, the notice's facts travel on it: each table row gains `planSet` (the name of the
-set in use in its zone and the time it came in) and `waitingToMove` (true while the table waits at
-its old place). The till groups them by zone. The 15-second re-read needs no second request.
-(Alternative: put the set on `GET /api/zones` and have the re-read fetch zones too; that read does
-not run `ensureToday` today, `till-api.ts:2689`, so it would have to, or be read after the tables.)
+**What the till reads.** The notice's facts belong to a zone, and the till already re-reads the
+zones every 15 seconds on the floor screen, map and list (section 2), so they go on `GET /api/zones`:
+each zone gains `planSet` (the name of the set in use and the time it came in) and `waitingToMove`
+(how many tables wait at their old place). For the zones read to show a switch it must also be able
+to perform one, so `GET /api/zones` runs the floor catch-up as `GET /api/tables/state` does
+(`till-api.ts:2675-2685`; today it does not, `till-api.ts:2689`). This costs no extra request.
+(Alternative: put the facts on each table row of `GET /api/tables/state`, the read that performs the
+switch today; but the list does not re-read tables on a timer, so the list would show the notice
+only after a staff action.)
 The dashboard's live subscriptions name the new tables as sources (`scripts/live-subscriptions.test.ts`),
 and the configuration export, which lists `floor_plans` today (`packages/db/src/configuration-transfer.ts:53`),
 adds them.
@@ -530,8 +570,10 @@ after a period ended; (8) what a switch does and the till's notice; (9) publishi
 - **Deleting a department** (A435 step 6) must delete its sets and their layouts with it; the impact
   read in its delete dialog should count them
   ([reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md)).
-- **A zone's own closed times and "keep open"** (`zone_closed_times`, `zone_extensions`,
-  `packages/venue-service/src/schema/zone-extensions.ts`, A366). The rule here follows the
+- **A zone's own closed times and "keep open"** (`zone_days` and `zone_day_ranges`,
+  `packages/venue-service/src/schema/seasons.ts:164`, `203`; `zone_extensions`,
+  `packages/venue-service/src/schema/zone-extensions.ts`, A366). The older `zone_closed_times` table
+  is gone (`packages/venue-service/src/migrations.test.ts:191-197`). The rule here follows the
   department's period; whether a zone kept open past its department's period keeps its layout is for
   the plan.
 - **Bookings.** A booking on a table the evening's set puts away: the editor could warn, the booking
@@ -571,8 +613,9 @@ after a period ended; (8) what a switch does and the till's notice; (9) publishi
 - **Run:** the keep-open reopening test (section 2). **Read and cited:** everything else in section 2,
   including that one department's painted ranges cannot overlap (`service-day.ts:76-80`) and that
   keep open cuts into the next range (`service-day.ts:161-184`).
-- **Not measured:** how soon a till shows a switch. "About 15 seconds" for a till on the map rests on
-  reading `#watchFloor` and `#pollFloor`; no till was run across a period boundary.
+- **Not measured:** how soon a till shows a switch. "About 15 seconds" rests on reading
+  `#watchFloor`, `#pollFloor` and the menu-checking timer's `onTick`; no till was run across a period
+  boundary.
 - **Expected, not tested:** that `planReset`'s waiting rules carry over unchanged to a reset onto
   another set's layout, and that recording `holds_until` makes keep open, repaints and deletions
   behave as sections 7.2 and 7.3 describe.
