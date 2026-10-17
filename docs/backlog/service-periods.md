@@ -316,13 +316,13 @@ Re-check when a new year's list is added.
   roles never include the one being edited, nor the one the dialog has just created and stays open
   on when only its people failed to save.
 
-- **The Staff roles list names every holder, whatever their status (A753 plan, Decision 6; plan
+- **The Staff roles list names every holder, whatever their status ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 6; plan
   default, sent to the owner as an FYI).** The names come from the Staff roles list route, which
   `venue.view` opens, not from the people list, which needs `person.manage`. Every active person's
   name was already readable without signing in (`GET /management-api/staff-roster`); a pending or
   suspended holder's name is the one widening. The receipt is in #1828.
 
-- **The Staff roles list shows five holders' names, then "plus N more" (A753 plan, Decision 7;
+- **The Staff roles list shows five holders' names, then "plus N more" ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 7;
   chosen on the screen, 2026-10-17, and sent to the owner as an FYI).** `HOLDER_NAMES_SHOWN`
   (`packages/staffing/src/dashboard/staff-roles-screen.ts`) stays 5, chosen on the demo venue: at
   1280 px wide, ten names (a role held by 12 people) overflowed the People cell and hid "plus 2
