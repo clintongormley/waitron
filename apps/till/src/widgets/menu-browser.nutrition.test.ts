@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
@@ -266,6 +266,31 @@ describe("product nutrition on the menu", () => {
     await el.updateComplete;
     expect(store.lines).toHaveLength(0);
     expect(info(el)).toBeNull();
+  });
+
+  it("Escape closes held-product information once without adding or leaking its dialog event", async () => {
+    const { el, host, store, button } = await mount();
+    const closedProducts: string[] = [];
+    const leakedEvents: Event[] = [];
+    host.addEventListener("wt-close", (event) => leakedEvents.push(event));
+    await userEvent.click(button, { delay: 650 });
+    await el.updateComplete;
+    const productInfo = info(el)!;
+    productInfo.addEventListener("close-info", (event) => {
+      closedProducts.push((event as CustomEvent<TillProduct>).detail.id);
+    });
+    const dialog = productInfo.shadowRoot!.querySelector("wt-dialog")!;
+    await vi.waitFor(() => expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true));
+    const closed = new Promise<void>((resolve) => {
+      dialog.addEventListener("wt-close", () => resolve(), { once: true });
+    });
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await el.updateComplete;
+    expect(info(el)).toBeNull();
+    expect(store.lines).toHaveLength(0);
+    expect(closedProducts).toEqual(["dish"]);
+    expect(leakedEvents).toEqual([]);
   });
 
   it("Enter still selects after a held press was closed", async () => {
