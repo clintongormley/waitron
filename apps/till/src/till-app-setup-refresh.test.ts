@@ -691,3 +691,71 @@ describe("A768 the till follows the venue's setup revision", () => {
     ).toBe("Mains");
   });
 });
+
+describe("A768 a settings read that gets no answer", () => {
+  // Fake timers from mount on, so the till's request limit can be passed.
+  beforeEach(() => {
+    server = draftServer();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+  });
+
+  async function settle(el: TillApp, rounds = 3): Promise<void> {
+    for (let i = 0; i < rounds; i++) {
+      await vi.advanceTimersByTimeAsync(20);
+      await el.updateComplete;
+    }
+  }
+
+  async function tick(el: TillApp, ms: number): Promise<void> {
+    await vi.advanceTimersByTimeAsync(ms);
+    await settle(el);
+  }
+
+  /** A read that answers only by failing once its signal aborts, as a fetch does. */
+  const unanswered = (options?: { signal?: AbortSignal }) =>
+    new Promise((_, reject) =>
+      options?.signal?.addEventListener("abort", () =>
+        reject(new DOMException("The operation was aborted.", "AbortError")),
+      ),
+    );
+
+  it("is cut off at the till's request limit, and the next poll reads the settings again", async () => {
+    const noCourses = { ...till(drillFormFactor), courses: [], setupRevision: "s1" };
+    const moved = { ...till(drillFormFactor), courses, setupRevision: "s2" };
+    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(noCourses) });
+    await settle(el);
+    server.personId = "p1";
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await settle(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await settle(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await settle(el, 6);
+    expect(tableOrder(el)).not.toBeNull();
+    const reads = api.getTill.mock.calls.length;
+    let sentAt = 0;
+    api.getTill.mockImplementationOnce((options?: { signal?: AbortSignal }) => {
+      sentAt = Date.now();
+      return unanswered(options);
+    });
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await tick(el, 15_000);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+    const [options] = api.getTill.mock.lastCall as [{ signal?: AbortSignal }?];
+    api.getTill.mockResolvedValue(moved);
+    // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+    await vi.advanceTimersByTimeAsync(sentAt + 149_999 - Date.now());
+    expect(options?.signal?.aborted).toBe(false);
+    expect(api.getTill.mock.calls.length).toBe(reads + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(options?.signal?.aborted).toBe(true);
+    await tick(el, 15_000);
+    expect(api.getTill.mock.calls.length).toBe(reads + 2);
+    expect(courseIds(venue(el).courses)).toEqual(["drinks", "mains", "desserts"]);
+  });
+});

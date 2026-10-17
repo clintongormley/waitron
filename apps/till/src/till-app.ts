@@ -8081,13 +8081,15 @@ export class TillApp extends LitElement {
     if (revision === undefined || revision === this.#setupRevision || this.#setupRead) return;
     const generation = this.#bootGeneration;
     const asked = ++this.#setupAsked;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const read: Promise<void> = this.api
-      .getTill()
+      .getTill({ signal: limit.signal })
       .then((till) => {
         if (generation === this.#bootGeneration) this.#applyVenueSetup(till, asked);
       })
       .catch(() => undefined)
       .finally(() => {
+        limit.done();
         if (this.#setupRead === read) this.#setupRead = undefined;
       });
     this.#setupRead = read;
