@@ -127,14 +127,18 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     expect(window.innerWidth).toBe(1280);
   });
 
-  // axe scores no contrast for a shape with no text; light's track against the page, about 1.3,
-  // is the bar dark must match.
-  test("draws a bar's empty track apart from the page", async () => {
+  // axe scores no contrast for a shape with no text; 1.4 is the Month's track against its date.
+  test.each([
+    ["the page", 1280],
+    ["a phone's card", 390],
+  ])("draws a bar's empty track apart from %s", async (_, width) => {
+    await page.viewport(width, 800);
     const el = await mountWeek(theme, { date: "2026-12-02" });
     const track = el.shadowRoot!.querySelector<HTMLElement>(".track")!;
+    expect(track.closest(".card") !== null).toBe(width === 390);
     expect(
       contrastRatio(getComputedStyle(track).backgroundColor, behind(track)),
-    ).toBeGreaterThanOrEqual(1.3);
+    ).toBeGreaterThanOrEqual(1.4);
   });
 
   // axe leaves text over a gradient unscored, so a closed block's words are read against each of

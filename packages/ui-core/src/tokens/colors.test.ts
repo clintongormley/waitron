@@ -168,6 +168,26 @@ describe.each(["light", "dark"] as const)("sunken surface (%s)", (theme) => {
   });
 });
 
+describe.each(["light", "dark"] as const)("bar track (%s)", (theme) => {
+  test("stands 1.4:1 or more from the page and the surface, and text reads on it", () => {
+    const el = mount(theme);
+    const track = token(el, "--wt-color-track");
+    expect(ratio(track, token(el, "--wt-color-bg"))).toBeGreaterThanOrEqual(1.4);
+    expect(ratio(track, token(el, "--wt-color-surface"))).toBeGreaterThanOrEqual(1.4);
+    expect(ratio(token(el, "--wt-color-text"), track)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the OS preference gives it the same value as the explicit theme", async () => {
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = token(explicit, "--wt-color-track");
+    expect(fromTheme).not.toBe("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    expect(token(mount(), "--wt-color-track")).toBe(fromTheme);
+  });
+});
+
 const FIELD_TOKENS = [
   "--wt-color-field-fill",
   "--wt-color-field-line",
