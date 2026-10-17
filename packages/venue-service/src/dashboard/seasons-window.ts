@@ -48,6 +48,13 @@ import { refusalOf, type Refusal } from "./refusal.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
+const seasonOf = (row: SeasonRow): OpeningHoursModel["seasons"][number] => ({
+  id: row.key,
+  name: row.name,
+  startsOn: `${row.month}-${row.day.padStart(2, "0")}`,
+  colour: row.colour,
+});
+
 type RowField = "name" | "day" | "month" | "colour";
 const errorFieldOf = (field: RowField): SeasonRefusedField =>
   field === "day" || field === "month" ? "startsOn" : field;
@@ -294,13 +301,13 @@ export class SeasonsWindow extends LitElement {
     this.impacts = new Map(this.impacts).set(id, { token, impact });
   }
   /** The row whose days a binned season's days join: the one starting last before it, round the year. */
-  private joins(start: string): string {
+  private joins(start: string): string | undefined {
     const starts = this.rows.flatMap((row) =>
       row.day && row.month ? [{ start: `${row.month}-${row.day.padStart(2, "0")}`, row }] : [],
     );
     starts.sort((a, b) => a.start.localeCompare(b.start));
     const before = starts.filter((each) => each.start < start);
-    return (before.at(-1) ?? starts.at(-1))?.row.name.trim() ?? "";
+    return (before.at(-1) ?? starts.at(-1))?.row.name.trim();
   }
   private deleteNotes() {
     const notes = this.draft!.deleted.map((id) => {
@@ -321,10 +328,13 @@ export class SeasonsWindow extends LitElement {
                   }).format(found.departments.map((department) => department.name)),
                 })
               : t("season.delete_loses_none");
-      return html`<p data-test="delete-note">
-        ${format("season.delete_pending", { name: season.name, previous: this.joins(start) })}
-        ${loses}
-      </p>`;
+      const previous = this.joins(start);
+      // No row holds a start, so there is no season to name.
+      const deletes =
+        previous === undefined
+          ? `${format("season.delete_named", { name: season.name })}.`
+          : format("season.delete_pending", { name: season.name, previous });
+      return html`<p data-test="delete-note">${deletes} ${loses}</p>`;
     });
     return notes.length ? html`<div class="notes" role="status">${notes}</div>` : nothing;
   }
@@ -360,7 +370,12 @@ export class SeasonsWindow extends LitElement {
         }),
       );
     } catch (error) {
-      if (generation === this.generation) this.refusal = { refusal: refusalOf(error), keys };
+      if (generation !== this.generation) return;
+      const refusal = refusalOf(error);
+      const goneId = refusal.code === "season.not_found" ? refusal.params?.seasonId : undefined;
+      if (this.baseline!.rows.some((row) => row.key === goneId))
+        this.follow(this.baseline!.rows.filter((row) => row.key !== goneId).map(seasonOf));
+      else this.refusal = { refusal, keys };
     } finally {
       if (this.saving === generation) this.saving = undefined;
     }

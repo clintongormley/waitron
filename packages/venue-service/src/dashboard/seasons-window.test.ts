@@ -603,7 +603,10 @@ it.each([
     { code: "season.invalid", params: { field: "delete", reason: "last" } },
     "A venue keeps at least one season.",
   ],
-  [{ code: "season.not_found", params: { seasonId: "autumn" } }, "This season no longer exists."],
+  [
+    { code: "season.not_found", params: { seasonId: "elsewhere" } },
+    "This season no longer exists.",
+  ],
   [{ code: "network.unavailable" }, "The change could not be saved."],
 ])(
   "says an end-offset clash, a changed or pending business-day start and the last season at the bottom (%o)",
@@ -1121,5 +1124,53 @@ it("with no other row holding a start, the note still names the binned season", 
   for (let count = 0; count < 4; count += 1) await press(el, bins(el)[0]!);
   expect(rowKeys(el)).toEqual(["new-1"]);
   expect(notes(el)).toHaveLength(4);
-  expect(notes(el)[0]).toMatch(/^Saving deletes Winter; its days join/);
+  expect(notes(el)[0]).toBe("Delete Winter.");
+});
+
+it("a Save refused because a changed season is gone marks that row until it is binned", async () => {
+  const saveSeasons = vi
+    .fn<WindowApi["saveSeasons"]>()
+    .mockRejectedValueOnce({ code: "season.not_found", params: { seasonId: "autumn" } })
+    .mockResolvedValueOnce([...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  await change(el, "season-3-day", "15");
+  await press(el, save(el));
+  await expect.poll(() => fieldError(el, "season-3-name")).toBe("This season no longer exists.");
+  expect(fieldError(el, "season-0-name")).toBe("");
+  expect(save(el).disabled).toBe(true);
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  await press(el, bins(el)[3]!);
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer"]);
+  expect(save(el).disabled).toBe(false);
+  expect(bottom(el)).toBe("");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(2);
+  expect(saveSeasons.mock.calls[1]![0]).toEqual({
+    save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
+    delete: [],
+  });
+});
+
+it("a Save refused because a binned season is gone drops its delete and its note", async () => {
+  const saveSeasons = vi
+    .fn<WindowApi["saveSeasons"]>()
+    .mockRejectedValueOnce({ code: "season.not_found", params: { seasonId: "autumn" } })
+    .mockResolvedValueOnce([...seasons]);
+  const el = await mount(false, {
+    saveSeasons,
+    readSeasonDeleteImpact: vi.fn(async () => ({ departments: [] })),
+  });
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, bins(el)[3]!);
+  await press(el, save(el));
+  await expect.poll(() => notes(el)).toEqual([]);
+  expect(bottom(el)).toBe("");
+  expect(save(el).disabled).toBe(false);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(2);
+  expect(saveSeasons.mock.calls[1]![0]).toEqual({
+    save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
+    delete: [],
+  });
 });
