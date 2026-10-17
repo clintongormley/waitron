@@ -11,11 +11,18 @@ import { RotaView } from "./rota-view.js";
 const A = "2026-11-30",
   B = "2026-12-07";
 const frames: HTMLElement[] = [];
+/** Resizes the window and waits for its `resize` event, which can land after `page.viewport`
+ *  answers: left to land in the next test, it closes that test's open popup. */
+async function resizeViewport(width: number, height: number) {
+  if (innerWidth === width && innerHeight === height) return;
+  const resized = new Promise((resolve) => addEventListener("resize", resolve, { once: true }));
+  await page.viewport(width, height);
+  await resized;
+}
 async function useViewport(width: number, height: number) {
   const before = [innerWidth, innerHeight] as const;
-  await page.viewport(width, height);
-  await vi.waitFor(() => expect(innerWidth).toBe(width));
-  onTestFinished(() => page.viewport(...before));
+  await resizeViewport(width, height);
+  onTestFinished(() => resizeViewport(...before));
 }
 /** Scrolls the page home and waits for the scroll event, so it cannot reach a later popup and
  *  close it: a popup closes on a scroll that leaves its anchor out of view. */
