@@ -88,7 +88,7 @@ Everything not listed here needs more spec work first.
 1. **A773 — courses, groups and the pass** (_The till, devices and table service_). A773-1, the
    table screen's unsent list, has a plan; A773-2, firing and the pass, is planned once A773-1
    lands.
-2. **A504 — floor plans published for a future date, and one per service period** (_The till,
+2. **A504 — floor plan sets, one per service period** (_The till,
    devices and table service_).
 3. **A682 — translations: nothing required, every missing name reported, all languages side by
    side, with automatic translation** (_Menus and the catalogue_).
@@ -2409,13 +2409,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   those two deletes taken out, `floor-delete.test.ts` still passed 7 of 7 (A503 part 1, Task 2b).
   Next: delete them, or add a case that reaches them.
 
-- **A504. Floor plans published for a future date, and one per service period (owner,
-  2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
-  different layouts for different periods. Owner, 2026-10-16: floor plans get a page of their own,
-  edited as named sets a period picks. Backlog only, not queued to a lane. A504 adds a Floor plan
-  column to the Periods window and a Floor plan field to the period dialog (`periods-list.ts`,
-  `period-dialog.ts`); A719 removed the placeholders.
-  [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
+- **A504. Floor plan sets, one per service period (owner, 2026-10-11; design revised to the
+  owner's answers of 2026-10-17).** A Floor plans page of named sets per department; a period
+  picks a set; the till offers a period's layout with an Update layout banner and marks occupied
+  tables "Needs moving". No publication dates. A504 adds a Floor plan column to the Periods window
+  and a Floor plan field to the period dialog (`periods-list.ts`, `period-dialog.ts`). Next: the
+  plan.
+  [Detail](backlog/till.md#a504-floor-plan-sets-one-per-service-period)
 
 - **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**
   When a tab is opened for seated guests, a QR code is printed for them; on their own phone it

@@ -513,20 +513,26 @@ not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) ex
 Take off for today on a joined table with tables split off, the third point, is allowed by the
 owner's A579 design and left as it is.
 
-## A504. Floor plans published for a future date, and one per service period
+## A504. Floor plan sets, one per service period
 
-**A504 (owner, 2026-10-11) — backlog only.** Two related wishes, each probably its own job:
+**A504 (owner, 2026-10-11; design revised to the owner's answers of 2026-10-17).** Design:
+[2026-10-17-a504-floor-plans-design.md](../superpowers/specs/2026-10-17-a504-floor-plans-design.md);
+pictures in [mockups/a504-floor-plans/](mockups/a504-floor-plans/).
 
-- **Publish a layout for a future date**, as menus can (a queued edition goes live at its time:
-  `menu_scheduled_publications`, `packages/catalogue/src/schema/publication.ts`). Today a saved plan
-  reaches the till at the next reset.
-- **Different layouts for different periods** of the day, for example lunch and dinner. This needs
-  deciding how a change of layout meets tables that are occupied when the period changes. A504 adds
-  the Floor plan column to the Periods window and the field to the period dialog.
 - **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
-  floor plans, one layout per zone, and a period picks the set it uses. The departments table's
-  per-zone floor-plan link (`packages/venue-service/src/dashboard/departments-list.ts:239`) goes
-  when that page lands, because a link to one zone's single plan no longer fits.
+  floor plans, one layout per zone, per department, and a period picks the set it uses; an empty
+  choice means the department's default set. The departments table's per-zone floor-plan link
+  (`packages/venue-service/src/dashboard/departments-list.ts:236-240`) goes when that page lands. A504
+  adds the Floor plan column to the Periods window and the field to the period dialog.
+- **A change of layout is offered, never applied by itself (owner, 2026-10-17).** When a period
+  ends, or a dashboard change makes another layout due, the till shows a banner with Update layout;
+  tables with guests show "Needs moving" once free, and move on the map when marked moved.
+- **On a phone, List goes into the floor's ⋮ menu (owner, 2026-10-17).**
+- **No publication dates for layouts** (owner, 2026-10-17, dropping the 2026-10-11 wish). A change
+  that comes back every year is done with seasons.
+
+Next: the plan. Build after A719 (landed), and before or after the A760 migration squash, never
+across it.
 
 ## A508. A table's QR code: order, call a waiter, ask for the bill or pay
 
