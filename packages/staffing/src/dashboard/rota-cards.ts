@@ -14,8 +14,7 @@ export type CardHost = HTMLElement & {
 };
 type Shift = RotaWeek["shifts"][number];
 
-/** A read's shifts and people by id, the shifts beyond their area's slots, and each partly
- *  uncovered shift's uncovered times in reading order. */
+/** `uncovered`: each partly uncovered shift's uncovered times, in reading order. */
 type CardIndex = {
   shifts: Map<string, Shift>;
   people: Map<string, RotaWeek["people"][number]>;
@@ -51,7 +50,6 @@ function indexOf(week: RotaWeek): CardIndex {
   return index;
 }
 
-/** The read's shift with this id. */
 export function shiftOf(week: RotaWeek, shiftId: string): Shift {
   return indexOf(week).shifts.get(shiftId)!;
 }

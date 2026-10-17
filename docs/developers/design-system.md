@@ -4085,8 +4085,8 @@ on its other side, or below it, to stay inside the window), which follows the sl
 scrolls and closes once the slot scrolls out of view. Staff-role holders come first, with leave or
 overlapping work and their week hours against their contract, and "would go over … h contract" when
 the slot would take them over it; Show everyone includes the other active people. A choice writes at
-once, and a refusal stays in the picker for retry, and shows under the bar when the picker is
-closed other than by its Cancel, until the next pick. The empty part of a cell holds "+ Add shift", its words shown on
+once, and a refusal stays in the picker for retry; once the picker closes it shows under the bar
+until the next pick, except that a phone sheet's Cancel discards it. The empty part of a cell holds "+ Add shift", its words shown on
 hover or focus, which opens the shift editor with the day, area and staff role chosen. In an area
 the person-level weekly labour warnings have no cell; the bar's labour count, the publish dialog and
 Everyone still show them.

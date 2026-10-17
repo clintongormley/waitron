@@ -160,10 +160,11 @@ both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the seaso
 already shared through `@waitron/venue-service/dashboard/season-tint`). The same file's
 `dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
 because venue-service's `exports` map does not include `hours-view.ts` (A775). A763 added more
-copies of venue-service code outside that map: `weekTitleParts` in `format.ts` (of
-`formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic (private to `CalendarDayBox` in `calendar-day-box.ts`,
-which the map does export), with its own `flatParent` and `scrollTargets` (of `flat-tree.ts`, which
-it does not); and `rota-view.ts`'s
+copies of venue-service code that the map does not make reachable: `weekTitleParts` in `format.ts`
+(of `formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic (private to
+`CalendarDayBox` in `calendar-day-box.ts`, a file the map exports; the rota's version also places
+once per frame and again when its own size changes, which `CalendarDayBox` does not), with its own
+`flatParent` and `scrollTargets` (of `flat-tree.ts`, which the map does not export); and `rota-view.ts`'s
 swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
 limits, and these, into browser-safe venue-service files and export them.
 

@@ -85,8 +85,8 @@ export class RotaPopup extends LitElement {
   });
 
   /** Opens beside `anchor`, or below it when neither side has room, and follows it while open:
-   *  on each change of its own size, and in the frame after a window resize or a scroll of the
-   *  page or of a box `anchor` is drawn inside, it places itself again, or closes once no part of
+   *  on each change of its own size, and at most once per frame after a window resize or a scroll
+   *  of the page or of a box `anchor` is drawn inside, it places itself again, or closes once no part of
    *  `anchor` is left in view. A sheet sits at the foot of the window and does not follow. Called
    *  again after the content changes, it places again without moving focus. */
   show(anchor: HTMLElement): void {

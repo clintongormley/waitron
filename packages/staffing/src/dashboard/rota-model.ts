@@ -180,7 +180,6 @@ export type RotaModel = {
   summary: Summary;
   hasSlots: boolean;
   shiftCount: number;
-  /** In an area, `rolesShown`; in Everyone, none. */
   roles: StaffRole[];
   days: ReadonlyMap<string, { counts: Counts; closed: boolean }>;
 };
