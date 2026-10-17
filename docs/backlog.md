@@ -416,6 +416,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Local command and staged archive/bucket cases retain the destination database and identity when
   a node key is wrong; a separate case retains them when module preparation is missing.
   These checks do not complete the default hour-preparation wiring.
+  Staged archive/bucket admission refusals now retain a fresh request for retry. Local checks
+  repeat wrong-key and missing-preparation refusals without changing the destination database
+  or identity; wrong-key checks also run in two successive Node processes. Interruption during
+  admission and default hour-preparation composition remain open.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

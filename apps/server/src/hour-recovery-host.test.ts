@@ -36,6 +36,8 @@ import { recoveryStreamSourceId } from "./recovery-source.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq } from "drizzle-orm";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -1081,6 +1083,128 @@ describe("selected-hour admission before archive placement", () => {
       );
     },
   );
+
+  it.each([
+    ["archive", "key"],
+    ["stream", "key"],
+    ["archive", "preparation"],
+    ["stream", "preparation"],
+  ] as const)(
+    "retries a staged %s %s refusal against the selected copy after reconstruction",
+    async (kind, refusal) => {
+      const f = await archiveHost(kind);
+      const recoveryOperation = { binding: f.options.binding, input: f.outcome.input };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? {
+              artifact: f.restore.artifact,
+              recoveryKey: "archive password",
+              environment: "preproduction",
+              recoveryOperation,
+              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+            }
+          : {
+              kind: "stream",
+              databasePath: f.database,
+              entries: f.entries,
+              environment: "preproduction",
+              recoveryOperation,
+              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+            },
+      );
+      await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
+      await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
+      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(runStagedRestore({ ...f.restore })).rejects.toMatchObject({
+          code: refusal === "key" ? "promotion.break_glass_invalid" : "sif.allocation_invalid",
+          ...(refusal === "preparation"
+            ? { params: { reason: "outside_confirmation_missing" } }
+            : {}),
+        });
+        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+          "original destination database",
+        );
+        expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+          "original destination identity",
+        );
+      }
+    },
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "retains fresh staged %s admission across two separate processes",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      const credentials = {
+        environment: "preproduction" as const,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: "wrong node key",
+      };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
+          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
+      );
+      await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
+      await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
+      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      const source = `
+        import { runStagedRestore } from ${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)};
+        try {
+          await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} });
+          process.stdout.write(JSON.stringify({ outcome: "restored" }));
+        } catch (error) {
+          process.stdout.write(JSON.stringify({ code: error.code }));
+        }
+      `;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await promisify(execFile)(
+          process.execPath,
+          [
+            "--import",
+            import.meta.resolve("tsx"),
+            "--input-type=module",
+            "-e",
+            source,
+            JSON.stringify({ ...f.roots, migrationsRoot: null }),
+          ],
+          { timeout: 45_000 },
+        );
+        expect(JSON.parse(result.stdout)).toEqual({ code: "promotion.break_glass_invalid" });
+        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+          "original destination database",
+        );
+        expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+          "original destination identity",
+        );
+      }
+    },
+    120_000,
+  );
+
+  it("clears an unstored-credential request after its injected admission refuses", async () => {
+    const f = await archiveHost();
+    await stageRestoreRequest(f.roots.stateDir, {
+      artifact: f.restore.artifact,
+      recoveryKey: "archive password",
+      environment: "preproduction",
+    });
+    const wrong = createSelectedRecoveryPreparation({ ...f.options, secret: "wrong node key" });
+    await expect(
+      runStagedRestore({ ...f.restore, withModuleOperations: wrong.runner(f.outcome.input) }),
+    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    await expect(readFile(join(f.roots.stateDir, "restore-request.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(join(f.roots.stateDir, "restore-request.key"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
 
   it("checks fresh isolation before replacing the destination or its identity", async () => {
     const f = await archiveHost();

@@ -1049,3 +1049,35 @@ pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
 This qualifies refusal before placement. Default hour-preparation composition, fresh restart
 clock comparisons, historical invoice preservation and managed-Cloud placement remain open in
 Task 7. Protected fiscal writers, SQL, schemas and earlier fiscal assertions are unchanged.
+
+## Staged admission retry, 2026-10-18
+
+No existing assertion or fixture changes. Seven cases are added to
+`apps/server/src/hour-recovery-host.test.ts`; its imports gain Node's `execFile` and `promisify`.
+The existing archive fixture stays unchanged.
+
+The first two archive/bucket probes reproduced a second-attempt `ERR_SQLITE_ERROR` instead of
+`promotion.break_glass_invalid`. The staged marker said placement had started even though admission
+refused before placement. The staging wrapper now observes an actual pre-placement exception and
+restores the fresh request marker for requests retaining their node key. Failures after admission
+keep the existing checked-replay path.
+
+Four cases repeat wrong-key and missing-preparation refusals against the real file/bucket adapters.
+They retain the exact original marker, destination database and identity. Two further cases invoke
+the real staged restore in two separate Node processes and check the same wrong-key refusal and
+retained files after each process exits. The seventh retains cleanup for a request without a stored
+node key. That case failed against the initial broader wrapper and passed after restricting it to
+requests with a stored node key.
+
+You can run the new cases with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
+  -t 'retries a staged|two separate processes|unstored-credential'
+```
+
+The process cases end normally after reporting their refusal. They do not qualify process death
+during admission, power loss, successful staged activation, or a lost response after activation.
+Default hour-preparation composition, fresh restart clocks, historical invoice preservation and
+managed-Cloud placement remain open in Task 7. No protected writer, SQL, schema, guard or earlier
+fiscal check changes.

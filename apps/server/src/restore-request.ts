@@ -296,6 +296,7 @@ export async function runStagedRestore(
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
   let markedStarted = false;
+  let admissionRefused = false;
   try {
     const marker = JSON.parse(raw) as {
       version?: unknown;
@@ -358,6 +359,22 @@ export async function runStagedRestore(
       operation === undefined
         ? deps.withModuleOperations
         : createRecoveryRestoreRunner(ALL_MODULES, operation, secret);
+    const admission = withModuleOperations?.checkBeforePlacement;
+    if (
+      marker.nodeRecoveryKey === true &&
+      !resuming &&
+      withModuleOperations !== undefined &&
+      admission !== undefined
+    ) {
+      withModuleOperations.checkBeforePlacement = async (context) => {
+        try {
+          await admission(context);
+        } catch (error) {
+          admissionRefused = true;
+          throw error;
+        }
+      };
+    }
     const common = {
       venueDir: deps.venueDir,
       stateDir: deps.stateDir,
@@ -410,9 +427,12 @@ export async function runStagedRestore(
     }
     await run();
   } catch (error) {
-    // The lock refuses before the restore places the database or touches the identity, so the
-    // request stays for a boot that gets the folder.
-    if (!resuming && isAppError(error) && error.code === "provisioning.database_in_use") {
+    // Refused admission never runs placement. A later failure can follow activation and must
+    // retain the checked-replay marker.
+    if (
+      !resuming &&
+      (admissionRefused || (isAppError(error) && error.code === "provisioning.database_in_use"))
+    ) {
       if (markedStarted) await writeFileAtomic(join(deps.stateDir, MARKER), raw, 0o600);
     } else if (!resuming && !markedStarted) {
       // A later file error can follow a committed activation; started requests need checked replay.
