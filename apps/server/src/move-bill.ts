@@ -164,6 +164,8 @@ export async function moveBill(
     ) {
       // `before` was read while the bill was still at its old tables, so the kitchen is told below.
       await mergeCheckedBills(tx, cfg, partyId, main, billId, {
+        operatorId: options.operatorId,
+        ...(activity === undefined ? {} : { attendance: activity }),
         mainBillId: main,
         kitchenTold: true,
       });

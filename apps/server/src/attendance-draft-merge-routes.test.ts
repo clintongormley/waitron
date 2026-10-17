@@ -222,6 +222,65 @@ describe("draft-event attendance in table combines", () => {
       expect(await state()).toEqual(before);
     },
   );
+  it.each([false, true])(
+    "a direct bill merge keeps draft-event attendance and its refusal rollback (refuse: %s)",
+    async (refused) => {
+      const p = await prepare();
+      expect(
+        await send(api(), v.cookie, "POST", `/api/parties/${p.source.partyId}/join`, {
+          tableId: p.target.tableId,
+          expectedPartyRevision: p.source.revision,
+          otherPartyId: p.target.partyId,
+          expectedOtherPartyRevision: p.target.revision,
+          bills: "separate",
+        }),
+      ).toMatchObject({ status: 200 });
+      const before = await state();
+      const party = before.parties.find((row) => row.id === p.source.partyId)!;
+      const recorder: AttendanceRecorder = async (tx, fact) => {
+        await recordAttendanceFact(tx, fact);
+        if (refused && fact.source === "draft")
+          throw new AppError("attendance.invalid", { reason: "draft merge refused" });
+      };
+      const response = await send(
+        api(recorder),
+        v.cookie,
+        "POST",
+        `/api/bills/${p.source.tabId}/merge`,
+        {
+          fromBillId: p.target.tabId,
+          expectedPartyRevision: party.revision,
+          partyId: party.id,
+          operatorId: v.adminId,
+          at: "2026-01-06T20:00:00Z",
+        },
+      );
+      if (refused) {
+        expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });
+        expect(await state()).toEqual(before);
+      } else {
+        expect(response.status).toBe(204);
+        const saved = await state();
+        const events = saved.events.filter(
+          (event) => !before.events.some((old) => old.id === event.id),
+        );
+        expect(events.map((event) => [event.kind, event.actorId])).toEqual([
+          ["discarded", v.operatorId],
+        ]);
+        expect(saved.facts.filter((fact) => fact.source === "draft")).toEqual([
+          expect.objectContaining({
+            source: "draft",
+            key: `event:${events[0]!.id}`,
+            personId: v.operatorId,
+            locationId: v.cfg.locationId,
+            at: "2026-01-05T16:40:00.000Z",
+            outcome: "qualifying",
+          }),
+        ]);
+      }
+    },
+  );
+
   it("a table combine without workforce capture retains the event without attendance writes", async () => {
     const p = await prepare();
     expect(await command(api(), "join", p)).toMatchObject({ status: 200 });

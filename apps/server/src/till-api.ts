@@ -3726,7 +3726,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
-        await mergeBills(tx, cfg, intoBillId, fromBillId, command);
+        await mergeBills(
+          tx,
+          cfg,
+          intoBillId,
+          fromBillId,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
         await captureKitchenActivity(
           tx,
           deps.attendance === undefined

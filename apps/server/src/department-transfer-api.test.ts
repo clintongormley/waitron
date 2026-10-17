@@ -1541,7 +1541,9 @@ describe("department transfer tab lifecycle", () => {
       return party.partyId;
     });
     const id = await pendingPartyFixture(f);
-    await withTransaction(suite.db, (tx) => mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab));
+    await withTransaction(suite.db, (tx) =>
+      mergeCheckedBills(tx, v.cfg, party, target.tab, f.tab, { operatorId: personId }),
+    );
     expect((await state(f.tab)).tab!.status).toBe("abandoned");
     await withdrawn(f, id);
   });

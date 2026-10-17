@@ -264,6 +264,15 @@ export async function combineParties(
       (await serviceModesMatch(tx, cfg, fromMain, intoMain))
     ) {
       await mergeCheckedBills(tx, cfg, into, intoMain, fromMain, {
+        operatorId: args.operatorId,
+        ...(attendance === undefined
+          ? {}
+          : {
+              attendance: {
+                recorder: attendance.recorder,
+                at: attendance.clock.now().instant.toISOString(),
+              },
+            }),
         mainBillId: intoMain,
         kitchenTold: true,
       });

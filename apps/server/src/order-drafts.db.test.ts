@@ -61,7 +61,7 @@ import {
 } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { mergeBills, splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
 
 const LOCALE = "es-ES";
@@ -3759,6 +3759,216 @@ describe("source-backed draft foundations", () => {
     slot: 2,
     joinGroupId: null,
     afterGroupId: null,
+  });
+
+  async function billDraft(v: Venue, partyId: string, billId: string, owner = ALEX) {
+    return inTx((tx) =>
+      saveDraft(tx, v.cfg, partyId, owner, {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [item(v, "beer", { slot: 1 }), item(v, "fish", { slot: 1 })],
+      }),
+    );
+  }
+
+  it("a direct bill merge absorbs same-owner source drafts, preserving slots, charges and both tick kinds", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const intoId = randomUUID();
+    await inTx((tx) =>
+      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      }),
+    );
+    const own = await billDraft(v, partyId, intoId);
+    const source = await billDraft(v, partyId, tabId);
+    const frozen = await family(v, tabId);
+    const referenceId = randomUUID();
+    await db.insert(orderDraftRecalledLines).values({
+      id: referenceId,
+      draftId: source.id,
+      sourceLineId: frozen.parentId,
+      position: 3,
+      slot: 1,
+    });
+    const allergy = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window", allergens: { milk: {} } },
+            { who: "Door", allergens: { eggs: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: allergy.guests[0]!.id, draftLineId: source.lines[0]!.id },
+        { guestId: allergy.guests[1]!.id, workingLineId: frozen.parentId },
+      ]),
+    );
+    const beforeTicks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    const beforeMoney = await db
+      .select({
+        id: workingOrderLines.id,
+        amount: workingOrderLines.lineTotal,
+        price: workingOrderLines.unitPriceGross,
+        quantity: workingOrderLines.quantity,
+        credit: workingOrderLines.creditedTo,
+        parent: workingOrderLines.parentLineId,
+      })
+      .from(workingOrderLines);
+
+    await inTx(async (tx) =>
+      mergeBills(tx, v.cfg, intoId, tabId, {
+        partyId,
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: SAM,
+      }),
+    );
+
+    const [read] = await draftsOf(v, partyId);
+    expect(await draftsOf(v, partyId)).toHaveLength(1);
+    expect(read).toMatchObject({ id: own.id, billId: intoId, revision: 1 });
+    expect(read!.lines.map((line) => [line.id, line.slot])).toEqual([
+      [own.lines[0]!.id, 1],
+      [own.lines[1]!.id, 1],
+      [source.lines[0]!.id, 2],
+      [source.lines[1]!.id, 2],
+      [referenceId, 2],
+    ]);
+    expect(read!.lines[4]).toMatchObject({
+      sourceLineId: frozen.parentId,
+      source: {
+        netAmount: "12.50",
+        line: { id: frozen.parentId },
+        extras: [{ id: frozen.extraId }],
+      },
+    });
+    expect(await draftRow(source.id)).toMatchObject({
+      state: "discarded",
+      revision: 1,
+      billId: intoId,
+    });
+    expect(await eventsOf(source.id)).toContainEqual({
+      kind: "discarded",
+      fromPerson: ALEX,
+      toPerson: ALEX,
+      actorId: SAM,
+      detail: { intoDraftId: own.id },
+    });
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(beforeTicks);
+    expect(
+      await db
+        .select({
+          id: workingOrderLines.id,
+          amount: workingOrderLines.lineTotal,
+          price: workingOrderLines.unitPriceGross,
+          quantity: workingOrderLines.quantity,
+          credit: workingOrderLines.creditedTo,
+          parent: workingOrderLines.parentLineId,
+        })
+        .from(workingOrderLines),
+    ).toEqual(beforeMoney);
+    expect((await db.select().from(workingOrderLines)).map((line) => line.workingOrderId)).toEqual([
+      intoId,
+      intoId,
+    ]);
+    expect(await db.select().from(orderDraftRecalledLines)).toMatchObject([
+      { id: referenceId, draftId: own.id, sourceLineId: frozen.parentId, position: 5, slot: 2 },
+    ]);
+  });
+
+  it("a direct bill merge rebinds every owner's draft without absorbing another owner's draft", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const intoId = randomUUID();
+    await inTx((tx) =>
+      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      }),
+    );
+    const own = await billDraft(v, partyId, intoId, SAM);
+    const source = await billDraft(v, partyId, tabId);
+    const frozen = await family(v, tabId);
+    const referenceId = randomUUID();
+    await db.insert(orderDraftRecalledLines).values({
+      id: referenceId,
+      draftId: source.id,
+      sourceLineId: frozen.parentId,
+      position: 3,
+      slot: 1,
+    });
+    await inTx(async (tx) =>
+      mergeBills(tx, v.cfg, intoId, tabId, {
+        partyId,
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: SAM,
+      }),
+    );
+    expect(await draftRow(source.id)).toMatchObject({ state: "open", billId: intoId, revision: 1 });
+    expect(await draftRow(own.id)).toMatchObject({ state: "open", billId: intoId, revision: 0 });
+    const read = (await draftsOf(v, partyId)).find((draft) => draft.id === source.id)!;
+    expect(read.lines.map((line) => line.id)).toEqual([...lineIds(source), referenceId]);
+    expect(read.lines[2]).toMatchObject({
+      sourceLineId: frozen.parentId,
+      source: { netAmount: "12.50" },
+    });
+  });
+
+  it("a refused bill merge leaves source reservations, drafts, ticks and all other rows unchanged", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const into = await seated(v, "Other table");
+    await reserved(v, partyId, tabId);
+    await refusedWritingNothing(
+      () =>
+        inTx(async (tx) =>
+          mergeBills(tx, v.cfg, tabId, into.tabId, {
+            partyId,
+            expectedPartyRevision: await partyRevision(partyId),
+            operatorId: SAM,
+          }),
+        ),
+      { code: "bill.other_party" },
+    );
+  });
+
+  it("joining parties with merged bills absorbs source reservations after rebinding their bill", async () => {
+    const v = await setupVenue();
+    const into = await seated(v);
+    const from = await seated(v, "Other table");
+    const own = await billDraft(v, into.partyId, into.tabId);
+    const source = await reserved(v, from.partyId, from.tabId);
+    await merge(v, into, from, SAM);
+    const read = await draftsOf(v, into.partyId);
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatchObject({
+      id: own.id,
+      billId: into.tabId,
+      partyId: into.partyId,
+      revision: 1,
+    });
+    expect(read[0]!.lines.find((line) => line.id === source.id)).toMatchObject({
+      sourceLineId: source.parentId,
+      source: { netAmount: "12.50" },
+      slot: 3,
+    });
+    expect(await draftRow(source.draft.id)).toMatchObject({
+      state: "discarded",
+      billId: into.tabId,
+    });
+    expect(await draftsOf(v, from.partyId)).toEqual([]);
   });
 
   it("reads fresh and discounted source families in one position order without a live offer", async () => {

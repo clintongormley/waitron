@@ -356,6 +356,40 @@ export async function takeOverDraft(
   return readOpenDraft(tx, cfg, partyId, own.id);
 }
 
+export async function moveDraftsToBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromBillId: string,
+  intoBillId: string,
+  operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<void> {
+  const [bill] = await tx
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, intoBillId));
+  if (bill?.partyId == null) throw invalid("billId");
+  const moving = await tx
+    .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId })
+    .from(orderDrafts)
+    .where(and(eq(orderDrafts.billId, fromBillId), eq(orderDrafts.state, "open")));
+  for (const draft of moving) {
+    const [own] = await openDraftsOn(tx, bill.partyId, draft.ownerId, intoBillId);
+    await tx
+      .update(orderDrafts)
+      .set({
+        ...(own === undefined ? { partyId: bill.partyId } : {}),
+        billId: intoBillId,
+        revision: sql`${orderDrafts.revision} + 1`,
+        updatedAt: nowIso(),
+        ...(own === undefined ? {} : { state: "discarded" as const }),
+      })
+      .where(eq(orderDrafts.id, draft.id));
+    if (own !== undefined)
+      await addDiscardedDraft(tx, cfg, draft.id, own, draft.ownerId, operatorId, attendance);
+  }
+}
+
 export async function moveDraftsToParty(
   tx: Transaction,
   cfg: TillConfig,

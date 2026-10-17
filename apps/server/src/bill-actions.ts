@@ -10,7 +10,9 @@ import {
   orderTableLabel,
   readSentWork,
 } from "./kitchen-print.js";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
   guardParty,
@@ -27,6 +29,7 @@ import {
   carveOffLines,
   createOpenOrder,
   moveOrderLines,
+  type OrderAttendance,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -175,12 +178,23 @@ export async function mergeBills(
   intoBillId: string,
   fromBillId: string,
   command: BillCommand,
+  attendance?: OrderAttendance,
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
-  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
+  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId, {
+    operatorId: command.operatorId,
+    ...(attendance === undefined
+      ? {}
+      : {
+          attendance: {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          },
+        }),
+  });
 }
 
 /**
@@ -195,12 +209,18 @@ export async function mergeCheckedBills(
   partyId: string,
   intoBillId: string,
   fromBillId: string,
-  known: { mainBillId?: string | null; kitchenTold?: boolean } = {},
+  known: {
+    operatorId: string;
+    mainBillId?: string | null;
+    kitchenTold?: boolean;
+    attendance?: { recorder: AttendanceRecorder; at: string };
+  },
 ): Promise<void> {
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
+  await moveDraftsToBill(tx, cfg, fromBillId, intoBillId, known.operatorId, known.attendance);
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
   await tx
