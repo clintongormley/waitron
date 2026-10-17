@@ -10,7 +10,6 @@ import type { CalendarColour } from "../staffing-types.js";
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "staffing.rota.by_person": "By person",
   "staffing.rota.everyone": "Everyone",
   "staffing.rota.everyone_search": "Everyone's rota",
   "staffing.shift.edit": "Edit shift",
@@ -210,7 +209,6 @@ const en = {
 };
 
 const es: Record<keyof typeof en, string> = {
-  "staffing.rota.by_person": "Por persona",
   "staffing.rota.everyone": "Todo el equipo",
   "staffing.rota.everyone_search": "Turnos de todo el equipo",
   "staffing.shift.edit": "Editar turno",

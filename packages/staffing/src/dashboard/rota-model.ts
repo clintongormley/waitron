@@ -61,6 +61,20 @@ export function isClosed(read: RotaWeek, show: Show, businessDay: string): boole
   );
 }
 
+/** Everyone's rows: by the lowest position among a person's staff roles, then name, then id; a
+ *  person with no staff role after those with one. */
+export function peopleInOrder(read: RotaWeek): RotaWeek["people"] {
+  const position = new Map(read.staffRoles.map((r) => [r.id, r.position]));
+  const lowest = (p: RotaWeek["people"][number]) =>
+    Math.min(Infinity, ...p.staffRoleIds.map((id) => position.get(id) ?? Infinity));
+  return [...read.people].sort(
+    (a, b) =>
+      lowest(a) - lowest(b) ||
+      a.name.localeCompare(b.name) ||
+      (a.personId < b.personId ? -1 : a.personId > b.personId ? 1 : 0),
+  );
+}
+
 export type Target = {
   businessDay: string;
   area?: AreaRef;
@@ -82,9 +96,10 @@ export function attentionTargets(
       .map((d) => ({ businessDay: d.businessDay, header: true }));
   const rolePosition = (id: string | null) =>
     read.staffRoles.find((r) => r.id === id)?.position ?? Number.MAX_SAFE_INTEGER;
+  const people = peopleInOrder(read);
   const personRow = (shiftId: string) => {
     const personId = read.shifts.find((s) => s.shiftId === shiftId)?.personId;
-    return read.people.findIndex((p) => p.personId === personId);
+    return people.findIndex((p) => p.personId === personId);
   };
   return read.days.flatMap((day) => {
     const found: { target: Target; row: number; start: number }[] = [];

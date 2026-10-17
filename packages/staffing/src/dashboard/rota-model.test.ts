@@ -7,6 +7,7 @@ import {
   dayCounts,
   isClosed,
   matchesFor,
+  peopleInOrder,
   rolesShown,
   summary,
   weekCounts,
@@ -229,6 +230,19 @@ describe("what a count button steps to", () => {
       { businessDay: read.days[3]!.businessDay, area, shiftId: "over" },
     ]);
   });
+  it("in Everyone, orders one day's cards by the rows as drawn, in staff-role order", () => {
+    const read = rotaWeek();
+    const over = read.shifts.find((s) => s.shiftId === "over")!;
+    read.shifts.push({ ...over, shiftId: "joan-over", personId: "joan" });
+    read.days[3]!.areas[0]!.match.over.push("joan-over");
+    expect(read.people.map((p) => p.personId).indexOf("laia")).toBeLessThan(
+      read.people.map((p) => p.personId).indexOf("joan"),
+    );
+    expect(attentionTargets(read, everyone, "over").map((t) => t.shiftId)).toEqual([
+      "joan-over",
+      "over",
+    ]);
+  });
   it("counts one day's attention in scope", () => {
     const read = twoRows();
     expect(dayCounts(read, kitchen(read), read.days[1]!.businessDay)).toEqual({
@@ -308,5 +322,40 @@ describe("the staff role rows an area draws", () => {
         (r) => r.id,
       ),
     ).toEqual(["sous"]);
+  });
+});
+
+describe("the people Everyone draws, in order", () => {
+  it("orders by lowest staff-role position, then name, with no-role people last", () => {
+    expect(peopleInOrder(rotaWeek()).map((p) => p.personId)).toEqual([
+      "ana",
+      "marc",
+      "joan",
+      "laia",
+      "ibra",
+    ]);
+  });
+  it("breaks a tie on name by person id, and orders no-role people the same way", () => {
+    const read = rotaWeek();
+    const ana = read.people[0]!;
+    const ibra = read.people[4]!;
+    read.people = [
+      { ...ibra, personId: "z-none", name: "Ana" },
+      { ...ana, personId: "b-ana" },
+      ibra,
+      { ...ana, personId: "a-ana" },
+    ];
+    expect(peopleInOrder(read).map((p) => p.personId)).toEqual([
+      "a-ana",
+      "b-ana",
+      "z-none",
+      "ibra",
+    ]);
+  });
+  it("takes a person's lowest staff-role position, not their first listed", () => {
+    const read = rotaWeek();
+    read.people = read.people.filter((p) => p.personId === "marc" || p.personId === "laia");
+    expect(peopleInOrder(read).map((p) => p.personId)).toEqual(["marc", "laia"]);
+    expect(read.people.find((p) => p.personId === "marc")!.staffRoleIds[0]).toBe("sous");
   });
 });

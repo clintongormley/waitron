@@ -4,10 +4,10 @@ import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import { areaKey } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import { RotaByArea, dayHead, focusIn } from "./rota-by-area.js";
-import type { Target } from "./rota-model.js";
-import { hours, shiftTime } from "./rota-format.js";
+import { peopleInOrder, type Target } from "./rota-model.js";
+import { hours, minuteTime, shiftTime } from "./rota-format.js";
 import { breachText, shiftBreaches } from "./rota-warnings.js";
-import { t } from "./strings.js";
+import { t, tf } from "./strings.js";
 @customElement("rota-by-person")
 export class RotaByPerson extends LitElement {
   static override styles = RotaByArea.styles;
@@ -33,12 +33,25 @@ export class RotaByPerson extends LitElement {
     const over = this.week.days.some((d) =>
       d.areas.some((a) => a.match.over.includes(shift.shiftId)),
     );
-    const content = html`<span>${shiftTime(shift)}</span
+    const uncovered = this.week.days.flatMap((d) =>
+      d.areas.flatMap((a) =>
+        a.match.slots.flatMap(({ status }) =>
+          status.kind === "partly_uncovered" && status.shiftId === shift.shiftId
+            ? status.uncovered.map(
+                (u) => `${minuteTime(u.start, d.cutover)}–${minuteTime(u.end, d.cutover)}`,
+              )
+            : [],
+        ),
+      ),
+    );
+    const content = html`<span
+        >${staffRole ? html`<span class="swatch" data-colour=${staffRole.colour}></span>` : nothing}${shiftTime(shift)}</span
       ><small
         >${area?.name ?? t("staffing.rota.not_in_slot")}${staffRole ? ` · ${staffRole.name}` : ""}</small
       >
       ${overflow ? html`<small>${t(shift.businessDay < this.week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}
       ${over ? html`<small>${t("staffing.rota.over")}</small>` : nothing}
+      ${uncovered.length > 0 ? html`<small>${tf("staffing.rota.uncovered", { times: uncovered.join(", ") })}</small>` : nothing}
       ${staffRole && !this.week.people.find((p) => p.personId === shift.personId)?.staffRoleIds.includes(staffRole.id) ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}
       ${this.week.openSwaps.some((s) => s.fromShiftId === shift.shiftId || s.toShiftId === shift.shiftId) ? html`<small>${t("staffing.shift.swap_heading")}</small>` : nothing}
       ${this.warnings(shiftBreaches(this.breaches, shift.shiftId))}`;
@@ -59,7 +72,7 @@ export class RotaByPerson extends LitElement {
       data-test="grid-scroll"
       tabindex="0"
       role="region"
-      aria-label=${t("staffing.rota.by_person")}
+      aria-label=${t("staffing.rota.everyone")}
     >
       <table>
         <thead>
@@ -69,7 +82,7 @@ export class RotaByPerson extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${this.week.people.map(
+          ${peopleInOrder(this.week).map(
             (p) =>
               html`<tr data-person=${p.personId}>
                 <th

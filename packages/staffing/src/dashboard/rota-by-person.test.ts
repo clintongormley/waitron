@@ -233,3 +233,59 @@ it("a grid reports a target it does not draw", async () => {
   expect(byArea.focusTarget({ businessDay: "2026-12-04", slotKey: "gone" })).toBe(false);
   expect(byArea.focusTarget({ businessDay: "2026-12-04", slotKey: "empty" })).toBe(true);
 });
+it("rows follow each person's first staff role, then name", async () => {
+  const { root } = await mount();
+  expect(
+    [...root.querySelectorAll<HTMLElement>("[data-person]")].map((r) => r.dataset.person),
+  ).toEqual(["ana", "marc", "joan", "laia", "ibra"]);
+});
+it("each card carries its staff role's colour, its time, its area and staff role, and keeps its warnings", async () => {
+  const { root, grid } = await mount();
+  const filled = root.querySelector<HTMLElement>("[data-shift=filled]")!;
+  const swatch = filled.querySelector<HTMLElement>(".swatch")!;
+  expect(swatch.dataset.colour).toBe("purple");
+  const probe = document.createElement("span");
+  probe.style.background = "var(--wt-color-palette-purple)";
+  frames[0]!.append(probe);
+  const painted = getComputedStyle(swatch).backgroundColor;
+  expect(painted).toBe(getComputedStyle(probe).backgroundColor);
+  expect(painted).not.toBe("rgba(0, 0, 0, 0)");
+  expect(filled.textContent).toContain("09:00–17:00");
+  expect(filled.textContent).toContain("Kitchen · Head chef");
+  expect(root.querySelector("[data-shift=part] .swatch")!.getAttribute("data-colour")).toBe(
+    "green",
+  );
+  expect(root.querySelector("[data-shift=over]")!.textContent).toContain("not needed");
+  expect(root.querySelector("[data-shift=part]")!.textContent!.replace(/\s+/g, " ")).toContain(
+    "uncovered 14:00–17:00",
+  );
+  expect(root.querySelector("[data-shift=filled]")!.textContent).not.toContain("uncovered");
+  expect(root.querySelector("[data-shift=unlinked] .swatch")).toBeNull();
+  grid.breaches = [{ kind: "night_work", personId: "ana", shiftId: "filled", nightMinutes: 120 }];
+  await grid.updateComplete;
+  expect(root.querySelector("[data-shift=filled]")!.textContent).toContain("2 h night work");
+});
+it("under each name its staff roles and the week's hours, marked when over contract", async () => {
+  const { root } = await mount();
+  const joan = root.querySelector("[data-person=joan] th")!;
+  expect(joan.textContent).toContain("Sous chef");
+  expect(joan.textContent).toContain("41 / 40 h");
+  expect(joan.hasAttribute("data-over-contract")).toBe(true);
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-warning)";
+  frames[0]!.append(probe);
+  const warning = getComputedStyle(probe).color;
+  expect(getComputedStyle(joan.querySelector(".hours")!).color).toBe(warning);
+  const ana = root.querySelector("[data-person=ana] th")!;
+  expect(ana.hasAttribute("data-over-contract")).toBe(false);
+  expect(getComputedStyle(ana.querySelector(".hours")!).color).not.toBe(warning);
+  expect(root.querySelector("[data-person=ibra] th")!.hasAttribute("data-over-contract")).toBe(
+    false,
+  );
+});
+it("names its scrolling grid Everyone", async () => {
+  const { root } = await mount();
+  expect(root.querySelector("[data-test=grid-scroll]")!.getAttribute("aria-label")).toBe(
+    "Everyone",
+  );
+});
