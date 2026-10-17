@@ -4011,11 +4011,14 @@ export class TillApi {
     partyId: string,
     lineId: string,
     command: GroupCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number }> {
-    return this.#request(`/api/parties/${partyId}/groups/split-line`, "POST", {
-      ...command,
-      lineId,
-    });
+    return this.#request(
+      `/api/parties/${partyId}/groups/split-line`,
+      "POST",
+      { ...command, lineId },
+      options.signal,
+    );
   }
 
   /** Move lines, or part of one, between held groups, or into a new held group at the end →

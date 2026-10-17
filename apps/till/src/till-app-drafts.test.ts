@@ -5582,3 +5582,395 @@ describe("line-edit unsaved station choice", () => {
     expect(api.logout).toHaveBeenCalledOnce();
   });
 });
+
+// The split response carries a party revision; the new draft references arrive on the following read.
+describe("recalled draft source splitting", () => {
+  type SourceLine = import("./api/client.js").RecalledDraftLine;
+
+  function reference(id = "source-7", netAmount = "17.25", quantity = "2"): SourceLine {
+    const line: SourceLine["source"]["line"] = {
+      id,
+      name: "Recorded steak",
+      productId: "retired-steak",
+      parentProductId: null,
+      menuItemId: null,
+      lineNo: id === "source-7" ? 7 : 9,
+      parentLineNo: null,
+      quantity,
+      priceQuantity: "1",
+      unitPrecision: 0,
+      unitPriceGross: "7.50",
+      listUnitPriceGross: "10.00",
+      servedAt: null,
+      courseId: null,
+      sentAt: null,
+      firedAt: null,
+      state: null,
+      stationId: null,
+      movable: true,
+      groupId: null,
+      note: "Recorded note",
+      listId: null,
+    };
+    return {
+      id: `reference-${id}`,
+      sourceLineId: id,
+      source: {
+        line,
+        extras: [
+          {
+            ...line,
+            id: `${id}-extra`,
+            name: "Recorded cheese",
+            lineNo: line.lineNo + 1,
+            parentLineNo: line.lineNo,
+            quantity: quantity === "2" ? "4" : "2",
+            unitPriceGross: "0.75",
+            listUnitPriceGross: "1.00",
+            productId: "retired-cheese",
+            listId: "toppings",
+          },
+        ],
+        netAmount,
+      },
+      quantity,
+      note: line.note,
+      courseId: null,
+      makeAt: null,
+      noMerge: true,
+      unavailable: false,
+      slot: 0,
+      joinGroupId: null,
+      afterGroupId: null,
+    };
+  }
+
+  function seedSource(): void {
+    server.drafts.push({
+      id: "draft-recalled",
+      partyId: "v1",
+      billId: "wo-4",
+      ownerId: "p1",
+      ownerName: "Ana",
+      revision: 2,
+      takenOverFrom: null,
+      lines: [reference()],
+    });
+  }
+
+  function saveSplit(): void {
+    const saved = server.drafts[0]!;
+    saved.revision += 1;
+    saved.lines = [reference("source-7", "8.62", "1"), reference("source-9", "8.63", "1")];
+  }
+
+  async function opening(split: ReturnType<typeof vi.fn>) {
+    seedSource();
+    const mounted = await mountApp({ splitHeldLineIntoUnits: split });
+    const order = await openMesa(mounted.el);
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await order.updateComplete;
+    const button = order.shadowRoot!.querySelector<HTMLElement>("[data-split-draft-line='0']")!;
+    expect(button).not.toBeNull();
+    return { ...mounted, order, button };
+  }
+
+  it("keeps the original family until the server splits and hydrates distinct recorded charges", async () => {
+    let answer!: () => void;
+    const split = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, button } = await opening(split);
+    await userEvent.click(button);
+    await flush(el);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(split).toHaveBeenCalledOnce();
+    expect(split.mock.calls[0]).toEqual([
+      "v1",
+      "source-7",
+      { submissionId: expect.any(String), expectedPartyRevision: 3 },
+      { signal: expect.any(AbortSignal) },
+    ]);
+    expect(draft(el).sending).toBe(true);
+    expect(draft(el).total).toBe("17.25");
+    expect(
+      tableOrder(el)!.shadowRoot!.querySelector("[data-round-sending]")!.textContent!.trim(),
+    ).toBe(t("table.split_group_line"));
+    answer();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
+    expect(
+      draft(el).lines.map((line) => [
+        line.draftLineId,
+        line.workingOrderLineId,
+        line.source?.netAmount,
+        line.source?.extras.map((extra) => [extra.id, extra.quantity]),
+      ]),
+    ).toEqual([
+      ["reference-source-7", "source-7", "8.62", [["source-7-extra", "2"]]],
+      ["reference-source-9", "source-9", "8.63", [["source-9-extra", "2"]]],
+    ]);
+    expect(draft(el).total).toBe("17.25");
+    expect(tableOrder(el)?.party?.revision).toBe(4);
+    expect(draft(el).sending).toBe(false);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("a later submission announces sending after the split operation has finished", async () => {
+    const split = vi.fn(async () => {
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, button } = await opening(split);
+    await userEvent.click(button);
+    await flush(el, 6);
+    let answer!: () => void;
+    api.submitDraft.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { tabId: "wo-4", revision: 5, groups: [], draft: null };
+    });
+    const store = draft(el);
+    emit(tableOrder(el)!, "submit-draft", {
+      store,
+      sent: [...store.lines],
+      groups: [{ release: "fire", lineIndexes: [0, 1] }],
+      draft: { laterAddition: true, tally: { fired: 0, held: 0, joined: 0 } },
+    });
+    await flush(el, 6);
+    try {
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(
+        tableOrder(el)!.shadowRoot!.querySelector("[data-round-sending]")!.textContent!.trim(),
+      ).toBe(t("table.round_sending"));
+    } finally {
+      answer();
+    }
+    await flush(el, 6);
+  });
+
+  it("blocks repeated source split events and edits while the original request is pending", async () => {
+    let answer!: () => void;
+    const split = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, order, button } = await opening(split);
+    const store = draft(el);
+    const line = store.lines[0]!;
+    await userEvent.click(button);
+    emit(order, "split-draft-source", { store, line });
+    store.setLineExtras(0, { note: "Late edit" });
+    await flush(el);
+    expect(split).toHaveBeenCalledOnce();
+    expect(line.note).toBe("Recorded note");
+    expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+    answer();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
+  });
+
+  it("rereads ownership after a refused split and names the new owner without retrying", async () => {
+    const split = vi.fn(async () => {
+      server.drafts[0]!.ownerId = "p2";
+      server.drafts[0]!.ownerName = "Sam";
+      throw { code: "draft.taken_over", ownerName: "Sam" };
+    });
+    const { el, order, button } = await opening(split);
+    await userEvent.click(button);
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(order.otherDrafts.map((other) => [other.ownerName, other.lines.length])).toEqual([
+      ["Sam", 1],
+    ]);
+    expect(banner(el)?.textContent).toContain("Sam");
+    expect(split).toHaveBeenCalledOnce();
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("locks a stale source after a successful split with a failed read and recovers by reopening", async () => {
+    const split = vi.fn(async () => {
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, order, button } = await opening(split);
+    api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
+    const store = draft(el);
+    const line = store.lines[0]!;
+    await userEvent.click(button);
+    await flush(el, 6);
+    expect(store.editsLocked).toBe(true);
+    store.setLineExtras(0, { note: "Would overwrite the split" });
+    emit(order, "split-draft-source", { store, line });
+    await flush(el);
+    expect(split).toHaveBeenCalledOnce();
+    expect(line.note).toBe("Recorded note");
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
+    expect(draft(el).editsLocked).toBe(false);
+    expect(draft(el).total).toBe("17.25");
+    expect(split).toHaveBeenCalledOnce();
+  });
+
+  it("drops late split answers after switching tables and releases the command lock", async () => {
+    let answer!: () => void;
+    const split = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { revision: 99 };
+    });
+    const { el, order, button } = await opening(split);
+    server.drafts.push({
+      ...structuredClone(server.drafts[0]!),
+      id: "draft-table-7",
+      partyId: "v7",
+      billId: "wo-7",
+    });
+    const old = { store: draft(el), line: draft(el).lines[0]! };
+    await userEvent.click(button);
+    emit(order, "open-table", { tableId: "t7", seated: true });
+    await flush(el, 6);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    const messageOnNewTable = banner(el)?.textContent;
+    answer();
+    await flush(el, 6);
+    expect(banner(el)?.textContent).toBe(messageOnNewTable);
+    expect(tableOrder(el)?.party?.revision).toBe(9);
+    expect(draft(el).lines[0]!.workingOrderLineId).toBe("source-7");
+    const next = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(
+      "[data-split-draft-line='0']",
+    )!;
+    expect(next.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
+    emit(tableOrder(el)!, "split-draft-source", old);
+    await flush(el);
+    expect(split).toHaveBeenCalledOnce();
+  });
+
+  it("does not send a source removed by the pending save's authoritative answer", async () => {
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, button } = await opening(split);
+    api.saveDraft.mockImplementationOnce(async (partyId, ask) => {
+      const saved = server.save(partyId, ask);
+      saved.lines = [];
+      return structuredClone(saved);
+    });
+    draft(el).setLineExtras(0, { note: "No pepper" });
+    await userEvent.click(button);
+    await flush(el, 6);
+    expect(split).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual([]);
+    expect(banner(el)?.textContent).toContain(t("table.draft_changed_elsewhere"));
+  });
+
+  it("ignores a detached row or another store even when it names the same recorded source", async () => {
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, order } = await opening(split);
+    const store = draft(el);
+    const line = store.lines[0]!;
+    emit(order, "split-draft-source", { store: new WorkingOrderStore(), line });
+    emit(order, "split-draft-source", { store, line: { ...line } });
+    await flush(el);
+    expect(split).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(store.sending).toBe(false);
+  });
+
+  it("aborts the source split when the operator signs out and ignores its late answer", async () => {
+    let answer!: () => void;
+    let signal: AbortSignal | undefined;
+    const split = vi.fn(async (...args: Parameters<TillApi["splitHeldLineIntoUnits"]>) => {
+      signal = args[3]?.signal;
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { revision: 99 };
+    });
+    const { el, button } = await opening(split);
+    await userEvent.click(button);
+    try {
+      emit(shell(el), "logout");
+      await flush(el, 6);
+      expect(signal?.aborted).toBe(true);
+      expect(lock(el)).not.toBeNull();
+      expect(api.logout).toHaveBeenCalledOnce();
+    } finally {
+      answer();
+    }
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+    expect(tableOrder(el)?.party?.revision).not.toBe(99);
+    expect(split).toHaveBeenCalledOnce();
+  });
+
+  it("keeps fresh-line splitting local without calling the recorded-family command", async () => {
+    const split = vi.fn();
+    const { el } = await mountApp({ splitHeldLineIntoUnits: split });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    const order = tableOrder(el)!;
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>("[data-split-draft-line='0']")!,
+    );
+    expect(rows(el)).toEqual(["Beer ×1", "Beer ×1"]);
+    expect(draft(el).lines.every((line) => line.source === undefined)).toBe(true);
+    expect(split).not.toHaveBeenCalled();
+  });
+
+  it("saves a pending source edit before splitting without locally duplicating its reference", async () => {
+    const split = vi.fn(async () => {
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, button } = await opening(split);
+    let answer!: () => void;
+    api.saveDraft.mockImplementationOnce(async (partyId, ask) => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return structuredClone(server.save(partyId, ask));
+    });
+    draft(el).setLineExtras(0, { note: "No pepper" });
+    await userEvent.click(button);
+    await flush(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(split).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).sending).toBe(true);
+    answer();
+    await flush(el, 6);
+    expect(split).toHaveBeenCalledOnce();
+    expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the source and pending edit when the save before a split fails", async () => {
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, button } = await opening(split);
+    api.saveDraft.mockRejectedValue(new TypeError("offline"));
+    draft(el).setLineExtras(0, { note: "No pepper" });
+    await userEvent.click(button);
+    await flush(el, 6);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(split).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).lines[0]!.note).toBe("No pepper");
+    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+  });
+});

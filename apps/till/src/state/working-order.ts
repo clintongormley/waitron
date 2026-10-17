@@ -218,6 +218,8 @@ export class WorkingOrderStore {
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
   #sending = false;
+  /** An operation holding the sending lock without submitting the order. */
+  busyAction?: "split";
   #editLock: object | null = null;
   #loadGeneration = 0;
   #kitchenNote: string | null = null;

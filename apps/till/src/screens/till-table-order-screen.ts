@@ -201,6 +201,11 @@ export interface TakeOverDraftDetail {
   revision: number;
 }
 
+export interface SplitDraftSourceDetail {
+  store: WorkingOrderStore;
+  line: OrderLine;
+}
+
 /** A dish the table's offers no longer hold has no name to show, so it reads as not offered. */
 function shownName(product: TillProduct): string {
   return lineProductName(product) || t("basket.not_offered");
@@ -3022,7 +3027,13 @@ export class TillTableOrderScreen extends LitElement {
     return html`${
         draft.sending
           ? html`<p class="round-sending" role="status" data-round-sending>
-              ${this.takeOverSent === null ? t("table.round_sending") : t("table.taking_over")}
+              ${
+                this.takeOverSent !== null
+                  ? t("table.taking_over")
+                  : draft.busyAction === "split"
+                    ? t("table.split_group_line")
+                    : t("table.round_sending")
+              }
             </p>`
           : nothing
       }
@@ -3139,7 +3150,15 @@ export class TillTableOrderScreen extends LitElement {
               variant="secondary"
               data-split-draft-line=${index}
               aria-label=${`${t("table.split_group_line")} · ${name}`}
-              @click=${() => store.splitLine(index)}
+              ?disabled=${store.sending || store.editsLocked || this.groupCommandBusy}
+              @click=${() => {
+                if (line.source === undefined) store.splitLine(index);
+                else
+                  this.#dispatch("split-draft-source", {
+                    store,
+                    line,
+                  } satisfies SplitDraftSourceDetail);
+              }}
             >
               ${t("table.split_group_line")}
             </wt-button>`,

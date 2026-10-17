@@ -125,6 +125,7 @@ import type {
   ServeGroupDetail,
   ServeLinesDetail,
   SnoozeGroupDetail,
+  SplitDraftSourceDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
   TakeOverDraftDetail,
@@ -9825,6 +9826,60 @@ export class TillApp extends LitElement {
     );
   }
 
+  async #onSplitDraftSource(event: Event): Promise<void> {
+    const { store, line } = (event as CustomEvent<SplitDraftSourceDetail>).detail;
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      store !== this.#tableDraft() ||
+      store !== sync.store ||
+      !store.lines.includes(line) ||
+      line.source === undefined ||
+      this.groupCommandBusy ||
+      store.sending ||
+      store.editsLocked
+    )
+      return;
+    const sourceLineId = line.source.line.id;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const live = () =>
+      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
+    this.errorKey = undefined;
+    this.groupCommandBusy = true;
+    store.busyAction = "split";
+    try {
+      const outcome = await sync.runCommand(async (_state, options) => {
+        const party = this.orderParty;
+        if (
+          !live() ||
+          party?.id !== sync.partyId ||
+          !store.lines.some((row) => row.source?.line.id === sourceLineId)
+        )
+          throw { code: "draft.out_of_date" };
+        return this.api.splitHeldLineIntoUnits(
+          party.id,
+          sourceLineId,
+          {
+            submissionId: crypto.randomUUID(),
+            expectedPartyRevision: party.revision,
+          },
+          options,
+        );
+      });
+      if (!live()) return;
+      if (typeof outcome === "object" && "applied" in outcome) {
+        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
+      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+      else this.errorKey = outcome === "failed" ? "table.error" : draftRefusalError(outcome);
+      await this.#loadTabLines();
+    } finally {
+      delete store.busyAction;
+      this.groupCommandBusy = false;
+    }
+  }
+
   /** Serving, its undo and a reminder's snooze and its clearing are commands on the party whose
    * order is open; with no order open they send nothing. */
   async #onServiceRequest(
@@ -13251,6 +13306,7 @@ export class TillApp extends LitElement {
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
         @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
+        @split-draft-source=${(event: Event) => void this.#onSplitDraftSource(event)}
         @serve-lines=${(event: Event) => void this.#onServeLines(event)}
         @unserve-lines=${(event: Event) => void this.#onUnserveLines(event)}
         @serve-group=${(event: Event) => void this.#onServeGroup(event)}

@@ -18,6 +18,23 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("TillApi draft source commands", () => {
+  it("splits a recalled source through the public group command with session cancellation", async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ revision: 10 }));
+    const api = new TillApi("", fetcher);
+    const signal = new AbortController().signal;
+    const command = { submissionId: "split-source-1", expectedPartyRevision: 9 };
+    expect(await api.splitHeldLineIntoUnits("party-1", "source-7", command, { signal })).toEqual({
+      revision: 10,
+    });
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/parties/party-1/groups/split-line", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...command, lineId: "source-7" }),
+      signal,
+    });
+  });
+
   it("recalls on the party route with its submission, revision and cancellation signal", async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 9, draft }));
     const api = new TillApi("https://venue.test", fetcher);
