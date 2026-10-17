@@ -1327,13 +1327,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the link must also go on the hidden width copies in `fixed-title.ts`, or the arrows move again.
   Left open by A759.
 
-- **A753. Calendar colours: more of them, one shared picker, and who holds each staff role (owner,
-  2026-10-16).** Periods, staff roles and menus pick from six colours; the palette grows (the
-  owner sees a swatch board first), every place picking one uses A725's shared colour popup — the
-  staff role dialog's dropdown included, marking colours other roles use and starting a new role on
-  an unused one — and the Staff roles list names the people holding each
-  role, with "plus N more" past 5 or 10, whichever reads better.
-  [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them-one-shared-picker-and-who-holds-each-staff-role)
+- **A753. Calendar colours: more of them (owner, 2026-10-16).** Periods (which set the menus'
+  times) and staff roles pick from six colours; special dates store no colour. The palette grows
+  once the owner has seen a swatch board, with a migration, because a CHECK on each of the two
+  tables lists the six. Every calendar-colour picker in dashboard code already uses the shared
+  `wt-colour-chooser`: the period and staff role dialogs are the only callers of
+  `calendarColourChoices`, which turns `CALENDAR_COLOURS` into its choices; prep stations use their
+  own palette (A725), and seasons store no colour yet (A721). Points 2 and 3, the shared chooser and
+  the Staff roles list naming who holds each role, landed in #NNNN.
+  [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them)
 
 - **Loose ends left by A755 (#1809).**
   - For the owner: the Business day card's actions with a scheduled change. The mock-up draws only

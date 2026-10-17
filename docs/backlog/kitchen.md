@@ -169,8 +169,10 @@ list does not exist.
    "Venue setting: Don't print"), "Print" and "Don't print" — owner: not "As the venue". Spanish to
    match.
 7. **The colour is chosen in a popup:** one square showing the colour opens a small panel of
-   colours, which still marks those other stations use. One shared component, also used by periods
-   (A719) and seasons (A721); category colours keep their dialog.
+   colours, which still marks those other stations use. The shared component exists:
+   `wt-colour-chooser` (A753, #NNNN), already used by the period and staff role dialogs. A725 hands
+   it the twelve station colours from `STATION_COLOUR_TOKENS` with `usedBy`, and
+   `station-colour-picker.ts` goes. Category colours keep their dialog.
 
 ## Whole-order note correction volume
 
