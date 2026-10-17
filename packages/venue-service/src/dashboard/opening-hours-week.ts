@@ -316,7 +316,7 @@ export class OpeningHoursWeekView extends LitElement {
       .day-title {
         display: inline-flex;
         align-items: center;
-        gap: var(--wt-space-1);
+        gap: var(--wt-space-2);
       }
       .day-title .title-link {
         min-inline-size: var(--wt-space-5);
@@ -353,7 +353,8 @@ export class OpeningHoursWeekView extends LitElement {
         display: block;
         white-space: normal;
       }
-      .card .row-name:not(.strong) {
+      .card .row-name:not(.strong),
+      .card .row-name:not(.strong) + .words {
         color: var(--wt-color-text-muted);
       }
       .words {

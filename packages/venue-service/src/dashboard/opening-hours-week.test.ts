@@ -803,6 +803,17 @@ describe("Opening hours week on a phone", () => {
     expect(bold(followed.querySelector(".row-name")!)).toBe(false);
   });
 
+  it("a zone that follows its department has its words muted as its name is", async () => {
+    const el = await mount({ date: "2026-12-02", departmentId: "rest" });
+    const colour = (row: HTMLElement, part: string) =>
+      getComputedStyle(row.querySelector(part)!).color;
+    const followed = cardRow(el, "terrace");
+    expect(text(followed.querySelector(".words"))).toBe("as Restaurant");
+    expect(colour(followed, ".words")).toBe(colour(followed, ".row-name"));
+    const rest = cardRow(el, "rest");
+    expect(colour(rest, ".words")).not.toBe(colour(followed, ".words"));
+  });
+
   it("decides on its content width when it is first drawn", async () => {
     await page.viewport(1280, 800);
     expect(window.innerWidth).toBe(1280);

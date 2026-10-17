@@ -298,6 +298,7 @@ describe("at a phone's width", () => {
     expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2027-01-04"]);
     await expect.poll(() => months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
     await week(el)!.updateComplete;
+    expect(months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
     expect(dayNames(el)).toEqual(["2027-01-04"]);
   });
 });

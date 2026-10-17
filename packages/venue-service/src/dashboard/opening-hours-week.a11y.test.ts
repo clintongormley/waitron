@@ -148,6 +148,10 @@ const phoneStates: Record<
       '[data-test="day-card"] .block[data-kind="closed"]',
     ],
   },
+  "a day on a phone with a zone that follows its department": {
+    props: { date: "2026-12-02", departmentId: "rest" },
+    shown: ['[data-test="day-card"] .row-name:not(.strong) + .words'],
+  },
   "a day on a phone, Spanish": {
     props: { date: "2026-12-01" },
     shown: ['[data-test="day-name"]', '[data-test="week-month"]'],
