@@ -169,6 +169,8 @@ export class TillModifierPicker extends LitElement {
   /** How many of the dish the line holds — the count the running price multiplies every pick by. */
   @property() quantity = "1";
 
+  @property({ type: Boolean }) showTotal = true;
+
   /** The answers a line already carries, when the dialog was opened to EDIT one. Present also when
    * it is empty, which is how "the operator deliberately picked nothing" is told from a fresh open:
    * a fresh open seeds the offer's defaults, a reopen never does. */
@@ -568,10 +570,14 @@ export class TillModifierPicker extends LitElement {
               },
             })
       }
-      <div class="running">
-        <span class="running-label">${t("label.total")}</span>
-        <span class="running-amount">${this.#runningPrice}</span>
-      </div>
+      ${
+        this.showTotal
+          ? html`<div class="running">
+              <span class="running-label">${t("label.total")}</span>
+              <span class="running-amount">${this.#runningPrice}</span>
+            </div>`
+          : nothing
+      }
       <wt-button
         slot="footer"
         class="cancel"

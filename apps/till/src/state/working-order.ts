@@ -446,15 +446,23 @@ export class WorkingOrderStore {
       return;
     line.source = snapshot.source;
     line.product = snapshot.product;
-    if (line.sourceSelection === savedSelection) {
-      delete line.sourceSelection;
+    const pending = { ...line.sourceSelection };
+    if (pending.options === savedSelection?.options) {
+      delete pending.options;
+      delete pending.optionSnapshots;
       delete line.options;
-      delete line.extras;
       if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
       else line.optionSnapshots = snapshot.optionSnapshots;
+    }
+    if (pending.extras === savedSelection?.extras) {
+      delete pending.extras;
+      if (snapshot.extras === undefined) delete line.extras;
+      else line.extras = snapshot.extras;
       if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
       else line.notOfferedExtras = snapshot.notOfferedExtras;
     }
+    if (pending.options === undefined && pending.extras === undefined) delete line.sourceSelection;
+    else line.sourceSelection = pending;
     this.#invalidatePricing();
     this.emit("changed");
   }
@@ -522,12 +530,38 @@ export class WorkingOrderStore {
     delete line.optionSnapshots;
     applySelection(line, selection);
     if (line.source !== undefined) {
-      line.sourceSelection = selection;
+      line.sourceSelection = {
+        ...selection,
+        options: selection.options ?? [],
+        extras: selection.extras ?? [],
+      };
       delete line.notOfferedExtras;
     }
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+  }
+
+  /** Omitted kinds keep their recorded choices: a recalled dish can outlive its offered lists. */
+  patchRecalledLineModifiers(index: number, selection: LineSelection): void {
+    if (this.#refusesEdits) return;
+    const line = this.#lines[index];
+    if (
+      line?.source === undefined ||
+      (selection.options === undefined && selection.extras === undefined)
+    )
+      return;
+    if (selection.options !== undefined) {
+      delete line.options;
+      delete line.optionSnapshots;
+    }
+    if (selection.extras !== undefined) {
+      delete line.extras;
+      delete line.notOfferedExtras;
+    }
+    applySelection(line, selection);
+    line.sourceSelection = { ...line.sourceSelection, ...selection };
+    this.#changedLines();
   }
 
   /** Never merges lines: stepping one line's count never folds it into an identical sibling. */

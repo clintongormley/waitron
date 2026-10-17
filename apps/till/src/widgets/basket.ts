@@ -7,10 +7,19 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { type Decimal, decimal, formatMoney, grossOf } from "@waitron/shared";
+import {
+  type Decimal,
+  decimal,
+  formatMoney,
+  grossOf,
+  multiplyDecimal,
+  perDishOptionQuantity,
+} from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
+import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
+import { deriveExtraSelections } from "../state/held-extras.js";
 import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
@@ -35,7 +44,7 @@ import {
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
-import type { Station, TabLine } from "../api/client.js";
+import type { Station, TabLine, TillProduct } from "../api/client.js";
 
 const QTY_BADGE = "×";
 
@@ -298,6 +307,7 @@ export class TillBasket extends LitElement {
    * so a fresh literal in `render()` would re-render the dialog on every basket render.
    */
   #modifierSelection: LineSelection | null = null;
+  #modifierProduct?: TillProduct;
 
   /** Detects a whole-basket swap: `clear` mints a fresh id and `loadFrom` adopts the retrieved order's,
    * while an in-basket add / remove / edit keeps it. */
@@ -305,12 +315,108 @@ export class TillBasket extends LitElement {
 
   #openModifierPicker(line: OrderLine): void {
     this.modifierLine = line;
-    this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
+    this.#modifierProduct = line.product;
+    if (line.source === undefined) {
+      this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
+      return;
+    }
+    const offered = offeredListsOf(line.product);
+    this.#modifierProduct = {
+      ...line.product,
+      offeredModifiers: offered.map((list) =>
+        list.kind === "options"
+          ? list
+          : {
+              ...list,
+              items: list.items.map((item) => {
+                const stored = this.#recordedExtra(line, list.id, item.productId);
+                return stored === undefined
+                  ? item
+                  : {
+                      ...item,
+                      name: stored.name ?? item.name,
+                      price: stored.unitPriceGross,
+                    };
+              }),
+            },
+      ),
+    };
+    const held = line.source.extras.map((extra) => ({
+      productId: extra.productId,
+      listId: extra.listId,
+      name: extra.name ?? "",
+      price: extra.unitPriceGross,
+      quantity: perDishOptionQuantity(
+        extra.quantity,
+        multiplyDecimal(decimal(line.source!.line.quantity), decimal(extra.priceQuantity ?? "1")),
+      ),
+    }));
+    const derived = held.flatMap((extra) => {
+      const [kept] = deriveExtraSelections(offered, [extra]).extras;
+      return kept !== undefined
+        ? [kept]
+        : offered.some((list) => list.kind === "extras")
+          ? [{ ...extra, listId: extra.listId ?? "", productId: extra.productId ?? "" }]
+          : [];
+    });
+    this.#modifierSelection = {
+      extras: line.sourceSelection?.extras ?? derived,
+      options:
+        line.sourceSelection?.options ??
+        deriveOptionSelections(offered, line.optionSnapshots).options,
+    };
   }
 
   #closeModifierPicker(): void {
     this.modifierLine = null;
     this.#modifierSelection = null;
+    this.#modifierProduct = undefined;
+  }
+
+  #recordedExtra(line: OrderLine, listId: string, productId: string): TabLine | undefined {
+    return line.source?.extras.find(
+      (extra) =>
+        extra.listId?.toLowerCase() === listId.toLowerCase() &&
+        extra.productId?.toLowerCase() === productId.toLowerCase(),
+    );
+  }
+
+  #confirmModifiers(detail: ModifierConfirmDetail): void {
+    const line = this.modifierLine;
+    if (line === null) return;
+    const index = this.store.lines.indexOf(line);
+    if (line.source === undefined) {
+      this.#closeModifierPicker();
+      this.store.setLineModifiers(index, detail);
+      return;
+    }
+    const offered = offeredListsOf(line.product);
+    const selection: LineSelection = {};
+    if (
+      offered.some((list) => list.kind === "options") &&
+      !sameOptionSelections(detail.options ?? [], this.#modifierSelection!.options ?? [])
+    ) {
+      selection.options = detail.options ?? [];
+      selection.optionSnapshots = detail.optionSnapshots ?? [];
+    }
+    const extrasKey = (picks: SelectedExtra[]) =>
+      JSON.stringify(
+        picks
+          .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
+          .sort(),
+      );
+    if (
+      offered.some((list) => list.kind === "extras") &&
+      extrasKey(detail.extras ?? []) !== extrasKey(this.#modifierSelection!.extras ?? [])
+    )
+      selection.extras = (detail.extras ?? []).map((pick) => {
+        const stored = this.#recordedExtra(line, pick.listId, pick.productId);
+        return stored === undefined
+          ? pick
+          : { ...pick, name: stored.name ?? pick.name, price: stored.unitPriceGross };
+      });
+    this.#closeModifierPicker();
+    this.store.patchRecalledLineModifiers(index, selection);
   }
 
   constructor() {
@@ -550,15 +656,13 @@ export class TillBasket extends LitElement {
       ${
         this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
-              .product=${this.modifierLine.product}
+              .product=${this.#modifierProduct}
               .quantity=${this.modifierLine.quantity}
+              .showTotal=${this.modifierLine.source === undefined}
               .initialSelections=${this.#modifierSelection}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                 event.stopPropagation();
-                if (!this.modifierLine) return;
-                const index = this.store.lines.indexOf(this.modifierLine);
-                this.#closeModifierPicker();
-                this.store.setLineModifiers(index, event.detail);
+                this.#confirmModifiers(event.detail);
               }}
               @wt-modifier-cancel=${(event: Event) => {
                 event.stopPropagation();

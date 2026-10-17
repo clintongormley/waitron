@@ -1,4 +1,10 @@
-import { divideDecimal, decimal, draftLineMergeKey, QUANTITY_SCALE } from "@waitron/shared";
+import {
+  decimal,
+  draftLineMergeKey,
+  multiplyDecimal,
+  perDishOptionQuantity,
+  QUANTITY_SCALE,
+} from "@waitron/shared";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import {
   menuOfferToTillProduct,
@@ -10,8 +16,10 @@ import {
   type TillProduct,
 } from "../api/client.js";
 import { optionSnapshotOf } from "./held-options.js";
+import { deriveExtraSelections } from "./held-extras.js";
 import {
   displayQuantity,
+  offeredListsOf,
   productAsVariant,
   quantityPlaces,
   takesExtras,
@@ -38,12 +46,12 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
       id: line.draftLineId,
       sourceLineId: line.source.line.id,
       makeAt: line.makeAt ?? null,
-      ...(line.sourceSelection === undefined
+      ...(line.sourceSelection?.options === undefined
         ? {}
-        : {
-            options: line.sourceSelection.options ?? [],
-            extras: toWireModifiers(line.sourceSelection).extras ?? [],
-          }),
+        : { options: line.sourceSelection.options }),
+      ...(line.sourceSelection?.extras === undefined
+        ? {}
+        : { extras: toWireModifiers(line.sourceSelection).extras ?? [] }),
     };
   }
   const { product } = line;
@@ -94,7 +102,7 @@ export function fromDraftLine(
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions?: ReadonlyMap<string, string>,
 ): OrderLine {
-  if (line.sourceLineId != null) return fromRecalledLine(line);
+  if (line.sourceLineId != null) return fromRecalledLine(line, offers);
   const offer = offers.get(line.menuItemId);
   const earlierPrice =
     offer !== undefined &&
@@ -198,8 +206,17 @@ function unofferedProduct(line: FreshDraftLineInput): TillProduct {
   };
 }
 
-function fromRecalledLine(line: RecalledDraftLine): OrderLine {
+function fromRecalledLine(
+  line: RecalledDraftLine,
+  offers: ReadonlyMap<string, TillMenuOffer>,
+): OrderLine {
   const parent = line.source.line;
+  const offer = parent.menuItemId === null ? undefined : offers.get(parent.menuItemId);
+  const sameProduct = offer?.productId === (parent.parentProductId ?? parent.productId);
+  const selling =
+    parent.parentProductId === null
+      ? offer
+      : offer?.variants.find((variant) => variant.id === parent.productId);
   const product: TillProduct = {
     id: parent.productId ?? parent.id,
     name: parent.name ?? "",
@@ -208,7 +225,23 @@ function fromRecalledLine(line: RecalledDraftLine): OrderLine {
     category: null,
     allergens: null,
     unit: { ...UNKNOWN_UNIT, precision: parent.unitPrecision ?? QUANTITY_SCALE },
+    ...(sameProduct && selling !== undefined && offer !== undefined
+      ? { offeredModifiers: menuOfferToTillProduct(offer).offeredModifiers }
+      : {}),
   };
+  const { extras, notOffered } = deriveExtraSelections(
+    offeredListsOf(product),
+    line.source.extras.map((extra) => ({
+      productId: extra.productId ?? extra.id,
+      listId: extra.listId,
+      name: extra.name ?? "",
+      price: extra.unitPriceGross,
+      quantity: perDishOptionQuantity(
+        extra.quantity,
+        multiplyDecimal(decimal(parent.quantity), decimal(extra.priceQuantity ?? "1")),
+      ),
+    })),
+  );
   return {
     draftLineId: line.id,
     workingOrderLineId: line.sourceLineId,
@@ -217,18 +250,8 @@ function fromRecalledLine(line: RecalledDraftLine): OrderLine {
     quantity: displayQuantity(product, line.quantity),
     noMerge: true,
     ...(parent.optionSnapshots?.length ? { optionSnapshots: parent.optionSnapshots } : {}),
-    ...(line.source.extras.length
-      ? {
-          notOfferedExtras: line.source.extras.map((extra) => ({
-            productId: extra.productId ?? extra.id,
-            name: extra.name ?? "",
-            price: extra.unitPriceGross,
-            quantity: Number(
-              divideDecimal(decimal(extra.quantity), decimal(line.quantity), QUANTITY_SCALE),
-            ),
-          })),
-        }
-      : {}),
+    ...(extras.length ? { extras } : {}),
+    ...(notOffered.length ? { notOfferedExtras: notOffered } : {}),
     ...(line.note === null ? {} : { note: line.note }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
     ...(line.course?.id === line.courseId ? { course: line.course } : {}),
