@@ -1632,6 +1632,34 @@ describe("the guests its invoice's receipts print", () => {
     expect(decodeTicket(copies.at(-1)!.payload)).toContain("4 comensales");
   });
 
+  it("refuses a collect's guests 0 on the departed invoice, and writes nothing", async () => {
+    const party = await seatedFor(4, "Botella tinto");
+    expect(
+      (
+        await depart(party.partyId, {
+          expectedPartyRevision: revisionOf(party.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
+    const before = await salesOf(party.tabId);
+    const refused = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/collect`,
+      { tender: { method: "cash", amount: "30.00" }, guests: 0 },
+    );
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "guests" } },
+    });
+    expect(await salesOf(party.tabId)).toEqual(before);
+    expect(before).toEqual([{ id: expect.any(String), total: 3000, settledAt: null }]);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+    expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
+  });
+
   it("stores the party's count on an invoice issued unpaid without a departure", async () => {
     const party = await seatedFor(3, "Botella tinto");
     await issueOrderInvoice(venue, venue.cfg, party.tabId, venue.operatorId);

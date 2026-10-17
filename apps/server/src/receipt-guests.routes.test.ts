@@ -371,7 +371,30 @@ async function collect(
   return { status: res.status, body: await res.json() };
 }
 
+/** {@link partyOfFourBill}, placed, with no invoice yet. */
+async function placedPartyBill(v: Venue): Promise<string> {
+  const billId = await partyOfFourBill(v);
+  await placeOrder({ db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
+  return billId;
+}
+
 describe("/collect of a placed order keeps the guests its receipt prints", () => {
+  it("stores a party's 4 when the request sends no guests", async () => {
+    const v = await venue(suite.db);
+    const id = await placedPartyBill(v);
+    const answer = await collect(v, id, {});
+    expect(answer.status).toBe(200);
+    expect(await storedGuests(suite.db, id)).toEqual([{ guests: 4 }]);
+  });
+
+  it("stores no line for a party's bill when the request sends null", async () => {
+    const v = await venue(suite.db);
+    const id = await placedPartyBill(v);
+    const answer = await collect(v, id, { guests: null });
+    expect(answer.status).toBe(200);
+    expect(await storedGuests(suite.db, id)).toEqual([{ guests: null }]);
+  });
+
   it("stores the chosen count", async () => {
     const v = await venue(suite.db);
     const id = await placedCounterOrder(v);

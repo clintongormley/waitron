@@ -47,6 +47,7 @@ async function guestsOf(partyId: string, guestCount: number): Promise<void> {
   });
   if (answer.status !== 200) throw new Error(`guestsOf: the route answered ${answer.status}`);
 }
+
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
