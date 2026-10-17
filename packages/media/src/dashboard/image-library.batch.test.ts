@@ -224,3 +224,28 @@ it("a drop on the page outside the library's content uploads once and removes it
   expect(drag("drop", [file("second.png")], document.body).defaultPrevented).toBe(false);
   expect(api.uploadImage).toHaveBeenCalledOnce();
 });
+
+it("an old batch response cannot overwrite a newly mounted batch", async () => {
+  const api = await mount();
+  const old = deferred<{ image: LibraryImage; created: boolean }>();
+  const current = deferred<{ image: LibraryImage; created: boolean }>();
+  api.uploadImage.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+  drag("drop", [file("old.png")]);
+  expect(api.uploadImage).toHaveBeenCalledOnce();
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  await vi.waitFor(() => expect(api.listImages).toHaveBeenCalledTimes(2));
+  drag("drop", [file("current.png")]);
+  expect(api.uploadImage).toHaveBeenCalledTimes(2);
+  old.resolve({ image: image("stale", "Old batch"), created: true });
+  await old.promise;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-image=stale]")).toBeNull();
+  expect(text()).toContain("0 of 1 photos uploaded.");
+  current.resolve({ image: image("current", "Current batch"), created: true });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-image=current]")).not.toBeNull(),
+  );
+  expect(api.uploadImage).toHaveBeenCalledTimes(2);
+});
