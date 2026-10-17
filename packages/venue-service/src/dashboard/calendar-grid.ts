@@ -7,6 +7,10 @@ export const MONTHS = Array.from({ length: 12 }, (_, index) => String(index + 1)
 /** A month, `YYYY-MM`. */
 export type Month = string;
 
+/** The months the month read serves: its first week must start in year 0100 or later. */
+export const FIRST_MONTH = "0100-02";
+export const LAST_MONTH = "9998-12";
+
 export function addMonths(month: Month, months: number): Month {
   const [year, number] = month.split("-").map(Number) as [number, number];
   return new Date(Date.UTC(year, number - 1 + months, 1)).toISOString().slice(0, 7);

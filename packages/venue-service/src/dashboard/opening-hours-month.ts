@@ -8,7 +8,13 @@ import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
-import { dayNameLines, monthNames, type MonthNames } from "./opening-hours-day.js";
+import { FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
+import {
+  chosenDepartment,
+  dayNameLines,
+  monthNames,
+  type MonthNames,
+} from "./opening-hours-day.js";
 import {
   dateAroundDay,
   format,
@@ -22,7 +28,7 @@ import { closedHatch } from "./period-colour-styles.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
-import { chosenDepartment, showPicker } from "./calendar-show.js";
+import { showPicker } from "./calendar-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -47,9 +53,6 @@ export interface CalendarDaysOpen {
   to: LocalDate;
 }
 
-/** The months the month read serves: its first week must start in year 0100 or later. */
-export const FIRST_MONTH = "0100-02";
-export const LAST_MONTH = "9998-12";
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
 

@@ -6,14 +6,6 @@ import { t } from "./strings.js";
 
 const ALL = "all";
 
-/** `departmentId` when `day`'s read carries it, else "" for every department. */
-export function chosenDepartment(
-  day: OpeningHoursMonth["days"][number],
-  departmentId: string,
-): string {
-  return day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
-}
-
 /** The Show picker the Month and the Week share. */
 export function showPicker(options: {
   model: OpeningHoursMonth;

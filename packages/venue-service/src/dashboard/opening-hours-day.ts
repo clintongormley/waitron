@@ -3,7 +3,6 @@ import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ServiceRange } from "../service-day.js";
 import { zoneOwnHours, type ZoneOwnHours } from "../zone-own-hours.js";
 import type { DayBoxRow } from "./calendar-day-box.js";
-import { chosenDepartment } from "./calendar-show.js";
 import { format } from "./hours-view.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
 import { t } from "./strings.js";
@@ -35,6 +34,11 @@ export function monthNames(departments: readonly MonthDepartment[]): MonthNames 
     name: (id) => named.get(id) ?? "",
     period: (id) => periods.get(id) ?? { name: "" },
   };
+}
+
+/** `departmentId` when `day`'s read carries it, else "" for every department. */
+export function chosenDepartment(day: Day, departmentId: string): string {
+  return day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
 }
 
 export interface DayNameLine {

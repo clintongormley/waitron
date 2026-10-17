@@ -639,6 +639,21 @@ describe("Opening hours week: a block's label", () => {
     }
   });
 
+  it("moving from one block to another keeps the second block's tip after the first's hide delay", async () => {
+    const el = await mount();
+    await userEvent.hover(block(el, "2026-12-02", "rest", 3));
+    expect(open(el)).toBe(true);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await userEvent.hover(block(el, "2026-12-02", "rest", 1));
+      vi.advanceTimersByTime(1000);
+      expect(open(el)).toBe(true);
+      expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("a long unbroken label wraps inside the window", async () => {
     await page.viewport(1024, 800);
     expect(window.innerWidth).toBe(1024);

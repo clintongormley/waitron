@@ -2,11 +2,15 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { placeOnDay, zoneOwnHours } from "../zone-own-hours.js";
-import { mondayOf } from "./calendar-grid.js";
-import { chosenDepartment } from "./calendar-show.js";
+import { FIRST_MONTH, LAST_MONTH, mondayOf } from "./calendar-grid.js";
 import { format } from "./hours-view.js";
-import { departmentRow, serviceRangeText, zoneRow, type MonthNames } from "./opening-hours-day.js";
-import { FIRST_MONTH, LAST_MONTH } from "./opening-hours-month.js";
+import {
+  chosenDepartment,
+  departmentRow,
+  serviceRangeText,
+  zoneRow,
+  type MonthNames,
+} from "./opening-hours-day.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];

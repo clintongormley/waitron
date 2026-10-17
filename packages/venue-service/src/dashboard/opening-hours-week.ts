@@ -7,9 +7,14 @@ import { clockAt } from "../day-paint.js";
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import { chosenDepartment, showPicker } from "./calendar-show.js";
+import { showPicker } from "./calendar-show.js";
 import { formatDayHeading, formatWeekTitleParts } from "./hours-view.js";
-import { dayNameLines, monthNames, type MonthNames } from "./opening-hours-day.js";
+import {
+  chosenDepartment,
+  dayNameLines,
+  monthNames,
+  type MonthNames,
+} from "./opening-hours-day.js";
 import type { CalendarDayOpen, MonthDepartment } from "./opening-hours-month.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { scrollTargets, visibleTop } from "./flat-tree.js";
