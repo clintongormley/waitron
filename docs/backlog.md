@@ -3573,6 +3573,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   device's setting at all. The favicon (`packages/ui/brand/public/favicon.svg`) is drawn by the
   browser from the operating system's setting. Open.
 
+- **Five tidy-ups A681's review left for later (#1842, 2026-10-17).** None is a defect; each
+  reshapes working code. (1) Draw the dashboard logo as a token-coloured inline image, as setup's
+  is, instead of swapping two images by `media`. (2) One shared "redraw when this changes" helper
+  for the theme and the language. (3) Move more of the two choosers' repeated open and close steps
+  into `packages/ui/src/menu-popover.ts`. (4) Rename the till's `language-chooser-styles.ts`, which
+  now places the Theme menu too. (5) Handle a theme pick with a plain handler in each app instead
+  of `ThemeChoiceController`'s `applies` option. Take them when next working in those files.
+
 - **A653 — every long dashboard table scrolls the same way, with less above it (owner,
   2026-10-14; open).** Products keeps its toolbar and column headings in view and scrolls its rows
   inside the table's own box (`wt-data-table`'s `stickyHeader`, set by no other screen); a menu's
