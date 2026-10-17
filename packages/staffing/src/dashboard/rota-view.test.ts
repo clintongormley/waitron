@@ -1040,6 +1040,37 @@ describe("the Rota's slot picker beside its slot", () => {
     );
     expect(document.activeElement).not.toBe(document.body);
   });
+  it("the picker stays inside the window when Show everyone lengthens it", async () => {
+    await useViewport(1280, 900);
+    const el = await mount(
+      rotaApi(async (week) => {
+        const read = rotaWeek(week);
+        for (let n = 0; n < 20; n++)
+          read.people.push({
+            personId: `extra${n}`,
+            name: `Extra ${n}`,
+            staffRoleIds: [],
+            plannedMinutes: 0,
+            contractedMinutes: null,
+          });
+        return read;
+      }).api,
+    );
+    frames[0]!.style.paddingTop = "350px";
+    await userEvent.click(slotIn(el, "empty"));
+    const picker = await opened(el);
+    await new Promise(requestAnimationFrame);
+    expect(box(popupBox(el)).bottom).toBeLessThanOrEqual(900 - 8 + 0.5);
+    await userEvent.click(
+      picker.shadowRoot!.querySelector<HTMLElement>("[data-test=show-everyone]")!,
+    );
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("[data-person=extra19]")).toBeTruthy(),
+    );
+    await expect.poll(() => box(popupBox(el)).bottom).toBeLessThanOrEqual(900 - 8 + 0.5);
+    expect(box(popupBox(el)).top).toBeGreaterThanOrEqual(8 - 0.5);
+    expect(popupBox(el).matches(":popover-open")).toBe(true);
+  });
   it("a fill refused while a click outside is dismissing the picker still shows under the bar, until the next pick", async () => {
     await useViewport(1280, 900);
     const client = rotaApi();

@@ -125,6 +125,62 @@ describe("rota-popup", () => {
     near(box().right, anchor.getBoundingClientRect().left);
   });
 
+  it("places again when its content grows by itself, staying inside the window", async () => {
+    await useViewport(1280, 900);
+    const anchor = anchorAt(100, 500);
+    el.show(anchor);
+    // The resize the viewport change sends lands in a later frame, and would place it again too.
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    near(box().top, anchor.getBoundingClientRect().top);
+    content.style.height = "600px";
+    await expect.poll(() => box().bottom).toBeLessThanOrEqual(900 - 8 + 0.5);
+    insideWindow();
+    near(box().left, anchor.getBoundingClientRect().right);
+  });
+
+  it("stops watching its content's size once closed or taken off the page", async () => {
+    await useViewport(1280, 900);
+    const anchor = anchorAt(100, 500);
+    el.show(anchor);
+    el.hide();
+    await closedOnce();
+    content.style.height = "600px";
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    expect(el.shown).toBe(false);
+    content.style.height = "200px";
+    el.show(anchor);
+    el.remove();
+    host.append(el);
+    content.style.height = "600px";
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    expect(el.shown).toBe(false);
+  });
+
+  it("stays closed when it is shown again while it is closing", async () => {
+    await useViewport(1280, 900);
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    host.append(spacer);
+    const anchor = anchorAt(100, 300);
+    el.show(anchor);
+    // As the rota view does when a fill settles during a click outside.
+    popup().addEventListener("beforetoggle", (event) => {
+      if ((event as ToggleEvent).newState === "closed") el.show(anchor);
+    });
+    el.hide();
+    await closedOnce();
+    content.style.height = "600px";
+    const scroll = scrolled(window);
+    window.scrollBy(0, 100);
+    await scroll;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    expect(el.shown).toBe(false);
+  });
+
   it("follows its anchor when the box it is drawn in scrolls, and closes once the anchor leaves that box", async () => {
     await useViewport(1280, 900);
     const scroller = document.createElement("div");
@@ -322,6 +378,21 @@ describe("rota-popup", () => {
     near(box().bottom, 844);
     near(box().left, 0);
     expect(closes).toBe(0);
+  });
+
+  it("a sheet stays at the foot of the window when its content grows by itself", async () => {
+    await useViewport(390, 844);
+    const anchor = anchorAt(100, 300);
+    el.sheet = true;
+    await el.updateComplete;
+    el.show(anchor);
+    content.style.height = "400px";
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    expect(el.shown).toBe(true);
+    near(box().bottom, 844);
+    near(box().left, 0);
+    near(box().width, 390);
   });
 
   it("a sheet's Cancel closes it and returns focus to what opened it", async () => {

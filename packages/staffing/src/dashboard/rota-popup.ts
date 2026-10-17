@@ -77,12 +77,16 @@ export class RotaPopup extends LitElement {
   #anchor: HTMLElement | undefined;
   #focusWasInside = false;
   #scrollTargets: EventTarget[] = [];
+  // A show() while it is closing follows again, so what it follows can fire once it has closed.
+  readonly #resized = new ResizeObserver(() => {
+    if (this.shown) this.#place();
+  });
 
   /** Opens beside `anchor`, or below it when neither side has room, and follows it while open:
-   *  on each window resize and each scroll of the page or of a box `anchor` is drawn inside, it
-   *  places itself again, or closes once no part of `anchor` is left in view. A sheet sits at the
-   *  foot of the window and does not follow. Called again after the content changes, it places
-   *  again without moving focus. */
+   *  on each window resize, each change of its own size and each scroll of the page or of a box
+   *  `anchor` is drawn inside, it places itself again, or closes once no part of `anchor` is left
+   *  in view. A sheet sits at the foot of the window and does not follow. Called again after the
+   *  content changes, it places again without moving focus. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
@@ -127,16 +131,19 @@ export class RotaPopup extends LitElement {
     for (const target of this.#scrollTargets)
       target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
     window.addEventListener("resize", this.#onScroll, { passive: true });
+    this.#resized.observe(this.popup);
   }
 
   #stopFollowing(): void {
     for (const target of this.#scrollTargets.splice(0))
       target.removeEventListener("scroll", this.#onScroll, { capture: true });
     window.removeEventListener("resize", this.#onScroll);
+    this.#resized.disconnect();
   }
 
   // Held on screen, a menu whose anchor has gone would sit beside some other slot.
   readonly #onScroll = (): void => {
+    if (!this.shown) return;
     if (this.#anchorInView()) this.#place();
     else this.hide();
   };
