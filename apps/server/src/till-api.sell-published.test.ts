@@ -964,6 +964,7 @@ describe("GET /api/menu-state", () => {
       optionLabels: string[];
     };
     liveFields: string;
+    setupRevision: string;
   };
   const state = async (v: Lunch, query = `?zoneId=${v.zoneId}`): Promise<MenuState> => {
     const response = await send(v, "GET", `/api/menu-state${query}`);
@@ -995,6 +996,7 @@ describe("GET /api/menu-state", () => {
       unavailable: nothing,
       defaultMenuId: v.menuId,
       liveFields: expect.any(String),
+      setupRevision: expect.any(String),
     });
 
     const setBurger = (available: boolean) =>
@@ -1019,6 +1021,7 @@ describe("GET /api/menu-state", () => {
       unavailable: { ...nothing, products: [v.burger.productId] },
       defaultMenuId: v.menuId,
       liveFields: first.liveFields,
+      setupRevision: first.setupRevision,
     });
     const status = await withTransaction(suite.db, (tx) => menuStatus(tx, [v.menuId]));
     expect(status.get(v.menuId)?.state).toBe("current");

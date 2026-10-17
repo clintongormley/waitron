@@ -1233,6 +1233,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // `node_membership` holds no row (the server-list test below writes one and removes it again).
       nodeId: cfg.nodeId,
       servers: [],
+      setupRevision: expect.stringMatching(/^[0-9a-f]{64}$/),
       // This suite's configuration carries no regime limit.
       simplifiedInvoiceLimit: null,
       fullInvoices: false,
