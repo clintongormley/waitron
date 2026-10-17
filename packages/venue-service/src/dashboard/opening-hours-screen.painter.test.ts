@@ -1267,6 +1267,46 @@ class DeletingApp extends PainterApp {
 }
 customElements.define("opening-hours-deleting-test-app", DeletingApp);
 
+/** Deleting p1 with Dinner (p2) as its replacement moves p1's saved slots to p2, as the server
+ *  does. */
+class ReplacingApp extends PainterApp {
+  override readonly api = new OpeningHoursApi((async (
+    path: string,
+    method: string,
+    body: unknown,
+  ) => {
+    if (method === "GET" && path.endsWith("/menu-periods/p1/delete-impact"))
+      return {
+        seasons: 1,
+        specialDays: 0,
+        routingUses: [],
+        keptOpenToday: false,
+        replacements: [{ id: "p2", name: "Dinner" }],
+        clockRevision: 4,
+      };
+    if (method === "POST" && path.endsWith("/menu-periods/p1/delete")) {
+      this.writes.push([path, method, body]);
+      const replacement = (body as { replacementPeriodId: string | null }).replacementPeriodId;
+      const next = structuredClone(this.model);
+      const restaurant = next.departments[0]!;
+      restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+      for (const season of restaurant.seasonWeeks)
+        for (const day of season.week)
+          day.slots = day.slots.flatMap((slot) =>
+            slot.periodId !== "p1"
+              ? [slot]
+              : replacement === null
+                ? []
+                : [{ ...slot, periodId: replacement }],
+          );
+      this.model = next;
+      return {};
+    }
+    return request(() => this.model, this.writes)(path, method, body);
+  }) as DashboardRequest);
+}
+customElements.define("opening-hours-replacing-test-app", ReplacingApp);
+
 describe("the painters' Periods link", () => {
   const base = "/manage/opening-hours/view/season/season/winter/department/d1";
   const link = (painter: SeasonPainter) =>
@@ -1393,6 +1433,97 @@ describe("the painters' Periods link", () => {
         days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
           weekday,
           slots: weekday === 4 ? [{ periodId: "p2", startsAt: "08:00", endsAt: "10:00" }] : [],
+        })),
+      },
+    ]);
+  });
+
+  /** Paints Dinner 08:00–10:00 on `weekday`, deletes Lunch (saved Monday 13:00–16:00) in the
+   *  Periods window with Dinner as its replacement, closes the window and saves: what was sent. */
+  async function saveAfterReplacingLunch(weekday: string) {
+    history.replaceState(null, "", base);
+    const app = document.createElement("opening-hours-replacing-test-app") as ReplacingApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    await expect.poll(() => drawnView(el)).toBeDefined();
+    const painter = await shownPainter(el);
+    painter.shadowRoot!.querySelector<HTMLElement>('[data-test="paint-p2"]')!.click();
+    await settle(painter);
+    await drag(painter, weekday, 120, 240);
+    await userEvent.click(link(painter));
+    const { modal, list, table } = await periodsWindow(el);
+    table
+      .shadowRoot!.querySelector<HTMLElement>(
+        'tr[data-row-key="period:p1"] [data-test=delete-period]',
+      )!
+      .click();
+    await expect
+      .poll(() => list.shadowRoot!.querySelector("period-delete-dialog")?.impact)
+      .toBeTruthy();
+    const deletion = list.shadowRoot!.querySelector("period-delete-dialog")!;
+    await deletion.updateComplete;
+    deletion
+      .shadowRoot!.querySelector("wt-combobox[name=replacementPeriodId]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "p2" }, bubbles: true, composed: true }),
+      );
+    await deletion.updateComplete;
+    deletion.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect.poll(() => list.shadowRoot!.querySelector("period-delete-dialog")).toBeNull();
+    expect(app.writes).toContainEqual([
+      "/management-api/venue-service/menu-periods/p1/delete",
+      "POST",
+      expect.objectContaining({ replacementPeriodId: "p2" }),
+    ]);
+    modal.querySelector<HTMLElement>("[data-test=close-calendar-window]")!.click();
+    await expect.poll(() => location.pathname).toBe(base);
+    await expect.poll(() => painter.shadowRoot!.querySelector('[data-test="paint-p1"]')).toBeNull();
+    await settle(painter);
+    const shown = (key: string) => grid(painter).days.get(key);
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await expect
+      .poll(() => app.writes.filter((write) => (write as unknown[])[1] === "PUT"))
+      .toHaveLength(1);
+    const [, , sent] = app.writes.find((write) => (write as unknown[])[1] === "PUT") as [
+      string,
+      string,
+      { departments: { departmentId: string; days: { weekday: number; slots: unknown[] }[] }[] },
+    ];
+    return { shown, sent: sent.departments };
+  }
+  const dinner = (startsAt: string, endsAt: string) => ({ periodId: "p2", startsAt, endsAt });
+
+  it("a period deleted with a replacement keeps the replacement's saved block on a day the draft changed, beside the painted one", async () => {
+    const { shown, sent } = await saveAfterReplacingLunch("1");
+    expect(shown("1")).toEqual([dinner("08:00", "10:00"), dinner("13:00", "16:00")]);
+    expect(sent).toEqual([
+      {
+        departmentId: "d1",
+        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
+          weekday,
+          slots: weekday === 1 ? [dinner("08:00", "10:00"), dinner("13:00", "16:00")] : [],
+        })),
+      },
+    ]);
+  });
+
+  it("a period deleted with a replacement keeps the replacement's saved block on a day the draft did not change", async () => {
+    const { shown, sent } = await saveAfterReplacingLunch("4");
+    expect(shown("1")).toEqual([dinner("13:00", "16:00")]);
+    expect(sent).toEqual([
+      {
+        departmentId: "d1",
+        days: [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
+          weekday,
+          slots:
+            weekday === 1
+              ? [dinner("13:00", "16:00")]
+              : weekday === 4
+                ? [dinner("08:00", "10:00")]
+                : [],
         })),
       },
     ]);

@@ -125,3 +125,65 @@ export function withoutPeriods<K>(
     ]),
   );
 }
+
+/** Each day's blocks of a period in `removed` that `saved` holds, the same, on that day. */
+export function savedBlocks<K>(
+  days: ReadonlyMap<K, readonly Paint[]>,
+  removed: ReadonlySet<string>,
+  saved: ReadonlyMap<K, readonly Paint[]>,
+): Map<K, Paint[]> {
+  const found = new Map<K, Paint[]>();
+  for (const [key, day] of days) {
+    const blocks = day
+      .filter(
+        (block) =>
+          block.periodId !== null &&
+          removed.has(block.periodId) &&
+          (saved.get(key) ?? []).some((other) => samePaint([other], [block])),
+      )
+      .map((block) => ({ ...block }));
+    if (blocks.length) found.set(key, blocks);
+  }
+  return found;
+}
+
+/** `days` with what `stored` holds inside each of `holes`' blocks painted in on the same day,
+ *  wherever the day leaves that stretch empty; touching same-period blocks join. */
+export function refill<K>(
+  days: ReadonlyMap<K, readonly Paint[]>,
+  holes: ReadonlyMap<K, readonly Paint[]>,
+  stored: ReadonlyMap<K, readonly Paint[]>,
+  cutover: string,
+): Map<K, Paint[]> {
+  const refilled = new Map(
+    [...days].map(([key, day]) => [key, day.map((range) => ({ ...range }))]),
+  );
+  for (const [key, hole] of holes) {
+    let day = refilled.get(key);
+    if (!day) continue;
+    const taken = Array<boolean>(DAY_MINUTES).fill(false);
+    const take = ([start, end]: [number, number]) => taken.fill(true, start, end);
+    for (const range of day) take(stepSpan(range, cutover));
+    for (const gap of hole)
+      for (const block of stored.get(key) ?? []) {
+        const [gapStart, gapEnd] = stepSpan(gap, cutover);
+        const [blockStart, blockEnd] = stepSpan(block, cutover);
+        const end = Math.min(gapEnd, blockEnd);
+        for (let start = Math.max(gapStart, blockStart); start < end; start++) {
+          if (taken[start]) continue;
+          let stop = start;
+          while (stop < end && !taken[stop]) stop++;
+          const stretch = {
+            periodId: block.periodId,
+            startsAt: clockAt(start, cutover),
+            endsAt: clockAt(stop, cutover),
+          };
+          day = paintStretch(day, stretch, cutover, false);
+          take([start, stop]);
+          start = stop;
+        }
+      }
+    refilled.set(key, day);
+  }
+  return refilled;
+}

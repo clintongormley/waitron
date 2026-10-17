@@ -5,6 +5,8 @@ import {
   deleteBlock,
   paintStretch,
   rebaseDays,
+  refill,
+  savedBlocks,
   stepAt,
   stepMinuteAt,
   withoutPeriods,
@@ -319,5 +321,108 @@ describe("withoutPeriods", () => {
     );
     const inputs = [...days.values()].flat();
     for (const day of kept.values()) for (const block of day) expect(inputs).not.toContain(block);
+  });
+});
+
+describe("savedBlocks", () => {
+  it("finds each day's blocks of a removed period that the saved days hold the same, and copies them", () => {
+    const days = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00"), paint(DINNER, "18:00", "21:00")]],
+      ["2", [paint(LUNCH, "08:00", "10:00"), paint(null, "10:00", "11:00")]],
+      ["3", [paint(LUNCH, "13:00", "16:00")]],
+    ]);
+    const saved = new Map([
+      ["1", [paint(LUNCH, "13:00", "16:00"), paint(DINNER, "18:00", "21:00")]],
+      ["2", [paint(LUNCH, "08:00", "09:00"), paint(null, "10:00", "11:00")]],
+    ]);
+    const found = savedBlocks(days, new Set([LUNCH]), saved);
+    expect(found).toEqual(new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]));
+    expect(found.get("1")![0]).not.toBe(days.get("1")![0]);
+  });
+});
+
+describe("refill", () => {
+  const stored = (day: Paint[]) => new Map([["1", day]]);
+
+  it("puts the stored block at a hole's times beside what the day already holds", () => {
+    expect(
+      refill(
+        new Map([["1", [paint(DINNER, "08:00", "10:00")]]]),
+        new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]),
+        stored([paint(DINNER, "13:00", "16:00")]),
+        "06:00",
+      ),
+    ).toEqual(new Map([["1", [paint(DINNER, "08:00", "10:00"), paint(DINNER, "13:00", "16:00")]]]));
+  });
+
+  it("takes only the hole's stretch of a wider stored block, joining a touching block of its period", () => {
+    expect(
+      refill(
+        new Map([["1", [paint(DINNER, "10:00", "13:00")]]]),
+        new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]),
+        stored([paint(DINNER, "10:00", "18:00")]),
+        "06:00",
+      ),
+    ).toEqual(new Map([["1", [paint(DINNER, "10:00", "16:00")]]]));
+  });
+
+  it("leaves a stretch of the hole the day has painted since, and keeps Closed as stored", () => {
+    expect(
+      refill(
+        new Map([["1", [paint(BREAKFAST, "14:00", "15:00")]]]),
+        new Map([["1", [paint(LUNCH, "13:00", "16:00")]]]),
+        stored([paint(null, "13:00", "16:00")]),
+        "06:00",
+      ),
+    ).toEqual(
+      new Map([
+        [
+          "1",
+          [
+            paint(null, "13:00", "14:00"),
+            paint(BREAKFAST, "14:00", "15:00"),
+            paint(null, "15:00", "16:00"),
+          ],
+        ],
+      ]),
+    );
+  });
+
+  it("fills a hole across midnight by the changeover's order", () => {
+    expect(
+      refill(
+        new Map([["1", []]]),
+        new Map([["1", [paint(LUNCH, "23:00", "02:00")]]]),
+        stored([paint(DINNER, "22:00", "06:00")]),
+        "06:00",
+      ),
+    ).toEqual(new Map([["1", [paint(DINNER, "23:00", "02:00")]]]));
+  });
+
+  it("leaves a hole the stored day holds nothing in empty, a day it does not hold untouched, and its inputs unchanged", () => {
+    const days = new Map([
+      ["1", [paint(DINNER, "08:00", "10:00")]],
+      ["2", [paint(DINNER, "18:00", "20:00")]],
+    ]);
+    const refilled = refill(
+      days,
+      new Map([
+        ["1", [paint(LUNCH, "13:00", "16:00")]],
+        ["3", [paint(LUNCH, "13:00", "16:00")]],
+      ]),
+      new Map([
+        ["1", [paint(DINNER, "16:00", "18:00")]],
+        ["3", [paint(DINNER, "13:00", "16:00")]],
+      ]),
+      "06:00",
+    );
+    expect(refilled).toEqual(
+      new Map([
+        ["1", [paint(DINNER, "08:00", "10:00")]],
+        ["2", [paint(DINNER, "18:00", "20:00")]],
+      ]),
+    );
+    expect(refilled.get("2")![0]).not.toBe(days.get("2")![0]);
+    expect(days.get("1")).toEqual([paint(DINNER, "08:00", "10:00")]);
   });
 });

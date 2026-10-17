@@ -21,7 +21,7 @@ import { addDays, isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
-import { rebaseDays, samePaint, withoutPeriods } from "../paint-model.js";
+import { rebaseDays, refill, samePaint, savedBlocks, withoutPeriods } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -429,6 +429,9 @@ export class SpecialDayPainter extends LitElement {
   private seeded?: string;
   /** The stored dates, each with the public holiday it was saved on, if any. */
   private stored = new Map<LocalDate, string | undefined>();
+  /** The saved blocks `dropDeletedPeriods` took out of the draft's and the saved state's paint,
+   *  which the next {@link merge} fills from the stored day. */
+  private vacated?: { draft: OwnerPaint; baseline: OwnerPaint };
   /** The clock revision the draft was seeded with; followed only while nothing is edited. */
   private revision = 0;
   /** Replaced whenever a read's or a write's answer would land on a draft it no longer belongs to. */
@@ -642,6 +645,24 @@ export class SpecialDayPainter extends LitElement {
     const fresh = fromDetail(detail);
     const draft = copyDraft(this.draft);
     const baseline = copyDraft(this.baseline);
+    if (this.vacated) {
+      const cutover = this.cutover();
+      const fill = (paint: OwnerPaint, holes: OwnerPaint) => {
+        for (const [owner, days] of holes)
+          paint.set(
+            owner,
+            refill(
+              paint.get(owner) ?? new Map(),
+              days,
+              fresh.paint.get(owner) ?? new Map(),
+              cutover,
+            ),
+          );
+      };
+      fill(draft.paint, this.vacated.draft);
+      fill(baseline.paint, this.vacated.baseline);
+      this.vacated = undefined;
+    }
     if (draft.name === baseline.name) draft.name = baseline.name = fresh.name;
     if (draft.repeatsYearly === baseline.repeatsYearly)
       draft.repeatsYearly = baseline.repeatsYearly = fresh.repeatsYearly;
@@ -689,6 +710,7 @@ export class SpecialDayPainter extends LitElement {
     kept: OwnerPaint = new Map(),
   ) {
     this.stored = new Map(detail?.dates.map(({ date, holidayName }) => [date, holidayName]));
+    this.vacated = undefined;
     this.savableAtOpen = !detail && name !== "";
     const fresh = detail ? fromDetail(detail) : blank(dates, name);
     const draft = copyDraft(fresh);
@@ -707,10 +729,28 @@ export class SpecialDayPainter extends LitElement {
           since.set(owner, new Map(since.get(owner)).set(date, day));
     return since;
   }
-  /** A save naming a deleted period is refused, so its paint leaves the draft and the saved state. */
+  /** A save naming a deleted period is refused, so its paint leaves the draft and the saved state.
+   *  A deletion naming a replacement moves the saved blocks to it, so the next {@link merge} fills
+   *  a saved block's stretch from the stored day. */
   private dropDeletedPeriods(previous: Model) {
     const removed = removedPeriods(previous, this.model);
     if (!removed.size) return;
+    const holes = (paint: OwnerPaint, into: OwnerPaint = new Map()): OwnerPaint => {
+      for (const [owner, days] of paint)
+        for (const [date, blocks] of savedBlocks(
+          days,
+          removed,
+          this.baseline.paint.get(owner) ?? new Map(),
+        )) {
+          const held = new Map(into.get(owner));
+          into.set(owner, held.set(date, [...(held.get(date) ?? []), ...blocks]));
+        }
+      return into;
+    };
+    this.vacated = {
+      draft: holes(this.draft.paint, this.vacated?.draft),
+      baseline: holes(this.baseline.paint, this.vacated?.baseline),
+    };
     const strip = (paint: OwnerPaint): OwnerPaint =>
       new Map([...paint].map(([owner, days]) => [owner, withoutPeriods(days, removed)]));
     this.draft = { ...this.draft, paint: strip(this.draft.paint) };

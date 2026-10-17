@@ -12,7 +12,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { WEEK_DISPLAY_ORDER } from "../hours-types.js";
-import { rebaseDays, samePaint, withoutPeriods, type Paint } from "../paint-model.js";
+import {
+  rebaseDays,
+  refill,
+  samePaint,
+  savedBlocks,
+  withoutPeriods,
+  type Paint,
+} from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
@@ -307,14 +314,27 @@ export class SeasonPainter extends LitElement {
    *  week whose department or zone is gone or inactive has its edits dropped with a notice. */
   private refresh(previous: Model, confirmed?: Draft) {
     const fresh = seed(this.model, this.seasonId);
-    // A save naming a deleted period is refused, so its paint leaves every week held here.
+    // A save naming a deleted period is refused, so its paint leaves every week held here. A
+    // deletion naming a replacement moves the saved blocks to it, so a saved block's stretch takes
+    // what the stored week now holds there.
     const removed = removedPeriods(previous, this.model);
     if (removed.size) {
-      const strip = (weeks: Draft): Draft =>
-        new Map([...weeks].map(([key, week]) => [key, withoutPeriods(week, removed)]));
-      this.draft = strip(this.draft);
-      this.baseline = strip(this.baseline);
-      if (confirmed) confirmed = strip(confirmed);
+      const none: Week = new Map();
+      const strip = (weeks: Draft, saved: Draft): Draft =>
+        new Map(
+          [...weeks].map(([key, week]) => [
+            key,
+            refill(
+              withoutPeriods(week, removed),
+              savedBlocks(week, removed, saved.get(key) ?? none),
+              fresh.get(key) ?? none,
+              this.model.dayCutover,
+            ),
+          ]),
+        );
+      this.draft = strip(this.draft, this.baseline);
+      if (confirmed) confirmed = strip(confirmed, confirmed);
+      this.baseline = strip(this.baseline, this.baseline);
     }
     if (confirmed) {
       this.draft = new Map(this.draft);

@@ -678,3 +678,38 @@ describe("a period the live model no longer lists", () => {
     expect(writes).toEqual([]);
   });
 });
+
+describe("a period the live model no longer lists, moved to a replacement", () => {
+  it("leaves the replacement's saved block on a date the draft changed, and Save sends it beside the painted one", async () => {
+    const day = storedDay({
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("08:00", "10:00")] }],
+    });
+    const { painter, writes } = await mount({ days: { sd1: day } });
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_15, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([
+      lunch("08:00", "10:00"),
+      dinner("19:00", "22:00"),
+    ]);
+    day.paint = [{ departmentId: "d1", date: DEC_15, ranges: [dinner("08:00", "10:00")] }];
+    const next = painterModel();
+    const restaurant = next.departments[0]!;
+    restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+    painter.model = next;
+    await settle(painter);
+    expect(part(painter, "paint-p1")).toBeNull();
+    await expect
+      .poll(() => grid(painter).days.get(DEC_15))
+      .toEqual([dinner("08:00", "10:00"), dinner("19:00", "22:00")]);
+    expect(saveButton(painter).disabled).toBe(false);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect((writes[0]!.body as { paint: unknown }).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_15,
+        ranges: [dinner("08:00", "10:00"), dinner("19:00", "22:00")],
+      },
+    ]);
+  });
+});
