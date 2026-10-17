@@ -271,7 +271,9 @@ export class RotaView extends LitElement {
         )
           this.picked = undefined;
         const day = this.openDay;
-        if (day && !this.busy) {
+        // The menu reads its person from the week, so it cannot outlive them, even mid-fill.
+        if (day && !read.people.some((p) => p.personId === day.personId)) this.openDay = undefined;
+        else if (day && !this.busy) {
           const left = openSlots(read, day.personId, day.businessDay);
           if (
             read.version?.status === "published" ||

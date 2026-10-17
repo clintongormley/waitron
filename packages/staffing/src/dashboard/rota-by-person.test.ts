@@ -504,6 +504,102 @@ describe("filling the rota from Everyone", () => {
     expect(el.shadowRoot!.querySelector("rota-open-slots")).toBe(none);
     expect(none.businessDay).toBe("2026-12-02");
   });
+  it("closes the open-slots menu when its person leaves the rota on another screen, and keeps it when someone else leaves", async () => {
+    const live = new LiveData();
+    const gone = new Set<string>();
+    const { el, root } = await mount(
+      false,
+      "1280px",
+      (r) => {
+        r.people = r.people.filter((p) => !gone.has(p.personId));
+        r.shifts = r.shifts.filter((s) => !gone.has(s.personId));
+        return r;
+      },
+      live,
+    );
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    const found = await menu(el);
+    gone.add("ibra");
+    live.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(root.querySelector("[data-person=ibra]")).toBeNull());
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("rota-open-slots")).toBe(found);
+    gone.add("marc");
+    live.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(root.querySelector("[data-person=marc]")).toBeNull());
+    expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull();
+  });
+  it("closes the open-slots menu when its person leaves the rota while a fill from it is in flight", async () => {
+    const live = new LiveData();
+    const gone = new Set<string>();
+    const { el, root, request } = await mount(
+      false,
+      "1280px",
+      (r) => {
+        r.people = r.people.filter((p) => !gone.has(p.personId));
+        r.shifts = r.shifts.filter((s) => !gone.has(s.personId));
+        return r;
+      },
+      live,
+    );
+    const original = request.getMockImplementation()!;
+    let refuse!: (e: unknown) => void;
+    request.mockImplementation((async (path: string, method: string, body: unknown) => {
+      if (method === "POST" && path.endsWith("/rota/shifts"))
+        return new Promise((_, reject) => (refuse = reject));
+      return original(path, method, body);
+    }) as unknown as typeof original);
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    (await menu(el)).shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    gone.add("marc");
+    live.invalidate([{ type: "persons" }]);
+    await vi.waitFor(() => expect(root.querySelector("[data-person=marc]")).toBeNull());
+    expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull();
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=fill-error]")?.textContent).toContain(
+        "Could not fill the slot",
+      ),
+    );
+  });
+  it("a fill that settles while focus is on another control leaves focus there", async () => {
+    const { el, root, request } = await mount();
+    const original = request.getMockImplementation()!;
+    let accept!: (v: unknown) => void;
+    request.mockImplementation((async (path: string, method: string, body: unknown) => {
+      if (method === "POST" && path.endsWith("/rota/shifts"))
+        return new Promise((resolve) => (accept = resolve));
+      return original(path, method, body);
+    }) as unknown as typeof original);
+    const elsewhere = document.createElement("button");
+    elsewhere.textContent = "elsewhere";
+    frames[0]!.append(elsewhere);
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    (await menu(el)).shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    await vi.waitFor(() => expect(accept).toBeTypeOf("function"));
+    elsewhere.focus();
+    accept({ shiftId: "new" });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+    await vi.waitFor(() => expect(dayAdd(root, "marc", "2026-12-04")).toBeTruthy());
+    await el.updateComplete;
+    await new Promise(requestAnimationFrame);
+    expect(document.activeElement).toBe(elsewhere);
+    expect(root.activeElement).toBeNull();
+  });
+  it("a day picked before the previous day's menu has drawn shows only the newer day's menu", async () => {
+    const { el, root } = await mount();
+    const popup = el.shadowRoot!.querySelector("rota-popup")!;
+    const show = vi.spyOn(popup, "show");
+    const ana = dayAdd(root, "ana", "2026-12-03");
+    dayAdd(root, "marc", "2026-12-04").click();
+    await el.updateComplete;
+    // Marc's menu has been asked for but has not drawn yet: pick another day now.
+    ana.click();
+    const found = await menu(el);
+    expect([found.personId, found.businessDay]).toEqual(["ana", "2026-12-03"]);
+    expect(show.mock.calls).toEqual([[ana]]);
+  });
   it("clicking another day while a menu is open opens that day's menu", async () => {
     await useViewport(1280, 900);
     const { el, root } = await mount();
