@@ -16,17 +16,20 @@ import {
   type MonthNames,
 } from "./opening-hours-day.js";
 import type { CalendarDayOpen, MonthDepartment } from "./opening-hours-month.js";
+import type { ShowStation, StationShow } from "./station-show.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { scrollTargets, visibleTop } from "./flat-tree.js";
 import { POPOVER_MARGIN } from "./paint-grid-parts.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
+  daysAt,
   weekDates,
   weekDays,
   weekInRange,
   weekMonth,
   weekRows,
+  weekStationRows,
   type WeekRow,
 } from "./week-rows.js";
 
@@ -43,6 +46,14 @@ interface Drawn {
   days: Day[];
   chosen: string;
   names: MonthNames;
+}
+
+/** What the Week draws below its head: a day's rows, and whether they read as a station's orders. */
+interface Body {
+  days: Day[];
+  names: MonthNames;
+  rows: (day: Day) => WeekRow[];
+  orders: boolean;
 }
 
 const RULER_STEP = 120;
@@ -133,7 +144,8 @@ function placeTip(tip: HTMLElement, block: HTMLElement): void {
  *  blocks on one scale, the week's longest day; narrower than `PHONE_WIDTH`, the day `date` alone,
  *  each row's words written under its name. A day's name sends `calendar-day-open`; ‹ › send
  *  `week-change` (a week apart, or a day apart when narrow), the title's months and years
- *  `week-month-open` and `week-year-open`, and Show `week-department-change`. */
+ *  `week-month-open` and `week-year-open`, and Show `week-department-change` or
+ *  `week-station-change`. */
 @customElement("opening-hours-week")
 export class OpeningHoursWeekView extends LitElement {
   static override styles = [
@@ -154,6 +166,15 @@ export class OpeningHoursWeekView extends LitElement {
       }
       .head wt-combobox {
         min-width: 0;
+      }
+      .always-open,
+      .no-orders {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+      .no-orders {
+        margin-block-start: var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
       }
       .title-link {
         display: inline-block;
@@ -359,7 +380,8 @@ export class OpeningHoursWeekView extends LitElement {
         white-space: normal;
       }
       .card .row-name:not(.strong),
-      .card .row-name:not(.strong) + .words {
+      .card .row-name:not(.strong) + .words,
+      .card .words[data-no-orders] {
         color: var(--wt-color-text-muted);
       }
       .words {
@@ -376,6 +398,10 @@ export class OpeningHoursWeekView extends LitElement {
   /** The chosen department; "" draws every department. */
   @property() departmentId = "";
   @property({ attribute: false }) departments: readonly MonthDepartment[] = [];
+  /** The prep stations Show offers. */
+  @property({ attribute: false }) stations: readonly ShowStation[] = [];
+  /** The station Show shows, drawn in place of `model`'s departments; its rows read as orders. */
+  @property({ attribute: false }) station?: StationShow;
 
   /** Whether the Week's own width is below `PHONE_WIDTH`. */
   @state() narrow = false;
@@ -469,6 +495,7 @@ export class OpeningHoursWeekView extends LitElement {
       changed.has("model") ||
       changed.has("date") ||
       changed.has("departmentId") ||
+      changed.has("station") ||
       changed.has("narrow")
     )
       this.#hideTip();
@@ -591,7 +618,7 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${drawn ? this.#week(drawn) : nothing}
+      ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}
       <div
         popover="manual"
         class="tip"
@@ -635,7 +662,7 @@ export class OpeningHoursWeekView extends LitElement {
         )}
         ${this.#step(1, "next-day", "week.next_day", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
-      ${drawn ? this.#day(drawn) : nothing}
+      ${drawn ? this.#body(drawn, (body) => this.#day(body)) : nothing}
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>`;
   }
 
@@ -672,7 +699,38 @@ export class OpeningHoursWeekView extends LitElement {
     });
   }
 
-  #day({ days: [day], chosen, names }: Drawn) {
+  /** The department view of `drawn`, or the station's in its place: nothing while it loads, Always
+   *  open for the default station, else `drawn`'s days of its read. */
+  #body(drawn: Drawn, draw: (body: Body) => unknown) {
+    const station = this.station;
+    if (!station) {
+      const { days, chosen, names } = drawn;
+      return draw({ days, names, rows: (day) => weekRows(day, chosen, names), orders: false });
+    }
+    if (station.state === "always")
+      return html`<p class="always-open" data-test="always-open">
+        ${t("prep.always_open_default")}
+      </p>`;
+    if (station.state === "loading") return nothing;
+    const days = daysAt(
+      station.model,
+      drawn.days.map((day) => day.date),
+    );
+    // A read that lacks a shown date is one still on its way for that week: drawn as loading.
+    if (!days) return nothing;
+    const names = monthNames(station.departments);
+    return draw({ days, names, rows: (day) => weekStationRows(day, names), orders: true });
+  }
+
+  /** A station's day whose departments send nothing reads No orders once, in place of its rows. */
+  #noOrders(rows: readonly WeekRow[], orders: boolean) {
+    return orders && rows.every((row) => !row.blocks.length)
+      ? html`<p class="no-orders" data-test="no-orders">${t("month.no_orders")}</p>`
+      : undefined;
+  }
+
+  #day({ days: [day], names, rows: rowsOf, orders }: Body) {
+    const rows = rowsOf(day!);
     const lines = dayNameLines(day!);
     return html`${
         lines.length
@@ -686,7 +744,7 @@ export class OpeningHoursWeekView extends LitElement {
         data-test="day-card"
         @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
       >
-        ${weekRows(day!, chosen, names).map((row) => this.#phoneRow(row, day!, names))}
+        ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#phoneRow(row, day!, names, orders))}
       </div>`;
   }
 
@@ -727,11 +785,11 @@ export class OpeningHoursWeekView extends LitElement {
     window.removeEventListener("pointercancel", this.#swipeEnd);
   }
 
-  #phoneRow(row: WeekRow, day: Day, names: MonthNames) {
+  #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
     const span = day.endMinute;
     return html`<div class="row" data-row=${row.key}>
       <span class="row-name ${row.strong ? "strong" : ""}">${row.name}</span>
-      <span class="words">${row.words}</span>
+      <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
       <div class="track" aria-hidden="true">
         ${row.blocks.map(
           (block) =>
@@ -756,10 +814,13 @@ export class OpeningHoursWeekView extends LitElement {
       chosen,
       names,
       onDepartment: (departmentId) => this.#emit("week-department-change", { departmentId }),
+      stations: this.stations,
+      stationId: this.station?.id ?? "",
+      onStation: (stationId) => this.#emit("week-station-change", { stationId }),
     });
   }
 
-  #week({ days, chosen, names }: Drawn) {
+  #week({ days, names, rows, orders }: Body) {
     const longest = Math.max(...days.map((day) => day.endMinute));
     const labels = Array.from(
       { length: Math.floor(longest / RULER_STEP) + 1 },
@@ -777,10 +838,10 @@ export class OpeningHoursWeekView extends LitElement {
           )}
         </div>
       </div>
-      ${days.map((day) => this.#weekDay(day, chosen, names, longest))}`;
+      ${days.map((day) => this.#weekDay(day, rows(day), orders, names, longest))}`;
   }
 
-  #weekDay(day: Day, chosen: string, names: MonthNames, longest: number) {
+  #weekDay(day: Day, rows: WeekRow[], orders: boolean, names: MonthNames, longest: number) {
     return html`<section data-date=${day.date}>
       <h3>
         <button
@@ -798,7 +859,7 @@ export class OpeningHoursWeekView extends LitElement {
         </button>
         ${dayNameLines(day).map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
       </h3>
-      ${weekRows(day, chosen, names).map((row) => this.#row(row, day, names, longest))}
+      ${this.#noOrders(rows, orders) ?? rows.map((row) => this.#row(row, day, names, longest))}
     </section>`;
   }
 

@@ -8,6 +8,7 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { CalendarDayOpen } from "./opening-hours-month.js";
 import { dayTitleCandidateDates, type OpeningHoursWeekView } from "./opening-hours-week.js";
+import type { ShowStation, StationShow } from "./station-show.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(async () => {
@@ -1192,3 +1193,304 @@ describe("Opening hours week on a phone", () => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   });
 });
+
+const STATIONS: ShowStation[] = [
+  { id: "grill", name: "Grill" },
+  { id: "cold", name: "Cold kitchen" },
+];
+const SENDERS = DEPARTMENTS.map(({ id, name, periods }) => ({
+  id,
+  name,
+  zones: [],
+  periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
+}));
+/** The Grill's month: the Restaurant sends it orders until last orders at 15:30 for lunch, the
+ *  Bar all day; neither on 3 December. */
+function grill(): Extract<StationShow, { state: "ready" }> {
+  const model = monthModel();
+  return {
+    id: "grill",
+    state: "ready",
+    model: {
+      ...model,
+      days: model.days.map((day) => ({
+        ...day,
+        departments: day.departments.map((d) => ({
+          departmentId: d.departmentId,
+          zones: [],
+          ranges:
+            day.date === "2026-12-03"
+              ? []
+              : d.ranges.map((r) => (r.periodId === "lunch" ? { ...r, endsAt: "15:30" } : r)),
+        })),
+      })),
+    },
+    departments: SENDERS,
+  };
+}
+/** The Grill when no department sends it anything. */
+function unsent(): StationShow {
+  const station = grill();
+  return {
+    ...station,
+    model: {
+      ...station.model,
+      days: station.model.days.map((day) => ({ ...day, departments: [] })),
+    },
+    departments: [],
+  };
+}
+const show = (el: OpeningHoursWeekView) =>
+  root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=departmentId]")!;
+const choose = (el: OpeningHoursWeekView, value: string) =>
+  show(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+
+describe("Opening hours week, a station shown", () => {
+  it("Show lists stations in their own group, after the departments", async () => {
+    for (const [locale, departments, stations] of [
+      ["en", "Departments", "Prep stations"],
+      ["es", "Departamentos", "Estaciones de preparación"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount({ stations: STATIONS });
+      expect(show(el).options.map(({ value, label, group }) => ({ value, label, group }))).toEqual([
+        {
+          value: "all",
+          label: locale === "en" ? "All departments" : "Todos los departamentos",
+          group: undefined,
+        },
+        { value: "rest", label: "Restaurant", group: departments },
+        { value: "bar", label: "Bar", group: departments },
+        { value: "station:grill", label: "Grill", group: stations },
+        { value: "station:cold", label: "Cold kitchen", group: stations },
+      ]);
+      el.remove();
+    }
+  });
+
+  it("with no stations Show is as before", async () => {
+    const el = await mount({ departmentId: "bar" });
+    expect(show(el).options).toEqual([
+      { value: "all", label: "All departments" },
+      { value: "rest", label: "Restaurant" },
+      { value: "bar", label: "Bar" },
+    ]);
+    expect(show(el).value).toBe("bar");
+  });
+
+  it("choosing a station sends week-station-change", async () => {
+    const el = await mount({ stations: STATIONS, station: grill() });
+    expect(show(el).value).toBe("station:grill");
+    const stations = events<{ stationId: string }>(el, "week-station-change");
+    const departments = events<{ departmentId: string }>(el, "week-department-change");
+    choose(el, "station:grill");
+    choose(el, "station:cold");
+    expect(stations).toEqual([{ stationId: "cold" }]);
+    choose(el, "rest");
+    expect(departments).toEqual([{ departmentId: "rest" }]);
+    expect(show(el).value).toBe("station:grill");
+  });
+
+  it("a station draws a row per sending department, its day names still open the box", async () => {
+    const el = await mount({ stations: STATIONS, station: grill() });
+    expect(root(el).querySelectorAll("section")).toHaveLength(7);
+    const wednesday = section(el, "2026-12-02");
+    expect([...wednesday.querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([
+      "rest",
+      "bar",
+    ]);
+    expect(text(row(el, "2026-12-02", "rest").querySelector(".spoken"))).toBe(
+      "Restaurant: Breakfast 08:00–11:00 · Lunch 13:00–15:30 · Dinner 20:00–23:00",
+    );
+    expect(
+      [...track(el, "2026-12-02", "rest").querySelectorAll(".block")].map((b) => text(b)),
+    ).toEqual(["Breakfast 08:00–11:00", "Lunch 13:00–15:30", "Dinner 20:00–23:00"]);
+    expect(row(el, "2026-12-02", "terrace")).toBeNull();
+    expect(text(row(el, "2026-12-06", "rest").querySelector(".spoken"))).toBe(
+      "Restaurant: No orders",
+    );
+    expect(track(el, "2026-12-06", "rest").textContent!.trim()).toBe("");
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+    const name = root(el).querySelector<HTMLElement>(
+      '[data-test="day-name"][data-date="2026-12-02"]',
+    )!;
+    await userEvent.click(name);
+    expect(sent.map(({ date }) => date)).toEqual(["2026-12-02"]);
+  });
+
+  it("a day no department sends on reads No orders once", async () => {
+    for (const [locale, words] of [
+      ["en", "No orders"],
+      ["es", "Sin pedidos"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount({ stations: STATIONS, station: grill() });
+      const none = section(el, "2026-12-03");
+      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
+      expect(none.querySelectorAll(".row .track")).toHaveLength(0);
+      expect(section(el, "2026-12-02").querySelector('[data-test="no-orders"]')).toBeNull();
+      el.remove();
+    }
+    setLocale("en");
+    const el = await mount({ stations: STATIONS, station: unsent() });
+    const sections = [...root(el).querySelectorAll("section")];
+    expect(sections).toHaveLength(7);
+    for (const day of sections)
+      expect(
+        [...day.querySelectorAll('[data-test="no-orders"]')].map(text),
+        day.dataset.date,
+      ).toEqual(["No orders"]);
+  });
+
+  it("the default station reads Always open in place of the days, muted", async () => {
+    for (const [locale, words] of [
+      ["en", "Always open: this is the default station"],
+      ["es", "Siempre abierta: es la estación predeterminada"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount({ stations: STATIONS, station: { id: "grill", state: "always" } });
+      expect(root(el).querySelector("section")).toBeNull();
+      expect(root(el).querySelector(".ruler")).toBeNull();
+      const always = testId(el, "always-open")!;
+      expect(text(always)).toBe(words);
+      expect(getComputedStyle(always).color).toBe(
+        getComputedStyle(probeText(el, "--wt-color-text-muted")).color,
+      );
+      expect(show(el).value).toBe("station:grill");
+      el.remove();
+    }
+  });
+
+  it("loading draws only the head", async () => {
+    const el = await mount({ stations: STATIONS, station: { id: "grill", state: "loading" } });
+    expect(root(el).querySelector("section")).toBeNull();
+    expect(root(el).querySelector(".ruler")).toBeNull();
+    expect(testId(el, "always-open")).toBeNull();
+    expect(show(el).value).toBe("station:grill");
+  });
+
+  it("a station block's tip names its department", async () => {
+    const el = await mount({ stations: STATIONS, station: grill() });
+    const lunch = block(el, "2026-12-02", "rest", 2);
+    await userEvent.hover(lunch);
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Lunch 13:00–15:30");
+  });
+
+  it("a change of station hides a shown tip", async () => {
+    const el = await mount({ stations: STATIONS, station: grill() });
+    await userEvent.hover(block(el, "2026-12-02", "rest", 2));
+    expect(open(el)).toBe(true);
+    el.station = { ...grill(), id: "cold" };
+    await el.updateComplete;
+    expect(block(el, "2026-12-02", "rest", 2)).toBeTruthy();
+    expect(open(el)).toBe(false);
+  });
+
+  it("a station read lacking a shown date draws as loading does", async () => {
+    const station = grill();
+    const el = await mount({
+      stations: STATIONS,
+      station: {
+        ...station,
+        model: {
+          ...station.model,
+          days: station.model.days.filter((day) => day.date !== "2026-12-04"),
+        },
+      },
+    });
+    const loading = await mount({
+      stations: STATIONS,
+      station: { id: "grill", state: "loading" },
+    });
+    expect(root(el).querySelector("section")).toBeNull();
+    expect(root(el).querySelector(".ruler")).toBeNull();
+    expect(
+      [...root(el).children].map((child) => child.outerHTML.replace(/<!--[^>]*-->/g, "")),
+    ).toEqual(
+      [...root(loading).children].map((child) => child.outerHTML.replace(/<!--[^>]*-->/g, "")),
+    );
+  });
+
+  it("on a phone a station row writes its orders under its name", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 800);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const el = await mount({ date: "2026-12-02", stations: STATIONS, station: grill() });
+      const card = testId(el, "day-card")!;
+      const rows = [...card.querySelectorAll<HTMLElement>(".row")];
+      expect(rows.map((r) => r.dataset.row)).toEqual(["rest", "bar"]);
+      expect(rows.map((r) => text(r.querySelector(".words")))).toEqual([
+        "Breakfast 08:00–11:00 · Lunch 13:00–15:30 · Dinner 20:00–23:00",
+        "All day 10:00–02:00",
+      ]);
+      expect(show(el).value).toBe("station:grill");
+
+      el.date = "2026-12-06";
+      await el.updateComplete;
+      expect(text(card.querySelector('.row[data-row="rest"] .words'))).toBe("No orders");
+
+      el.date = "2026-12-03";
+      await el.updateComplete;
+      expect([...card.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([
+        "No orders",
+      ]);
+      expect(card.querySelectorAll(".row")).toHaveLength(0);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("on a phone a station row's No orders is muted, as the whole day's is, and its orders are not", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const el = await mount({ date: "2026-12-06", stations: STATIONS, station: grill() });
+      const card = testId(el, "day-card")!;
+      const words = (key: string) =>
+        card.querySelector<HTMLElement>(`.row[data-row="${key}"] .words`)!;
+      expect(text(words("rest"))).toBe("No orders");
+      expect(text(words("bar"))).toBe("All day 10:00–02:00");
+      const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
+      const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;
+      expect(muted).not.toBe(normal);
+      expect(getComputedStyle(words("rest")).color).toBe(muted);
+      expect(getComputedStyle(words("bar")).color).toBe(normal);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("on a phone a department closed for the day is not muted when no station is shown", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const el = await mount({ date: "2026-12-06", departmentId: "rest" });
+      const row = testId(el, "day-card")!.querySelector<HTMLElement>('.row[data-row="rest"]')!;
+      expect(row.querySelectorAll(".track .block")).toHaveLength(0);
+      const words = row.querySelector<HTMLElement>(".words")!;
+      expect(words.hasAttribute("data-no-orders")).toBe(false);
+      const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
+      const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;
+      expect(muted).not.toBe(normal);
+      expect(getComputedStyle(words).color).toBe(normal);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+});
+
+/** An element painted in `token`, beside `el`, to compare a text colour against. */
+function probeText(el: HTMLElement, token: string): HTMLElement {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  applyTokens(probe);
+  el.after(probe);
+  hosts.push(probe);
+  return probe;
+}

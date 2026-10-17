@@ -94,6 +94,7 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_joins",
   ],
   settings: ["service_settings"],
+  "prep-stations-list": ["kitchen_stations"],
   routing: [
     "kitchen_timing_defaults",
     "kitchen_station_timing",

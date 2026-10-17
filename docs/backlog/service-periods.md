@@ -230,18 +230,6 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
    the Year paints it blue. A stored colour is the same on every view. Landing deletes the open note
    "Season colours differ between Opening hours' Year and its month (and the Times tab)".
 
-## A722. A Week view in the Calendar
-
-**A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
-[on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
-
-6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
-   department that sends it dishes, from each period's start to its last orders — what A725 retires
-   with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,
-   "Named staffing guide bands").
-
-The Week's title and ruler scroll away with the days; pin them? (LOOK, Part 1)
-
 ## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
 
 **A723 (owner, 2026-10-15).** Mockups: [season painter](mockups/a718-a727-calendar-and-stations/06-season-painter.png),
@@ -338,7 +326,7 @@ Re-check when a new year's list is added.
   tab's year and Staffing's year are plain text, since neither has a Year view.
 
 - **The Week's address takes over `view/week` ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 1; plan default, sent to the owner as an FYI, 2026-10-17).** The Week is
-  `/manage/opening-hours/view/week[/department/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
+  `/manage/opening-hours/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
   the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
   painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
   names a season, department, zone or `?station=` still opens it.
@@ -359,6 +347,30 @@ Re-check when a new year's list is added.
   A `ResizeObserver` reads it, because the narrow Week draws different things and its ‹ › step a
   day. The phone's day title has no year link, following board 5; the Year is one press further,
   through the Month's year link.
+
+- **The Week's `week` pair holds the shown date, not a Monday ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 2; plan default, sent to the owner as an FYI, 2026-10-17).**
+  At desktop width the Week shows the Monday-to-Sunday week holding it, on a phone that day alone,
+  so ‹ › step a week or a day and resizing a window keeps the address. A missing, malformed or
+  out-of-range date shows the week (or day) holding the venue's today, and the address is left as
+  written, as a bad month is.
+
+- **Nothing is painted in the Week, and it has no long press ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 7; plan default, sent to the owner as an FYI, 2026-10-17).**
+  A day's name opens the day box, and making a special day is one press further, from there.
+
+- **"Open this week" is in the day box over the Year and the Month, for a viewer too, and not over the Week ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 8; plan default, sent to the owner as an FYI, 2026-10-17).**
+  It changes nothing, so a viewer gets it. It is the box's last button.
+
+- **A prep station in the Calendar's Show draws one row per department that sends it dishes, named by the department even when only one does ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 10; plan default, sent to the owner as an FYI, 2026-10-17).**
+  The Times tab names a lone row after the station, and keeps doing so. The day box still lists
+  every department's opening hours: it is about the day, and a station is a way of looking at the
+  dates. If the station list cannot be read, Show offers departments only, with no alert.
+
+- **A read-only Calendar offers no prep stations in Show ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
+  Stations go only to those who could already open the Times tab, which needs
+  `venue_service.manage`. A read-only Calendar reads no station list and no station times, and
+  ignores a `station` in its address. Whether a supervisor (`venue.view` without
+  `venue_service.manage`) gets a read-only station view is the owner's open question: backlog.md,
+  "Supervisors have no dashboard path to a prep station's times".
 
 - **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
   (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.

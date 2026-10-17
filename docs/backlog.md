@@ -1389,13 +1389,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
   ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **A722. The Calendar's Show lists prep stations, in the Week and the Month (owner, 2026-10-15).**
-  Choosing a station draws one row per department that sends it dishes. Left open by A722 Parts 1
-  (#1823) and 2 (#1826). Part 3 touches Show, so it also fixes this: at 390 px a department name
-  with no spaces widens the Month's Show picker and the page (a 60-letter name measured 487 px);
-  the phone Week's head gives its picker `min-width: 0` (#1826).
-  [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
   what it edits; Save closes; a zone's Closed paint is clipped to its department's hours; a visible
@@ -1506,6 +1499,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A live update that arrives during a special day's save that is then refused may never be
   taken in** (`save`, `special-day-painter.ts`), so a retry could send an old copy of a date; A637
   closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
+
+- **The Week's title and ruler scroll away with the days**; whether to pin them is open — left open
+  by A722 Part 1, #1823.
+
+- **A prep station is drawn by two paths in the Month.** The Times tab works the station's rows out
+  itself and hands them over with `stationMode`; the Calendar hands over a `StationShow`. The Month
+  and the Week each repeat the loading, "Always open" and ready cases, the "Always open" paragraph
+  is drawn in three places, and the screen and the Times tab each keep their own watch on a
+  station's times. One `StationShow` from both callers, one shared drawing of those cases and one
+  watch would leave `stationMode` only for what differs — left open by A722 Part 3's review.
 
 - **The painter cannot resize a block by dragging its edge**; painting over a block lengthens it
   and painting Closed shortens it — left open by A506-8, #1634.
@@ -1662,9 +1665,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   acknowledgement should remain per dish. [Detail](backlog/kitchen.md#whole-order-note-correction-volume).
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
-  moved to Prep stations' Times tab, and Prep stations is offered only to someone with
-  `venue_service.manage`; the stations service-times route still lets `venue.view` read them
-  (`routes.ts`). Owner to decide whether a supervisor gets a read-only view — left open by A506-12.
+  show in Prep stations' Times tab and in the Calendar's Show picker, and both are offered only to
+  someone with `venue_service.manage`: a read-only Calendar offers no stations. The stations
+  service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
+  supervisor gets a read-only view, which would now mean offering stations in a read-only
+  Calendar's Show — left open by A506-12.
 
 - **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
   it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,

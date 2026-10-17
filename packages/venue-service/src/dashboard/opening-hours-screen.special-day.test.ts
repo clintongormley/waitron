@@ -101,6 +101,7 @@ function request(recorded: Recorded): DashboardRequest {
         zonePaint: [],
       } satisfies SpecialDayDetail;
     }
+    if (path === "/management-api/stations") return [];
     const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
     if (year) return yearRead(Number(year[1]));
     const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);

@@ -4,7 +4,7 @@ import type { LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import { monthNames, openingHoursDay } from "./opening-hours-day.js";
-import { weekDates, weekDays, weekMonth, weekRows } from "./week-rows.js";
+import { weekDates, weekDays, weekMonth, weekRows, weekStationRows } from "./week-rows.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -207,6 +207,69 @@ describe("weekRows", () => {
       const terrace = rowsOn("2026-12-01", "rest")[1]!;
       expect(terrace.blocks.find((b) => b.kind === "closed")!.text).toBe("Cerrado 20:00–22:00");
       expect(rowsOn("2026-12-25", "")[0]!.empty).toBe("Cerrado todo el día");
+    } finally {
+      setLocale("en");
+    }
+  });
+});
+
+describe("weekStationRows", () => {
+  /** The Grill's 2 December: the Restaurant sends it Lunch until last orders, the Bar nothing. */
+  function grillDay() {
+    const day = monthModel().days.find((d) => d.date === "2026-12-02")!;
+    return {
+      ...day,
+      departments: [
+        {
+          departmentId: "rest",
+          zones: [],
+          ranges: [
+            { periodId: "breakfast", startsAt: "08:00", endsAt: "10:30" },
+            { periodId: "lunch", startsAt: "13:00", endsAt: "15:30" },
+          ],
+        },
+        { departmentId: "bar", zones: [], ranges: [] },
+      ],
+    };
+  }
+
+  it("draws a row per sending department, its blocks the orders it sends", () => {
+    const [rest, bar, ...more] = weekStationRows(grillDay(), names);
+    expect(more).toEqual([]);
+    expect(rest).toMatchObject({ key: "rest", name: "Restaurant", zone: false, strong: true });
+    expect(rest!.blocks.map((b) => [b.kind, b.periodId, b.text, b.label, b.faded])).toEqual([
+      ["open", "breakfast", "Breakfast 08:00–10:30", "Restaurant · Breakfast 08:00–10:30", false],
+      ["open", "lunch", "Lunch 13:00–15:30", "Restaurant · Lunch 13:00–15:30", false],
+    ]);
+    expect(rest!.blocks[1]).toMatchObject({ start: 420, end: 570 });
+    expect(rest!.empty).toBe("");
+    expect(rest!.words).toBe("Breakfast 08:00–10:30 · Lunch 13:00–15:30");
+    expect(bar).toMatchObject({
+      key: "bar",
+      name: "Bar",
+      blocks: [],
+      empty: "",
+      words: "No orders",
+    });
+  });
+
+  it("draws no rows when no department sends, and no zones ever", () => {
+    expect(weekStationRows({ ...grillDay(), departments: [] }, names)).toEqual([]);
+    const withZone = grillDay();
+    withZone.departments[0] = {
+      ...withZone.departments[0]!,
+      zones: [{ zoneId: "terrace", closed: [{ startsAt: "13:00", endsAt: "14:00" }] }],
+    } as never;
+    expect(weekStationRows(withZone, names).map((r) => r.key)).toEqual(["rest", "bar"]);
+  });
+
+  it("reads No orders on a date closed all day too, and in Spanish", () => {
+    const christmas = monthModel().days.find((d) => d.date === "2026-12-25")!;
+    const closed = { ...christmas, departments: [{ departmentId: "rest", zones: [], ranges: [] }] };
+    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "No orders" });
+    setLocale("es");
+    try {
+      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Sin pedidos");
     } finally {
       setLocale("en");
     }

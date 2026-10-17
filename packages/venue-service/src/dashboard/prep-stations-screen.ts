@@ -66,6 +66,7 @@ import "./station-table.js";
 import "./station-editor.js";
 import "./station-colour-picker.js";
 import "./station-times-tab.js";
+import { activeStationsInOrder } from "./station-show.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   refusalOf,
@@ -210,9 +211,7 @@ export class PrepStationsScreen extends LitElement {
   );
   /** The station the Times tab draws first: the Stations table's first active one. */
   #firstStation(): string | undefined {
-    return this.view?.stations
-      .filter((station) => station.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))[0]?.id;
+    return this.view ? activeStationsInOrder(this.view.stations)[0]?.id : undefined;
   }
   /** On Times, an address naming no active station is replaced by the one the tab draws. */
   #settleStation(): void {
@@ -669,10 +668,7 @@ export class PrepStationsScreen extends LitElement {
   #activeStationOrder() {
     return (
       this.stationOrder ??
-      [...(this.view?.stations ?? [])]
-        .filter((station) => station.active)
-        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
-        .map((station) => station.id)
+      activeStationsInOrder(this.view?.stations ?? []).map((station) => station.id)
     );
   }
   #stationTable() {

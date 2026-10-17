@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import type { PrepStation } from "./routing-client.js";
+import { activeStationsInOrder } from "./station-show.js";
 import { t } from "./strings.js";
 
 @customElement("prep-station-table")
@@ -109,9 +110,7 @@ export class StationTable extends LitElement {
     ];
   }
   override render() {
-    const rows = this.stations
-      .filter((station) => station.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const rows = activeStationsInOrder(this.stations);
     return html`<wt-data-table
       aria-label=${t("prep.title")}
       data-test="station-table"

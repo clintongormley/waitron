@@ -29,6 +29,7 @@ import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import { showPicker } from "./calendar-show.js";
+import type { ShowStation, StationShow } from "./station-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -73,7 +74,8 @@ interface Row {
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
  *  per department (or one department and its zones), from the server's month read alone. A date sends
  *  `calendar-day-open`, and an editor's opened run `calendar-days-open`, except in station mode,
- *  where dates are plain; ‹ › send `month-change` and the picker `month-department-change`. */
+ *  where dates are plain; ‹ › send `month-change` and the picker `month-department-change` or
+ *  `month-station-change`. */
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
@@ -93,6 +95,16 @@ export class OpeningHoursMonthView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
+      }
+      .head wt-combobox {
+        min-width: 0;
+      }
+      .always-open {
+        margin: 0;
+      }
+      .always-open,
+      .no-orders {
+        color: var(--wt-color-text-muted);
       }
       .sub {
         display: flex;
@@ -241,7 +253,8 @@ export class OpeningHoursMonthView extends LitElement {
       .name.holiday {
         color: var(--wt-color-palette-red);
       }
-      td[data-closed] .name {
+      td[data-closed] .name,
+      td[data-closed] .no-orders {
         color: inherit;
       }
       .track {
@@ -309,6 +322,10 @@ export class OpeningHoursMonthView extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   /** One prep station's month: its rows the station, or one per department when several feed it. */
   @property({ type: Boolean }) stationMode = false;
+  /** The prep stations Show offers. */
+  @property({ attribute: false }) stations: readonly ShowStation[] = [];
+  /** The station Show shows, drawn in place of `model`'s departments; its rows read as orders. */
+  @property({ attribute: false }) station?: StationShow;
   /** Draws the title's year as a link sending `month-year-open`, where a Year view exists. */
   @property({ type: Boolean }) linkYear = false;
   #dayPicker = new DayPicker(this, {
@@ -371,13 +388,17 @@ export class OpeningHoursMonthView extends LitElement {
       });
   }
 
+  get #orders(): boolean {
+    return this.stationMode || this.station !== undefined;
+  }
+
   #noOrders(rows: readonly Row[]): boolean {
-    return this.stationMode && rows.every((row) => !row.ranges.length);
+    return this.#orders && rows.every((row) => !row.ranges.length);
   }
 
   #title(period: string, row: Row, rows: readonly Row[], range: ClosedRange): string {
     const name =
-      this.stationMode && rows.length > 1
+      this.station || (this.stationMode && rows.length > 1)
         ? format("month.period_department", { period, department: row.name })
         : period;
     return format("month.range", { name, start: range.startsAt, end: range.endsAt });
@@ -387,7 +408,7 @@ export class OpeningHoursMonthView extends LitElement {
     if (day.closedAllDay) return [];
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
-      if (this.stationMode && !row.ranges.length) return `${row.name}: ${t("month.no_orders")}`;
+      if (this.#orders && !row.ranges.length) return `${row.name}: ${t("month.no_orders")}`;
       if (!row.ranges.length) return format("month.department_closed", { name: row.name });
       const parts = row.ranges.map((range) =>
         format("month.range", {
@@ -460,35 +481,39 @@ export class OpeningHoursMonthView extends LitElement {
         ${isToday ? html`<span class="today" data-test="today">${t("hours.today")}</span>` : nothing}
       </span>
       ${nameLines}
-      ${(none ? rows.slice(0, 1) : rows).map((row) =>
+      ${
         none
           ? html`<span class="no-orders" ?data-all-day=${day.closedAllDay} data-test="no-orders"
               >${t("month.no_orders")}</span
             >`
-          : html`<span class="track" data-row=${row.key} aria-hidden="true">
-              ${row.ranges.map((range) => {
-                const period = names.period(range.periodId);
-                return html`<span
-                  class="segment"
-                  data-colour=${period.colour ?? nothing}
-                  title=${this.#title(period.name, row, rows, range)}
-                  style=${place(range)}
-                ></span>`;
-              })}
-              ${row.gaps.map(
-                (gap) =>
-                  html`<span
-                    class="gap"
-                    data-test="gap"
-                    title=${format("month.zone_closed", {
-                      name: row.name,
-                      start: gap.startsAt,
-                      end: gap.endsAt,
-                    })}
-                    style=${place(gap)}
-                  ></span>`,
-              )}
-            </span>`,
+          : nothing
+      }
+      ${(none ? [] : rows).map(
+        (row) =>
+          html`<span class="track" data-row=${row.key} aria-hidden="true">
+            ${row.ranges.map((range) => {
+              const period = names.period(range.periodId);
+              return html`<span
+                class="segment"
+                data-colour=${period.colour ?? nothing}
+                title=${this.#title(period.name, row, rows, range)}
+                style=${place(range)}
+              ></span>`;
+            })}
+            ${row.gaps.map(
+              (gap) =>
+                html`<span
+                  class="gap"
+                  data-test="gap"
+                  title=${format("month.zone_closed", {
+                    name: row.name,
+                    start: gap.startsAt,
+                    end: gap.endsAt,
+                  })}
+                  style=${place(gap)}
+                ></span>`,
+            )}
+          </span>`,
       )}
       ${
         this.stationMode || !unseen
@@ -574,7 +599,18 @@ export class OpeningHoursMonthView extends LitElement {
         ${model ? this.#tools(model, chosen, names) : nothing}
       </div>
       ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
-      ${model ? this.#grid(model, chosen, names) : nothing}`;
+      ${model ? this.#body(model, chosen, names) : nothing}`;
+  }
+
+  #body(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
+    const station = this.station;
+    if (!station) return this.#grid(model, chosen, names);
+    if (station.state === "loading") return nothing;
+    if (station.state === "always")
+      return html`<p class="always-open" data-test="always-open">
+        ${t("prep.always_open_default")}
+      </p>`;
+    return this.#grid(station.model, "", monthNames(station.departments));
   }
 
   #tools(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
@@ -584,6 +620,9 @@ export class OpeningHoursMonthView extends LitElement {
       chosen,
       names,
       onDepartment: (departmentId) => this.#emit("month-department-change", { departmentId }),
+      stations: this.stations,
+      stationId: this.station?.id ?? "",
+      onStation: (stationId) => this.#emit("month-station-change", { stationId }),
     });
   }
 

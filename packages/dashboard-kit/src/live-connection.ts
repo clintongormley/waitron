@@ -53,8 +53,8 @@ export class LiveConnection {
     queueMicrotask(() => {
       this.#scheduled = false;
       if (!this.#active) return;
-      const interests = this.data.interests;
-      const key = JSON.stringify(interests);
+      const interests = this.data.interestKeys;
+      const key = `[${interests.join(",")}]`;
       if (key === this.#key) return;
       this.#close();
       if (interests.length === 0) return;

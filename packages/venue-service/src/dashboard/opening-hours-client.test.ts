@@ -558,6 +558,29 @@ it.each(["holiday_geographies", "tenants"])(
   },
 );
 
+it("watches the station list passively", async () => {
+  const live = new LiveData();
+  const before = [{ id: "bar", name: "Bar" }];
+  const after = [...before, { id: "grill", name: "Grill" }];
+  const request = vi.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+  const api = new OpeningHoursApi(request as DashboardRequest, live);
+  const received: unknown[] = [];
+  const stop = api.watchStations((stations) => received.push(stations), vi.fn(), vi.fn());
+  try {
+    await vi.waitFor(() => expect(received).toEqual([before]));
+    expect(request.mock.calls).toEqual([
+      ["/management-api/stations", "GET", undefined, { passive: true }],
+    ]);
+    expect(QUERY_DEPENDENCIES["prep-stations-list"]).toEqual(["kitchen_stations"]);
+    expect(live.interests).toEqual([{ type: "kitchen_stations" }]);
+    live.invalidate([{ type: "kitchen_stations" }]);
+    await vi.waitFor(() => expect(received).toEqual([before, after]));
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
 it("sends a season's edited department and zone weeks in one request with the clock revision", async () => {
   const request = vi.fn(async () => undefined);
   const api = new OpeningHoursApi(request as DashboardRequest);

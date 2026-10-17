@@ -7,6 +7,7 @@ import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.
 import { flatParent } from "./flat-tree.js";
 import type { OpeningHoursWeekView } from "./opening-hours-week.js";
 import "./opening-hours-week.js";
+import type { StationShow } from "./station-show.js";
 
 afterEach(() => {
   cleanup();
@@ -35,6 +36,28 @@ function sliverModel() {
   );
   return model;
 }
+
+/** The Grill's month: both departments send it orders, neither on 3 December. */
+function grill(): StationShow {
+  const model = monthModel();
+  return {
+    id: "grill",
+    state: "ready",
+    model: {
+      ...model,
+      days: model.days.map((day) => ({
+        ...day,
+        departments: day.departments.map((d) => ({
+          departmentId: d.departmentId,
+          zones: [],
+          ranges: day.date === "2026-12-03" ? [] : d.ranges,
+        })),
+      })),
+    },
+    departments: DEPARTMENTS.map(({ id, name, periods }) => ({ id, name, zones: [], periods })),
+  };
+}
+const STATIONS = [{ id: "grill", name: "Grill" }];
 
 function contrastRatio(a: string, b: string): number {
   const luminance = (rgb: string) => {
@@ -88,6 +111,14 @@ const states: Record<
     shown: ['[data-test="block-tip"]:popover-open'],
   },
   Spanish: { props: { date: "2026-12-08", departmentId: "rest" }, shown: [".name.holiday"] },
+  "a station's Week": {
+    props: { date: "2026-12-02", stations: STATIONS, station: grill() },
+    shown: ['[data-test="no-orders"]', ".block", ".track:not(:has(.block))", "wt-combobox"],
+  },
+  "a station always open": {
+    props: { date: "2026-12-02", stations: STATIONS, station: { id: "grill", state: "always" } },
+    shown: ['[data-test="always-open"]', "wt-combobox"],
+  },
 };
 
 describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)", (theme) => {
@@ -156,6 +187,14 @@ const phoneStates: Record<
     props: { date: "2026-12-01" },
     shown: ['[data-test="day-name"]', '[data-test="week-month"]'],
     spanish: true,
+  },
+  "a station's Week on a phone": {
+    props: { date: "2026-12-06", stations: STATIONS, station: grill() },
+    shown: ['[data-test="day-card"] .words', '[data-test="day-card"] .block', "wt-combobox"],
+  },
+  "a station's day with no orders on a phone": {
+    props: { date: "2026-12-03", stations: STATIONS, station: grill() },
+    shown: ['[data-test="day-card"] [data-test="no-orders"]'],
   },
 };
 

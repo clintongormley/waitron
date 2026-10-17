@@ -82,6 +82,61 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     await expectNoA11yViolations(host);
   });
 
+  test.each(["en", "es"] as const)("a station's Month (%s)", async (locale) => {
+    setLocale(locale);
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    const model = monthModel();
+    Object.assign(el, {
+      model,
+      departments: DEPARTMENTS,
+      stations: [{ id: "grill", name: "Grill" }],
+      station: {
+        id: "grill",
+        state: "ready",
+        model: {
+          ...model,
+          days: model.days.map((day) => ({
+            ...day,
+            departments:
+              day.date === "2026-12-15"
+                ? day.departments.map((d) => ({ ...d, ranges: [], zones: [] }))
+                : day.departments.map((d) => ({ ...d, zones: [] })),
+          })),
+        },
+        departments: DEPARTMENTS.map(({ id, name, periods }) => ({ id, name, zones: [], periods })),
+      },
+    });
+    host.append(el);
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    for (const shown of [
+      '[data-test="no-orders"]',
+      ".track:not(:has(.segment))",
+      ".segment",
+      "button.day",
+      "[data-closed]",
+      "wt-combobox",
+    ])
+      expect(root.querySelector(shown), shown).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a station always open", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("opening-hours-month");
+    Object.assign(el, {
+      model: monthModel(),
+      departments: DEPARTMENTS,
+      stations: [{ id: "grill", name: "Grill" }],
+      station: { id: "grill", state: "always" },
+    });
+    host.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-test="always-open"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test("a picked run", async () => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");
