@@ -46,6 +46,9 @@ const SWIPE_PX = 48;
 /** What, beside its key (which names its day and area), the slot picker and its fill read from a
  *  slot. */
 const sameSlotFields = ["staffRoleId", "startsAt", "endsAt", "start", "end"] as const;
+/** Handed to the grids and the publication dialog until the warnings load: one array, so a
+ *  redraw meanwhile does not hand them a changed property. */
+const NO_BREACHES: readonly RosterBreach[] = Object.freeze([]);
 
 /** The venue's business day now. The read gives only its own week's changeovers, so a day just
  *  outside the week is taken to change over as its nearest day in the week does. */
@@ -869,7 +872,7 @@ export class RotaView extends LitElement {
   };
   #grid(read: RotaWeek, show: Show) {
     const editable = this.canWrite && read.version?.status !== "published" && !this.busy;
-    const breaches = this.warnings?.breaches ?? [];
+    const breaches = this.warnings?.breaches ?? NO_BREACHES;
     if (this.narrow)
       return html`<rota-day
         .week=${read}
@@ -1053,7 +1056,7 @@ export class RotaView extends LitElement {
       <rota-publish-dialog
         .open=${this.publishing}
         .week=${read}
-        .breaches=${this.warnings?.breaches ?? []}
+        .breaches=${this.warnings?.breaches ?? NO_BREACHES}
         .busy=${this.busy}
         .error=${this.publishError}
         @back=${() => {

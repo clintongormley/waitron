@@ -523,3 +523,17 @@ it.each([
     pending.resolve({ shiftId: "new" });
   },
 );
+it("hands the grid and the publication dialog the same empty warnings on every draw until the warnings load", async () => {
+  const warnings = deferred<Warnings>();
+  const { el } = await mount({ warnings: () => warnings.promise });
+  type Shown = Element & { breaches: RosterBreach[] };
+  const grid = () => el.shadowRoot!.querySelector<Shown>("rota-by-area")!;
+  const dialog = () => el.shadowRoot!.querySelector<Shown>("rota-publish-dialog")!;
+  const before = [grid().breaches, dialog().breaches];
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(grid().breaches).toBe(before[0]);
+  expect(dialog().breaches).toBe(before[1]);
+  expect(before[0]).toEqual([]);
+  warnings.resolve(quiet());
+});
