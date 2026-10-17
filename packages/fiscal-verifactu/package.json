@@ -76,6 +76,7 @@
     "./setup": "./src/setup/first-fiscal-screen.ts",
     "./recovery-document": "./src/recovery-document.ts",
     "./recovery-pdf": "./src/recovery-pdf.ts",
+    "./recovery-pdf-node": "./src/recovery-pdf-node.ts",
     "./recovery-reader": "./src/recovery-reader.ts",
     "./recovery-delivery": "./src/recovery-delivery.ts"
   }
