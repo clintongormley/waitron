@@ -1,3 +1,5 @@
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -28,8 +30,14 @@ useVenueDb({
   },
 });
 
-function post(path: string, body: unknown, cookie = venue.cookie) {
-  return send(venue.app, cookie, "POST", path, body);
+async function post(path: string, body: unknown, cookie = venue.cookie) {
+  return send(
+    venue.app,
+    cookie,
+    "POST",
+    path,
+    await observedTableActionBody(venue.db, path, await observedMoveBillBody(venue.db, path, body)),
+  );
 }
 
 function revisionOf(partyId: string): number {

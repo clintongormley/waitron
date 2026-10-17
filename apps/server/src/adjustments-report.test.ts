@@ -1,3 +1,6 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -83,7 +86,20 @@ async function member(name: string): Promise<Member> {
 }
 
 async function call(who: Member, method: string, path: string, body?: unknown) {
-  const answer = await send(venue.app, who.cookie, method, path, body);
+  body = await observedDraftCommandBody(venue.db, method, path, body);
+  const adjustment = /^\/api\/working-orders\/([^/]+)\/adjustments$/.exec(path);
+  if (adjustment !== null && body !== null && typeof body === "object")
+    body = {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, adjustment[1]!)),
+      ...body,
+    };
+  const answer = await send(
+    venue.app,
+    who.cookie,
+    method,
+    path,
+    await observedPaymentBody(venue.db, path, body),
+  );
   expect(answer.status, `${method} ${path}: ${JSON.stringify(answer.json)}`).toBe(200);
   return answer.json as Record<string, unknown> & { id: string; revision: number };
 }
@@ -106,12 +122,14 @@ async function draft(who: Member, partyId: string, dishes: string[]): Promise<Dr
   const [party] = await inTx(venue, (tx) =>
     tx.select({ billId: parties.mainBillId }).from(parties).where(eq(parties.id, partyId)),
   );
-  return (await call(who, "PUT", `/api/parties/${partyId}/drafts`, {
-    billId: party!.billId,
-    draftId: null,
-    revision: 0,
-    lines: dishes.map((name) => ({ menuItemId: venue.item(name), quantity: "1" })),
-  })) as unknown as Draft;
+  return (
+    await call(who, "PUT", `/api/parties/${partyId}/drafts`, {
+      billId: party!.billId,
+      draftId: null,
+      revision: 0,
+      lines: dishes.map((name) => ({ menuItemId: venue.item(name), quantity: "1" })),
+    })
+  ).draft as Draft;
 }
 
 async function submit(who: Member, partyId: string, submitted: Draft): Promise<void> {
@@ -229,9 +247,12 @@ describe("whose sales an adjustment rate is measured against (plan D21, spec §7
     await submit(alex, partyId, await draft(alex, partyId, ["Burger", "Steak"]));
     // Sam drafts the €30.00 bottle of wine; Mia takes the draft over and sends it (plan D5).
     const sams = await draft(sam, partyId, ["Bottle"]);
-    const mias = (await call(mia, "POST", `/api/parties/${partyId}/drafts/${sams.id}/take-over`, {
-      revision: sams.revision,
-    })) as unknown as Draft;
+    const mias = (
+      await call(mia, "POST", `/api/parties/${partyId}/drafts/${sams.id}/take-over`, {
+        revision: sams.revision,
+        submissionId: randomUUID(),
+      })
+    ).draft as Draft;
     await submit(mia, partyId, mias);
     await adjust(alex, billId, "Burger", "comp");
     const invoice = await payInFull(jo, billId, "55.00");

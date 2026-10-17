@@ -1,3 +1,4 @@
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -27,7 +28,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { workingLineContexts } from "@waitron/venue-service";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { type Draft } from "./order-drafts.js";
+import { type BillDraftSnapshot, type Draft } from "./order-drafts.js";
 import {
   inTx,
   provisionBillVenue,
@@ -51,8 +52,14 @@ useVenueDb({
     venue = await provisionBillVenue(db);
   },
 });
-function call(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown) {
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await observedDraftCommandBody(venue.db, method, path, body),
+  );
 }
 async function command(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
@@ -306,7 +313,9 @@ describe("recalled modifier edits", () => {
         });
         expect(answer.status, JSON.stringify(answer.json)).toBe(200);
         expect(
-          (answer.json as unknown as Draft).lines.map((line) => line.source?.netAmount),
+          (answer.json as unknown as BillDraftSnapshot).draft!.lines.map(
+            (line) => line.source?.netAmount,
+          ),
         ).toEqual(["32.50", "42.00", ...(fresh ? [undefined] : [])]);
         expect(
           (await family(p))
@@ -444,7 +453,7 @@ describe("recalled modifier edits", () => {
       ],
     });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect((answer.json as unknown as Draft).lines[0]).toMatchObject({
+    expect((answer.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
       quantity: "3.000",
       source: { netAmount: "48.75" },
     });
@@ -471,7 +480,7 @@ describe("recalled modifier edits", () => {
     const before = await frozen(p);
     const answer = await save(p, { extras: [] });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect((answer.json as unknown as Draft).lines[0]).toMatchObject({
+    expect((answer.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
       source: { netAmount: "27.00", extras: [] },
     });
     const after = await frozen(p);
@@ -516,7 +525,7 @@ describe("recalled modifier edits", () => {
       options: [{ listId: p.options.id, labelId: p.options.labels[1]!.id }],
     });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect((answer.json as unknown as Draft).lines[0]).toMatchObject({
+    expect((answer.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
       source: {
         netAmount: "28.50",
         line: {
@@ -573,7 +582,7 @@ describe("recalled modifier edits", () => {
       ];
       const answer = await save(p, { extras: picks });
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-      expect((answer.json as unknown as Draft).lines[0]).toMatchObject({
+      expect((answer.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
         source: {
           netAmount: "32.50",
           extras: [
@@ -602,10 +611,14 @@ describe("recalled modifier edits", () => {
       expect(
         after.contexts.find((row) => row.workingOrderLineId === after.lines[2]!.id),
       ).toMatchObject({ menuItemId: p.menuItemId });
-      const again = await save(p, { extras: picks }, answer.json as unknown as Draft);
+      const again = await save(
+        p,
+        { extras: picks },
+        (answer.json as unknown as BillDraftSnapshot).draft!,
+      );
       expect(again.status).toBe(200);
       expect(await frozen(p)).toEqual(after);
-      const draft = again.json as unknown as Draft;
+      const draft = (again.json as unknown as BillDraftSnapshot).draft!;
       const request = {
         ...(await command(p.partyId)),
         draftRevision: draft.revision,

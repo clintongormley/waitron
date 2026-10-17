@@ -1,3 +1,4 @@
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -109,7 +110,11 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
       ? {}
       : {
           body: JSON.stringify(
-            await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+            await observedTableActionBody(
+              v.db,
+              path,
+              await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+            ),
           ),
         }),
   });

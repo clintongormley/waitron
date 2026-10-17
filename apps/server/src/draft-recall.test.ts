@@ -1,3 +1,5 @@
+import { createOpenOrder } from "./working-order.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -23,7 +25,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { kitchenNotices, serviceSettings, workingLineContexts } from "@waitron/venue-service";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
-import type { Draft } from "./order-drafts.js";
+import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
 import { createCourse } from "./kitchen.js";
 import { readReleaseReminders } from "./order-groups.js";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
@@ -56,7 +58,12 @@ async function call(method: string, path: string, body?: unknown) {
     venue.cookie,
     method,
     path,
-    await observedGroupSubmitBody(venue.db, path, body),
+    await observedDraftCommandBody(
+      venue.db,
+      method,
+      path,
+      await observedGroupSubmitBody(venue.db, path, body),
+    ),
   );
 }
 async function revision(partyId: string) {
@@ -151,7 +158,7 @@ describe("party Recall to draft", () => {
           lines: [input],
         });
         expect(saved.status).toBe(200);
-        expect(saved.json).toMatchObject({
+        expect((saved.json as unknown as BillDraftSnapshot).draft).toMatchObject({
           id: draft.id,
           revision: draft.revision + 1,
           lines: [
@@ -183,7 +190,10 @@ describe("party Recall to draft", () => {
         expect(after.revision).toBe(before.revision + 1);
         const loaded = await call("GET", `/api/parties/${p.partyId}/drafts`);
         expect(loaded.status).toBe(200);
-        expect(loaded.json).toEqual({ drafts: [saved.json], billEdits: expect.any(Array) });
+        expect(loaded.json).toEqual({
+          drafts: [(saved.json as unknown as BillDraftSnapshot).draft],
+          billEdits: expect.any(Array),
+        });
       } finally {
         read.mockRestore();
       }
@@ -209,13 +219,15 @@ describe("party Recall to draft", () => {
       lines: [{ ...draft.lines[0]!, note: null, courseId: null, makeAt: null }],
     });
     expect(saved.status).toBe(200);
-    expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+    expect((saved.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
       courseId: null,
       makeAt: null,
       joinGroupId: p.groupId,
       source: { line: { id: p.line.id, courseId: null, unitPriceGross: "18.00" } },
     });
-    expect((saved.json as unknown as Draft).lines[0]).not.toHaveProperty("course");
+    expect((saved.json as unknown as BillDraftSnapshot).draft!.lines[0]).not.toHaveProperty(
+      "course",
+    );
     const [stored] = await venue.db
       .select()
       .from(workingOrderLines)
@@ -251,7 +263,7 @@ describe("party Recall to draft", () => {
         lines: [{ ...draft.lines[0]!, note: "Retain recorded choices" }],
       });
       expect(saved.status).toBe(200);
-      expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+      expect((saved.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
         note: "Retain recorded choices",
         courseId: course.id,
         makeAt: stationId,
@@ -384,7 +396,7 @@ describe("party Recall to draft", () => {
         lines: [{ ...draft.lines[0]!, quantity: "3" }],
       });
       expect(saved.status).toBe(200);
-      expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+      expect((saved.json as unknown as BillDraftSnapshot).draft!.lines[0]).toMatchObject({
         quantity: "3.000",
         source: { netAmount: "40.50", line: { id: p.line.id, unitPriceGross: "13.50" } },
       });
@@ -550,7 +562,7 @@ describe("party Recall to draft", () => {
         lines: draft.lines,
       });
       expect(saved.status).toBe(200);
-      expect((saved.json as unknown as Draft).lines).toEqual(draft.lines);
+      expect((saved.json as unknown as BillDraftSnapshot).draft!.lines).toEqual(draft.lines);
       expect(read).not.toHaveBeenCalled();
     } finally {
       read.mockRestore();
@@ -989,10 +1001,21 @@ describe("party Recall to draft", () => {
 
   it("appends to the own bill draft while preserving another person's draft and its revision", async () => {
     const p = await setup("hold");
+    const otherBillId = randomUUID();
+    await inTx(venue, (tx) =>
+      createOpenOrder(tx, venue.cfg, otherBillId, [], p.tableLabel, {
+        partyId: p.partyId,
+        existingService: true,
+        copyServiceContextFrom: p.tabId,
+      }),
+    );
     for (const ownerId of [venue.adminId, venue.operatorId])
-      await venue.db
-        .insert(orderDrafts)
-        .values({ partyId: p.partyId, billId: p.tabId, ownerId, revision: 7 });
+      await venue.db.insert(orderDrafts).values({
+        partyId: p.partyId,
+        billId: ownerId === venue.adminId ? otherBillId : p.tabId,
+        ownerId,
+        revision: 7,
+      });
     const before = await venue.db
       .select()
       .from(orderDrafts)

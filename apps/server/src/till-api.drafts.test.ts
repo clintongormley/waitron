@@ -1,3 +1,6 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
+import { createOpenOrder } from "./working-order.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -77,14 +80,31 @@ async function seated(): Promise<Seated> {
 }
 
 /** Ana, the venue's staff session. */
-function ana(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function ana(method: string, path: string, body?: unknown) {
+  return send(venue.app, venue.cookie, method, path, await draftBody(method, path, body));
 }
 
-function admin(method: string, path: string, body?: unknown) {
-  return send(venue.app, adminCookie, method, path, body);
+async function admin(method: string, path: string, body?: unknown) {
+  return send(venue.app, adminCookie, method, path, await draftBody(method, path, body));
 }
 
+async function draftBody(method: string, path: string, body: unknown) {
+  if (
+    path.endsWith("/take-over") &&
+    body !== null &&
+    typeof body === "object" &&
+    !Array.isArray(body)
+  )
+    body = { submissionId: randomUUID(), ...body };
+  return observedDraftCommandBody(venue.db, method, path, body);
+}
+async function anotherBill(partyId: string): Promise<string> {
+  const billId = randomUUID();
+  await inTx(venue, (tx) =>
+    createOpenOrder(tx, venue.cfg, billId, [], "", { partyId, existingService: true }),
+  );
+  return billId;
+}
 const dish = (name: string, quantity = "1") => ({ menuItemId: venue.offerFor(name), quantity });
 
 /** A new draft of the caller's on the party, holding the lines. */
@@ -92,15 +112,16 @@ async function newDraft(
   caller: typeof ana,
   partyId: string,
   lines: ReturnType<typeof dish>[],
+  billId?: string,
 ): Promise<DraftAnswer> {
   const saved = await caller("PUT", `/api/parties/${partyId}/drafts`, {
-    billId: await mainBillOf(partyId),
+    billId: billId ?? (await mainBillOf(partyId)),
     draftId: null,
     revision: 0,
     lines,
   });
   expect(saved.status).toBe(200);
-  return saved.json as unknown as DraftAnswer;
+  return saved.json.draft as unknown as DraftAnswer;
 }
 
 async function revisionOf(partyId: string): Promise<number> {
@@ -223,15 +244,16 @@ describe("GET /api/parties/:id/drafts", () => {
       lines: [dish("Pulpo")],
     });
     expect(saved.status).toBe(200);
-    const second = saved.json as unknown as DraftAnswer;
+    const second = saved.json.draft as unknown as DraftAnswer;
     await newDraft(admin, foreign.partyId, [dish("Caña")]);
-    await inTx(venue, (tx) =>
-      tx.insert(billEditStates).values([
+    await inTx(venue, async (tx) => {
+      for (const row of [
         { billId: secondId, editorId: venue.adminId, editorVersion: 8 },
         { billId: party.tabId, editorId: venue.operatorId, editorVersion: 3 },
         { billId: foreign.tabId, editorId: venue.adminId, editorVersion: 12 },
-      ]),
-    );
+      ])
+        await tx.update(billEditStates).set(row).where(eq(billEditStates.billId, row.billId));
+    });
     const before = await snapshot();
     const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
     expect(read.status).toBe(200);
@@ -305,7 +327,12 @@ describe("GET /api/parties/:id/drafts", () => {
   it("answers every open draft on the party, each person's, with the owner's name", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Caña", "2")]);
-    const admins = await newDraft(admin, party.partyId, [dish("Pulpo")]);
+    const admins = await newDraft(
+      admin,
+      party.partyId,
+      [dish("Pulpo")],
+      await anotherBill(party.partyId),
+    );
 
     const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
     const upper = await ana("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`);
@@ -340,7 +367,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       lines: [dish("Caña")],
     });
     expect(first.status).toBe(200);
-    expect(first.json).toMatchObject({ partyId: party.partyId, billId: party.tabId });
+    expect(first.json.draft).toMatchObject({ partyId: party.partyId, billId: party.tabId });
     const foreign = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: other.tabId,
       draftId: null,
@@ -350,7 +377,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(foreign.status).toBe(409);
     expect(foreign.json).toEqual(refusal("bill.other_party", { workingOrderId: other.tabId }));
     const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
-    expect(read.json).toEqual({ drafts: [first.json], billEdits: expect.any(Array) });
+    expect(read.json).toEqual({ drafts: [first.json.draft], billEdits: expect.any(Array) });
   });
 
   describe.each(["joinGroupId", "afterGroupId"] as const)("stored %s target", (field) => {
@@ -417,7 +444,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       lines: places.map((place) => ({ ...dish("Caña"), ...place })),
     });
     expect(saved.status).toBe(200);
-    const draft = saved.json as unknown as DraftAnswer;
+    const draft = saved.json.draft as unknown as DraftAnswer;
     expect(draft.lines).toMatchObject(places);
     expect(draft.lines).toHaveLength(4);
     const again = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
@@ -429,17 +456,17 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(again.status).toBe(200);
     const reread = await ana("GET", `/api/parties/${party.partyId}/drafts`);
     expect(reread.status).toBe(200);
-    expect(reread.json).toEqual({ drafts: [again.json], billEdits: expect.any(Array) });
-    expect((again.json as unknown as DraftAnswer).lines).toMatchObject(places);
+    expect(reread.json).toEqual({ drafts: [again.json.draft], billEdits: expect.any(Array) });
+    expect((again.json.draft as unknown as DraftAnswer).lines).toMatchObject(places);
     const taken = await admin(
       "POST",
       `/api/parties/${party.partyId}/drafts/${draft.id}/take-over`,
       {
-        revision: (again.json as unknown as DraftAnswer).revision,
+        revision: (again.json.draft as unknown as DraftAnswer).revision,
       },
     );
     expect(taken.status).toBe(200);
-    expect((taken.json as unknown as DraftAnswer).lines).toMatchObject(places);
+    expect((taken.json.draft as unknown as DraftAnswer).lines).toMatchObject(places);
   });
 
   it.each([
@@ -481,7 +508,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       lines: [{ ...dish("Caña"), makeAt: bar!.id }, dish("Caña")],
     });
     expect(saved.status).toBe(200);
-    const answer = saved.json as { id: string; lines: { makeAt: string | null }[] };
+    const answer = saved.json.draft as { id: string; lines: { makeAt: string | null }[] };
     expect(answer.lines.map((line) => line.makeAt)).toEqual([bar!.id, null]);
     const stored = await inTx(venue, (tx) =>
       tx
@@ -510,7 +537,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
     });
     expect(first.status).toBe(200);
-    const draft = first.json as unknown as DraftAnswer;
+    const draft = first.json.draft as unknown as DraftAnswer;
     await inTx(venue, (tx) =>
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, bar!.id)),
     );
@@ -521,8 +548,8 @@ describe("PUT /api/parties/:id/drafts", () => {
       lines: [{ ...dish("Caña"), quantity: "2", makeAt: bar!.id }],
     });
     expect(second.status).toBe(200);
-    expect(second.json).toMatchObject({ lines: [{ quantity: "2.000", makeAt: bar!.id }] });
-    const updated = second.json as unknown as DraftAnswer;
+    expect(second.json.draft).toMatchObject({ lines: [{ quantity: "2.000", makeAt: bar!.id }] });
+    const updated = second.json.draft as unknown as DraftAnswer;
     const newChoice = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await mainBillOf(party.partyId),
       draftId: draft.id,
@@ -551,7 +578,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
 
     expect(saved.status).toBe(200);
-    expect(saved.json).toMatchObject({
+    expect(saved.json.draft).toMatchObject({
       partyId: party.partyId,
       ownerId: venue.operatorId,
       revision: 0,
@@ -564,6 +591,8 @@ describe("PUT /api/parties/:id/drafts", () => {
     const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
     const before = await snapshot();
     const taken = refusal("draft.taken_over", {
+      billId: party.tabId,
+      edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
       draftId: anas.id,
       ownerId: venue.operatorId,
       ownerName: "Ana",
@@ -700,7 +729,7 @@ describe("a draft's chosen station at submission", () => {
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
     });
     expect(chosen.status).toBe(200);
-    const draft = chosen.json as unknown as DraftAnswer;
+    const draft = chosen.json.draft as unknown as DraftAnswer;
     const sent = await ana(
       "POST",
       `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
@@ -756,7 +785,7 @@ describe("a draft's chosen station at submission", () => {
 });
 
 describe("POST /api/parties/:id/drafts/:did/take-over", () => {
-  it("carries a chosen station when a taken draft is discarded into the owner's draft", async () => {
+  it("transfers a chosen station in place while retaining the taker's other bill draft", async () => {
     const party = await seated();
     const [bar] = await inTx(venue, (tx) =>
       tx
@@ -767,7 +796,12 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
         })
         .returning({ id: kitchenStations.id }),
     );
-    const own = await newDraft(ana, party.partyId, [dish("Tarta")]);
+    const own = await newDraft(
+      ana,
+      party.partyId,
+      [dish("Tarta")],
+      await anotherBill(party.partyId),
+    );
     const other = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await mainBillOf(party.partyId),
       draftId: null,
@@ -775,23 +809,24 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       lines: [{ ...dish("Caña"), makeAt: bar!.id }],
     });
     expect(other.status).toBe(200);
-    const otherDraft = other.json as unknown as DraftAnswer;
+    const otherDraft = other.json.draft as unknown as DraftAnswer;
     const taken = await ana(
       "POST",
       `/api/parties/${party.partyId}/drafts/${otherDraft.id}/take-over`,
       { revision: otherDraft.revision },
     );
     expect(taken.status).toBe(200);
-    expect(taken.json).toMatchObject({
-      id: own.id,
-      lines: [
-        { menuItemId: venue.offerFor("Tarta"), makeAt: null },
-        { menuItemId: venue.offerFor("Caña"), makeAt: bar!.id },
-      ],
+    expect(taken.json.draft).toMatchObject({
+      id: otherDraft.id,
+      billId: otherDraft.billId,
+      ownerId: venue.operatorId,
+      lines: [{ id: otherDraft.lines[0]!.id, menuItemId: venue.offerFor("Caña"), makeAt: bar!.id }],
     });
+    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    expect((read.json.drafts as DraftAnswer[]).find((d) => d.id === own.id)).toEqual(own);
   });
 
-  it("makes the session's person the owner, and refuses 409 draft.out_of_date for a stale revision and draft.already_submitted for a sent draft", async () => {
+  it("makes the session's person the owner, and refuses 409 draft.out_of_date for a stale revision and current released facts for a sent draft", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);
 
@@ -800,7 +835,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
     });
 
     expect(taken.status).toBe(200);
-    const admins = taken.json as unknown as DraftAnswer;
+    const admins = taken.json.draft as unknown as DraftAnswer;
     expect(admins).toMatchObject({
       id: anas.id,
       ownerId: venue.adminId,
@@ -812,7 +847,12 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
     });
     expect(stale.status).toBe(409);
     expect(stale.json).toEqual(
-      refusal("draft.out_of_date", { draftId: anas.id, revision: admins.revision }),
+      refusal("draft.out_of_date", {
+        billId: party.tabId,
+        edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+        draftId: anas.id,
+        revision: admins.revision,
+      }),
     );
     expect(await snapshot()).toEqual(before);
 
@@ -827,7 +867,14 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       revision: admins.revision + 1,
     });
     expect(late.status).toBe(409);
-    expect(late.json).toEqual(refusal("draft.already_submitted", { draftId: anas.id }));
+    expect(late.json).toEqual(
+      refusal("draft.out_of_date", {
+        billId: party.tabId,
+        draftId: null,
+        revision: null,
+        edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+      }),
+    );
     expect(await snapshot()).toEqual(afterSending);
   });
 });

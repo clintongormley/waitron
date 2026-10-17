@@ -1,3 +1,6 @@
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -96,7 +99,15 @@ function cashContribution(billId: string, amount: string) {
   });
 }
 
-function post(path: string, body: unknown, cookie = venue.cookie) {
+async function post(path: string, body: unknown, cookie = venue.cookie) {
+  body = await observedTableActionBody(
+    venue.db,
+    path,
+    await observedMoveBillBody(venue.db, path, body),
+  );
+  const place = /^\/api\/working-orders\/([^/]+)\/place$/.exec(path);
+  if (place !== null && body !== null && typeof body === "object")
+    body = { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, place[1]!)), ...body };
   return send(venue.app, cookie, "POST", path, body);
 }
 
@@ -382,13 +393,17 @@ describe("money on a moved bill", () => {
     const first = pay(billId, body);
     await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
 
-    const moved = await send(venue.app, venue.cookie2, "POST", `/api/bills/${billId}/move`, {
-      to: { tableId: luis.tableId },
-      bills: "merge",
-      expectedPartyRevision: ana.revision + 1,
-      otherPartyId: luis.partyId,
-      expectedOtherPartyRevision: luis.revision,
-    });
+    const moved = await post(
+      `/api/bills/${billId}/move`,
+      {
+        to: { tableId: luis.tableId },
+        bills: "merge",
+        expectedPartyRevision: ana.revision + 1,
+        otherPartyId: luis.partyId,
+        expectedOtherPartyRevision: luis.revision,
+      },
+      venue.cookie2,
+    );
     release();
     const answered = await first;
     const retry = await pay(billId, body);

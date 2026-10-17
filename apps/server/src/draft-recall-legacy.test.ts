@@ -36,6 +36,12 @@ useVenueDb({
 });
 
 async function call(method: string, path: string, body?: unknown) {
+  const order = /^\/api\/working-orders\/([^/]+)/.exec(path);
+  if (method !== "GET" && order !== null)
+    body = {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, order[1]!)),
+      ...(body as object | undefined),
+    };
   return send(
     venue.app,
     venue.cookie,
@@ -157,19 +163,16 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
         const before = await frozen();
         const answer = await edits[operation](p);
         expect(answer.json).toMatchObject({
-          code:
-            operation === "group move" && ownerId !== venue.operatorId
-              ? "draft.taken_over"
-              : "draft.out_of_date",
+          code: ownerId !== venue.operatorId ? "draft.taken_over" : "draft.out_of_date",
           params:
-            operation === "group move" && ownerId !== venue.operatorId
+            ownerId !== venue.operatorId
               ? {
                   billId: p.tabId,
                   draftId: p.draft!.id,
                   ownerId,
                   ownerName: edit.editorName,
                   edit,
-                  conflicts: [edit],
+                  ...(operation === "group move" ? { conflicts: [edit] } : {}),
                 }
               : { billId: p.tabId, draftId: p.draft!.id, revision: edit.draftRevision, edit },
         });
@@ -227,7 +230,13 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
   it("does not resend a recalled family through an unqualified legacy send", async () => {
     const p = await setup(true, "fire");
     const before = await frozen();
-    expect((await call("POST", `/api/working-orders/${p.tabId}/lines/send`, {})).status).toBe(200);
+    const edit = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
+    const answer = await call("POST", `/api/working-orders/${p.tabId}/lines/send`, {});
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "draft.out_of_date",
+      params: { billId: p.tabId, draftId: p.draft!.id, revision: edit.draftRevision, edit },
+    });
     expect(await frozen()).toEqual(before);
   });
 
@@ -245,7 +254,16 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
       lineIds: [p.line.id],
       stationId: item!.stationId,
     });
-    expect(answer.json).toMatchObject({ code: "ticket.not_sent" });
+    const edit = await inTx(venue, (tx) => readBillEditState(tx, p.tabId));
+    expect(answer.json).toMatchObject({
+      code: "draft.out_of_date",
+      params: {
+        billId: p.tabId,
+        draftId: p.draft!.id,
+        revision: edit.draftRevision,
+        edit,
+      },
+    });
     expect(await frozen()).toEqual(unchanged);
     expect(unchanged.sources).toEqual(before.sources);
   });

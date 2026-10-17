@@ -1,3 +1,5 @@
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -80,7 +82,15 @@ async function post(path: string, body: unknown): Promise<Response> {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify(
-      await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+      await observedTableActionBody(
+        v.db,
+        path,
+        await observedMoveBillBody(
+          v.db,
+          path,
+          await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+        ),
+      ),
     ),
   });
 }

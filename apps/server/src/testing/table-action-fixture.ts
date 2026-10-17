@@ -1,4 +1,4 @@
-import type { Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { holderOf } from "../parties.js";
@@ -121,4 +121,38 @@ export async function splitTable(
     },
     attendance,
   );
+}
+
+export async function observedTableActionBody(
+  db: Database,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  const match = /^\/api\/parties\/([^/]+)\/(join|move|split-table)$/.exec(path);
+  if (
+    match === null ||
+    body === null ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.hasOwn(body, "expectedEdits")
+  )
+    return body;
+  const ask = body as Record<string, unknown>;
+  return withTransaction(db, async (tx) => {
+    if (match[2] === "split-table")
+      return {
+        expectedEdits:
+          typeof ask.billId === "string" ? [await readBillEditState(tx, ask.billId)] : [],
+        ...ask,
+      };
+    const tableId = match[2] === "join" ? ask.tableId : ask.toTableId;
+    const other = typeof tableId === "string" ? await holderOf(tx, tableId.toLowerCase()) : null;
+    return {
+      expectedEdits: await partyBillEditsForTest(
+        tx,
+        other === null ? [match[1]!.toLowerCase()] : [match[1]!.toLowerCase(), other],
+      ),
+      ...ask,
+    };
+  });
 }
