@@ -1130,4 +1130,76 @@ describe("A768 the order screen shows at once", () => {
     expect(vi.mocked(history.pushState)).not.toHaveBeenCalled();
     expect(orderReplaces()).toEqual([]);
   });
+
+  it("Back while loading returns to the floor and the late answers do not bring the order back", async () => {
+    const offers = deferred<ZoneOfferCatalogue>();
+    const { el } = await mountApp({ listZoneOffers: vi.fn(() => offers.promise) });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(loadingLine(el)).not.toBeNull();
+    await back(el);
+    expect(tableOrder(el)).toBeNull();
+    offers.resolve(catalogue("v1"));
+    await flush(el, 6);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(api.getTabLines).not.toHaveBeenCalled();
+    expect(api.listDrafts).not.toHaveBeenCalled();
+    expect(opening(el)).toBe(false);
+  });
+
+  it("leaving the loading order tab for another tab abandons the open", async () => {
+    const offers = deferred<ZoneOfferCatalogue>();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
+      listZoneOffers: vi.fn(() => offers.promise),
+    });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.loading).toBe(true);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    offers.resolve(catalogue("v1"));
+    await flush(el, 6);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(api.getTabLines).not.toHaveBeenCalled();
+    expect(opening(el)).toBe(false);
+  });
+
+  it("Back during seating keeps the carried lines", async () => {
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    const seat = deferred<void>();
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn(async () => {
+        await seat.promise;
+        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+    });
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(api.seatTable).toHaveBeenCalledTimes(1);
+    await back(el);
+    expect(tableOrder(el)).toBeNull();
+    seat.resolve();
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    await reopen(el, "t9");
+    await flush(el, 6);
+    expect(
+      tableOrder(el)!.draftStore?.lines.map((line) => `${line.product.name} ×${line.quantity}`),
+    ).toEqual(["Beer ×1"]);
+  });
 });

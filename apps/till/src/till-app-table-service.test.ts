@@ -536,6 +536,7 @@ describe("till-app table ordering: the table's menus", () => {
     await flush(el);
 
     emit(floor(el)!, "open-table", { tableId: tableA.id, seated: true });
+    await flush(el);
     emit(floor(el)!, "open-table", { tableId: tableB.id, seated: true });
     await flush(el);
     rejectA({ code: "service_zone.not_found" });

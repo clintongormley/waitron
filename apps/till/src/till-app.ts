@@ -8410,12 +8410,13 @@ export class TillApp extends LitElement {
     key = tab;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
+    const wasLoadingOrder = this.tableOpening && this.#orderScreenShown();
     this.#setActiveTab(key, replace, fromHistory);
     if (key === "counter") void this.#loadStations();
     if (fromHistory) this.#restoreDestination();
     else if (this.drill !== undefined) this.#popDrill();
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
-    if (leftOrder) this.#orderVisit++;
+    if (leftOrder || (wasLoadingOrder && !this.#orderScreenShown())) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
     const flushed = leftOrder ? this.#flushDraft() : Promise.resolve();
@@ -8580,7 +8581,8 @@ export class TillApp extends LitElement {
       ? { note: unassigned.kitchenNote, lines: unassigned.lines.slice() }
       : undefined;
     const offerRequest = ++this.#tableOfferRequest;
-    this.#orderVisit++;
+    const visit = ++this.#orderVisit;
+    const abandoned = () => left() || this.#orderVisit !== visit;
     this.#moveStationOpening = null;
     this.#makeAtOpening = null;
     this.movingStation = null;
@@ -8598,13 +8600,13 @@ export class TillApp extends LitElement {
       )
         this.#releaseDraft(leaving);
       else await this.#flushDraft();
-      if (left() || session !== this.#operatorSession) return;
+      if (abandoned() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
         seated ? undefined : (guestCount ?? null),
         offerRequest,
         withTableIds,
-        left,
+        abandoned,
         carried,
         showAtOnce,
       );
@@ -8745,9 +8747,9 @@ export class TillApp extends LitElement {
                 : await this.api.seatAtTables(tableId, guestCount, withTableIds);
           const { tabId, partyId, revision } = seated;
           // A table opened after this one has made its own table the active one, so this answer
-          // would put this table's order beside that table.
-          if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest)
-            return;
+          // would put this table's order beside that table. Leaving does not stop it: the party
+          // now exists, and the carried lines live only here.
+          if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           this.activeTableId = tableId;
           this.activeTabId = tabId;
           this.orderParty = {
