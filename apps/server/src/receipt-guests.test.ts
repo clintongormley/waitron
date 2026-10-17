@@ -26,6 +26,7 @@ import {
   readPrintedGuests,
   readReceiptGuests,
   recordReceiptGuests,
+  type RecordedSale,
 } from "./receipt-guests.js";
 import {
   OPERATOR,
@@ -57,7 +58,7 @@ useVenueDb({
   },
 });
 
-/** Pays the bill in cash and answers the guests its receipt prints. */
+/** Pays the bill in cash and answers the default guests (`readReceiptGuests`) read just after. */
 async function guestsOnPaying(billId: string, amount: string): Promise<number | undefined> {
   await pay(v, billId, amount);
   return inTx(v, async (tx) => {
@@ -86,7 +87,7 @@ async function joinOther(
   await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, tableId, options));
 }
 
-describe("the guests a receipt prints", () => {
+describe("the default guests (readReceiptGuests)", () => {
   it("prints a party's count on its one bill", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Invitados 1"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
@@ -230,8 +231,8 @@ async function saleOf(billId: string): Promise<string> {
 
 /**
  * A sale of one dish (a Burger at 12,00 € unless another is named) paid in cash on the bill,
- * recorded straight through `recordSale` so that no guests row is written beside it, as every till
- * payment now writes one.
+ * recorded straight through `recordSale` so that no guests row is written beside it, as the till's
+ * payment paths write one for a simplified sale.
  */
 async function saleWithNoRow(
   billId: string,
@@ -272,17 +273,19 @@ async function saleWithNoRow(
 }
 
 /** The sale, with no guests row, of a party of 4 that paid one Burger at 12,00 € on its one bill. */
-async function paidPartyOfFour(label: string): Promise<{ partyId: string; saleId: string }> {
+async function paidPartyOfFour(
+  label: string,
+): Promise<{ partyId: string; tabId: string; saleId: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label), 4);
   await orderForParty(v, partyId, ["Burger"], tabId);
-  return { partyId, saleId: await saleWithNoRow(tabId) };
+  return { partyId, tabId, saleId: await saleWithNoRow(tabId) };
 }
 
 /**
  * A party of 4's one bill issued as a full invoice. No till route files one, so the bill is saved
  * as F1 and a bill payment covering it is inserted by hand and completed.
  */
-async function fullInvoiceOfFour(label: string): Promise<string> {
+async function fullInvoiceOfFour(label: string): Promise<{ billId: string; saleId: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label), 4);
   await orderForParty(v, partyId, ["Burger"], tabId);
   await inTx(v, async (tx) => {
@@ -322,7 +325,12 @@ async function fullInvoiceOfFour(label: string): Promise<string> {
     );
     expect(invoice?.invoiceType).toBe("F1");
   });
-  return saleOf(tabId);
+  return { billId: tabId, saleId: await saleOf(tabId) };
+}
+
+/** A sale `recordSale` filed with no counterparty, as {@link saleWithNoRow} files one. */
+function simplifiedSale(saleId: string, workingOrderId: string): RecordedSale {
+  return { saleId, workingOrderId, counterparty: null };
 }
 
 async function storedRows(saleId: string) {
@@ -362,20 +370,20 @@ describe("a payment request's guests", () => {
 
 describe("the guests row written beside a recorded sale", () => {
   it("writes the count the request chose", async () => {
-    const { saleId } = await paidPartyOfFour("Fila 1");
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, 5));
+    const { tabId, saleId } = await paidPartyOfFour("Fila 1");
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), 5));
     expect(await storedRows(saleId)).toEqual([{ guests: 5 }]);
   });
 
   it("writes no line when the request chose none", async () => {
-    const { saleId } = await paidPartyOfFour("Fila 2");
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, null));
+    const { tabId, saleId } = await paidPartyOfFour("Fila 2");
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), null));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
   it("writes the party's count when the request sent none", async () => {
-    const { saleId } = await paidPartyOfFour("Fila 3");
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
+    const { tabId, saleId } = await paidPartyOfFour("Fila 3");
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: 4 }]);
   });
 
@@ -383,7 +391,7 @@ describe("the guests row written beside a recorded sale", () => {
     const { partyId, tabId } = await seat(v, await v.table("Fila 1000"), 1000);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const saleId = await saleWithNoRow(tabId);
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
@@ -392,14 +400,14 @@ describe("the guests row written beside a recorded sale", () => {
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const saleId = await saleWithNoRow(second, { name: "Vino", price: "30.00", vatRate: "21.00" });
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, second), undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
   it("writes no line by default for a counter sale", async () => {
     const orderId = await counterOrder(v, "Burger");
     const saleId = await saleWithNoRow(orderId);
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
+    await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, orderId), undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
@@ -407,15 +415,18 @@ describe("the guests row written beside a recorded sale", () => {
     const { partyId, tabId } = await seat(v, await v.table("Fila 1001"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const saleId = await saleWithNoRow(tabId);
-    await expect(inTx(v, (tx) => recordReceiptGuests(tx, saleId, 1000))).rejects.toThrow(
-      /CHECK constraint failed/,
-    );
+    await expect(
+      inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), 1000)),
+    ).rejects.toThrow(/CHECK constraint failed/);
     expect(await storedRows(saleId)).toEqual([]);
   });
 
   it("writes nothing for a full invoice", async () => {
-    const saleId = await fullInvoiceOfFour("Fila 6");
-    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, 5));
+    const { billId, saleId } = await fullInvoiceOfFour("Fila 6");
+    const counterparty = { taxId: "B12345674", legalName: "Client SL", countryCode: "ES" };
+    await inTx(v, (tx) =>
+      recordReceiptGuests(tx, { saleId, workingOrderId: billId, counterparty }, 5),
+    );
     expect(await storedRows(saleId)).toEqual([]);
   });
 });
@@ -456,7 +467,7 @@ describe("the guests a paper receipt of a sale prints", () => {
 
   // A probe of the read: no product path writes a row for a full invoice.
   it("prints a full invoice's party count even beside a row", async () => {
-    const saleId = await fullInvoiceOfFour("Papel 6");
+    const { saleId } = await fullInvoiceOfFour("Papel 6");
     await storeRow(saleId, 5);
     expect(await printed(saleId)).toBe(4);
   });

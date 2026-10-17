@@ -90,7 +90,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
-import { recordReceiptGuests, type GuestsChoice } from "./receipt-guests.js";
+import { recordSaleReceiptFacts, type GuestsChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
   personId: string;
@@ -969,9 +969,12 @@ async function fileImmediateSale(
             ],
     },
   });
-  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
-  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
-  await recordReceiptGuests(tx, saleId, guests);
+  await recordSaleReceiptFacts(
+    tx,
+    cfg,
+    { saleId, workingOrderId, counterparty: selected.sale.counterparty },
+    guests,
+  );
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
@@ -1566,9 +1569,12 @@ async function finalizeCapture(
           ],
         },
       });
-      const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
-      await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
-      await recordReceiptGuests(tx, saleId, req.guests);
+      await recordSaleReceiptFacts(
+        tx,
+        cfg,
+        { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
+        req.guests,
+      );
 
       // The provider already recorded the payment row; this only points its `sale_id` at the sale.
       await associatePaymentWithSale(tx, {
@@ -1727,9 +1733,12 @@ async function finalizeRecovery(
         tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
       },
     });
-    const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
-    await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
-    await recordReceiptGuests(tx, saleId, req.guests);
+    await recordSaleReceiptFacts(
+      tx,
+      cfg,
+      { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
+      req.guests,
+    );
 
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,

@@ -1,21 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-const CREATED = /CREATE TABLE (?:IF NOT EXISTS )?[`"]?(\w+)/gi;
+import { tablesCreatedBy } from "@waitron/sync-enrolment";
 
 function created(folder: string, tags: readonly string[]): Set<string> {
-  return new Set(
-    tags.flatMap((tag) =>
-      [...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(CREATED)].map(
-        (match) => match[1]!,
-      ),
-    ),
-  );
+  return tablesCreatedBy(tags.map((tag) => readFileSync(join(folder, `${tag}.sql`), "utf8")));
 }
 
 /**
  * Today's append-only list for a database built from `kept` alone: it drops only the tables the
- * left-out migrations create, so a table this parse misses stays listed and its trigger fails loudly.
+ * left-out migrations, applied alone, leave in place, so a table this parse misses stays listed and its trigger fails loudly.
  */
 export function predecessorAppendOnly(
   tables: readonly string[] | undefined,

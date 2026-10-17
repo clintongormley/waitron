@@ -546,6 +546,15 @@ describe("/api/pay keeps the guests its receipt prints", () => {
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
   });
 
+  it("stores no line for null on a party's bill", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyOfFourBill(v);
+    const pay = await payByReader(v, { lines: [], guests: null }, { id: billId });
+    expect(pay.status).toBe(200);
+    expect((pay.body as { outcome: string }).outcome).toBe("captured");
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+  });
+
   it("stores nothing and records no sale when the card is declined", async () => {
     const v = await venue(suite.db);
     const pay = await payByReader(v, { guests: 5, simulationOutcome: "declined" });

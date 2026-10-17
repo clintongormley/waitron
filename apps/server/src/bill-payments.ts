@@ -59,7 +59,7 @@ import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { recordReceiptGuests, type GuestsChoice } from "./receipt-guests.js";
+import { recordSaleReceiptFacts, type GuestsChoice } from "./receipt-guests.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -717,9 +717,12 @@ async function issueWhenFullyPaid(
     operatorId,
     settlement: { kind: "deferred" },
   });
-  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
-  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
-  await recordReceiptGuests(tx, saleId, options.guests);
+  await recordSaleReceiptFacts(
+    tx,
+    cfg,
+    { saleId, workingOrderId, counterparty: selected.sale.counterparty },
+    options.guests,
+  );
   await settleSale(tx, { saleId, tenders: tendersOfBill });
 
   const provided = await findPaymentsByBillPayments(
@@ -1022,9 +1025,9 @@ export async function findSubmission(
  * the one the operator saw (design §3.6), and the payment and its lines are inserted in `state`. A new
  * payment answers the bill's total too, which the insert leaves as it was.
  *
- * Keyed by `submissionId` within the bill (design §5.1): the same request again answers the first
- * row and writes nothing; the id with another request, or naming one of the bill's refunds, is
- * `submission.id_reused`.
+ * Keyed by `submissionId` within the bill (design §5.1): the same payment again, whatever its
+ * `guests`, answers the first row and writes nothing; the id with another payment, or naming one of
+ * the bill's refunds, is `submission.id_reused`.
  */
 async function beginBillPayment(
   tx: Transaction,
