@@ -1217,7 +1217,8 @@ One way to fix it (A775, 2026-10-16): move the trigger to the WAI-ARIA Authoring
 select-only combobox, `role="combobox"` on the trigger, which can carry `aria-required`. The APG
 marks the button-and-list pattern `wt-combobox` follows as deprecated ("Collapsible Dropdown
 Listbox": _"This pattern has been deprecated … The select-only combobox should be used as an
-alternative"_). A775 did not make the move. Tried in a throwaway worktree on 2026-10-16,
+alternative"_, <https://www.w3.org/WAI/ARIA/apg/patterns/listbox/examples/listbox-collapsible/>,
+read 2026-10-17). A775 did not make the move. Tried in a throwaway worktree on 2026-10-16,
 `role="combobox"` on the trigger alone gave 44 `aria-required-attr` failures in
 `wt-combobox.a11y.test.ts`, all on the trigger (the role requires `aria-controls`, which the
 trigger does not carry); the move also changes the role every test and screen reader meets,

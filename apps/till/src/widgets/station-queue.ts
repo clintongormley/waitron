@@ -110,7 +110,6 @@ export class TillStationQueue extends LitElement {
         display: block;
       }
 
-      /* The line's drawn text names it; the bump verb is hidden text, not an aria-label (WCAG 2.5.3). */
       .visually-hidden {
         ${visuallyHiddenStyles}
       }

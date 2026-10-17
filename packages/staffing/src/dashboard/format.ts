@@ -24,6 +24,17 @@ export function dateFormat(
 
 export const utc = (date: string) => new Date(`${date}T00:00:00Z`);
 
+/** A date as `formatter` writes it, split into the text before and after its day number. */
+export function dateAroundDay(
+  date: string,
+  formatter: Intl.DateTimeFormat,
+): { before: string; after: string } {
+  const parts = formatter.formatToParts(utc(date));
+  const at = parts.findIndex((part) => part.type === "day");
+  const text = (some: Intl.DateTimeFormatPart[]) => some.map((part) => part.value).join("");
+  return { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
+}
+
 /** The `index`-th day of a week, Monday 0. */
 export const mondayFirst = (index: number) => new Date(A_MONDAY + index * DAY_MS);
 

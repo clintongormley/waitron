@@ -21,7 +21,7 @@ export interface ComboboxOption {
    * row that makes or opens something, rather than choosing a value, does not read as one more
    * item of the list. */
   primary?: true;
-  /** A second, muted line under the label in the open list, and the row's accessible description.
+  /** A second, muted line under the label in the open list; the row's name holds both lines.
    * Never shown on the closed trigger. */
   description?: string;
   /** Shown, matched by the search and reachable by the arrows, but never chosen or run. */
@@ -368,7 +368,7 @@ export class WtCombobox extends LitElement {
       primitive in this design system has one (design-system.md → Forms). */
   @property() name = "";
   // The host's aria-label names the field only when `label` is empty; with `hide-label` and a
-  // `label`, the `label` names it.
+  // `label`, the `label` stands first in the trigger's name.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
@@ -399,7 +399,7 @@ export class WtCombobox extends LitElement {
   /** Shown as the placeholder unless one is given, and kept as the trigger's description because a
    * placeholder disappears once something is chosen. */
   @property() hint = "";
-  /** Names the trigger by `label` without drawing it, and makes the field compact. */
+  /** Puts `label` first in the trigger's name without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   /** `"link"` draws the trigger as inline text, the chosen value followed by `actionLabel`, with no
    * field box, drawn label or chevron; `label` still names it, as hidden text before the value.

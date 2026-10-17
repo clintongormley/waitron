@@ -2744,7 +2744,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       @blur=${trackIconTooltip}
     >
       <wt-icon name="table-filter"></wt-icon>
-      <!-- Tooltip before the count, whitespace between: axe reads the drawn text as "Filters 1", matching the name. -->
+      <!-- Tooltip before the count, whitespace between: while the tooltip shows, the drawn text reads "Filters 1", as the name does. -->
       <span class="icon-tooltip" aria-hidden="true">${this.filtersLabel}</span>
       ${activeCount ? html`<span class="filters-count">${activeCount}</span>` : nothing}
     </button>`;

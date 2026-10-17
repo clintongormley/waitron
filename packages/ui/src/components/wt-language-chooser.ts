@@ -15,8 +15,7 @@ export interface WtLocaleOption {
  *
  * The trigger draws the full name (`part="name"`) and the short code (`part="code"`, hidden). An
  * app swaps them at phone width with its own `::part()` rules, because a primitive here may hold no
- * literal breakpoint and a media query cannot read a token. The trigger is named by what it draws:
- * the full name, or the code followed by a visually hidden copy of the full name.
+ * literal breakpoint and a media query cannot read a token.
  *
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader

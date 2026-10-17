@@ -7626,7 +7626,7 @@ async function pickInOpenPanel(filter: WtCombobox, label: string): Promise<void>
   await filter.updateComplete;
 }
 
-test("Filters is drawn first, as an icon button named by its label, with its count and the panel it controls", async () => {
+test("Filters is drawn first, as an icon button named by its label and its count, with the panel it controls", async () => {
   const status = withStatus[1]!;
   const { el, root, trigger } = await filteredTable<RowS>(900, {
     rows: rowsS,

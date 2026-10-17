@@ -12,7 +12,7 @@ import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateFormat, mondayFirst, utc } from "./format.js";
+import { dateAroundDay, dateFormat, mondayFirst, utc } from "./format.js";
 import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -574,10 +574,7 @@ export class StaffingMonthView extends LitElement {
   ) {
     const isToday = day.date === today;
     const shown = this.#shown(day, chosen, names);
-    const parts = cellLabel.formatToParts(utc(day.date));
-    const at = parts.findIndex((part) => part.type === "day");
-    const text = (some: Intl.DateTimeFormatPart[]) => some.map((part) => part.value).join("");
-    const around = { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
+    const around = dateAroundDay(day.date, cellLabel);
     const body = this.#dayBody(day, isToday, shown, largest, around);
     return html`<td
       data-date=${day.date}
@@ -614,8 +611,6 @@ export class StaffingMonthView extends LitElement {
   ) {
     const separator = html`<span class="visually-hidden">, </span>`;
     const more = isToday || day.specialDay || day.closedAllDay || shown.length > 0;
-    // A button's name from what it draws, with the rest as hidden text: an aria-label would drop
-    // the drawn words from the name (WCAG 2.5.3).
     return html`
       <span class="top">
         <span class="visually-hidden">${around.before}</span>

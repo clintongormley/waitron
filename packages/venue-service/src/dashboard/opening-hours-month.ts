@@ -472,8 +472,6 @@ export class OpeningHoursMonthView extends LitElement {
       .filter(Boolean)
       .join(", ");
     const more = isToday || lines.length > 0;
-    // A button's name from what it draws, with the rest as hidden text: an aria-label would drop
-    // the drawn words from the name (WCAG 2.5.3).
     const body = html`<span class="top">
         ${this.stationMode ? nothing : html`<span class="visually-hidden">${around.before}</span>`}
         <span class="date" data-test="date-heading">${Number(day.date.slice(8))}</span>
