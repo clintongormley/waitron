@@ -1464,6 +1464,25 @@ describe("Opening hours week, a station shown", () => {
       await page.viewport(width, height);
     }
   });
+
+  it("on a phone a department closed for the day is not muted when no station is shown", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 844);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const el = await mount({ date: "2026-12-06", departmentId: "rest" });
+      const row = testId(el, "day-card")!.querySelector<HTMLElement>('.row[data-row="rest"]')!;
+      expect(row.querySelectorAll(".track .block")).toHaveLength(0);
+      const words = row.querySelector<HTMLElement>(".words")!;
+      expect(words.hasAttribute("data-no-orders")).toBe(false);
+      const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
+      const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;
+      expect(muted).not.toBe(normal);
+      expect(getComputedStyle(words).color).toBe(normal);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
 });
 
 /** An element painted in `token`, beside `el`, to compare a text colour against. */
