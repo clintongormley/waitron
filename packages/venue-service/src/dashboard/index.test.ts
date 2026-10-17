@@ -175,7 +175,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       id: "prep-stations",
       navLabelKey: "nav.prep_stations",
       group: "operations",
-      order: 30,
+      order: 12,
       requiresPermission: "venue_service.manage",
     });
     const handle = prep.create({
@@ -425,4 +425,19 @@ it("declares the Calendar's Week as a search destination", async () => {
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull(),
   );
+});
+
+it("A725 puts Prep stations immediately after Departments and zones, before Calendar", () => {
+  const screens = [
+    VENUE_SERVICE_DASHBOARD.screen!,
+    ...VENUE_SERVICE_DASHBOARD.moreScreens!.map(({ screen }) => screen),
+  ]
+    .filter(({ group }) => group === "operations")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  expect(screens.map(({ id }) => id)).toEqual([
+    "venue-operations",
+    "prep-stations",
+    "opening-hours",
+    "periods",
+  ]);
 });

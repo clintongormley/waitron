@@ -64,7 +64,8 @@ import type {
 import { t } from "./strings.js";
 import "./station-table.js";
 import "./station-editor.js";
-import "./station-colour-picker.js";
+import "@waitron/ui/src/components/wt-colour-chooser.js";
+import { stationColourChoices } from "./station-colour-choices.js";
 import "./station-times-tab.js";
 import { activeStationsInOrder } from "./station-show.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
@@ -77,7 +78,7 @@ import {
   type StationRefusal,
 } from "./station-editor.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
-import { STATION_COLOURS, type DeleteImpact, type StationColour } from "@waitron/shared";
+import { firstUnusedStationColour, isStationColour, type DeleteImpact } from "@waitron/shared";
 import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 
 type StationAction = {
@@ -952,7 +953,7 @@ export class PrepStationsScreen extends LitElement {
     const used = this.#colourUsers().map(({ colour }) => colour);
     this.draft = {
       name: "",
-      colour: STATION_COLOURS.find((colour) => !used.includes(colour)) ?? "red",
+      colour: firstUnusedStationColour(used),
       displayOrder: 0,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
@@ -1188,17 +1189,25 @@ export class PrepStationsScreen extends LitElement {
   }
   #newStationColour() {
     const identity = this.#stationIdentity;
-    return html`<station-colour-picker
+    return html`<wt-colour-chooser
+      name="colour"
+      label=${t("prep.colour")}
+      required
       .value=${this.draft.colour}
-      .stations=${this.#colourUsers()}
+      .choices=${stationColourChoices(this.#colourUsers())}
+      .usedByLabel=${(colour: string, names: string) => format("prep.colour_used_by", { colour, stations: names })}
       .error=${this.fieldError.colour ?? ""}
-      ?busy=${this.busy}
-      @station-colour-change=${(event: CustomEvent<{ colour: StationColour }>) => {
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        if (this.isConnected && identity === this.#stationIdentity)
-          this.#change("colour", event.detail.colour);
+        if (
+          this.isConnected &&
+          identity === this.#stationIdentity &&
+          isStationColour(event.detail.value)
+        )
+          this.#change("colour", event.detail.value);
       }}
-    ></station-colour-picker>`;
+    ></wt-colour-chooser>`;
   }
   #newStationPrinters() {
     const identity = this.#stationIdentity;

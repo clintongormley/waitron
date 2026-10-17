@@ -144,7 +144,7 @@ list does not exist.
 
 **A725 (owner, 2026-10-15).** Mockup: [prep stations](mockups/a718-a727-calendar-and-stations/14-prep-stations.png). Files:
 `packages/venue-service/src/dashboard/prep-stations-screen.ts`, `station-table.ts`,
-`station-editor.ts`, `station-colour-picker.ts`, `opening-hours-screen.ts`, the Times tab, the sidebar order,
+`station-editor.ts`, `station-colour-choices.ts`, `opening-hours-screen.ts`, the Times tab, the sidebar order,
 `apps/server/src/kitchen.ts`, `packages/db/src/schema/kitchen-stations.ts`.
 
 1. **Prep stations sits just after Departments and zones** in the sidebar.
@@ -176,6 +176,11 @@ list does not exist.
    other stations use. It is already used by the period and staff role dialogs. A725 hands
    it the twelve station colours from `STATION_COLOUR_TOKENS` with `usedBy`, and
    `station-colour-picker.ts` goes. Category colours keep their dialog.
+
+**Branch checkpoint (2026-10-17; not yet landed):** editor wording/layout, transactional unused
+colours, the Add/Edit shared popup, row swatches and sidebar placement are implemented.
+Times retirement and alphabetical station ordering across browser/server/storage remain open;
+the complete branch still needs its final review, push, CI and landing.
 
 ## Whole-order note correction volume
 

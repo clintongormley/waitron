@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -12,6 +13,7 @@ import { addDays } from "../hours-rules.js";
 const startUrl = location.href;
 afterEach(() => {
   cleanup();
+  setLocale("en");
   history.replaceState(null, "", startUrl);
 });
 const empty = {
@@ -516,6 +518,161 @@ describe.each(["light", "dark"] as const)("prep stations Times tab accessibility
         await expectNoA11yViolations(container);
       } finally {
         vi.useRealTimers();
+        setLocale("en");
+      }
+    },
+  );
+});
+
+describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme) => {
+  it.each([
+    ["en", 390],
+    ["es", 390],
+    ["en", 1280],
+    ["es", 1280],
+  ] as const)(
+    "keeps all used colours and a refusal accessible in %s at %ipx",
+    async (locale, width) => {
+      const previous = [window.innerWidth, window.innerHeight] as const;
+      try {
+        await page.viewport(width, 1100);
+        setLocale(locale);
+        await mountThemed("<div></div>", theme);
+        const colours = [
+          "red",
+          "orange",
+          "amber",
+          "lime",
+          "green",
+          "teal",
+          "cyan",
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "brown",
+        ] as const;
+        const stations = colours.map((colour, index) => ({
+          id: colour,
+          name: `Station ${index} with a very long name for the kitchen team`,
+          colour,
+          active: true,
+          isDefault: index === 0,
+          displayOrder: index,
+          warmAfterMinutes: 5,
+          overdueAfterMinutes: 10,
+          forgottenAfterMinutes: 15,
+          timingDefaults: {
+            warmAfterMinutes: 5,
+            overdueAfterMinutes: 10,
+            forgottenAfterMinutes: 15,
+          },
+          timingOverrides: {
+            warmAfterMinutes: null,
+            overdueAfterMinutes: null,
+            forgottenAfterMinutes: null,
+          },
+          showsRestOfOrder: false,
+          printMovedSlips: null,
+        }));
+        const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+        const createStation = vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", params: { field: "colour" } });
+        el.api = {
+          load: vi.fn().mockResolvedValue({ ...empty, stations }),
+          createStation,
+        } as unknown as PrepStationsApi;
+        host.append(el);
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector('[data-test="new-station"]')).not.toBeNull(),
+        );
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
+        await el.updateComplete;
+        const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+          "wt-modal wt-colour-chooser",
+        )!;
+        await chooser.updateComplete;
+        expect(chooser.value).toBe("red");
+        expect(chooser.choices.every(({ usedBy }) => usedBy!.length === 1)).toBe(true);
+        expect(chooser.choices.map(({ label }) => label)).toEqual(
+          locale === "en"
+            ? [
+                "Red",
+                "Orange",
+                "Amber",
+                "Lime",
+                "Green",
+                "Teal",
+                "Cyan",
+                "Blue",
+                "Indigo",
+                "Purple",
+                "Pink",
+                "Brown",
+              ]
+            : [
+                "Rojo",
+                "Naranja",
+                "Ámbar",
+                "Lima",
+                "Verde",
+                "Turquesa",
+                "Cian",
+                "Azul",
+                "Índigo",
+                "Morado",
+                "Rosa",
+                "Marrón",
+              ],
+        );
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-danger)";
+        host.append(probe);
+        expect(getComputedStyle(chooser.shadowRoot!.querySelector("[data-required]")!).color).toBe(
+          getComputedStyle(probe).color,
+        );
+        probe.remove();
+        expect(chooser.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        await expectNoA11yViolations(host);
+        await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+        const panel = chooser.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(panel.matches(":popover-open")).toBe(true);
+        const bounds = panel.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+        expect(bounds.top).toBeGreaterThanOrEqual(0);
+        expect(bounds.bottom).toBeLessThanOrEqual(innerHeight);
+        for (const tile of panel.querySelectorAll<HTMLElement>("[role=radio]")) {
+          expect(tile.scrollWidth).toBeLessThanOrEqual(tile.clientWidth + 1);
+          expect(tile.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+        }
+        await expectNoA11yViolations(host);
+        await userEvent.click(panel.querySelector('[data-value="teal"]')!);
+        await el.updateComplete;
+        expect(chooser.value).toBe("teal");
+        el.shadowRoot!.querySelector('wt-input[name="name"]')!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+        );
+        await el.updateComplete;
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station"]')!.click();
+        await vi.waitFor(() =>
+          expect(chooser.error).toBe(
+            locale === "en" ? "Choose one of these colours." : "Elige uno de estos colores.",
+          ),
+        );
+        expect(chooser.value).toBe("teal");
+        expect(
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            '[data-test="save-station"]',
+          )!.disabled,
+        ).toBe(false);
+        await expectNoA11yViolations(host);
+        await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+        expect(panel.matches(":popover-open")).toBe(true);
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(previous[0], previous[1]);
         setLocale("en");
       }
     },

@@ -4004,9 +4004,11 @@ variant reads "Product (Variant)" beside its product. A product's own choice, an
 moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the three
-late-flag minutes (Warm after, Overdue after and Forgotten after), "Show the rest of the order" and MOVED
-slips — As the venue (naming the venue's current choice), Print or Don't print; choosing As the venue
-again sends null.
+late-flag fields in one row under "Late flags (minutes)", "Also list the order's dishes from other
+stations" with "On this station's tickets and kitchen screen", and "Print a slip when sent dishes
+move table". The slip choices are "Venue setting: Print" (or "Venue setting: Don't print"), "Print"
+and "Don't print"; choosing the venue setting again sends null. One note below the minutes fields
+says "Leave a field blank to use the venue setting".
 Save sends only what changed, in one request. A minutes field left blank follows the venue's
 Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
 follows the default again. Save first checks that each filled minutes field is a whole number from
@@ -4016,11 +4018,12 @@ that names a minutes field (`station.thresholds_invalid` or `management.request_
 under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
-`station-colour-picker` (`station-colour-picker.ts`) of the twelve station colours, each tile
-naming under it the other active stations that have that colour; it is no wider than
-`--wt-field-max-width`, like the dialog's other fields, and its required `*` is in
-`--wt-color-danger`, like theirs. Add station also sets Colour and
-Printers, and starts on the first colour no active station has, or Red when all twelve are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
+required `wt-colour-chooser`: its closed field shows the chosen colour's square and name,
+and its popup offers the twelve station colours, naming the other active stations that use each.
+The editor's own station is excluded from those names. Each Stations row also shows its colour
+square beside its name; both squares use the station dot token. Add station uses the same colour
+field and sets Printers. It starts on the first colour no active station has, or Red when all twelve
+are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
 an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to

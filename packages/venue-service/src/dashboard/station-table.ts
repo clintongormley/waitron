@@ -1,15 +1,24 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import type { PrepStation } from "./routing-client.js";
 import { activeStationsInOrder } from "./station-show.js";
 import { t } from "./strings.js";
+import { STATION_COLOUR_TOKENS } from "./station-colour-styles.js";
 
 @customElement("prep-station-table")
 export class StationTable extends LitElement {
   static override styles = [
     baseStyles,
+    unsafeCSS(
+      Object.entries(STATION_COLOUR_TOKENS)
+        .map(
+          ([colour, { dot }]) =>
+            `wt-data-table::part(station-colour-${colour}) { background: ${dot}; }`,
+        )
+        .join("\n"),
+    ),
     css`
       :host {
         display: block;
@@ -36,7 +45,7 @@ export class StationTable extends LitElement {
       }
       wt-data-table::part(station-name-content) {
         display: grid;
-        grid-template-columns: max-content minmax(0, 1fr);
+        grid-template-columns: max-content max-content minmax(0, 1fr);
         align-items: center;
       }
       wt-data-table::part(station-name-handle) {
@@ -45,6 +54,14 @@ export class StationTable extends LitElement {
       }
       wt-data-table::part(station-name-details) {
         min-width: 0;
+      }
+      wt-data-table::part(station-colour) {
+        display: inline-block;
+        inline-size: var(--wt-space-4);
+        block-size: var(--wt-space-4);
+        margin-inline-end: var(--wt-space-2);
+        border-radius: var(--wt-radius-sm);
+        vertical-align: middle;
       }
       wt-data-table::part(station-status),
       wt-data-table::part(service-times) {
@@ -73,6 +90,11 @@ export class StationTable extends LitElement {
   #name(station: PrepStation) {
     return html`<span part="station-name-content"
       ><span part="station-name-handle">${this.handles[station.id] ?? nothing}</span
+      ><span
+        part=${`station-colour station-colour-${station.colour}`}
+        data-station-colour=${station.colour}
+        aria-hidden="true"
+      ></span
       ><span part="station-name-details"
         ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}

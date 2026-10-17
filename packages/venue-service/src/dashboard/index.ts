@@ -70,7 +70,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         id: "prep-stations",
         navLabelKey: "nav.prep_stations",
         group: "operations",
-        order: 30,
+        order: 12,
         requiresPermission: "venue_service.manage",
       },
       create(ctx) {

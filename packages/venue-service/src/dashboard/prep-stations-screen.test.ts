@@ -680,11 +680,13 @@ it("creates a station from the modal with the chosen thresholds", async () => {
   });
 });
 const addPicker = (el: PrepStationsScreen) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["station-colour-picker"]>(
-    "wt-modal station-colour-picker",
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
   )!;
-const colourTile = (picker: HTMLElementTagNameMap["station-colour-picker"], colour: string) =>
-  picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!;
+const colourTile = (picker: HTMLElementTagNameMap["wt-colour-chooser"], colour: string) => {
+  picker.show();
+  return picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-value="${colour}"]`)!;
+};
 const colouredView = (colours: readonly (string | [string, boolean])[]): PrepStationsView => ({
   ...view,
   stations: colours.map((entry, index) => {
@@ -711,7 +713,7 @@ it("a new station starts on the first colour no station has, and is created with
   expect(picker.value).toBe("amber");
   expect(
     el.shadowRoot!.querySelector(
-      "wt-modal .form > div:has(wt-input[name=name]) + station-colour-picker",
+      "wt-modal .form > div:has(wt-input[name=name]) + wt-colour-chooser",
     ),
   ).toBe(picker);
   expect(colourTile(picker, "orange").getAttribute("aria-label")).toBe("Orange, used by Station 1");
@@ -790,10 +792,14 @@ it("the station editor opens on the station's colour and names the other active 
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
-  const picker = editor.shadowRoot!.querySelector("station-colour-picker")!;
+  const picker = editor.shadowRoot!.querySelector("wt-colour-chooser")!;
   await picker.updateComplete;
   expect(picker.value).toBe("blue");
-  expect(picker.stations.map(({ id, colour }) => [id, colour])).toEqual([["s1", "orange"]]);
+  expect(
+    picker.choices
+      .filter(({ usedBy }) => usedBy!.length)
+      .map(({ value, usedBy }) => [value, usedBy]),
+  ).toEqual([["orange", ["Station 1"]]]);
 });
 it("makes a nondefault station the default", async () => {
   const changed = {
@@ -974,7 +980,7 @@ it("hands the station's and the venue's MOVED slips choices to the editor and sa
     "wt-combobox[name=printMovedSlips]",
   )!;
   expect(moved.value).toBe("print");
-  expect(moved.options[0]!.label).toBe("As the venue (don't print)");
+  expect(moved.options[0]!.label).toBe("Venue setting: Don't print");
   moved.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "venue" } }));
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
@@ -1004,9 +1010,9 @@ async function openMovedSlipsEditorThatSeesVenueStopPrinting() {
 it("follows the venue's MOVED slips switch in an open editor's first option", async () => {
   const { el, editor, moved, liveData } = await openMovedSlipsEditorThatSeesVenueStopPrinting();
   expect(moved().value).toBe("venue");
-  expect(moved().options[0]!.label).toBe("As the venue (print)");
+  expect(moved().options[0]!.label).toBe("Venue setting: Print");
   liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("As the venue (don't print)"));
+  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
   expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
   expect(moved().value).toBe("venue");
 });
@@ -1017,7 +1023,7 @@ it("keeps a MOVED slips choice made in an open editor when the venue's switch ch
   await editor.updateComplete;
   expect(save().hasAttribute("disabled")).toBe(false);
   liveData.invalidate([{ type: "service_settings" }]);
-  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("As the venue (don't print)"));
+  await vi.waitFor(() => expect(moved().options[0]!.label).toBe("Venue setting: Don't print"));
   await editor.updateComplete;
   expect(el.shadowRoot!.querySelector("prep-station-editor")).toBe(editor);
   expect(moved().value).toBe("print");
@@ -2235,7 +2241,9 @@ it.each([
       });
       const rest = await openStationRest(el);
       expect(rest.label).toBe(
-        locale === "en" ? "Show the rest of the order" : "Mostrar el resto del pedido",
+        locale === "en"
+          ? "Also list the order's dishes from other stations"
+          : "Mostrar también los platos del pedido de otras estaciones",
       );
       await expectNoA11yViolations(host);
       rest.scrollIntoView({ block: "nearest", inline: "end" });
@@ -5523,4 +5531,179 @@ it("permanent delete names current refusals and never offers a disposition", asy
     dialog.shadowRoot!.querySelector('[data-test="delete-confirm"]')!.hasAttribute("disabled"),
   ).toBe(true);
   expect(a.deleteStation).not.toHaveBeenCalled();
+});
+
+it.each(["en", "es"] as const)("A725 Add station uses the shared popup in %s", async (locale) => {
+  setLocale(locale);
+  const a = api({
+    load: vi.fn().mockResolvedValue(colouredView(["red", "orange", ["amber", false]])),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  );
+  expect(chooser).not.toBeNull();
+  await chooser!.updateComplete;
+  expect(chooser!.name).toBe("colour");
+  expect(chooser!.required).toBe(true);
+  expect(chooser!.value).toBe("amber");
+  expect(chooser!.choices.map(({ value }) => value)).toEqual([
+    "red",
+    "orange",
+    "amber",
+    "lime",
+    "green",
+    "teal",
+    "cyan",
+    "blue",
+    "indigo",
+    "purple",
+    "pink",
+    "brown",
+  ]);
+  expect(chooser!.choices.find(({ value }) => value === "orange")!.usedBy).toEqual(["Station 1"]);
+  expect(chooser!.choices.find(({ value }) => value === "amber")!.usedBy).toEqual([]);
+  const trigger = chooser!.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  trigger.click();
+  await chooser!.updateComplete;
+  expect(
+    chooser!.shadowRoot!.querySelector('[data-value="orange"]')!.getAttribute("aria-label"),
+  ).toBe(locale === "en" ? "Orange, used by Station 1" : "Naranja, en uso por Station 1");
+  const tile = chooser!.shadowRoot!.querySelector<HTMLButtonElement>('[data-value="teal"]')!;
+  expect(tile.getBoundingClientRect().width).toBeGreaterThan(0);
+  tile.click();
+  await settle(el);
+  await chooser!.updateComplete;
+  expect(chooser!.value).toBe("teal");
+  trigger.click();
+  await chooser!.updateComplete;
+  chooser!
+    .shadowRoot!.querySelector('[data-value="teal"]')!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }));
+  await chooser!.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  expect(chooser!.value).toBe("teal");
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "teal",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 Add station ignores a colour outside the station palette", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  chooser.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "grey" }, bubbles: true, composed: true }),
+  );
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 ignores a colour event from a closed Add station opening", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const previous = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await modal.requestClose("cancel");
+  await closed;
+  await settle(el);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const current = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  expect(current).not.toBe(previous);
+  previous.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "teal" }, bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(current.value).toBe("red");
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});
+
+it("A725 holds the colour popup closed while Add station is saving", async () => {
+  let finish!: (value: { id: string }) => void;
+  const createStation = vi.fn(
+    () =>
+      new Promise<{ id: string }>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const el = await mount(api({ createStation }));
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const chooser = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-modal wt-colour-chooser",
+  )!;
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(chooser.disabled).toBe(true);
+  chooser.show();
+  await chooser.updateComplete;
+  expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  finish({ id: "terrace" });
+  await settle(el);
+  expect(createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace",
+    colour: "red",
+    displayOrder: 0,
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
 });

@@ -13,7 +13,13 @@ afterEach(() => {
   setLocale("en");
 });
 function station(overrides: Partial<PrepStation> & Pick<PrepStation, "id" | "name">) {
-  return { active: true, isDefault: false, displayOrder: 0, ...overrides } as PrepStation;
+  return {
+    active: true,
+    isDefault: false,
+    displayOrder: 0,
+    colour: "blue",
+    ...overrides,
+  } as PrepStation;
 }
 const bar = station({ id: "bar", name: "Bar", isDefault: true });
 type StationTable = HTMLElement & {
@@ -178,3 +184,42 @@ it.each([
     await page.viewport(frame.width, frame.height);
   }
 });
+
+it.each(["light", "dark"] as const)(
+  "A725 paints every station swatch through the table parts in %s",
+  async (theme) => {
+    const colours = [
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+    ] as const;
+    const el = await mount(
+      colours.map((colour) => station({ id: colour, name: colour, colour })),
+      theme,
+    );
+    const squares = [...table(el)!.querySelectorAll<HTMLElement>('[part~="station-colour"]')];
+    expect(squares).toHaveLength(12);
+    for (const colour of colours) {
+      const square = squares.find((node) => node.dataset.stationColour === colour)!;
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = `var(--wt-color-station-${colour}-dot)`;
+      el.parentElement!.append(probe);
+      const actual = getComputedStyle(square);
+      expect(actual.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+      expect(square.getAttribute("aria-hidden")).toBe("true");
+      expect(square.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(square.getBoundingClientRect().width).toBe(square.getBoundingClientRect().height);
+      expect(square.closest("td")).toBe(square.closest("tr")!.querySelector("td"));
+      probe.remove();
+    }
+  },
+);

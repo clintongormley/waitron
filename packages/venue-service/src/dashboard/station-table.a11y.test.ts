@@ -11,9 +11,16 @@ afterEach(() => {
 });
 
 const stations = [
-  { id: "bar", name: "Bar", active: true, isDefault: true, displayOrder: 0 },
-  { id: "grill", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
-  { id: "old", name: "Old kitchen", active: false, isDefault: false, displayOrder: 2 },
+  { id: "bar", name: "Bar", colour: "blue", active: true, isDefault: true, displayOrder: 0 },
+  { id: "grill", name: "Grill", colour: "green", active: true, isDefault: false, displayOrder: 1 },
+  {
+    id: "old",
+    name: "Old kitchen",
+    colour: "red",
+    active: false,
+    isDefault: false,
+    displayOrder: 2,
+  },
 ] as PrepStation[];
 
 describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
