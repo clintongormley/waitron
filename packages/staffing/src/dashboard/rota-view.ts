@@ -426,11 +426,14 @@ export class RotaView extends LitElement {
               .flatMap((a) => a.match.slots)
               .find((s) => s.slot.key === picked.key)
           : undefined;
-        // The picker reads its slot's area from the week, so it cannot outlive the slot or the area,
-        // even mid-fill.
+        // The picker reads its slot's area and staff role from the week, so it cannot outlive the
+        // slot, the area or the staff role, even mid-fill. A slot's key is its place in the area's
+        // day, so once a staff role and its blocks are deleted another staff role's slot can take
+        // it.
         if (
           picked &&
-          (!listed || !read.areas.some((a) => areaKey(a.area) === areaKey(picked.area)))
+          (listed?.slot.staffRoleId !== picked.staffRoleId ||
+            !read.areas.some((a) => areaKey(a.area) === areaKey(picked.area)))
         )
           this.picked = undefined;
         else if (

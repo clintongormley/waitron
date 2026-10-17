@@ -361,6 +361,80 @@ it("closes a fill's slot picker when its slot leaves the plan while the fill is 
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
 });
+/** The read once the Sous chef staff role is deleted, which deletes its painted blocks: a later
+ *  Head chef block on Friday then takes the freed place, and its slot the key `empty`. */
+function sousDeleted(w: string) {
+  const r = rotaWeek(w);
+  r.staffRoles = r.staffRoles.filter((role) => role.id !== "sous");
+  for (const p of r.people) p.staffRoleIds = p.staffRoleIds.filter((id) => id !== "sous");
+  const sousShifts = new Set(
+    r.shifts.filter((s) => s.staffRoleId === "sous").map((s) => s.shiftId),
+  );
+  r.shifts = r.shifts.filter((s) => !sousShifts.has(s.shiftId));
+  for (const day of r.days)
+    for (const a of day.areas) {
+      a.match.over = a.match.over.filter((id) => !sousShifts.has(id));
+      a.match.slots = a.match.slots.flatMap((s) =>
+        s.slot.staffRoleId !== "sous"
+          ? [s]
+          : s.slot.key === "empty"
+            ? [
+                {
+                  slot: { ...s.slot, staffRoleId: "head", startsAt: "18:00", endsAt: "23:00" },
+                  status: { kind: "unfilled" as const },
+                },
+              ]
+            : [],
+      );
+    }
+  return r;
+}
+it.each(["idle", "in flight"])(
+  "closes the slot picker when its staff role is deleted, while a fill is %s",
+  async (fill) => {
+    const pending = deferred<unknown>();
+    let deleted = false;
+    const { el, live } = await mount({
+      fill: () => pending.promise,
+      read: async (w) => (deleted ? sousDeleted(w) : rotaWeek(w)),
+    });
+    const picker = await openPicker(el);
+    if (fill === "in flight") click(picker, "[data-person=marc]");
+    deleted = true;
+    live.invalidate([{ type: "staff_roles" }]);
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector<RotaView>("rota-by-area")!
+          .shadowRoot!.querySelector("[data-slot=empty]")!.textContent,
+      ).toContain("18:00"),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+    await vi.waitFor(() => expect(popupOpen(el)).toBe(false));
+    pending.resolve({ shiftId: "new" });
+  },
+);
+it("a person's open slots drop a deleted staff role's slots and keep the menu working", async () => {
+  let deleted = false;
+  const { el, live } = await mount({
+    read: async (w) => (deleted ? sousDeleted(w) : rotaWeek(w)),
+  });
+  el.params = { area: "everyone" };
+  const grid = () => el.shadowRoot!.querySelector<RotaView>("rota-by-person")!;
+  await vi.waitFor(() => expect(grid()).toBeTruthy());
+  await grid().updateComplete;
+  click(grid(), '[data-person=marc] td[data-day="2026-12-04"] [data-test=day-add]');
+  await vi.waitFor(() => expect(popupOpen(el)).toBe(true));
+  const menu = () => el.shadowRoot!.querySelector<RotaView>("rota-open-slots")!;
+  await menu().updateComplete;
+  expect(menu().shadowRoot!.textContent).toContain("Sous chef");
+  deleted = true;
+  live.invalidate([{ type: "staff_roles" }]);
+  await vi.waitFor(() => expect(menu().shadowRoot!.textContent).toContain("18:00–23:00"));
+  expect(menu().shadowRoot!.textContent).not.toContain("Sous chef");
+  expect(popupOpen(el)).toBe(true);
+});
 it("a picker that closes as a page scroll takes its slot out of view stays closed when the grid redraws before the close lands", async () => {
   await useViewport(1280, 900);
   const { el } = await mount();
