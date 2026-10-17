@@ -131,7 +131,8 @@ export interface TillClockState {
 }
 
 /**
- * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
+ * `GET /api/till` — the public boot info the app reads before login, and again when `/api/menu-state`
+ * names a `setupRevision` it has not applied. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
  * for a till with no integrated reader).
  */
@@ -184,7 +185,6 @@ export interface TillInfo {
   inactivityTimeoutSeconds: number | null;
   /** The screen the CALLING device's profile opens at each sign-in; absent or `null` for none. */
   startingScreen?: NavigationScreen | null;
-  /** This node's id, so the app can tell which `servers` entry it is on. */
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
   servers: TillServer[];

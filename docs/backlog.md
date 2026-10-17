@@ -1957,7 +1957,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones
   (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
   whether clocking is offered change the till's layout, so they are applied only where the till
-  already lays itself out again (A768's owner decision 4). Decide whether any of them should follow
+  already lays itself out again (A768's default; the owner has not decided). Decide whether any of them should follow
   a profile edit made on the dashboard while the till is open.
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during

@@ -1219,14 +1219,16 @@ src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed th
 ## What an open till keeps current
 
 A signed-in till keeps two things it has read, and asks `/api/menu-state` every 15 seconds
-(`POLL_MS`, `apps/till/src/state/menu-state-poll.ts`) whether either moved. The poll starts at
+(`POLL_MS`, `apps/till/src/state/menu-state-poll.ts`), for the counter's zone and the open table's
+(`#menuPoll`'s `zones`), whether either moved. A held menu of any other zone is checked only when a
+table in it opens. The poll starts at
 sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
 
 **Each zone's menu.** The till keeps the menu of every zone it has read (`#zoneCatalogues`). A table
 in a zone already held shows that menu at once and sends one `/api/menu-state` check for the zone
 (`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
 published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and
-options) is applied in place. `liveFields` is a digest of each dish's course and reporting category
+options) is applied in place. `liveFields` is a digest of the course and reporting category of each dish, variant and extras item
 (`liveFieldsDigest`, `packages/catalogue/src/menu-document.ts`); without it a dish moved to another
 course would not be noticed. The held menus are forgotten on every start (`#boot`, which a server
 switch runs again) and when the till is given a new `api`. Two limits:
@@ -1275,7 +1277,7 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   (`#enterSwitchedProfile`) and when the device's zone selection changes
   (`#reconcileSavedDeviceZones`), and at no other time. They change the layout and which screens the
   till offers; applied mid-session they could take away the screen the person is on, and at those
-  three points the till already lays itself out again (A768's owner decision 4).
+  three points the till already lays itself out again (the default A768 chose; whether to change it is backlog A787).
 - A kitchen screen in device mode: nothing. Nobody signs in on it, so it runs no poll (backlog A785).
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup

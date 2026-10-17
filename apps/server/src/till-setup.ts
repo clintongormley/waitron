@@ -100,7 +100,6 @@ export async function readTillSetup(
     capabilities,
     inactivityTimeoutSeconds,
     ...(startingScreen === null ? {} : { startingScreen }),
-    // The till polls each server's `GET /api/node` to follow the primary across a failover.
     nodeId: deps.cfg.nodeId,
     // So the basket refuses an order over it as it is entered, not at the pay step.
     simplifiedInvoiceLimit: deps.cfg.simplifiedInvoiceLimit,
