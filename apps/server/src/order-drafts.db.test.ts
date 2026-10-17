@@ -12,6 +12,7 @@ import {
   locations,
   orderDraftEvents,
   orderDraftLines,
+  orderDraftRecalledLines,
   orderDrafts,
   orderGroups,
   serviceCommands,
@@ -51,8 +52,14 @@ import { finishTable, seatTable } from "./parties.js";
 import { listTablesWithState } from "./working-order.js";
 import { submitGroups } from "./order-groups.js";
 import type { GroupRelease } from "./order-groups.js";
-import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
-import type { Draft, DraftLine } from "./order-drafts.js";
+import {
+  discardPartyDrafts,
+  readDrafts,
+  saveDraft,
+  submitDraft,
+  takeOverDraft,
+} from "./order-drafts.js";
+import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
@@ -245,10 +252,12 @@ async function seated(v: Venue, label = "Mesa 4"): Promise<Seated> {
   });
 }
 
-type LineInput = Omit<DraftLine, "id" | "unavailable">;
+type LineInput = Omit<FreshDraftLine, "id" | "unavailable">;
 
 function item(v: Venue, dish: Dish, overrides: Partial<LineInput> = {}): LineInput {
   return {
+    sourceLineId: null,
+    source: null,
     menuItemId: v.offer(dish),
     variantId: null,
     menuVersionId: null,
@@ -595,6 +604,8 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         id: draft.lines[0]!.id,
+        sourceLineId: null,
+        source: null,
         menuItemId: v.offer("beer"),
         variantId: null,
         menuVersionId: null,
@@ -3683,4 +3694,391 @@ it("A669 replays a submitted draft without duplicating its groups or moving its 
   expect(await inTx((tx) => readPartyAllergy(tx, partyId))).toEqual(afterFirst);
   expect(await db.select().from(workingOrderLines)).toHaveLength(1);
   expect(await db.select().from(orderGroups)).toHaveLength(1);
+});
+
+describe("source-backed draft foundations", () => {
+  async function family(v: Venue, billId: string, lineNo = 1) {
+    const parentId = randomUUID();
+    const extraId = randomUUID();
+    await inTx(async (tx) => {
+      await tx.insert(workingOrderLines).values({
+        id: parentId,
+        workingOrderId: billId,
+        lineNo,
+        name: "Frozen burger",
+        descriptions: { [LOCALE]: "Hamburguesa congelada" },
+        quantity: 2500,
+        priceQuantity: 500,
+        unitPriceGross: 200,
+        listUnitPriceGross: 400,
+        lineTotal: 1000,
+        vatClass: "reduced",
+        note: "No salt",
+        courseId: v.courseId,
+        creditedTo: ALEX,
+      });
+      await tx.insert(workingOrderLines).values({
+        id: extraId,
+        workingOrderId: billId,
+        lineNo: lineNo + 1,
+        name: "Frozen sauce",
+        descriptions: { [LOCALE]: "Salsa congelada" },
+        quantity: 5000,
+        unitPriceGross: 50,
+        lineTotal: 250,
+        vatClass: "general",
+        parentLineId: parentId,
+        extraListId: v.sauceListId,
+        productId: v.productId.sauce,
+      });
+    });
+    return { parentId, extraId };
+  }
+  async function reserved(v: Venue, partyId: string, billId: string, owner = ALEX) {
+    const draft = await save(v, partyId, owner, null, 0, [item(v, "beer"), item(v, "fish")]);
+    const source = await family(v, billId);
+    const id = randomUUID();
+    await inTx(async (tx) => {
+      await tx
+        .update(orderDraftLines)
+        .set({ position: 3 })
+        .where(eq(orderDraftLines.id, draft.lines[1]!.id));
+      await tx
+        .insert(orderDraftRecalledLines)
+        .values({ id, draftId: draft.id, sourceLineId: source.parentId, position: 2, slot: 2 });
+    });
+    return { draft, id, ...source };
+  }
+  const sourceInput = (id: string, sourceLineId: string) => ({
+    id,
+    sourceLineId,
+    quantity: "2.500",
+    note: "No salt",
+    courseId: null,
+    makeAt: null,
+    slot: 2,
+    joinGroupId: null,
+    afterGroupId: null,
+  });
+
+  it("reads fresh and discounted source families in one position order without a live offer", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    const [read] = await draftsOf(v, partyId);
+    expect(read!.lines.map((line) => line.id)).toEqual([
+      draft.lines[0]!.id,
+      id,
+      draft.lines[1]!.id,
+    ]);
+    expect(read!.lines[0]).toMatchObject({ sourceLineId: null, source: null });
+    expect(read!.lines[1]).toMatchObject({
+      id,
+      sourceLineId: parentId,
+      quantity: "2.500",
+      note: "No salt",
+      courseId: v.courseId,
+      course: { id: v.courseId, name: "Mains", displayOrder: 1, heldUntilFired: true },
+      makeAt: null,
+      noMerge: true,
+      unavailable: false,
+      slot: 2,
+      joinGroupId: null,
+      afterGroupId: null,
+      source: {
+        line: {
+          id: parentId,
+          name: "Frozen burger",
+          unitPriceGross: "2.00",
+          listUnitPriceGross: "4.00",
+          priceQuantity: "0.500",
+          menuItemId: null,
+        },
+        extras: [
+          {
+            id: extraId,
+            name: "Frozen sauce",
+            parentLineNo: 1,
+            quantity: "5.000",
+            unitPriceGross: "0.50",
+          },
+        ],
+        netAmount: "12.50",
+      },
+    });
+    expect(read!.lines[1]).not.toHaveProperty("menuItemId");
+  });
+
+  it("retains source identities and common positions through an ordinary save and takeover", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId, tableId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const input = {
+      ...sourceInput(id, parentId),
+      courseId: v.courseId,
+      source: { netAmount: "0.00" },
+      unitPriceGross: "0.00",
+    };
+    const saved = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      input,
+      draft.lines[1]!,
+      draft.lines[0]!,
+    ]);
+    expect(saved.lines.map((line) => line.id)).toEqual([
+      id,
+      draft.lines[1]!.id,
+      draft.lines[0]!.id,
+    ]);
+    expect(saved.lines[0]).toMatchObject({
+      sourceLineId: parentId,
+      source: { netAmount: "12.50" },
+    });
+    expect(await db.select().from(orderDraftRecalledLines)).toMatchObject([
+      { id, draftId: draft.id, sourceLineId: parentId, position: 1, slot: 2 },
+    ]);
+    expect((await storedLines(draft.id)).map(({ id, position }) => ({ id, position }))).toEqual([
+      { id: draft.lines[1]!.id, position: 2 },
+      { id: draft.lines[0]!.id, position: 3 },
+    ]);
+    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 3 }]);
+    const taken = await takeOver(v, partyId, draft.id, SAM, saved.revision);
+    expect(taken.lines).toEqual(saved.lines);
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId)),
+    ).toEqual(before);
+  });
+
+  it.each(["unclaimed", "extra", "other owner", "new draft"])(
+    "refuses an arbitrary source claim: %s",
+    async (kind) => {
+      const v = await setupVenue();
+      const { partyId, tabId } = await seated(v);
+      const { draft, id, parentId, extraId } = await reserved(
+        v,
+        partyId,
+        tabId,
+        kind === "other owner" ? SAM : ALEX,
+      );
+      const sourceLineId =
+        kind === "extra" ? extraId : kind === "unclaimed" ? randomUUID() : parentId;
+      const own = kind === "other owner" ? await save(v, partyId, ALEX, null, 0, []) : draft;
+      await refusedWritingNothing(
+        () =>
+          save(v, partyId, ALEX, kind === "new draft" ? null : own.id, own.revision, [
+            { ...item(v, "beer"), sourceLineId },
+          ]),
+        { code: "management.request_invalid", params: { field: "lines.0.id" } },
+      );
+      expect((await db.select().from(orderDraftRecalledLines))[0]).toMatchObject({
+        id,
+        sourceLineId: parentId,
+      });
+    },
+  );
+  it.each([
+    "different source",
+    "fresh ID",
+    "fresh disguise",
+    "duplicate",
+    "omitted",
+    "quantity",
+    "note",
+    "courseId",
+    "makeAt",
+    "options",
+    "extras",
+  ])("refuses unresolved source changes: %s", async (kind) => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    const source = { ...sourceInput(id, parentId), courseId: v.courseId };
+    let lines: unknown[] = [source, ...draft.lines];
+    const edits: Record<string, unknown> = {
+      quantity: "3",
+      note: "changed",
+      courseId: null,
+      makeAt: randomUUID(),
+      options: [],
+      extras: [],
+    };
+    if (kind === "different source") lines[0] = { ...source, sourceLineId: extraId };
+    else if (kind === "fresh ID") lines = [{ ...source, id: draft.lines[0]!.id }, draft.lines[1]!];
+    else if (kind === "fresh disguise") lines[0] = { ...item(v, "beer"), id };
+    else if (kind === "duplicate") lines.push(source);
+    else if (kind === "omitted") lines = draft.lines;
+    else lines[0] = { ...source, [kind]: edits[kind] };
+    const field =
+      kind === "omitted"
+        ? "lines"
+        : kind === "duplicate"
+          ? "lines.3.id"
+          : ["fresh disguise", "different source", "fresh ID", "options", "extras"].includes(kind)
+            ? "lines.0.sourceLineId"
+            : `lines.0.${kind}`;
+    await refusedWritingNothing(() => save(v, partyId, ALEX, draft.id, draft.revision, lines), {
+      code: "management.request_invalid",
+      params: { field },
+    });
+  });
+
+  it("refuses source submission until the recall resend command can preserve the bill family", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id } = await reserved(v, partyId, tabId);
+    await refusedWritingNothing(
+      () => submit(v, partyId, draft, ALEX, [{ lineIds: [id], release: "hold" }]),
+      { code: "management.request_invalid", params: { field: "groups" } },
+    );
+  });
+
+  it("keeps a source-only draft in the floor count and allows placement saves without fresh offers", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId, tableId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const saved = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      { ...sourceInput(id, parentId), courseId: v.courseId, slot: 0 },
+    ]);
+    expect(saved.lines).toHaveLength(1);
+    expect(saved.lines[0]).toMatchObject({ id, sourceLineId: parentId, slot: 0 });
+    expect(await storedLines(draft.id)).toEqual([]);
+    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 1 }]);
+  });
+
+  it("absorbs a colleague's source references without recreating them or merging them with fresh dishes", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const own = await save(v, partyId, SAM, null, 0, [item(v, "beer", { slot: 1 })]);
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const taken = await takeOver(v, partyId, draft.id, SAM, draft.revision);
+    expect(taken.id).toBe(own.id);
+    expect(taken.lines.map((line) => line.id)).toEqual([
+      own.lines[0]!.id,
+      draft.lines[0]!.id,
+      id,
+      draft.lines[1]!.id,
+    ]);
+    expect(taken.lines[2]).toMatchObject({
+      id,
+      sourceLineId: parentId,
+      slot: 3,
+      source: { netAmount: "12.50" },
+    });
+    expect(await db.select().from(orderDraftRecalledLines)).toMatchObject([
+      { id, draftId: own.id, position: 3, slot: 3 },
+    ]);
+    expect(await draftRow(draft.id)).toMatchObject({ state: "discarded" });
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId)),
+    ).toEqual(before);
+  });
+
+  it("sends only fresh rows while retaining a recalled companion and its original bill family", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const sent = await submit(v, partyId, draft, ALEX, [
+      { lineIds: lineIds(draft), release: "fire" },
+    ]);
+    expect(sent.draft!.lines).toHaveLength(1);
+    expect(sent.draft!.lines[0]).toMatchObject({
+      id,
+      sourceLineId: parentId,
+      source: { netAmount: "12.50" },
+    });
+    expect(await draftRow(draft.id)).toMatchObject({ state: "open", revision: 1 });
+    expect(await db.select().from(orderDraftRecalledLines)).toMatchObject([
+      { id, draftId: draft.id },
+    ]);
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(after.filter((line) => line.id === parentId || line.parentLineId === parentId)).toEqual(
+      before,
+    );
+  });
+
+  it.each(["extra", "other bill"])(
+    "refuses a stored source reference naming an %s",
+    async (kind) => {
+      const v = await setupVenue();
+      const { partyId, tabId } = await seated(v);
+      const { draft, id, extraId } = await reserved(v, partyId, tabId);
+      const target =
+        kind === "extra" ? extraId : (await family(v, (await seated(v, "Foreign")).tabId)).parentId;
+      await db
+        .update(orderDraftRecalledLines)
+        .set({ sourceLineId: target })
+        .where(eq(orderDraftRecalledLines.id, id));
+      await expect(draftsOf(v, partyId)).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "sourceLineId" },
+      });
+      expect(await draftRow(draft.id)).toMatchObject({ state: "open", revision: 0 });
+    },
+  );
+
+  it("does not discard an unresolved source reservation or abandon its history", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    await reserved(v, partyId, tabId);
+    await refusedWritingNothing(() => inTx((tx) => discardPartyDrafts(tx, partyId, ALEX)), {
+      code: "management.request_invalid",
+      params: { field: "drafts" },
+    });
+  });
+  it("counts each fresh and recalled row once when both sets contain several dishes", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId, tableId } = await seated(v);
+    const { draft } = await reserved(v, partyId, tabId);
+    const second = await family(v, tabId, 3);
+    await db
+      .insert(orderDraftRecalledLines)
+      .values({ draftId: draft.id, sourceLineId: second.parentId, position: 4 });
+    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 4 }]);
+  });
+
+  it("retains the original working-line allergy tick through source placement save and takeover", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const allergy = await inTx((tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        0,
+        { answer: "allergies", guests: [{ who: "Window", allergens: { milk: {} } }] },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: allergy.guests[0]!.id, workingLineId: parentId },
+      ]),
+    );
+    const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    expect(ticks).toEqual([
+      { guestId: allergy.guests[0]!.id, workingLineId: parentId, draftLineId: null },
+    ]);
+    const saved = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      { ...sourceInput(id, parentId), courseId: v.courseId, slot: 0 },
+      ...draft.lines,
+    ]);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(ticks);
+    const taken = await takeOver(v, partyId, draft.id, SAM, saved.revision);
+    expect(taken.lines[0]).toMatchObject({ id, sourceLineId: parentId, slot: 0 });
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(ticks);
+  });
 });

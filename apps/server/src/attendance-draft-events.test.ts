@@ -209,6 +209,7 @@ describe("natural draft-event attendance snapshots", () => {
     await run((tx) =>
       moveDraftsToParty(
         tx,
+        v.cfg,
         partyId,
         target.partyId,
         other,

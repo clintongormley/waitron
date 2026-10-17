@@ -5,6 +5,8 @@ import {
   nowIso,
   orderDraftEvents,
   orderDraftLines,
+  orderDraftRecalledLines,
+  workingOrderLines,
   orderDrafts,
   orderGroups,
   workingOrders,
@@ -15,6 +17,8 @@ import { persons } from "@waitron/identity";
 import type { ZoneMenuOffer } from "@waitron/module";
 import {
   AppError,
+  centsToDecimal,
+  sumDecimals,
   isUuid,
   normaliseDraftLines,
   stringToThousandths,
@@ -33,14 +37,17 @@ import {
   requireOpenParty,
   runServiceCommand,
 } from "./parties.js";
-import { refusePaymentInFlight, screenNote } from "./working-order.js";
+import { readTabLines, refusePaymentInFlight, screenNote } from "./working-order.js";
+import type { TabLine } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
-export interface DraftLine {
+export interface FreshDraftLine {
+  sourceLineId: null;
+  source: null;
   id: string;
   menuItemId: string;
   variantId: string | null;
@@ -59,6 +66,28 @@ export interface DraftLine {
   unavailable: boolean;
 }
 
+export interface RecalledDraftLine {
+  id: string;
+  sourceLineId: string;
+  source: { line: TabLine; extras: TabLine[]; netAmount: string };
+  quantity: string;
+  note: string | null;
+  courseId: string | null;
+  course?: FreshDraftLine["course"];
+  makeAt: string | null;
+  noMerge: true;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
+  unavailable: false;
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  options?: never;
+  extras?: never;
+}
+export type DraftLine = FreshDraftLine | RecalledDraftLine;
+
 export interface Draft {
   id: string;
   partyId: string;
@@ -73,7 +102,26 @@ export interface Draft {
 
 export { normaliseDraftLines };
 
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course"> & { id?: string };
+export type FreshDraftLineInput = Omit<
+  FreshDraftLine,
+  "id" | "unavailable" | "course" | "source"
+> & { id?: string };
+export type RecalledDraftLineInput = Pick<
+  RecalledDraftLine,
+  | "id"
+  | "sourceLineId"
+  | "quantity"
+  | "note"
+  | "courseId"
+  | "makeAt"
+  | "slot"
+  | "joinGroupId"
+  | "afterGroupId"
+> & {
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+};
+export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
 
 export interface SaveDraftInput {
   billId: unknown;
@@ -90,10 +138,6 @@ export interface UnsentDraft {
   lineCount: number;
 }
 
-/**
- * Every open draft on the party, whoever owns it, each line marked by {@link unavailable} against
- * the zone's live offers. The mark is worked out on each read and never stored.
- */
 export async function readDrafts(
   tx: Transaction,
   cfg: TillConfig,
@@ -120,26 +164,48 @@ export async function saveDraft(
   if (draft !== null) {
     await requireOwnDraftAt(tx, draft, operatorId, input.revision);
     if (draft.billId !== billId) throw invalid("billId");
-    previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
+    previous = (await storedLines(tx, cfg, [draft.id])).map(({ line }) => line);
   }
-  const owned = new Set(previous.map((line) => line.id));
+  const owned = new Map(previous.map((line) => [line.id, line]));
   const named = new Set<string>();
   for (const [index, line] of lines.entries()) {
     if (line.id === undefined) continue;
     if (!owned.has(line.id) || named.has(line.id)) throw invalid(`lines.${index}.id`);
     named.add(line.id);
   }
+  const retainedSources = new Set(previous.filter(isRecalled).map((line) => line.id));
+  for (const [index, line] of lines.entries()) {
+    const prior = line.id === undefined ? undefined : owned.get(line.id);
+    if (line.sourceLineId === null) {
+      if (prior?.sourceLineId != null) throw invalid(`lines.${index}.sourceLineId`);
+      continue;
+    }
+    if (prior?.sourceLineId !== line.sourceLineId) throw invalid(`lines.${index}.sourceLineId`);
+    const source = prior as RecalledDraftLine;
+    for (const key of ["quantity", "note", "courseId", "makeAt"] as const) {
+      const same =
+        key === "quantity"
+          ? stringToThousandths(line.quantity) === stringToThousandths(source.quantity)
+          : line[key] === source[key];
+      if (!same) throw invalid(`lines.${index}.${key}`);
+    }
+    if (line.options !== undefined || line.extras !== undefined)
+      throw invalid(`lines.${index}.sourceLineId`);
+    retainedSources.delete(line.id);
+  }
+  if (retainedSources.size > 0) throw invalid("lines");
+  const freshLines = lines.filter(isFresh);
   await requireBillOfParty(tx, partyId, billId);
   await refusePaymentInFlight(tx, [billId]);
   await validateDraftPlaces(tx, partyId, lines);
-  await requireCourses(tx, cfg, lines, previous);
+  await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
   const offers = await offersFor(
     tx,
     cfg,
     partyId,
-    lines.map((line) => line.menuItemId),
+    freshLines.map((line) => line.menuItemId),
   );
-  for (const line of lines) {
+  for (const line of freshLines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
@@ -173,12 +239,12 @@ export async function saveDraft(
       .where(eq(orderDrafts.id, draftId));
   }
   const priorChoices = new Map<string, number>();
-  for (const line of previous) {
+  for (const line of previous.filter(isFresh)) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     priorChoices.set(key, (priorChoices.get(key) ?? 0) + 1);
   }
-  for (const line of lines) {
+  for (const line of freshLines) {
     if (line.makeAt == null) continue;
     const key = JSON.stringify([line.menuItemId, line.variantId, line.makeAt]);
     const held = priorChoices.get(key) ?? 0;
@@ -194,12 +260,22 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line) => ({
-        ...line,
-        id: line.id ?? newId(),
-        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
-        unavailable: false,
-      })),
+      lines.map((line): DraftLine =>
+        line.sourceLineId === null
+          ? {
+              ...line,
+              source: null,
+              id: line.id ?? newId(),
+              noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+              unavailable: false,
+            }
+          : {
+              ...(owned.get(line.id)! as RecalledDraftLine),
+              slot: line.slot,
+              joinGroupId: line.joinGroupId,
+              afterGroupId: line.afterGroupId,
+            },
+      ),
     ),
   );
   const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
@@ -270,6 +346,7 @@ export async function takeOverDraft(
   if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
   await addDiscardedDraft(
     tx,
+    cfg,
     draft.id,
     own,
     operatorId,
@@ -281,6 +358,7 @@ export async function takeOverDraft(
 
 export async function moveDraftsToParty(
   tx: Transaction,
+  cfg: TillConfig,
   fromPartyId: string,
   intoPartyId: string,
   operatorId: string,
@@ -314,6 +392,7 @@ export async function moveDraftsToParty(
   for (const draft of absorbed) {
     await addDiscardedDraft(
       tx,
+      cfg,
       draft.id,
       held.get(key(draft))!,
       draft.ownerId,
@@ -333,6 +412,17 @@ export async function discardPartyDrafts(
   const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
   if (open.length === 0) return;
+  const [unresolved] = await tx
+    .select({ id: orderDraftRecalledLines.id })
+    .from(orderDraftRecalledLines)
+    .where(
+      inArray(
+        orderDraftRecalledLines.draftId,
+        open.map((draft) => draft.id),
+      ),
+    )
+    .limit(1);
+  if (unresolved !== undefined) throw invalid("drafts");
   await discardDrafts(
     tx,
     open.map((draft) => draft.id),
@@ -412,13 +502,14 @@ export async function submitDraft(
       await requireBillOfParty(tx, partyId, billId);
       await refusePaymentInFlight(tx, [billId]);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
-      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
+      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
       const named = new Set<string>();
       for (const lineId of groups.flatMap((group) => group.lineIds)) {
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
+      if (lines.some((line) => named.has(line.id) && isRecalled(line))) throw invalid("groups");
       const placed = await placeGroups(
         tx,
         cfg,
@@ -426,7 +517,13 @@ export async function submitDraft(
         {
           groups: groups.map(({ lineIds, release }) => {
             const inGroup = new Set(lineIds);
-            return { release, lines: lines.filter((line) => inGroup.has(line.id)).map(groupLine) };
+            return {
+              release,
+              lines: lines
+                .filter(isFresh)
+                .filter((line) => inGroup.has(line.id))
+                .map(groupLine),
+            };
           }),
           joinGroupId,
           operatorId,
@@ -510,13 +607,15 @@ export async function readUnsentDrafts(
     .select({
       partyId: orderDrafts.partyId,
       ownerName: persons.displayName,
-      lineCount: sql<number>`cast(count(${orderDraftLines.id}) as int)`,
+      lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) + count(distinct ${orderDraftRecalledLines.id}) as int)`,
     })
     .from(orderDrafts)
-    .innerJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
+    .leftJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
+    .leftJoin(orderDraftRecalledLines, eq(orderDraftRecalledLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
     .where(and(inArray(orderDrafts.partyId, [...partyIds]), eq(orderDrafts.state, "open")))
     .groupBy(orderDrafts.partyId, orderDrafts.ownerId)
+    .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`)
     .orderBy(sql`min(${orderDrafts.createdAt})`, sql`min(${orderDrafts.id})`);
   for (const row of rows) {
     unsent.get(row.partyId)!.push({ ownerName: row.ownerName ?? "", lineCount: row.lineCount });
@@ -578,7 +677,7 @@ function foldIfUuid(id: string): string {
 }
 
 /** A draft line as pricing takes a basket line, with each null field left out. */
-function groupLine(line: DraftLine): GroupLine {
+function groupLine(line: FreshDraftLine): GroupLine {
   return {
     [RETAINED_COURSE]: true,
     menuItemId: line.menuItemId,
@@ -603,7 +702,6 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     const field = (name: string) => `lines.${index}.${name}`;
     if (!isRecord(entry)) throw invalid(`lines.${index}`);
     const { quantity, note, noMerge } = entry;
-    const menuItemId = uuid(entry.menuItemId, field("menuItemId"));
     if (
       typeof quantity !== "string" ||
       !QUANTITY_PATTERN.test(quantity) ||
@@ -623,9 +721,28 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
     const afterGroupId = optionalId(entry.afterGroupId, field("afterGroupId"));
     if (joinGroupId !== null && slot !== 0) throw invalid(field("slot"));
     if (afterGroupId !== null && slot === 0) throw invalid(field("afterGroupId"));
+    const sourceLineId =
+      entry.sourceLineId === undefined || entry.sourceLineId === null
+        ? null
+        : uuid(entry.sourceLineId, field("sourceLineId"));
+    if (sourceLineId !== null)
+      return {
+        id: uuid(entry.id, field("id")),
+        sourceLineId,
+        quantity,
+        note: screenNote(note),
+        courseId: optionalId(entry.courseId, field("courseId")),
+        makeAt: optionalId(entry.makeAt, field("makeAt")),
+        slot,
+        joinGroupId,
+        afterGroupId,
+        ...(entry.options === undefined ? {} : { options: readOptionSelections(entry.options) }),
+        ...(entry.extras === undefined ? {} : { extras: readExtraSelections(entry.extras) }),
+      };
     return {
       ...(entry.id === undefined ? {} : { id: uuid(entry.id, field("id")) }),
-      menuItemId,
+      sourceLineId: null,
+      menuItemId: uuid(entry.menuItemId, field("menuItemId")),
       variantId: optionalId(entry.variantId, field("variantId")),
       menuVersionId: optionalId(entry.menuVersionId, field("menuVersionId")),
       options: entry.options === undefined ? [] : readOptionSelections(entry.options),
@@ -645,10 +762,10 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
 async function requireCourses(
   tx: Transaction,
   cfg: TillConfig,
-  lines: readonly DraftLineInput[],
-  previous: readonly DraftLine[],
+  lines: readonly FreshDraftLineInput[],
+  previous: readonly FreshDraftLine[],
 ): Promise<void> {
-  const keyOf = (line: DraftLineInput) =>
+  const keyOf = (line: FreshDraftLineInput) =>
     JSON.stringify([
       foldIfUuid(line.menuItemId),
       line.variantId === null ? null : foldIfUuid(line.variantId),
@@ -750,6 +867,7 @@ async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Prom
  */
 async function addDiscardedDraft(
   tx: Transaction,
+  cfg: TillConfig,
   fromDraftId: string,
   into: { id: string; revision: number },
   ownerId: string,
@@ -764,7 +882,7 @@ async function addDiscardedDraft(
     actorId,
     detail: { intoDraftId: into.id },
   });
-  const stored = await storedLines(tx, [into.id, fromDraftId]);
+  const stored = await storedLines(tx, cfg, [into.id, fromDraftId]);
   const combined = absorbLines(
     stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
     stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
@@ -840,8 +958,18 @@ async function recordDraftEvents(
  * The drafts' stored lines, in position order, each with its draft's id, and `unavailable` not yet
  * worked out.
  */
+function isRecalled(line: DraftLine): line is RecalledDraftLine {
+  return line.sourceLineId !== null;
+}
+function isFresh<T extends DraftLine | DraftLineInput>(
+  line: T,
+): line is T & (FreshDraftLine | FreshDraftLineInput) {
+  return line.sourceLineId === null;
+}
+
 async function storedLines(
   tx: Transaction,
+  cfg: TillConfig,
   draftIds: readonly string[],
 ): Promise<{ draftId: string; line: DraftLine }[]> {
   const rows = await tx
@@ -858,53 +986,136 @@ async function storedLines(
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, orderDraftLines.courseId))
     .where(inArray(orderDraftLines.draftId, [...draftIds]))
     .orderBy(asc(orderDraftLines.position), asc(orderDraftLines.id));
-  return rows.map(({ line: row, course }) => ({
-    draftId: row.draftId,
-    line: {
-      id: row.id,
-      menuItemId: row.menuItemId,
-      variantId: row.variantId,
-      menuVersionId: row.menuVersionId,
-      options: row.options,
-      extras: row.extras,
-      note: row.note,
-      quantity: thousandthsToDecimal(row.quantity),
-      courseId: row.courseId,
-      ...(course === null ? {} : { course }),
-      makeAt: row.makeAtStationId,
-      noMerge: row.noMerge,
-      slot: row.slot,
-      joinGroupId: row.joinGroupId,
-      afterGroupId: row.afterGroupId,
-      unavailable: false,
-    },
-  }));
+  const fresh = rows.map(
+    ({ line: row, course }) =>
+      ({
+        draftId: row.draftId,
+        position: row.position,
+        line: {
+          sourceLineId: null,
+          source: null,
+          id: row.id,
+          menuItemId: row.menuItemId,
+          variantId: row.variantId,
+          menuVersionId: row.menuVersionId,
+          options: row.options,
+          extras: row.extras,
+          note: row.note,
+          quantity: thousandthsToDecimal(row.quantity),
+          courseId: row.courseId,
+          ...(course === null ? {} : { course }),
+          makeAt: row.makeAtStationId,
+          noMerge: row.noMerge,
+          slot: row.slot,
+          joinGroupId: row.joinGroupId,
+          afterGroupId: row.afterGroupId,
+          unavailable: false,
+        },
+      }) satisfies { draftId: string; position: number; line: FreshDraftLine },
+  );
+  const sources = await tx
+    .select({
+      reference: orderDraftRecalledLines,
+      billId: orderDrafts.billId,
+      sourceBillId: workingOrderLines.workingOrderId,
+      parentLineId: workingOrderLines.parentLineId,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
+      },
+      makeAt: workingOrderLines.makeAtStationId,
+    })
+    .from(orderDraftRecalledLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .where(inArray(orderDraftRecalledLines.draftId, [...draftIds]));
+  const recalled: { draftId: string; position: number; line: RecalledDraftLine }[] = [];
+  for (const billId of new Set(sources.map((row) => row.billId))) {
+    if (billId === null) throw invalid("billId");
+    const bill = await readTabLines(tx, cfg, billId);
+    const amounts = await tx
+      .select({ id: workingOrderLines.id, total: workingOrderLines.lineTotal })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const totals = new Map(amounts.map((row) => [row.id, centsToDecimal(row.total)]));
+    for (const { reference, sourceBillId, parentLineId, makeAt, course } of sources.filter(
+      (row) => row.billId === billId,
+    )) {
+      if (sourceBillId !== billId || parentLineId !== null) throw invalid("sourceLineId");
+      const line = bill.find((line) => line.id === reference.sourceLineId)!;
+      const extras = bill.filter((child) => child.parentLineNo === line.lineNo);
+      recalled.push({
+        draftId: reference.draftId,
+        position: reference.position,
+        line: {
+          id: reference.id,
+          sourceLineId: line.id,
+          source: {
+            line,
+            extras,
+            netAmount: sumDecimals([line, ...extras].map((row) => totals.get(row.id)!)),
+          },
+          quantity: line.quantity,
+          note: line.note,
+          courseId: line.courseId,
+          ...(course === null ? {} : { course }),
+          makeAt,
+          noMerge: true,
+          unavailable: false,
+          slot: reference.slot,
+          joinGroupId: reference.joinGroupId,
+          afterGroupId: reference.afterGroupId,
+        },
+      });
+    }
+  }
+  return [...fresh, ...recalled].sort(
+    (a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id),
+  );
 }
 
-/** Delete every line of `fromDraftIds`, then write `lines` to `intoDraftId` numbered from one. */
 async function replaceLines(
   tx: Transaction,
   fromDraftIds: readonly string[],
   intoDraftId: string,
   lines: readonly DraftLine[],
 ): Promise<void> {
+  for (const [index, line] of lines.entries()) {
+    if (isRecalled(line))
+      await tx
+        .update(orderDraftRecalledLines)
+        .set({
+          draftId: intoDraftId,
+          position: index + 1,
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+        })
+        .where(eq(orderDraftRecalledLines.id, line.id));
+  }
+  const fresh = lines.flatMap((line, index) =>
+    isFresh(line) ? [{ line, position: index + 1 }] : [],
+  );
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
   await tx.delete(orderDraftLines).where(
     and(
       inArray(orderDraftLines.draftId, [...fromDraftIds]),
-      lines.length === 0
+      fresh.length === 0
         ? undefined
         : notInArray(
             orderDraftLines.id,
-            lines.map((line) => line.id),
+            fresh.map(({ line }) => line.id),
           ),
     ),
   );
-  if (lines.length === 0) return;
-  const rows = lines.map((line, index) => ({
+  if (fresh.length === 0) return;
+  const rows = fresh.map(({ line, position }) => ({
     id: line.id,
     draftId: intoDraftId,
-    position: index + 1,
+    position,
     menuItemId: line.menuItemId,
     variantId: line.variantId,
     menuVersionId: line.menuVersionId,
@@ -985,6 +1196,7 @@ async function readOpenDrafts(
   if (drafts.length === 0) return [];
   const lines = await storedLines(
     tx,
+    cfg,
     drafts.map((draft) => draft.id),
   );
   const offers =
@@ -993,7 +1205,7 @@ async function readOpenDrafts(
       tx,
       cfg,
       partyId,
-      lines.map(({ line }) => line.menuItemId),
+      lines.flatMap(({ line }) => (isFresh(line) ? [line.menuItemId] : [])),
     ));
   const takenFrom = await takenOverFrom(
     tx,
@@ -1006,10 +1218,14 @@ async function readOpenDrafts(
     takenOverFrom: takenFrom.get(draft.id) ?? null,
     lines: lines
       .filter((stored) => stored.draftId === draft.id)
-      .map(({ line }) => ({
-        ...line,
-        unavailable: unavailable(line, offers.get(line.menuItemId)),
-      })),
+      .map(({ line }) =>
+        isRecalled(line)
+          ? line
+          : {
+              ...line,
+              unavailable: unavailable(line, offers.get(line.menuItemId)),
+            },
+      ),
   }));
 }
 
@@ -1067,7 +1283,7 @@ async function offersFor(
  * those is refused when the line is priced. An options list the line leaves unanswered is not
  * checked.
  */
-function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean {
+function unavailable(line: FreshDraftLine, offer: ZoneMenuOffer | undefined): boolean {
   if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
     return true;
   if (

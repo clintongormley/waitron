@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
   orderDraftLines,
+  orderDraftRecalledLines,
   orderGroups,
   parties,
   products,
@@ -953,4 +954,41 @@ describe("a line's answers of the wrong shape", () => {
       expect(await snapshot()).toEqual(before);
     },
   );
+});
+
+describe("source-backed draft HTTP boundary", () => {
+  it("refuses source routing preview until its stored-family route is implemented", async () => {
+    const party = await seated();
+    const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const sourceId = randomUUID(),
+      referenceId = randomUUID();
+    await inTx(venue, async (tx) => {
+      await tx.insert(workingOrderLines).values({
+        id: sourceId,
+        workingOrderId: party.tabId,
+        lineNo: 1,
+        name: "Frozen",
+        descriptions: { [venue.cfg.locale]: "Frozen" },
+        quantity: 1000,
+        unitPriceGross: 100,
+        lineTotal: 100,
+        vatClass: "general",
+      });
+      await tx
+        .insert(orderDraftRecalledLines)
+        .values({ id: referenceId, draftId: draft.id, sourceLineId: sourceId, position: 2 });
+    });
+    const before = await snapshot();
+    const response = await ana("POST", "/api/dead-ends/draft", {
+      partyId: party.partyId,
+      draftId: draft.id,
+      lineIds: [referenceId],
+    });
+    expect(response.status).toBe(400);
+    expect(response.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "lineIds" },
+    });
+    expect(await snapshot()).toEqual(before);
+  });
 });

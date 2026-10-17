@@ -3306,8 +3306,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const draft = (await readDrafts(tx, cfg, partyId)).find((entry) => entry.id === draftId);
         if (draft === undefined) throw new AppError("draft.not_found", { draftId });
         const ids = new Set(body.lineIds);
-        const lines = draft.lines.filter((line) => ids.has(line.id));
-        if (lines.length !== ids.size) throw invalid("lineIds");
+        const selected = draft.lines.filter((line) => ids.has(line.id));
+        if (selected.length !== ids.size || selected.some((line) => line.sourceLineId !== null))
+          throw invalid("lineIds");
+        const lines = selected.filter((line) => line.sourceLineId === null);
         const zoneId = await partyZone(tx, cfg, partyId);
         const priced = await priceOrderLines(
           tx,

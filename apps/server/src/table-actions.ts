@@ -275,6 +275,7 @@ export async function combineParties(
 
   await moveDraftsToParty(
     tx,
+    cfg,
     from,
     into,
     args.operatorId,

@@ -318,3 +318,13 @@ describe("normaliseDraftLines (D10)", () => {
     expect(first.quantity).toBe("1");
   });
 });
+
+describe("source-backed draft merge boundaries", () => {
+  it("never merges a recalled source with fresh rows or another source, even without noMerge", () => {
+    const fresh = line({ menuItemId: BURGER });
+    const source = { ...fresh, id: "recall-1", sourceLineId: "sent-1" };
+    const other = { ...fresh, id: "recall-2", sourceLineId: "sent-2" };
+    expect(draftLineMergeKey(source)).toBeNull();
+    expect(normaliseDraftLines([fresh, source, other])).toEqual([fresh, source, other]);
+  });
+});
