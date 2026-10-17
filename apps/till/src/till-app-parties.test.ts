@@ -5110,6 +5110,7 @@ describe("till-app: the order's groups", () => {
   });
 
   it("sends a round from a party just seated when the floor could not be read after seating", async () => {
+    drafts.bills.add("wo-new");
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
@@ -5440,7 +5441,19 @@ describe("till-app: the order's groups", () => {
         await openGroups(el);
         await press(el, '[data-split-group-line="line-steak"]');
         expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
-          ["v1", "line-steak", command(3)],
+          [
+            "v1",
+            "line-steak",
+            {
+              ...command(3),
+              expectedEdit: {
+                billId: "wo-4",
+                editorVersion: 0,
+                draftId: null,
+                draftRevision: null,
+              },
+            },
+          ],
         ]);
         expect(server.moveLinesToGroup).not.toHaveBeenCalled();
         expect(heldGroupsList(el)[2]!.lines).toEqual([
@@ -5471,7 +5484,16 @@ describe("till-app: the order's groups", () => {
       await openGroups(el);
       const lineReads = server.getTabLines.mock.calls.length;
       await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
@@ -5536,7 +5558,16 @@ describe("till-app: the order's groups", () => {
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
       await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(banner(el)!.textContent).toContain(t("table.error"));
       expect(heldGroupsList(el)[2]!.lines).toEqual([
@@ -5563,7 +5594,16 @@ describe("till-app: the order's groups", () => {
       const floorReads = server.getTablesState.mock.calls.length;
       const lineReads = server.getTabLines.mock.calls.length;
       await press(el, '[data-split-group-line="line-steak"]');
-      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      expect(split.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
@@ -5602,7 +5642,16 @@ describe("till-app: the order's groups", () => {
       split.click();
       await flush(el);
 
-      expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
+      expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
+        [
+          "v1",
+          "line-steak",
+          {
+            ...command(3),
+            expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          },
+        ],
+      ]);
       expect(banner(el)).toBeNull();
       expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
     });
@@ -5700,7 +5749,19 @@ describe("till-app: the order's groups", () => {
         await flush(el);
 
         expect(refused).toHaveBeenCalledOnce();
-        expect(refused.mock.calls[0]!.at(-1)).toEqual(command(3));
+        expect(refused.mock.calls[0]!.at(-1)).toEqual(
+          type === "split-group-line"
+            ? {
+                ...command(3),
+                expectedEdit: {
+                  billId: "wo-4",
+                  editorVersion: 0,
+                  draftId: null,
+                  draftRevision: null,
+                },
+              }
+            : command(3),
+        );
         expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
         expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
         expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
@@ -6734,6 +6795,85 @@ describe("till-app: Current orders", () => {
 
     expect(api.readCurrentOrders).toHaveBeenCalledWith("v1");
     expect(order.currentOrders).toEqual(orders);
+  });
+
+  it.each([
+    ["wo-4", 0],
+    ["wo-check", 8],
+  ] as const)(
+    "splits a held party dish using its own bill %s observation",
+    async (billId, editorVersion) => {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      current.groups[0]!.rows[0]!.workingOrderId = billId;
+      const split = vi.fn().mockResolvedValue({ revision: 4 });
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+        listDrafts: vi.fn(async (partyId: string) => {
+          const snapshot = await drafts.listDrafts(partyId);
+          snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 8;
+          return snapshot;
+        }),
+      });
+      const order = await openMesa(el);
+      emit(order, "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedEdit: { billId, editorVersion, draftId: null, draftRevision: null },
+      });
+      expect(order.orderId).toBe("wo-4");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps another bill's newer observation when a refresh reports a lower version", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.rows[0]!.workingOrderId = "wo-check";
+    let reads = 0;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion =
+        ++reads === 1 ? 8 : 2;
+      return snapshot;
+    });
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+      listDrafts,
+    });
+    const order = await openMesa(el);
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    expect(listDrafts).toHaveBeenCalledTimes(2);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      expectedEdit: { billId: "wo-check", editorVersion: 8, draftId: null, draftRevision: null },
+    });
+  });
+
+  it("sends no split without an observation for the dish's bill", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.rows[0]!.workingOrderId = "wo-missing";
+    const split = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+    });
+    const order = await openMesa(el);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).not.toHaveBeenCalled();
+    expect(order.orderId).toBe("wo-4");
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
   });
 
   it("opens the order with no Current orders when their read fails", async () => {

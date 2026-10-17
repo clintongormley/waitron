@@ -6194,6 +6194,13 @@ describe("recalled draft source splitting", () => {
         action: "cancel",
         reasonId: "mistake",
         note: "Duplicate order",
+        sourceDraftId: "draft-recalled",
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 3,
+        },
       },
       {
         expectedRevision: 0,
@@ -6201,6 +6208,13 @@ describe("recalled draft source splitting", () => {
         action: "cancel",
         reasonId: "mistake",
         note: "Duplicate order",
+        sourceDraftId: "draft-recalled",
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 3,
+        },
       },
     ]);
     emit(adjustment(el)!, "adjust-confirm");
@@ -6213,6 +6227,12 @@ describe("recalled draft source splitting", () => {
         submissionId: expect.any(String),
         revision: 3,
         expectedRevision: 0,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 3,
+        },
         reasonId: "mistake",
         note: "Duplicate order",
       },
@@ -6271,6 +6291,12 @@ describe("recalled draft source splitting", () => {
         submissionId: expect.any(String),
         revision: 1,
         expectedRevision: 0,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: expect.any(String),
+          draftRevision: 1,
+        },
       },
       { signal: expect.any(AbortSignal) },
     );
@@ -6348,6 +6374,12 @@ describe("recalled draft source splitting", () => {
         submissionId: expect.any(String),
         revision: 2,
         expectedRevision: 0,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 2,
+        },
         reasonId: "mistake",
         note: "Duplicate order",
         approver: { personId: "admin-1", pin: "7777" },
@@ -6433,11 +6465,11 @@ describe("recalled draft source splitting", () => {
     await discardPreview(el, order);
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el, 6);
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
     expect(adjustment(el)).toBeNull();
     expect(banner(el)?.textContent).toContain("Luis");
     expect(server.drafts[0]!.lines).toHaveLength(1);
-    expect(draft(el).editsLocked).toBe(false);
+    expect(draft(el).editsLocked).toBe(true);
   });
 
   it("Discard locks stale source rows if the successful command cannot reload its draft", async () => {
@@ -6476,8 +6508,10 @@ describe("recalled draft source splitting", () => {
     await flush(el);
     expect(adjustment(el)).toBeNull();
     expect(discardDraft).not.toHaveBeenCalled();
-    expect(draft(el).lines[0]!.note).toBe("Keep this unsaved note");
-    expect(draft(el).editsLocked).toBe(false);
+    expect(draft(el).lines[0]!.note).toBe("Recorded note");
+    expect(tableOrder(el)!.retainedDraft?.lines[0]!.note).toBe("Keep this unsaved note");
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")).not.toBeNull();
+    expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
   });
 
@@ -6534,17 +6568,29 @@ describe("recalled draft source splitting", () => {
 
   it("Discard of fresh dishes retains unsaved edits when its save is refused", async () => {
     const discardDraft = vi.fn();
-    const { el } = await mountApp({ discardDraft });
+    let refuse!: (error: Error) => void;
+    const saveDraft = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountApp({ discardDraft, saveDraft });
     const order = await openMesa(el);
     await tap(el, "Beer");
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
     await order.updateComplete;
-    server.saveDraft.mockRejectedValue(new Error("Offline"));
     await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!);
+    await expect.poll(() => saveDraft.mock.calls.length).toBe(1);
+    refuse(new Error("Offline"));
     await flush(el);
     expect(discardDraft).not.toHaveBeenCalled();
-    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(rows(el)).toEqual([]);
+    expect(
+      tableOrder(el)!.retainedDraft?.lines.map((line) => [line.product.name, line.quantity]),
+    ).toEqual([["Beer", "1"]]);
+    expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
     expect(draft(el).sending).toBe(false);
   });
@@ -6631,7 +6677,8 @@ describe("recalled draft source splitting", () => {
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el, 6);
     expect(adjustment(el)).toBeNull();
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)?.textContent).toContain("Luis");
     expect(api.applyAdjustment).toHaveBeenCalledOnce();
   });
@@ -6700,13 +6747,15 @@ describe("recalled draft source splitting", () => {
     draft(el).removeLine(0);
     await flush(el, 6);
     expect(rows(el)).toEqual(["Recorded steak ×2"]);
-    expect(draft(el).lines[0]!.note).toBe("No salt");
+    expect(draft(el).lines[0]!.note).toBe("Recorded note");
+    expect(tableOrder(el)!.retainedDraft?.lines[0]!.note).toBe("No salt");
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")).not.toBeNull();
     expect(adjustment(el)).toBeNull();
     expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
     expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(draft(el).sending).toBe(false);
-    expect(draft(el).editsLocked).toBe(false);
+    expect(draft(el).editsLocked).toBe(true);
   });
 
   it("source cancellation ignores late answers after table navigation and releases the command lock", async () => {
@@ -6735,7 +6784,7 @@ describe("recalled draft source splitting", () => {
     expect(banner(el)?.textContent).toBe(nextMessage);
     expect(adjustment(el)).toBeNull();
     expect(old.sending).toBe(false);
-    expect(old.editsLocked).toBe(false);
+    expect(old.editsLocked).toBe(true);
     expect(tableOrder(el)?.groupCommandBusy).toBe(false);
   });
 
@@ -6780,6 +6829,13 @@ describe("recalled draft source splitting", () => {
       lineId: "source-7",
       expectedRevision: 0,
       quantity: "1",
+      expectedEdit: {
+        billId: "wo-4",
+        editorVersion: 1,
+        draftId: "draft-recalled",
+        draftRevision: 2,
+      },
+      sourceDraftId: "draft-recalled",
     });
     emit(adjustment(el)!, "adjust-confirm");
     await flush(el);
@@ -6791,6 +6847,13 @@ describe("recalled draft source splitting", () => {
         lineId: "source-7",
         quantity: "1",
         expectedRevision: 0,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 2,
+        },
+        sourceDraftId: "draft-recalled",
         submissionId: expect.any(String),
       },
       { signal: expect.any(AbortSignal) },
@@ -6856,7 +6919,16 @@ describe("recalled draft source splitting", () => {
     expect(split.mock.calls[0]).toEqual([
       "v1",
       "source-7",
-      { submissionId: expect.any(String), expectedPartyRevision: 3 },
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: "draft-recalled",
+          draftRevision: 2,
+        },
+      },
       { signal: expect.any(AbortSignal) },
     ]);
     expect(draft(el).sending).toBe(true);
@@ -6952,7 +7024,8 @@ describe("recalled draft source splitting", () => {
     const { el, order, button } = await opening(split);
     await userEvent.click(button);
     await flush(el, 6);
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
     expect(order.otherDrafts.map((other) => [other.ownerName, other.lines.length])).toEqual([
       ["Sam", 1],
     ]);
@@ -7134,7 +7207,9 @@ describe("recalled draft source splitting", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(split).not.toHaveBeenCalled();
     expect(rows(el)).toEqual(["Recorded steak ×2"]);
-    expect(draft(el).lines[0]!.note).toBe("No pepper");
+    expect(draft(el).lines[0]!.note).toBe("Recorded note");
+    expect(tableOrder(el)!.retainedDraft?.lines[0]!.note).toBe("No pepper");
+    expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
   });
 
@@ -7191,6 +7266,7 @@ describe("recalled draft source splitting", () => {
         {
           expectedPartyRevision: 3,
           submissionId: expect.any(String),
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         },
         { signal: expect.any(AbortSignal) },
       );
@@ -7247,12 +7323,21 @@ describe("recalled draft source splitting", () => {
       expect(api.saveDraft).toHaveBeenCalledOnce();
       expect(api.recallToDraft).not.toHaveBeenCalled();
       expect(api.recallLines).not.toHaveBeenCalled();
-      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(rows(el)).toEqual([]);
+      expect(
+        tableOrder(el)!.retainedDraft?.lines.map((line) => [line.product.name, line.quantity]),
+      ).toEqual([["Beer", "1"]]);
+      expect(draft(el).editsLocked).toBe(true);
       expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
       expect(draft(el).sending).toBe(false);
     });
     it("retains this owner's fresh dishes and another owner's separate draft", async () => {
-      const other = server.save("v1", { draftId: null, revision: 0, billId: "wo-4", lines: [] });
+      const other = server.save("v1", {
+        draftId: null,
+        revision: 0,
+        billId: "wo-check",
+        lines: [],
+      });
       other.ownerId = "p2";
       other.ownerName = "Luis";
       other.lines = [reference("luis-source", "8.63", "1")];
@@ -7263,7 +7348,7 @@ describe("recalled draft source splitting", () => {
       await flush(el, 6);
       expect(rows(el)).toEqual(["Beer ×1", "Recorded steak ×2"]);
       expect(server.drafts.find((each) => each.ownerId === "p2")).toEqual(frozen);
-      expect(order.otherDrafts.map((each) => each.ownerName)).toEqual(["Luis"]);
+      expect(order.otherDrafts).toEqual([]);
       expect(api.takeOverDraft).not.toHaveBeenCalled();
     });
 
@@ -7458,7 +7543,16 @@ describe("recalled draft source splitting", () => {
           expect(api.recallToDraft).toHaveBeenCalledWith(
             "v1",
             "source-7",
-            { expectedPartyRevision: 4, submissionId: expect.any(String) },
+            {
+              expectedPartyRevision: 4,
+              submissionId: expect.any(String),
+              expectedEdit: {
+                billId: "wo-4",
+                editorVersion: 0,
+                draftId: null,
+                draftRevision: null,
+              },
+            },
             { signal: expect.any(AbortSignal) },
           );
           expect(rows(el)).toEqual(["Recorded steak ×2"]);

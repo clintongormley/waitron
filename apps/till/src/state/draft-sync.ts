@@ -261,6 +261,7 @@ export class DraftSync {
   readonly #options: DraftSyncOptions;
   readonly #candidates: Map<string, RetainedDraftCandidate>;
   #edit: BillEditState | null = null;
+  #billEdits: BillEditState[] = [];
   #authoritative: Draft | null = null;
   #localGeneration = 0;
   #draftId: string | null = null;
@@ -306,8 +307,13 @@ export class DraftSync {
   }
 
   get expectedEdit(): BillEditExpected | null {
-    const edit = this.#edit;
-    return edit === null
+    return this.expectedEditFor(this.billId);
+  }
+
+  expectedEditFor(billId: string): BillEditExpected | null {
+    const edit =
+      billId === this.billId ? this.#edit : this.#billEdits.find((edit) => edit.billId === billId);
+    return edit == null
       ? null
       : {
           billId: edit.billId,
@@ -393,8 +399,7 @@ export class DraftSync {
     );
   }
 
-  #olderEdit(edit: BillEditExpected): boolean {
-    const current = this.#edit;
+  #olderEdit(edit: BillEditExpected, current: BillEditExpected | null = this.#edit): boolean {
     return (
       current !== null &&
       (edit.editorVersion < current.editorVersion ||
@@ -500,6 +505,11 @@ export class DraftSync {
       answer.drafts.find((draft) => draft.id === edit.draftId && draft.billId === this.billId) ??
       null;
     if ((draft === null) !== (edit.draftId === null)) return false;
+    const previous = new Map(this.#billEdits.map((edit) => [edit.billId, edit]));
+    this.#billEdits = answer.billEdits.map((edit) => {
+      const known = previous.get(edit.billId);
+      return known !== undefined && this.#olderEdit(edit, known) ? known : { ...edit };
+    });
     this.applyBillSnapshot({ draft, edit }, read);
     this.#recoveryRequired = false;
     this.#unlockRecovery?.();

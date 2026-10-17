@@ -10242,9 +10242,17 @@ export class TillApp extends LitElement {
 
   async #onSplitGroupLine(event: Event): Promise<void> {
     const { lineId } = (event as CustomEvent<SplitGroupLineDetail>).detail;
-    await this.#onGroupRequest((party, command) =>
-      this.api.splitHeldLineIntoUnits(party.id, lineId, command),
-    );
+    await this.#onGroupRequest((party, command) => {
+      const row = this.currentOrders?.groups
+        .flatMap((group) => group.rows)
+        .find((row) => row.lineId === lineId);
+      const billId =
+        row?.workingOrderId ??
+        (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
+      const expectedEdit = billId === undefined ? null : this.#draftSync?.expectedEditFor(billId);
+      if (expectedEdit == null) throw { code: "draft.out_of_date" };
+      return this.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit });
+    });
   }
 
   async #onSplitDraftSource(event: Event): Promise<void> {
@@ -10270,7 +10278,7 @@ export class TillApp extends LitElement {
     this.groupCommandBusy = true;
     store.busyAction = "split";
     try {
-      const outcome = await sync.runCommand(async (_state, options) => {
+      const outcome = await sync.runCommand(async (state, options) => {
         const party = this.orderParty;
         if (
           !live() ||
@@ -10284,6 +10292,7 @@ export class TillApp extends LitElement {
           {
             submissionId: crypto.randomUUID(),
             expectedPartyRevision: party.revision,
+            expectedEdit: state.expectedEdit,
           },
           options,
         );
@@ -10337,6 +10346,7 @@ export class TillApp extends LitElement {
             submissionId: crypto.randomUUID(),
             revision: state.revision,
             expectedRevision: this.tabRevision,
+            expectedEdit: state.expectedEdit,
           },
           options,
         );
@@ -10494,13 +10504,17 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       if (!(await this.#flushPartyKitchenNote()) || !live()) return;
-      const outcome = await sync.runCommand(async (_state, options) => {
+      const outcome = await sync.runCommand(async (state, options) => {
         const party = this.orderParty;
         if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
         return this.api.recallToDraft(
           party.id,
           line.id,
-          { submissionId: crypto.randomUUID(), expectedPartyRevision: party.revision },
+          {
+            submissionId: crypto.randomUUID(),
+            expectedPartyRevision: party.revision,
+            expectedEdit: state.expectedEdit,
+          },
           options,
         );
       });
@@ -11214,7 +11228,14 @@ export class TillApp extends LitElement {
       expectedRevision: open.revision,
       lineId: open.target.lineId,
       ...choice,
-      ...(open.source === undefined ? {} : { action: "cancel", quantity: open.source.quantity }),
+      ...(open.source === undefined
+        ? {}
+        : {
+            action: "cancel",
+            quantity: open.source.quantity,
+            expectedEdit: open.source.sync.expectedEdit!,
+            sourceDraftId: open.source.sync.expectedEdit!.draftId!,
+          }),
       ...(open.cancellation === undefined
         ? {}
         : { action: "cancel", quantity: open.cancellation.choice.quantity }),
@@ -11245,6 +11266,8 @@ export class TillApp extends LitElement {
               action: "cancel",
               lineId,
               expectedRevision: open.revision,
+              expectedEdit: open.source.sync.expectedEdit!,
+              sourceDraftId: open.source.sync.expectedEdit!.draftId!,
             }),
           );
           if (this.#adjustingNow(open.id) === null) return;
@@ -11406,6 +11429,7 @@ export class TillApp extends LitElement {
                 submissionId: command.submissionId,
                 revision: state.revision,
                 expectedRevision: open.revision,
+                expectedEdit: state.expectedEdit,
                 reasonId: open.choice!.reasonId,
                 note: open.choice!.note,
                 ...(approver === undefined ? {} : { approver }),
@@ -11413,7 +11437,15 @@ export class TillApp extends LitElement {
               options,
             );
           }
-          return await this.api.applyAdjustment(open.orderId, command, options);
+          return await this.api.applyAdjustment(
+            open.orderId,
+            {
+              ...command,
+              expectedEdit: state.expectedEdit,
+              sourceDraftId: state.draftId!,
+            },
+            options,
+          );
         } catch (error) {
           refusal = error;
           throw error;

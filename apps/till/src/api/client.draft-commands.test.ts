@@ -11,6 +11,7 @@ const draft: Draft = {
   lines: [],
   takenOverFrom: null,
 };
+const expectedEdit = { billId: "bill-2", editorVersion: 2, draftId: "draft-1", draftRevision: 5 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -22,7 +23,7 @@ describe("TillApi draft source commands", () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 10 }));
     const api = new TillApi("", fetcher);
     const signal = new AbortController().signal;
-    const command = { submissionId: "split-source-1", expectedPartyRevision: 9 };
+    const command = { submissionId: "split-source-1", expectedPartyRevision: 9, expectedEdit };
     expect(await api.splitHeldLineIntoUnits("party-1", "source-7", command, { signal })).toEqual({
       revision: 10,
     });
@@ -39,7 +40,7 @@ describe("TillApi draft source commands", () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 9, draft }));
     const api = new TillApi("https://venue.test", fetcher);
     const signal = new AbortController().signal;
-    const command = { submissionId: "recall-1", expectedPartyRevision: 8 };
+    const command = { submissionId: "recall-1", expectedPartyRevision: 8, expectedEdit };
     expect(await api.recallToDraft("party-1", "source-7", command, { signal })).toEqual({
       revision: 9,
       draft,
@@ -71,6 +72,7 @@ describe("TillApi draft source commands", () => {
       submissionId: "discard-1",
       revision: 5,
       expectedRevision: 12,
+      expectedEdit,
       reasonId: "reason-1",
       note: "Guest left",
       approver: { personId: "manager-1", pin: "3456" },
@@ -94,7 +96,12 @@ describe("TillApi draft source commands", () => {
       party: null,
     };
     const fetcher = vi.fn().mockResolvedValue(json(answer));
-    const command = { submissionId: "discard-fresh", revision: 5, expectedRevision: 12 };
+    const command = {
+      submissionId: "discard-fresh",
+      revision: 5,
+      expectedRevision: 12,
+      expectedEdit,
+    };
     expect(await new TillApi("", fetcher).discardDraft("party-1", "draft-1", command)).toEqual(
       answer,
     );
@@ -118,11 +125,13 @@ describe("TillApi draft source commands", () => {
           ? api.recallToDraft("party-1", "source-7", {
               submissionId: "recall-1",
               expectedPartyRevision: 8,
+              expectedEdit,
             })
           : api.discardDraft("party-1", "draft-1", {
               submissionId: "discard-1",
               revision: 5,
               expectedRevision: 12,
+              expectedEdit,
             });
       await expect(sent).rejects.toEqual({
         code: "draft.taken_over",

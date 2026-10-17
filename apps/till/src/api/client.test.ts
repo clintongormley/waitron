@@ -4112,11 +4112,17 @@ describe("TillApi: a seated party", () => {
       api.splitHeldLineIntoUnits("v1", "l2", {
         submissionId: "split-1",
         expectedPartyRevision: 10,
+        expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null },
       }),
     ).resolves.toEqual({ revision: 11 });
     expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
       "/api/parties/v1/groups/split-line",
-      post({ submissionId: "split-1", expectedPartyRevision: 10, lineId: "l2" }),
+      post({
+        submissionId: "split-1",
+        expectedPartyRevision: 10,
+        expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null },
+        lineId: "l2",
+      }),
     );
   });
 

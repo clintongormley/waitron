@@ -849,6 +849,7 @@ export interface DraftDiscard {
   submissionId: string;
   revision: number;
   expectedRevision: number;
+  expectedEdit: BillEditExpected;
   reasonId?: string;
   note?: string | null;
   approver?: { personId: string; pin: string };
@@ -911,6 +912,8 @@ export interface AdjustmentReason {
  * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
  * taken only whole. */
 export interface AdjustmentAsk {
+  expectedEdit?: BillEditExpected;
+  sourceDraftId?: string;
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
@@ -4064,7 +4067,7 @@ export class TillApi {
   splitHeldLineIntoUnits(
     partyId: string,
     lineId: string,
-    command: GroupCommand,
+    command: GroupCommand & { expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4166,7 +4169,7 @@ export class TillApi {
   recallToDraft(
     partyId: string,
     lineId: string,
-    command: { submissionId: string; expectedPartyRevision: number },
+    command: GroupCommand & { expectedEdit: BillEditExpected },
     options: ReadOptions = {},
   ): Promise<{ revision: number; draft: Draft }> {
     return this.#request(
