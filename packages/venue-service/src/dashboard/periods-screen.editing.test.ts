@@ -4,6 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
@@ -129,14 +130,11 @@ async function edit(el: PeriodsScreen, existing?: string) {
   return dialog!;
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {
-  if (name === "colour")
-    dialog.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-colour="${value}"]`)!.click();
-  else
-    dialog
-      .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
-      .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-      );
+  dialog
+    .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
   await dialog.updateComplete;
 }
 const saveButton = (dialog: PeriodDialog) =>
@@ -146,8 +144,13 @@ function submit(dialog: PeriodDialog) {
 }
 const nameField = (dialog: PeriodDialog) =>
   dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-const checkedColour = (dialog: PeriodDialog) =>
-  dialog.shadowRoot!.querySelector("[role=radio][aria-checked=true]")?.getAttribute("data-colour");
+const checkedColour = (dialog: PeriodDialog) => {
+  const value =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+      "wt-colour-chooser[name=colour]",
+    )?.value ?? "";
+  return (CALENDAR_COLOURS as readonly string[]).includes(value) ? value : null;
+};
 const isHoursRead = (path: string, method: string) =>
   method === "GET" && path.endsWith("/opening-hours");
 
@@ -589,10 +592,10 @@ it("+ Add period on a venue with two departments asks for the department and cre
   }) as DashboardRequest);
   const dialog = await edit(el);
   expect(
-    dialog.departments?.map(({ id, name, usedColours }) => ({ id, name, usedColours })),
+    dialog.departments?.map(({ id, name, colourUsers }) => ({ id, name, colourUsers })),
   ).toEqual([
-    { id: "restaurant", name: "Restaurant", usedColours: ["green"] },
-    { id: "bar", name: "Bar", usedColours: ["red"] },
+    { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "green" }] },
+    { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
   ]);
   expect(dialog.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add period");
   expect(saveButton(dialog).textContent!.trim()).toBe("Save");
@@ -900,4 +903,55 @@ it("a late period save cannot revive the removed department's retained dialog", 
   expect(dialog.isConnected).toBe(false);
   expect(dialogOf(screen)).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("editing a period marks the colours its department's other periods use, never its own", async () => {
+  const data = model();
+  data.departments[0]!.periods = [
+    { ...lunch(), colour: "red" },
+    { ...lunch(), id: "p2", name: "Dinner", colour: "red" },
+    { ...lunch(), id: "p3", name: "Brunch", colour: "blue" },
+  ];
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  const chooser = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-colour-chooser[name=colour]",
+  )!;
+  const marks = Object.fromEntries(chooser.choices.map((c) => [c.value, c.usedBy ?? []]));
+  expect(marks.red).toEqual(["Dinner"]);
+  expect(marks.blue).toEqual(["Brunch"]);
+  expect(checkedColour(dialog)).toBe("red");
+});
+
+it("a page redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
+  const data = model();
+  data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  const chooser = () =>
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+      "wt-colour-chooser[name=colour]",
+    )!;
+  const users = dialog.colourUsers;
+  const choices = chooser().choices;
+  el.requestUpdate();
+  await el.updateComplete;
+  await dialog.updateComplete;
+  expect(dialog.colourUsers).toBe(users);
+  expect(chooser().choices).toBe(choices);
+  data.departments[0]!.periods[1]!.colour = "blue";
+  el.api.rereadWatches();
+  await expect.poll(() => dialog.colourUsers).not.toBe(users);
+  expect(dialog.colourUsers).toEqual([{ name: "Dinner", colour: "blue" }]);
+});
+
+it("a page redraw hands a dialog asking for the department the same department list", async () => {
+  const el = await mount((async () => twoDepartments()) as DashboardRequest);
+  const dialog = await edit(el);
+  const departments = dialog.departments;
+  const users = dialog.colourUsers;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(dialog.departments).toBe(departments);
+  expect(dialog.colourUsers).toBe(users);
 });

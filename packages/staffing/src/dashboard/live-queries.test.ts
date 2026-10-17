@@ -2,8 +2,19 @@ import { describe, expect, it } from "vitest";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
 describe("QUERY_DEPENDENCIES", () => {
-  it("reads the staff roles again when a role or a holder changes", () => {
-    expect(QUERY_DEPENDENCIES["staff-roles"]).toEqual(["staff_roles", "person_staff_roles"]);
+  it("reads the staff roles again when a role, a holder or a person changes", () => {
+    expect(QUERY_DEPENDENCIES["staff-roles"]).toEqual([
+      "staff_roles",
+      "person_staff_roles",
+      "persons",
+    ]);
+  });
+
+  it("reads the painters' staff roles again when a role or a holder changes, not a person", () => {
+    expect(QUERY_DEPENDENCIES["painter-staff-roles"]).toEqual([
+      "staff_roles",
+      "person_staff_roles",
+    ]);
   });
 
   it("reads a delete's impact again when a role, a holder, a painted block, a shift or a person changes", () => {
@@ -40,6 +51,7 @@ describe("QUERY_DEPENDENCIES", () => {
     ]);
     expect(Object.keys(QUERY_DEPENDENCIES)).toEqual([
       "staff-roles",
+      "painter-staff-roles",
       "staff-role-delete-impact",
       "staffing-month",
       "rota-warnings",

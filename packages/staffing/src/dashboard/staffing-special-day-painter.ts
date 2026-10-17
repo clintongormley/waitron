@@ -133,10 +133,14 @@ export class StaffingSpecialDayPainter extends LitElement {
     if (this.api && !this.watchingRoles) {
       this.watchingRoles = true;
       this.api
-        .watchStaffRoles(this.#roles, (staffRoles) => {
-          this.staffRoles = staffRoles;
-          this.rolesError = undefined;
-        })
+        .watchStaffRoles(
+          this.#roles,
+          (staffRoles) => {
+            this.staffRoles = staffRoles;
+            this.rolesError = undefined;
+          },
+          "painter-staff-roles",
+        )
         .catch(() => {
           // The controller's error callback has already said why.
         });
@@ -422,6 +426,7 @@ export class StaffingSpecialDayPainter extends LitElement {
           : staffRoleDialog(
               this.api,
               this.dialogOpen,
+              this.staffRoles,
               (saved) => {
                 if (!this.staffRoles.some(({ id }) => id === saved.id))
                   this.staffRoles = [...this.staffRoles, saved];

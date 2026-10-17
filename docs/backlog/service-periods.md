@@ -209,8 +209,6 @@ rows and dialog still apply). Files: `packages/venue-service/src/dashboard/perio
 5. **Delete… moves into the dialog's bottom row**, after Cancel on the left, with Save alone on the
    right — `[Cancel] [Delete…] … [Save]`, the house rule since 2026-10-16 (design-system.md → Forms);
    today it sits alone in the body.
-6. **The colour is chosen in a popup**, the shared chooser A725 point 7 describes, not a row of
-   squares. Whichever of A719, A721 and A725 lands first builds it.
 
 Its button goes on the Year view's season row.
 
@@ -222,7 +220,8 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 
 1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row,
    replaces the existing addressable chooser at `window/seasons` and lists every season in the order it
-   starts in the year. Each row edits its colour (A725's popup chooser), name and start date in
+   starts in the year. Each row edits its colour (`wt-colour-chooser`, choices from
+   `calendarColourChoices`, `packages/venue-service/src/dashboard/calendar-colours.ts`), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
    window; Cancel discards. The separate season editor and the chips' ✎ go.
@@ -271,30 +270,17 @@ special-day write routes.
    shift-click adds a run; one hint line says so. `DayPicker` (`day-picking.ts`), with `dragOnTouch` on
    inside the dialog.
 
-## A753. Calendar colours: more of them, one shared picker, and who holds each staff role
+## A753. Calendar colours: more of them
 
-**A753 (owner, 2026-10-16).** Three points that share one palette.
+**A753 (owner, 2026-10-16; left open by #1828).**
 
-1. **More colours for periods** ("we need more colours for periods"). Periods, staff roles, menus
-   and special dates pick from the six calendar colours — red, amber, grey, blue, green, purple
-   (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts:6`; their tokens are the
-   `--wt-color-palette-*` pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette.
-   How many and which colours go to the owner first as a swatch board in both themes, each with
-   its text colour at readable contrast. Check whether a stored column or a CHECK lists the six
-   before adding any (a migration if so).
-2. **One picker for every calendar colour.** The staff role dialog shows the colour as a dropdown
-   (`packages/staffing/src/dashboard/staff-role-dialog.ts:296-305`); the period dialog draws its
-   own swatches (`packages/venue-service/src/dashboard/period-dialog.ts:446-531`). A725 point 7
-   already plans one shared colour popup for stations, periods and seasons; staff roles use it too.
-   Whichever of A725 and A753 lands first builds it, and the other adopts it. The category and
-   product colour field (`apps/dashboard/src/widgets/color-field.ts`, a different set of 24) stays
-   apart. **For staff roles it marks the colours other roles use**, as A725 point 7 does for
-   stations, **and a new role starts on the first colour no role uses**, as A725 point 4 does for a
-   new station (owner, 2026-10-16: Waiter was offered Grey while only blue and red were taken). The
-   painter's "+ New staff role" opens the same dialog.
-3. **The Staff roles list names who holds each role.** The People column says "3 people"; it shows
-   the names, then "plus N more" past a cut-off. Owner: try 5 and 10 names on the real screen and
-   keep the one that reads better.
+1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
+   from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
+   `packages/venue-service/src/hours-types.ts:6`; their tokens are the `--wt-color-palette-*`
+   pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette. The owner's swatch board
+   is `docs/backlog/mockups/a753-calendar-colours/` (question in lane B's `questions.md`,
+   2026-10-17). Two CHECK constraints list the six, so growing it is a migration:
+   `menu_periods_colour_ck` (venue-service) and `staff_roles_colour_ck` (staffing).
 
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
@@ -326,6 +312,27 @@ shipped list has one: a probe on 2026-10-13 over every province and area of
 Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
+
+- **A new staff role's colour is chosen once, when its dialog opens
+  ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 5; plan default,
+  sent to the owner as an FYI).** It is the first colour, in `CALENDAR_COLOURS` order, that no other
+  role uses, or the first (red) when every colour is used. If the roles list arrives after the
+  dialog opened, the marks on the colours update but the chosen colour does not move. The other
+  roles never include the one being edited, nor the one the dialog has just created and stays open
+  on when only its people failed to save.
+
+- **The Staff roles list names every holder, whatever their status (A753 plan, Decision 6; plan
+  default, sent to the owner as an FYI).** The names come from the Staff roles list route, which
+  `venue.view` opens, not from the people list, which needs `person.manage`. Every active person's
+  name was already readable without signing in (`GET /management-api/staff-roster`); a pending or
+  suspended holder's name is the one widening. The receipt is in #1828.
+
+- **The Staff roles list shows five holders' names, then "plus N more" (A753 plan, Decision 7;
+  chosen on the screen, 2026-10-17, and sent to the owner as an FYI).** `HOLDER_NAMES_SHOWN`
+  (`packages/staffing/src/dashboard/staff-roles-screen.ts`) stays 5, chosen on the demo venue: at
+  1280 px wide, ten names (a role held by 12 people) overflowed the People cell and hid "plus 2
+  more", while five fit on one line; at 390 px the table scrolls sideways at either value. The
+  pictures are in #1828.
 
 - **The Calendar has no Year | Month switch; the title moves between views (A759, owner
   2026-10-16).** A month's name in the Year opens that month; in the Month's "‹ February 2026 ›" the

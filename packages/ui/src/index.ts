@@ -122,6 +122,7 @@ export {
   type ComboboxOption,
   type WtComboboxAppearance,
 } from "./components/wt-combobox.js";
+export { WtColourChooser, type ColourChoice } from "./components/wt-colour-chooser.js";
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE, paleSwatch } from "./category-color.js";
 

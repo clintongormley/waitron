@@ -51,7 +51,7 @@ const states: Record<string, () => Promise<void>> = {
   "a blank name refused": async () => {
     const el = await open(undefined, async () => people);
     el.shadowRoot!.querySelector("[name=colour]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "red" }, bubbles: true, composed: true }),
+      new CustomEvent("wt-change", { detail: { value: "purple" }, bubbles: true, composed: true }),
     );
     await el.updateComplete;
     save(el).click();

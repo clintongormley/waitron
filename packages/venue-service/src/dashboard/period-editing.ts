@@ -2,6 +2,7 @@ import { html, nothing, type ReactiveController, type ReactiveControllerHost } f
 import { keyed } from "lit/directives/keyed.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
+import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintPot } from "./paint-row.js";
 import type { PeriodDialog } from "./period-dialog.js";
@@ -33,6 +34,12 @@ export class PeriodEditing implements ReactiveController {
     paintedIn?: PaintedIn;
   };
   private busy = false;
+  private colours?: {
+    model: OpeningHoursModel;
+    editor: NonNullable<PeriodEditing["editor"]>;
+    colourUsers: readonly ColourUser[];
+    departments?: { id: string; name: string; colourUsers: readonly ColourUser[] }[];
+  };
   /** A period just created, chosen in its own department until the model lists it. */
   private created?: { id: string; departmentId: string };
 
@@ -180,13 +187,37 @@ export class PeriodEditing implements ReactiveController {
     return editor.period && this.options.paintedIn(editor.period.id);
   }
 
+  /** Built once per model and editor, so a redraw that changes neither keeps the dialog's choices. */
+  private coloursFor(
+    model: OpeningHoursModel,
+    editor: NonNullable<PeriodEditing["editor"]>,
+    department: Department | undefined,
+  ) {
+    if (this.colours?.model === model && this.colours.editor === editor) return this.colours;
+    const colourUsers = (entry: Department) =>
+      entry.periods
+        .filter(({ id }) => id !== editor.period?.id)
+        .map(({ name, colour }) => ({ name, colour }));
+    this.colours = {
+      model,
+      editor,
+      colourUsers: department ? colourUsers(department) : NO_COLOUR_USERS,
+      departments: department
+        ? undefined
+        : model.departments
+            .filter(({ active }) => active)
+            .map((entry) => ({ id: entry.id, name: entry.name, colourUsers: colourUsers(entry) })),
+    };
+    return this.colours;
+  }
+
   render(): unknown {
     const editor = this.editor;
     if (!editor) return nothing;
     const model = this.options.model();
-    const colours = (department: Department) => department.periods.map(({ colour }) => colour);
     const department = model.departments.find(({ id }) => id === editor.departmentId);
     if (editor.departmentId !== null && !department) return nothing;
+    const colours = this.coloursFor(model, editor, department);
     const fromPainter = !editor.period && !this.options.chooseDepartment;
     return keyed(
       editor,
@@ -198,14 +229,8 @@ export class PeriodEditing implements ReactiveController {
         .seasons=${model.seasons}
         .departmentId=${department?.id ?? ""}
         .departmentName=${department?.name ?? ""}
-        .usedColours=${department ? colours(department) : []}
-        .departments=${
-          department
-            ? undefined
-            : model.departments
-                .filter(({ active }) => active)
-                .map((entry) => ({ id: entry.id, name: entry.name, usedColours: colours(entry) }))
-        }
+        .colourUsers=${colours.colourUsers}
+        .departments=${colours.departments}
         .menus=${model.menus}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}

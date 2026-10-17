@@ -127,14 +127,15 @@ const en = {
   "staffing.role.delete_unknown": "{names} ({count})",
   "staffing.role.delete_error": "Could not delete the staff role: {reason}",
   "staffing.role.holders_none": "No people",
-  "staffing.role.holders_one": "1 person",
   "staffing.role.holders_other": "{count} people",
+  "staffing.role.holders_more": "{names} plus {count} more",
   "staffing.role.heading_new": "Add staff role",
   "staffing.role.heading_edit": "Edit staff role",
   "staffing.role.name": "Name",
   "staffing.role.name_required": "Enter a name",
   "staffing.role.colour": "Colour",
   "staffing.role.colour_invalid": "Choose one of the colours",
+  "staffing.role.colour_used_by": "{colour}, used by {names}",
   "staffing.role.people": "People",
   "staffing.role.people_placeholder": "Choose people",
   "staffing.role.people_invalid": "Some of these people no longer exist",
@@ -320,14 +321,15 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.delete_unknown": "{names} ({count})",
   "staffing.role.delete_error": "No se pudo eliminar el rol de personal: {reason}",
   "staffing.role.holders_none": "Nadie",
-  "staffing.role.holders_one": "1 persona",
   "staffing.role.holders_other": "{count} personas",
+  "staffing.role.holders_more": "{names} y {count} más",
   "staffing.role.heading_new": "Añadir rol de personal",
   "staffing.role.heading_edit": "Editar rol de personal",
   "staffing.role.name": "Nombre",
   "staffing.role.name_required": "Escribe un nombre",
   "staffing.role.colour": "Color",
   "staffing.role.colour_invalid": "Elige uno de los colores",
+  "staffing.role.colour_used_by": "{colour}, en uso por {names}",
   "staffing.role.people": "Personas",
   "staffing.role.people_placeholder": "Elige personas",
   "staffing.role.people_invalid": "Algunas de estas personas ya no existen",
@@ -427,11 +429,16 @@ export function tf(key: StringKey, values: Record<string, string>, locale?: stri
   return t(key, locale).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 
-/** How many people hold a staff role, as the list shows it. */
-export function holderCount(count: number, locale?: string): string {
-  if (count === 0) return t("staffing.role.holders_none", locale);
-  if (count === 1) return t("staffing.role.holders_one", locale);
-  return tf("staffing.role.holders_other", { count: String(count) }, locale);
+/** "No people"; the names; or the first `shown` names "plus N more". */
+export function holderNames(names: readonly string[], shown: number, locale?: string): string {
+  if (names.length === 0) return t("staffing.role.holders_none", locale);
+  const listed = names.slice(0, shown).join(", ");
+  if (names.length <= shown) return listed;
+  return tf(
+    "staffing.role.holders_more",
+    { names: listed, count: String(names.length - shown) },
+    locale,
+  );
 }
 
 /** How many people a staffing block needs, in words. */

@@ -238,12 +238,14 @@ export function paintRow(options: PaintRowOptions) {
 export function staffRoleDialog(
   api: StaffingApi,
   open: boolean,
+  staffRoles: readonly StaffRole[],
   saved: (staffRole: StaffRole) => void,
   close: () => void,
 ) {
   return html`<staff-role-dialog
     .api=${api}
     .open=${open}
+    .staffRoles=${staffRoles}
     .createLabel=${catalogueText("painter.add_and_paint")}
     @staff-role-saved=${(event: CustomEvent<StaffRole>) => {
       event.stopPropagation();

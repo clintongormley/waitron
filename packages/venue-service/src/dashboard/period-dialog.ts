@@ -16,12 +16,18 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
+import {
+  firstUnusedCalendarColour,
+  NO_COLOUR_USERS,
+  rememberedColourChoices,
+  type ColourUser,
+} from "./calendar-colours.js";
 import { format } from "./hours-view.js";
 import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
-import { periodColourStyles } from "./period-colour-styles.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
@@ -31,22 +37,14 @@ type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   /** Empty unless the dialog asks for the department. */
   departmentId: string;
 };
-type Department = { id: string; name: string; usedColours: readonly CalendarColour[] };
+type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
-const COLOUR_STEPS: Partial<Record<string, 1 | -1>> = {
-  ArrowRight: 1,
-  ArrowDown: 1,
-  ArrowLeft: -1,
-  ArrowUp: -1,
-};
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
-const unused = (usedColours: readonly CalendarColour[]) =>
-  CALENDAR_COLOURS.find((colour) => !usedColours.includes(colour)) ?? CALENDAR_COLOURS[0];
-const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
+const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
   name: "",
-  colour: unused(usedColours),
+  colour: firstUnusedCalendarColour(users),
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
@@ -65,7 +63,6 @@ const fields: Field[] = [
 export class PeriodDialog extends LitElement {
   static override styles = [
     baseStyles,
-    periodColourStyles,
     seasonTintStyles,
     css`
       :host {
@@ -75,39 +72,6 @@ export class PeriodDialog extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
-      }
-      fieldset {
-        display: grid;
-        gap: var(--wt-space-2);
-        border: none;
-        margin: 0;
-        padding: 0;
-      }
-      legend {
-        padding: 0;
-        margin-block-end: var(--wt-space-2);
-      }
-      [role="radiogroup"] {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      .swatch {
-        width: var(--wt-space-6);
-        height: var(--wt-space-6);
-        padding: 0;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--period-fill);
-        cursor: pointer;
-      }
-      .swatch[aria-checked="true"] {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-text);
-        outline-offset: var(--wt-focus-offset);
-      }
-      [data-test="colour-error"] {
-        color: var(--wt-color-danger);
-        font-size: var(--wt-font-size-sm);
       }
       .painted {
         display: grid;
@@ -151,7 +115,8 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
-  @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
+  /** The department's other periods; their colours are marked as used. */
+  @property({ attribute: false }) colourUsers: readonly ColourUser[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   /** Where the period is painted; absent draws no Painted in. */
   @property({ attribute: false }) paintedIn?: PaintedIn;
@@ -211,8 +176,8 @@ export class PeriodDialog extends LitElement {
             departmentId: "",
           }
         : this.departments?.length === 1
-          ? { ...empty(this.departments[0]!.usedColours), departmentId: this.departments[0]!.id }
-          : empty(this.usedColours);
+          ? { ...empty(this.departments[0]!.colourUsers), departmentId: this.departments[0]!.id }
+          : empty(this.colourUsers);
       this.colourPicked = false;
       this.baseline = copy(this.input);
       this.attempted = false;
@@ -249,6 +214,16 @@ export class PeriodDialog extends LitElement {
       endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
     };
   }
+  private get shownColourUsers(): readonly ColourUser[] {
+    if (!this.choosesDepartment) return this.colourUsers;
+    return (
+      this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ??
+      NO_COLOUR_USERS
+    );
+  }
+  private readonly colourChoices = rememberedColourChoices((colour) => t(`hours.colour.${colour}`));
+  private readonly usedByLabel = (colour: string, names: string) =>
+    format("hours.colour_used_by", { colour, names });
   private get choosesDepartment() {
     return !this.period && this.departments !== undefined;
   }
@@ -311,13 +286,8 @@ export class PeriodDialog extends LitElement {
         staffMenuIds: this.draft.staffMenuIds.filter((id) => id !== value),
       };
     if (field === "colour") this.colourPicked = true;
-    if (field === "departmentId" && !this.colourPicked) {
-      const department = this.departments?.find((entry) => entry.id === value);
-      this.draft = {
-        ...this.draft,
-        colour: unused(department ? department.usedColours : this.usedColours),
-      };
-    }
+    if (field === "departmentId" && !this.colourPicked)
+      this.draft = { ...this.draft, colour: firstUnusedCalendarColour(this.shownColourUsers) };
     if (this.refusalField() === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -442,8 +412,6 @@ export class PeriodDialog extends LitElement {
             ? t("menu.department_gone")
             : t("menu.save_error")
         : "";
-    const colourError = this.error("colour");
-    const tabStop = Math.max(0, CALENDAR_COLOURS.indexOf(this.draft.colour));
     const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;
     const current = () =>
@@ -497,51 +465,20 @@ export class PeriodDialog extends LitElement {
               if (current()) this.changed("name", event.detail.value);
             }}
           ></wt-input>
-          <fieldset name="colour">
-            <legend>${t("hours.colour")}</legend>
-            <div
-              role="radiogroup"
-              aria-label=${t("hours.colour")}
-              aria-invalid=${colourError ? "true" : "false"}
-              aria-describedby="colour-error"
-            >
-              ${CALENDAR_COLOURS.map(
-                (colour, index) =>
-                  html`<button
-                    type="button"
-                    class="swatch"
-                    role="radio"
-                    aria-checked=${this.draft.colour === colour ? "true" : "false"}
-                    aria-label=${t(`hours.colour.${colour}`)}
-                    aria-invalid=${colourError && index === 0 ? "true" : nothing}
-                    data-colour=${colour}
-                    tabindex=${index === tabStop ? 0 : -1}
-                    ?disabled=${this.busy}
-                    @click=${(event: Event) => {
-                      event.stopPropagation();
-                      if (current()) this.changed("colour", colour);
-                    }}
-                    @keydown=${(event: KeyboardEvent) => {
-                      const step = COLOUR_STEPS[event.key];
-                      if (!step) return;
-                      event.preventDefault();
-                      if (!current()) return;
-                      const next =
-                        CALENDAR_COLOURS[
-                          (index + step + CALENDAR_COLOURS.length) % CALENDAR_COLOURS.length
-                        ]!;
-                      this.changed("colour", next);
-                      void this.updateComplete.then(() =>
-                        this.shadowRoot!.querySelector<HTMLElement>(
-                          `[role=radio][data-colour="${next}"]`,
-                        )?.focus(),
-                      );
-                    }}
-                  ></button>`,
-              )}
-            </div>
-            <span id="colour-error" data-test="colour-error">${colourError}</span>
-          </fieldset>
+          <wt-colour-chooser
+            name="colour"
+            label=${t("hours.colour")}
+            required
+            .value=${this.draft.colour}
+            .choices=${this.colourChoices(this.shownColourUsers)}
+            .usedByLabel=${this.usedByLabel}
+            .error=${this.error("colour")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              if (current()) this.changed("colour", event.detail.value);
+            }}
+          ></wt-colour-chooser>
           <wt-combobox
             name="menuId"
             label=${t("period.customer_menu")}

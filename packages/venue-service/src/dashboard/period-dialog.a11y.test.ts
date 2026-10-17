@@ -69,8 +69,8 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     if (state === "deletable") el.deletable = true;
     if (state === "add-from-page")
       el.departments = [
-        { id: "restaurant", name: "Restaurant", usedColours: ["red"] },
-        { id: "bar", name: "Bar", usedColours: [] },
+        { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "red" }] },
+        { id: "bar", name: "Bar", colourUsers: [] },
       ];
     el.open = true;
     await el.updateComplete;
@@ -93,7 +93,11 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       ).toBe("Choose a menu.");
     }
     if (state === "new" || state === "edit") {
-      expect(el.shadowRoot!.querySelectorAll("[role=radiogroup] [role=radio]")).toHaveLength(6);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+          "wt-colour-chooser[name=colour]",
+        )!.choices,
+      ).toHaveLength(6);
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=floorPlanId]")!
           .disabled,
@@ -104,9 +108,11 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-test=colour-error]")!.textContent!.trim()).toBe(
-        "Choose a colour.",
-      );
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+          "wt-colour-chooser[name=colour]",
+        )!.error,
+      ).toBe("Choose a colour.");
     }
     if (state === "refused") el.refusal = { code: "menu_period.name_taken" };
     if (state === "saving") {

@@ -29,6 +29,7 @@ import "../src/components/wt-slider.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
+import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
@@ -131,6 +132,21 @@ const panel = (theme: "light" | "dark") => `
           multiple
           allow-add
         ></wt-combobox>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <wt-colour-chooser
+          label="Colour"
+          name="colour"
+          value="blue"
+          class="demo-colour-chooser"
+        ></wt-colour-chooser>
+        <wt-colour-chooser
+          label="Colour"
+          name="colour-required"
+          required
+          error="Choose a colour."
+          class="demo-colour-chooser"
+        ></wt-colour-chooser>
       </div>
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
@@ -465,6 +481,29 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
     multi.options = [...multi.options, option];
     multi.values = [...multi.values, option.value];
   }) as EventListener);
+
+  const DEMO_COLOURS = [
+    { value: "red", label: "Red", fill: "var(--wt-color-palette-red)", usedBy: ["Waiter"] },
+    { value: "amber", label: "Amber", fill: "var(--wt-color-palette-amber)" },
+    {
+      value: "blue",
+      label: "Blue",
+      fill: "var(--wt-color-palette-blue)",
+      usedBy: ["Runner", "Cook"],
+    },
+    { value: "green", label: "Green", fill: "var(--wt-color-palette-green)" },
+    { value: "purple", label: "Purple", fill: "var(--wt-color-palette-purple)" },
+    { value: "grey", label: "Grey", fill: "var(--wt-color-palette-grey)" },
+  ];
+  for (const chooser of el.querySelectorAll<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    ".demo-colour-chooser",
+  )) {
+    chooser.choices = DEMO_COLOURS;
+    chooser.addEventListener("wt-change", ((e: CustomEvent<{ value: string }>) => {
+      chooser.value = e.detail.value;
+      chooser.error = "";
+    }) as EventListener);
+  }
 
   const PRICE_UNITS = ["ud", "kg", "l"];
   for (const price of el.querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>(

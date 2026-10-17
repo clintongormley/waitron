@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
-import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import type { StaffPerson, StaffRole, StaffRoleInput, StaffingApi } from "./client.js";
 import type { StaffRoleDialog } from "./staff-role-dialog.js";
@@ -67,6 +68,23 @@ async function mount(staffRole?: StaffRole, api = fakeApi()) {
 
 const field = <K extends keyof HTMLElementTagNameMap>(tag: K, name: string) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap[K]>(`${tag}[name=${name}]`)!;
+const chooser = () => {
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-colour-chooser[name=colour]",
+  );
+  expect(control, "colour chooser").not.toBeNull();
+  return control!;
+};
+const tile = (colour: string) =>
+  chooser().shadowRoot!.querySelector<HTMLButtonElement>(`[role=radio][data-value="${colour}"]`)!;
+const usedBy = () =>
+  Object.fromEntries(chooser().choices.map((choice) => [choice.value, choice.usedBy ?? []]));
+async function pick(value: string) {
+  chooser().dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
 const save = () =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-staff-role]")!;
 const actions = () => el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -95,10 +113,9 @@ describe("staff-role dialog", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add staff role");
     expect(field("wt-input", "name").required).toBe(true);
     expect(field("wt-input", "name").label).toBe("Name");
-    const colour = field("wt-combobox", "colour");
+    const colour = chooser();
     expect(colour.label).toBe("Colour");
-    expect(colour.multiple).toBe(false);
-    expect(colour.options.map((option) => [option.value, option.label])).toEqual([
+    expect(colour.choices.map((option) => [option.value, option.label])).toEqual([
       ["red", "Red"],
       ["amber", "Amber"],
       ["grey", "Grey"],
@@ -106,7 +123,7 @@ describe("staff-role dialog", () => {
       ["green", "Green"],
       ["purple", "Purple"],
     ]);
-    expect(colour.value).toBe("blue");
+    expect(colour.value).toBe("red");
     const people = field("wt-combobox", "people");
     expect(people.multiple).toBe(true);
     expect(people.label).toBe("People");
@@ -120,11 +137,18 @@ describe("staff-role dialog", () => {
     expect(save().variant).toBe("secondary");
   });
 
+  it("the colour chooser is required and draws its mark", async () => {
+    await mount();
+    expect(chooser().required).toBe(true);
+    await chooser().updateComplete;
+    expect(chooser().shadowRoot!.querySelector("[data-required]")).not.toBeNull();
+  });
+
   it("opens an existing staff role with its values, keeping a suspended holder offered", async () => {
     await mount(waiter);
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit staff role");
     expect(field("wt-input", "name").value).toBe("Waiter");
-    expect(field("wt-combobox", "colour").value).toBe("green");
+    expect(chooser().value).toBe("green");
     const people = field("wt-combobox", "people");
     expect(people.values).toEqual(["p-held"]);
     expect(people.options.map((option) => option.value)).toEqual(["p-ana", "p-held", "p-marc"]);
@@ -134,12 +158,12 @@ describe("staff-role dialog", () => {
     setLocale("es");
     await mount();
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Añadir rol de personal");
-    expect(field("wt-combobox", "colour").options[4]!.label).toBe("Verde");
+    expect(chooser().choices[4]!.label).toBe("Verde");
   });
 
   it("marks a blank name and says so above the buttons, holding Save until it is fixed", async () => {
     const api = await mount();
-    await chooseOption(field("wt-combobox", "colour"), "red");
+    await pick("purple");
     expect(save().disabled).toBe(false);
     expect(save().variant).toBe("primary");
     await press();
@@ -164,7 +188,7 @@ describe("staff-role dialog", () => {
     const close = closed();
     await press();
     await close;
-    expect(api.createStaffRole).toHaveBeenCalledWith({ name: "Runner", colour: "blue" });
+    expect(api.createStaffRole).toHaveBeenCalledWith({ name: "Runner", colour: "red" });
     expect(api.setHolders).toHaveBeenCalledWith("role-new", ["p-ana", "p-marc"]);
     expect(api.createStaffRole.mock.invocationCallOrder[0]!).toBeLessThan(
       api.setHolders.mock.invocationCallOrder[0]!,
@@ -215,7 +239,7 @@ describe("staff-role dialog", () => {
 
   it("updates only the details when only they change", async () => {
     const api = await mount(waiter);
-    await chooseOption(field("wt-combobox", "colour"), "purple");
+    await pick("purple");
     const close = closed();
     await press();
     await close;
@@ -276,16 +300,14 @@ describe("staff-role dialog", () => {
       api[call].mockRejectedValueOnce({ code: "staffing.invalid", params: { field: "colour" } });
       await typeName("Head waiter");
       await press();
-      await vi.waitFor(() =>
-        expect(field("wt-combobox", "colour").error).toBe("Choose one of the colours"),
-      );
+      await vi.waitFor(() => expect(chooser().error).toBe("Choose one of the colours"));
       expect(field("wt-input", "name").error).toBe("");
       expect(await bottom()).toBe("Correct the highlighted fields to continue.");
       expect(save().disabled).toBe(false);
       await typeName("Head waiter 2");
-      expect(field("wt-combobox", "colour").error).toBe("Choose one of the colours");
-      await chooseOption(field("wt-combobox", "colour"), "purple");
-      expect(field("wt-combobox", "colour").error).toBe("");
+      expect(chooser().error).toBe("Choose one of the colours");
+      await pick("purple");
+      expect(chooser().error).toBe("");
       expect(await bottom()).toBe("");
     },
   );
@@ -322,10 +344,8 @@ describe("staff-role dialog", () => {
     });
     await typeName("Jefe de sala");
     await press();
-    await vi.waitFor(() =>
-      expect(field("wt-combobox", "colour").error).toBe("Elige uno de los colores"),
-    );
-    await chooseOption(field("wt-combobox", "colour"), "purple");
+    await vi.waitFor(() => expect(chooser().error).toBe("Elige uno de los colores"));
+    await pick("purple");
     await chooseOptions(field("wt-combobox", "people"), ["p-held", "p-ana"]);
     await press();
     await vi.waitFor(() =>
@@ -344,7 +364,7 @@ describe("staff-role dialog", () => {
     await press();
     await vi.waitFor(async () => expect(await bottom()).toBe("Some of the details are not valid"));
     expect(field("wt-input", "name").error).toBe("");
-    expect(field("wt-combobox", "colour").error).toBe("");
+    expect(chooser().error).toBe("");
     api.updateStaffRole.mockRejectedValueOnce({
       code: "staff_role.not_found",
       params: { staffRoleId: "role-1" },
@@ -430,7 +450,7 @@ describe("staff-role dialog", () => {
     expect(api.createStaffRole).toHaveBeenCalledTimes(1);
     expect(api.updateStaffRole).toHaveBeenCalledWith("role-runner", {
       name: "Cook",
-      colour: "blue",
+      colour: "red",
     });
   });
 
@@ -464,7 +484,7 @@ describe("staff-role dialog", () => {
       await close;
       if (expected === "createStaffRole") {
         expect(api.createStaffRole).toHaveBeenCalledTimes(2);
-        expect(api.createStaffRole).toHaveBeenLastCalledWith({ name: "Cook", colour: "blue" });
+        expect(api.createStaffRole).toHaveBeenLastCalledWith({ name: "Cook", colour: "red" });
         expect(api.updateStaffRole).not.toHaveBeenCalled();
       } else {
         expect(api.createStaffRole).toHaveBeenCalledTimes(1);
@@ -608,5 +628,150 @@ describe("staff-role dialog", () => {
     await el.updateComplete;
     expect(field("wt-input", "name").value).toBe("Cook");
     expect(save().disabled).toBe(true);
+  });
+
+  const roles = [
+    { id: "role-w", name: "Waiter", colour: "red" },
+    { id: "role-r", name: "Runner", colour: "blue" },
+    { id: "role-c", name: "Cook", colour: "blue" },
+  ] as const;
+  async function mountWith(
+    staffRoles: readonly Pick<StaffRole, "id" | "name" | "colour">[],
+    staffRole?: StaffRole,
+    api = fakeApi(),
+  ) {
+    el = document.createElement("staff-role-dialog");
+    el.staffRoles = staffRoles;
+    el.api = api as unknown as StaffingApi;
+    el.staffRole = staffRole;
+    el.open = true;
+    applyTokens(el);
+    document.body.append(el);
+    await el.updateComplete;
+    await vi.waitFor(() => expect(api.listPeople).toHaveBeenCalled());
+    await api.listPeople.mock.results[0]!.value.catch(() => undefined);
+    await el.updateComplete;
+    return api;
+  }
+
+  it("a new staff role starts on the first colour no other role uses, and names who uses each", async () => {
+    await mountWith(roles);
+    expect(chooser().value).toBe("amber");
+    expect(usedBy()).toEqual({
+      red: ["Waiter"],
+      amber: [],
+      grey: [],
+      blue: ["Runner", "Cook"],
+      green: [],
+      purple: [],
+    });
+  });
+
+  it("a new staff role starts on red when every colour is taken", async () => {
+    await mountWith(
+      (["red", "amber", "grey", "blue", "green", "purple"] as const).map((colour, index) => ({
+        id: `role-${index}`,
+        name: `Role ${index}`,
+        colour,
+      })),
+    );
+    expect(chooser().value).toBe("red");
+  });
+
+  it("editing a staff role marks the colours the others use, never its own", async () => {
+    await mountWith(roles, { ...waiter, id: "role-r", name: "Runner", colour: "blue" });
+    expect(chooser().value).toBe("blue");
+    expect(usedBy().blue).toEqual(["Cook"]);
+    expect(usedBy().red).toEqual(["Waiter"]);
+  });
+
+  it("a staff role it has just created is not marked as using its own colour", async () => {
+    const api = await mountWith([]);
+    api.setHolders.mockRejectedValueOnce({ code: "connection.failed" });
+    await typeName("Runner");
+    await chooseOptions(field("wt-combobox", "people"), ["p-ana"]);
+    await press();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit staff role"),
+    );
+    el.staffRoles = [
+      { id: "role-new", name: "Runner", colour: "red" },
+      { id: "role-1", name: "Waiter", colour: "blue" },
+    ];
+    await el.updateComplete;
+    expect(usedBy()).toEqual({
+      red: [],
+      amber: [],
+      grey: [],
+      blue: ["Waiter"],
+      green: [],
+      purple: [],
+    });
+    expect(chooser().value).toBe("red");
+  });
+
+  it("a new staff role keeps its starting colour when the roles arrive after it opened", async () => {
+    await mountWith([]);
+    expect(chooser().value).toBe("red");
+    el.staffRoles = [{ id: "role-w", name: "Waiter", colour: "red" }];
+    await el.updateComplete;
+    expect(chooser().value).toBe("red");
+    expect(usedBy().red).toEqual(["Waiter"]);
+    expect(save().disabled).toBe(true);
+  });
+
+  it("a colour chosen through the panel is the one created", async () => {
+    const api = await mountWith(roles);
+    await typeName("Host");
+    await userEvent.click(
+      chooser().shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!,
+    );
+    await expect
+      .poll(() => chooser().shadowRoot!.querySelector("[popover]")!.matches(":popover-open"))
+      .toBe(true);
+    await userEvent.click(tile("green"));
+    await el.updateComplete;
+    expect(chooser().value).toBe("green");
+    const close = closed();
+    await userEvent.click(save());
+    await close;
+    expect(api.createStaffRole).toHaveBeenCalledWith({ name: "Host", colour: "green" });
+  });
+
+  it("names a used tile by its colour and the role using it, in English and Spanish", async () => {
+    await mountWith(roles);
+    await chooser().updateComplete;
+    expect(tile("red").getAttribute("aria-label")).toBe("Red, used by Waiter");
+    el.remove();
+    setLocale("es");
+    try {
+      await mountWith(roles);
+      await chooser().updateComplete;
+      expect(tile("red").getAttribute("aria-label")).toBe("Rojo, en uso por Waiter");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("typing a name keeps the chooser's choices; new roles or a language change rebuild them", async () => {
+    await mountWith(roles);
+    const before = chooser().choices;
+    const label = chooser().usedByLabel;
+    await typeName("Host");
+    expect(chooser().choices).toBe(before);
+    expect(chooser().usedByLabel).toBe(label);
+    el.staffRoles = [...roles];
+    await el.updateComplete;
+    const rebuilt = chooser().choices;
+    expect(rebuilt).not.toBe(before);
+    setLocale("es");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(chooser().choices).not.toBe(rebuilt);
+      expect(chooser().choices[0]!.label).toBe("Rojo");
+    } finally {
+      setLocale("en");
+    }
   });
 });

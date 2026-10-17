@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { codeMessage, setLocale } from "@waitron/dashboard-kit";
 import { droppedNotice } from "./painter-parts.js";
-import { colourName, holderCount, peopleNeeded, STAFFING_STRINGS, tf } from "./strings.js";
+import { colourName, holderNames, peopleNeeded, STAFFING_STRINGS, tf } from "./strings.js";
 
 afterEach(() => setLocale("en"));
 
@@ -16,13 +16,15 @@ describe("staffing strings", () => {
     expect(tf("staffing.role.actions", {}, "en")).toBe("Actions for {name}");
   });
 
-  it("counts holders in the singular and the plural", () => {
-    expect(holderCount(0, "en")).toBe("No people");
-    expect(holderCount(1, "en")).toBe("1 person");
-    expect(holderCount(3, "en")).toBe("3 people");
-    expect(holderCount(0, "es")).toBe("Nadie");
-    expect(holderCount(1, "es")).toBe("1 persona");
-    expect(holderCount(3, "es")).toBe("3 personas");
+  it("names the holders, and past the cut-off says how many more", () => {
+    const names = (count: number) => Array.from({ length: count }, (_, index) => `P${index + 1}`);
+    expect(holderNames([], 5, "en")).toBe("No people");
+    expect(holderNames([], 5, "es")).toBe("Nadie");
+    expect(holderNames(["Ana", "Marc"], 5, "en")).toBe("Ana, Marc");
+    expect(holderNames(names(5), 5, "en")).toBe("P1, P2, P3, P4, P5");
+    expect(holderNames(names(6), 5, "en")).toBe("P1, P2, P3, P4, P5 plus 1 more");
+    expect(holderNames(names(12), 5, "en")).toBe("P1, P2, P3, P4, P5 plus 7 more");
+    expect(holderNames(names(12), 5, "es")).toBe("P1, P2, P3, P4, P5 y 7 más");
   });
 
   it("says how many people a block needs in the singular and the plural", () => {

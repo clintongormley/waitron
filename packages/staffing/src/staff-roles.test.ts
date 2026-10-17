@@ -8,6 +8,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
 import { persons } from "@waitron/identity";
+import { createLabelComparator } from "@waitron/shared";
 import { seedVenue } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import {
@@ -21,6 +22,7 @@ import {
   createStaffRole,
   deleteStaffRole,
   listStaffRoles,
+  listStaffRolesWithHolderNames,
   readStaffRoleDeleteImpact,
   reorderStaffRoles,
   setStaffRoleHolders,
@@ -379,5 +381,62 @@ describe("staff roles", () => {
       });
     // A new role still goes last after a reorder.
     expect(await make("E")).toMatchObject({ position: 3 });
+  });
+
+  it("names every holder of each role in label order, for this location only", async () => {
+    const v = await seedVenue(suite.db);
+    const other = await seedVenue(suite.db);
+    const person = (
+      displayName: string,
+      status: "active" | "pending" | "suspended" = "active",
+      id: string = randomUUID(),
+    ) =>
+      inTx(async (tx) => {
+        const [row] = await tx
+          .insert(persons)
+          .values({ id, displayName, role: "staff", status })
+          .returning({ id: persons.id });
+        return row!.id;
+      });
+    const marc = await person("Marc");
+    const alvaro = await person("Álvaro", "suspended");
+    const ana = await person("ana", "pending");
+    // The comparator ignores case, so the three Paus tie and only the person id orders them.
+    // Here the engine scans person_staff_roles in write order (its query plan printed SCAN psr),
+    // so the higher ids are written first and that order cannot pass for id order.
+    const [lowId, midId, highId] = [randomUUID(), randomUUID(), randomUUID()].sort();
+    const twinA = await person("Pau", "active", highId);
+    const twinB = await person("pau", "suspended", lowId);
+    const twinC = await person("Pau", "suspended", midId);
+    const sous = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Sous chef", colour: "green" }),
+    );
+    const head = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Head chef", colour: "purple" }),
+    );
+    const waiter = await inTx((tx) =>
+      createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
+    );
+    const theirs = await inTx((tx) =>
+      createStaffRole(tx, other.cfg, { name: "Theirs", colour: "red" }),
+    );
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, sous.id, [marc, alvaro, ana]));
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, waiter.id, [twinA, ana, twinC, twinB]));
+    await inTx((tx) => setStaffRoleHolders(tx, other.cfg, theirs.id, [marc]));
+
+    const listed = await inTx((tx) => listStaffRolesWithHolderNames(tx, v.cfg));
+    const plain = await inTx((tx) => listStaffRoles(tx, v.cfg));
+    const compare = createLabelComparator();
+    const sousNames = ["Marc", "Álvaro", "ana"].sort(compare);
+    expect(compare("Pau", "pau")).toBe(0);
+    expect(twinB < twinC && twinC < twinA).toBe(true);
+    const waiterNames = ["ana", "pau", "Pau", "Pau"];
+    expect(listed).toEqual([
+      { ...plain[0]!, holderNames: sousNames },
+      { ...plain[1]!, holderNames: [] },
+      { ...plain[2]!, holderNames: waiterNames },
+    ]);
+    expect(plain.map((r) => r.id)).toEqual([sous.id, head.id, waiter.id]);
+    expect(listed.map((r) => r.id)).not.toContain(theirs.id);
   });
 });

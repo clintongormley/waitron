@@ -111,6 +111,14 @@ async function routed() {
   return { ...venue, ...cookies, app, call, send, create };
 }
 
+async function displayNameOf(personId: string): Promise<string> {
+  const [row] = await suite.db
+    .select({ displayName: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  return row!.displayName;
+}
+
 async function answers(response: Response, status: number, body?: unknown) {
   expect(response.status).toBe(status);
   if (body !== undefined) expect(await response.json()).toEqual(body);
@@ -131,7 +139,9 @@ describe("the staff-role routes", () => {
       position: 0,
       holderIds: [],
     });
-    await answers(await r.send("GET", "", r.supervisor), 200, { staffRoles: [staffRole] });
+    await answers(await r.send("GET", "", r.supervisor), 200, {
+      staffRoles: [{ ...staffRole, holderNames: [] }],
+    });
   });
 
   it("updates a role, sets its holders and deletes it", async () => {
@@ -147,6 +157,18 @@ describe("the staff-role routes", () => {
       200,
       { ...staffRole, name: "Head waiter", colour: "red", holderIds: [r.ana, r.marc].sort() },
     );
+    // The seed names them "Ana <suffix>" and "Marc <suffix>", so Ana sorts first.
+    await answers(await r.send("GET", "", r.supervisor), 200, {
+      staffRoles: [
+        {
+          ...staffRole,
+          name: "Head waiter",
+          colour: "red",
+          holderIds: [r.ana, r.marc].sort(),
+          holderNames: [await displayNameOf(r.ana), await displayNameOf(r.marc)],
+        },
+      ],
+    });
     await answers(await r.send("DELETE", `/${staffRole.id}`, r.manager), 200, {
       target: { id: staffRole.id, name: "Head waiter" },
       refusals: [],
@@ -414,7 +436,16 @@ describe("the staff-role routes", () => {
       removes: [],
     });
     await answers(await r.send("GET", "", r.manager), 200, {
-      staffRoles: [{ ...a, name: "A2", colour: "red", position: 1, holderIds: [r.ana] }],
+      staffRoles: [
+        {
+          ...a,
+          name: "A2",
+          colour: "red",
+          position: 1,
+          holderIds: [r.ana],
+          holderNames: [await displayNameOf(r.ana)],
+        },
+      ],
     });
   });
 });

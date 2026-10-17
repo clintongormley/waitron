@@ -38,7 +38,7 @@ import { STAFFING_PERMISSIONS } from "./permissions.js";
 import {
   createStaffRole,
   deleteStaffRole,
-  listStaffRoles,
+  listStaffRolesWithHolderNames,
   readStaffRoleDeleteImpact,
   reorderStaffRoles,
   setStaffRoleHolders,
@@ -306,7 +306,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const staffRoles = await gatedBy(VIEW_VENUE, sessionId, (tx) =>
-          listStaffRoles(tx, ctx.cfg),
+          listStaffRolesWithHolderNames(tx, ctx.cfg),
         );
         return c.json({ staffRoles });
       }),
