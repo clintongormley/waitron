@@ -603,6 +603,11 @@ export interface LineNutrition {
 }
 
 export interface CurrentOrderRow {
+  billStatus: WorkingOrderStatus;
+  /** Stored dish and extras total, after adjustments. */
+  netAmount: string;
+  readyAt: string | null;
+  firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
@@ -620,7 +625,15 @@ export interface CurrentOrderRow {
   released: boolean;
   kitchen: CurrentOrderKitchen | null;
   note: string | null;
-  extras: { lineId: string; name: string; quantity: string; cancelledQuantity?: string }[];
+  extras: {
+    lineId: string;
+    name: string;
+    quantity: string;
+    netAmount: string;
+    unitPriceGross: string;
+    priceQuantity: string;
+    cancelledQuantity?: string;
+  }[];
 }
 
 export interface CurrentOrderGroup {

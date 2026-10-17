@@ -1,4 +1,5 @@
 /** Current orders fixtures shared by the table screen's Current orders suites. */
+import { grossOf } from "@waitron/shared";
 import type {
   CurrentOrderGroup,
   CurrentOrderRow,
@@ -17,6 +18,10 @@ export function row(
   over: Partial<CurrentOrderRow> = {},
 ) {
   return {
+    billStatus: "open",
+    netAmount: grossOf("2.00", quantity),
+    readyAt: null,
+    firedAt: fired,
     lineId,
     workingOrderId: "wo-4",
     lineNo: 1,
@@ -64,7 +69,17 @@ export const pulpo = row("l-pulpo", "Pulpo", "1.000", { workingOrderId: "wo-chec
 export const flan = row("l-flan", "Flan", "2.000", {
   released: false,
   kitchen: { stationId: null, movable: false, state: "queued", firedAt: null, awayAt: null },
-  extras: [{ lineId: "l-cream", name: "Cream", quantity: "2.000" }],
+  netAmount: "6.00",
+  extras: [
+    {
+      lineId: "l-cream",
+      name: "Cream",
+      quantity: "2.000",
+      netAmount: "2.00",
+      unitPriceGross: "1.00",
+      priceQuantity: "1.000",
+    },
+  ],
 });
 export const tarta = row("l-tarta", "Tarta", "1.000", {
   released: false,

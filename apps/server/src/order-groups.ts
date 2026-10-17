@@ -41,6 +41,10 @@ import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   AppError,
+  centsToDecimal,
+  sumDecimals,
+  toScale,
+  MONEY_SCALE,
   partyTablesName,
   stringToThousandths,
   thousandthsToDecimal,
@@ -1463,12 +1467,21 @@ export interface CurrentOrderExtra {
   /** The staff name. */
   name: string;
   quantity: string;
+  netAmount: string;
+  unitPriceGross: string;
+  priceQuantity: string;
   /** Present only for food cancelled while its charge remains on the bill. */
   cancelledQuantity?: string;
 }
 
 /** A dish line of the party, on whichever of its bills, a paid one included. */
 export interface CurrentOrderRow {
+  billStatus: (typeof workingOrders.$inferSelect)["status"];
+  /** Stored dish and extras total, after adjustments. */
+  netAmount: string;
+  /** All kitchen components must be ready; no kitchen work leaves this null. */
+  readyAt: string | null;
+  firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
@@ -1573,6 +1586,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .select({
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
+      billStatus: workingOrders.status,
+      lineTotal: workingOrderLines.lineTotal,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      priceQuantity: workingOrderLines.priceQuantity,
       lineNo: workingOrderLines.lineNo,
       courseId: workingOrderLines.courseId,
       course: {
@@ -1598,6 +1615,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketItemId: ticketItems.id,
       ticketState: ticketItems.state,
       ticketFiredAt: ticketItems.firedAt,
+      ticketReadyAt: ticketItems.readyAt,
       ticketMadeHere: ticketItems.madeHere,
       awayAt: ticketItems.awayAt,
       stationId: ticketItems.stationId,
@@ -1640,11 +1658,21 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         lineId: line.id,
         name: staffPresentationName({ name: line.name, variantName: line.variantName }),
         quantity: thousandthsToDecimal(line.quantity),
+        netAmount: centsToDecimal(line.lineTotal),
+        unitPriceGross: centsToDecimal(line.unitPriceGross),
+        priceQuantity: thousandthsToDecimal(line.priceQuantity),
         ...((cancellations.get(line.id) ?? 0) > 0
           ? { cancelledQuantity: thousandthsToDecimal(cancellations.get(line.id)!) }
           : {}),
       },
     ]);
+  }
+  const families = new Map<string, (typeof lines)[number][]>();
+  for (const line of lines) {
+    const parentId = line.parentLineId ?? line.id;
+    const familyLines = families.get(parentId) ?? [];
+    familyLines.push(line);
+    families.set(parentId, familyLines);
   }
   const shown: CurrentOrderGroup[] = groups
     .filter((group) => group.state !== "removed")
@@ -1672,7 +1700,28 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       servedAt: serviceCompletedAt(line),
       ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
     });
+    const familyLines = families.get(line.id)!;
+    const kitchenItems = familyLines.filter((component) => component.ticketItemId !== null);
+    const allFired = kitchenItems.every((component) => component.ticketFiredAt !== null);
+    const firedTimes = kitchenItems.flatMap((component) =>
+      component.ticketFiredAt === null ? [] : [component.ticketFiredAt],
+    );
+    const readyTimes = kitchenItems.flatMap((component) =>
+      component.ticketState === "ready" && component.ticketReadyAt !== null
+        ? [component.ticketReadyAt]
+        : [],
+    );
     const row: CurrentOrderRow = {
+      billStatus: line.billStatus,
+      netAmount: toScale(
+        sumDecimals(familyLines.map((component) => centsToDecimal(component.lineTotal))),
+        MONEY_SCALE,
+      ),
+      firedAt: allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null,
+      readyAt:
+        kitchenItems.length > 0 && allFired && readyTimes.length === kitchenItems.length
+          ? readyTimes.sort().at(-1)!
+          : null,
       lineId: line.id,
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
       workingOrderId: line.workingOrderId,

@@ -6704,6 +6704,10 @@ describe("till-app: Current orders", () => {
         sentBy: "Luis",
         rows: [
           {
+            billStatus: "open",
+            netAmount: "30.00",
+            readyAt: null,
+            firedAt: "2026-09-28T19:50:00.000Z",
             lineId: "line-1",
             workingOrderId: "wo-4",
             lineNo: 1,
@@ -6877,6 +6881,10 @@ describe("till-app: Current orders", () => {
           sentBy: "Ana",
           rows: [
             {
+              billStatus: "open",
+              netAmount: "12.00",
+              readyAt: null,
+              firedAt: null,
               lineId: "line-9",
               workingOrderId: "wo-check",
               lineNo: 1,

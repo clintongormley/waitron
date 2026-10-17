@@ -5946,6 +5946,10 @@ describe("A668 nutrition after table-order names", () => {
         groups: [],
         ungrouped: [
           {
+            billStatus: "open",
+            netAmount: "2.00",
+            readyAt: null,
+            firedAt: "2026-10-17T12:00:00.000Z",
             lineId: "other-bill-line",
             workingOrderId: "other-bill",
             lineNo: 5,

@@ -173,7 +173,17 @@ describe("Current orders in the Tab drawer", () => {
 
   it("offers Mark served on a dish and not on its extras, which are served with it", async () => {
     const burger = row("l-burger", "Burger", "1.000", {
-      extras: [{ lineId: "l-bacon", name: "Bacon", quantity: "2.000" }],
+      netAmount: "4.00",
+      extras: [
+        {
+          lineId: "l-bacon",
+          name: "Bacon",
+          quantity: "2.000",
+          netAmount: "2.00",
+          unitPriceGross: "1.00",
+          priceQuantity: "1.000",
+        },
+      ],
     });
     const { el } = await mountCurrent({
       currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [burger])], ungrouped: [] }),

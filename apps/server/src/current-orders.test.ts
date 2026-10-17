@@ -15,6 +15,7 @@ import {
   orderGroups,
   kitchenCourses,
   serviceCommands,
+  ticketItems,
   parties,
   withTransaction,
   workingOrderLines,
@@ -971,8 +972,13 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
 type RowShape = Awaited<ReturnType<typeof currentOrders>>["groups"][number]["rows"][number];
 
 /** A row as Current orders shows it, with the fields a case does not vary filled in. */
-function row(fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name">): RowShape {
+function row(
+  fields: Partial<RowShape> & Pick<RowShape, "lineId" | "name" | "netAmount">,
+): RowShape {
   return {
+    billStatus: "open",
+    readyAt: null,
+    firedAt: expect.any(String) as unknown as string,
     workingOrderId: expect.any(String) as unknown as string,
     lineNo: expect.any(Number) as unknown as number,
     courseId: null,
@@ -1181,7 +1187,9 @@ describe("readCurrentOrders (spec §4)", () => {
           sentBy: null,
           rows: [
             row({
+              netAmount: "16.00",
               lineId: croqLine!.id,
+              billStatus: "settled",
               workingOrderId: s.tabId,
               lineNo: croqLine!.lineNo,
               name: "croquetas",
@@ -1196,11 +1204,14 @@ describe("readCurrentOrders (spec §4)", () => {
               },
             }),
             row({
+              netAmount: "2.00",
               lineId: named("water", s.tabId).id,
+              billStatus: "settled",
               workingOrderId: s.tabId,
               name: "water",
             }),
             row({
+              netAmount: "8.00",
               lineId: split.id,
               workingOrderId: checkId,
               name: "croquetas",
@@ -1226,7 +1237,9 @@ describe("readCurrentOrders (spec §4)", () => {
           sentBy: null,
           rows: [
             row({
+              netAmount: "23.50",
               lineId: steak.id,
+              firedAt: null,
               workingOrderId: laterTab,
               name: "steak",
               released: false,
@@ -1237,13 +1250,23 @@ describe("readCurrentOrders (spec §4)", () => {
                 stationId: expect.any(String),
                 movable: true,
               },
-              extras: [{ lineId: sauce.id, name: "sauce", quantity: "1.000" }],
+              extras: [
+                {
+                  lineId: sauce.id,
+                  name: "sauce",
+                  quantity: "1.000",
+                  netAmount: "1.50",
+                  unitPriceGross: "1.50",
+                  priceQuantity: "1.000",
+                },
+              ],
             }),
           ],
         },
       ],
       ungrouped: [
         row({
+          netAmount: "5.00",
           lineId: flan.id,
           workingOrderId: laterTab,
           name: "flan",
@@ -1279,7 +1302,8 @@ describe("readCurrentOrders (spec §4)", () => {
       stationId: expect.any(String),
       movable: true,
     });
-    expect(JSON.stringify(read.groups[0])).not.toContain("ready");
+    expect(JSON.stringify(read.groups[0])).not.toContain('"ready"');
+    expect(croq!.readyAt).toBeNull();
     expect(steak!.kitchen).toEqual({
       state: "ready",
       firedAt: expect.any(String),
@@ -1675,5 +1699,107 @@ describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)"
       [starters.id, T(0), null],
       [mains.id, T(1), null],
     ]);
+  });
+});
+
+describe("Sent panel read facts (A773)", () => {
+  it("reads stored family amounts and bill status without changing any bill rows", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [
+      {
+        ...line(v, "steak", "2"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+    ]);
+    const rows = await linesByName(s.partyId);
+    const parent = rows.find((row) => row.parentLineId === null)!;
+    const extra = rows.find((row) => row.parentLineId === parent.id)!;
+    await inTx(async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1999, lineTotal: 3998 })
+        .where(eq(workingOrderLines.id, parent.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1, lineTotal: 2 })
+        .where(eq(workingOrderLines.id, extra.id));
+    });
+    const before = await snapshot(s.partyId);
+    const read = await currentOrders(s.partyId);
+    expect(read.groups[0]!.rows[0]).toMatchObject({
+      billStatus: "open",
+      netAmount: "40.00",
+      extras: [
+        {
+          lineId: extra.id,
+          quantity: "2.000",
+          netAmount: "0.02",
+          unitPriceGross: "0.01",
+          priceQuantity: "1.000",
+        },
+      ],
+    });
+    expect(await snapshot(s.partyId)).toEqual(before);
+  });
+
+  it("waits for every kitchen component and uses the last ready time, including a split-off extra", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [
+      {
+        ...line(v, "steak"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+    ]);
+    const rows = await linesByName(s.partyId);
+    const parent = rows.find((row) => row.parentLineId === null)!;
+    const extra = rows.find((row) => row.parentLineId === parent.id)!;
+    await inTx(async (tx) => {
+      const [ticket] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, parent.id));
+      await tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: T(5), firedAt: T(0) })
+        .where(eq(ticketItems.id, ticket!.id));
+      await tx.insert(ticketItems).values({
+        ...ticket!,
+        id: randomUUID(),
+        workingOrderLineId: extra.id,
+        state: "preparing",
+        firedAt: T(1),
+        readyAt: null,
+      });
+    });
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      readyAt: null,
+      firedAt: T(0),
+    });
+    await inTx((tx) =>
+      tx
+        .update(ticketItems)
+        .set({ state: "ready", readyAt: T(9) })
+        .where(eq(ticketItems.workingOrderLineId, extra.id)),
+    );
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      readyAt: T(9),
+      firedAt: T(0),
+    });
+  });
+
+  it("uses the sent time of a no-preparation dish without inventing kitchen readiness", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await at(T(2), () => group(v, s.partyId, "fire", [line(v, "water")]));
+    expect((await currentOrders(s.partyId)).groups[0]!.rows[0]).toMatchObject({
+      kitchen: null,
+      released: true,
+      readyAt: null,
+      firedAt: T(2),
+      netAmount: "2.00",
+      billStatus: "open",
+    });
   });
 });

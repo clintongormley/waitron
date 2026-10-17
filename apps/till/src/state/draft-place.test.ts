@@ -298,6 +298,10 @@ describe("placeFor: later additions", () => {
 });
 
 const row = (lineId: string, courseId: string | null): CurrentOrderRow => ({
+  billStatus: "open",
+  netAmount: "2.00",
+  readyAt: null,
+  firedAt: null,
   lineId,
   courseId,
   workingOrderId: "bill1",
