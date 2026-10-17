@@ -4,6 +4,7 @@ import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types
 import type { PaintedIn } from "../period-delete.js";
 import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
+import { periodsWindowPath } from "./opening-hours-paths.js";
 import type { PaintPot } from "./paint-row.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import { refusalOf } from "./refusal.js";
@@ -14,10 +15,9 @@ type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
-/** The Periods page, which a painter's bar links to. */
 export function periodsLink() {
-  return html`<a slot="link" data-test="periods-link" href="/manage/periods"
-    >${t("nav.periods")}</a
+  return html`<a slot="link" data-test="periods-link" href=${periodsWindowPath}
+    >${t("period.title")}</a
   >`;
 }
 

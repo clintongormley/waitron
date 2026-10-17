@@ -132,6 +132,7 @@ function request(recorded: Recorded): DashboardRequest {
           .split(",")
           .map((date) => ({ date, seasonId: "winter", dayCutover: "06:00", departments: [] })),
       } satisfies SeasonDays;
+    if (path.endsWith("/menu-periods/painted-in")) return [];
     return painterModel();
   }) as DashboardRequest;
 }
@@ -743,5 +744,81 @@ describe("links into the special-day painter", () => {
     expect(chips(painter)).toEqual(["2026-12-10"]);
     expect(nameOf(painter)).toBe("");
     expect(writes).toEqual([]);
+  });
+});
+
+describe("the special-day painter's Periods link", () => {
+  const base = "/manage/opening-hours/view/special-day/special-day/sd1";
+  const link = (painter: SpecialDayPainter) =>
+    painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
+  const periodsWindow = (el: Screen) =>
+    el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods] periods-list");
+
+  it("the special-day painter's Periods link opens the window over it and keeps its unsaved day", async () => {
+    history.replaceState(null, "", base);
+    const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const painter = await shownPainter(el);
+    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Staff party" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    const question =
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    const pushes = pushedPaths();
+    await userEvent.click(link(painter));
+    await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+    await expect.poll(() => periodsWindow(el)).not.toBeNull();
+    expect(pushes()).toEqual([`${base}/window/periods`]);
+    expect(question.open).toBe(false);
+    expect(painterOf(el)).toBe(painter);
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    history.back();
+    await expect.poll(() => location.pathname).toBe(base);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    expect(question.open).toBe(false);
+    expect(painterOf(el)).toBe(painter);
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(app.recorded.writes).toEqual([]);
+  });
+
+  it("a modified click on its Periods link is left to the browser", async () => {
+    const { el } = await mount(base);
+    const painter = await shownPainter(el);
+    const seen: boolean[] = [];
+    // Bubbling on window runs after the screen's own listener, so it sees what the screen did.
+    const record = (event: Event) => {
+      seen.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    window.addEventListener("click", record);
+    try {
+      const press = (init: MouseEventInit) =>
+        link(painter).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
+        );
+      press({ ctrlKey: true });
+      await el.updateComplete;
+      expect(seen).toEqual([false]);
+      expect(location.pathname).toBe(base);
+      press({});
+      expect(seen).toEqual([false, true]);
+      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+    } finally {
+      window.removeEventListener("click", record);
+    }
   });
 });

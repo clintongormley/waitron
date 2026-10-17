@@ -501,13 +501,13 @@ describe("periods from the painter", () => {
     const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
     expect(link.slot).toBe("link");
     expect(link.textContent!.trim()).toBe("Periods");
-    expect(link.getAttribute("href")).toBe("/manage/periods");
+    expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
     await pick(painter, "zone:z2");
     expect(
       painter
         .shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!
         .getAttribute("href"),
-    ).toBe("/manage/periods");
+    ).toBe("/manage/opening-hours/view/year/window/periods");
   });
 
   it("+ New period opens the period dialog, saves the period on its own, keeps the painting and chooses it", async () => {
