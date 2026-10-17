@@ -1403,8 +1403,11 @@ The form's two "?" buttons, beside Department and Starting zone, are A237 candid
 
 **A757 (owner, 2026-10-16) — design first; it comes back to the owner before anything is built.**
 
-**Design (2026-10-17):** [the lifecycle, how each state is shown, six owner questions](../superpowers/specs/2026-10-17-a757-table-states-design.md),
-with [mock-ups](mockups/a757-table-states/). Nothing is built until the owner answers.
+**Design (2026-10-17, revised the same day after the owner's answers to Q15–Q20):** [the lifecycle,
+one order of precedence, how each state is shown on the card, the map and the zone tabs, service
+steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a757-table-states-design.md),
+with [mock-ups](mockups/a757-table-states/). Nothing is built until Q29–Q34 are answered and A756
+has landed.
 
 Today Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) holds two
 things:
@@ -2294,15 +2297,13 @@ reach them.
 
 ## Task 10 (#908, the service dashboard's attention signals)
 
-- The floor's older waiting band (`timingBand`, which colours the card and shows "Forgotten") still
-  counts HELD dishes, while the long-wait chip counts only dishes sent to the kitchen. So a table
-  whose only work is a held course queued long ago shows "Forgotten" with no wait chip. **Next
-  action:** decide whether `timingBand` should also count only dishes sent. Left open by service
-  Task 10 (#908, the service dashboard's attention signals). For the owner.
-- The "Take order" chip has the same primary border on a neutral fill as the "Reserved" badge, and
-  the "Bill requested" chip is filled primary like the "N en camino" badge, so each pair looks
-  alike. **Next action:** decide whether the chips get tones of their own. Left open by service Task
-  10 (#908). For the owner.
+- **Decided by A757 (owner, 2026-10-17); built in A757's slices 3 and 4.** The floor's older
+  waiting band (`timingBand`, which colours the card and shows "Forgotten") counts HELD dishes, while
+  the long-wait chip counts only dishes sent, so a held course queued long ago shows "Forgotten":
+  `timingBand` will count only dishes sent (A757 Q17). "Take order" looks like "Reserved": Reserved
+  takes the map's reserved colour and Take order becomes a service step (Q20). "Bill requested" no
+  longer looks like "N en camino": it has been filled purple since A472.
+  [A757's design](../superpowers/specs/2026-10-17-a757-table-states-design.md).
 - The till drops the bill request's late answer, a refusal included, once the waiter has signed out
   or left the party (`#onRequestBill`, `apps/till/src/till-app.ts`), stricter than most of C81's
   table actions. **Next action:** decide whether a late refusal should be said. Left open by service
