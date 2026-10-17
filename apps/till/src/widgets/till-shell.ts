@@ -1,6 +1,14 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
-import { ThemeChoiceController, baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import {
+  THEME_SELECTED_EVENT,
+  ThemeChoiceController,
+  baseStyles,
+  currentThemeChoice,
+  themeChoices,
+  themeChoicesStyles,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -16,7 +24,7 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-count-badge.js";
 import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
-import { themeChooser } from "./theme-chooser.js";
+import { themeChooser, themeLabels } from "./theme-chooser.js";
 
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
@@ -87,6 +95,7 @@ export class TillShell extends LitElement {
   static override styles = [
     baseStyles,
     languageChooserStyles,
+    themeChoicesStyles,
     css`
       :host {
         display: flex;
@@ -455,7 +464,7 @@ export class TillShell extends LitElement {
   async #settled(): Promise<void> {
     await this.updateComplete;
     const children = this.renderRoot.querySelectorAll(
-      ".head wt-button, .head wt-row-actions, .head wt-theme-chooser, .head wt-language-chooser, .head wt-count-badge",
+      ".head wt-button, .head wt-row-actions, .head wt-language-chooser, .head wt-count-badge",
     );
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
   }
@@ -505,10 +514,10 @@ export class TillShell extends LitElement {
 
   #chooser(): TemplateResult | typeof nothing {
     return this.loadLocales !== undefined
-      ? html`${themeChooser()}<wt-language-chooser
-            active=${currentLocale()}
-            .loadLocales=${this.loadLocales}
-          ></wt-language-chooser>`
+      ? html`<wt-language-chooser
+          active=${currentLocale()}
+          .loadLocales=${this.loadLocales}
+        ></wt-language-chooser>`
       : nothing;
   }
 
@@ -659,7 +668,11 @@ export class TillShell extends LitElement {
               >
             `
           : nothing
-      }<wt-button
+      }${themeChoices({
+        active: currentThemeChoice(),
+        labels: themeLabels(),
+        onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
+      })}<wt-button
         class="logout"
         variant=${variant}
         align=${variant === "ghost" ? "start" : nothing}
@@ -720,7 +733,7 @@ export class TillShell extends LitElement {
         ${
           this.kiosk || this.formFactor === "kds"
             ? this.loadLocales !== undefined
-              ? html`<div class="language-corner">${this.#chooser()}</div>`
+              ? html`<div class="language-corner">${themeChooser()}${this.#chooser()}</div>`
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>

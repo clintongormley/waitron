@@ -117,6 +117,7 @@ export {
   subscribeThemeChoice,
 } from "./theme-choice.js";
 export type { ThemeChoice } from "./theme-choice.js";
+export { themeChoices, themeChoicesStyles } from "./theme-choices.js";
 
 export {
   UrlStateController,

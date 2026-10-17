@@ -48,6 +48,9 @@ the meaning allows.
    - setup's card header — `apps/setup/src/setup-app.ts:1481`;
    - the till shell bar, and its kitchen-display / kiosk corner — `apps/till/src/widgets/till-shell.ts:504-509`
      (`#chooser()`, rendered at `:721` and `:767`);
+     **Changed 2026-10-17 after Task 9's look:** the bar's chooser cut the "Sala" tab at 360 px, so a
+     signed-in till holds Theme in the person's menu instead, as decision 1a does for the dashboard;
+     the kitchen-display corner keeps the chooser;
    - the till sign-in screen — `apps/till/src/screens/till-lock-screen.ts:311`;
    - the till join screen — `apps/till/src/screens/till-enrol-screen.ts:188`;
    - the UI workbench — `packages/ui/demo/main.ts:273` (not product UI; design-system.md →
@@ -907,6 +910,9 @@ in its corner):
 ---
 
 ### Task 7: The till shell's bar and its kitchen-display corner
+
+> 2026-10-17: superseded for the bar by the fix after Task 9's look (see decision 1); the
+> kitchen-display corner part stands.
 
 **Files:**
 - Modify: `apps/till/src/widgets/till-shell.ts` — `#chooser()` (`:504-510`) returns

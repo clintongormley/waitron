@@ -1,10 +1,11 @@
-import { commands } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   chooseTheme,
   leaveCoordinatorFor,
   startThemeChoice,
   THEME_STORAGE_KEY,
+  type WtRowActions,
   type WtThemeChooser,
 } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
@@ -150,7 +151,7 @@ const cafe: TillProduct = {
   allergens: null,
 };
 
-it("picking a theme with an unsent order open asks nothing and keeps the order", async () => {
+it("picking a theme in the person's menu with an unsent order open asks nothing and keeps the order", async () => {
   await commands.emulateColorScheme("light");
   const { el, host } = await mountWidget<TillApp>("till-app", {
     api: stubApi({
@@ -204,12 +205,17 @@ it("picking a theme with an unsent order open asks nothing and keeps the order",
   await flush(el);
   const shell = el.shadowRoot!.querySelector<TillShell>("till-shell")!;
   await shell.updateComplete;
-  const chooser = () =>
-    shell.shadowRoot!.querySelector<WtThemeChooser>("[data-test=theme-chooser]")!;
-  chooser().shadowRoot!.querySelector<HTMLElement>("[data-test=theme-trigger]")!.click();
-  await chooser().updateComplete;
-  chooser().shadowRoot!.querySelector<HTMLElement>("[data-test=theme-dark]")!.click();
+  expect(shell.shadowRoot!.querySelector("header wt-theme-chooser")).toBeNull();
+  const choice = (name: string) =>
+    shell.shadowRoot!.querySelector<HTMLElement>(`[data-test=theme-choice-${name}]`)!;
+  const menu = choice("dark").closest<WtRowActions>("wt-row-actions")!;
+  await menu.updateComplete;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await userEvent.click(choice("dark"));
   await vi.waitFor(() => expect(bg(host)).toBe(DARK_BG));
+  await shell.updateComplete;
+  expect(choice("dark").getAttribute("aria-pressed")).toBe("true");
+  expect(choice("device").getAttribute("aria-pressed")).toBe("false");
   await flush(el);
   const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await question.updateComplete;

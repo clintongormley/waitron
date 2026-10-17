@@ -3073,7 +3073,8 @@ Signed out, the Theme chooser (`wt-theme-chooser`) sits just before the language
 in, the banner has no room for it at phone width, so Theme moves into the account menu, at every
 width: a labelled group of three toggle buttons (Light, Dark, Follow device, each with its icon,
 the current one `aria-pressed="true"` and bordered) between Account settings and Log out; a pick
-closes the menu like any other action. Measured 2026-10-17 in the plan review for A681: a 52 px stand-in in the
+closes the menu like any other action. The group is `themeChoices` with its `themeChoicesStyles`
+(`packages/ui/src/theme-choices.ts`), which the till's person menu draws too. Measured 2026-10-17 in the plan review for A681: a 52 px stand-in in the
 signed-in banner shrank the lockup to 15 px at 360 px and 45 px at 390 px, below the 60 px floor
 in `apps/dashboard/src/dashboard-app.test.ts`. In Demo and Preparation, `wt-demo-bar` shows the mode,
 the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
@@ -4570,18 +4571,21 @@ app always embeds it). A till screen with no top bar — the sign-in and join sc
 kitchen display, whose shell draws no bar — holds it at the top right, above the content.
 
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card
-header, the till's shell bar, the till's sign-in and join screens and the kitchen display's
-corner, and in the dashboard's banner while nobody is signed in (signed in, Theme is in the
-account menu; see "Dashboard banner"). The counter screen's own header has none, because the till
-never shows that header. On the till's bar the Theme chooser stays on the bar with the tabs and
-the language chooser at every width, and never moves into More. A theme pick applies at once and
-never asks about unsaved work, unlike a language pick on the till. The dashboard banner's dark
+header, the till's sign-in and join screens and the kitchen display's corner, and in the
+dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
+"Dashboard banner"). The counter screen's own header has none, because the till never shows that
+header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in
+person's menu (the menu under their name, or inside More once their name has moved there), the same
+group of three choices as the dashboard's account menu, just before Log out. Measured 2026-10-17
+in the real-browser look for A681: with the chooser on the bar, at 360 px the tab strip got 148 px
+of the 178 px its tabs needed, and "Sala" showed as "Sa". A theme pick applies at once and never
+asks about unsaved work, unlike a language pick on the till. The dashboard banner's dark
 lockup follows the choice (its `<source>`'s `media` is `all` for Dark, `not all` for Light, and
 `(prefers-color-scheme: dark)` for Follow device), and the printable node recovery page takes the
 screen's resolved `color-scheme` rather than `light dark`.
 
 The till's shell bar is one row at every width. On a phone (40rem wide or less) it holds the
-tabs, the Theme and language choosers and a More menu with everything else. Wider, it measures itself when
+tabs, the language chooser and a More menu with everything else. Wider, it measures itself when
 its width, its content or the language changes, and moves items into More one at a time, only as many as it needs to stay on one row.
 Find a bill stays in More at every width and opens the Bills and Transactions page. Its Back
 returns to the counter without replacing the basket. A transaction receipt keeps the page's tab,
@@ -4591,8 +4595,8 @@ The other bar actions run left to right in priority order: Pass, Kitchen, My sch
 Profile, Equipment and Transfers (the count and its button together). More takes these from the
 right. The Waitron name hides first, followed by Transfers, Equipment, Profile, My
 schedule, Kitchen, Pass, and finally the operator's name with Log out after the language chooser.
-Inside More the items keep the bar's order, with Find a bill first. The tabs, the Theme chooser and
-the language chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
+Inside More the items keep the bar's order, with Find a bill first. The tabs and the language
+chooser stay on the bar; once everything else has moved, the tabs scroll sideways. Items return
 when the screen grows wider, the content other than the transfer count changes, or the language
 changes, but they stay in an open More menu until it closes. While Transfers is in More, the
 menu's button carries its pending count. Cases: `apps/till/src/widgets/till-shell.test.ts` and the

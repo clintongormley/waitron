@@ -10,12 +10,14 @@ import {
   baseStyles,
   chooseTheme,
   iconButtonStyles,
-  THEME_CHOICES,
   ThemeChoiceController,
+  themeChoices,
+  themeChoicesStyles,
   trackIconTooltip,
   UrlStateController,
   type ThemeChoice,
   type WtInput,
+  type WtThemeLabels,
   type WtToast,
 } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
@@ -352,6 +354,7 @@ export class DashboardApp extends LitElement {
   static override styles = [
     baseStyles,
     iconButtonStyles,
+    themeChoicesStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -696,48 +699,6 @@ export class DashboardApp extends LitElement {
         position: relative;
       }
 
-      .theme-choices {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .theme-choices-label {
-        padding: var(--wt-space-2) var(--wt-space-4) 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      /* The same box as the menu's wt-button variant="ghost" align="start". */
-      .theme-choice {
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: var(--wt-space-2);
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-4);
-        border: 1px solid transparent;
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        font-weight: var(--wt-font-weight-bold);
-        text-align: start;
-        cursor: pointer;
-      }
-      .theme-choice[aria-pressed="true"] {
-        border-color: var(--wt-color-border);
-      }
-      .theme-choice:hover {
-        border-color: var(--wt-color-primary-text);
-      }
-      .theme-choice:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-
       .alert-toast {
         position: absolute;
         inset-block-start: calc(100% + var(--wt-space-2));
@@ -1034,6 +995,15 @@ export class DashboardApp extends LitElement {
    * before it, so that answer must not repaint over the person's choice. */
   #sessionLocaleChoice = 0;
   readonly #theme = new ThemeChoiceController(this, { applies: true });
+
+  #themeLabels(): WtThemeLabels {
+    return {
+      theme: t("theme.label"),
+      light: t("theme.light"),
+      dark: t("theme.dark"),
+      device: t("theme.device"),
+    };
+  }
 
   constructor() {
     super();
@@ -1776,12 +1746,7 @@ export class DashboardApp extends LitElement {
             : html`<wt-theme-chooser
                 data-test="theme-chooser"
                 .active=${this.#theme.choice}
-                .labels=${{
-                  theme: t("theme.label"),
-                  light: t("theme.light"),
-                  dark: t("theme.dark"),
-                  device: t("theme.device"),
-                }}
+                .labels=${this.#themeLabels()}
               ></wt-theme-chooser>`
         }
         <wt-language-chooser
@@ -1826,28 +1791,11 @@ export class DashboardApp extends LitElement {
                     @click=${() => this.#openProfile()}
                     >${t("action.account_settings")}</wt-button
                   >
-                  <div
-                    class="theme-choices"
-                    role="group"
-                    aria-labelledby="theme-choices-label"
-                    data-test="theme-choices"
-                  >
-                    <span id="theme-choices-label" class="theme-choices-label"
-                      >${t("theme.label")}</span
-                    >
-                    ${THEME_CHOICES.map(
-                      (choice) =>
-                        html`<button
-                          type="button"
-                          class="theme-choice"
-                          aria-pressed=${String(choice === this.#theme.choice)}
-                          data-test="theme-choice-${choice}"
-                          @click=${() => chooseTheme(choice)}
-                        >
-                          <wt-icon name="theme-${choice}"></wt-icon>${t(`theme.${choice}`)}
-                        </button>`,
-                    )}
-                  </div>
+                  ${themeChoices({
+                    active: this.#theme.choice,
+                    labels: this.#themeLabels(),
+                    onPick: chooseTheme,
+                  })}
                   <wt-button
                     variant="ghost"
                     align="start"
