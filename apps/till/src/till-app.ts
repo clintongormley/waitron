@@ -18,6 +18,7 @@ import {
   baseStyles,
   registerIcons,
   NUTRITION_ICONS,
+  ThemeChoiceController,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -1917,6 +1918,7 @@ export class TillApp extends LitElement {
     // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the screens, which read
     // `t()` at render time.
     new LocaleChangeController(this);
+    new ThemeChoiceController(this, { applies: true });
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
     // reach every later listener in that same notification.
     this.#store.subscribe(() => {

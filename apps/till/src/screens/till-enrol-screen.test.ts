@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
+import { page } from "vitest/browser";
+import { chooseTheme, THEME_STORAGE_KEY, type WtThemeChooser } from "@waitron/ui";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillEnrolScreen } from "./till-enrol-screen.js";
@@ -486,7 +488,7 @@ it("renders its own language chooser, so a fresh device can be set up in Spanish
   expect(el.shadowRoot!.querySelector("wt-language-chooser")).not.toBeNull();
 });
 
-it("puts the language chooser at the top right on its own, above the join form", async () => {
+it("puts the language chooser at the top right, after the theme chooser, above the join form", async () => {
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
   const own = el.shadowRoot!.querySelector("wt-language-chooser")!.getBoundingClientRect();
@@ -496,6 +498,62 @@ it("puts the language chooser at the top right on its own, above the join form",
   expect(own.top - screen.top).toBeLessThanOrEqual(32);
   expect(screen.right - own.right).toBeLessThanOrEqual(32);
   expect(own.left).toBeGreaterThan(screen.left + screen.width / 2);
+});
+
+it("shows the theme chooser just before the language chooser, at the top right", async () => {
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  const theme = el.shadowRoot!.querySelector<HTMLElement>("[data-test=theme-chooser]")!;
+  const language = el.shadowRoot!.querySelector("wt-language-chooser")!;
+  const corner = el.shadowRoot!.querySelector(".language-corner")!;
+  expect(theme.parentElement).toBe(corner);
+  expect(theme.nextElementSibling).toBe(language);
+  expect(
+    Math.abs(corner.getBoundingClientRect().right - language.getBoundingClientRect().right),
+  ).toBeLessThanOrEqual(1);
+  expect(theme.getBoundingClientRect().right).toBeLessThanOrEqual(
+    language.getBoundingClientRect().left,
+  );
+  const space1 = parseFloat(getComputedStyle(corner).getPropertyValue("--wt-space-1"));
+  expect(space1).toBe(4);
+  const own = theme.getBoundingClientRect();
+  const next = language.getBoundingClientRect();
+  expect(Math.abs(next.left - own.right - space1)).toBeLessThanOrEqual(1);
+  expect(Math.abs(own.top + own.height / 2 - (next.top + next.height / 2))).toBeLessThanOrEqual(1);
+});
+
+it("labels the theme chooser in Spanish", async () => {
+  const before = currentLocale();
+  setLocale("es-ES");
+  try {
+    const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+    await flush(el);
+    const chooser = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("[data-test=theme-chooser]")!;
+    await chooser.updateComplete;
+    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=theme-trigger]")!;
+    await expect
+      .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
+      .toHaveAccessibleName("Tema: Según el dispositivo");
+  } finally {
+    setLocale(before);
+  }
+});
+
+it("redraws its theme chooser when the theme choice changes", async () => {
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  try {
+    chooseTheme("dark");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<WtThemeChooser>("[data-test=theme-chooser]")!.active).toBe(
+      "dark",
+    );
+  } finally {
+    chooseTheme("device");
+    localStorage.removeItem(THEME_STORAGE_KEY);
+  }
 });
 
 it("shows the language's full name at 1280 wide and its short code at 390, always named in full", async () => {

@@ -6,6 +6,7 @@ import {
   submitOnEnter,
   leaveCoordinatorFor,
   type DraftScope,
+  ThemeChoiceController,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -14,6 +15,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TillApi } from "../api/client.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
+import { themeChooser } from "../widgets/theme-chooser.js";
 
 const POLL_MS = 2_000;
 
@@ -73,6 +75,7 @@ export class TillEnrolScreen extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    new ThemeChoiceController(this);
   }
 
   @property({ attribute: false }) api!: TillApi;
@@ -185,6 +188,7 @@ export class TillEnrolScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <div class="language-corner">
+        ${themeChooser()}
         <wt-language-chooser
           active=${currentLocale()}
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}

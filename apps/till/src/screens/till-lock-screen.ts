@@ -1,12 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { ThemeChoiceController, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
+import { themeChooser } from "../widgets/theme-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
@@ -41,6 +42,7 @@ export class TillLockScreen extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    new ThemeChoiceController(this);
   }
 
   static override styles = [
@@ -308,6 +310,7 @@ export class TillLockScreen extends LitElement {
   override render() {
     return html`
       <div class="language-corner">
+        ${themeChooser()}
         <wt-language-chooser
           active=${currentLocale()}
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}

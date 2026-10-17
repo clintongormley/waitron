@@ -4,14 +4,16 @@ import { css, unsafeCSS } from "lit";
 export const PHONE_WIDTH = "(max-width: 40rem)";
 
 /**
- * The till's placement of `wt-language-chooser`: `.language-corner` holds it at the top right on a
- * screen with no top bar, and at phone width the trigger shows the short code. The breakpoint is a
- * literal because a media query cannot read a token.
+ * The till's placement of `wt-language-chooser`: `.language-corner` holds it, after the theme
+ * chooser, at the top right on a screen with no top bar, and at phone width the trigger shows the
+ * short code. The breakpoint is a literal because a media query cannot read a token.
  */
 export const languageChooserStyles = css`
   .language-corner {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: var(--wt-space-1);
     padding-block-end: var(--wt-space-3);
   }
 
