@@ -3510,6 +3510,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
+  #1828).** `wt-colour-chooser` copies the panel placement and the grid arrow-key handling that
+  several other `wt-*` components (`wt-combobox`, `wt-language-chooser` among them) each carry
+  their own copy of. Move both into shared helpers in `packages/ui` and have every copy use them;
+  each component's own tests and mutation score must hold.
+
 - **A681. A light / dark / follow-device theme choice in the apps (owner, 2026-10-14).** Today every
   screen follows the device's own light or dark setting. Add a Theme choice with three options
   (Light, Dark, Follow device, the default) to the dashboard, the till and setup. It is saved in
@@ -4207,6 +4213,13 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 ### Working time and staff
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
+
+- **A780. The staffing painters read holder names they never show (left open by #1828).** Both
+  staff-role feeds (`staff-roles` and `painter-staff-roles`, `packages/staffing/src/dashboard/client.ts`)
+  read `GET /management-api/staffing/staff-roles`, which always looks up every holder's name
+  (`listStaffRolesWithHolderNames`, `packages/staffing/src/staff-roles.ts`). The painters use only
+  each role's name, colour and holder ids. Give the painters a read without the names (a query
+  parameter or a second route), keeping the Staff roles list's.
 
 - **A763. The Rota view redesigned (owner, 2026-10-16).** One Show menu (Everyone or an area)
   replaces the Area picker and the By area | By person switch; two rows of controls; no "Add shift"
