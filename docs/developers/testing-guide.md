@@ -77,6 +77,21 @@ violations needs a guard, and the guard could not pass while a single suite stil
 helper. That is the shape the column-vocabulary rollout ended in too: #414 was the last conversion,
 and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line together afterwards.
 
+## Populate an upgrade fixture using its predecessor's schema
+
+When an upgrade test opens an older schema, seed its rows through operations that use only that
+schema's columns. Keep its populated rows, audit history and whole-database comparisons; add an
+explicit empty-table expectation for each new table the upgrade creates. Do not make a live request
+handler understand an old schema just to populate a test.
+
+Receipt, 2026-10-17, A773-1: running
+`pnpm --filter @waitron/server exec vitest run src/canvas-retirement-upgrade.test.ts` after integration
+failed while populating the predecessor. Calling the same group submission directly exposed
+`no such column: "display_number"` in `nextGroupNumber`, before the migration under test ran. The
+fixture now inserts its historical group shape, prices and inserts the recorded dish through the
+lower-level helpers, and retains its submission event and command record. Its five cases passed;
+the full snapshot also checks that A773's recalled-line and service-cancellation tables start empty.
+
 ## A migration set gets a whole database-backed suite by calling one function.
 
 `packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top

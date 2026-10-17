@@ -91,7 +91,10 @@ import * as service from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { applyMigrations } from "@waitron/migrations";
 import { provisionOrderVenue, billlessSale } from "./testing/order-venue.js";
-import { seatedWith, send } from "./testing/bill-venue.js";
+import { seatedWith } from "./testing/bill-venue.js";
+import { priceTabRound, insertTabRound, bumpRevision } from "./working-order.js";
+import { checkAndBumpParty, runServiceCommand } from "./parties.js";
+import { recordGroupEvent } from "./order-groups.js";
 import {
   beforeMissingCoreTables,
   predecessorAppendOnly,
@@ -185,7 +188,75 @@ function snapshot(db: Database): Record<string, unknown[]> {
 async function populatePredecessor(db: Database) {
   const venue = await provisionOrderVenue(db);
   const saleId = await billlessSale(venue);
-  const party = await seatedWith(venue, "Tarta");
+  const party = await seatedWith(venue);
+  await withTransaction(db, async (tx) => {
+    await runServiceCommand(
+      tx,
+      { kind: "party", partyId: party.partyId },
+      randomUUID(),
+      "group.submit",
+      {
+        partyId: party.partyId,
+        operatorId: venue.operatorId,
+        groups: [
+          { release: "fire", lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }] },
+        ],
+      },
+      async () => {
+        await checkAndBumpParty(tx, party.partyId, party.revision, "open");
+        const groupId = randomUUID();
+        const sentAt = "2026-10-16T10:00:00.000Z";
+        // Current group commands read columns absent from this predecessor schema.
+        await tx.run(sql`insert into order_groups
+      (id, party_id, position, state, fired_at, fired_by, submitted_by, created_at)
+      values (${groupId}, ${party.partyId}, 1, 'fired', ${sentAt}, ${venue.operatorId}, ${venue.operatorId}, ${sentAt})`);
+        const round = await priceTabRound(tx, venue.cfg, party.tabId, [
+          { menuItemId: venue.offerFor("Tarta"), quantity: "1", release: true },
+        ]);
+        await insertTabRound(
+          tx,
+          venue.cfg,
+          round,
+          round.rows.map((row) => ({
+            ...row,
+            groupId,
+            creditedTo: venue.operatorId,
+            sentAt,
+          })),
+        );
+        await bumpRevision(tx, [party.tabId]);
+        await recordGroupEvent(tx, {
+          partyId: party.partyId,
+          groupId,
+          kind: "submitted",
+          actorId: venue.operatorId,
+          detail: { workingOrderId: party.tabId, release: "fire" },
+        });
+        expect(
+          tx.all(sql`select name, quantity, unit_price_gross, line_total, sent_at, group_id
+      from working_order_lines where working_order_id = ${party.tabId}`),
+        ).toEqual([
+          {
+            name: "Tarta",
+            quantity: 1000,
+            unit_price_gross: 1800,
+            line_total: 1800,
+            sent_at: sentAt,
+            group_id: groupId,
+          },
+        ]);
+        return { tabId: party.tabId, groupIds: [groupId], revision: party.revision + 1 };
+      },
+    );
+    expect(
+      tx.all(sql`select kind from order_group_events where party_id = ${party.partyId}`),
+    ).toEqual([{ kind: "submitted" }]);
+    expect(
+      tx.all(
+        sql`select kind from service_commands where scope_id = ${party.partyId} and kind = 'group.submit'`,
+      ),
+    ).toEqual([{ kind: "group.submit" }]);
+  });
   const draftId = randomUUID();
   await withTransaction(db, async (tx) => {
     await tx.run(
@@ -434,6 +505,8 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       sale_receipt_guests: [],
       floor_plan_sets: [],
       floor_plan_placements: [],
+      order_draft_recalled_lines: [],
+      line_service_cancellations: [],
     };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>
