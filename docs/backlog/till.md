@@ -1403,6 +1403,9 @@ The form's two "?" buttons, beside Department and Starting zone, are A237 candid
 
 **A757 (owner, 2026-10-16) — design first; it comes back to the owner before anything is built.**
 
+**Design (2026-10-17):** [the lifecycle, how each state is shown, six owner questions](../superpowers/specs/2026-10-17-a757-table-states-design.md),
+with [mock-ups](mockups/a757-table-states/). Nothing is built until the owner answers.
+
 Today Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) holds two
 things:
 

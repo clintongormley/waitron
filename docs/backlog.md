@@ -1917,8 +1917,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
   Design first. Decided: the Tables tab goes; optional states are switched per department; an
   optional state is one the code understands, not a label the venue makes up. A773 adds a Requested
-  state (the waiter fired it; the pass has not yet); the held mark counts it.
-  [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab)
+  state (the waiter fired it; the pass has not yet); the held mark counts it. **Design written
+  2026-10-17, waiting for the owner's answers (Q1–Q6)**; the build also waits for A756.
+  [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
+  [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
+  [mockups](backlog/mockups/a757-table-states/)
 
 - **A758. Adjustment reasons: review the rules, then a page of their own (owner, 2026-10-16).**
   Design first: an approver never asked, limits nobody can approve, one kind per reason, role lists
