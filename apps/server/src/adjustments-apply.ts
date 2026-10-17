@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billCancelNeedsManager,
   billDiscountNeedsManager,
@@ -24,7 +24,15 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  nowIso,
+  orderDraftRecalledLines,
+  orderDrafts,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -163,6 +171,7 @@ interface Carve {
 }
 
 interface Plan {
+  recalledDraftIds: string[];
   reason: AdjustmentReason;
   reasonName: string;
   /** The dish or the extra the action names; null on a bill-level discount. */
@@ -540,7 +549,39 @@ export async function planAdjustment(
   if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
     approverRole = "manager";
   }
+  const parents = new Set(
+    (ask.action === "cancel" ? [line!] : changes.map((change) => change.row)).map(
+      (row) => row.parentLineId ?? row.id,
+    ),
+  );
+  const recalled =
+    parents.size === 0
+      ? []
+      : await tx
+          .select({
+            id: orderDrafts.id,
+            ownerId: orderDrafts.ownerId,
+            ownerName: persons.displayName,
+          })
+          .from(orderDraftRecalledLines)
+          .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
+          .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
+          .where(
+            and(
+              eq(orderDrafts.state, "open"),
+              inArray(orderDraftRecalledLines.sourceLineId, [...parents]),
+            ),
+          );
+  for (const draft of recalled) {
+    if (draft.ownerId !== ask.operatorId)
+      throw new AppError("draft.taken_over", {
+        draftId: draft.id,
+        ownerId: draft.ownerId,
+        ownerName: draft.ownerName ?? "",
+      });
+  }
   return {
+    recalledDraftIds: [...new Set(recalled.map((draft) => draft.id))],
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
     line,
@@ -849,6 +890,15 @@ export async function applyAdjustment(
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
+      }
+      if (plan.recalledDraftIds.length > 0) {
+        await tx
+          .update(orderDrafts)
+          .set({
+            revision: sql`${orderDrafts.revision} + 1`,
+            updatedAt: nowIso(),
+          })
+          .where(inArray(orderDrafts.id, plan.recalledDraftIds));
       }
       const { line } = plan;
       const id = await recordAdjustment(tx, {

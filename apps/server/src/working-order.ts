@@ -1,5 +1,5 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
-import { isRecalledDish } from "./draft-source.js";
+import { copyRecalledSplit, isRecalledDish } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import {
@@ -4450,6 +4450,7 @@ export async function splitLinesWithinOrder(
     refuseHeld: false,
     ...opts,
   });
+  for (const [sourceId, split] of splitLines) await copyRecalledSplit(tx, sourceId, split.id);
   return splitLines;
 }
 
