@@ -9817,6 +9817,38 @@ describe("till-app", () => {
       expect(tenderPay(el).shadowRoot!.querySelector(".card-outcome")).toBeNull();
     });
 
+    it("sends no reader payment when the guests turn bad while the kitchen routes are read", async () => {
+      let answer: (value: DeadEndAnswer) => void = () => undefined;
+      const askSaleDeadEnds = vi.fn(
+        () => new Promise<DeadEndAnswer>((resolve) => (answer = resolve)),
+      );
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ getTill: withReaderTill(), askSaleDeadEnds, pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      const stepper = tenderPay(el).shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown>; error: string }
+      >('[name="guests"]')!;
+      await stepper.updateComplete;
+      const input = stepper.shadowRoot!.querySelector("input")!;
+
+      tapPayCard(el);
+      await flush(el);
+      expect(askSaleDeadEnds).toHaveBeenCalledOnce();
+      expect(input.disabled).toBe(false);
+      input.value = "0";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flush(el);
+      answer({ sends: false, deadEnds: [], stations: [] });
+      await flush(el);
+      await tenderPay(el).updateComplete;
+
+      expect(pay).not.toHaveBeenCalled();
+      expect(stepper.isConnected).toBe(true);
+      expect(stepper.error).toBe(t("seat.guest_count_invalid"));
+    });
+
     it("sends the receipt's guests to the reader payment, and again on the retry after a decline", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ getTill: withReaderTill(), pay });

@@ -15,12 +15,10 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
-  MAX_GUEST_COUNT,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
-import "@waitron/ui/src/components/wt-number-stepper.js";
-import { parseGuestCount } from "./guest-count.js";
+import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -127,6 +125,7 @@ export class TillTenderPay extends LitElement {
     baseStyles,
     segmentedOptionStyles,
     formMessageStyles,
+    guestsStepperStyles,
     css`
       :host {
         display: block;
@@ -239,11 +238,6 @@ export class TillTenderPay extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-2);
-      }
-
-      /* Room for the empty field's placeholder between the two buttons. */
-      .guests {
-        --wt-stepper-field-width: calc(var(--wt-tap-min) * 3);
       }
 
       .reader-name,
@@ -523,7 +517,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #guestsText(): string {
-    return this.guestsEntry ?? (this.receiptGuests === null ? "" : String(this.receiptGuests));
+    return guestsText(this.guestsEntry, this.receiptGuests);
   }
 
   #guestsInvalid(): boolean {
@@ -546,17 +540,18 @@ export class TillTenderPay extends LitElement {
     this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
-  #focusGuests(): void {
+  /** Asked again after the check before payment, which can wait while the field stays open. */
+  #guestsRefused(): boolean {
+    this.guestsAttempted = true;
+    if (!this.#guestsInvalid()) return false;
     this.shadowRoot!.querySelector<HTMLElement>('[name="guests"]')?.focus();
+    return true;
   }
 
   #startPaying(): void {
-    this.guestsAttempted = true;
-    if (this.#guestsInvalid()) {
-      this.#focusGuests();
-      return;
-    }
+    if (this.#guestsRefused()) return;
     this.#checkBeforeTender(() => {
+      if (this.#guestsRefused()) return;
       this.entry = "";
       this.view = "paying";
     });
@@ -581,18 +576,19 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  #onCardTap(): void {
+  /** Asked again after the check before payment, like `#guestsRefused`. */
+  #tipRefused(): boolean {
     this.tipAttempted = true;
     this.guestsAttempted = true;
-    if (this.#tipInvalid()) {
-      this.shadowRoot!.querySelector<HTMLElement>(".tip-input")?.focus();
-      return;
-    }
-    if (this.#guestsInvalid()) {
-      this.#focusGuests();
-      return;
-    }
+    if (!this.#tipInvalid()) return false;
+    this.shadowRoot!.querySelector<HTMLElement>(".tip-input")?.focus();
+    return true;
+  }
+
+  #onCardTap(): void {
+    if (this.#tipRefused() || this.#guestsRefused()) return;
     this.#checkBeforeTender(() => {
+      if (this.#tipRefused() || this.#guestsRefused()) return;
       if (this.cardProvider === "none") {
         this.#startCard();
         return;
@@ -947,24 +943,14 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** It saves nothing, so it joins no draft scope. */
   #renderGuests() {
     if (!this.asksGuests) return nothing;
-    return html`<wt-number-stepper
-      name="guests"
-      class="guests"
-      clearable
-      .min=${1}
-      .max=${MAX_GUEST_COUNT}
-      .label=${t("seat.guest_count")}
-      .placeholder=${t("receipt.guests_none")}
-      .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
-      .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
-      .value=${live(this.#guestsText())}
-      .disabled=${this.busy}
-      .error=${this.#guestsHeld() ? t("seat.guest_count_invalid") : ""}
-      @wt-change=${(event: Event) => this.#onGuestsChange(event)}
-    ></wt-number-stepper>`;
+    return guestsStepper({
+      text: this.#guestsText(),
+      disabled: this.busy,
+      error: this.#guestsHeld() ? t("seat.guest_count_invalid") : "",
+      onChange: (event) => this.#onGuestsChange(event),
+    });
   }
 
   /** No Hold: a placed order is not parked again. */

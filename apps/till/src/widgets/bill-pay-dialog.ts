@@ -1,8 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { live } from "lit/directives/live.js";
 import {
-  MAX_GUEST_COUNT,
   MONEY_SCALE,
   compareDecimal,
   decimal,
@@ -25,8 +23,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-number-stepper.js";
-import { parseGuestCount } from "./guest-count.js";
+import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -202,6 +199,7 @@ const PEOPLE = /^[1-9]\d{0,2}$/;
 export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    guestsStepperStyles,
     css`
       .body {
         display: flex;
@@ -398,11 +396,6 @@ export class TillBillPayDialog extends LitElement {
 
       .payment-text p {
         font-size: var(--wt-font-size-sm);
-      }
-
-      /* Room for the empty field's placeholder between the two buttons. */
-      .guests {
-        --wt-stepper-field-width: calc(var(--wt-tap-min) * 3);
       }
     `,
   ];
@@ -1442,7 +1435,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #guestsText(): string {
-    return this.guestsEntry ?? (this.receiptGuests === null ? "" : String(this.receiptGuests));
+    return guestsText(this.guestsEntry, this.receiptGuests);
   }
 
   #guestsInvalid(): boolean {
@@ -1455,23 +1448,13 @@ export class TillBillPayDialog extends LitElement {
     this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
-  /** It saves nothing, so it joins no draft scope. */
   #guests(error: string | undefined): TemplateResult {
-    return html`<wt-number-stepper
-      name="guests"
-      class="guests"
-      clearable
-      .min=${1}
-      .max=${MAX_GUEST_COUNT}
-      .label=${t("seat.guest_count")}
-      .placeholder=${t("receipt.guests_none")}
-      .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
-      .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
-      .value=${live(this.#guestsText())}
-      .disabled=${this.busy}
-      .error=${error ?? ""}
-      @wt-change=${(event: Event) => this.#onGuestsChange(event)}
-    ></wt-number-stepper>`;
+    return guestsStepper({
+      text: this.#guestsText(),
+      disabled: this.busy,
+      error: error ?? "",
+      onChange: (event) => this.#onGuestsChange(event),
+    });
   }
 
   #confirmStep(asked: PayRequest, preview: Allocated): TemplateResult {

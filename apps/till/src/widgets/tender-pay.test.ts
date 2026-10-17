@@ -2132,6 +2132,93 @@ describe("the receipt's guests field", () => {
     expect(el.shadowRoot!.activeElement).toBe(guests(el));
   });
 
+  /** The screen answers `check-before-tender` later, as the app does while it reads the kitchen
+   * routes; the returned function answers the latest press. */
+  function holdTenderCheck(el: TillTenderPay): (proceed: boolean) => void {
+    let answer: (proceed: boolean) => void = () => undefined;
+    el.addEventListener("check-before-tender", (event) => {
+      event.preventDefault();
+      answer = (event as CustomEvent<{ resolve: (proceed: boolean) => void }>).detail.resolve;
+    });
+    return (proceed) => answer(proceed);
+  }
+
+  it.each([
+    ["Cash", ".pay", {}, "confirm-payment", { method: "cash", amount: "5", guests: 3 }],
+    [
+      "Card typed by hand",
+      ".pay-card",
+      {},
+      "confirm-payment",
+      { method: "card", amount: "1.50", guests: 3 },
+    ],
+    [
+      "Cash at the collect stage",
+      ".pay",
+      { mode: "ticket_then_pay", stage: "collect" },
+      "collect-order",
+      { method: "cash", amount: "5", guests: 3 },
+    ],
+    [
+      "Card on a reader",
+      ".pay-card",
+      { cardProvider: "stripe_terminal" },
+      "collect-card",
+      { guests: 3 },
+    ],
+  ])(
+    "a count made bad while %s waits on the check before payment starts nothing until it is fixed",
+    async (_, button, props, eventName, sent) => {
+      const { el } = await mount(props);
+      const answer = holdTenderCheck(el);
+      const spy = listen(el, eventName);
+      click(el, button);
+      await el.updateComplete;
+      await typeGuests(el, "0");
+      answer(true);
+      await el.updateComplete;
+      expect(guests(el)).not.toBeNull();
+      expect(query(el, "till-numeric-pad")).toBeNull();
+      expect(query(el, ".ref-input")).toBeNull();
+      expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+      expect(el.shadowRoot!.activeElement).toBe(guests(el));
+      await typeGuests(el, "3");
+      click(el, button);
+      await el.updateComplete;
+      answer(true);
+      await el.updateComplete;
+      if (eventName !== "collect-card") {
+        if (button === ".pay") await type(el, "5");
+        click(el, ".confirm");
+      }
+      expect(spy).toHaveBeenCalledOnce();
+      expect(spy).toHaveBeenCalledWith(sent);
+    },
+  );
+
+  it("a tip made bad while Card waits on the check before payment starts no collection until it is fixed", async () => {
+    const { el } = await mount({ cardProvider: "stripe_terminal", tipsEnabled: true });
+    const answer = holdTenderCheck(el);
+    const spy = listen(el, "collect-card");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    await typeTip(el, "abc");
+    answer(true);
+    await el.updateComplete;
+    expect(spy).not.toHaveBeenCalled();
+    const tip = query(el, ".tip-input") as (HTMLElement & { error: string }) | null;
+    expect(tip).not.toBeNull();
+    expect(tip!.error).toBe(t("bill_pay.tip_invalid"));
+    expect(el.shadowRoot!.activeElement).toBe(tip);
+    await typeTip(el, "0.50");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    answer(true);
+    await el.updateComplete;
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith({ tip: "0.50", guests: 4 });
+  });
+
   it("a new order puts the field back on the default and clears the messages", async () => {
     const { el, store } = await mount();
     await typeGuests(el, "0");
