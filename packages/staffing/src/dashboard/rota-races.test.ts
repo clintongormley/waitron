@@ -1,4 +1,5 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
@@ -10,7 +11,22 @@ import { RotaView } from "./rota-view.js";
 const A = "2026-11-30",
   B = "2026-12-07";
 const frames: HTMLElement[] = [];
-afterEach(() => {
+/** Scrolls the page home and waits for the scroll event, so it cannot reach a later popup and
+ *  close it: a popup closes on a scroll that leaves its anchor out of view. */
+async function useViewport(width: number, height: number) {
+  const before = [innerWidth, innerHeight] as const;
+  await page.viewport(width, height);
+  await vi.waitFor(() => expect(innerWidth).toBe(width));
+  onTestFinished(() => page.viewport(...before));
+}
+async function scrollHome() {
+  if (scrollX === 0 && scrollY === 0) return;
+  const done = new Promise((resolve) => addEventListener("scroll", resolve, { once: true }));
+  scrollTo(0, 0);
+  await done;
+}
+afterEach(async () => {
+  await scrollHome();
   frames.splice(0).forEach((f) => f.remove());
   setLocale("en");
 });
@@ -254,3 +270,125 @@ it.each(["lands", "is refused"])(
     ).toBe(false);
   },
 );
+/** A read without the areas named in `gone`, and without the slots named in `taken`, as the rota
+ *  reads once an area stops being active or a slot leaves the plan on another screen. */
+function without(gone: Set<string>, taken: Set<string> = new Set()) {
+  return async (w: string) => {
+    const r = rotaWeek(w);
+    r.areas = r.areas.filter((a) => !gone.has(a.area.id));
+    for (const day of r.days) {
+      day.areas = day.areas.filter((a) => !gone.has(a.area.id));
+      for (const a of day.areas)
+        a.match.slots = a.match.slots.filter((s) => !taken.has(s.slot.key));
+    }
+    return r;
+  };
+}
+const shownAreas = (el: RotaView) =>
+  el.shadowRoot!.querySelector<RotaView & { week: RotaWeek }>("rota-by-area")?.week.areas.length;
+it("closes the slot picker when its area stops being active, and keeps it when another area does", async () => {
+  const gone = new Set<string>();
+  const { el, live } = await mount({ read: without(gone) });
+  const picker = await openPicker(el);
+  gone.add("restaurant");
+  live.invalidate([{ type: "departments" }]);
+  await vi.waitFor(() => expect(shownAreas(el)).toBe(1));
+  await el.updateComplete;
+  await new Promise(requestAnimationFrame);
+  expect(el.shadowRoot!.querySelector("slot-picker")).toBe(picker);
+  expect(popupOpen(el)).toBe(true);
+  gone.add("kitchen");
+  live.invalidate([{ type: "kitchen_stations" }]);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+  expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+  await vi.waitFor(() => expect(popupOpen(el)).toBe(false));
+});
+it("keeps a fill's slot picker open while it is in flight when another area stops being active", async () => {
+  const fill = deferred<unknown>();
+  const gone = new Set<string>();
+  const { el, live } = await mount({ fill: () => fill.promise, read: without(gone) });
+  const picker = await openPicker(el);
+  click(picker, "[data-person=marc]");
+  gone.add("restaurant");
+  live.invalidate([{ type: "departments" }]);
+  await vi.waitFor(() => expect(shownAreas(el)).toBe(1));
+  await el.updateComplete;
+  await new Promise(requestAnimationFrame);
+  expect(el.shadowRoot!.querySelector("slot-picker")).toBe(picker);
+  expect(popupOpen(el)).toBe(true);
+  fill.resolve({ shiftId: "new" });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull());
+});
+it.each(["lands", "is refused"])(
+  "closes a fill's slot picker when the last area stops being active while the fill is in flight, and the fill that %s afterwards draws no picker",
+  async (outcome) => {
+    const fill = deferred<unknown>();
+    const gone = new Set<string>();
+    const { el, live } = await mount({ fill: () => fill.promise, read: without(gone) });
+    click(await openPicker(el), "[data-person=marc]");
+    gone.add("kitchen").add("restaurant");
+    live.invalidate([{ type: "kitchen_stations" }]);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+    await new Promise(requestAnimationFrame);
+    expect(el.shadowRoot!.querySelector("rota-by-area")).toBeNull();
+    expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+    await vi.waitFor(() => expect(popupOpen(el)).toBe(false));
+    if (outcome === "lands") fill.resolve({ shiftId: "new" });
+    else fill.reject({ code: "connection.failed" });
+    await fill.promise.catch(() => undefined);
+    if (outcome === "is refused")
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=fill-error]")?.textContent).toContain(
+          "Could not fill the slot",
+        ),
+      );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+    expect(popupOpen(el)).toBe(false);
+  },
+);
+it("closes a fill's slot picker when its slot leaves the plan while the fill is in flight", async () => {
+  const fill = deferred<unknown>();
+  const taken = new Set<string>();
+  const { el, live } = await mount({ fill: () => fill.promise, read: without(new Set(), taken) });
+  click(await openPicker(el), "[data-person=marc]");
+  taken.add("empty");
+  live.invalidate([{ type: "staffing_blocks" }]);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull());
+  await vi.waitFor(() => expect(popupOpen(el)).toBe(false));
+  fill.resolve({ shiftId: "new" });
+  await fill.promise;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+});
+it("a picker that closes as a page scroll takes its slot out of view stays closed when the grid redraws before the close lands", async () => {
+  await useViewport(1280, 900);
+  const { el } = await mount();
+  const spacer = document.createElement("div");
+  spacer.style.height = "8000px";
+  el.parentElement!.append(spacer);
+  await openPicker(el);
+  const scrolled = new Promise<void>((resolve) =>
+    // Runs after the popup's own scroll handler has hidden it, before its close event.
+    window.addEventListener(
+      "scroll",
+      () => {
+        expect(popupOpen(el)).toBe(false);
+        el.canWrite = false;
+        resolve();
+      },
+      { once: true },
+    ),
+  );
+  window.scrollBy(0, 3000);
+  await scrolled;
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("slot-picker")).toBeNull();
+  expect(popupOpen(el)).toBe(false);
+  await scrollHome();
+  el.canWrite = true;
+  await el.updateComplete;
+  await openPicker(el);
+});

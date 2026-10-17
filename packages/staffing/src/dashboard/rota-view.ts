@@ -411,14 +411,24 @@ export class RotaView extends LitElement {
           this.publishing = false;
           this.editor = undefined;
         }
-        if (
-          this.picked &&
-          !this.busy &&
-          (read.version?.status === "published" ||
-            !read.days
+        const picked = this.picked;
+        const listed = picked
+          ? read.days
               .flatMap((d) => d.areas)
               .flatMap((a) => a.match.slots)
-              .some((s) => s.slot.key === this.picked!.key && s.status.kind === "unfilled"))
+              .find((s) => s.slot.key === picked.key)
+          : undefined;
+        // The picker reads its slot's area from the week, so it cannot outlive the slot or the area,
+        // even mid-fill.
+        if (
+          picked &&
+          (!listed || !read.areas.some((a) => areaKey(a.area) === areaKey(picked.area)))
+        )
+          this.picked = undefined;
+        else if (
+          picked &&
+          !this.busy &&
+          (read.version?.status === "published" || listed!.status.kind !== "unfilled")
         )
           this.picked = undefined;
         const day = this.openDay;
