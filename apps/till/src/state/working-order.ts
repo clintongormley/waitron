@@ -429,6 +429,12 @@ export class WorkingOrderStore {
     for (const line of this.#lines) delete line.notOfferedExtras;
   }
 
+  appendLines(lines: readonly OrderLine[]): void {
+    if (this.#refusesEdits || lines.length === 0) return;
+    this.#lines.push(...lines);
+    this.#changedLines();
+  }
+
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
     if (this.#refusesSelection(product)) return;

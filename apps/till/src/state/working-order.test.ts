@@ -32,6 +32,59 @@ const jamon: TillProduct = {
 };
 
 describe("WorkingOrderStore", () => {
+  it("appends already-chosen lines as one unsaved edit, merging none of them", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [{ product: cafe, quantity: "1" }]);
+    expect(store.dirty).toBe(false);
+    let changes = 0;
+    store.subscribe(() => changes++);
+    const total = store.total;
+    store.appendLines([
+      { product: cafe, quantity: "2", note: "decaf", courseId: "mains", noMerge: true },
+      { product: cafe, quantity: "1" },
+    ]);
+    expect(
+      store.lines.map(({ quantity, note, courseId, noMerge }) => ({
+        quantity,
+        note,
+        courseId,
+        noMerge,
+      })),
+    ).toEqual([
+      { quantity: "1", note: undefined, courseId: undefined, noMerge: undefined },
+      { quantity: "2", note: "decaf", courseId: "mains", noMerge: true },
+      { quantity: "1", note: undefined, courseId: undefined, noMerge: undefined },
+    ]);
+    expect(store.dirty).toBe(true);
+    expect(store.id).toBe("draft");
+    expect(store.total).not.toEqual(total);
+    expect(changes).toBe(1);
+  });
+
+  it.each(["sending", "reload"] as const)(
+    "does not append chosen lines while %s holds edits",
+    (gate) => {
+      const store = new WorkingOrderStore();
+      if (gate === "sending") store.sending = true;
+      else store.lockEdits();
+      let changes = 0;
+      store.subscribe(() => changes++);
+      store.appendLines([{ product: cafe, quantity: "1" }]);
+      expect(store.lines).toEqual([]);
+      expect(store.dirty).toBe(false);
+      expect(changes).toBe(0);
+    },
+  );
+
+  it("appending no lines is no edit", () => {
+    const store = new WorkingOrderStore();
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.appendLines([]);
+    expect(store.dirty).toBe(false);
+    expect(changes).toBe(0);
+  });
+
   it.each(["addProduct", "addMerging"] as const)(
     "period selection refuses %s after the picker opened",
     (method) => {

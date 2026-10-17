@@ -901,6 +901,11 @@ describe("A768 the order screen shows at once", () => {
     return { promise, resolve };
   }
 
+  const savedBeers = () =>
+    server.drafts.flatMap((each) =>
+      each.lines.map((line) => `${line.menuItemId} ×${Number(line.quantity)}`),
+    );
+
   async function onFloor(el: TillApp): Promise<void> {
     await flush(el);
     await signIn(el);
@@ -1201,5 +1206,72 @@ describe("A768 the order screen shows at once", () => {
     expect(
       tableOrder(el)!.draftStore?.lines.map((line) => `${line.product.name} ×${line.quantity}`),
     ).toEqual(["Beer ×1"]);
+    expect(savedBeers()).toEqual(["offer-beer ×1"]);
+  });
+
+  it("lines carried to a newly seated table are saved, and are there when it is reopened", async () => {
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn(async () => {
+        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+    });
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    await vi.waitFor(() => expect(savedBeers()).toEqual(["offer-beer ×1"]));
+    expect(server.saveDraft).toHaveBeenCalledWith(
+      "v-new",
+      expect.objectContaining({ lines: [expect.objectContaining({ menuItemId: "offer-beer" })] }),
+      expect.anything(),
+    );
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    await reopen(el, "t9");
+    await flush(el, 6);
+    expect(
+      tableOrder(el)!.draftStore?.lines.map((line) => `${line.product.name} ×${line.quantity}`),
+    ).toEqual(["Beer ×1"]);
+  });
+
+  it("lines carried to a newly seated table are sent when the waiter sends at once", async () => {
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn(async () => {
+        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+    });
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
+      .click();
+    await flush(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await flush(el, 6);
+    expect(server.submitDraft).toHaveBeenCalledOnce();
+    const [partyId, draftId] = server.submitDraft.mock.calls[0]!;
+    expect(partyId).toBe("v-new");
+    expect(server.saveDraft.mock.calls.at(-1)![1].lines).toEqual([
+      expect.objectContaining({ menuItemId: "offer-beer" }),
+    ]);
+    expect(await server.saveDraft.mock.results.at(-1)!.value).toMatchObject({ id: draftId });
   });
 });

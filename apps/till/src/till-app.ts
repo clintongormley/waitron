@@ -8775,7 +8775,7 @@ export class TillApp extends LitElement {
           const opened = await this.#openDraft(false, session);
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           if (carried && opened?.sync && carried.lines.length > 0)
-            opened.sync.store.loadFrom(opened.sync.store.id, carried.lines);
+            opened.sync.store.appendLines(carried.lines);
           this.#showDraft(opened);
         } catch (error) {
           this.#leaveFailedOpen(shownEarly, left, offerRequest, session);
