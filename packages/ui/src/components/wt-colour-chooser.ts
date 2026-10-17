@@ -138,7 +138,7 @@ export class WtColourChooser extends LitElement {
   @property() value = "";
   @property({ attribute: false }) choices: readonly ColourChoice[] = [];
   @property({ type: Boolean }) required = false;
-  @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean, reflect: true }) disabled = false;
   @property() error = "";
   /** A used colour's accessible name; `names` are its `usedBy`, joined with ", ". */
   @property({ attribute: false }) usedByLabel: (colour: string, names: string) => string = (
@@ -246,7 +246,7 @@ export class WtColourChooser extends LitElement {
   override render() {
     const chosen = this.chosen;
     const hasError = this.error !== "";
-    const stopIndex = Math.max(0, chosen ? this.choices.indexOf(chosen) : 0);
+    const stopIndex = chosen ? this.choices.indexOf(chosen) : 0;
     return html`
       <div
         class="field"
