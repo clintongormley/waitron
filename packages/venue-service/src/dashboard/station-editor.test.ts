@@ -1,6 +1,8 @@
 import { afterEach, expect, it } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import type { WtColourChooser } from "@waitron/ui/src/components/wt-colour-chooser.js";
 import { setLocale } from "@waitron/dashboard-kit";
-import { cleanup, mount as mountHtml } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, host, mount as mountHtml } from "@waitron/ui/src/test-helpers.js";
 import {
   refusalOf,
   type StationEditor,
@@ -96,14 +98,12 @@ function saves(el: StationEditor) {
   );
   return seen;
 }
-const picker = (el: StationEditor) =>
-  $<HTMLElementTagNameMap["station-colour-picker"]>(el, "station-colour-picker")!;
+const picker = (el: StationEditor) => $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
 const tile = (el: StationEditor, colour: string) =>
-  picker(el).shadowRoot!.querySelector<HTMLButtonElement>(
-    `[role=radio][data-station-colour="${colour}"]`,
-  )!;
+  picker(el).shadowRoot!.querySelector<HTMLButtonElement>(`[role=radio][data-value="${colour}"]`)!;
 async function pickColour(el: StationEditor, colour: string) {
-  tile(el, colour).click();
+  picker(el).show();
+  await userEvent.click(tile(el, colour));
   await el.updateComplete;
 }
 async function save(el: StationEditor) {
@@ -119,7 +119,7 @@ it("opens with the station's name, printers and rest-of-order choice, the name r
   expect(printersField(el)!.multiple).toBe(true);
   expect(printersField(el)!.values).toEqual(["epson"]);
   expect(restSwitch(el).checked).toBe(true);
-  expect(restSwitch(el).label).toBe("Show the rest of the order");
+  expect(restSwitch(el).label).toBe("Also list the order's dishes from other stations");
 });
 
 it("sends the name, printers and rest-of-order choice in one save", async () => {
@@ -253,7 +253,7 @@ it("reads in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect($(el, "wt-modal")!.getAttribute("heading")).toBe("Editar estación");
   expect(printersField(el)!.label).toBe("Impresoras");
-  expect(restSwitch(el).label).toBe("Mostrar el resto del pedido");
+  expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
 });
 
 it("ignores a cancel and a save while busy", async () => {
@@ -342,15 +342,18 @@ it("opens each timing empty when inherited, the venue default as its placeholder
   expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["", "12", ""]);
   expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["5", "10", "15"]);
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
-    "Warm after (min)",
-    "Overdue after (min)",
-    "Forgotten after (min)",
+    "Warm",
+    "Overdue",
+    "Forgotten",
   ]);
   for (const name of TIMINGS) {
     expect(timingField(el, name).required).toBe(false);
     expect(timingField(el, name).type).toBe("number");
-    expect(timingField(el, name).hint).toBe("Leave blank to use the venue default.");
+    expect(timingField(el, name).hint).toBe("");
   }
+  expect($(el, "#timing-inheritance")!.textContent).toBe(
+    "Leave a field blank to use the venue setting",
+  );
 });
 
 it("sends a typed timing, a cleared override as null, and an override equal to its default", async () => {
@@ -468,17 +471,18 @@ it("follows a venue-default change while open and keeps a typed override", async
 it("reads the timings in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es" });
   expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
-    "Aviso a partir de (min)",
-    "Atraso a partir de (min)",
-    "Olvido a partir de (min)",
+    "En demora",
+    "Retrasado",
+    "Olvidado",
   ]);
   await setTiming(el, "warmAfterMinutes", "0");
   await save(el);
   expect(timingField(el, "warmAfterMinutes").error).toBe(
     "Usa minutos enteros con aviso < atraso < olvido.",
   );
-  expect(timingField(el, "warmAfterMinutes").hint).toBe(
-    "Deja el campo vacío para usar el valor del local.",
+  expect(timingField(el, "warmAfterMinutes").hint).toBe("");
+  expect($(el, "#timing-inheritance")!.textContent).toBe(
+    "Deja un campo vacío para usar el ajuste del local",
   );
 });
 
@@ -529,7 +533,7 @@ it("offers another station's colour with its name, and never names the station b
   expect(tile(el, "orange").getAttribute("aria-label")).toBe("Orange, used by Pizza oven");
   expect(tile(el, "blue").getAttribute("aria-label")).toBe("Blue, used by Bar");
   expect(picker(el).shadowRoot!.textContent).not.toContain("Grill");
-  expect($(el, ".form > wt-input[name=stationName] + station-colour-picker")).not.toBeNull();
+  expect($(el, ".form > wt-input[name=stationName] + wt-colour-chooser")).not.toBeNull();
 });
 
 it("puts a colour refusal under Colour", async () => {
@@ -545,12 +549,12 @@ it("puts a colour refusal under Colour", async () => {
   expect(formMessage(el)).toBe("");
 });
 
-it("offers MOVED slips as the venue, naming the venue's choice, right after the rest-of-order switch", async () => {
+it("offers Print a slip when sent dishes move table as the venue, naming the venue's choice, right after the rest-of-order switch", async () => {
   const on = await mount();
-  expect(movedField(on).label).toBe("MOVED slips");
+  expect(movedField(on).label).toBe("Print a slip when sent dishes move table");
   expect(movedField(on).value).toBe("venue");
   expect(movedField(on).options.map(({ value, label }) => [value, label])).toEqual([
-    ["venue", "As the venue (print)"],
+    ["venue", "Venue setting: Print"],
     ["print", "Print"],
     ["dont-print", "Don't print"],
   ]);
@@ -558,10 +562,10 @@ it("offers MOVED slips as the venue, naming the venue's choice, right after the 
   expect(fields.indexOf(movedField(on))).toBe(fields.indexOf(restSwitch(on)) + 1);
   cleanup();
   const off = await mount(GRILL, { venuePrintsMovedSlips: false });
-  expect(movedField(off).options[0]!.label).toBe("As the venue (don't print)");
+  expect(movedField(off).options[0]!.label).toBe("Venue setting: Don't print");
 });
 
-it("opens on the station's own MOVED slips choice", async () => {
+it("opens on the station's own Print a slip when sent dishes move table choice", async () => {
   expect(movedField(await mount({ ...GRILL, printMovedSlips: true })).value).toBe("print");
   cleanup();
   expect(movedField(await mount({ ...GRILL, printMovedSlips: false })).value).toBe("dont-print");
@@ -588,15 +592,180 @@ it("sends null when a station's own choice goes back to as the venue", async () 
   expect(seen).toEqual([{ printMovedSlips: null }]);
 });
 
-it("reads MOVED slips in Spanish", async () => {
+it("reads Print a slip when sent dishes move table in Spanish", async () => {
   const el = await mount(GRILL, { locale: "es", venuePrintsMovedSlips: false });
-  expect(movedField(el).label).toBe("Avisos MOVIDO");
+  expect(movedField(el).label).toBe("Imprimir un aviso al cambiar de mesa los platos enviados");
   expect(movedField(el).options.map(({ label }) => label)).toEqual([
-    "Como el local (no imprimir)",
+    "Ajuste del local: No imprimir",
     "Imprimir",
     "No imprimir",
   ]);
   cleanup();
   const on = await mount(GRILL, { locale: "es" });
-  expect(movedField(on).options[0]!.label).toBe("Como el local (imprimir)");
+  expect(movedField(on).options[0]!.label).toBe("Ajuste del local: Imprimir");
+});
+
+it("A725 editor uses the station popup and saves the chosen colour", async () => {
+  const el = await mount();
+  el.stations = [...STATIONS, { id: "coffee", name: "Coffee", colour: "blue" }];
+  await el.updateComplete;
+  const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]");
+  expect(chooser).not.toBeNull();
+  await chooser!.updateComplete;
+  const root = chooser!.shadowRoot!;
+  expect(root.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  expect(root.querySelector(".value")!.textContent).toContain("Orange");
+  expect(chooser!.required).toBe(true);
+  expect(chooser!.choices.map(({ value }) => value)).toEqual([
+    "red",
+    "orange",
+    "amber",
+    "lime",
+    "green",
+    "teal",
+    "cyan",
+    "blue",
+    "indigo",
+    "purple",
+    "pink",
+    "brown",
+  ]);
+  const seen = saves(el);
+  await userEvent.click(root.querySelector("button.trigger")!);
+  expect(root.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+  expect(root.querySelector("[data-value=blue]")!.getAttribute("aria-label")).toBe(
+    "Blue, used by Bar, Coffee",
+  );
+  expect(root.textContent).not.toContain("Grill");
+  await userEvent.click(root.querySelector("[data-value=teal]")!);
+  await el.updateComplete;
+  expect(chooser!.value).toBe("teal");
+  expect(root.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  await save(el);
+  expect(seen).toEqual([{ colour: "teal" }]);
+});
+
+it("A725 ignores a colour value outside the offered station palette", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
+  chooser.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "grey" } }));
+  await el.updateComplete;
+  await save(el);
+  expect(seen).toEqual([]);
+  expect(chooser.value).toBe("orange");
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it("A725 popup Escape preserves the open editor and its changed colour", async () => {
+  const el = await mount();
+  await pickColour(el, "teal");
+  const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
+  await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+  expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  expect(el.open).toBe(true);
+  expect(chooser.value).toBe("teal");
+  expect(el.dirty).toBe(true);
+  expect(saveButton(el).disabled).toBe(false);
+});
+
+it("A725 paints the station dot token and translates a retained chooser", async () => {
+  const el = await mount();
+  const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
+  await chooser.updateComplete;
+  host.style.setProperty("--wt-color-station-orange-dot", "rgb(1, 2, 3)");
+  const square = chooser.shadowRoot!.querySelector(".trigger [part=swatch]")!;
+  expect(getComputedStyle(square).backgroundColor).toBe("rgb(1, 2, 3)");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await chooser.updateComplete;
+  expect(chooser.shadowRoot!.querySelector(".value")!.textContent).toContain("Naranja");
+  expect(chooser.shadowRoot!.querySelector("[data-value=blue]")!.getAttribute("aria-label")).toBe(
+    "Azul, en uso por Bar",
+  );
+  expect($(el, "fieldset legend")!.textContent).toBe("Avisos de demora (minutos)");
+  expect(restSwitch(el).label).toBe("Mostrar también los platos del pedido de otras estaciones");
+  expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
+    "En las comandas y la pantalla de cocina de esta estación",
+  );
+});
+
+it("A725 ignores an event from the departed station chooser", async () => {
+  const el = await mount();
+  const previous = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
+  el.open = false;
+  await el.updateComplete;
+  el.station = { ...GRILL, id: "bar", name: "Bar", colour: "blue" };
+  el.open = true;
+  await el.updateComplete;
+  previous.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "teal" } }));
+  await el.updateComplete;
+  expect($<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!.value).toBe("blue");
+  expect(el.dirty).toBe(false);
+  expect(saveButton(el).disabled).toBe(true);
+});
+
+it.each([390, 1280])("A725 groups late minutes on one row at %ipx", async (width) => {
+  const previous = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(width, 1100);
+    const el = await mount();
+    const group = $(el, "fieldset[aria-describedby=timing-inheritance]");
+    expect(group).not.toBeNull();
+    expect(group!.querySelector("legend")!.textContent).toBe("Late flags (minutes)");
+    const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
+      (name) => timingField(el, name),
+    );
+    await Promise.all(fields.map((field) => field.updateComplete));
+    const boxes = fields.map((field) => field.getBoundingClientRect());
+    expect(new Set(boxes.map((box) => Math.round(box.top))).size).toBe(1);
+    expect(boxes.every((box) => box.width > 0 && box.right <= window.innerWidth)).toBe(true);
+    expect(fields.map((field) => field.placeholder)).toEqual(["5", "10", "15"]);
+    expect(fields.map((field) => field.hint)).toEqual(["", "", ""]);
+    expect($(el, "#timing-inheritance")!.textContent).toBe(
+      "Leave a field blank to use the venue setting",
+    );
+    expect(restSwitch(el).label).toBe("Also list the order's dishes from other stations");
+    expect($(el, "[data-test=rest-of-order-hint]")!.textContent).toBe(
+      "On this station's tickets and kitchen screen",
+    );
+    expect(movedField(el).label).toBe("Print a slip when sent dishes move table");
+    expect(movedField(el).options.map(({ label }) => label)).toEqual([
+      "Venue setting: Print",
+      "Print",
+      "Don't print",
+    ]);
+  } finally {
+    await page.viewport(previous[0]!, previous[1]!);
+  }
+});
+
+it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", async (locale) => {
+  const previous = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 1100);
+    const el = await mount(GRILL, { locale });
+    const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"].map(
+      (name) => timingField(el, name),
+    );
+    await Promise.all(fields.map((field) => field.updateComplete));
+    for (const field of fields) {
+      const text = field.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+      expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth + 1);
+    }
+    expect(fields.map((field) => field.label)).toEqual(
+      locale === "en" ? ["Warm", "Overdue", "Forgotten"] : ["En demora", "Retrasado", "Olvidado"],
+    );
+    const group = $(el, "fieldset[data-test=moved-slips-group]");
+    expect(group).not.toBeNull();
+    const question = group!.querySelector("legend")!;
+    expect(question.textContent).toBe(movedField(el).label);
+    expect(question.scrollWidth).toBeLessThanOrEqual(question.clientWidth + 1);
+    expect(movedField(el).hideLabel).toBe(true);
+  } finally {
+    await page.viewport(previous[0]!, previous[1]!);
+  }
 });

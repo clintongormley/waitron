@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
+import { userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { StationEditor } from "./station-editor.js";
@@ -211,10 +212,14 @@ it("keeps a timing edit across removal and reconnect", async () => {
 });
 
 async function pickColour(el: StationEditor, colour: string) {
-  const picker = el.shadowRoot!.querySelector("station-colour-picker")!;
-  picker
-    .shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-station-colour="${colour}"]`)!
-    .click();
+  const picker = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-colour-chooser[name=colour]",
+  )!;
+  await picker.updateComplete;
+  picker.show();
+  await userEvent.click(
+    picker.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-value="${colour}"]`)!,
+  );
   await el.updateComplete;
 }
 
