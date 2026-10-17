@@ -18,7 +18,7 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { currentLocale } from "@waitron/dashboard-kit";
+import { listOf } from "./painter-labels.js";
 import type { CalendarColour } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { MONTHS } from "./calendar-grid.js";
@@ -57,9 +57,6 @@ const seasonOf = (row: SeasonRow): OpeningHoursModel["seasons"][number] => ({
   startsOn: startOf(row),
   colour: row.colour,
 });
-
-const listOf = (names: readonly string[]): string =>
-  new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" }).format(names);
 
 type RowField = "name" | "day" | "month" | "colour";
 type Refused = { key: string; field: SeasonRefusedField; message: string };
@@ -335,8 +332,9 @@ export class SeasonsWindow extends LitElement {
     this.impacts = new Map(this.impacts).set(id, { token, impact });
   }
   /**
-   * The named rows that will hold some of a binned season's stored days: the row holding its start,
-   * then each row starting before the next stored start, in start order round the year.
+   * The named rows that will hold some of a binned season's stored days, from its start to the next
+   * stored start (binned ones included): the row holding its start, then each row starting inside
+   * that range, in start order round the year.
    */
   private receivers(season: SeasonRow): string[] {
     const start = startOf(season);

@@ -1305,7 +1305,7 @@ it("the seasons a binned one's days join are listed by start, round the year fro
   await change(el, "season-6-month", "04");
   await change(el, "season-6-day", "1");
   await press(el, bins(el)[0]!);
-  expect(notes(el)).toEqual(["Saving deletes Winter; its days join Autumn, Christmas, and Kings."]);
+  expect(notes(el)).toEqual(["Saving deletes Winter; its days join Autumn, Christmas and Kings."]);
 });
 
 it("a new season starting outside the binned one's days leaves the note naming one season", async () => {

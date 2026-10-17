@@ -56,8 +56,8 @@ describe("season tint tokens", () => {
 });
 
 /** Reads a computed colour, as `rgb(…)`/`rgba(…)` or the `color(srgb …)` Chromium gives a
- *  `color-mix`, into 0–1 channels. One not fully opaque throws: an undeclared token computes to
- *  transparent black, whose channels alone read as black. */
+ *  `color-mix`, into 0–1 channels. One not fully opaque throws: an undeclared tint token computes,
+ *  as a background, to transparent black, whose channels alone read as black. */
 function channels(value: string): [number, number, number] {
   const srgb = /^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/.exec(value);
   const rgb = /^rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)(?:,? ([\d.]+))?\)$/.exec(value);

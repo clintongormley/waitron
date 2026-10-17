@@ -696,7 +696,8 @@ export, finds the target holding the exported four, and asks `resolveDepartmentS
 `closedZoneIdsAt` about one Saturday in each of two seasons.
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
-others: a season start that is not a common year's date or is `02-29`; a range off the
+others: a season name that is blank, held by another season, or has spaces around it
+(`setup.request_invalid`, field `seasons.name`); a season start that is not a common year's date or is `02-29`; a range off the
 quarter-hour or overlapping another on the same day; on a season day, a department range with no
 period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
 seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.

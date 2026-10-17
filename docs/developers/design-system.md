@@ -259,7 +259,8 @@ fill as its tint, the station dot as its line, and `--wt-color-text` as its text
 `[data-tint]` element, whose value is the colour's name; `seasonTints` reads a stored value that
 names no calendar colour as grey. The season chips (`season-chips.ts`), the Year's days, the chips of both season painters
 (`season-painter.ts`, `staffing-season-painter.ts`), the period dialog's and the Periods window's
-season chips, and the swatches of a viewer's Seasons window take the tint, and the Month's and the Staffing month's days
+season chips (the Periods window's through `::part(tint-<colour>)` rules over `SEASON_TINT_TOKENS`,
+`periods-list.ts`), and the swatches of a viewer's Seasons window take the tint, and the Month's and the Staffing month's days
 take the line as their top border.
 Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
 orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`). The
@@ -4903,9 +4904,10 @@ goes to the bin of the row that took the removed row's place, else the bin of th
 "+ Season". Binning a
 stored season reads what deleting it loses (`GET …/seasons/:seasonId/delete-impact`; a newer read's
 answer wins) and adds a note under the table, in a live region: "Saving deletes {name}; its days
-join {previous}.", where {previous} lists, joined by "and", every remaining row that will hold
-some of its stored days: the row holding its start day, then each row whose start falls before the
-next stored season's start, in start order round the year. A row with no name, or no whole start,
+join {previous}.", where {previous} lists, as a list in the window's language, every remaining row
+that will hold some of its stored days: the row holding its start day, then each row starting after
+it and before the next stored season's start (a season binned in the same Save still counts), in
+start order round the year. A row with no name, or no whole start,
 is left out, and the note reads "Saving deletes {name}." when no row is left. Once the read answers,
 the note adds "The hours of {departments} in it are lost.", "No department has hours in it." or,
 when the read fails, "Which departments lose hours could not be read."
