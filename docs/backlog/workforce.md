@@ -207,6 +207,11 @@ cap, weekly rest), which have no cell there; the bar's labour count and the publ
 include them, and Everyone shows them under the name (A763, 2026-10-17). A rota day's header reads
 "Closed" when no active department opens that day, whichever area is shown, and the shown area (or
 Everyone) has no slot that day (`isClosed`, `packages/staffing/src/dashboard/rota-model.ts`; A763).
+The Rota's bar takes two rows when the view is narrower than its words: its end (the state, the
+counts, the labour line and Publish) wraps whole onto a second line. With the side menu open at a
+1280 px window the view is about 900 px wide and the bar needs about 1,200 px (measured at the
+A763 LOOK, 2026-10-17); the boards were drawn at about 1440 px with no side menu, and their words
+were kept rather than shortened (A763).
 
 
 ### A10. Clocking in and out — the working-time record
