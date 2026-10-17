@@ -88,7 +88,11 @@ export function addRow(draft: SeasonDraft): SeasonDraft {
 }
 
 /** The draft without the row; a stored season still in `stored` is binned to be deleted. */
-export function removeRow(draft: SeasonDraft, key: string, stored: readonly Season[]): SeasonDraft {
+export function removeRow(
+  draft: SeasonDraft,
+  key: string,
+  stored: readonly { id?: string }[],
+): SeasonDraft {
   const removed = draft.rows.find((row) => row.key === key);
   const rows = draft.rows.filter((row) => row.key !== key);
   const id = removed?.id;

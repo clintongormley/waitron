@@ -50,6 +50,19 @@ async function mount(state: string, theme: "light" | "dark") {
       .toBe("Another season has this name.");
     await el.updateComplete;
   }
+  if (state === "deleting") {
+    el.api = {
+      saveSeasons: async () => [],
+      readSeasonDeleteImpact: async () => ({ departments: [{ id: "r", name: "Restaurant" }] }),
+    };
+    el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-season]")[3]!
+      .shadowRoot!.querySelector("button")!
+      .click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-note]")?.textContent ?? "")
+      .toContain("Restaurant");
+    await el.updateComplete;
+  }
   if (state === "added") {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!
       .shadowRoot!.querySelector("button")!
@@ -61,7 +74,7 @@ async function mount(state: string, theme: "light" | "dark") {
 }
 
 describe.each(["light", "dark"] as const)("Seasons window (%s)", (theme) => {
-  test.each(["editable", "read-only", "added", "refused"])(
+  test.each(["editable", "read-only", "added", "refused", "deleting"])(
     "%s has no violations",
     async (state) => {
       const el = await mount(state, theme);

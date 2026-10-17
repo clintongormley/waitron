@@ -17,16 +17,19 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { currentLocale } from "@waitron/dashboard-kit";
 import type { CalendarColour } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { MONTHS } from "./calendar-grid.js";
 import { rememberedColourChoices, type ColourUser } from "./calendar-colours.js";
 import { format, formatMonthDay, formatMonthName } from "./hours-view.js";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
+import type { OpeningHoursApi, SeasonDeleteImpact } from "./opening-hours-client.js";
 import {
   addRow,
   daysIn,
   draftOf,
+  goneKeys,
+  mergeSeasonDraft,
   removeRow,
   rowErrors,
   runsUntil,
@@ -130,6 +133,14 @@ export class SeasonsWindow extends LitElement {
         gap: var(--wt-space-2);
         margin-block-start: var(--wt-space-3);
       }
+      .notes {
+        display: grid;
+        gap: var(--wt-space-1);
+        margin-block-start: var(--wt-space-3);
+      }
+      .notes p {
+        margin: 0;
+      }
       .hint {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -161,6 +172,11 @@ export class SeasonsWindow extends LitElement {
   @state() private attempted = false;
   /** A refusal with the row keys of the request it answered, in the order of its `save` entries. */
   @state() private refusal?: { refusal: Refusal; keys: readonly string[] };
+  /** Each binned season's delete impact, by id; `token` is the newest read's, and only it may answer. */
+  @state() private impacts = new Map<
+    string,
+    { token: object; impact?: SeasonDeleteImpact | "failed" }
+  >();
   /** The opening a Save in flight was sent from. */
   @state() private saving?: object;
   private scope?: DraftScope<SeasonDraft>;
@@ -189,6 +205,8 @@ export class SeasonsWindow extends LitElement {
     if (!this.draft) {
       this.baseline = draftOf(this.seasons);
       this.draft = this.baseline;
+    } else if (changed.has("seasons")) {
+      this.follow(this.seasons);
     }
     if (this.isConnected && !this.readOnly && !this.scope) {
       const { scope } = draftScopeFor<SeasonDraft>(this, {
@@ -207,9 +225,17 @@ export class SeasonsWindow extends LitElement {
       scope.commit(this.baseline!);
       this.scope = scope;
       if (!scope.isDirty()) this.revision = this.clockRevision;
-    } else if (changed.has("clockRevision") && !this.scope?.isDirty()) {
+    } else if ((changed.has("clockRevision") || changed.has("seasons")) && !this.scope?.isDirty()) {
       this.revision = this.clockRevision;
     }
+  }
+  /** Folds a newer list into the draft; the live `next` is kept so a new row's key is never reused. */
+  private follow(latest: OpeningHoursModel["seasons"]) {
+    const draft = this.draft!;
+    const merged = mergeSeasonDraft(draft, this.baseline!, latest);
+    this.draft = { ...merged.draft, next: Math.max(draft.next, merged.draft.next) };
+    this.baseline = merged.baseline;
+    this.scope?.commit(this.baseline);
   }
   private get busy(): boolean {
     return this.saving !== undefined && this.saving === this.generation;
@@ -241,7 +267,66 @@ export class SeasonsWindow extends LitElement {
       );
     const refused = this.refused();
     if (refused?.key === row.key) errors[refused.field] = refused.message;
+    if (this.gone().has(row.key)) errors.name = t("season.not_found");
     return errors;
+  }
+  private gone(): Set<string> {
+    return new Set(goneKeys(this.draft!, this.baseline!));
+  }
+  private bin(key: string) {
+    const draft = removeRow(this.draft!, key, this.baseline!.rows);
+    const id = draft.deleted.find((each) => !this.draft!.deleted.includes(each));
+    this.setDraft(draft);
+    if (id !== undefined) void this.readImpact(id);
+  }
+  private async readImpact(id: string) {
+    const api = this.api;
+    if (!api) return;
+    const token = {};
+    this.impacts = new Map(this.impacts).set(id, { token });
+    let impact: SeasonDeleteImpact | "failed";
+    try {
+      impact = await api.readSeasonDeleteImpact(id);
+    } catch {
+      impact = "failed";
+    }
+    if (this.impacts.get(id)?.token !== token) return;
+    this.impacts = new Map(this.impacts).set(id, { token, impact });
+  }
+  /** The row whose days a binned season's days join: the one starting last before it, round the year. */
+  private joins(start: string): string {
+    const starts = this.rows.flatMap((row) =>
+      row.day && row.month ? [{ start: `${row.month}-${row.day.padStart(2, "0")}`, row }] : [],
+    );
+    starts.sort((a, b) => a.start.localeCompare(b.start));
+    const before = starts.filter((each) => each.start < start);
+    return (before.at(-1) ?? starts.at(-1))?.row.name.trim() ?? "";
+  }
+  private deleteNotes() {
+    const notes = this.draft!.deleted.map((id) => {
+      // A merge keeps only binned ids the new list still holds, and the baseline holds that list.
+      const season = this.baseline!.rows.find((row) => row.key === id)!;
+      const start = `${season.month}-${season.day.padStart(2, "0")}`;
+      const found = this.impacts.get(id)?.impact;
+      const loses =
+        found === undefined
+          ? ""
+          : found === "failed"
+            ? t("season.delete_loses_unknown")
+            : found.departments.length
+              ? format("season.delete_loses", {
+                  departments: new Intl.ListFormat(currentLocale(), {
+                    style: "long",
+                    type: "conjunction",
+                  }).format(found.departments.map((department) => department.name)),
+                })
+              : t("season.delete_loses_none");
+      return html`<p data-test="delete-note">
+        ${format("season.delete_pending", { name: season.name, previous: this.joins(start) })}
+        ${loses}
+      </p>`;
+    });
+    return notes.length ? html`<div class="notes" role="status">${notes}</div>` : nothing;
   }
   private ownErrors(): Map<string, SeasonRowErrors> {
     return this.attempted ? rowErrors(this.rows) : new Map();
@@ -258,10 +343,15 @@ export class SeasonsWindow extends LitElement {
     const submitted = this.draft!;
     const { change, keys } = seasonChange(submitted, this.baseline!);
     this.saving = generation;
+    // Before the next draw, so a close asked in this same turn is refused rather than asked about.
+    this.shadowRoot!.querySelector("wt-modal")!.dismissible = false;
     try {
       const saved = await this.api.saveSeasons(change, this.revision);
       if (generation !== this.generation) return;
-      this.scope?.commit(submitted);
+      // The saved list is the new baseline, so the snapshot that follows finds nothing changed.
+      this.baseline = draftOf(saved);
+      this.draft = { ...this.baseline, next: submitted.next };
+      this.scope?.commit(this.baseline);
       this.dispatchEvent(
         new CustomEvent<{ seasons: OpeningHoursModel["seasons"] }>("seasons-saved", {
           detail: { seasons: saved },
@@ -421,9 +511,7 @@ export class SeasonsWindow extends LitElement {
           data-test="delete-season"
           aria-label=${name ? format("season.delete_named", { name }) : t("season.delete_new")}
           ?disabled=${busy || this.rows.length === 1}
-          @click=${() => {
-            this.setDraft(removeRow(this.draft!, row.key, this.seasons));
-          }}
+          @click=${() => this.bin(row.key)}
           ><wt-icon name="bin"></wt-icon
         ></wt-button>
       </td>
@@ -500,7 +588,8 @@ export class SeasonsWindow extends LitElement {
     const own = this.ownErrors();
     const busy = this.busy;
     const refused = this.refused();
-    const marked = own.size > 0 || this.rows.some((row) => row.key === refused?.key);
+    const gone = this.gone().size > 0;
+    const marked = own.size > 0 || gone || this.rows.some((row) => row.key === refused?.key);
     const refusal = !this.refusal
       ? ""
       : seasonRefusalField(this.refusal.refusal)
@@ -523,7 +612,7 @@ export class SeasonsWindow extends LitElement {
       <wt-button
         data-test="save-seasons"
         variant=${action.variant}
-        ?disabled=${action.unchanged || busy || own.size > 0}
+        ?disabled=${action.unchanged || busy || own.size > 0 || gone}
         ?loading=${busy}
         @click=${() => void this.save()}
         >${t("prep.save")}</wt-button
@@ -539,7 +628,7 @@ export class SeasonsWindow extends LitElement {
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
     >
-      ${this.table()}
+      ${this.table()} ${this.readOnly ? nothing : this.deleteNotes()}
       ${
         this.readOnly
           ? nothing

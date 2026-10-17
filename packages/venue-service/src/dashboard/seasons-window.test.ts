@@ -847,3 +847,279 @@ it("an earlier opening's answer leaves the new opening's own Save busy", async (
   await expect.poll(() => events.length).toBe(1);
   expect(save(el).loading).toBe(false);
 });
+
+type Impact = Awaited<ReturnType<WindowApi["readSeasonDeleteImpact"]>>;
+function heldImpact() {
+  let resolve!: (value: Impact) => void;
+  let reject!: (error: unknown) => void;
+  const answer = new Promise<Impact>((ok, fail) => {
+    resolve = ok;
+    reject = fail;
+  });
+  return { answer, resolve, reject };
+}
+const notes = (el: SeasonsWindow) =>
+  [...root(el).querySelectorAll("[data-test=delete-note]")].map((note) =>
+    note.textContent!.replace(/\s+/g, " ").trim(),
+  );
+
+it("binning a stored season says where its days go and what is lost", async () => {
+  // Moved from season-chips.test.ts:194, :211 and :361 (the delete confirmation's wording).
+  const autumn = heldImpact();
+  const spring = heldImpact();
+  const summer = heldImpact();
+  const readSeasonDeleteImpact = vi
+    .fn<WindowApi["readSeasonDeleteImpact"]>()
+    .mockReturnValueOnce(autumn.answer)
+    .mockReturnValueOnce(spring.answer)
+    .mockReturnValueOnce(summer.answer);
+  const el = await mount(false, { readSeasonDeleteImpact });
+  expect(notes(el)).toEqual([]);
+  await press(el, bins(el)[3]!);
+  expect(readSeasonDeleteImpact).toHaveBeenCalledTimes(1);
+  expect(readSeasonDeleteImpact).toHaveBeenCalledWith("autumn");
+  expect(notes(el)).toEqual(["Saving deletes Autumn; its days join Summer."]);
+  autumn.resolve({ departments: [{ id: "r", name: "Restaurant" }] });
+  await expect
+    .poll(() => notes(el))
+    .toEqual([
+      "Saving deletes Autumn; its days join Summer. The hours of Restaurant in it are lost.",
+    ]);
+
+  await press(el, bins(el)[1]!);
+  spring.resolve({ departments: [] });
+  await press(el, bins(el)[1]!);
+  summer.reject({ code: "network.unavailable" });
+  await expect
+    .poll(() => notes(el))
+    .toEqual([
+      "Saving deletes Autumn; its days join Winter. The hours of Restaurant in it are lost.",
+      "Saving deletes Spring; its days join Winter. No department has hours in it.",
+      "Saving deletes Summer; its days join Winter. Which departments lose hours could not be read.",
+    ]);
+  expect(readSeasonDeleteImpact).toHaveBeenCalledTimes(3);
+
+  await press(el, button(el, "add-season")!);
+  await press(el, bins(el)[1]!);
+  expect(readSeasonDeleteImpact).toHaveBeenCalledTimes(3);
+  expect(notes(el)).toHaveLength(3);
+});
+
+it("a newer impact read's answer wins over an older one", async () => {
+  const leave = fakeCoordinator();
+  const older = heldImpact();
+  const newer = heldImpact();
+  const readSeasonDeleteImpact = vi
+    .fn<WindowApi["readSeasonDeleteImpact"]>()
+    .mockReturnValueOnce(older.answer)
+    .mockReturnValueOnce(newer.answer);
+  const el = await mount(false, { readSeasonDeleteImpact });
+  await press(el, bins(el)[3]!);
+  const [scope] = leave.live();
+  scope!.owner.restore(scope!.owner.snapshot(scope!.base()));
+  await el.updateComplete;
+  expect(notes(el)).toEqual([]);
+  await press(el, bins(el)[3]!);
+  newer.resolve({ departments: [{ id: "b", name: "Bar" }] });
+  await expect
+    .poll(() => notes(el))
+    .toEqual(["Saving deletes Autumn; its days join Summer. The hours of Bar in it are lost."]);
+  older.resolve({ departments: [{ id: "r", name: "Restaurant" }] });
+  await older.answer;
+  await el.updateComplete;
+  expect(notes(el)).toEqual([
+    "Saving deletes Autumn; its days join Summer. The hours of Bar in it are lost.",
+  ]);
+});
+
+it("Spanish: the bin and the delete note", async () => {
+  // Moved from season-chips.test.ts:445.
+  try {
+    setLocale("es");
+    const el = await mount(false, {
+      readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+    });
+    el.seasons = [
+      { id: "spring", name: "Primavera", startsOn: "03-01", colour: "green" },
+      { id: "summer", name: "Verano", startsOn: "06-01", colour: "amber" },
+      { id: "autumn", name: "Otoño", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Invierno", startsOn: "12-01", colour: "blue" },
+    ];
+    await el.updateComplete;
+    expect(bins(el)[3]!.getAttribute("aria-label")).toBe("Eliminar Otoño");
+    await press(el, bins(el)[3]!);
+    expect(notes(el)).toEqual(["Al guardar se elimina Otoño; sus días pasan a Verano."]);
+  } finally {
+    setLocale("en");
+  }
+});
+
+it("a season another session deleted is marked under a row the person changed", async () => {
+  // Moved from season-chips.test.ts:318 and :529.
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  await change(el, "season-1-name", "Early spring");
+  el.seasons = seasons.filter((season) => season.id !== "spring" && season.id !== "summer");
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "autumn"]);
+  expect(fieldError(el, "season-1-name")).toBe("This season no longer exists.");
+  expect(fieldError(el, "season-0-name")).toBe("");
+  expect(save(el).disabled).toBe(true);
+  await press(el, bins(el)[1]!);
+  expect(rowKeys(el)).toEqual(["winter", "autumn"]);
+  expect(save(el).disabled).toBe(false);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]![0]).toEqual({
+    save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
+    delete: [],
+  });
+});
+
+it("a binned season deleted elsewhere loses its note and sends no delete", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, {
+    saveSeasons,
+    readSeasonDeleteImpact: vi.fn(async () => ({ departments: [] })),
+  });
+  await press(el, bins(el)[3]!);
+  await expect.poll(() => notes(el)).toHaveLength(1);
+  el.seasons = seasons.filter((season) => season.id !== "autumn");
+  await el.updateComplete;
+  expect(notes(el)).toEqual([]);
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]![0]).toEqual({
+    save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
+    delete: [],
+  });
+});
+
+const feria = { id: "feria", name: "Feria", startsOn: "04-15", colour: "red" as const };
+it("a snapshot while clean follows it and takes its clock revision", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  el.seasons = [{ ...seasons[0]!, name: "Primavera" }, ...seasons.slice(1), feria];
+  el.clockRevision = 7;
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "feria", "summer", "autumn"]);
+  expect(rowNames(el)).toEqual(["Winter", "Primavera", "Feria", "Summer", "Autumn"]);
+  expect(save(el).disabled).toBe(true);
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]).toEqual([
+    {
+      save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
+      delete: [],
+    },
+    7,
+  ]);
+});
+
+it("a snapshot while dirty keeps the person's changed fields and appends a season added elsewhere", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-2-name", "High summer");
+  el.seasons = [
+    { ...seasons[0]!, name: "Primavera" },
+    { ...seasons[1]!, name: "Verano", colour: "teal" },
+    ...seasons.slice(2),
+    feria,
+  ];
+  el.clockRevision = 8;
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn", "feria"]);
+  expect(rowNames(el)).toEqual(["Winter", "Primavera", "High summer", "Autumn", "Feria"]);
+  expect(field(el, "season-2-colour").value).toBe("teal");
+  expect(save(el).disabled).toBe(false);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]).toEqual([
+    {
+      save: [{ id: "summer", name: "High summer", startsOn: "06-01", colour: "teal" }],
+      delete: [],
+    },
+    3,
+  ]);
+});
+
+it("a list set after the first draw fills the rows", async () => {
+  const el = document.createElement("seasons-window");
+  el.api = { saveSeasons: vi.fn(), readSeasonDeleteImpact: vi.fn() } as unknown as WindowApi;
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual([]);
+  el.seasons = seasons;
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn"]);
+  expect(save(el).disabled).toBe(true);
+});
+
+it("a window put back on the page while clean shows the list that changed while it was away", async () => {
+  const el = await mount();
+  el.remove();
+  el.seasons = [...seasons, feria];
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  document.body.append(el);
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "feria", "summer", "autumn"]);
+  expect(save(el).disabled).toBe(true);
+});
+
+it("the list that follows a save is taken as saved, so a second Save adds nothing again", async () => {
+  const saved = [...seasons, feria];
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => saved);
+  const el = await mount(false, { saveSeasons });
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-4-name", "Feria");
+  await change(el, "season-4-month", "04");
+  await change(el, "season-4-day", "15");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  await el.updateComplete;
+  el.seasons = saved;
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "feria", "summer", "autumn"]);
+  expect(save(el).disabled).toBe(true);
+  await press(el, button(el, "add-season")!);
+  expect(rowKeys(el)).toContain("new-2");
+});
+
+it("a season the window just saved can be binned before the list that follows arrives", async () => {
+  const saved = [...seasons, feria];
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => saved);
+  const el = await mount(false, { saveSeasons });
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-4-name", "Feria");
+  await change(el, "season-4-month", "04");
+  await change(el, "season-4-day", "15");
+  await press(el, save(el));
+  await expect.poll(() => rowKeys(el)).toContain("feria");
+  await press(el, bins(el)[rowKeys(el).indexOf("feria")]!);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(2);
+  expect(saveSeasons.mock.calls[1]![0]).toEqual({ save: [], delete: ["feria"] });
+});
+
+it("a bin with no client to read the impact still says where the days go", async () => {
+  const el = await mount();
+  el.api = undefined;
+  await el.updateComplete;
+  await press(el, bins(el)[3]!);
+  expect(notes(el)).toEqual(["Saving deletes Autumn; its days join Summer."]);
+});
+
+it("with no other row holding a start, the note still names the binned season", async () => {
+  const el = await mount(false, {
+    readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+  });
+  await press(el, button(el, "add-season")!);
+  for (let count = 0; count < 4; count += 1) await press(el, bins(el)[0]!);
+  expect(rowKeys(el)).toEqual(["new-1"]);
+  expect(notes(el)).toHaveLength(4);
+  expect(notes(el)[0]).toMatch(/^Saving deletes Winter; its days join/);
+});
