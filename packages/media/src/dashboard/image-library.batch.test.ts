@@ -121,6 +121,41 @@ it("shows a counted drag overlay across nested enters, ignores text drags and cl
   el.dispatchEvent(e);
   expect(e.defaultPrevented).toBe(false);
 });
+it("file dragover prevents navigation while an open editor suppresses the page overlay", async () => {
+  const api = await mount();
+  const files = [file("bread.png")];
+  const ready = drag("dragover", files);
+  expect(ready.defaultPrevented).toBe(true);
+  expect(api.uploadImage).not.toHaveBeenCalled();
+
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=upload]")!.click();
+  await el.updateComplete;
+  const blocked = drag("dragover", files);
+  expect(blocked.defaultPrevented).toBe(true);
+  drag("dragenter", files);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=drop-overlay]")).toBeNull();
+  expect(api.uploadImage).not.toHaveBeenCalled();
+
+  const textTransfer = new DataTransfer();
+  textTransfer.setData("text/plain", "bread");
+  const textDrag = new DragEvent("dragover", {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer: textTransfer,
+  });
+  el.dispatchEvent(textDrag);
+  expect(textDrag.defaultPrevented).toBe(false);
+});
+it.each(["dragenter", "dragover", "drop"])("ignores %s without transfer data", async (type) => {
+  const api = await mount();
+  const event = new DragEvent(type, { bubbles: true, cancelable: true });
+  el.dispatchEvent(event);
+  await el.updateComplete;
+  expect(event.defaultPrevented).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=drop-overlay]")).toBeNull();
+  expect(api.uploadImage).not.toHaveBeenCalled();
+});
 it.each(["picker", "editor", "viewer", "delete"])(
   "prevents file navigation without a batch through %s",
   async (mode) => {
