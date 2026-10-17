@@ -73,6 +73,7 @@ function parseAsk(
   return {
     orderId,
     expectedEdit: body.expectedEdit as AdjustmentAsk["expectedEdit"],
+    ...(body.sourceDraftId === undefined ? {} : { sourceDraftId: body.sourceDraftId as string }),
     expectedRevision,
     lineId: lineId === null ? null : lineId.toLowerCase(),
     reasonId: requireBodyUuid(body.reasonId, "reasonId").toLowerCase(),

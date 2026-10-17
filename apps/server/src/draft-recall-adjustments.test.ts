@@ -19,7 +19,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { persons } from "@waitron/identity";
 import { kitchenNotices } from "@waitron/venue-service";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
-import type { Draft } from "./order-drafts.js";
+import type { Draft, BillEditExpected, BillDraftSnapshot } from "./order-drafts.js";
 import { discardPartyDrafts } from "./order-drafts.js";
 import { send } from "./testing/bill-venue.js";
 import {
@@ -41,7 +41,44 @@ useVenueDb({
   },
 });
 
-function call(method: string, path: string, body?: unknown, cookie = venue.cookie.staff) {
+async function call(method: string, path: string, body?: unknown, cookie = venue.cookie.staff) {
+  if (body !== null && typeof body === "object" && !Array.isArray(body)) {
+    const ask = body as Record<string, unknown>;
+    let billId: string | undefined;
+    const recall = /\/lines\/([^/]+)\/recall$/.exec(path);
+    const takeover = /\/drafts\/([^/]+)\/take-over$/.exec(path);
+    if (recall !== null) {
+      const [line] = await venue.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, recall[1]!));
+      billId = line?.workingOrderId;
+    } else if (takeover !== null) {
+      const [draft] = await venue.db
+        .select()
+        .from(orderDrafts)
+        .where(eq(orderDrafts.id, takeover[1]!));
+      billId = draft?.billId ?? undefined;
+    } else if (method === "PUT" && path.endsWith("/drafts") && typeof ask.billId === "string") {
+      billId = ask.billId;
+    }
+    if (billId !== undefined && !Object.hasOwn(ask, "expectedEdit")) {
+      const edit = await readBillEditState(venue.db, billId);
+      body = {
+        ...ask,
+        expectedEdit:
+          method === "PUT"
+            ? {
+                billId,
+                editorVersion: edit.editorVersion,
+                draftId: ask.draftId,
+                draftRevision: ask.draftId === null ? null : ask.revision,
+              }
+            : edit,
+        ...(takeover === null ? {} : { submissionId: randomUUID() }),
+      };
+    }
+  }
   return send(venue.app, cookie, method, path, body);
 }
 async function billRevision(billId: string) {
@@ -73,13 +110,27 @@ async function setup(release: "hold" | "fire" = "hold") {
     draft: (answer.json as unknown as { draft: Draft }).draft,
   };
 }
+const observedAdjustments = new Map<
+  string,
+  { expectedEdit: BillEditExpected; sourceDraftId?: string }
+>();
 async function post(billId: string, body: Record<string, unknown>, cookie = venue.cookie.staff) {
+  const submissionId = typeof body.submissionId === "string" ? body.submissionId : randomUUID();
+  let observed = observedAdjustments.get(submissionId);
+  if (observed === undefined) {
+    const expectedEdit = await readBillEditState(venue.db, billId);
+    observed = {
+      expectedEdit,
+      ...(expectedEdit.draftId === null ? {} : { sourceDraftId: expectedEdit.draftId }),
+    };
+    observedAdjustments.set(submissionId, observed);
+  }
   return call(
     "POST",
     `/api/working-orders/${billId}/adjustments`,
     {
-      expectedEdit: await readBillEditState(venue.db, billId),
-      submissionId: randomUUID(),
+      ...observed,
+      submissionId,
       expectedRevision: await billRevision(billId),
       lineId: null,
       reasonId: venue.reasonId.house,
@@ -210,7 +261,7 @@ describe("adjusting an owned recalled family", () => {
       ],
     });
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
-    const savedDraft = saved.json as unknown as Draft;
+    const savedDraft = (saved.json as unknown as BillDraftSnapshot).draft!;
     const water = (await rowsOf(venue, p.billId))[2]!;
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
     const recalled = await call("POST", `/api/parties/${p.partyId}/lines/${water.id}/recall`, {
@@ -272,13 +323,28 @@ describe("adjusting an owned recalled family", () => {
     ).toEqual(refs);
   });
 
-  it("allows another person to adjust an unrelated sent line without changing the recalled draft", async () => {
+  it("requires takeover before another person adjusts a sent sibling, without changing recalled dishes", async () => {
     const p = await setup();
     const water = (await rowsOf(venue, p.billId))[2]!;
-    const before = await draftOn(p.partyId, p.draft.id);
+    const before = await frozen();
+    const refused = await post(
+      p.billId,
+      { action: "comp", lineId: water.id },
+      venue.cookie.manager,
+    );
+    expect(refused.json).toMatchObject({ code: "draft.taken_over" });
+    expect(await frozen()).toEqual(before);
+    const taken = await call(
+      "POST",
+      `/api/parties/${p.partyId}/drafts/${p.draft.id}/take-over`,
+      { revision: p.draft.revision },
+      venue.cookie.manager,
+    );
+    expect(taken.status, JSON.stringify(taken.json)).toBe(200);
+    const afterTakeover = await draftOn(p.partyId, p.draft.id);
     const answer = await post(p.billId, { action: "comp", lineId: water.id }, venue.cookie.manager);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(await draftOn(p.partyId, p.draft.id)).toEqual(before);
+    expect(await draftOn(p.partyId, p.draft.id)).toEqual(afterTakeover);
     expect((await rowsOf(venue, p.billId))[2]).toMatchObject({
       id: water.id,
       unitPriceGross: "0.00",
@@ -430,7 +496,7 @@ describe("adjusting an owned recalled family", () => {
     },
   );
 
-  it("removes a whole recalled family once and allows its now resolved draft to be discarded", async () => {
+  it("removes a whole recalled family once and closes its draft before releasing the editor", async () => {
     const p = await setup();
     const before = await frozen();
     const body = {
@@ -444,9 +510,21 @@ describe("adjusting an owned recalled family", () => {
     expect(await rowsOf(venue, p.billId)).toEqual([
       expect.objectContaining({ name: "Water", quantity: "1.000", lineTotal: "2.00" }),
     ]);
-    const read = await draftOn(p.partyId, p.draft.id);
-    expect(read.revision).toBe(p.draft.revision + 1);
-    expect(read.lines).toEqual([]);
+    const remaining = await call("GET", `/api/parties/${p.partyId}/drafts`);
+    expect((remaining.json as unknown as { drafts: Draft[] }).drafts).not.toContainEqual(
+      expect.objectContaining({ id: p.draft.id }),
+    );
+    const [closed] = await venue.db
+      .select()
+      .from(orderDrafts)
+      .where(eq(orderDrafts.id, p.draft.id));
+    expect(closed).toMatchObject({ state: "discarded", revision: p.draft.revision + 1 });
+    expect(await readBillEditState(venue.db, p.billId)).toMatchObject({
+      editorId: null,
+      editorVersion: 2,
+      draftId: null,
+      draftRevision: null,
+    });
     const after = await frozen();
     expect(after.sources.filter((row) => row.draftId === p.draft.id)).toEqual([]);
     expect(after.adjustments.filter((row) => row.workingOrderId === p.billId)).toMatchObject([
@@ -462,7 +540,7 @@ describe("adjusting an owned recalled family", () => {
     expect(await frozen()).toEqual(after);
     await inTx(venue, (tx) => discardPartyDrafts(tx, p.partyId, venue.staffId));
     const [draft] = await venue.db.select().from(orderDrafts).where(eq(orderDrafts.id, p.draft.id));
-    expect(draft).toMatchObject({ state: "discarded", revision: p.draft.revision + 2 });
+    expect(draft).toMatchObject({ state: "discarded", revision: p.draft.revision + 1 });
   });
 
   it.each([
