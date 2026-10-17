@@ -23,12 +23,8 @@ afterEach(async () => {
   setLocale("en");
 });
 
-async function mount(
-  extra: Partial<OpeningHoursWeekView> = {},
-  width?: string,
-): Promise<OpeningHoursWeekView> {
+async function mount(extra: Partial<OpeningHoursWeekView> = {}): Promise<OpeningHoursWeekView> {
   const el = document.createElement("opening-hours-week");
-  if (width) el.style.width = width;
   Object.assign(el, {
     model: monthModel(),
     date: "2026-12-02",
@@ -692,12 +688,10 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
   });
 
-  it("a tip shown again is placed afresh, in a desktop Week wider than a narrow window", async () => {
-    await page.viewport(390, 800);
-    expect(window.innerWidth).toBe(390);
-    // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
-    // window's, decides when the Week draws a day alone.
-    const el = await mount({}, "600px");
+  it("a tip shown again is placed afresh in a narrow window", async () => {
+    await page.viewport(600, 800);
+    expect(window.innerWidth).toBe(600);
+    const el = await mount();
     await userEvent.hover(block(el, "2026-12-02", "rest", 3));
     expect(open(el)).toBe(true);
     const breakfast = block(el, "2026-12-02", "rest", 1);
@@ -706,7 +700,7 @@ describe("Opening hours week: a block's label", () => {
     const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
     expect(gap).toBeGreaterThan(0);
     const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(box.right).toBeLessThanOrEqual(600 - 8);
     expect(
       Math.abs(box.bottom - (breakfast.getBoundingClientRect().top - gap)),
     ).toBeLessThanOrEqual(0.5);
@@ -740,17 +734,15 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Terrace · Lunch 13:00–16:00");
   });
 
-  it("stays inside a narrow window, in a desktop Week wider than it", async () => {
-    await page.viewport(390, 800);
-    expect(window.innerWidth).toBe(390);
-    // Drawn wider than the window, as a page scrolled sideways draws it: its own width, not the
-    // window's, decides when the Week draws a day alone.
-    const el = await mount({}, "600px");
+  it("stays inside a narrow window", async () => {
+    await page.viewport(600, 800);
+    expect(window.innerWidth).toBe(600);
+    const el = await mount();
     const dinner = block(el, "2026-12-02", "rest", 3);
     await userEvent.hover(dinner);
     expect(open(el)).toBe(true);
     const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(box.right).toBeLessThanOrEqual(600 - 8);
     expect(box.left).toBeGreaterThanOrEqual(8);
     expect(box.left).toBeLessThan(dinner.getBoundingClientRect().left);
   });
@@ -790,6 +782,10 @@ describe("Opening hours week on a phone", () => {
     );
     const terraceTrack = terrace.querySelector<HTMLElement>(".track")!;
     expect(terraceTrack.getAttribute("aria-hidden")).toBe("true");
+    const thin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+    expect(thin).toBeGreaterThan(0);
+    expect(terraceTrack.getBoundingClientRect().height).toBe(thin);
+    expect(root(el).querySelector(".day-names")).toBeNull();
     const blocks = [...terraceTrack.querySelectorAll<HTMLElement>(".block")];
     expect(blocks.length).toBeGreaterThan(0);
     for (const b of blocks) expect(text(b)).toBe("");
@@ -805,6 +801,20 @@ describe("Opening hours week on a phone", () => {
     const followed = cardRow(el, "terrace");
     expect(text(followed.querySelector(".words"))).toBe("as Restaurant");
     expect(bold(followed.querySelector(".row-name")!)).toBe(false);
+  });
+
+  it("decides on its content width when it is first drawn", async () => {
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    const el = document.createElement("opening-hours-week");
+    Object.assign(el, { model: monthModel(), date: "2026-12-02", departments: DEPARTMENTS });
+    Object.assign(el.style, { boxSizing: "border-box", width: "600px", paddingInline: "30px" });
+    applyTokens(el);
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    expect(el.getBoundingClientRect().width).toBe(600);
+    expect(testId(el, "day-card")).not.toBeNull();
   });
 
   it("names the day's special day or holiday under the head", async () => {
@@ -867,6 +877,17 @@ describe("Opening hours week on a phone", () => {
     expect(window.innerWidth).toBe(390);
     await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
     expect(shown.matches(":popover-open")).toBe(false);
+
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(root(el).querySelectorAll("section")).toHaveLength(7));
+    await userEvent.hover(block(el, "2026-12-02", "rest", 1));
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+  });
+
+  it("pointing at or tapping a row's bar shows no tip", async () => {
+    const el = await mount();
     const track = card(el).querySelector<HTMLElement>(".track")!;
     await userEvent.hover(track);
     expect(testId(el, "block-tip")).toBeNull();

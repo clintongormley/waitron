@@ -281,10 +281,6 @@ describe("the Calendar switch from the Week", () => {
   };
 
   it("a module view's switch from the Week carries the week's month", async () => {
-    const before = [innerWidth, innerHeight] as const;
-    await resizeViewport(1280, 800);
-    onTestFinished(() => resizeViewport(...before));
-    expect(window.innerWidth).toBe(1280);
     const { el } = await mount("/manage/opening-hours/view/week/week/2027-01-02", {
       ctx: { request: (async () => undefined) as DashboardRequest },
       views: [{ view: staffing, canWrite: true }],

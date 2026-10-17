@@ -94,8 +94,8 @@ function placeTip(tip: HTMLElement, block: HTMLElement): void {
 /** The Monday-to-Sunday week holding `date`, each day a section of rows with its hours drawn as
  *  blocks on one scale, the week's longest day; narrower than `PHONE_WIDTH`, the day `date` alone,
  *  each row's words written under its name. A day's name sends `calendar-day-open`; ‹ › send
- *  `week-change` (a week apart, or a day apart when narrow), the title's months and years `week-month-open` and `week-year-open`, and Show
- *  `week-department-change`. */
+ *  `week-change` (a week apart, or a day apart when narrow), the title's months and years
+ *  `week-month-open` and `week-year-open`, and Show `week-department-change`. */
 @customElement("opening-hours-week")
 export class OpeningHoursWeekView extends LitElement {
   static override styles = [
@@ -302,6 +302,10 @@ export class OpeningHoursWeekView extends LitElement {
       .card .row:last-child {
         border-block-end: 0;
       }
+      .card .track {
+        height: var(--wt-space-2);
+        padding: 0;
+      }
       .card .row-name {
         display: block;
         white-space: normal;
@@ -464,7 +468,12 @@ export class OpeningHoursWeekView extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     // Measured now as well, so a phone's first paint is already its day.
-    this.narrow = this.getBoundingClientRect().width < PHONE_WIDTH;
+    const box = getComputedStyle(this);
+    const around = ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"] as const;
+    const content =
+      this.getBoundingClientRect().width -
+      around.reduce((sum, side) => sum + parseFloat(box[side]), 0);
+    this.narrow = content < PHONE_WIDTH;
     this.#resizes.observe(this);
   }
 
@@ -578,9 +587,14 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #day({ days: [day], chosen, names }: Drawn) {
-    return html`<div class="day-names">
-        ${dayNameLines(day!).map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
-      </div>
+    const lines = dayNameLines(day!);
+    return html`${
+        lines.length
+          ? html`<div class="day-names">
+              ${lines.map((line) => html`<span class="name ${line.kind}">${line.name}</span>`)}
+            </div>`
+          : nothing
+      }
       <div class="card" data-test="day-card">
         ${weekRows(day!, chosen, names).map((row) => this.#phoneRow(row, day!, names))}
       </div>`;

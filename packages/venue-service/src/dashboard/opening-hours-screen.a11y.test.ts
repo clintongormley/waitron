@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, onTestFinished, test } from "vitest";
 import { page } from "vitest/browser";
 import { html } from "lit";
 import { registerCatalogue, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -10,10 +10,6 @@ import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import "./opening-hours-screen.js";
 
 const originalUrl = location.href;
-beforeEach(async () => {
-  await page.viewport(1280, 800);
-  expect(window.innerWidth).toBe(1280);
-});
 afterEach(() => {
   cleanup();
   setLocale("en");
@@ -209,6 +205,10 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     ["the Week", false],
     ["the day box over the Week", true],
   ] as const)("%s", async (_state, boxed) => {
+    const before = [innerWidth, innerHeight] as const;
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(...before));
+    expect(window.innerWidth).toBe(1280);
     setLocale("en");
     history.replaceState(
       null,
