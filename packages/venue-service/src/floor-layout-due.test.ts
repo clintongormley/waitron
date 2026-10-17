@@ -76,6 +76,12 @@ describe("dueRun", () => {
     expect(due(night, "03:00", record("night", "22:00"))).toEqual(range("night", "22:00", "02:00"));
   });
 
+  it("holds a recorded run past midnight against a period reopened in the afternoon", () => {
+    const late = range("late", "00:30", "02:00");
+    const kept = day([L(), late], L("16:00", "17:00"));
+    expect(due(kept, "16:10", record("late", "00:30"))).toEqual(late);
+  });
+
   it("is the last run after the day's last ends", () => {
     expect(due(standard(), "23:45")).toEqual(D());
   });
