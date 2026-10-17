@@ -1189,10 +1189,29 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("a station created with no colour is Red", async () => {
+  it("A725 a station created with no colour takes the first unused colour", async () => {
+    const original = await suite.db
+      .select({ id: kitchenStations.id, colour: kitchenStations.colour })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, venue.locationId));
+    onTestFinished(() =>
+      withTransaction(suite.db, async (tx) => {
+        for (const row of original)
+          await tx
+            .update(kitchenStations)
+            .set({ colour: row.colour })
+            .where(eq(kitchenStations.id, row.id));
+      }),
+    );
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(kitchenStations)
+        .set({ colour: "red" })
+        .where(eq(kitchenStations.locationId, venue.locationId)),
+    );
     const id = await createStation(unique("No colour"));
     expect((await listStations()).find((station) => station.id === id)).toMatchObject({
-      colour: "red",
+      colour: "orange",
     });
   });
 

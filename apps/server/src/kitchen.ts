@@ -9,6 +9,7 @@ import {
   products,
   kitchenStations,
   kitchenStationTiming,
+  nextStationColour,
 } from "@waitron/db";
 import type { StationColour, StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -106,7 +107,8 @@ export async function createStation(
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         isDefault: input.isDefault ?? false,
-        ...(input.colour === undefined ? {} : { colour: input.colour }),
+        colour:
+          input.colour === undefined ? await nextStationColour(tx, cfg.locationId) : input.colour,
       })
       .returning({ id: kitchenStations.id });
     if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {

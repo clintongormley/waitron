@@ -73,11 +73,18 @@ describe("validateCoreConfiguration", () => {
     ).toThrowError(stationRefusal);
   });
 
-  it("refuses a station with no colour", () => {
-    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).toThrowError(
-      stationRefusal,
-    );
+  it("A725 accepts an absent station colour for allocation during import", () => {
+    expect(() => validateCoreConfiguration({ kitchen_stations: [{}] })).not.toThrow();
   });
+
+  it.each([null, [], {}, 1, false])(
+    "A725 refuses an explicit invalid station colour %j",
+    (colour) => {
+      expect(() => validateCoreConfiguration({ kitchen_stations: [{ colour }] })).toThrowError(
+        stationRefusal,
+      );
+    },
+  );
 
   it("accepts each station colour", () => {
     expect(() =>

@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { STATION_COLOURS, isStationColour } from "./station-colours.js";
+import { STATION_COLOURS, firstUnusedStationColour, isStationColour } from "./station-colours.js";
 
 describe("station colours", () => {
+  it.each([
+    { used: [], expected: "red" },
+    { used: ["red", "red", "blue"], expected: "orange" },
+    { used: ["orange", "amber"], expected: "red" },
+    { used: [...STATION_COLOURS], expected: "red" },
+  ] as const)("chooses $expected after $used", ({ used, expected }) => {
+    expect(firstUnusedStationColour(new Set(used))).toBe(expected);
+  });
+
   it("lists the twelve station colours in the editor's order", () => {
     expect(STATION_COLOURS).toEqual([
       "red",

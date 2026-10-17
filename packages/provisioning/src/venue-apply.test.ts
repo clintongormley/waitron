@@ -47,6 +47,20 @@ function request(taxId = "B12345678"): VenueRequest {
   };
 }
 
+it("A725 fresh provisioning starts with one red default kitchen", async () => {
+  const created = await applyVenue(planVenue(request("B10000007"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(
+    (
+      await suite.db.execute(sql`
+    select name, colour, is_default from kitchen_stations where location_id = ${created.locationId}
+  `)
+    ).rows,
+  ).toEqual([{ name: "Cocina", colour: "red", is_default: 1 }]);
+});
+
 it("provisions late-flag defaults once and preserves edits when the venue plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
   const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });

@@ -4,6 +4,8 @@ import {
   AppError,
   businessDayAt,
   cutoverForBusinessDay,
+  firstUnusedStationColour,
+  isStationColour,
   locationId as brandLocationId,
 } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
@@ -621,7 +623,26 @@ export async function importConfigurationTables(
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
   validateConfigurationBundle(bundle, modules, targetVersions);
-  const checked = checkedRows(bundle, modules);
+  const incoming = checkedRows(bundle, modules);
+  const stationColours = new Set(
+    (incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [])
+      .map((row) => row.colour)
+      .filter(isStationColour),
+  );
+  const checked = incoming.map(
+    ([declaration, rows]) =>
+      [
+        declaration,
+        declaration.name === "kitchen_stations"
+          ? rows.map((row) => {
+              if (row.colour !== undefined) return row;
+              const colour = firstUnusedStationColour(stationColours);
+              stationColours.add(colour);
+              return { ...row, colour };
+            })
+          : rows,
+      ] as const,
+  );
   const columns = new Map<string, Set<string>>();
   // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: a string bound
   // to a BLOB column is stored as text.

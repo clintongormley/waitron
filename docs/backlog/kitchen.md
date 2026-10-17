@@ -158,10 +158,11 @@ list does not exist.
    its "Default" label). The stored order (`displayOrder`, `reorderStations` in `kitchen.ts`) is
    also read by kitchen timing, the stations-down list and the Calendar's Show (`opening-hours-screen.ts`): move them to name order and remove the
    reorder route and the column, unless one turns out to need a hand-set order.
-4. **A new station's colour is the first one no station uses.** The dashboard's Add station does
-   this; the server does not, so a station created without a colour — the default Kitchen, or one a
-   script or import made — gets the column's default, red (`kitchen-stations.ts:29`). In the Santet
-   venue Kitchen and Bar are both red, which makes the Routes grid hard to read.
+4. **A new station's colour is the first one no station uses.** `createStation` and configuration
+   import choose from the active stations at the same location; when every station colour is used,
+   they use red. An explicit colour stays as chosen, even when another station uses it. Import
+   reserves all explicit colours before assigning omitted ones, including explicit colours later
+   in the file. The first provisioned Kitchen starts red; the demo seed keeps its explicit colours.
 5. **Each row of the Stations tab shows its colour square.**
 6. **The station editor:** the three late-flag minute fields (`TIMING_FIELDS`, `station-editor.ts`)
    share one row of short fields under one heading, with "Leave a field blank to use the venue
