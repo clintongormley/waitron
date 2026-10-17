@@ -117,6 +117,54 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  /** A cash contribution of everything left, confirmed, with the receipt's guests field shown. */
+  async function payingTheRest(over: Partial<TillBillPayDialog> = {}) {
+    const mounted = await mount({
+      way: "contribution",
+      asksGuests: true,
+      receiptGuests: 4,
+      ...over,
+    });
+    await typed(mounted.el, "amount", "50");
+    await typed(mounted.el, "tendered", "50");
+    await previewed(mounted.el, {
+      kind: "allocated",
+      choice: null,
+      applied: "50.00",
+      tip: "0.00",
+      change: "0.00",
+      charged: null,
+    });
+    return mounted;
+  }
+
+  it("has no violations confirming the rest of the bill with the guests field", async () => {
+    const { el, host } = await payingTheRest();
+    if (!el.shadowRoot!.querySelector('[name="guests"]')) throw new Error("no guests field");
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the guests field empty", async () => {
+    const { el, host } = await payingTheRest({ receiptGuests: null });
+    if (!el.shadowRoot!.querySelector('[name="guests"]')) throw new Error("no guests field");
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the guests field marked invalid", async () => {
+    const { el, host } = await payingTheRest();
+    const stepper =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]')!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "1000";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await pressed(el, "[data-pay-confirm]");
+    await el.updateComplete;
+    if (stepper.error === "") throw new Error("the guests field is not marked");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations confirming a card whose amounts changed", async () => {
     const { el, host } = await mount({ way: "contribution" });
     await typed(el, "amount", "40");

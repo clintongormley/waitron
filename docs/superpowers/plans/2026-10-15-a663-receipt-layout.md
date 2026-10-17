@@ -22,7 +22,7 @@ reads the same filed figures and lays them out differently.
 `@waitron/printing` raster builder, and PDFKit and sharp for A4.
 
 **Spec:** `docs/backlog/printers.md`, section "A663 — receipts and full invoices that are easier to
-read", with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
+read" (section deleted 2026-10-17 when A663 closed; see git history), with the approved mockups `docs/backlog/mockups/a663-receipt-layout/1-simplified-receipt.png`
 and `2-full-invoice.png`. Read the section and look at both pictures before starting any task. The
 mockups are "drawn, not rendered": where this plan departs from a drawing, it says so and why. The
 owner changed one point of `1-simplified-receipt.png` on 2026-10-15 (Q11): a one-rate simplified
@@ -49,7 +49,7 @@ request holds.
 | 2d | Extras only on a dish sold by the unit: the server refuses them on a dish whose unit has a scale or decimals, and the till stops offering them (owner, 2026-10-15: "we don't offer half portions"). No migration | 2d.1, 2d.2, 2d.3 | After Part 2c has landed |
 | 2e | Every printed price before discounts comes from the stored price: the fallback that worked it back from the line's total is deleted, and the shared fixture and the tests that relied on it carry stored prices (owner, 2026-10-16). No migration | 2e.1, 2e.2, 2e.3 | After Part 2d has landed (#1779) |
 | 3a | Guests and the amount per person, by the default rule, on every printed and A4 copy (owner Q2 answered 2026-10-15; A713 sums joined tables' counts) | 3a.1, 3a.2, 3a.3 | Now: Parts 1a–2e have landed |
-| 3b | The till's per-print choice: leave the guests line out or change the number, for that print only (owner, 2026-10-15) | 3b.1–3b.6 | After Part 3a has landed **and the owner has answered Q12**; the tasks build Q12's recommended answer |
+| 3b | A «Comensales» field on the till's payment screen; the chosen count is kept per sale in a new append-only table, so the automatic receipt and every later copy print it (owner, Q12 = C and Q13 = A, 2026-10-16) | 3b.1–3b.12 | Now: Part 3a has landed (#1783) and Q12 and Q13 are answered |
 | 4 | The drink/food subtotal setting | 6 | Withdrawn by the owner on 2026-10-15: the drink and food subtotals are not built. Was: after owner questions Q1, Q3 and Q6 are answered, and after A661 lands |
 
 Why 1b and 2 wait for A661 (A661 landed 2026-10-15, #1745): see "A661 overlap" below.
@@ -3504,17 +3504,18 @@ from "WATCHER 2026-10-15 ~12:35" to "LANE A (A713, 2026-10-15 ~14:15)"). Two pul
 
 - **Part 3a — the default** (branch `feat/a663-3-guests`): the server prints the guests line on
   every paper, A4, PDF and email copy by one rule, with no till change. It can land now.
-- **Part 3b — the per-print choice** (branch `feat/a663-3b-guests-when-printing`): the till lets
-  the person printing a simplified receipt change the number, or leave the line out, for that
-  print only. **It waits for owner question Q12** (where the choice sits), because the placement
-  is not obvious (see "Why Q12" below). Only Task 3b.1 is the same whatever the answer.
+- **Part 3b — the guests field on the payment screen** (branch
+  `feat/a663-3b-guests-when-printing`): the till's payment screen offers a «Comensales» field
+  before charging, and the number chosen is kept with the sale in a new table, so the receipt
+  printed at payment and every later copy print it (owner, Q12 = C and Q13 = A, 2026-10-16; see
+  Part 3b).
 
-Why two: 3a is a server-only change to what prints; 3b changes a till→server request on three
-routes and adds a till control with browser tests. Together they are well past one reviewable pull
+Why two: 3a is a server-only change to what prints; 3b adds a table, changes a till→server request
+on four payment routes and adds a till control with browser tests. Together they are well past one reviewable pull
 request, and 3a should not wait for an answer it does not need.
 
 **Review path: FULL for both** (CLAUDE.md §5: a printed invoice is a legal document; 3b also
-changes a cross-package request shape): per-task reviews, then `/finish-branch` with the Codex
+adds a migration and changes a cross-package request shape): per-task reviews, then `/finish-branch` with the Codex
 run-it seat run twice, the second told to set this plan's checklist aside.
 
 ## What the owner decided, and what it means for the code
@@ -3523,8 +3524,8 @@ run-it seat run twice, the second told to set this plan's checklist aside.
    adds the counts when parties combine: `combinedGuests` (`apps/server/src/table-actions.ts:207-211`)
    gives the sum, or no count when either side had none or the sum is over 999, and it is written
    onto the surviving party at `table-actions.ts:295`. The till can set or clear a party's count at
-   any time (`PUT /api/parties/:id/guests`, `apps/server/src/till-api.ts:2855`), and Split a table
-   sets each side's count (`POST /api/parties/:id/split-table`, `till-api.ts:2943`). So the reader
+   any time (`PUT /api/parties/:id/guests`, `apps/server/src/till-api.ts:2872`), and Split a table
+   sets each side's count (`POST /api/parties/:id/split-table`, `till-api.ts:2960`). So the reader
    reads `parties.guest_count` of the bill's own party: no `partyFamily` sum of COUNTS (it would
    add the merged-away party's count a second time, as lane A warned), and no "a party something
    was merged into prints nothing" rule (the previous version of this part had both). The family
@@ -3534,13 +3535,14 @@ run-it seat run twice, the second told to set this plan's checklist aside.
    guests line by default. Merging a split bill back makes the emptied bill `abandoned`
    (`mergeCheckedBills`, `apps/server/src/bill-actions.ts:197-200`), so the party prints its count
    again.
-3. **The line is optional and editable when a receipt is printed** (owner, 2026-10-15 ~13:25):
-   on the till, the person printing a simplified receipt can leave the line out or change the
-   number for that print, starting from what would print by default. **The changed number is used
-   for that print only.** It never writes `parties.guest_count`, any sale, sale line, filed record
-   or anything a fingerprint reads; the only place it is kept is the printed bytes in that print
-   job's `print_jobs.payload` (`packages/db/src/schema/print-jobs.ts:48-50`), as every print's
-   bytes are. A full invoice prints the default (the owner's words name the receipt; Q12 says so).
+3. **The line is optional and editable** (owner, 2026-10-15 ~13:25), starting from what would
+   print by default. Where and how were settled on 2026-10-16 (Q12 = C, the reprint rule, Q13 =
+   A): the waiter chooses on the payment screen, before charging; the choice is kept with the
+   sale in its own append-only table (`sale_receipt_guests`, Part 3b; a sale recorded without a
+   choice stores the default at that moment), and every simplified receipt of that sale prints
+   it, copies included. It never writes `parties.guest_count`, any
+   sale, sale line, filed record or anything a fingerprint reads. A full invoice prints the
+   default.
 4. **Concise text.** The wording is the approved mockups' «4 comensales · por persona 101,75 €»
    (both mockups, highlighted yellow, legend «optional: guests and per person (only when guests
    were entered)»). One guest prints «1 comensal · por persona …», so a singular label is added.
@@ -3576,7 +3578,9 @@ built, nothing stored:
 is built, so a later copy can differ from the original: a party that orders again on a new bill
 after paying makes a reprint of the first bill print no line, and a count changed after payment
 changes the line on later copies. This plan accepts that as the default (owner FYI in the PR, no
-question); Part 3b's per-print choice is the way to print a different number on a copy.
+question). Since Part 3b, every simplified sale keeps the count fixed when it was recorded — the
+number chosen on the payment screen, or this default taken at that moment — and its copies print
+that; the read-when-built rule remains for full invoices and for sales recorded before Part 3b.
 
 X is `divideDecimal(decimal(total), decimal(String(N)), MONEY_SCALE)`, rounded half away from zero
 (`packages/shared/src/money.ts:93-101`). It is the sale's TOTAL, tip excluded, divided by N.
@@ -3608,7 +3612,7 @@ receipt and the full invoice, on paper and on the A4 page (both mockups draw it;
 **Joined tables with separate bills print nothing.** The owner's words were "joined tables print
 the sum"; with bills kept separate there are two bills, so neither knows its share of the guests,
 and the default prints no line on either. The PR says so in one line, and Q12's preamble does too;
-Part 3b's per-print choice lets the waiter add a number to either.
+Part 3b's field on the payment screen lets the waiter add a number to either.
 
 On 58 mm paper (30 columns, `packages/printing/src/layout.ts:8`) «4 comensales · por persona» is
 26 characters, so with the 8-character «101,75 €» the amount drops to its own line, as an amount
@@ -3617,27 +3621,28 @@ row does when it does not fit (`receipt-document.ts:67`); on 80 mm (42 columns) 
 ## Every print path, and how each gets the guests
 
 Every paper receipt, simplified or full, is built by `buildReceiptBytes`
-(`apps/server/src/receipt-print.ts:170-227`), and every A4, PDF and email copy of a full invoice by
+(`apps/server/src/receipt-print.ts:172-231`; line numbers in this table refreshed 2026-10-17 on
+`81658ba83`, after Part 3a), and every A4, PDF and email copy of a full invoice by
 `readInvoiceDocument` (`apps/server/src/invoice-document.ts:30-157`). Part 3a changes those two and
 nothing else; the paths below reach them unchanged:
 
 | Path | Route or caller | Reaches |
 | ---- | --------------- | ------- |
-| Automatic receipt at payment (department set to print automatically, or a full invoice) | `enqueueSaleReceipt` (`receipt-print.ts:251-276`) from `bill-payments.ts:772`, `till-sale.ts:997`, `:1601`, `:1762` | `enqueueOriginalReceipt` (`:511-540`) → `resolvePrinterAndReceipt` (`:233-248`) → `buildReceiptBytes` |
-| Print receipt on the till's paid-sale screen (department set to print on request) | `POST /api/sales/:id/receipt` (`till-api.ts:2524-2545`) → `printSaleReceipt(…, false, …)` (`till-sale.ts:843-868`) | `enqueueOriginalReceipt` → `buildReceiptBytes` |
-| Reprint on the paid-sale screen | `POST /api/sales/:id/reprint` (`till-api.ts:2547-2566`) → `reprintSale` (`till-sale.ts:2180-2188`) → `enqueueReceiptReprint` (`receipt-print.ts:308-319`) | `enqueueReceiptCopy` (`:322-339`) → `buildReceiptBytes` |
+| Automatic receipt at payment (department set to print automatically, or a full invoice) | `enqueueSaleReceipt` (`receipt-print.ts:255-280`) from `bill-payments.ts:772`, `till-sale.ts:1000`, `:1605`, `:1766` | `enqueueOriginalReceipt` (`:515-541`) → `resolvePrinterAndReceipt` (`:237-252`) → `buildReceiptBytes` |
+| Print receipt on the till's paid-sale screen (department set to print on request) | `POST /api/sales/:id/receipt` (`till-api.ts:2517-2538`) → `printSaleReceipt(…, false, …)` (`till-sale.ts:846-872`) | `enqueueOriginalReceipt` → `buildReceiptBytes` |
+| Reprint on the paid-sale screen | `POST /api/sales/:id/reprint` (`till-api.ts:2540`) → `reprintSale` (`till-sale.ts:2190-2198`) → `enqueueReceiptReprint` (`receipt-print.ts:312-323`) | `enqueueReceiptCopy` (`:326-343`) → `buildReceiptBytes` |
 | Reprint of a sale opened from Find a bill | `POST /api/transactions/:saleId/reprint` (`transaction-receipt-api.ts:43-85`) | `enqueueReceiptCopy` → `buildReceiptBytes` |
 | Reprint from the dashboard's orders | `reprintOrderReceipt` (`orders-reprint.ts:11-48`, called at `orders-api.ts:291`) | `enqueueReceiptCopy` → `buildReceiptBytes` |
-| A full invoice on a receipt printer | `enqueueInvoiceReceipt` (`receipt-print.ts:345-369`, from `invoice-delivery-actions.ts:101`) and `enqueueOriginalReceipt` (`invoice-delivery-actions.ts:246`) | `buildReceiptBytes` |
-| A full invoice on an A4 printer, by email, as a PDF | `boot.ts:1627` (delivery documents), `boot.ts:1670` (page printing, read at `page-print-api.ts:239`), `orders-invoice-pdf.ts:23` | `readInvoiceDocument` |
+| A full invoice on a receipt printer | `enqueueInvoiceReceipt` (`receipt-print.ts:349-370`, from `invoice-delivery-actions.ts:101`) and `enqueueOriginalReceipt` (`invoice-delivery-actions.ts:246`) | `buildReceiptBytes` |
+| A full invoice on an A4 printer, by email, as a PDF | `boot.ts:1662` (delivery documents), `boot.ts:1705` (page printing, read at `page-print-api.ts:239`), `orders-invoice-pdf.ts:23` | `readInvoiceDocument` |
 
 Three paths RESEND a receipt already printed rather than build a new one: the till's retry of a
-failed original (`POST /api/sales/:id/receipt/retry`, `till-api.ts:2336-2355`), an invoice
+failed original (`POST /api/sales/:id/receipt/retry`, `till-api.ts:2329`, resending at `:2348`), an invoice
 delivery's resend (`invoice-delivery-actions.ts:256`) and the print queue's resend
 (`print-api.ts:1487`). Each goes through `resendInvoicePrintJob` (`apps/server/src/invoice-print.ts:23`)
 to `resendPrintJob` (`packages/printing/src/outbox.ts`), which queues a new job holding the stored
-job's `payload`. They need no change: a resend prints what was printed, and in Part 3b a resend of
-a print made with a changed number prints that number again.
+job's `payload`. They need no change: a resend prints what was printed, so in Part 3b a resend of
+a receipt printed with a chosen number prints that number again.
 
 `buildReceiptBytes` already has the sale's id (its `saleId` argument) and a transaction, so it
 reads the guests itself; no caller changes in 3a.
@@ -3660,9 +3665,12 @@ What the till offers today when a receipt prints (read 2026-10-16):
 So the choice could sit on the paid-sale screen (A), in a window on every Print receipt and
 Reprint (B), or on the payment screen before charging (C), and each costs something different.
 That is a decision for the owner: **Q12**, with the mockup
-`docs/backlog/mockups/a663-receipt-layout/3-guests-when-printing.png`. The tasks for 3b below
-build the recommended A; B or C changes Tasks 3b.4–3b.6, and C also changes 3b.2–3b.3 (the
-override would ride on the payment request instead of the print routes).
+`docs/backlog/mockups/a663-receipt-layout/3-guests-when-printing.png`.
+
+> **Answered 2026-10-16: C**, the field on the payment screen; a copy prints exactly what the
+> original printed (the owner: «it should remain the same otherwise it isn't a true duplicate»);
+> and, asked as Q13, the chosen number is kept per sale in a new append-only table. Part 3b builds
+> that; option A is not built.
 
 ---
 
@@ -3864,152 +3872,680 @@ export async function readReceiptGuests(tx: Transaction, saleId: string): Promis
 
 ---
 
-## Part 3b — the per-print choice (waits for Q12)
+## Part 3b — the guests field on the payment screen, kept per sale (Q12 and Q13 answered)
 
-Branch `feat/a663-3b-guests-when-printing`, from `main` after Part 3a has landed **and the owner
-has answered Q12**. The tasks build option A, the recommended answer. If the owner picks B or C,
-rewrite Tasks 3b.4–3b.6 (and, for C, 3b.2–3b.3) before dispatching any of them; Task 3b.1 stands
-for every answer.
+Branch `feat/a663-3b-guests-when-printing`, from `main` after Part 3a (#1783, `1702045c3`).
+Rewritten 2026-10-17 on `main` at `81658ba83`, after the owner answered Q12 and Q13, and revised the
+same day after a fresh-context review. It replaces the option-A tasks this section held before (a
+field on the paid-sale screen and a per-print override on the print routes); none of those are
+built. Every `file:line` below was read on that tree.
 
-**The request contract** (three routes): the JSON body may carry `guests`.
+### The decisions (binding)
 
-- absent: the default rule (Part 3a), as today;
-- `null`: print no guests line;
-- a whole number from 1 to 999 (`isValidGuestCount`, `packages/shared/src/guest-count.ts:2-7`, the
-  bound A713's routes use through `requireGuestCount`, `till-api.ts:768-773`): print the line with
-  this number;
-- anything else (0, 1000, 2.5, `"4"`, `true`): refused, 400 `management.request_invalid` with
-  `{ field: "guests" }`, the code those routes already answer for a bad `language`
-  (`till-api.ts:2555-2557`, `transaction-receipt-api.ts:49-50`).
+1. **Q12 = C** (watcher, 2026-10-16 09:55, superseding the 09:50 "A"; `~/waitron-campaign-c/questions.md`):
+   «the «Comensales» field sits on the payment screen, before charging, starting on what would print
+   by default (empty for a bill split by item or a counter sale), so the automatic receipt prints the
+   chosen number too. That print's number only: the table's own count and anything filed stay
+   unchanged; a full invoice prints the default. … Do NOT build option A.» So there is no field on
+   the paid-sale screen (`apps/till/src/screens/till-ticket-view.ts` is not touched), none on a Find
+   a bill receipt, and nothing here writes `parties.guest_count`.
+2. **A copy repeats the original** (owner, 2026-10-16 ~10:00): «it should remain the same otherwise
+   it isn't a true duplicate.» A Reprint, a print from Find a bill, a dashboard reprint and a retry —
+   every simplified receipt of that sale — prints exactly the guest count chosen at payment, and
+   offers no way to change it.
+3. **Q13 = A** (watcher, 2026-10-16 ~17:35): «a small new append-only table, one row per sale paid
+   on the till, holding the guest count its simplified receipt prints (or "no line"), written in the
+   same step as the payment and never changed; every simplified receipt of that sale (original,
+   retry, Reprint, Find a bill, dashboard reprint) prints the stored number; a sale with no row
+   keeps today's rule; a full invoice prints the default. No fiscal record, fingerprint, sale or
+   table count changes.» The proposal the owner accepted names the sales with no row: «a
+   substitution invoice, or one paid before this lands». The row is written even when the waiter
+   leaves the field as it was, so a Reprint stays a true duplicate after the table's count changes.
+4. **Every path that records a simplified sale writes the row** (the driver's decision, 2026-10-17,
+   reading decision 3's two named exceptions as the only ones): on every server path that records a
+   sale, the row is written in the same transaction, after the sale is recorded and before
+   `enqueueSaleReceipt` — the request's `guests` when the request carried the key, otherwise
+   Part 3a's default (`readReceiptGuests`) taken at that moment. Never inside `recordSale` or the
+   fiscal core; not for the fiscal-readiness test sale (`fiscal-readiness-runner.ts:138` calls
+   `recordSale` directly); not for a substitution; not for a full invoice. So a sale with no row is
+   one paid before this lands, a substitution, a full invoice or the readiness sale, and only those
+   read the party when they print.
 
-It never writes `parties`, `working_orders`, `sales`, `sale_lines`, `registros_facturacion`,
-`receipt_reprints` beyond the row the reprint already writes, or anything else; it reaches only the
-bytes of the job it prints. The server applies it to whatever the route prints, a full invoice
-included; the till sends one only for a simplified receipt.
+### What this means for the code
 
-### Task 3b.1: The ticket carries the default count
+- **One new core table, `sale_receipt_guests`** (Task 3b.1): `sale_id` (primary key, foreign key to
+  `sales.id`), `guests` (null = no line, else a whole number 1 to 999), `created_at`. Declared
+  `appendOnly()`, so `applyMigrations` puts the `RAISE(ABORT)` pair on it. It is written BESIDE the
+  sale, never by `recordSale` (`packages/core/src/record-sale.ts`), the fiscal backend or anything
+  that writes `sales`, `sale_lines`, `tenders`, `sale_settlements` or `registros_facturacion` — the
+  pattern the department header already follows: every path that records a sale writes it beside
+  the sale (`VENUE_SERVICE.recordSaleReceiptHeader`, `apps/server/src/till-sale.ts:954`, `:1549`,
+  `:1709`, `apps/server/src/bill-payments.ts:713`, `apps/server/src/working-order.ts:6161`) into its
+  own append-only table (`sale_receipt_headers`, `packages/venue-service/src/schema/service.ts`;
+  manifest `packages/migrations/migrations.manifest.json:36`). The new row goes right after that
+  header at each of those five places.
+- **Why the core migration set, not a module's** (the commit says so; CLAUDE.md §3 "No new table
+  enters the core migration set without a stated reason"). The row hangs off `sales` (core); its
+  default comes from `parties` (core, `packages/db/src/schema/parties.ts:33-67`); every reader and
+  writer is in `apps/server`; it sits beside `receipt_reprints`
+  (`packages/db/src/schema/receipt-reprints.ts`, core, `appendOnly` at
+  `packages/db/src/classification.ts:23-27`), the other per-sale receipt fact. `sale_receipt_headers`
+  lives in venue-service's set because it names a department, which that module owns; this table
+  names nothing a module owns.
+- **One read reaches every simplified receipt** (Task 3b.2). Every paper receipt is built by
+  `buildReceiptBytes` (`apps/server/src/receipt-print.ts:172-231`, the guests read at `:216`): the
+  automatic receipt (`enqueueSaleReceipt`, `:255-280`, through `enqueueOriginalReceipt`,
+  `:515-541`), Print receipt and Reprint (`printSaleReceipt`, `till-sale.ts:846-872`), Find a bill
+  (`enqueueReceiptCopy` from `transaction-receipt-api.ts:69`), the dashboard's reprint
+  (`orders-reprint.ts:35`) and a full invoice on a receipt printer (`enqueueInvoiceReceipt`,
+  `receipt-print.ts:349-370`). `git grep -n 'formatReceipt(' -- 'apps/server/src/*.ts' ':!*.test.ts'`
+  finds its definition (`receipt-ticket.ts:53`) and two calls: `receipt-print.ts:217` and
+  `sample-receipt.ts:49` (the settings sample, no sale). The new read takes the stored row when the
+  sale is simplified (`sales.counterparty_tax_id` is null — the test `transaction-receipt.ts:149`
+  and `invoice-document.ts:46-47` use) and a row exists; otherwise Part 3a's `readReceiptGuests`,
+  unchanged. A retry of a failed original (`POST /api/sales/:id/receipt/retry`, `till-api.ts:2329`)
+  resends the stored job's bytes (see "Every print path" above), so it repeats the number with no
+  change.
+- **No email or PDF copy of a simplified receipt exists.** `readInvoiceDocument`
+  (`apps/server/src/invoice-document.ts:31-157`), which feeds every A4 page, PDF and email, refuses a
+  sale with no recipient (`invoice_delivery.full_invoice_required`, `:46-47`). It only ever reads a
+  full invoice, so it keeps `readReceiptGuests` (`:120`) and is not touched.
+- **No till route files a full invoice today.** `/api/sales`, `/api/pay` and `/collect` refuse a
+  full-invoice request or a bill saved as one (`refuseUnavailableInvoiceRequest`,
+  `till-sale.ts:502-510`, `:506`; `refuseUnavailableFullInvoice`, `working-order.ts:3654-3665`,
+  called at `till-sale.ts:667`, `:1109`, `:2101`), and so does a bill payment
+  (`bill-payments.ts:1049`) and an unpaid departure (`working-order.ts:6136`). Pinned by
+  `receipt-language.test.ts:1022-1023` (a full invoice reached only by inserting its bill payment
+  by hand) and `simplified-limit.test.ts`. So the full-invoice skip in `recordReceiptGuests` and the
+  till's hiding of the field on a full-invoice bill are defensive: they keep decision 1 true if a
+  route starts filing full invoices, and Task 3b.2 covers the skip through that hand-built set-up.
+- **No live subscription, no change source.** `apps/dashboard/src/api/live-queries.ts:274` lists
+  `receipt_reprints` because the order detail lists copies (`apps/server/src/orders-list.ts:1008-1018`);
+  nothing on the dashboard shows the guests line, so no dashboard query reads the new table.
+- **The till already knows the default before paying.** A table's party reaches the till as
+  `TableParty` (`apps/till/src/api/client.ts:1834-1854`) with `guestCount` (`:1838`) and
+  `billCount` (`:1847`). The server fills `billCount` with the party's bills that are not abandoned,
+  merged parties' included (`apps/server/src/working-order.ts:7527-7528`, counted at `:7973` over
+  `readBillsOfParties`, `apps/server/src/parties.ts`, which reads the whole family) — the same bills
+  `readReceiptGuests` counts (`receipt-guests.ts:26-32`). A seated party is open, so it was not
+  merged into another (`parties_merged_into_ck`, `parties.ts:63-66`). So the default for a table's
+  bill is `billCount === 1 ? guestCount : null`, and for a counter sale null. No new server read.
+- **No existing test reads a later copy after a count change.** `git grep -ln comensal -- 'apps/server/src/*.test.ts'`
+  finds four files; only `receipt-print.test.ts` prints from a stored sale, and its two cases
+  (`:2198-2229`) print at payment, where the stored default equals the party's count.
 
-**Files:** `packages/shared/src/receipt-text.ts` (`ReceiptPresentation`, `:44-48`: add
-`receiptGuests?: number` — what prints by default; absent, no line), `apps/server/src/receipt-presentation.ts`
-(`readReceiptPresentation` reads it with `readReceiptGuests`), test
-`apps/server/src/receipt-guests.test.ts` (or the suite that pins `GET /api/sales/:id`; find it
-with `git grep -l "api/sales/\${" -- 'apps/server/src/*.test.ts'`).
+### The request contract (four routes)
 
-`readReceiptPresentation` feeds every ticket the till reads: payment (`bill-payments.ts:757`,
-`till-sale.ts:983`, `:1587`, `:1748`), `GET /api/sales/:id` (`till-sale.ts:826`) and a sale opened
-from Find a bill (`transaction-receipt.ts:138`). `ReceiptDocumentInput.result` omits
-`ReceiptPresentation`'s keys (`receipt-document.ts:45`), so the document cannot read it by
-mistake. The till's `TillSaleResult` extends `ReceiptPresentation`
-(`apps/till/src/api/client.ts:881`), so the field reaches the till's type with no till change.
+The JSON body of `POST /api/sales` (`apps/server/src/till-api.ts:1729`), `POST /api/pay` (`:1770`),
+`POST /api/working-orders/:id/collect` (`:2611`) and `POST /api/working-orders/:id/payments`
+(`apps/server/src/bill-payments-api.ts:219`) may carry `guests`:
 
-- [ ] **Step 1: Failing test:** a party of 4 paying its one bill gets `receiptGuests: 4` on the
-  payment's ticket and on `GET /api/sales/:id`; a split bill's ticket has no `receiptGuests` key.
-  Run — FAILS: the key is absent.
-- [ ] **Step 2–3:** Code; the file passes; `pnpm --filter @waitron/shared exec tsc --noEmit`,
-  `pnpm --filter @waitron/server exec tsc --noEmit`, `pnpm --filter @waitron/till exec tsc
-  --noEmit`. **Commit.**
+- **absent**: when this request records the sale, its row holds Part 3a's default taken at that
+  moment (decision 4). An old till, Find a bill's pay and the test helpers send none.
+- **`null`**: when this request records the sale, its row says "no line".
+- **a whole number from 1 to 999** (`isValidGuestCount`, `packages/shared/src/guest-count.ts:5-7`,
+  `MAX_GUEST_COUNT` at `:2`): when this request records the sale, its row holds it.
+- **anything else** (`0`, `1000`, `2.5`, `"4"`, `true`, `{}`): refused at the route before anything
+  is written, 400 `management.request_invalid` with `{ field: "guests" }`, the code and shape the
+  neighbouring checks answer (`invalid`, `apps/server/src/bill-allocation.ts:72-74`;
+  `requireGuestCount`, `till-api.ts:768-772`; `refuseUnavailableInvoiceRequest`,
+  `till-sale.ts:502-510`). A refused request records no sale, takes no payment, opens no drawer and
+  queues no job. A `0` that reached the receipt would divide by zero (3a's review saw
+  `shared.invalid_decimal`), which is one reason the route checks first; the other is
+  `finalizeCapture`, where a throw after `recordSale` rolls back a sale whose card is already
+  charged (`till-sale.ts:1603-1604`).
+- **`guests` is never part of a retry's fingerprint.** The bill payment route hashes its request
+  (`fingerprint(retryShapeOf(req))`, `bill-payments.ts:1036`; `retryShapeOf`, `:965-976`, spreads
+  the whole request, so `guests` would enter it — a probe in the review hashed 3, 9 and null
+  differently). Task 3b.6 takes it out there. The other three routes hash nothing: their retry key
+  is the working order id (`payWorkingOrder`'s doc comment, `till-sale.ts:593-618`), and
+  `git grep -ln 'fingerprint(' -- 'apps/server/src/*.ts' ':!*.test.ts'` finds only
+  `bill-payments.ts`, `bill-refunds.ts`, `tender-refund-reservation.ts` and `parties.ts` (the
+  hasher itself).
 
-### Task 3b.2: Print receipt and Reprint take an override
+Where each recorded sale gets its row — always in the transaction that records it, after
+`recordSaleReceiptHeader`, before `enqueueSaleReceipt`, so the automatic receipt reads it:
 
-**Files:** `apps/server/src/receipt-guests.ts` (add `type GuestsChoice = number | null | undefined`
-and `readGuestsChoice(body: Record<string, unknown>): GuestsChoice`, which throws the refusal
-above), `apps/server/src/receipt-print.ts` (`buildReceiptBytes` takes a `GuestsChoice`: `undefined`
-reads the default, `null` prints none, a number prints it; thread it through
-`enqueueOriginalReceipt`, `enqueueReceiptReprint`, `enqueueReceiptCopy` as a last optional
-argument, so no other caller changes), `apps/server/src/till-sale.ts` (`printSaleReceipt`,
-`reprintSale`), `apps/server/src/till-api.ts` (the `receipt` action of the loop at `:2524` reads
-the body — `payment-slip` does not — and `/api/sales/:id/reprint` at `:2547`). Test: a new
-`apps/server/src/receipt-guests.routes.test.ts`, built like `receipt-language.test.ts` (it signs in a
-till, pays, posts to these routes and reads `print_jobs.payload` with `printedLines`, `:235-277`).
+| Path | Route → function | Sale recorded / receipt queued | Row holds |
+| ---- | ---------------- | ------------------------------ | --------- |
+| Cash or hand-keyed card, whole bill or walk-up | `/api/sales` → `recordTillSale` → `runTillSale` (`till-sale.ts:2158-2188`) → `runPayWorkingOrder` (`:628-735`) → `fireAndFileSale` (`:743-772`) → `fileImmediateSale` (`:895-1005`) | `:924` / `:1000` | the request's `guests`, else the default |
+| A placed order collected, no invoice yet — from the payment screen, or from Find a bill's pay of a presented bill (`apps/till/src/widgets/find-bill-dialog.ts:194-205`, `till-app.ts:6266`) | `/collect` → `collectOrder` → `runCollectOrder` (`:2014`) no-invoice branch (`:2101-2106`) → `fileImmediateSale` (`:2104`) | as above | the request's `guests` (Find a bill sends none, so the default) |
+| Connected reader, whole bill | `/api/pay` → `runIntegratedPay` → `payIntegrated` (`:1074-1345`) → `finalizeCapture` (`:1490`) | `:1528` / `:1605` | the request's `guests`, else the default |
+| Reader: a charge captured before a lost response, filed by the next Pay | `payIntegrated` `recover` (`:1268-1270`) → `finalizeRecovery` (`:1630`) | `:1691` / `:1766` | the `guests` of the Pay that files it, else the default |
+| Reader, nothing to charge | `payIntegrated` `:1206-1226` | `fileImmediateSale` | the request's `guests`, else the default |
+| Bill paid in parts, cash or hand-keyed card | `/payments` → `takeBillPayment` (`bill-payments.ts:1132`) → `issueWhenFullyPaid` (`:637-776`) | `:698` / `:772` | the completing payment's `guests`, else the default |
+| Bill paid in parts, reader answered while the till waits | `takeReaderBillPayment` (`:1307-1384`) → `completeBillPayment` (`:1223-1248`) at `:1365` → `issueWhenFullyPaid` | as above | the completing payment's `guests`, else the default |
+| Reader bill payment finished later by the loop (`bill-payments-loop.ts:143`) or confirmed by a manager (`payments-api.ts:1229`) | `completeBillPayment` with no till request | as above | the default at that moment |
+| A bill left fully paid by a discount, a line change or a move (`adjustments-api.ts:156`, `till-api.ts:3668`, `:3779`, `working-order.ts:5941`) | `issueIfFullyPaid` (`bill-payments.ts:785-794`) | as above | the default at that moment |
+| An unpaid departure (`/api/parties/:id/unpaid-departure`, `unpaid-departure-api.ts:46`) invoices its open bills | `recordUnpaidDeparture` (`unpaid-departure.ts:53`) → `issueUnpaidInvoice` (`working-order.ts:6127`) | `recordSale` `:6146`, header `:6161`; no receipt prints | the default at that moment |
+| That invoice collected later: `runCollectOrder` outstanding (`till-sale.ts:2050-2097`, owing nothing `:2053-2057`), `finalizeSettle` (`:1823`), `finalizeSettleRecovery` (`:1893`), owing nothing at the reader (`:1147-1158`) | the sale already exists | — | nothing new: the row written at the departure stands; a `guests` on the collect is checked and ignored |
+| Not written: a full invoice (defensive, see above); the fiscal-readiness sale (`fiscal-readiness-runner.ts:138`); a substitution (`git grep -n recordSubstitution -- apps` finds no non-test caller); a replay of an already-settled order (`till-sale.ts:649-651`, `:1097-1102`, `:2032-2034`; a bill payment replay, `bill-payments.ts:1152`), whose first request wrote it | — | — | — |
 
-- [ ] **Step 1: Failing tests.** For a party of 4 paying 12,00 €: Reprint with `{ guests: 5 }`
-  prints «5 comensales · por persona» and «2,40 €»; with `{ guests: null }` prints no «comensal»;
-  with `{}` prints «4 comensales». Print receipt (a department set to print on request) with
-  `{ guests: 2 }` prints «2 comensales · por persona» and «6,00 €». A counter sale reprinted with
-  `{ guests: 3 }` prints «3 comensales». Each of `0`, `1000`, `2.5`, `"4"` answers 400
-  `management.request_invalid` `{ field: "guests" }` and queues no job. **Nothing written:**
-  after a reprint with `{ guests: 5 }`, `parties.guest_count` is still 4, the sale's
-  `registros_facturacion` count (`registroCount`, `testing/bill-venue.ts:378`) is unchanged, and a
-  following reprint with `{}` prints «4 comensales». Run — FAIL: the override is ignored («4
-  comensales» where 5 is expected) and the bad values answer 200.
-- [ ] **Step 2–3:** Code; the file passes; the receipt suites and `receipt-language.test.ts`;
+**Multi-step payments.** Nothing is held between steps: no pending row, no column on
+`bill_payments` or `payments`. The till sends the field on the payment that pays what is left
+(Task 3b.9); a payment that does not complete the bill ignores any `guests` it carries. One edge:
+while another device's reader card on the bill is still pending, a cash payment of the rest shows
+the field (the dialog compares with `outstanding`, which leaves the pending card out,
+`bill-payments.ts:610`), but `issueWhenFullyPaid` waits for the pending card
+(`bill-payments.ts:656`), so the cash payment's `guests` is ignored and the bill completes on the
+reader payment, storing the default at that moment. The PR says so.
+
+**Review path: FULL** (risk triggers: a migration, an append-only table beside the fiscal write
+path, a cross-package request shape): per-task reviews, then `/finish-branch` with the Codex run-it
+seat run twice, the second told to set this plan's checklist aside.
+
+### Task 3b.1: The table
+
+**Files:**
+- Create: `packages/db/src/schema/sale-receipt-guests.ts`, modelled on
+  `packages/db/src/schema/receipt-reprints.ts`:
+
+  ```ts
+  import { check, foreignKey } from "drizzle-orm/sqlite-core";
+  import { sql } from "drizzle-orm";
+  import { count, id, nowIso, table, tsString } from "./columns.js";
+  import { sales } from "./sales.js";
+
+  /** The guest count a sale's simplified receipt prints, fixed when the sale was recorded; null prints no line. */
+  export const saleReceiptGuests = table(
+    "sale_receipt_guests",
+    {
+      saleId: id("sale_id").primaryKey(),
+      guests: count("guests"),
+      createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    },
+    (t) => [
+      foreignKey({ columns: [t.saleId], foreignColumns: [sales.id], name: "sale_receipt_guests_sale_fk" }).onDelete("restrict"),
+      check(
+        "sale_receipt_guests_guests_ck",
+        sql`${t.guests} is null or (typeof(${t.guests}) = 'integer' and ${t.guests} between 1 and 999)`,
+      ),
+    ],
+  );
+  ```
+
+  The column builders come from `columns.ts` (`id` `:21`, `tsString` `:38`, `count` `:148`), never
+  from `drizzle-orm/sqlite-core` (`scripts/column-vocabulary.test.ts`). 999 is `MAX_GUEST_COUNT`
+  (`packages/shared/src/guest-count.ts:2`). **Why `typeof`:** measured 2026-10-17 on
+  `node:sqlite`, Node v26.11.1, an `integer` column with the range check alone accepted 2.5,
+  `"2.5"` and 1.0000001 (stored as real); adding `typeof(guests) = 'integer'` refused all three
+  (and so did `guests = cast(guests as integer)`). Neither refuses `"4"` or `"4.0"`: the column's
+  integer affinity stores them as the integer 4 before the check runs, which is the same value.
+- Modify: `packages/db/src/schema/index.ts` (`export * from "./sale-receipt-guests.js";` beside
+  `:25`), `packages/db/src/index.ts` (`export { saleReceiptGuests } …` beside `:144`),
+  `packages/db/src/classification.ts` (after `receipt_reprints`, `:23-27`:
+  `appendOnly("sale_receipt_guests", "ledger", "the guest count a sale's simplified receipt prints, fixed when it was recorded; never corrected")`),
+  `packages/migrations/migrations.manifest.json` (core's `appendOnlyTables`, after
+  `"receipt_reprints"` at `:13`), `scripts/append-only-triggers.test.ts` (`EXPECTED`, `:34-63`,
+  alphabetical: after `"sale_lines"`).
+  `CORE_MIGRATIONS.appendOnlyTables` derives from the classification
+  (`packages/db/src/migrations.ts:19-23`), so the descriptor needs no edit; the manifest JSON does
+  (CLAUDE.md §3; `packages/composition/src/composition.test.ts` compares the two).
+- Generate: `pnpm --filter @waitron/db db:generate --name sale_receipt_guests` (from the worktree).
+  drizzle-kit numbers the file; do not hardcode the number. It must hold one `CREATE TABLE` with the
+  key and the CHECK, and no rebuild of another table.
+- Test: `packages/db/src/schema/sale-receipt-guests.test.ts` (new, built like
+  `receipt-reprints.test.ts`, `useVenueDb({ migrations: [CORE_MIGRATIONS] })`, its sale seeded the
+  same way, `:23-63`).
+
+- [ ] **Step 1: Failing tests.** In the new file: a row with `guests` 4, one with `null`, one with
+  1 and one with 999 (each on its own sale) are accepted; an unknown sale is refused
+  (`FOREIGN_KEY_VIOLATION`, `packages/db/src/sql-state.ts:24`); a second row for one sale is refused
+  (`UNIQUE_VIOLATION`, `:21`); `0`, `1000` and `2.5` are refused (`CHECK_VIOLATION`, `:46`); an
+  `update` and a `delete` of a stored row are refused with the append-only trigger's words
+  (`TRIGGER_ABORT`, `:43`, and the message, as CLAUDE.md §3 asks for result code 1811). Add
+  `"sale_receipt_guests"` to `EXPECTED` in `scripts/append-only-triggers.test.ts`.
+  Run `pnpm --filter @waitron/db exec vitest run src/schema/sale-receipt-guests.test.ts` — FAILS:
+  `./sale-receipt-guests.js` cannot be found. Run
+  `pnpm exec vitest run scripts/append-only-triggers.test.ts` (worktree root) — FAILS: the declared
+  set lacks `sale_receipt_guests`.
+- [ ] **Step 2: Code.** The schema, the two exports, the classification entry, the manifest entry;
+  generate the migration; read the generated SQL.
+- [ ] **Step 3: Pass, then the guards** (check memory first, `memory_pressure | grep free`):
+  `pnpm --filter @waitron/db exec vitest run src/schema/sale-receipt-guests.test.ts src/classification.test.ts`;
+  `pnpm exec vitest run scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/journal-monotonic.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/append-only-migration-sets.test.ts scripts/module-graph-honesty.test.ts scripts/column-vocabulary.test.ts scripts/migration-upgrade.test.ts`;
+  `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts`;
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`;
+  `pnpm --filter @waitron/db exec tsc --noEmit`. Read each `Tests` count.
+  **`scripts/migration-upgrade.test.ts` decides the venue reset.** It synthesises two rows per table
+  and leaves a nullable column outside every unique index null (its header, `:40-45`), which this
+  CHECK allows, so no `CANDIDATES` entry (`:582`) should be needed; add one only if the test asks,
+  and an unreached entry fails it (`:615-617`). A new table touches no stored row, so the expected
+  answer is "no reset"; the PR's first line states what the test answered. The table is new, so no
+  box meets `append_only.triggers_restored` for it (conventions-data.md: that warning is for an
+  EXISTING table newly marked append-only).
+- [ ] **Step 4: Commit**, its message naming why the table is core (the reason above).
+
+### Task 3b.2: The helpers, and every simplified receipt prints the stored count
+
+**Files:**
+- Modify: `apps/server/src/receipt-guests.ts` — add:
+
+  ```ts
+  /** The guests a payment request chose: a count, `null` for no line, `undefined` when it sent none. */
+  export type GuestsChoice = number | null | undefined;
+
+  /** A request's `guests`, refused as `management.request_invalid` `{ field: "guests" }` unless absent, null or 1 to 999. */
+  export function readGuestsChoice(value: unknown): GuestsChoice;
+
+  /** Writes the row of a sale just recorded: the choice, or the default read now when there is none. Skips a full invoice. */
+  export async function recordReceiptGuests(tx: Transaction, saleId: string, choice: GuestsChoice): Promise<void>;
+
+  /** What a paper receipt of the sale prints: a simplified sale's stored row when it has one, else {@link readReceiptGuests}. */
+  export async function readPrintedGuests(tx: Transaction, saleId: string): Promise<number | undefined>;
+  ```
+
+  `readGuestsChoice` throws `invalid("guests")` (`bill-allocation.ts:72-74`) for anything
+  `isValidGuestCount` rejects other than `undefined` and `null`. `recordReceiptGuests` reads
+  `sales.counterparty_tax_id` and returns without writing when it is not null (a full invoice;
+  defensive, see above); otherwise it inserts `choice`, or, when `choice` is `undefined`,
+  `(await readReceiptGuests(tx, saleId)) ?? null`. `readPrintedGuests` reads the sale left-joined to
+  `sale_receipt_guests`: simplified and a row present → the row's `guests ?? undefined`; otherwise
+  `readReceiptGuests(tx, saleId)`.
+
+  > **2026-10-17 (finish-branch review):** the five header-then-guests pairs are one call,
+  > `recordSaleReceiptFacts(tx, cfg, { saleId, workingOrderId, counterparty }, guests)`.
+  > `recordReceiptGuests` takes that `RecordedSale`, skips on its `counterparty` and reads no `sales`
+  > row; its default reads the bill (`readBillGuests`). The till checks the guests and the tip again
+  > when the check before payment answers.
+- Modify: `apps/server/src/receipt-print.ts:216` — `buildReceiptBytes` calls `readPrintedGuests`.
+  `invoice-document.ts` keeps `readReceiptGuests` (full invoices only, see above).
+- Test: `apps/server/src/receipt-guests.test.ts` (the helpers), `apps/server/src/receipt-print.test.ts`
+  (beside «a party's receipt prints its guests and the amount per person», `:2198-2229`, reusing its
+  `receiptOfParty` set-up), `apps/server/src/transaction-receipt-api.test.ts` (Find a bill),
+  `apps/server/src/orders-reprint.test.ts` (dashboard), `apps/server/src/receipt-language.test.ts`
+  (add `"sale_receipt_guests"` to `SALE_TABLES`, `:557-570`, so a reprint that wrote a row is seen).
+
+Until Tasks 3b.3–3b.6 wire the payments, these tests write the row themselves (with
+`recordReceiptGuests` or `tx.insert(saleReceiptGuests)`) after paying with today's `pay` helper
+(`apps/server/src/testing/party-venue.ts:296-302`).
+
+- [ ] **Step 1: Failing tests.**
+  - `readGuestsChoice`: `undefined` → `undefined`, `null` → `null`, `1`, `4`, `999` → themselves;
+    `0`, `1000`, `2.5`, `-1`, `"4"`, `true`, `{}`, `[]` each throw an `AppError` with code
+    `management.request_invalid` and params `{ field: "guests" }` (assert the code, CLAUDE.md §4).
+  - `recordReceiptGuests` on a party seated with 4 that paid its one bill: `5` writes 5; `null`
+    writes null; `undefined` writes 4 (the default now); on a party with a dish split onto a second
+    bill, `undefined` writes null; on a counter sale, `undefined` writes null. On a full-invoice
+    sale built as «renders a full invoice's A4 …» builds one (`receipt-language.test.ts:1022-1060`:
+    an F1 order and a bill payment inserted by hand, then completed), `5` writes nothing.
+  - `readPrintedGuests`, on that party of 4 paying 12,00 €: no row → 4; row 5 → 5; row null →
+    `undefined`; row 5 and the party's count then changed to 6 (`setPartyGuests`,
+    `apps/server/src/parties.ts:224`) → 5; a counter sale with row 3 → 3; the full invoice with a
+    row 5 inserted by hand → its party's count (a probe of the read: no product path writes such a
+    row).
+  - Printed (decode the job as `receipt-print.test.ts:2212-2215` does), a party of 4 paying 12,00 €
+    whose sale holds row 5: Print receipt in a department set to print on request
+    (`printSaleReceipt(…, false, …)`) prints «5 comensales · por persona» and «2,40 €»; Reprint
+    (`reprintSale`, `till-sale.ts:2190-2198`) prints the same and «DUPLICADO»
+    (`receipt-document.ts:213`); after the party's count changes to 6 a second Reprint still prints
+    5; with row null each prints no «comensal». In `transaction-receipt-api.test.ts`
+    (`POST /api/transactions/:saleId/reprint`) and `orders-reprint.test.ts` (`reprintOrderReceipt`)
+    the copy prints «5 comensales».
+  Run `pnpm --filter @waitron/server exec vitest run src/receipt-guests.test.ts src/receipt-print.test.ts src/transaction-receipt-api.test.ts src/orders-reprint.test.ts`
+  — FAILS: `readGuestsChoice`, `recordReceiptGuests` and `readPrintedGuests` are not exported, and
+  the printed cases print «4 comensales» where 5 is expected.
+- [ ] **Step 2: Code.**
+- [ ] **Step 3: Proof by deletion.** Drop the simplified check in `readPrintedGuests`: the
+  full-invoice read returns 5 and fails. Drop the row read: every row-5 case prints 4. Make
+  `recordReceiptGuests` write `null` for `undefined`: the default case fails. Restore each.
+- [ ] **Step 4:** The four files and `receipt-language.test.ts`, then the receipt suites (Global
+  Constraints), reading the `Tests` count; `pnpm --filter @waitron/server exec tsc --noEmit`.
+  **Commit.**
+
+### Task 3b.3: A whole bill paid in cash or by hand-keyed card writes the row (`/api/sales`)
+
+**Files:**
+- Modify: `apps/server/src/till-sale.ts` — `guests?: number | null` on `TillSaleRequest`
+  (`:180-210`), `PayWorkingOrderRequest` (`:478-500`) and `IntegratedPayRequest` (`:538-568`, used
+  in Task 3b.5); `runTillSale` copies it into the request it builds (`:2171-2186` lists every field
+  by hand — without the copy the value is dropped silently); `fileImmediateSale` (`:895`) takes a
+  `guests: GuestsChoice` parameter and calls `recordReceiptGuests(tx, saleId, guests)` right after
+  `recordSaleReceiptHeader` (`:954`), before `enqueueSaleReceipt` (`:1000`); `fireAndFileSale`
+  (`:743`) passes it through; `runPayWorkingOrder` (`:701-710`) passes `req.guests`. Every other
+  caller of `fileImmediateSale` passes `req.guests` too (Tasks 3b.4 and 3b.5 test them).
+- Modify: `apps/server/src/till-api.ts` — `/api/sales` (`:1729`): `readGuestsChoice(body.guests)`
+  beside the other body checks (`:1734-1742`), before `assertTakesTender`.
+- Modify: `apps/server/src/testing/party-venue.ts` — `pay(v, billId, amount, guests?)` passes
+  `guests` when given (`:296-302`).
+- Test: new `apps/server/src/receipt-guests.routes.test.ts`, its venue built like
+  `receipt-language.test.ts`'s (`venueWith`, `:117`: a till signed in, a receipt printer on every
+  device, `sell` at `:254`, `takePrinted` at `:272`), plus party cases in
+  `apps/server/src/receipt-print.test.ts` beside `receiptOfParty` (`:2200-2217`, extended to pass
+  `guests` to `pay`).
+
+- [ ] **Step 1: Failing tests.**
+  - Route (`/api/sales`, a department printing automatically): `{ guests: 5 }` on a 12,00 € cash sale
+    answers 200, stores row 5, and the automatic receipt prints «5 comensales · por persona» and
+    «2,40 €»; `{ guests: null }` stores row null and prints no «comensal»; no key on a counter sale
+    stores row null (the default). Each of `0`, `1000`, `2.5`, `"4"`, `true` answers 400
+    `management.request_invalid` `{ field: "guests" }` and leaves `sales`, `print_jobs`,
+    `drawer_opens` and `working_orders` exactly as before (snapshot them as `saleTables` does,
+    `receipt-language.test.ts:572-577`). A hand-keyed card (`tender: { method: "card", … }`) with
+    `{ guests: 3 }` stores 3. A re-sent sale with the same `workingOrderId` and `{ guests: 7 }`
+    replays and the row still holds the first value.
+  - Party (`receipt-print.test.ts`): a party seated with 4 paying 12,00 € with `guests: 5` prints
+    «5 comensales · por persona 2,40 €» on the automatic receipt; afterwards `parties.guest_count`
+    is still 4, and the sale's `sales` row and its `registros_facturacion` row, read whole, equal
+    those of the same payment made without `guests` field by field, apart from ids, numbers, times
+    and the chain's hash links; the party's count then set to 6, a Reprint prints «5 comensales» and
+    «DUPLICADO». Paying with `guests: 4` (the field left as it was) stores 4, and paying with no
+    `guests` stores 4 too (the default at payment); after the count changes to 6 a Reprint of
+    either still prints 4 (decisions 3 and 4).
+  Run `pnpm --filter @waitron/server exec vitest run src/receipt-guests.routes.test.ts src/receipt-print.test.ts`
+  — FAILS: no row is stored, the receipt prints the party's 4 where 5 is chosen, the reprint after
+  the change prints 6, and the bad values answer 200.
+- [ ] **Step 2: Code.** Then `pnpm --filter @waitron/server exec tsc --noEmit`.
+- [ ] **Step 3: Proof by deletion.** Remove the copy of `guests` in `runTillSale`: the `/api/sales`
+  cases store the default instead of 5. Move the `recordReceiptGuests` call after
+  `enqueueSaleReceipt`: the automatic receipt prints 4. Restore each.
+- [ ] **Step 4:** The two files, `till-api.receipt.test.ts`, `receipt-language.test.ts`, then the
+  receipt suites; `tsc`. **Commit.**
+
+### Task 3b.4: A placed bill collected, and an unpaid departure, write the row
+
+**Files:**
+- Modify: `apps/server/src/till-sale.ts` — `runCollectOrder`'s no-invoice branch passes
+  `req.guests` to `fileImmediateSale` (`:2104`); the outstanding branch (`:2050-2097`) writes
+  nothing (its sale has the row written when it was recorded).
+- Modify: `apps/server/src/working-order.ts` — `issueUnpaidInvoice` (`:6127`) calls
+  `recordReceiptGuests(tx, saleId, undefined)` after `recordSaleReceiptHeader` (`:6161`).
+- Modify: `apps/server/src/till-api.ts` — `/collect` (`:2611`): add `guests?: unknown` to the body
+  type (`:2618`), check it with `readGuestsChoice` beside `receiptLanguage` (`:2619-2621`) and pass
+  it in the request (`:2626`).
+- Test: `apps/server/src/receipt-guests.routes.test.ts`, `apps/server/src/unpaid-departure.test.ts`.
+
+- [ ] **Step 1: Failing tests.**
+  - `/collect` on a placed counter order (parked and placed as `receipt-language.test.ts:473-480`
+    does, without its `issueOrderInvoice`): `{ guests: 2 }` stores 2; no key stores the default
+    (null for a counter order); `{ guests: 0 }` answers 400 and records no sale.
+  - Unpaid departure (`unpaid-departure.test.ts`'s set-up): a party seated with 4 leaves without
+    paying its one bill; its invoice's row holds 4 at once. The party's count is then set to 6 (on
+    a party reopened or by direct write if the closed party refuses the route — say which in the
+    test), the invoice is collected (`/collect`, or `collectOrder` directly, with `{ guests: 2 }`),
+    and a Reprint prints «4 comensales»: the row written at the departure stands, and the collect's
+    `guests` is ignored. The order's invoice issued with `issueOrderInvoice`
+    (`apps/server/src/testing/issue-order.ts:7`, which calls `issueUnpaidInvoice`) also gets the
+    default row.
+  Run the two files — FAIL: no row.
+- [ ] **Step 2: Code.** **Step 3:** the two files, `bill-lookup-api.test.ts`, the receipt suites,
   `tsc`. **Commit.**
 
-### Task 3b.3: The Find a bill reprint takes the override
+### Task 3b.5: The connected reader writes the row (`/api/pay`)
 
-**Files:** `apps/server/src/transaction-receipt-api.ts` (`:43-85`, read `guests` with
-`readGuestsChoice` beside `language`, pass it to `enqueueReceiptCopy`), test
-`apps/server/src/transaction-receipt-api.test.ts`.
+**Files:**
+- Modify: `apps/server/src/till-sale.ts` — `finalizeCapture` (`:1490`) and `finalizeRecovery`
+  (`:1630`) call `recordReceiptGuests(tx, saleId, req.guests)` after `recordSaleReceiptHeader`
+  (`:1549`, `:1709`) and before `enqueueSaleReceipt` (`:1605`, `:1766`); the nothing-to-charge branch
+  (`:1206-1226`) passes `req.guests` to `fileImmediateSale` / `fireAndFileSale`. `finalizeSettle`,
+  `finalizeSettleRecovery` and the owing-nothing settle (`:1147-1158`) write nothing (the sale has
+  its row).
+- Modify: `apps/server/src/till-api.ts` — `/api/pay` (`:1770`) checks
+  `readGuestsChoice(body.guests)` with the other body checks, before `resolveCardCollector`.
+- Test: `apps/server/src/receipt-guests.routes.test.ts` (route), and domain cases built like
+  `receipt-language.test.ts`'s «a card-reader sale files and prints in the location's language …»
+  (`describe` at `:490`, cases at `:508` and `:528`: `SimulatorPaymentProvider`,
+  `payWorkingOrderIntegrated`, and `insertCapturedPayment` for the lost response).
 
-- [ ] **Step 1: Failing tests:** `{ guests: 5 }` prints «5 comensales»; `{ guests: null }` none;
-  `{ guests: 0 }` answers 400 `{ field: "guests" }` and queues nothing. Run — FAIL as in 3b.2.
-- [ ] **Step 2–3:** Code; the file passes; `tsc`. **Commit.**
+- [ ] **Step 1: Failing tests.** A simulator capture with `guests: 5` stores row 5 and the automatic
+  receipt prints «5 comensales»; a capture with no `guests` stores the default; a decline
+  (`simulationOutcome: "declined"`) stores nothing and records no sale; a charge captured before a
+  lost response (`:528`'s set-up) filed by a Pay carrying `guests: 3` stores 3; a zero-total order
+  paid with `guests: 2` stores 2; `/api/pay` with `guests: 1000` answers 400 `{ field: "guests" }`
+  before the reader is asked (the simulator records no `payments` row). Run the file — FAILS: no
+  row.
+- [ ] **Step 2: Code.** **Step 3:** the file, `receipt-language.test.ts`, the receipt suites, `tsc`.
+  **Commit.**
 
-### Task 3b.4: The till's client sends it
+### Task 3b.6: A bill paid in parts writes the row when it completes (`/payments`, the loop, a manager, a discount)
 
-**Files:** `apps/till/src/api/client.ts` (`printReceipt` `:2737`, `reprint` `:2635`,
-`reprintTransaction` `:3475` each take an optional `guests?: number | null` and send the key only
-when it is not `undefined`), test `apps/till/src/api/client.test.ts`.
+**Files:**
+- Modify: `apps/server/src/bill-payments.ts` — `BillPaymentRequest` (`:127-138`) gains
+  `guests?: number | null`; `retryShapeOf` (`:965-976`) leaves it out
+  (`const { guests: _guests, ...rest } = req;` and spread `rest`), so a resend is matched on the
+  payment alone; `issueWhenFullyPaid` (`:637`) takes `guests` in its `options` and calls
+  `recordReceiptGuests(tx, saleId, options.guests)` after `recordSaleReceiptHeader` (`:713`), before
+  `enqueueSaleReceipt` (`:772`); `takeBillPayment` passes `req.guests` in the options at
+  `:1168-1178`; `completeBillPayment` (`:1223`) takes an optional `guests` and passes it on;
+  `takeReaderBillPayment` passes `req.guests` at `:1365`. The loop (`bill-payments-loop.ts:143`),
+  the manager's confirmation (`payments-api.ts:1229`) and `issueIfFullyPaid` (`:785-794`, from
+  `adjustments-api.ts:156`, `till-api.ts:3668`, `:3779`, `working-order.ts:5941`) pass none, so
+  their sale stores the default at that moment.
+- Modify: `apps/server/src/bill-payments-api.ts` — `parseRequest` (`:108-146`) reads
+  `readGuestsChoice(body.guests)` into the request. `parseAsk` (the preview's) is not changed.
+- Test: `apps/server/src/receipt-guests.routes.test.ts` (route, `send` as
+  `receipt-language.test.ts:440-450` does), `apps/server/src/bill-payments-loop.test.ts` (the
+  loop's completion), `apps/server/src/bill-payments.test.ts` (reader, manager and fingerprint
+  cases), and one discount case beside `adjustments-api.ts`'s existing fully-paid test (find it
+  with `git grep -n "issueIfFullyPaid\|fully paid" -- apps/server/src/adjustments*.test.ts`).
 
-- [ ] **Step 1: Failing tests:** each method's body with `guests: 5`, with `null`, and without
-  (no `guests` key; the language key unchanged). Run — FAIL. **Steps 2–3:** code, pass, **commit.**
+- [ ] **Step 1: Failing tests.**
+  - A 21,00 € bill of a party seated with 4: a 10,00 € cash contribution with `guests: 5` stores
+    nothing (the bill is not paid); the 11,00 € contribution with `guests: 3` stores 3 and the
+    automatic receipt prints «3 comensales». A hand-keyed card completing it with `guests: null`
+    stores null; a completing payment with no `guests` stores 4. A reader card completing it while
+    the till waits, with `guests: 2`, stores 2.
+  - **Default at that moment, by the loop:** a reader bill payment left pending and completed by
+    `settlePendingBillPayments` (`bill-payments-loop.test.ts`'s set-up, `:20`, `:40`) stores the
+    party's count read when the loop files it (4); the count is then set to 6 and a Reprint prints
+    «4 comensales». The manager's confirmation (`payments-api.ts:1229`) stores the default the same
+    way. A discount that leaves a paid bill fully paid stores the default.
+  - **Retry fingerprint:** a non-completing payment re-sent with the same `submissionId` and a
+    different `guests` (3, then 9, then `null`, then no key) REPLAYS each time, never
+    `submission.id_reused`; the stored `bill_payments.fingerprint` equals the fingerprint of the
+    same request taken without `guests` (`fingerprint(retryShapeOf(…))`). A completing payment
+    re-sent with `guests: 9` replays and the row keeps its value.
+  - `guests: 2.5` answers 400 `{ field: "guests" }` and writes no `bill_payments` row.
+  Run the files — FAIL: no row, and the re-sent payment answers `submission.id_reused`.
+- [ ] **Step 2: Code.** **Step 3:** the files, `bill-payments-api.test.ts`,
+  `bill-payments.card.test.ts`, the receipt suites, `tsc`. **Commit.**
 
-### Task 3b.5: The field on the paid-sale screen (option A)
+### Task 3b.7: The till's client sends `guests`
 
-**Files:** `apps/till/src/screens/till-ticket-view.ts`, `apps/till/src/i18n/strings.ts` (en and
-es), tests `apps/till/src/screens/till-ticket-view.test.ts` and
-`apps/till/src/screens/till-ticket-view.a11y.test.ts` (real Chromium: `apps/till` runs Vitest in
-browser mode).
+**Files:** `apps/till/src/api/client.ts` — `recordSale` (`:2589-2610`) takes a last optional
+`guests?: number | null`; `collectOrder` (`:2963-2968`) takes a last optional `guests`; `pay`'s
+request type (`:2619-2637`) and `BillPaymentRequest` (`:954-964`) gain `guests?: number | null`.
+`pay` already spreads its whole request into the body (`:2638-2641`) and `takeBillPayment` sends
+its request as it is (`:4003`), so those two need only the type. `recordSale` and `collectOrder`
+build their bodies field by field and carry `guests` only when it is not `undefined`.
+Test: `apps/till/src/api/client.test.ts` (the `/api/sales` and `/api/pay` cases at `:202-363`
+show the body assertions).
 
-What it builds (mockup panel A): above the receipt buttons (`:902`), when the sale is a simplified
-receipt (`invoiceType !== "F1"`) and the screen shows Print receipt or Reprint, one
-`wt-number-stepper` (`packages/ui/src/components/wt-number-stepper.ts`; a screen draws no field of
-its own, CLAUDE.md §3), `name="guests"`, label `seat.guest_count` («Comensales», the word the seat
-and Guests windows use), `min` 1, `max` 999, `clearable` (− at 1 empties it), placeholder
-`receipt.guests_none` «Sin línea» / "No line" — the one new string. It starts on the ticket's
-`receiptGuests`, or empty when absent, and starts again when another sale is shown. It saves
-nothing, so it takes no draft scope and asks nothing on leaving: leaving the screen forgets it.
-Print receipt and Reprint dispatch their events with `detail: { guests }`: `null` when the field is
-empty, the number otherwise. Validation follows design-system.md → Forms: nothing until the first
-press; a press on an invalid value (0, over 999, not a whole number — `parseGuestCount`,
-`apps/till/src/widgets/guest-count.ts:4-10`, which already reads blank as "none") marks the field
-with `seat.guest_count_invalid` (its sentence already says 1 to 999 or empty), shows `form.fix_fields`
-on its own line above the buttons, prints nothing, and keeps Print receipt and Reprint disabled
-until the field is fixed. A full invoice shows no field.
+- [ ] **Step 1: Failing tests:** each of the four requests' body with `guests: 5`, with `null`
+  (the key present, `null`), and without (no `guests` key, the other keys unchanged). Run
+  `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts` — the `recordSale` and
+  `collectOrder` cases FAIL (no `guests` key). The `pay` and `takeBillPayment` cases already pass at
+  run time, because both forward what they are given; their first failure is
+  `pnpm --filter @waitron/till exec tsc --noEmit`, which rejects `guests` as a property their
+  request types do not have.
+- [ ] **Step 2–3:** Code; pass; `tsc`. **Commit.**
 
-- [ ] **Step 1: Failing tests** (`till-ticket-view.test.ts`): a simplified ticket with
-  `receiptGuests: 4` shows the field holding 4 above Reprint; Reprint's event carries
-  `{ guests: 4 }`; after + it carries 5; after emptying it carries `null`; a ticket without
-  `receiptGuests` shows the field empty with «No line» and Reprint carries `null`; typing 0 then
-  Reprint dispatches nothing, shows the field's sentence and the bottom sentence, and disables
-  Reprint until 3 is typed; an F1 ticket shows no field; Print receipt (on-request ticket) carries
-  the value the same way. a11y: the existing axe cases cover the screen with the field, in both
-  themes. Run `pnpm --filter @waitron/till exec vitest run src/screens/till-ticket-view.test.ts` —
-  FAILS: no `[name="guests"]` element.
-- [ ] **Step 2–3:** Code; both files pass. **Commit.**
+### Task 3b.8: The field on the whole-bill payment screen
 
-### Task 3b.6: The till sends the field's value, then LOOK, gate, PR
+The whole-bill payment screen is `till-tender-pay` (`apps/till/src/widgets/tender-pay.ts:114`):
+the counter's (`screens/till-counter-screen.ts:465-482`) and a table bill's
+(`screens/till-table-order-screen.ts:3419-3424`). What it builds (mockup panel C,
+`docs/backlog/mockups/a663-receipt-layout/3-guests-when-printing.png`):
 
-**Files:** `apps/till/src/till-app.ts` (`#onPrintReceipt`, `:6192`; `#onReprint`,
-`#reprint`, `#sendReprint`, `#onReprintLanguage`, `:5819-5869` — the chosen guests ride in
-`reprintAsking` while the language window is open, so a reprint in another language keeps them),
-test `apps/till/src/till-app-bill-payments.test.ts` (or the till-app suite that already presses
-Reprint; find it with `git grep -l 'data-test="reprint"\|\[data-test=reprint\]' apps/till/src`).
+- Two properties: `asksGuests: boolean` (default `false`; nothing is drawn while false) and
+  `receiptGuests: number | null` (the default). In the idle views (`#renderIdlePay`, `:881`, and
+  `#renderIdleCollect`, `:870`), above the tender buttons, one `wt-number-stepper`
+  (`packages/ui/src/components/wt-number-stepper.ts`; a screen draws no field of its own,
+  CLAUDE.md §3), `name="guests"`, label `seat.guest_count` (en «Guests», es «Comensales»,
+  `apps/till/src/i18n/strings.ts:901`, `:2416`), `.min=${1}`, `.max=${MAX_GUEST_COUNT}`, `clearable`
+  (− at 1 empties it, `wt-number-stepper.ts:132-133`, `:159-162`), placeholder
+  `receipt.guests_none` — en «No line», es «Sin línea», the one new string (`git grep` finds neither
+  in the code today).
+- It shows `receiptGuests`, or empty when null, until the waiter changes it. A change is held in a
+  state (`guestsEntry`) that resets when `store.id` changes (beside the reset in `willUpdate`,
+  `:455-466`). Untouched, it follows a new `receiptGuests` (a live
+  update of the party's count). It joins no draft scope (not `#extrasScope`), so leaving asks
+  nothing.
+- The value rides on every event that charges: `ConfirmPaymentDetail` (`:43-44`, dispatched by
+  `#confirm` `:678` and `#confirmCard` `:694`, as `confirm-payment` or `collect-order`) and
+  `CollectCardDetail` (`:50-57`, `#onCardTap` `:525-547`) gain `guests?: number | null` — `null`
+  for an empty field, the number otherwise, and absent while `asksGuests` is false. A card retry
+  sends `this.cardRetryDetail ?? this.#lastCollectDetail` (`:569`): `#lastCollectDetail` holds the
+  value already, and `cardRetryDetail` is what till-app hands back (`:263`), so till-app's retry
+  detail must keep it (Task 3b.10 tests that path).
+- Validation follows design-system.md → Forms and the tip field's pattern in this widget
+  (`tipAttempted`, `:283`; `#tipInvalid`, `:516-523`; `formMessage(… t("form.fix_fields") …)`,
+  `:873`, `:884`): nothing until Cash or Card is first pressed (`#startPaying` `:499-504`,
+  `#onCardTap`); a press with an invalid value (not empty and not what `parseGuestCount` accepts,
+  `apps/till/src/widgets/guest-count.ts:4-10`: 0, over 999, a fraction, letters) sets
+  `guestsAttempted`, puts `seat.guest_count_invalid` (`strings.ts:902`, `:2417-2418`, «… from 1 to
+  999, or leave it empty») on the field, shows `form.fix_fields` (`:270`, `:1817`) on its own line
+  above the buttons, focuses the field, opens nothing, and keeps Cash and Card disabled until the
+  value is fixed.
+- Create: `apps/till/src/state/receipt-guests.ts`:
+  `defaultReceiptGuests(party: TableParty | null | undefined): number | null` — `party?.billCount === 1 ? party.guestCount : null`,
+  with a one-line pointer to `readReceiptGuests` (`apps/server/src/receipt-guests.ts`) as the rule
+  it mirrors.
 
-- [ ] **Step 1: Failing tests:** after paying, changing the field to 5 and pressing Reprint calls
-  `reprint(id, undefined, 5)`; with two receipt languages, choosing Català in the window calls
-  `reprint(id, "ca-ES", 5)`; a Find a bill receipt calls `reprintTransaction(saleId, undefined,
-  5)`; Print receipt on an on-request sale calls `printReceipt(id, 5)`; an untouched field sends
-  the ticket's own number. Run — FAIL. **Steps 2–3:** code, pass, **commit.**
-- [ ] **Step 4: LOOK** in real Chromium, both themes, at 390 px and 1280 px: the paid-sale screen
-  of a simplified sale with the field holding 4, empty, and marked invalid; a Find a bill receipt;
-  a full invoice (no field). Take them from the dev stack (`wa-wt demo <worktree-name>`), open
-  each, and attach them to the PR. What the printer receives is pinned by Task 3b.2's decoded jobs.
-- [ ] **Step 5:** The fiscal gate, UNEDITED. Backlog: delete the Part 3b bullet from the A663 entry
-  in `docs/backlog/printers.md`, and the A663 entry itself with its line in `docs/backlog.md` if
-  nothing else is left.
-- [ ] **Step 6: `/finish-branch`** (FULL; a cross-package request shape changes). The PR names the
-  contract above and that the override is never stored.
+**Files:** `apps/till/src/widgets/tender-pay.ts`, `apps/till/src/state/receipt-guests.ts`,
+`apps/till/src/i18n/strings.ts` (en and es), tests `apps/till/src/widgets/tender-pay.test.ts`,
+`apps/till/src/widgets/tender-pay.a11y.test.ts` (it has «has no violations in the idle Pay view»,
+`:33`), `apps/till/src/state/receipt-guests.test.ts` (new). `apps/till` runs Vitest in real
+Chromium.
+
+- [ ] **Step 1: Failing tests.** `receipt-guests.test.ts`: a party with `guestCount` 4 and
+  `billCount` 1 → 4; `billCount` 2 → null; `guestCount` null → null; no party → null.
+  `tender-pay.test.ts`: with `asksGuests` and `receiptGuests` 4 the idle view shows a
+  `[name="guests"]` stepper holding 4 above Cash; Cash then Confirm dispatches `confirm-payment`
+  with `guests: 4`; after + it carries 5; emptied (− at 1) it carries `null` and the field shows «No
+  line»; `receiptGuests` null shows it empty and carries `null`; Card on a manual terminal carries
+  it on `confirm-payment`, on a reader on `collect-card`, and a retry after a decline (no
+  `cardRetryDetail` given) carries it again; at the collect stage `collect-order` carries it; typing
+  0 then pressing Cash opens no amount entry, shows the field's sentence and «Correct the
+  highlighted fields to continue.», and keeps Cash and Card disabled until 3 is typed, after which
+  Cash works and carries 3; nothing is shown before the first press; with `asksGuests` false there
+  is no field and no event carries a `guests` key; a new `store.id` puts the field back on
+  `receiptGuests` and clears the messages.
+  `tender-pay.a11y.test.ts`: the idle Pay view with the field, and with the field marked invalid,
+  in both themes. Run
+  `pnpm --filter @waitron/till exec vitest run src/widgets/tender-pay.test.ts src/widgets/tender-pay.a11y.test.ts src/state/receipt-guests.test.ts`
+  — FAILS: no `[name="guests"]` element, and `receipt-guests.ts` does not exist.
+- [ ] **Step 2–3:** Code; the three files and the other `tender-pay*.test.ts` files pass (Hold, park,
+  the weighed dish and the leading-zeros cases must not change); `tsc`. **Commit.**
+
+### Task 3b.9: The field on a bill paid in parts
+
+`till-bill-pay-dialog` (`apps/till/src/widgets/bill-pay-dialog.ts:197`) takes one part payment at
+a time and asks for it on its confirm step (`#confirmStep`, `:1409`, Take at `:1471-1479`).
+The field is drawn there, above the bottom message and the buttons, only when `asksGuests` is true
+AND the payment shown pays what is left (`compareDecimal(decimal(preview.applied),
+decimal(balance.outstanding)) === 0`; `outstanding` leaves out what a card in progress holds,
+`apps/server/src/bill-payments.ts:610`, hence the edge case under "Multi-step payments") — a part
+payment that leaves something owing does not record the sale, so it shows no field and sends no
+`guests`. Same stepper, properties (`asksGuests`, `receiptGuests`), validation (its first press is
+Take; the dialog's own `#fieldErrors` / `#bottomMessage`, `:1418-1419`, carry the field's error and
+«Correct the highlighted fields to continue.») and reset rules as Task 3b.8; the dialog is a new
+element on every opening (`till-app.ts:11225-11239`), and the value also resets after
+`paymentAccepted()` (`bill-pay-dialog.ts:629-647`). `bill-pay-confirm` (dispatched at `:1406` with
+an empty detail) carries `{ guests }` when the field is shown, and an empty detail otherwise.
+
+**Files:** `apps/till/src/widgets/bill-pay-dialog.ts`, tests
+`apps/till/src/widgets/bill-pay-dialog.test.ts`, `apps/till/src/widgets/bill-pay-dialog.a11y.test.ts`.
+
+- [ ] **Step 1: Failing tests:** on a 30,00 € bill with 10,00 € received, a contribution of 20,00 €
+  shows the field holding `receiptGuests` 4 and Take carries `{ guests: 4 }`; changed to 5 it
+  carries 5; emptied, `null`; a contribution of 5,00 € shows no field and carries no `guests`; an
+  equal share or chosen items that pay the rest show it; typing 1000 then Take dispatches nothing,
+  marks the field and shows the bottom sentence, and Take stays disabled until fixed; `asksGuests`
+  false shows none. a11y: the confirm step with the field, and marked invalid, both themes. Run
+  `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts src/widgets/bill-pay-dialog.a11y.test.ts`
+  — FAILS: no `[name="guests"]`.
+- [ ] **Step 2–3:** Code; both files and `bill-pay-dialog.unsaved.test.ts` pass; `tsc`. **Commit.**
+
+### Task 3b.10: The till sends the field's value on a whole-bill payment
+
+**Files:**
+- `apps/till/src/screens/till-counter-screen.ts` — forwards `asksGuests` and `receiptGuests` to
+  `till-tender-pay` (`:465-482`); till-app passes them (`till-app.ts:11852-11869`): `asksGuests` is
+  true unless the counter order has a full invoice chosen (`invoiceChoice?.orderId === store.id`,
+  `till-app.ts:2626`; defensive, since the server refuses it today), `receiptGuests` null (a counter
+  sale has no party).
+- `apps/till/src/screens/till-table-order-screen.ts` — passes them to its `till-tender-pay`
+  (`:3419-3424`): `asksGuests` when the shown bill (`#shownBill`, `:1676`) is not `invoiceType`
+  `"F1"` (`PartyBill.invoiceType`, `client.ts:1861`), `receiptGuests` =
+  `defaultReceiptGuests(this.party)` (`party`, `:1206`). `#onTenderConfirm` (`:2616-2620`) re-sends
+  the detail as `pay-tab` unchanged, so `guests` rides along.
+- `apps/till/src/till-app.ts` — `#onConfirmPayment` (`:4670`), `#onCollectOrder` (`:5708`) and
+  `#onPayTab` (`:11072`) each take the whole event detail as the tender today (`:4681`, `:5713`,
+  `:11081`); split it (`const { guests, ...tender } = detail`) so the tender sent carries no
+  `guests` key, and pass `guests` to `recordSale` (`:4711-4724`, `:11096-11098`) or `collectOrder`
+  (`:5722-5723`, `:11096-11098`). `#collectCard` (`:4803`) adds the detail's `guests` to `api.pay`'s
+  request (`:4844`) and keeps it in the detail it hands back as `cardRetryDetail`. Find a bill's pay
+  (`#onFindBillPay`, `:6266`) is not changed: it sends no `guests`, so the server stores the default.
+- Test: `apps/till/src/till-app-table-service.test.ts` (`pay-tab`),
+  `apps/till/src/till-app-boot-and-counter.test.ts` (counter cash and card), `apps/till/src/till-app.test.ts`.
+
+- [ ] **Step 1: Failing tests:** a table seated with 4 holding one bill: its payment screen shows
+  4, and paying cash after changing it to 5 calls `recordSale` with `guests` 5 and a tender of
+  exactly `{ method: "cash", amount }` (no `guests` key); a placed bill calls `collectOrder` the
+  same way; a table with two bills shows the field empty and sends `null`; a counter cash sale sends
+  `null` with the field untouched and 2 after typing 2; a counter sale with a full invoice chosen
+  shows no field and sends no `guests`; a reader card sends `guests` in `api.pay`'s request, and a
+  retry after a decline sends it again; a Find a bill payment sends none. Run the three files —
+  FAIL: the calls carry no `guests`, and the tender carries the whole detail.
+- [ ] **Step 2–3:** Code; the three files and the counter and table screens' own tests and a11y
+  files pass; `tsc`. **Commit.**
+
+### Task 3b.11: The till sends the field's value on a part payment
+
+**Files:** `apps/till/src/till-app.ts` — `#renderBillPaying` (`:7692-7717`) gives the dialog
+`asksGuests` (a table bill: its `PartyBill.invoiceType` is not F1; a counter bill: no full invoice
+chosen) and `receiptGuests` (`defaultReceiptGuests(this.orderParty)` for a table bill, `:2341`;
+null at the counter); the dialog's listener (`@bill-pay-confirm=${() => void this.#onBillPayConfirm()}`,
+`:7712`) passes the event, and `#onBillPayConfirm` (`:11294`, `takeBillPayment` at `:11316`) adds
+its `guests` to the request when present. Test: `apps/till/src/till-app-bill-payments.test.ts`
+(its `mesa(...)` fixture, `:96`).
+
+- [ ] **Step 1: Failing tests:** a party of 4's bill paid in two contributions sends no `guests` on
+  the first and `guests` 4 (or the changed value) on the one that pays the rest; a split bill's
+  dialog shows the field empty and sends `null`; a counter bill paid in parts sends `null`
+  untouched. Run the file — FAIL: no `guests`.
+- [ ] **Step 2–3:** Code; the file and `till-app.test.ts` pass; `tsc`. **Commit.**
+
+### Task 3b.12: LOOK, the gate, the backlog, the pull request
+
+- [ ] **Step 1: LOOK** in real Chromium, both themes, at 390 px and 1280 px, from the dev stack
+  (`wa-wt demo waitron-feat-a663-3b-guests-when-printing`): a table seated with 4 at its payment
+  screen (field holding 4), the field emptied («Sin línea»), marked invalid after typing 0 and
+  pressing Efectivo, a counter sale (empty), and the part-payment confirm step paying the rest.
+  Open each picture; compare panel C of `3-guests-when-printing.png`. What the printer receives is
+  pinned by Tasks 3b.2–3b.6's decoded jobs.
+- [ ] **Step 2: The fiscal gate, UNEDITED** (Global Constraints):
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/sale-amount.huella.test.ts src/money-conversion.huella.test.ts src/correction-amount.huella.test.ts`.
+  The golden fingerprint suite (`write-path.e2e.test.ts`) and `inmutabilidad.test.ts` must pass
+  with no edit: this part writes no fiscal record and nothing a fingerprint reads. If either needs
+  an edit, STOP.
+- [ ] **Step 3: Backlog.**
+  - `docs/backlog/printers.md`: in the A663 entry (`:338-350`) delete the Part 3b bullet
+    (`:348-350`). Nothing else is listed as left there, so delete the A663 entry and its line in
+    `docs/backlog.md` (`:3088-3091`) — check first that nothing else was added under "What is left".
+  - Amend the "Decisions and deliberate limits" entry «The guests line is read when the receipt is
+    built, not when the sale is recorded (A663 Part 3a)» (`printers.md:582-588`) rather than delete
+    it: since Part 3b the count a simplified receipt prints is fixed when the sale is recorded — the
+    number chosen on the payment screen, or the default at that moment (`sale_receipt_guests`,
+    `readPrintedGuests`), owner 2026-10-16 «it should remain the same otherwise it isn't a true
+    duplicate»; the read-when-built rule now holds only for full invoices and for sales recorded
+    before Part 3b.
+  - Add one entry in printers.md, with its line in `docs/backlog.md`: «Find a bill's pay offers no
+    guests field» — a bill collected from Find a bill stores the default at that moment, and the
+    waiter cannot choose another number there (`apps/till/src/widgets/find-bill-dialog.ts`). Owner
+    decision 1 put the field on the payment screen only; this records the gap without deciding it.
+- [ ] **Step 4: `/finish-branch`** (FULL; the Codex run-it seat twice). The PR description says,
+  in plain words: the request contract above (the four routes, the values, the refusal, and that
+  `guests` stays out of the bill payment's retry fingerprint); the new table, that it is
+  append-only and core, and what `migration-upgrade` answered about a venue reset (first line);
+  that no fiscal record, fingerprint, `sales` or `sale_lines` row, or party count changes, with the
+  gate's result; the owner's three decisions, quoted, and the driver's decision 4; that a full
+  invoice prints the default (and that no till route files one today); which paths store the
+  default at that moment rather than a chosen number (the loop, a manager, a discount or line
+  change, an unpaid departure, Find a bill's pay, and a request with no `guests`); the pending-card
+  edge case under "Multi-step payments"; and that the only sales with no row are those recorded
+  before this lands, a substitution, a full invoice and the readiness sale.
 
 ---
 
@@ -4161,8 +4697,9 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
   `formatAmount`, `ReceiptTable`, `ReceiptTableRow`, `tableLines`, `baseFromGross`,
   `beforeVatFigures`, `groupDiscounts` (replaced in Part 2c by `invoiceDiscounts`, `FiguredGroup`,
   `InvoiceDiscounts`), `GroupDiscount`, `quantityText`, `listUnitPriceGross` (`sale_lines`,
-  `RecordSaleLine`, `TillSaleLine`), `dishFamily`, `readReceiptGuests`, `receiptGuests`
-  (`ReceiptPresentation`), `GuestsChoice`, `readGuestsChoice`,
+  `RecordSaleLine`, `TillSaleLine`), `dishFamily`, `readReceiptGuests`, `sale_receipt_guests` / `saleReceiptGuests`,
+  `GuestsChoice`, `readGuestsChoice`, `recordReceiptGuests`, `readPrintedGuests`,
+  `defaultReceiptGuests`, `asksGuests` and `receiptGuests` (the till widgets' properties),
   `drinkFoodSubtotals`, label keys as in Tasks 1.2, 2.1, 3a.1 and 4.5.
 
 ---
@@ -4172,7 +4709,7 @@ as `Bebida` / `Comida` rows in the guests section, after the guests line), label
 Answer by quoting the question number. Q4, Q5, Q7 and Q8 were answered on 2026-10-15 and Part 2
 builds the answers; Q9, Q10 and Q11 were answered on 2026-10-15 with the alternatives, after Part 2
 had built the defaults, and Parts 2b and 2c build the answers; Q2 was answered on 2026-10-15 and
-Part 3a builds it; Q12 (2026-10-16) is open and Part 3b waits for it;
+Part 3a builds it; Q12 and Q13 were answered on 2026-10-16 and Part 3b builds the answers;
 Q1, Q3 and Q6 were for Part 4, which the owner withdrew on 2026-10-15. The Part 1b header order is
 answered at the end.
 
@@ -4389,8 +4926,11 @@ legal name, in bold, under it, as the order list in Task 1.5 says, while another
 "legal name first and bold". ANSWERED 2026-10-15: «KEEP IT AS BUILT — subtitle first, bold legal
 name under it. No change.» Nothing is built; Task 1.5's sentence now matches the order list.
 
-**Q12 — Where the till asks about the guests line when a receipt is printed.** (Asked 2026-10-16.
-Part 3a lands without it; Part 3b waits for the answer.)
+**Q12 — Where the till asks about the guests line when a receipt is printed.** ANSWERED
+2026-10-16 (watcher, 09:55, superseding an answer of A at 09:50): **C**, the field on the payment
+screen, before charging; do not build A. Then, 10:00: «it should remain the same otherwise it isn't
+a true duplicate» — a Reprint or a Find a bill print repeats the number chosen at payment and offers
+no change. Part 3b builds it. The question as asked:
 You asked that the «comensales · por persona» line be optional and editable when a receipt is
 printed. (FYI, no answer needed: by default, joined tables whose bills were kept separate print no
 guests line, since neither bill knows its share; this choice is how a waiter adds one.) The till has no print window today: Print receipt and Reprint print at once (Reprint asks
@@ -4410,3 +4950,14 @@ Alternatives: **B — a window on every Print receipt and Reprint** asking the n
 on every receipt printed by hand; the same gap for automatic receipts). **C — the field on the
 payment screen, before charging** (it also reaches the automatic receipt, but adds a control to the
 busiest screen, and a later Reprint would still need A or B to change the number).
+
+**Q13 — Where the guest count chosen at payment is kept, so a Reprint repeats it.** (Asked
+2026-10-16 ~17:30 in `~/waitron-campaign-c/questions.md`.) ANSWERED 2026-10-16 ~17:35: **A** — «a
+small new append-only table, one row per sale paid on the till, holding the guest count its
+simplified receipt prints (or "no line"), written in the same step as the payment and never
+changed; every simplified receipt of that sale (original, retry, Reprint, Find a bill, dashboard
+reprint) prints the stored number; a sale with no row keeps today's rule; a full invoice prints the
+default. No fiscal record, fingerprint, sale or table count changes.» Part 3b builds it. The
+alternatives were a column on the sale (written only by the fiscal core, `recordSale`, and sale rows
+are append-only) and the receipt's print job (none exists at payment in a department that prints
+on request, `receipt-print.ts:277`).

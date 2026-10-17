@@ -140,6 +140,7 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
+import { defaultReceiptGuests } from "../state/receipt-guests.js";
 import {
   outOfServiceJoined,
   seatsGuests,
@@ -3444,6 +3445,8 @@ export class TillTableOrderScreen extends LitElement {
           .busy=${this.busy}
           .takesCash=${this.takesCash}
           .fullInvoices=${this.fullInvoices}
+          .asksGuests=${shown?.invoiceType !== "F1"}
+          .receiptGuests=${defaultReceiptGuests(this.party)}
         ></till-tender-pay>
         ${this.#billChoices(shown)} ${this.#payWays()}
       </section>`;

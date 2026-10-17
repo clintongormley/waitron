@@ -92,6 +92,7 @@ import { ALL_MODULES } from "./modules.js";
 import { applyMigrations } from "@waitron/migrations";
 import { provisionOrderVenue, billlessSale } from "./testing/order-venue.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
+import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
 
 const scratch: string[] = [];
 afterAll(() => {
@@ -105,11 +106,21 @@ function predecessor(root: string) {
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
   const index = journal.entries.findIndex((entry) => entry.tag.endsWith("_retire_canvases"));
   expect(index).toBeGreaterThan(0);
+  const tags = journal.entries.map((entry) => entry.tag);
   journal.entries = journal.entries.slice(0, index);
   writeFileSync(journalPath, JSON.stringify(journal));
   return migrationOptionsFor(manifestSets(), null).map((option) =>
     option.migrationsTable === CORE_MIGRATIONS.migrationsTable
-      ? { ...option, migrationsFolder: core }
+      ? {
+          ...option,
+          migrationsFolder: core,
+          appendOnlyTables: predecessorAppendOnly(
+            option.appendOnlyTables,
+            core,
+            tags.slice(0, index),
+            tags.slice(index),
+          ),
+        }
       : option,
   );
 }
@@ -376,13 +387,14 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     const oldJournal = before![journal]! as { created_at: number }[];
     const oldTimes = new Set(oldJournal.map((row) => row.created_at));
     const newJournal = actual[journal]! as { created_at: number }[];
-    expect(newJournal).toHaveLength(oldJournal.length + 6);
+    expect(newJournal).toHaveLength(oldJournal.length + 7);
     expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
     const retained: Record<string, unknown[]> = {
       ...before!,
       [journal]: newJournal,
       device_profile_admission_roles: [],
       tender_refunds: [],
+      sale_receipt_guests: [],
     };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>

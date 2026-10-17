@@ -23,6 +23,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -44,7 +45,7 @@ import {
   typedAmount,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
-import type { CardProvider } from "./tender-pay.js";
+import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
 
 export type PayWay = PayChoice["kind"];
 
@@ -98,7 +99,7 @@ export interface RefundNotice {
   terminal: boolean;
 }
 
-type Field = "lines" | "amount" | "people" | "tendered" | "cardTip" | "tipAmount";
+type Field = "lines" | "amount" | "people" | "tendered" | "cardTip" | "tipAmount" | "guests";
 type Allocated = Extract<AllocationPreview, { kind: "allocated" }>;
 type Choices = Extract<AllocationPreview, { kind: "choose" }>;
 type CashPay = Extract<PayMethod, { method: "cash" }>;
@@ -198,6 +199,7 @@ const PEOPLE = /^[1-9]\d{0,2}$/;
 export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    guestsStepperStyles,
     css`
       .body {
         display: flex;
@@ -430,6 +432,9 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) readers: TillActiveReader[] = [];
   /** The device's own reader, shown chosen until another is picked; it is never sent. */
   @property() defaultReaderId?: string;
+  @property({ type: Boolean }) asksGuests = false;
+  /** The count the guests field starts on; null starts it empty. */
+  @property({ attribute: false }) receiptGuests: number | null = null;
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
@@ -448,6 +453,9 @@ export class TillBillPayDialog extends LitElement {
   @state() private simulationOutcome: "captured" | "declined" = "captured";
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: PayRefusal | null = null;
+  /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
+  @state() private guestsEntry?: string;
+  @state() private guestsAttempted = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -643,6 +651,8 @@ export class TillBillPayDialog extends LitElement {
     this.cardTip = "";
     this.externalRef = "";
     this.attempted = false;
+    this.guestsEntry = undefined;
+    this.guestsAttempted = false;
     this.#noTip();
   }
 
@@ -1387,15 +1397,18 @@ export class TillBillPayDialog extends LitElement {
 
   /** Takes the payment shown; with part of the change typed as a tip, first checks it and, when
    * it is not the tip shown, asks the server for the allocation with it. */
-  async #take(asked: PayRequest, cash: Cash | null): Promise<void> {
+  async #take(asked: PayRequest, preview: Allocated, cash: Cash | null): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy) return;
-    if (cash !== null && this.tipMode === "part") {
-      this.tipAttempted = true;
-      if (this.#tipErrors(cash).size > 0) {
-        await this.updateComplete;
-        await focusFirstInvalid(this.shadowRoot!);
-        return;
-      }
+    const tipChecked = cash !== null && this.tipMode === "part";
+    const guestsShown = this.#guestsShown(preview);
+    if (tipChecked) this.tipAttempted = true;
+    if (guestsShown) this.guestsAttempted = true;
+    if ((tipChecked && this.#tipErrors(cash).size > 0) || (guestsShown && this.#guestsInvalid())) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
+    if (tipChecked) {
       const tip = typedAmount(this.tipAmount)!;
       if (compareDecimal(decimal(tip), decimal(cash.preview.tip)) !== 0) {
         this.#askWithTip(asked, cash.pay, this.#addedTipFor(cash, tip));
@@ -1403,7 +1416,45 @@ export class TillBillPayDialog extends LitElement {
       }
     }
     this.shownRefusal = null;
-    this.#emit("bill-pay-confirm");
+    this.#emit(
+      "bill-pay-confirm",
+      (guestsShown
+        ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null }
+        : {}) satisfies ReceiptGuestsDetail,
+    );
+  }
+
+  /** Only the payment that pays what is left records the sale; `outstanding` leaves out what a
+   * card in progress holds. */
+  #guestsShown(preview: Allocated): boolean {
+    return (
+      this.asksGuests &&
+      this.balance !== null &&
+      compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0
+    );
+  }
+
+  #guestsText(): string {
+    return guestsText(this.guestsEntry, this.receiptGuests);
+  }
+
+  #guestsInvalid(): boolean {
+    return parseGuestCount(this.#guestsText()) === undefined;
+  }
+
+  #onGuestsChange(event: Event): void {
+    event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
+    this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
+  }
+
+  #guests(error: string | undefined): TemplateResult {
+    return guestsStepper({
+      text: this.#guestsText(),
+      disabled: this.busy,
+      error: error ?? "",
+      onChange: (event) => this.#onGuestsChange(event),
+    });
   }
 
   #confirmStep(asked: PayRequest, preview: Allocated): TemplateResult {
@@ -1412,11 +1463,14 @@ export class TillBillPayDialog extends LitElement {
       asked.pay.method === "cash"
         ? { pay: asked.pay, preview: { ...preview, change: preview.change! } }
         : null;
-    const tipErrors =
+    const stepErrors =
       cash !== null && this.tipAttempted && this.tipMode === "part"
         ? this.#tipErrors(cash)
         : new Map<Field, string>();
-    const errors = this.#fieldErrors(tipErrors);
+    const guestsShown = this.#guestsShown(preview);
+    if (guestsShown && this.guestsAttempted && this.#guestsInvalid())
+      stepErrors.set("guests", t("seat.guest_count_invalid"));
+    const errors = this.#fieldErrors(stepErrors);
     const bottom = this.#bottomMessage(errors);
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     return html`<p class="scope" data-pay-scope>${this.#scope()}</p>
@@ -1466,14 +1520,15 @@ export class TillBillPayDialog extends LitElement {
           ? html`<p class="muted" role="status" data-pay-collecting>${t("card.collecting")}</p>`
           : nothing
       }
+      ${guestsShown ? this.#guests(errors.get("guests")) : nothing}
       <wt-form-actions .error=${bottom}>
         ${this.#backButton()}
         <wt-button
           variant="primary"
           data-pay-confirm
           .loading=${this.busy}
-          .disabled=${this.busy || tipErrors.size > 0}
-          @click=${() => void this.#take(asked, cash)}
+          .disabled=${this.busy || stepErrors.size > 0}
+          @click=${() => void this.#take(asked, preview, cash)}
         >
           ${t("bill_pay.take")}
         </wt-button>

@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./tender-pay.js";
@@ -34,6 +34,49 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations in the idle Pay view with the guests field", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, asksGuests: true, receiptGuests: 4 },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the guests field empty", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, asksGuests: true, receiptGuests: null },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the guests field marked invalid", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el, host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, asksGuests: true, receiptGuests: null },
+      theme,
+    );
+    const stepper =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]')!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "0";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await el.updateComplete;
+    expect(stepper.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 

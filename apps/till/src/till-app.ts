@@ -342,7 +342,9 @@ import type {
   CollectCardDetail,
   ConfirmPaymentDetail,
   ParkOrderDetail,
+  ReceiptGuestsDetail,
 } from "./widgets/tender-pay.js";
+import { defaultReceiptGuests } from "./state/receipt-guests.js";
 
 import { setContentLanguages } from "@waitron/ui";
 
@@ -4909,7 +4911,7 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
     const id = this.#store.id;
@@ -4938,7 +4940,7 @@ export class TillApp extends LitElement {
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        this.#store.kitchenNote !== null
+        guests !== undefined
           ? await this.api.recordSale(
               lines,
               tender,
@@ -4946,13 +4948,24 @@ export class TillApp extends LitElement {
               undefined,
               invoice,
               language,
-              this.#store.kitchenNote,
+              this.#store.kitchenNote ?? undefined,
+              guests,
             )
-          : language !== undefined
-            ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
-            : invoice
-              ? await this.api.recordSale(lines, tender, id, undefined, invoice)
-              : await this.api.recordSale(lines, tender, id);
+          : this.#store.kitchenNote !== null
+            ? await this.api.recordSale(
+                lines,
+                tender,
+                id,
+                undefined,
+                invoice,
+                language,
+                this.#store.kitchenNote,
+              )
+            : language !== undefined
+              ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
+              : invoice
+                ? await this.api.recordSale(lines, tender, id, undefined, invoice)
+                : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -5080,6 +5093,7 @@ export class TillApp extends LitElement {
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
             ...(detail.allowOffline ? { allowOffline: true } : {}),
+            ...(detail.guests === undefined ? {} : { guests: detail.guests }),
             ...(detail.simulationOutcome === undefined
               ? {}
               : { simulationOutcome: detail.simulationOutcome }),
@@ -5941,7 +5955,7 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
     const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
@@ -5949,9 +5963,11 @@ export class TillApp extends LitElement {
     try {
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        language === undefined
-          ? await this.api.collectOrder(id, tender)
-          : await this.api.collectOrder(id, tender, language);
+        guests !== undefined
+          ? await this.api.collectOrder(id, tender, language, guests)
+          : language === undefined
+            ? await this.api.collectOrder(id, tender)
+            : await this.api.collectOrder(id, tender, language);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
@@ -8146,13 +8162,21 @@ export class TillApp extends LitElement {
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
+        .asksGuests=${this.#billPayingAsksGuests(open)}
+        .receiptGuests=${open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
-        @bill-pay-confirm=${() => void this.#onBillPayConfirm()}
+        @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
         @bill-pay-close=${() => this.#closeBillPaying()}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  #billPayingAsksGuests(open: BillPaying): boolean {
+    return open.surface === "table"
+      ? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.invoiceType !== "F1"
+      : this.invoiceChoice?.orderId !== open.billId;
   }
 
   /** The refund dialog and, over it, its approver's PIN prompt, whose events stop here so the
@@ -11528,7 +11552,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.submitting = true;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
@@ -11543,9 +11567,23 @@ export class TillApp extends LitElement {
       )
         return;
       // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
-      this.result = presented
-        ? await this.api.collectOrder(id, tender)
-        : await this.api.recordSale([], tender, id);
+      this.result =
+        guests === undefined
+          ? presented
+            ? await this.api.collectOrder(id, tender)
+            : await this.api.recordSale([], tender, id)
+          : presented
+            ? await this.api.collectOrder(id, tender, undefined, guests)
+            : await this.api.recordSale(
+                [],
+                tender,
+                id,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                guests,
+              );
       this.#showTicket(id, bill?.receiptAvailable !== true);
     } catch (error) {
       paidMeanwhile = isPaymentsReceived(error);
@@ -11739,19 +11777,26 @@ export class TillApp extends LitElement {
   /**
    * Takes the payment the dialog showed. Its submission id is fresh for each confirmation, and is
    * the one sent before only while that same confirmation on the same bill got no answer (plan
-   * D8); the request is sent again unchanged while it gets none.
+   * D8).
    */
-  async #onBillPayConfirm(): Promise<void> {
+  async #onBillPayConfirm(event: Event): Promise<void> {
     // Sent only from the confirmation, which shows an allocated preview of what was asked.
     const open = this.billPaying!;
     if (open.busy) return;
     const asked = open.asked!;
+    const detail: ReceiptGuestsDetail =
+      (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
     const confirmation = confirmationOf(
       paymentAsk(asked.choice, asked.pay, asked.allocation),
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
       asked.card,
     );
-    const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    // The guests stay out of the resend key, as the server's `retryShapeOf` leaves them out.
+    const keyed = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    const submission =
+      "guests" in detail
+        ? { ...keyed, request: { ...keyed.request, guests: detail.guests } }
+        : keyed;
     const turn = ++this.#paymentSends;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;
@@ -12319,6 +12364,8 @@ export class TillApp extends LitElement {
         .receiptLanguages=${this.receiptLanguages}
         .fullInvoices=${this.fullInvoices}
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
+        .asksGuests=${this.invoiceChoice?.orderId !== this.#store.id}
+        .receiptGuests=${null}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
         .makeAtStations=${this.stations}

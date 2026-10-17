@@ -237,6 +237,8 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) receiptLanguages: string[] = [];
   @property({ type: Boolean }) fullInvoices = false;
   @property() receiptLanguage = "";
+  @property({ type: Boolean }) asksGuests = false;
+  @property({ attribute: false }) receiptGuests: number | null = null;
   /** The enclosing shell owns the header. */
   @property({ type: Boolean }) embedded = false;
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
@@ -408,6 +410,8 @@ export class TillCounterScreen extends LitElement {
             .receiptLanguages=${this.receiptLanguages}
             .fullInvoices=${this.fullInvoices}
             .receiptLanguage=${this.receiptLanguage}
+            .asksGuests=${this.asksGuests}
+            .receiptGuests=${this.receiptGuests}
           ></till-tender-pay>
         </div>
         ${this.phone ? this.#lists() : nothing}

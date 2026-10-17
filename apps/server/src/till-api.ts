@@ -86,6 +86,7 @@ import {
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
+import { readGuestsChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
   confirmReceiptHandover,
@@ -1763,6 +1764,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      const guests = readGuestsChoice(body.guests);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
@@ -1780,7 +1782,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         saleCfg,
-        { ...body, zoneId },
+        { ...body, zoneId, guests },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);
@@ -1813,6 +1815,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
+      const guests = readGuestsChoice(body.guests);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -1843,7 +1846,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           attendance: deps.attendance,
         },
         saleCfg,
-        { ...body, zoneId },
+        { ...body, zoneId, guests },
         { personId, sessionId: session.sessionId },
       );
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
@@ -2637,15 +2640,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ tender: TillTender; receiptLanguage?: string }>(c);
+      const body = await readJsonBody<{
+        tender: TillTender;
+        receiptLanguage?: string;
+        guests?: unknown;
+      }>(c);
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
+      const guests = readGuestsChoice(body.guests);
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         cfg,
-        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage },
+        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage, guests },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);

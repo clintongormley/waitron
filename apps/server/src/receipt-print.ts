@@ -21,7 +21,7 @@ import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
-import { readReceiptGuests } from "./receipt-guests.js";
+import { readPrintedGuests } from "./receipt-guests.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import {
@@ -168,7 +168,7 @@ async function readDevicePrinters(
   );
 }
 
-/** Use the filed issuer where available and the current optional trim, address, logo and guests. */
+/** Use the filed issuer where available and the current optional trim, address and logo. */
 async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId" | "practiceMode">,
@@ -213,7 +213,7 @@ async function buildReceiptBytes(
     printAddress: authored?.printAddress === true,
   });
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
-  const guests = await readReceiptGuests(tx, saleId);
+  const guests = await readPrintedGuests(tx, saleId);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },

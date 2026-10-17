@@ -567,6 +567,7 @@ const SALE_TABLES = [
   "working_orders",
   "working_order_lines",
   "receipt_reprints",
+  "sale_receipt_guests",
 ] as const;
 
 function saleTables(db: Database): Record<string, unknown[]> {

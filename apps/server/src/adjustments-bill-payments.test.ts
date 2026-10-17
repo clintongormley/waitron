@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { printJobs, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  printJobs,
+  saleReceiptGuests,
+  sales,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { RefundAnswer } from "@waitron/payments";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { centsToDecimal } from "@waitron/shared";
@@ -248,6 +255,31 @@ describe("a reduction after contributions (design §8 test 11)", () => {
       "Efectivo 50,00 €",
       "Devolución -10,00 €",
     ]);
+  });
+});
+
+describe("a discount that leaves a bill fully paid", () => {
+  it("stores the party's count read when the discount issues the invoice", async () => {
+    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    venue.db.run(
+      sql`update parties set guest_count = 3
+          where id = (select party_id from working_orders where id = ${billId})`,
+    );
+    await contribute(billId, "cash", "30.00");
+
+    const discounted = await adjust(billId, 2, { action: "discount_amount", amount: "10.00" });
+
+    expect(discounted.status).toBe(200);
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ guests: saleReceiptGuests.guests })
+          .from(saleReceiptGuests)
+          .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+          .where(eq(sales.workingOrderId, billId)),
+      ),
+    ).toEqual([{ guests: 3 }]);
   });
 });
 

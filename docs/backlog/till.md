@@ -131,6 +131,22 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
+## A booking or a seated party can count more than 999 guests
+
+- **A booking or a seated party can count more than 999 guests, which a simplified receipt
+  recorded since A663 Part 3b never prints (found by Part 3b).** `createBooking` and
+  `updateBooking` refuse only a party size of 0 or less (`booking.invalid`,
+  `packages/bookings/src/bookings.ts`), and seating a booking hands that size to `seatTable`
+  (`apps/server/src/parties.ts`) as the party's guest count without a bound; the `parties` table's
+  check asks only for 1 or more. The till's own guest-count fields, and the count stored for a
+  simplified receipt (`sale_receipt_guests`), take a whole number from 1 to 999
+  (`isValidGuestCount`, `packages/shared/src/guest-count.ts`). A full invoice, and a sale recorded
+  before Part 3b, read the party's count with no bound (`readReceiptGuests`). When a sale is
+  recorded for a party above 999 with no count chosen, its simplified receipt stores "no line"
+  instead of the party's count (`storableDefault` in `recordReceiptGuests`,
+  `apps/server/src/receipt-guests.ts`), so that receipt prints no guests line where Part 3a would
+  have printed one. Decide whether bookings and parties take the same 1 to 999 bound.
+
 <a id="five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen"></a>
 
 ## Five till handlers still leave a failed list refresh unhandled

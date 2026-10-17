@@ -2105,6 +2105,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change under it (re-pick the first, or close) and fix it test-first.
   [Detail](backlog/till.md#the-bookings-seat-picker-keeps-a-table-it-no-longer-offers)
 
+- **A booking or a seated party can count more than 999 guests, which a simplified receipt
+  recorded since A663 Part 3b never prints** (found by Part 3b). Bookings refuse only a party size
+  below 1, and seating one passes it on unchecked; the guests count stored for such a receipt is
+  bounded 1 to 999, so such a party's simplified receipt prints no guests line. [Detail](backlog/till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
+
 - **Five till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25, review of PR #641). **Next action:** decide whether
   discard, advance and mark-collected go through `#refreshAfterWrite` with their own "X succeeded,
   but…" strings, and what login and retrieve show when their refresh fails.
@@ -3079,10 +3084,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   `<dialog>`'s scroll height. `.body { position: relative }` removed the excess in the probe.
   [Detail](backlog/printers.md#a-wt-dialog-holding-hinted-fields-is-taller-inside-than-it-shows)
 
-- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** Left:
-  the till's choice to change or leave out the guests line when printing a receipt (Part 3b,
-  waits for owner question Q12). [Detail](backlog/printers.md#a663--receipts-and-full-invoices-that-are-easier-to-read),
-  [mockups](backlog/mockups/a663-receipt-layout/), [plan](superpowers/plans/2026-10-15-a663-receipt-layout.md)
+- **Find a bill's pay offers no guests field** (left open by A663 Part 3b). A bill with no invoice
+  yet stores the default guests count at that moment; one invoiced by an unpaid departure keeps the
+  count stored then. The waiter cannot choose another number; the owner put the field on the
+  payment screen only. Not decided.
+  [Detail](backlog/printers.md#find-a-bills-pay-offers-no-guests-field)
 
 - **Loose ends left by A661 (#1745).**
   - A661's six wording and behaviour choices were built on the recommended defaults. The owner's

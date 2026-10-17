@@ -16,7 +16,9 @@ import {
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { inTx, send } from "./testing/bill-venue.js";
+import { inTx, seatedWith, send } from "./testing/bill-venue.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { placeOrder } from "./working-order.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
@@ -33,6 +35,19 @@ import {
 } from "./testing/order-venue.js";
 
 let venue: OrderVenue;
+
+/** Sets the party's count through the till's route. */
+async function guestsOf(partyId: string, guestCount: number): Promise<void> {
+  const [row] = venue.db.all<{ revision: number }>(
+    sql`select revision from parties where id = ${partyId}`,
+  );
+  const answer = await send(venue.app, venue.cookie, "PUT", `/api/parties/${partyId}/guests`, {
+    expectedPartyRevision: row!.revision,
+    guestCount,
+  });
+  if (answer.status !== 200) throw new Error(`guestsOf: the route answered ${answer.status}`);
+}
+
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -155,6 +170,23 @@ describe("dashboard receipt reprint", () => {
     expect(detail.json).toMatchObject({
       reprints: [{ personName: "Administradora", printerName: "Recibos" }],
     });
+  });
+
+  it("prints the guests stored with the sale on the copy", async () => {
+    const party = await seatedWith(venue, "Caña");
+    await guestsOf(party.partyId, 5);
+    const billId = party.tabId;
+    await placeOrder(venue, venue.cfg, billId, venue.operatorId);
+    await issueOrderInvoice(venue, venue.cfg, billId, venue.operatorId);
+    expect((await collect(venue, billId, "3.00")).status).toBe(200);
+    await guestsOf(party.partyId, 2);
+    const answer = await post(venue.adminDashboard, billId, venue.printerId);
+    expect(answer.status).toBe(202);
+    const jobId = (answer.json as { jobId: string }).jobId;
+    const [job] = await inTx(venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.id, jobId)),
+    );
+    expect(decodeTicket(job!.payload)).toContain("5 comensales · por persona");
   });
 
   it("prints on a second printer chosen for this copy", async () => {

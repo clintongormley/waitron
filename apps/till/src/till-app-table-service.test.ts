@@ -24,6 +24,7 @@ import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
+  PartyBill,
   ProductCatalogue,
   Station,
   TabLine,
@@ -2471,6 +2472,133 @@ describe("till-app table ordering: paying the tab", () => {
     expect(text).not.toContain(t("sale.error"));
     expect(ticket(el)).toBeNull();
     expect(tableOrder(el)).not.toBeNull();
+  });
+});
+
+describe("till-app table ordering: the guests the receipt prints", () => {
+  type Stepper = HTMLElement & { value: string; updateComplete: Promise<unknown> };
+  const tableWith = (guestCount: number, billCount: number): TableState => ({
+    ...openTable,
+    party: { ...openTable.party!, guestCount, billCount },
+  });
+  const bill = (overrides: Partial<PartyBill> = {}): PartyBill => ({
+    workingOrderId: "wo-7",
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
+    partyId: "v-2",
+    label: null,
+    status: "open",
+    total: "3.00",
+    outstanding: "3.00",
+    hasPayments: false,
+    receiptAvailable: false,
+    ...overrides,
+  });
+  const pay = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-tender-pay",
+    )!;
+  const guests = (el: TillApp) => pay(el).shadowRoot!.querySelector<Stepper>('[name="guests"]');
+
+  async function openTableWith(table: TableState, bills: PartyBill[] = []) {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
+      }),
+      getTablesState: vi.fn().mockResolvedValue([table]),
+      getPartyBills: vi.fn().mockResolvedValue(bills),
+      collectOrder: vi.fn().mockResolvedValue(saleResult),
+    });
+    const screen = await toTableOrder(el);
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  async function stepUp(el: TillApp): Promise<void> {
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    stepper.shadowRoot!.querySelector<HTMLElement>('button[data-step="1"]')!.click();
+    await flush(el);
+  }
+
+  async function payCash(el: TillApp): Promise<void> {
+    const panel = pay(el);
+    panel.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    const pad = panel.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-numeric-pad",
+    )!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
+    await panel.updateComplete;
+    panel.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await flush(el);
+  }
+
+  it("a table of 4 on one open bill shows 4, and a cash payment changed to 5 sends 5 beside a bare tender", async () => {
+    const el = await openTableWith(tableWith(4, 1));
+    expect(guests(el)!.value).toBe("4");
+    await stepUp(el);
+
+    await payCash(el);
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    const call = vi.mocked(api.recordSale).mock.calls[0]!;
+    expect(call[0]).toEqual([]);
+    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
+    expect(call[2]).toBe("wo-7");
+    expect(call[7]).toBe(5);
+  });
+
+  it("a placed bill of a table of 4 is collected with the count changed to 5 beside a bare tender", async () => {
+    const el = await openTableWith(tableWith(4, 1), [bill({ status: "placed" })]);
+    expect(guests(el)!.value).toBe("4");
+    await stepUp(el);
+
+    await payCash(el);
+
+    expect(api.recordSale).not.toHaveBeenCalled();
+    const call = vi.mocked(api.collectOrder).mock.calls[0]!;
+    expect(call[0]).toBe("wo-7");
+    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
+    expect(call[3]).toBe(5);
+  });
+
+  it("a party with two bills shows the field empty and sends no guests line", async () => {
+    const el = await openTableWith(tableWith(4, 2), [
+      bill(),
+      bill({ workingOrderId: "wo-9", label: "B" }),
+    ]);
+    expect(guests(el)!.value).toBe("");
+
+    await payCash(el);
+
+    const call = vi.mocked(api.recordSale).mock.calls[0]!;
+    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
+    expect(call).toHaveLength(8);
+    expect(call[7]).toBeNull();
+  });
+
+  it("a bill with a full invoice shows no field and sends no guests", async () => {
+    const el = await openTableWith(tableWith(4, 1), [
+      bill({
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1",
+          countryCode: "ES",
+        },
+      }),
+    ]);
+    expect(guests(el)).toBeNull();
+
+    await payCash(el);
+
+    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "5" }, "wo-7");
   });
 });
 

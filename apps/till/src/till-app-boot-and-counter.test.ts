@@ -2199,6 +2199,117 @@ describe("till-app simplified-invoice limit", () => {
   });
 });
 
+describe("till-app counter: the guests the receipt prints", () => {
+  type Pane = HTMLElement & { updateComplete: Promise<unknown> };
+  const cashTill = {
+    ...till,
+    fullInvoices: true,
+    capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
+  };
+  const pane = (el: TillApp) => deepFind(el, "till-tender-pay") as Pane;
+  const guests = (el: TillApp) =>
+    pane(el).shadowRoot!.querySelector<Pane & { value: string }>('[name="guests"]');
+
+  async function typeGuests(el: TillApp, text: string): Promise<void> {
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+  }
+
+  async function payCash(el: TillApp): Promise<void> {
+    const panel = pane(el);
+    panel.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flush(el);
+    const pad = panel.shadowRoot!.querySelector<Pane>("till-numeric-pad")!;
+    await pad.updateComplete;
+    pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
+    await panel.updateComplete;
+    panel.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await flush(el);
+  }
+
+  async function counterWithCafe() {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      collectOrder: vi.fn().mockResolvedValue(saleResult),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+    return { el, c };
+  }
+
+  it("a cash sale with the field untouched sends no guests line beside a bare tender", async () => {
+    const { el, c } = await counterWithCafe();
+    expect(guests(el)!.value).toBe("");
+
+    await payCash(el);
+
+    const call = vi.mocked(api.recordSale).mock.calls[0]!;
+    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
+    expect(call[2]).toBe(c.store.id);
+    expect(call).toHaveLength(8);
+    expect(call[7]).toBeNull();
+  });
+
+  it("a cash sale after typing 2 sends 2", async () => {
+    const { el } = await counterWithCafe();
+    await typeGuests(el, "2");
+
+    await payCash(el);
+
+    const call = vi.mocked(api.recordSale).mock.calls[0]!;
+    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
+    expect(call[7]).toBe(2);
+  });
+
+  it("collecting a placed counter order sends the count beside a bare tender", async () => {
+    const { el, c } = await counterWithCafe();
+
+    emit(c, "collect-order", { method: "cash", amount: "5", guests: 2 });
+    await flush(el);
+
+    expect(vi.mocked(api.collectOrder).mock.calls).toStrictEqual([
+      [c.store.id, { method: "cash", amount: "5" }, undefined, 2],
+    ]);
+  });
+
+  it("a sale with a full invoice chosen shows no field and sends no guests", async () => {
+    const { el, c } = await counterWithCafe();
+    emit(c, "choose-invoice");
+    await flush(el);
+    const invoice = {
+      invoiceType: "F1" as const,
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Ana García",
+        address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+        countryCode: "ES" as const,
+      },
+    };
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      invoice,
+    );
+    await flush(el);
+    expect(guests(el)).toBeNull();
+
+    await payCash(el);
+
+    expect(api.recordSale).toHaveBeenCalledWith(
+      expect.any(Array),
+      { method: "cash", amount: "5" },
+      c.store.id,
+      undefined,
+      invoice,
+    );
+  });
+});
+
 describe("till-app integrated card collection", () => {
   it("sends the reader the operator picked", async () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });

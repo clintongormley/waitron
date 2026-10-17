@@ -333,21 +333,17 @@ just a green typecheck.
      details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
      [Mockup](mockups/a405-printer-details/3-one-printer-table.png)
 
-## A663 — receipts and full invoices that are easier to read
+## Find a bill's pay offers no guests field
 
-- **A663 — receipts and full invoices that are easier to read (owner, 2026-10-14; open).** The
-  owner compared ours with a restaurant receipt from Rome: ruled-off sections, a large total, one
-  line per item. Both layouts below are approved. A printed receipt or invoice is a legal document:
-  re-check the result against RD 1619/2012 arts. 6 and 7 on the BOE before landing.
-  [Mockup: simplified receipt](mockups/a663-receipt-layout/1-simplified-receipt.png),
-  [mockup: full invoice](mockups/a663-receipt-layout/2-full-invoice.png) — each beside today's
-  receipt, rendered from the code on 2026-10-14. The owner replaced the simplified mockup's «IVA 10%
-  incluido» line with «Base imponible 10%» and «IVA 10%» rows (Q11, 2026-10-15; built by Part 2b).
-  Plan: [2026-10-15-a663-receipt-layout.md](../superpowers/plans/2026-10-15-a663-receipt-layout.md).
-  What is left:
-  - **Part 3b:** the till lets the person printing a simplified receipt change the number of
-    guests or leave the line out, for that print only; waits for Q12.
-    [Mockup](mockups/a663-receipt-layout/3-guests-when-printing.png)
+- **Find a bill's pay offers no guests field (left open by A663 Part 3b).** A bill collected from
+  Find a bill (`apps/till/src/widgets/find-bill-dialog.ts`) sends no guests count. A bill with no
+  invoice yet is recorded then, and stores the count that would print by default at that moment;
+  one already invoiced by an unpaid departure keeps the count stored at the departure
+  (`issueUnpaidInvoice`, `apps/server/src/working-order.ts`), because collecting it records no new
+  sale (`runCollectOrder`, `apps/server/src/till-sale.ts`). Either way the waiter cannot choose
+  another number, or leave the line out, there. The owner's decision
+  of 2026-10-16 put the «Comensales» field on the payment screen only; this records the gap
+  without deciding whether Find a bill should ask too.
 
 ## The till's on-screen receipt is a second copy of the layout
 
@@ -580,7 +576,13 @@ gets longer, so we should just make it look good with the date on its own line".
   comes to the filed bases.
 
 - **The guests line is read when the receipt is built, not when the sale is recorded (A663 Part
-  3a).** A later copy reads the party as it is then: a count changed after payment, or a new bill
+  3a), except on a simplified receipt since Part 3b.** Since Part 3b the count a simplified receipt
+  prints is fixed when the sale is recorded: the number chosen on the payment screen, or the
+  default at that moment, stored once per sale (`sale_receipt_guests`, read by `readPrintedGuests`,
+  `apps/server/src/receipt-guests.ts`). Every later copy of that receipt prints the same number;
+  the owner, 2026-10-16: «it should remain the same otherwise it isn't a true duplicate». The rule
+  below now holds only for a full invoice and for a sale recorded before Part 3b. There, a later
+  copy reads the party as it is then: a count changed after payment, or a new bill
   the party opens after paying, changes or removes the line on that copy, while the order label
   stays as recorded. While a party, with any party joined into it, holds more than one bill that is
   not abandoned (bills kept separate after joining tables, or a split by item), none of those bills

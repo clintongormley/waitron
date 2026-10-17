@@ -28,6 +28,7 @@ import {
   printers,
   printJobs,
   readTenant,
+  saleReceiptGuests,
   sales,
   tenantReceipts,
   tenants,
@@ -113,11 +114,14 @@ import {
   join,
   nameParty,
   orderForParty,
+  partyRow,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   split,
 } from "./testing/party-venue.js";
+import { setPartyGuests } from "./parties.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
@@ -2225,6 +2229,192 @@ describe("a party's receipt prints its guests and the amount per person", () => 
 
   it("prints no guests for a party seated with no count", async () => {
     expect(await receiptOfParty(null)).not.toContain("comensal");
+  });
+
+  /**
+   * A party of 4 that paid one Burger at 12,00 € in a department printing on request, whose sale
+   * holds `stored` as its receipt's guests.
+   */
+  async function partyWithStoredGuests(stored: number | null) {
+    const v = await setupPartyVenue(suite.db);
+    const printerId = await makePrinter(v.cfg);
+    await configureReceipt(v.cfg, { mode: "on_request", printerId });
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 13"), 4);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    await pay(v, tabId, "12.00", stored);
+    const deps = { db: v.db, backend: v.backend };
+    /** Each receipt printed since the last call. */
+    let seen = 0;
+    const newReceipts = async () => {
+      const jobs = await inTx(v, (tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.printerId, printerId))
+          .orderBy(sql`rowid`),
+      );
+      const all = jobs
+        .map((job) => decodeTicket(new Uint8Array(job.payload)))
+        .filter((text) => text.includes("TOTAL"));
+      const fresh = all.slice(seen);
+      seen = all.length;
+      return fresh;
+    };
+    const changeCountTo = async (guestCount: number) => {
+      const expectedPartyRevision = await revisionOf(v, partyId);
+      await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+    };
+    return {
+      newReceipts,
+      changeCountTo,
+      print: () => printSaleReceipt(deps, v.cfg, tabId, false),
+      reprint: () => reprintSale(deps, v.cfg, tabId),
+    };
+  }
+
+  it("prints the stored guests on Print receipt and every Reprint, whatever the party's count becomes", async () => {
+    const sale = await partyWithStoredGuests(5);
+    expect(await sale.newReceipts()).toEqual([]);
+
+    await sale.print();
+    const [original] = await sale.newReceipts();
+    expect(original).toContain("5 comensales · por persona");
+    expect(original).toContain("2,40 €");
+    expect(original).not.toContain("DUPLICADO");
+
+    await sale.reprint();
+    const [copy] = await sale.newReceipts();
+    expect(copy).toContain("5 comensales · por persona");
+    expect(copy).toContain("2,40 €");
+    expect(copy).toContain("DUPLICADO");
+
+    await sale.changeCountTo(6);
+    await sale.reprint();
+    const [later] = await sale.newReceipts();
+    expect(later).toContain("5 comensales · por persona");
+    expect(later).toContain("2,40 €");
+  });
+
+  it("prints no guests on Print receipt or Reprint when the stored row says none", async () => {
+    const sale = await partyWithStoredGuests(null);
+
+    await sale.print();
+    await sale.reprint();
+    const receipts = await sale.newReceipts();
+    expect(receipts).toHaveLength(2);
+    for (const receipt of receipts) expect(receipt).not.toContain("comensal");
+  });
+
+  /**
+   * A venue printing automatically, and a way to seat a party of 4 at a new table that pays one
+   * Burger at 12,00 € in cash, sending `chosen` as its guests unless it is left out.
+   */
+  async function partiesPaying() {
+    const v = await setupPartyVenue(suite.db);
+    const printerId = await makePrinter(v.cfg);
+    await configureReceipt(v.cfg, { mode: "auto", printerId });
+    const deps = { db: v.db, backend: v.backend };
+    const pays = async (table: string, ...chosen: [] | [number | null]) => {
+      const { partyId, tabId } = await seat(v, await v.table(table), 4);
+      await orderForParty(v, partyId, ["Burger"], tabId);
+      await pay(v, tabId, "12.00", ...chosen);
+      const [sale] = await inTx(v, (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, tabId)),
+      );
+      const saleId = sale!.id;
+      return {
+        partyId,
+        saleId,
+        /** Every receipt of this sale printed so far, oldest first. */
+        receipts: async () =>
+          (
+            await inTx(v, (tx) =>
+              tx
+                .select({ payload: printJobs.payload })
+                .from(printJobs)
+                .where(eq(printJobs.saleId, saleId))
+                .orderBy(sql`rowid`),
+            )
+          )
+            .map((job) => decodeTicket(new Uint8Array(job.payload)))
+            .filter((text) => text.includes("TOTAL")),
+        stored: () =>
+          inTx(v, (tx) =>
+            tx
+              .select({ guests: saleReceiptGuests.guests })
+              .from(saleReceiptGuests)
+              .where(eq(saleReceiptGuests.saleId, saleId)),
+          ),
+        guestCount: async () => (await partyRow(v, partyId)).guestCount,
+        changeCountTo: async (guestCount: number) => {
+          const expectedPartyRevision = await revisionOf(v, partyId);
+          await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+        },
+        reprint: () => reprintSale(deps, v.cfg, tabId),
+      };
+    };
+    return { v, pays };
+  }
+
+  /** A sale's `sales` and `registros_facturacion` rows, less ids, numbers, times and chain links. */
+  function filedFacts(v: { db: typeof suite.db }, saleId: string) {
+    const strip = (row: Record<string, unknown>, keys: string[]) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)));
+    const [sale] = v.db.all<Record<string, unknown>>(sql`select * from sales where id = ${saleId}`);
+    const [registro] = v.db.all<Record<string, unknown>>(
+      sql`select * from registros_facturacion where sale_id = ${saleId}`,
+    );
+    return {
+      sale: strip(sale!, ["id", "working_order_id", "invoice_number", "issued_at"]),
+      registro: strip(registro!, [
+        "id",
+        "sale_id",
+        "secuencia",
+        "num_serie_factura",
+        "fecha_hora_huso_gen_registro",
+        "creado_en",
+        "primer_registro",
+        "anterior_id_emisor_factura",
+        "anterior_num_serie_factura",
+        "anterior_fecha_expedicion_factura",
+        "anterior_huella",
+        "huella",
+      ]),
+    };
+  }
+
+  it("prints the guests chosen at payment, files the same as without them, and repeats them on a Reprint", async () => {
+    const { v, pays } = await partiesPaying();
+    const chosen = await pays("Mesa 14", 5);
+    const [original] = await chosen.receipts();
+    expect(original).toContain("5 comensales · por persona");
+    expect(original).toContain("2,40 €");
+    expect(await chosen.guestCount()).toBe(4);
+
+    const plain = await pays("Mesa 15");
+    expect(filedFacts(v, chosen.saleId)).toEqual(filedFacts(v, plain.saleId));
+
+    await chosen.changeCountTo(6);
+    await chosen.reprint();
+    const [, copy] = await chosen.receipts();
+    expect(copy).toContain("5 comensales");
+    expect(copy).toContain("DUPLICADO");
+  });
+
+  it("stores the party's count whether the field is sent as it was or not at all, and a later Reprint repeats it", async () => {
+    const { pays } = await partiesPaying();
+    const asItWas = await pays("Mesa 16", 4);
+    const unsent = await pays("Mesa 17");
+    expect(await asItWas.stored()).toEqual([{ guests: 4 }]);
+    expect(await unsent.stored()).toEqual([{ guests: 4 }]);
+
+    for (const sale of [asItWas, unsent]) {
+      await sale.changeCountTo(6);
+      await sale.reprint();
+      const [, copy] = await sale.receipts();
+      expect(copy).toContain("4 comensales · por persona");
+      expect(copy).toContain("DUPLICADO");
+    }
   });
 });
 

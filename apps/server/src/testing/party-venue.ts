@@ -292,12 +292,18 @@ export async function floorRow(v: Pick<PartyVenue, "db" | "cfg">, tableId: strin
   return rows.find((row) => row.id === tableId)!;
 }
 
-/** Pays the bill in cash in one go. */
-export async function pay(v: PartyVenue, billId: string, amount: string): Promise<void> {
+/** Pays the bill in cash in one go, sending `guests` when one is given. */
+export async function pay(
+  v: PartyVenue,
+  billId: string,
+  amount: string,
+  ...guests: [] | [number | null]
+): Promise<void> {
   await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
     id: billId,
     lines: [],
     tender: { method: "cash", amount },
+    ...(guests.length === 0 ? {} : { guests: guests[0] }),
   });
 }
 

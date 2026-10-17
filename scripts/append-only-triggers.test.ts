@@ -52,6 +52,7 @@ const EXPECTED = [
   "receipt_reprints",
   "registros_facturacion",
   "sale_lines",
+  "sale_receipt_guests",
   "sale_receipt_headers",
   "sale_settlements",
   "sale_substitutions",
