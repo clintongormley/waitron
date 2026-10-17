@@ -957,6 +957,67 @@ describe("a line's answers of the wrong shape", () => {
 });
 
 describe("source-backed draft HTTP boundary", () => {
+  it("submits stored source IDs with fresh dishes through HTTP and replays the same result", async () => {
+    const party = await seated();
+    const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const sourceId = randomUUID(),
+      referenceId = randomUUID();
+    await inTx(venue, async (tx) => {
+      await tx.insert(workingOrderLines).values({
+        id: sourceId,
+        workingOrderId: party.tabId,
+        lineNo: 1,
+        name: "Frozen discounted dish",
+        descriptions: { [venue.cfg.locale]: "Frozen" },
+        quantity: 1000,
+        unitPriceGross: 125,
+        listUnitPriceGross: 250,
+        lineTotal: 125,
+        vatClass: "general",
+      });
+      await tx
+        .insert(orderDraftRecalledLines)
+        .values({ id: referenceId, draftId: draft.id, sourceLineId: sourceId, position: 2 });
+    });
+    const body = {
+      ...(await submitBody(party.partyId, draft)),
+      groups: [{ release: "fire", lineIds: [referenceId, draft.lines[0]!.id] }],
+    };
+    const response = await ana(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
+      body,
+    );
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({
+      tabId: party.tabId,
+      draft: null,
+      groups: [{ state: "fired", lineIds: expect.arrayContaining([sourceId]) }],
+    });
+    const rows = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, party.tabId)),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((line) => line.id === sourceId)).toMatchObject({
+      unitPriceGross: 125,
+      listUnitPriceGross: 250,
+      lineTotal: 125,
+    });
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select()
+          .from(orderDraftRecalledLines)
+          .where(eq(orderDraftRecalledLines.draftId, draft.id)),
+      ),
+    ).toEqual([]);
+    const beforeReplay = await snapshot();
+    expect(
+      await ana("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, body),
+    ).toEqual(response);
+    expect(await snapshot()).toEqual(beforeReplay);
+  });
+
   it("refuses source routing preview until its stored-family route is implemented", async () => {
     const party = await seated();
     const draft = await newDraft(ana, party.partyId, [dish("Caña")]);

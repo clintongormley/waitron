@@ -520,13 +520,6 @@ export interface SubmitDraftInput extends PartyCommandArgs {
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
 export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
 
-/**
- * Send the named lines of the operator's own draft as groups, through {@link placeGroups}, so each
- * line is credited to the operator and each group submitted by them. The sent lines leave the
- * draft and the rest keep their positions; the draft is `submitted` once it has no line left. A
- * retry under the same submission id answers the first result (D8), from the record of `partyId`,
- * where a draft of another party is not found.
- */
 export async function submitDraft(
   tx: Transaction,
   cfg: OriginConfig,
@@ -565,31 +558,53 @@ export async function submitDraft(
         if (!known.has(lineId) || named.has(lineId)) throw invalid("groups");
         named.add(lineId);
       }
-      if (lines.some((line) => named.has(line.id) && isRecalled(line))) throw invalid("groups");
+      const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+      const assigned = new Set(
+        allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
+      );
+      const freshGroups = groups.map(({ lineIds }) => {
+        const selected = new Set(lineIds);
+        return normaliseDraftLines(
+          lines
+            .filter(isFresh)
+            .filter((line) => selected.has(line.id))
+            .map((line) => ({
+              ...line,
+              noMerge: assigned.has(line.id),
+              slot: 0,
+              joinGroupId: null,
+              afterGroupId: null,
+            })),
+        );
+      });
+      const sources = lines.filter(isRecalled).filter((line) => named.has(line.id));
+      await tx.delete(orderDraftRecalledLines).where(
+        inArray(
+          orderDraftRecalledLines.id,
+          sources.map((line) => line.id),
+        ),
+      );
       const placed = await placeGroups(
         tx,
         cfg,
         partyId,
         {
-          groups: groups.map(({ lineIds, release, joinGroupId, afterGroupId }) => {
+          groups: groups.map(({ lineIds, release, joinGroupId, afterGroupId }, index) => {
             const inGroup = new Set(lineIds);
             return {
               release,
               joinGroupId,
               afterGroupId,
-              lines: lines
-                .filter(isFresh)
+              existingLineIds: sources
                 .filter((line) => inGroup.has(line.id))
-                .map(groupLine),
+                .map((line) => line.sourceLineId),
+              lines: freshGroups[index]!.map(groupLine),
             };
           }),
           joinGroupId,
           operatorId,
           billId,
-          sourceDraftLineIds: groups.flatMap(({ lineIds }) => {
-            const selected = new Set(lineIds);
-            return lines.filter((line) => selected.has(line.id)).map((line) => line.id);
-          }),
+          sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
           revisionMoved: true,
         },
         attendance === undefined ? undefined : { recorder: attendance, at },

@@ -2283,3 +2283,22 @@ describe("per-group HTTP destinations direct", () => {
     },
   );
 });
+
+it("direct group HTTP cannot claim an existing bill line using the internal resend field", async () => {
+  const party = await seated();
+  const existing = await submit(party.partyId, [{ lines: [dish("Caña")], release: "hold" }]);
+  const first = existing.json as unknown as SubmitAnswer;
+  const originalId = first.groups[0]!.lineIds[0]!;
+  const response = await call("POST", `/api/parties/${party.partyId}/groups`, {
+    submissionId: randomUUID(),
+    expectedPartyRevision: await revisionOf(party.partyId),
+    groups: [{ release: "fire", lines: [dish("Tarta")], existingLineIds: [originalId] }],
+  });
+  expect(response.status).toBe(200);
+  const second = response.json as unknown as SubmitAnswer;
+  expect(second.groups[0]!.lineIds).toHaveLength(1);
+  expect(second.groups[0]!.lineIds).not.toContain(originalId);
+  expect((await dishLines(party.tabId)).find((line) => line.id === originalId)!.groupId).toBe(
+    first.groups[0]!.id,
+  );
+});

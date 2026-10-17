@@ -37,6 +37,7 @@ import {
   advanceSet,
   bumpRevision,
   fireLines,
+  fireableLineColumns,
   fireOrderLines,
   insertTabRound,
   isReleased,
@@ -148,10 +149,8 @@ export async function submitGroups(
   );
 }
 
-export type PlaceGroupsInput = Pick<
-  SubmitGroupsInput,
-  "groups" | "joinGroupId" | "operatorId" | "billId"
-> & {
+export type PlaceGroupsInput = Pick<SubmitGroupsInput, "joinGroupId" | "operatorId" | "billId"> & {
+  groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** The command has already moved the party's revision on, so making a main bill does not. */
   revisionMoved?: boolean;
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
@@ -208,16 +207,15 @@ export async function placeGroups(
       release: group.release === "fire",
     })),
   );
-  // A first group with no lines prices nothing, as the bill is checked before the empty basket.
   const tabId = await resolveOrderBill(tx, cfg, partyId, input);
-  const round = await priceTabRound(
-    tx,
-    cfg,
-    tabId,
-    input.groups[0]!.lines.length === 0 ? [] : lines,
-    "checked",
-  );
-  if (input.groups.some((group) => group.lines.length === 0)) {
+  const empty = (group: PlaceGroupsInput["groups"][number]) =>
+    group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
+  // Recalled families already carry their charge and must bypass fresh pricing.
+  const round =
+    lines.length === 0 && !groups.some(empty)
+      ? null
+      : await priceTabRound(tx, cfg, tabId, empty(groups[0]!) ? [] : lines, "checked");
+  if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});
   }
   const groupIds: string[] = [];
@@ -240,13 +238,32 @@ export async function placeGroups(
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
   const groupOfRow = new Map<string, string>();
   let parents = 0;
-  const rows = round.rows.map((row) => {
+  const rows = (round?.rows ?? []).map((row) => {
     const groupId =
       row.parentLineId == null ? groupOfLine[parents++]! : groupOfRow.get(row.parentLineId)!;
     groupOfRow.set(row.id!, groupId);
     return { ...row, groupId, creditedTo: operatorId };
   });
-  const inserted = await insertTabRound(tx, cfg, round, rows);
+  const inserted = round === null ? [] : await insertTabRound(tx, cfg, round, rows);
+  for (const [index, group] of groups.entries()) {
+    const ids = group.existingLineIds ?? [];
+    if (ids.length === 0) continue;
+    const moved = await tx
+      .update(workingOrderLines)
+      .set({ groupId: groupIds[index]! })
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, tabId),
+          or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)),
+        ),
+      )
+      .returning({
+        ...fireableLineColumns,
+        lineNo: workingOrderLines.lineNo,
+        groupId: workingOrderLines.groupId,
+      });
+    inserted.push(...moved);
+  }
   if (input.sourceDraftLineIds !== undefined) {
     const draftIds = input.sourceDraftLineIds;
     await VENUE_SERVICE.moveAllergyDraftTicks(

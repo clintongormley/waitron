@@ -38,6 +38,7 @@ import {
   setProductVariants,
   updateMenuItem,
   updateProduct,
+  units,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
@@ -4545,14 +4546,288 @@ describe("source-backed draft foundations", () => {
     });
   });
 
-  it("refuses source submission until the recall resend command can preserve the bill family", async () => {
+  it.each(["hold", "fire"] as const)(
+    "resends a source-only %s group without repricing or duplicating its frozen bill family",
+    async (release) => {
+      const v = await setupVenue();
+      const { partyId, tabId } = await seated(v);
+      const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId, SAM);
+      const before = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+      const pricing = vi.spyOn(orderWrites, "priceTabRound");
+      try {
+        const sent = submit(v, partyId, draft, SAM, [{ lineIds: [id], release }]);
+        await expect(sent).resolves.toMatchObject({
+          tabId,
+          groups: [{ state: release === "hold" ? "held" : "fired", lineIds: [parentId] }],
+          draft: { id: draft.id, revision: 1 },
+        });
+        const answer = await sent;
+        expect(pricing).not.toHaveBeenCalled();
+        expect(answer.draft!.lines.map((line) => line.id)).toEqual(lineIds(draft));
+        expect(await db.select().from(orderDraftRecalledLines)).toEqual([]);
+        const after = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+        expect(after.map((line) => ({ ...line, groupId: null, sentAt: null }))).toEqual(
+          before.map((line) => ({ ...line, groupId: null, sentAt: null })),
+        );
+        expect(after.map((line) => line.groupId)).toEqual([
+          answer.groups[0]!.id,
+          answer.groups[0]!.id,
+        ]);
+        expect(after.map((line) => line.id)).toEqual([parentId, extraId]);
+        const tickets = await db.select().from(ticketItems);
+        expect(tickets.map((line) => line.workingOrderLineId)).toContain(parentId);
+        expect(tickets.every((line) => (line.firedAt === null) === (release === "hold"))).toBe(
+          true,
+        );
+      } finally {
+        pricing.mockRestore();
+      }
+    },
+  );
+
+  it("resends a mixed fresh/source destination once, keeps original allergy identity and replays without writes", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    const allergy = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        { answer: "allergies", guests: [{ who: "Window", allergens: { milk: {} } }] },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: allergy.guests[0]!.id, workingLineId: parentId },
+        { guestId: allergy.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+      ]),
+    );
+    const input = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(partyId),
+      operatorId: ALEX,
+      draftRevision: draft.revision,
+      groups: [{ lineIds: [id, ...lineIds(draft)], release: "fire" as const }],
+    };
+    const sending = inTx((tx) => submitDraft(tx, v.cfg, partyId, draft.id, input));
+    await expect(sending).resolves.toMatchObject({
+      tabId,
+      draft: null,
+      groups: [{ state: "fired" }],
+    });
+    const sent = await sending;
+    const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+    expect(rows).toHaveLength(4);
+    expect(rows.map((line) => line.id).slice(0, 2)).toEqual([parentId, extraId]);
+    expect(rows.every((line) => line.groupId === sent.groups[0]!.id)).toBe(true);
+    expect(sent.groups[0]!.lineIds).toHaveLength(3);
+    expect(await db.select().from(orderDraftRecalledLines)).toEqual([]);
+    expect(await storedLines(draft.id)).toEqual([]);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(
+      expect.arrayContaining([
+        { guestId: allergy.guests[0]!.id, draftLineId: null, workingLineId: parentId },
+        {
+          guestId: allergy.guests[0]!.id,
+          draftLineId: null,
+          workingLineId: rows.find((line) => line.productId === v.productId.beer)!.id,
+        },
+      ]),
+    );
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toHaveLength(2);
+    const beforeReplay = await everything();
+    expect(await inTx((tx) => submitDraft(tx, v.cfg, partyId, draft.id, input))).toEqual(sent);
+    expect(await everything()).toEqual(beforeReplay);
+  });
+
+  it("source resend can join a held group on another bill, retaining the old bill and held origin", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    const otherBill = randomUUID();
+    await inTx((tx) =>
+      orderWrites.createOpenOrder(tx, v.cfg, otherBill, [], "Bill 2", {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      }),
+    );
+    const existing = await inTx(async (tx) =>
+      submitGroups(tx, v.cfg, partyId, {
+        billId: otherBill,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: SAM,
+        groups: [{ lines: [{ menuItemId: v.offer("beer"), quantity: "1" }], release: "hold" }],
+      }),
+    );
+    const sending = inTx(async (tx) =>
+      submitDraft(tx, v.cfg, partyId, draft.id, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: ALEX,
+        draftRevision: draft.revision,
+        groups: [{ lineIds: [id], release: "hold", joinGroupId: existing.groups[0]!.id }],
+      }),
+    );
+    await expect(sending).resolves.toMatchObject({
+      tabId,
+      groups: [{ id: existing.groups[0]!.id, state: "held", displayNumber: 1 }],
+    });
+    expect(
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.id, parentId)),
+    ).toMatchObject([
+      {
+        workingOrderId: tabId,
+        groupId: existing.groups[0]!.id,
+        unitPriceGross: 200,
+        lineTotal: 1000,
+      },
+    ]);
+    expect(await db.select().from(orderGroups)).toHaveLength(1);
+  });
+
+  it("a later routing refusal rolls back source release, fresh inserts and both draft tables", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id } = await reserved(v, partyId, tabId);
+    const fire = orderWrites.fireLines;
+    let calls = 0;
+    const probe = vi.spyOn(orderWrites, "fireLines").mockImplementation(async (...args) => {
+      const result = await fire(...args);
+      if (++calls === 2) throw new AppError("station.no_default", { locationId: v.cfg.locationId });
+      return result;
+    });
+    try {
+      await refusedWritingNothing(
+        () =>
+          submit(v, partyId, draft, ALEX, [
+            { lineIds: [id], release: "hold" },
+            { lineIds: lineIds(draft), release: "fire" },
+          ]),
+        { code: "station.no_default", params: { locationId: v.cfg.locationId } },
+      );
+      expect(calls).toBe(2);
+    } finally {
+      probe.mockRestore();
+    }
+  });
+
+  it("resends two identical frozen families without combining their bill identities", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const first = await reserved(v, partyId, tabId);
+    const second = await family(v, tabId, 3);
+    const secondId = randomUUID();
+    await inTx((tx) =>
+      tx
+        .insert(orderDraftRecalledLines)
+        .values({
+          id: secondId,
+          draftId: first.draft.id,
+          sourceLineId: second.parentId,
+          position: 4,
+        })
+        .then(() => undefined),
+    );
+    const sent = await submit(v, partyId, first.draft, ALEX, [
+      { lineIds: [first.id, secondId], release: "hold" },
+    ]);
+    expect(sent.groups[0]!.lineIds).toEqual([first.parentId, second.parentId]);
+    const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+    expect(rows.map((line) => [line.id, line.lineTotal])).toEqual([
+      [first.parentId, 1000],
+      [first.extraId, 250],
+      [second.parentId, 1000],
+      [second.extraId, 250],
+    ]);
+    expect(await db.select().from(orderDraftRecalledLines)).toEqual([]);
+  });
+
+  it("a missing source resend destination retains every reservation and original bill row", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const { draft, id } = await reserved(v, partyId, tabId);
     await refusedWritingNothing(
-      () => submit(v, partyId, draft, ALEX, [{ lineIds: [id], release: "hold" }]),
-      { code: "management.request_invalid", params: { field: "groups" } },
+      () =>
+        inTx(async (tx) =>
+          submitDraft(tx, v.cfg, partyId, draft.id, {
+            submissionId: randomUUID(),
+            expectedPartyRevision: await partyRevision(partyId),
+            operatorId: ALEX,
+            draftRevision: draft.revision,
+            groups: [
+              { lineIds: [id, ...lineIds(draft)], release: "hold", joinGroupId: randomUUID() },
+            ],
+          }),
+        ),
+      { code: "group.not_found" },
     );
+  });
+
+  it("partial source send leaves the other source, fresh row and frozen family unsent", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const first = await reserved(v, partyId, tabId);
+    const second = await family(v, tabId, 3);
+    const secondId = randomUUID();
+    await inTx(async (tx) => {
+      await tx.insert(orderDraftRecalledLines).values({
+        id: secondId,
+        draftId: first.draft.id,
+        sourceLineId: second.parentId,
+        position: 4,
+      });
+    });
+    const sent = await submit(v, partyId, first.draft, ALEX, [
+      { lineIds: [first.id, first.draft.lines[0]!.id], release: "hold" },
+    ]);
+    expect(sent.draft!.lines.map((line) => line.id)).toEqual([first.draft.lines[1]!.id, secondId]);
+    expect(sent.draft!.lines[1]).toMatchObject({
+      sourceLineId: second.parentId,
+      source: { netAmount: "12.50" },
+    });
+    expect(await db.select().from(orderDraftRecalledLines)).toMatchObject([
+      { id: secondId, sourceLineId: second.parentId },
+    ]);
+    const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+    expect(
+      rows.filter((line) => line.id === second.parentId || line.parentLineId === second.parentId),
+    ).toMatchObject([
+      { id: second.parentId, groupId: null, lineTotal: 1000 },
+      { id: second.extraId, groupId: null, lineTotal: 250 },
+    ]);
+    expect(
+      (await db.select().from(ticketItems)).some(
+        (line) => line.workingOrderLineId === second.parentId,
+      ),
+    ).toBe(false);
+  });
+
+  it("releases a sent reservation so the same bill identity can be recalled and sent again", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    const first = await submit(v, partyId, draft, ALEX, [{ lineIds: [id], release: "hold" }]);
+    const nextId = randomUUID();
+    await inTx(async (tx) => {
+      await tx.delete(ticketItems).where(eq(ticketItems.workingOrderId, tabId));
+      await tx
+        .insert(orderDraftRecalledLines)
+        .values({ id: nextId, draftId: draft.id, sourceLineId: parentId, position: 4 });
+    });
+    const second = await submit(v, partyId, first.draft!, ALEX, [
+      { lineIds: [nextId], release: "fire" },
+    ]);
+    expect(second.groups[0]!.lineIds).toEqual([parentId]);
+    expect(second.groups[0]!.displayNumber).toBe(2);
+    const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+    expect(rows.map((line) => [line.id, line.lineTotal])).toEqual([
+      [parentId, 1000],
+      [extraId, 250],
+    ]);
+    expect(await db.select().from(orderDraftRecalledLines)).toEqual([]);
   });
 
   it("keeps a source-only draft in the floor count and allows placement saves without fresh offers", async () => {
@@ -4701,4 +4976,111 @@ describe("source-backed draft foundations", () => {
     expect(taken.lines[0]).toMatchObject({ id, sourceLineId: parentId, slot: 0 });
     expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(ticks);
   });
+});
+
+describe("send-time fresh combining", () => {
+  it("combines whole split lines per chosen destination, ignoring old slots and noMerge", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { noMerge: true, slot: 1 }),
+      item(v, "beer", { noMerge: true, slot: 2, quantity: "2" }),
+      item(v, "beer", { noMerge: true, slot: 2 }),
+      item(v, "beer", { noMerge: true, slot: 3 }),
+    ]);
+    const sent = await submit(v, partyId, draft, ALEX, [
+      { lineIds: lineIds(draft).slice(0, 2), release: "fire" },
+      { lineIds: lineIds(draft).slice(2), release: "hold" },
+    ]);
+    expect(
+      (await tabLines(partyId)).map(({ quantity, groupId }) => ({ quantity, groupId })),
+    ).toEqual([
+      { quantity: 3000, groupId: sent.groups[0]!.id },
+      { quantity: 2000, groupId: sent.groups[1]!.id },
+    ]);
+    expect(await db.select().from(ticketItems)).toHaveLength(2);
+    expect(sent.draft).toBeNull();
+  });
+
+  it("combines only unassigned rows and moves each guest's tick to its separate dish", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(
+      v,
+      partyId,
+      ALEX,
+      null,
+      0,
+      [0, 1, 2, 3].map(() => item(v, "beer", { noMerge: true })),
+    );
+    const allergy = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [
+            { who: "Window", allergens: { milk: {} } },
+            { who: "Door", allergens: { eggs: {} } },
+          ],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: allergy.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+        { guestId: allergy.guests[1]!.id, draftLineId: draft.lines[1]!.id },
+      ]),
+    );
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
+    expect(rows.map((line) => line.quantity)).toEqual([1000, 1000, 2000]);
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(
+      expect.arrayContaining([
+        { guestId: allergy.guests[0]!.id, draftLineId: null, workingLineId: rows[0]!.id },
+        { guestId: allergy.guests[1]!.id, draftLineId: null, workingLineId: rows[1]!.id },
+      ]),
+    );
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toHaveLength(2);
+    expect(await storedLines(draft.id)).toEqual([]);
+  });
+
+  it.each(["note", "options", "extras", "course", "fraction"] as const)(
+    "keeps split dishes separate when their %s differs",
+    async (difference) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      if (difference === "fraction") {
+        await inTx(async (tx) => {
+          const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
+          await updateProduct(tx, v.productId.burger, { unitId: kg!.id });
+          await publishWorkingMenu(tx, v.menuId);
+        });
+      }
+      const first = item(v, "burger", { options: [v.rare], noMerge: true });
+      const changed = {
+        note: { note: "No salt" },
+        options: { options: [v.well] },
+        extras: {
+          extras: [
+            { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+          ],
+        },
+        course: { courseId: v.courseId },
+        fraction: { quantity: "0.500" },
+      }[difference];
+      const draft = await save(v, partyId, ALEX, null, 0, [first, { ...first, ...changed }]);
+      await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]);
+      const parents = (await db.select().from(workingOrderLines)).filter(
+        (line) => line.parentLineId === null,
+      );
+      expect(parents).toHaveLength(2);
+      expect(parents.map((line) => line.quantity)).toEqual([
+        1000,
+        difference === "fraction" ? 500 : 1000,
+      ]);
+    },
+  );
 });
