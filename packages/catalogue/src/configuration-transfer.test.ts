@@ -455,3 +455,68 @@ describe("validateCatalogueConfiguration: Inactive products stay off menus", () 
     ).not.toThrow();
   });
 });
+
+describe("explicit unit staff identity on configuration import", () => {
+  const unit = {
+    id: "weight",
+    staff_name: "Kilogramo",
+    staff_abbreviation: "kg",
+    name: {},
+    abbreviation: {},
+    precision: 3,
+    hardware_unit: "kg",
+    seed_key: "kg",
+  };
+  it("accepts blank translation maps without mutating retained disabled translations", () => {
+    const rows = {
+      units: [unit, { ...unit, id: "other", name: { es: "Peso" }, abbreviation: { es: "p" } }],
+    };
+    const before = structuredClone(rows);
+    expect(() => validateCatalogueConfiguration(rows)).not.toThrow();
+    expect(rows).toEqual(before);
+  });
+  it("validates the raw JSON strings carried by a configuration export without rewriting them", () => {
+    const row = { ...unit, name: '{"de":"Gewicht","en":"Weight"}', abbreviation: "{}" };
+    const before = structuredClone(row);
+    expect(() => validateCatalogueConfiguration({ units: [row] })).not.toThrow();
+    expect(row).toEqual(before);
+  });
+  for (const field of ["staff_name", "staff_abbreviation"] as const) {
+    it.each([undefined, null, "", "  ", 7, "é".repeat(2049)])(
+      `refuses imported ${field} %j`,
+      (value) => {
+        expect(() =>
+          validateCatalogueConfiguration({ units: [{ ...unit, [field]: value }] }),
+        ).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `units.${field}` },
+          }),
+        );
+      },
+    );
+  }
+  for (const field of ["name", "abbreviation"] as const) {
+    it.each([null, [], { en: 7 }, { EN: "Weight" }])(
+      `refuses malformed imported ${field} %j`,
+      (value) => {
+        expect(() =>
+          validateCatalogueConfiguration({ units: [{ ...unit, [field]: value }] }),
+        ).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `units.${field}` },
+          }),
+        );
+      },
+    );
+  }
+  it.each([-1, 4, 1.5, "3"])("refuses imported precision %j", (precision) => {
+    expect(() => validateCatalogueConfiguration({ units: [{ ...unit, precision }] })).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "units.precision" },
+      }),
+    );
+  });
+});

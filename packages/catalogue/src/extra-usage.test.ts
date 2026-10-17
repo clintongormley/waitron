@@ -48,7 +48,13 @@ it("includes a unit's direct extra and an inheriting variant with their offered 
   const { unitId, variantListId } = await run(async (tx) => {
     const unit = await createUnit(
       tx,
-      { name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
       "en",
     );
     await assignProductUnit(tx, f.extraLemon, unit.id);
@@ -92,7 +98,13 @@ it("still warns for a variant with a retained unit row when its parent's unit ch
   const listId = await run(async (tx) => {
     const unit = await createUnit(
       tx,
-      { name: { en: "kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
       "en",
     );
     await assignProductUnit(tx, f.lemonade, unit.id);

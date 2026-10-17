@@ -409,10 +409,37 @@ describe("recordKitchenNotices", () => {
     const stored = await db
       .insert(units)
       .values([
-        { seedKey: "each", name: { en: "each" }, abbreviation: { en: "ea" }, precision: 0 },
-        { seedKey: "kg", name: { en: "kg" }, abbreviation: { en: "kg" }, precision: 3 },
-        { seedKey: "g", name: { en: "gram" }, abbreviation: { en: "g" }, precision: 0 },
-        { name: { en: "Portion" }, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          seedKey: "each",
+          name: { en: "each" },
+          abbreviation: { en: "ea" },
+          precision: 0,
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          seedKey: "kg",
+          name: { en: "kg" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          seedKey: "g",
+          name: { en: "gram" },
+          abbreviation: { en: "g" },
+          precision: 0,
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Portion" },
+          abbreviation: EACH_UNIT.abbreviation,
+          precision: 0,
+        },
       ])
       .returning({ id: units.id, abbreviation: units.abbreviation, precision: units.precision });
     const [seededEach, kg, gram, lookalike] = stored;

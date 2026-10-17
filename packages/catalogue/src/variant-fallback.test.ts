@@ -86,12 +86,24 @@ beforeEach(async () => {
     const bottles = await createCategory(tx, { name: "Bottles" });
     const glass = await createUnit(
       tx,
-      { name: { en: "glass" }, precision: 0, abbreviation: { en: "gl" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "glass" },
+        precision: 0,
+        abbreviation: { en: "gl" },
+      },
       "en",
     );
     const largeGlass = await createUnit(
       tx,
-      { name: { en: "large glass" }, precision: 0, abbreviation: { en: "lg" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "large glass" },
+        precision: 0,
+        abbreviation: { en: "lg" },
+      },
       "en",
     );
     const [course, ownCourse] = await tx

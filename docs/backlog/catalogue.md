@@ -840,7 +840,10 @@ closes both decisions and authorizes planning/build. The [executable plan](../su
 covers all five points and Use fix in one complete future production PR. **A682 and Use fix remain
 OPEN** for implementation and validation. Fresh-context plan review is complete, with field-specific
 staff fallback and the additive-upgrade check made explicit. Implement in one production PR after
-the relevant G/C/E handoffs. The original points and earlier checkpoint below remain historical.
+the relevant G/C/E handoffs. The owner also approved the populated-unit upgrade reset declaration
+for the new required staff fields. Existing venue folders must be reset/reseeded before using the
+completed change; that approval does not authorise executing a venue reset or the A760 squash.
+The original points and earlier checkpoint below remain historical.
 
 **Historical checkpoint; see the [2026-10-17 closure](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-closure-unit-a-and-spanish-a).**
 **Current checkpoint, 2026-10-17, after the unit answer:** unit option A is approved: required staff

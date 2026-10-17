@@ -214,9 +214,13 @@ describe("what counts as still there", () => {
       const punt = await optionList(tx, "Punt", null);
       const poc = await optionLabel(tx, punt, "Poc", {});
       await extraList(tx, "Salses", null);
-      await tx
-        .insert(units)
-        .values({ name: { ca: "CLIENT-CA Ració" }, abbreviation: { ca: "r." }, precision: 0 });
+      await tx.insert(units).values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { ca: "CLIENT-CA Ració" },
+        abbreviation: { ca: "r." },
+        precision: 0,
+      });
       const bar = await createCatalogue(tx, { name: "STAFF Bar", names: { ca: "CLIENT-CA Bar" } });
       const barRoot = await rootOf(tx, bar.id);
       await tx.update(sections).set({ names: {} }).where(eq(sections.id, barRoot));
@@ -345,6 +349,8 @@ describe("the gaps a run starts from", () => {
       const [portion] = await tx
         .insert(units)
         .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
           abbreviation: { ca: "r." },
           precision: 0,
@@ -505,6 +511,8 @@ describe("collecting what is missing", () => {
       const [racio] = await tx
         .insert(units)
         .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { ca: "CLIENT-CA Ració", es: "CLIENT-ES Ración" },
           abbreviation: { ca: "r." },
           precision: 0,

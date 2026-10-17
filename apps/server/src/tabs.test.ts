@@ -2956,8 +2956,21 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     const [gram, lookalike] = await db
       .insert(units)
       .values([
-        { seedKey: "g", name: { es: "gramo" }, abbreviation: { es: "g" }, precision: 0 },
-        { name: { es: "Ración" }, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          seedKey: "g",
+          name: { es: "gramo" },
+          abbreviation: { es: "g" },
+          precision: 0,
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "Ración" },
+          abbreviation: EACH_UNIT.abbreviation,
+          precision: 0,
+        },
       ])
       .returning({ id: units.id });
     const offerFor = await asApp(cfg, async (tx) => {

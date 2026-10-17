@@ -299,6 +299,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",
     es: "Debes traducir algunos productos, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
   },
+  "unit.invalid": {
+    en: "Enter the unit's staff name and abbreviation.",
+    es: "Introduce el nombre y la abreviatura de la unidad para el personal.",
+  },
   "unit.precision_invalid": {
     en: "Choose between 0 and 3 decimal places.",
     es: "Elige entre 0 y 3 decimales.",

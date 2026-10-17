@@ -193,12 +193,28 @@ describe("catalogue operations", () => {
       eachUnitId = (
         await createUnit(
           tx,
-          { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "each" },
+            precision: 0,
+            abbreviation: { en: "u" },
+          },
           "en",
         )
       ).id;
       kgUnitId = (
-        await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en")
+        await createUnit(
+          tx,
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "kg" },
+            precision: 3,
+            abbreviation: { en: "u" },
+          },
+          "en",
+        )
       ).id;
       await tx.execute(
         sql`update units
@@ -270,6 +286,8 @@ describe("catalogue operations", () => {
       expect(products.map((p) => p.id).sort()).toEqual([ham.id, water.id].sort());
       const seenHam = products.find((p) => p.id === ham.id)!;
       expect(seenHam.unit).toEqual({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: kgUnitId,
         name: { en: "kg" },
         precision: 3,
@@ -561,6 +579,8 @@ describe("catalogue operations", () => {
         where product_id = ${ham.id}`);
       expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
       expect(ham.unit).toEqual({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: kgUnitId,
         name: { en: "kg" },
         precision: 3,
@@ -1713,6 +1733,8 @@ describe("catalogue operations", () => {
       name: "water",
       customerName: null,
       unit: {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         id: eachUnitId,
         name: { en: "each" },
         precision: 0,

@@ -1076,8 +1076,17 @@ describe("a dish sold by the piece prints no unit", () => {
     const [gram, lookAlike] = await tx
       .insert(units)
       .values([
-        { name: grams, abbreviation: grams, precision: 0, hardwareUnit: "g" },
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: grams,
+          abbreviation: grams,
+          precision: 0,
+          hardwareUnit: "g",
+        },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "piece", es: "pieza", ca: "peça", gl: "peza", eu: "pieza" },
           abbreviation: EACH_UNIT.abbreviation,
           precision: 0,
@@ -1322,6 +1331,8 @@ describe("dish extras on kitchen tickets", () => {
       const [gram] = await tx
         .insert(units)
         .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { ca: "CA gram", es: "ES gramo" },
           abbreviation: { ca: "CA-g", es: "ES-g" },
           precision: 0,

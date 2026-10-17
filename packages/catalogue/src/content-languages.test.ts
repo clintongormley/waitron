@@ -38,10 +38,17 @@ describe("site content languages", () => {
   it("requires a variant's customer name in a new default language but leaves the product's optional", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }, "en");
       const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
-        { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each", fr: "unité" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       // The product has only a staff name (no customer name), so it never gaps; the variant carries a
@@ -143,7 +150,13 @@ describe("site content languages", () => {
       const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       const base = {
@@ -528,9 +541,13 @@ describe("site content languages", () => {
   it("refuses to change the default while a unit lacks its translation", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      await tx
-        .insert(units)
-        .values({ name: { en: "cup" }, abbreviation: { en: "c" }, precision: 0 });
+      await tx.insert(units).values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "cup" },
+        abbreviation: { en: "c" },
+        precision: 0,
+      });
     });
     await expect(
       withTransaction(suite.db, (tx) =>

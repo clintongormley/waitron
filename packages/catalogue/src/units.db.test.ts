@@ -56,7 +56,13 @@ it("rolls back unit creation and editing with the caller's transaction", async (
     app(async (tx) => {
       await createUnit(
         tx,
-        { name: { en: "crate" }, precision: 0, abbreviation: { en: "u" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "crate" },
+          precision: 0,
+          abbreviation: { en: "u" },
+        },
         "en",
       );
       throw new Error("rollback create");
@@ -65,7 +71,17 @@ it("rolls back unit creation and editing with the caller's transaction", async (
   expect(await app((tx) => listUnits(tx))).toEqual([]);
 
   const unit = await app((tx) =>
-    createUnit(tx, { name: { en: "box" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "box" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   await expect(
     app(async (tx) => {
@@ -80,7 +96,17 @@ it("serializes assignment against deletion so the committed product reference wi
   await seedTenant(suite.db);
   const productId = await product();
   const unit = await app((tx) =>
-    createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "portion" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
 
   const [assignedResult, deletedResult] = await racePair(
@@ -100,7 +126,17 @@ it("reports unit.not_found when deletion commits before a concurrent assignment"
   await seedTenant(suite.db);
   const productId = await product();
   const unit = await app((tx) =>
-    createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "portion" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
 
   const [deletedResult, assignedResult] = await racePair(
@@ -122,9 +158,39 @@ it("skips a product another manager moved off the source unit while the selectio
   await seedTenant(suite.db);
   const productId = await product();
   const [source, other, target] = await app(async (tx) => [
-    await createUnit(tx, { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } }, "en"),
-    await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
-    await createUnit(tx, { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "litre" },
+        precision: 2,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   ]);
   await app((tx) => assignProductUnit(tx, productId, source!.id));
 
@@ -144,8 +210,28 @@ it("two bulk reassignments listing the same products in opposite orders both com
   const first = await product("11111111-1111-4111-8111-111111111111");
   const second = await product("22222222-2222-4222-8222-222222222222");
   const [source, target] = await app(async (tx) => [
-    await createUnit(tx, { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } }, "en"),
-    await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   ]);
   await app(async (tx) => {
     await assignProductUnit(tx, first, source!.id);
@@ -170,7 +256,17 @@ it("reassigning to null clears the products' unit (they become Each)", async () 
   const p1 = await product();
   const p2 = await product();
   const sourceUnit = await app((tx) =>
-    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   await app(async (tx) => {
     await assignProductUnit(tx, p1, sourceUnit.id);
@@ -188,10 +284,30 @@ it("reassigning to null returns the products to each-priced and leaves products 
   const onSource = await product();
   const onOther = await product();
   const sourceUnit = await app((tx) =>
-    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   const otherUnit = await app((tx) =>
-    createUnit(tx, { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "litre" },
+        precision: 2,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   // Put both products in the real "sold by weight" state: a unit row plus pricing_unit = 'weight'.
   await app(async (tx) => {
@@ -235,7 +351,17 @@ async function variantOf(parent: string): Promise<string> {
 
 const kg = () =>
   app((tx) =>
-    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
 
 it("reassigning to null skips a variant's stored unit row, as it skips an id not on the unit", async () => {
@@ -307,7 +433,17 @@ describe("a variant's stored unit row, from before a variant always took its pro
     const variant = await variantOf(parent);
     const source = await kg();
     const target = await app((tx) =>
-      createUnit(tx, { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } }, "en"),
+      createUnit(
+        tx,
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "litre" },
+          precision: 2,
+          abbreviation: { en: "u" },
+        },
+        "en",
+      ),
     );
     await app((tx) => assignProductUnit(tx, parent, source.id));
     await plantStoredUnit(suite.db, variant, source.id, "weight");
@@ -380,10 +516,30 @@ it("retains an archived product's unit and refuses deletion or reassignment with
   await seedTenant(suite.db);
   const archivedId = await product();
   const source = await app((tx) =>
-    createUnit(tx, { name: { en: "portion" }, abbreviation: { en: "p" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "portion" },
+        abbreviation: { en: "p" },
+        precision: 0,
+      },
+      "en",
+    ),
   );
   const target = await app((tx) =>
-    createUnit(tx, { name: { en: "other" }, abbreviation: { en: "o" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "other" },
+        abbreviation: { en: "o" },
+        precision: 0,
+      },
+      "en",
+    ),
   );
   await app(async (tx) => {
     await assignProductUnit(tx, archivedId, source.id);

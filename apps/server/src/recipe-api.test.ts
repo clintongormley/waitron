@@ -54,7 +54,13 @@ const suite = useVenueDb({
       });
       const unit = await createUnit(
         tx,
-        { name: { es: "unidad" }, precision: 0, abbreviation: { es: "ud" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "unidad" },
+          precision: 0,
+          abbreviation: { es: "ud" },
+        },
         "es",
       );
       const product = await createProduct(tx, {

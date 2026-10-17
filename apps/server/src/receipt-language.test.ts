@@ -784,6 +784,8 @@ describe("a sale prints its goods in the default content language its lines stor
       const unit = await createUnit(
         tx,
         {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: wording((words) => words.unitName),
           precision: 0,
           abbreviation: wording((words) => words.unit),

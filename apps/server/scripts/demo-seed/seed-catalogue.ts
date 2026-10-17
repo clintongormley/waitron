@@ -155,6 +155,8 @@ export async function seedCatalogues(
               await createUnit(
                 tx,
                 {
+                  staffName: product.unit.staffName,
+                  staffAbbreviation: product.unit.staffAbbreviation,
                   name: translated(product.unit.name),
                   precision: product.unit.precision,
                   abbreviation: translated(product.unit.abbreviation),

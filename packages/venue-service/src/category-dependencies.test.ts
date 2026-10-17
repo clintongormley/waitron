@@ -129,7 +129,13 @@ it("an open order keeps its copied category label after the category is deleted"
     const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      },
       "en",
     );
     const product = await createProduct(tx, {

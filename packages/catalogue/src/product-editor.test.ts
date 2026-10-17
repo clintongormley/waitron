@@ -32,7 +32,13 @@ beforeEach(async () => {
     catalogue: await createCatalogue(tx, { name: "Menu" }),
     unit: await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
       "en",
     ),
   }));
@@ -390,7 +396,17 @@ it("changes the product's unit on update", async () => {
     saveProductEditor(tx, null, catalogueId, input, "en"),
   );
   const other = await withTransaction(fx.db, (tx) =>
-    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(
+      tx,
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "u" },
+      },
+      "en",
+    ),
   );
   const updated = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
@@ -615,7 +631,13 @@ describe("a variant's own page", () => {
       const ownCategory = await createCategory(tx, { name: "Espresso" });
       const kg = await createUnit(
         tx,
-        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "kg" },
+          precision: 3,
+          abbreviation: { en: "kg" },
+        },
         "en",
       );
       await tx.execute(sql`update units set hardware_unit = 'kg' where id = ${kg.id}`);

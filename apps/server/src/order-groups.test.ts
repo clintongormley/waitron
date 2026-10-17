@@ -4109,7 +4109,14 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
       const grams = { en: "g", es: "g", ca: "g", gl: "g", eu: "g" };
       const [gram] = await tx
         .insert(units)
-        .values({ name: grams, abbreviation: grams, precision: 0, hardwareUnit: "g" })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: grams,
+          abbreviation: grams,
+          precision: 0,
+          hardwareUnit: "g",
+        })
         .returning({ id: units.id });
       const dish = (name: string, kitchenName: string, unit: { unitId: string } | object) =>
         createProduct(tx, {

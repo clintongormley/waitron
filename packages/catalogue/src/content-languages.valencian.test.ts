@@ -9,7 +9,6 @@ import {
   writeContentLanguages,
   listContentTranslationGaps,
 } from "./content-languages.js";
-import { createUnit } from "./units.js";
 import { units } from "./schema/units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
@@ -19,15 +18,17 @@ describe("stored Valencian content", () => {
   it("stores Catalan and Valencian separately without copying either text", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const unit = await createUnit(
-        tx,
-        {
+      const unit = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { es: "Spanish", ca: "Catalan", [valencian]: "Valencian" },
           abbreviation: { es: "u" },
           precision: 0,
-        },
-        "es",
-      );
+        })
+        .returning()
+        .then((rows) => rows[0]!);
       await writeContentLanguages(
         tx,
         { defaultLanguage: valencian, languages: [valencian, "ca", "es"] },
@@ -50,11 +51,17 @@ describe("stored Valencian content", () => {
   it("reports missing Valencian text even when Catalan exists", async () => {
     await seedTenant(suite.db);
     const unit = await withTransaction(suite.db, (tx) =>
-      createUnit(
-        tx,
-        { name: { es: "Spanish", ca: "Catalan" }, abbreviation: { es: "u" }, precision: 0 },
-        "es",
-      ),
+      tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "Spanish", ca: "Catalan" },
+          abbreviation: { es: "u" },
+          precision: 0,
+        })
+        .returning()
+        .then((rows) => rows[0]!),
     );
     await expect(
       withTransaction(suite.db, (tx) =>

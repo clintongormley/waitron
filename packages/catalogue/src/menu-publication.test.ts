@@ -47,6 +47,7 @@ import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit, assignProductUnit } from "./units.js";
+import { units } from "./schema/units.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
 import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
@@ -119,11 +120,17 @@ describe("preview live snapshot", () => {
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
     await app(async (tx) => {
-      const unit = await createUnit(
-        tx,
-        { name: { en: "each", fr: "unité" }, abbreviation: { en: "ea", fr: "u" }, precision: 0 },
-        "en",
-      );
+      const unit = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each", fr: "unité" },
+          abbreviation: { en: "ea", fr: "u" },
+          precision: 0,
+        })
+        .returning()
+        .then((rows) => rows[0]!);
       await assignProductUnit(tx, f.lemonade, unit.id);
     });
     const offerId = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
@@ -384,7 +391,13 @@ describe("publishMenu", () => {
     const unitId = await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
@@ -1371,7 +1384,13 @@ describe("menuStatus", () => {
       await app(async (tx) => {
         const unit = await createUnit(
           tx,
-          { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+          {
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { en: "Kilogram" },
+            abbreviation: { en: "kg" },
+            precision: 3,
+          },
           "en",
         );
         await updateProduct(tx, f.extraLemon, { unitId: unit.id });

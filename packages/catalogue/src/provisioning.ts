@@ -96,6 +96,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         await tx.insert(units).values([
           {
             seedKey: "g",
+            staffName: "Gram",
+            staffAbbreviation: "g",
             name: UNIT_NAMES.g,
             abbreviation: UNIT_ABBR.g,
             precision: 0,
@@ -104,6 +106,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           },
           {
             seedKey: "kg",
+            staffName: "Kilogram",
+            staffAbbreviation: "kg",
             name: UNIT_NAMES.kg,
             abbreviation: UNIT_ABBR.kg,
             precision: 3,
@@ -112,6 +116,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           },
           {
             seedKey: "mg",
+            staffName: "Milligram",
+            staffAbbreviation: "mg",
             name: UNIT_NAMES.mg,
             abbreviation: UNIT_ABBR.mg,
             precision: 0,
@@ -120,6 +126,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           },
           {
             seedKey: "ml",
+            staffName: "Millilitre",
+            staffAbbreviation: "ml",
             name: UNIT_NAMES.ml,
             abbreviation: UNIT_ABBR.ml,
             precision: 0,
@@ -128,6 +136,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
           },
           {
             seedKey: "l",
+            staffName: "Litre",
+            staffAbbreviation: "l",
             name: UNIT_NAMES.l,
             abbreviation: UNIT_ABBR.l,
             precision: 3,

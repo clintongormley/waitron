@@ -8,6 +8,16 @@ export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
 export const MAX_UNIT_PRECISION = 3;
 const QUANTITY_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
+export function unitStaffText(value: unknown, field: "staffName" | "staffAbbreviation"): string {
+  if (
+    typeof value !== "string" ||
+    value.trim() === "" ||
+    new TextEncoder().encode(value.trim()).byteLength > 4096
+  )
+    throw new AppError("unit.invalid", { field });
+  return value.trim();
+}
+
 export function validateUnitPrecision(precision: number): number {
   if (!Number.isInteger(precision) || precision < 0 || precision > MAX_UNIT_PRECISION) {
     throw new AppError("unit.precision_invalid", {});

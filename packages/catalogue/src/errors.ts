@@ -29,6 +29,7 @@ declare module "@waitron/shared" {
     };
     /** A unit precision must be a whole number from zero through three. */
     "unit.precision_invalid": Record<string, never>;
+    "unit.invalid": { field: "staffName" | "staffAbbreviation" };
     /** A quantity is malformed, non-positive, too precise, or past nine integer digits. */
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
     /** A unit id names no unit. */

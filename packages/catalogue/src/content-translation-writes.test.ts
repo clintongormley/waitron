@@ -135,6 +135,8 @@ async function fixture(tx: Transaction) {
   const unit = await createUnit(
     tx,
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       name: { es: "CLIENT Kilogramo", ca: "CLIENT Quilogram" },
       abbreviation: { es: "kg", ca: "kg" },
       precision: 3,
@@ -207,23 +209,29 @@ describe("shared translation writes", () => {
     async (kind) => {
       await seedTenant(suite.db);
       const ids = await withTransaction(suite.db, (tx) => fixture(tx));
-      await expect(
-        withTransaction(suite.db, (tx) => existingWrite(tx, kind, ids, { en: "English only" })),
-      ).rejects.toMatchObject({
-        code: codes[kind],
-        params:
-          kind === "product" || kind === "variant"
-            ? { language: "es" }
-            : {
-                language: "es",
-                field:
-                  kind === "unit"
-                    ? "name"
-                    : kind === "option_label"
-                      ? "labels.0.customerName"
-                      : "customerName",
-              },
-      });
+      if (kind === "unit") {
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            existingWrite(tx, kind, ids, { en: "English only" }),
+          ),
+        ).toMatchObject({
+          name: { en: "English only" },
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+        });
+      } else
+        await expect(
+          withTransaction(suite.db, (tx) => existingWrite(tx, kind, ids, { en: "English only" })),
+        ).rejects.toMatchObject({
+          code: codes[kind],
+          params:
+            kind === "product" || kind === "variant"
+              ? { language: "es" }
+              : {
+                  language: "es",
+                  field: kind === "option_label" ? "labels.0.customerName" : "customerName",
+                },
+        });
       await withTransaction(suite.db, async (tx) => {
         await existingWrite(tx, kind, ids, { en: "English", es: "Castellano" });
         const { targets } = await resolveTranslationTargets(

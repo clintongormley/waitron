@@ -33,6 +33,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "content.translation_invalid": 400,
   "unit.translation_required": 400,
   "unit.precision_invalid": 400,
+  "unit.invalid": 400,
   "unit.not_found": 404,
   "unit.in_use": 409,
   "product.not_found": 404,
@@ -148,6 +149,8 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{
+        staffName?: unknown;
+        staffAbbreviation?: unknown;
         name?: unknown;
         precision?: unknown;
         abbreviation?: unknown;
@@ -163,6 +166,8 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         createUnit(
           tx,
           {
+            staffName: body.staffName as string,
+            staffAbbreviation: body.staffAbbreviation as string,
             name: body.name as Record<string, string>,
             precision: body.precision as number,
             abbreviation: body.abbreviation as Record<string, string>,
@@ -180,12 +185,17 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = unitId(c);
       const body = await readJsonBody<{
+        staffName?: unknown;
+        staffAbbreviation?: unknown;
         name?: unknown;
         precision?: unknown;
         abbreviation?: unknown;
         measure?: unknown;
       }>(c);
       const patch: UpdateUnitInput = {};
+      if (body.staffName !== undefined) patch.staffName = body.staffName as string;
+      if (body.staffAbbreviation !== undefined)
+        patch.staffAbbreviation = body.staffAbbreviation as string;
       if (body.name !== undefined) {
         screenTranslatable(body.name, "name");
         patch.name = body.name as Record<string, string>;

@@ -99,6 +99,8 @@ async function setupVenue(): Promise<Seeded> {
   // `$defaultFn` generators a raw insert never reaches.
   await db.insert(units).values([
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       seedKey: "each",
       name: { en: "each" },
       abbreviation: { en: "ea" },
@@ -106,6 +108,8 @@ async function setupVenue(): Promise<Seeded> {
       hardwareUnit: null,
     },
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       seedKey: "kg",
       name: { en: "kg" },
       abbreviation: { en: "kg" },

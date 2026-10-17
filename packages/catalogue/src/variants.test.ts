@@ -44,7 +44,13 @@ beforeEach(async () => {
     menuId = menu.id;
     const unit = await createUnit(
       tx,
-      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "u" },
+      },
       "en",
     );
     const product = await createProduct(tx, {
@@ -269,7 +275,13 @@ describe("product variants", () => {
     const [foreign] = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "plate" }, precision: 0, abbreviation: { en: "pl" } },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "plate" },
+          precision: 0,
+          abbreviation: { en: "pl" },
+        },
         "en",
       );
       const other = await createProduct(tx, {

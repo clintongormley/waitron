@@ -101,7 +101,13 @@ describe("what a product's own extras lists offer", () => {
     const { listId, unitId, weightedId } = await run(async (tx) => {
       const kg = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       const weighted = await createProduct(tx, {
@@ -136,6 +142,8 @@ describe("what a product's own extras lists offer", () => {
         price: "0.01",
         unit: {
           id: unitId,
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
           name: { en: "Kilogram" },
           abbreviation: { en: "kg" },
           precision: 3,

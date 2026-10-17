@@ -216,7 +216,13 @@ describe("the missing-translations report", () => {
         .where(eq(sections.id, details!.root));
       const [unit] = await tx
         .insert(units)
-        .values({ name: { ca: "racció", es: "ración" }, abbreviation: { es: "rac" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { ca: "racció", es: "ración" },
+          abbreviation: { es: "rac" },
+          precision: 0,
+        })
         .returning({ id: units.id });
 
       const english = (await report(tx))("en");
@@ -283,7 +289,13 @@ describe("the missing-translations report", () => {
         .returning({ id: sections.id });
       const [unit] = await tx
         .insert(units)
-        .values({ name: { es: "ración" }, abbreviation: { es: "rac" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "ración" },
+          abbreviation: { es: "rac" },
+          precision: 0,
+        })
         .returning({ id: units.id });
 
       const gaps = await report(tx);
@@ -346,7 +358,13 @@ describe("the missing-translations report", () => {
       await writeContentLanguages(tx, SPANISH_DEFAULT);
       const [unit] = await tx
         .insert(units)
-        .values({ name: { ca: "racció" }, abbreviation: { ca: "rac" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { ca: "racció" },
+          abbreviation: { ca: "rac" },
+          precision: 0,
+        })
         .returning({ id: units.id });
       expect((await report(tx))("es")).toEqual([
         { kind: "unit", id: unit!.id, name: "racció", reason: "partial" },
@@ -359,7 +377,13 @@ describe("the missing-translations report", () => {
       await writeContentLanguages(tx, SPANISH_DEFAULT);
       const [unit] = await tx
         .insert(units)
-        .values({ name: {}, abbreviation: { es: "rac" }, precision: 0 })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: {},
+          abbreviation: { es: "rac" },
+          precision: 0,
+        })
         .returning({ id: units.id });
       expect((await report(tx))("es")).toEqual([
         { kind: "unit", id: unit!.id, name: "", reason: "partial" },

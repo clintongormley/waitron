@@ -111,6 +111,8 @@ async function many(count: number) {
     .insert(units)
     .values(
       Array.from({ length: count }, (_, i) => ({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
         name: { es: `Unit ${i}` },
         abbreviation: { es: `u${i}` },
         precision: 2,
@@ -217,7 +219,13 @@ async function fixture() {
     );
     const [unit] = await tx
       .insert(units)
-      .values({ name: { es: "CLIENT Ración" }, abbreviation: { es: "rac" }, precision: 2 })
+      .values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { es: "CLIENT Ración" },
+        abbreviation: { es: "rac" },
+        precision: 2,
+      })
       .returning();
     return {
       product: product!.id,

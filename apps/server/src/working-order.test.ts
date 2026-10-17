@@ -156,6 +156,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const kgUnitId = randomUUID();
   await db.insert(units).values([
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: eachUnitId,
       seedKey: "each",
       name: { en: "each" },
@@ -164,6 +166,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       hardwareUnit: null,
     },
     {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
       id: kgUnitId,
       seedKey: "kg",
       name: { en: "kg" },
@@ -1571,8 +1575,8 @@ describe("getHeldOrder", () => {
     const { cfg, catalogueId, zoneId } = await setupVenue();
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
       const inserted = await tx.execute<{ id: string }>(sql`
-        insert into units (id, name, abbreviation, precision, hardware_unit)
-        values (${randomUUID()}, ${JSON.stringify({ [LOCALE]: "kg" })},
+        insert into units (id, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit)
+        values (${randomUUID()}, 'Staff unit', 'su', ${JSON.stringify({ [LOCALE]: "kg" })},
           ${JSON.stringify({ [LOCALE]: "kg" })}, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;

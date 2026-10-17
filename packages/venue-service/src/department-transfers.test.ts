@@ -958,7 +958,14 @@ describe("departmental tab transfers", () => {
         .returning();
       const [unit] = await tx
         .insert(units)
-        .values({ name: { en: "each" }, abbreviation: { en: "ea" }, precision: 0, seedKey: "each" })
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "each" },
+          abbreviation: { en: "ea" },
+          precision: 0,
+          seedKey: "each",
+        })
         .returning();
       const menu = await createCatalogue(tx, { name: "Source menu" });
       const product = await createProduct(tx, {

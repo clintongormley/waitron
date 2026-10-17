@@ -1185,7 +1185,13 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
@@ -1321,7 +1327,13 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
@@ -1351,7 +1363,13 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });
@@ -1374,7 +1392,13 @@ describe("diffMenuDocuments", () => {
     const unitId = await app(async (tx) => {
       const unit = await createUnit(
         tx,
-        { name: { en: "Kilogram" }, abbreviation: { en: "kg" }, precision: 3 },
+        {
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 3,
+        },
         "en",
       );
       await updateProduct(tx, f.extraLemon, { unitId: unit.id });

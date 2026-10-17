@@ -61,7 +61,13 @@ async function fixture() {
     const terrace = await createCatalogue(tx, { name: "Terrace" });
     const glass = await createUnit(
       tx,
-      { name: { en: "glass" }, precision: 0, abbreviation: { en: "gl" } },
+      {
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { en: "glass" },
+        precision: 0,
+        abbreviation: { en: "gl" },
+      },
       "en",
     );
     const parent = await createProduct(tx, {

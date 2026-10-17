@@ -128,7 +128,13 @@ async function fixture() {
     );
     const [unit] = await tx
       .insert(units)
-      .values({ name: { es: "CLIENT Ración" }, abbreviation: { es: "rac" }, precision: 2 })
+      .values({
+        staffName: "Staff unit",
+        staffAbbreviation: "su",
+        name: { es: "CLIENT Ración" },
+        abbreviation: { es: "rac" },
+        precision: 2,
+      })
       .returning();
     return {
       product: product!.id,
@@ -659,6 +665,8 @@ describe("atomic content translations", () => {
         .insert(units)
         .values(
           Array.from({ length: 100 }, (_, i) => ({
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
             name: { es: `CLIENT Unit ${i}` },
             abbreviation: { es: `u${i}` },
             precision: 0,
