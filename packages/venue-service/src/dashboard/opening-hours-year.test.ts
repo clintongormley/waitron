@@ -489,7 +489,7 @@ describe("Opening hours year", () => {
     expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
   });
 
-  it("the season row ends with Periods…, also for a viewer, which asks for the Periods window", async () => {
+  it("the season row offers Seasons… then Periods…, also for a viewer, each asking for its window", async () => {
     for (const readOnly of [false, true]) {
       const el = await mount(yearModel(), { readOnly });
       const chips = root(el).querySelector("season-chips")!;
@@ -499,8 +499,20 @@ describe("Opening hours year", () => {
       expect((last!.assignedSlot ?? undefined)?.getRootNode(), "slotted into the chips' row").toBe(
         chips.shadowRoot,
       );
+      const seasons = last!.previousElementSibling as HTMLElementTagNameMap["wt-button"] | null;
+      expect(seasons?.dataset.test).toBe("open-seasons");
+      expect(text(seasons)).toBe("Seasons…");
+      expect(
+        (seasons!.assignedSlot ?? undefined)?.getRootNode(),
+        "slotted into the chips' row",
+      ).toBe(chips.shadowRoot);
       const asked: CustomEvent[] = [];
       el.addEventListener("calendar-window-open", (event) => asked.push(event as CustomEvent));
+      await userEvent.click(seasons!);
+      expect(asked).toHaveLength(1);
+      expect(asked[0]!.detail).toEqual({ window: "seasons" });
+      expect(asked[0]!.composed).toBe(true);
+      asked.length = 0;
       await userEvent.click(last!);
       expect(asked).toHaveLength(1);
       expect(asked[0]!.detail).toEqual({ window: "periods" });
@@ -510,6 +522,7 @@ describe("Opening hours year", () => {
     try {
       const el = await mount();
       expect(text(root(el).querySelector("[data-test=open-periods]"))).toBe("Periodos…");
+      expect(text(root(el).querySelector("[data-test=open-seasons]"))).toBe("Temporadas…");
     } finally {
       setLocale("en");
     }

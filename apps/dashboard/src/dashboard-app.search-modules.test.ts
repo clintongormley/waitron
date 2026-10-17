@@ -186,6 +186,19 @@ const result = (el: DashboardApp, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-search-destination="${id}"]`);
 const calendar = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+/** The Seasons window's season names, from each row's name field or, read-only, its text. */
+const seasonRows = (screen: HTMLElement) =>
+  [
+    ...(screen
+      .shadowRoot!.querySelector("seasons-window[data-test=calendar-window]")
+      ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
+  ]
+    .map(
+      (row) =>
+        row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")?.value ??
+        row.textContent!.trim(),
+    )
+    .join(" ");
 it("opens the shipped Staffing, Rota for everyone and Routes tab from search", async () => {
   const { el } = await mount();
   await search(el, "staffing");
@@ -239,12 +252,7 @@ it.each(["light", "dark"] as const)(
     const { el } = await mount({ theme });
     await search(el, "seasons");
     await userEvent.click(result(el, "venue-service:seasons")!);
-    await vi.waitFor(() =>
-      expect(
-        calendar(el).shadowRoot!.querySelector("[data-test=calendar-window] season-chips")
-          ?.shadowRoot?.textContent,
-      ).toContain("Spring"),
-    );
+    await vi.waitFor(() => expect(seasonRows(calendar(el))).toContain("Spring"));
     expect(location.pathname).toBe("/manage/opening-hours/view/year/window/seasons");
     await expectNoA11yViolations(
       calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!,
@@ -291,13 +299,10 @@ it.each(["light", "dark"] as const)(
         });
         await search(el, locale === "es-ES" ? "temporadas" : "seasons");
         await userEvent.click(result(el, "venue-service:seasons")!);
-        await vi.waitFor(() =>
-          expect(
-            calendar(el).shadowRoot!.querySelector("[data-test=calendar-window] season-chips")
-              ?.shadowRoot?.textContent,
-          ).toContain("Spring"),
-        );
-        const modal = calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!;
+        await vi.waitFor(() => expect(seasonRows(calendar(el))).toContain("Spring"));
+        const modal = calendar(el)
+          .shadowRoot!.querySelector("[data-test=calendar-window]")!
+          .shadowRoot!.querySelector("wt-modal")!;
         await vi.waitFor(() => expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true));
         const native = modal.shadowRoot!.querySelector("dialog")!;
         await expect.poll(() => native.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
@@ -341,7 +346,10 @@ it("the real shell delegates window-only navigation without discarding the actua
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(calendar(el).shadowRoot!.querySelector("season-painter")).toBe(painter);
   expect(grid.days.get("3")).toEqual(painted);
-  calendar(el).shadowRoot!.querySelector<HTMLElement>("[data-test=close-calendar-window]")!.click();
+  calendar(el)
+    .shadowRoot!.querySelector("[data-test=calendar-window]")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-seasons]")!
+    .click();
   await vi.waitFor(() => expect(location.pathname).toBe(base));
   expect(grid.days.get("3")).toEqual(painted);
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);

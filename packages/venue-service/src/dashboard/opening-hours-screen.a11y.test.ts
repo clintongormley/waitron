@@ -21,6 +21,7 @@ function request(state: string): DashboardRequest {
     if (state === "load-failed") throw new Error("offline");
     if (path === "/management-api/stations") return [];
     if (path.endsWith("/menu-periods/painted-in")) return [];
+    if (path.endsWith("/special-days")) return [];
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: {
@@ -55,7 +56,13 @@ function request(state: string): DashboardRequest {
       timeZone: "Europe/Madrid",
       clockReadable: state !== "unreadable-viewer",
       dayCutover: "06:00",
-      seasons: [],
+      seasons:
+        state === "seasons"
+          ? [
+              { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+              { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
+            ]
+          : [],
       menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
       departments: [
         {
@@ -124,6 +131,25 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     const table = list.shadowRoot!.querySelector("wt-data-table")!;
     await expect.poll(() => table.shadowRoot?.textContent ?? "").toContain("Lunch");
     await table.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+  test.each([
+    ["the Seasons window", false],
+    ["the Seasons window, read-only", true],
+  ] as const)("%s", async (_state, readOnly) => {
+    setLocale("en");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/window/seasons");
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    screen.api = new OpeningHoursApi(request("seasons"));
+    screen.readOnly = readOnly;
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("seasons-window[data-window=seasons]"))
+      .not.toBeNull();
+    const win = screen.shadowRoot!.querySelector("seasons-window")!;
+    await expect.poll(() => win.shadowRoot?.querySelectorAll("tbody tr").length ?? 0).toBe(2);
+    await win.updateComplete;
     await expectNoA11yViolations(host);
   });
   test.each([
