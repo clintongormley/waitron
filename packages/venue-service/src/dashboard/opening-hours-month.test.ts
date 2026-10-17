@@ -1345,6 +1345,17 @@ describe("Opening hours month, a station shown", () => {
     expect(sent.map(({ date }) => date)).toEqual(["2026-12-07"]);
   });
 
+  it("a drag on a station's dates picks a run and a double-click asks to open it", async () => {
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    const runs = events<CalendarDaysOpen>(el, "calendar-days-open");
+    await commands.mouseDrag(DRAG.map(daySel));
+    await el.updateComplete;
+    expect(pressed(el)).toEqual(DRAG);
+    await userEvent.dblClick(dayButton(el, "2026-12-22"));
+    await el.updateComplete;
+    expect(runs).toEqual([{ date: "2026-12-22", from: "2026-12-20", to: "2026-12-23" }]);
+  });
+
   it("names a lone sending department beside each period", async () => {
     const station = grill() as Extract<StationShow, { state: "ready" }>;
     const el = await mount(monthModel(), {
@@ -1415,6 +1426,21 @@ describe("Opening hours month, a station shown", () => {
       expect(show(el).value).toBe("station:grill");
       el.remove();
     }
+  });
+
+  it("draws Always open muted, as the Week does", async () => {
+    const el = await mount(monthModel(), {
+      stations: STATIONS,
+      station: { id: "grill", state: "always" },
+    });
+    applyTokens(el);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    applyTokens(probe);
+    el.after(probe);
+    hosts.push(probe);
+    expect(getComputedStyle(testId(el, "always-open")!).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
   });
 
   it("loading draws only the head", async () => {

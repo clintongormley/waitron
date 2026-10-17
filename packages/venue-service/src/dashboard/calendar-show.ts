@@ -15,11 +15,11 @@ export function showPicker(options: {
   chosen: string;
   names: MonthNames;
   onDepartment: (departmentId: string) => void;
-  stations?: readonly ShowStation[];
-  stationId?: string;
-  onStation?: (stationId: string) => void;
+  stations: readonly ShowStation[];
+  stationId: string;
+  onStation: (stationId: string) => void;
 }): TemplateResult {
-  const { model, chosen, names, onDepartment, stations = [], stationId = "", onStation } = options;
+  const { model, chosen, names, onDepartment, stations, stationId, onStation } = options;
   const value = stationId ? STATION + stationId : chosen || ALL;
   const grouped = (group: string) => (stations.length ? { group } : {});
   const choices = [
@@ -48,7 +48,7 @@ export function showPicker(options: {
       const picked = event.detail.value;
       if (picked.startsWith(STATION)) {
         const next = picked.slice(STATION.length);
-        if (next !== stationId) onStation?.(next);
+        if (next !== stationId) onStation(next);
         return;
       }
       const next = picked === ALL ? "" : picked;
