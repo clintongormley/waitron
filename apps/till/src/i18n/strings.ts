@@ -916,6 +916,7 @@ export const en = {
   // Table-ordering screen
   "table.title": "Table order",
   "table.back": "Back to floor",
+  "table.loading": "Loading…",
   "table.open_drawer": "Tab",
   "table.pending_title": "To serve",
   "table.served_title": "Served",
@@ -2447,6 +2448,7 @@ export const es: Record<StringKey, string> = {
   "seat.confirm": "Sentar",
   "table.title": "Comanda",
   "table.back": "Volver a la sala",
+  "table.loading": "Cargando…",
   "table.open_drawer": "Cuenta",
   "table.pending_title": "Pendiente de servir",
   "table.served_title": "Servido",

@@ -1205,6 +1205,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Number }) kitchenNoteRevision = 0;
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) loading = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
@@ -2646,6 +2647,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override render() {
+    if (this.loading) return this.#loadingScreen();
     const pending = this.#pending();
     const draft = this.#draftStore;
     return html`
@@ -2677,18 +2679,7 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing
             }
           </wt-button>
-          ${
-            this.embedded
-              ? nothing
-              : html`<wt-button
-                  class="back"
-                  data-back
-                  variant="secondary"
-                  @click=${() => this.#back()}
-                >
-                  ${t("table.back")}
-                </wt-button>`
-          }
+          ${this.#floorBackButton()}
         </div>
         ${this.#printProblem()}
         <till-order-kitchen-note
@@ -2713,6 +2704,36 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#splitGuestsDialog()}
       </section>
     `;
+  }
+
+  #loadingScreen(): TemplateResult {
+    return html`
+      <div class="width-probe"></div>
+      <section
+        class="screen"
+        data-order-id=${this.orderId ?? nothing}
+        aria-label=${t("table.title")}
+        aria-busy="true"
+      >
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("table.title")}</h1>
+              </header>`
+        }
+        <div class="head-actions">${this.#floorBackButton()}</div>
+        <p role="status" data-loading>${t("table.loading")}</p>
+      </section>
+    `;
+  }
+
+  #floorBackButton(): TemplateResult | typeof nothing {
+    return this.embedded
+      ? nothing
+      : html`<wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
+          ${t("table.back")}
+        </wt-button>`;
   }
 
   /** Browsing and the draft: side by side when the screen is wide enough, otherwise browsing, with
