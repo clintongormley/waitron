@@ -314,6 +314,14 @@ configured-paper success check, and the planned server run has two retained read
 Exact changes to those checks need the lane's fiscal-test permission. See the
 [check inventory](../operations/a679-changed-checks.md#task-4-configured-module-and-api).
 
+**Startup qualification, 2026-10-17:** after rebasing onto main
+`f4ef363028efdb5670054cc083e937939a0e1364`, the two retained boot configuration checks
+first fail with `setup.attempt_uncertain`, then pass after moving configuration validation before
+setup workspace inspection. Their existing assertions remain unchanged. Five startup/entry suites
+pass 129 cases; the planned five-file Task 4 server command passes 59. The unchanged fiscal pair
+passes 20. This closes those two recorded boot failures; authenticated CLI composition, the
+previously measured provisioning coverage gap and the remaining hour-plan work stay open.
+
 **Owner update, 2026-10-15 at 22:15:** the current
 [design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md) and
 [plan](../superpowers/plans/2026-10-15-a679-one-pdf-implementation.md) retain the

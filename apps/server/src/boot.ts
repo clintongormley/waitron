@@ -811,6 +811,27 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
+  // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
+  // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
+  if (config.maxTickMs >= DUTY_BUDGET_MS[DRAIN_DUTY]) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_MAX_TICK_MS",
+      reason: "at_or_above_drain_budget",
+    });
+  }
+  // Each configured built-SPA directory must hold an `index.html`; checked before the store is opened
+  // or migrations run, and in both modes, so a wrong or never-built dir fails the boot loudly.
+  if (config.dashboardAppDir !== undefined) {
+    assertBuiltApp(config.dashboardAppDir, "WAITRON_DASHBOARD_APP_DIR");
+  }
+  if (config.tillAppDir !== undefined) {
+    assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
+  }
+  if (config.setupAppDir !== undefined) {
+    assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
+  }
+
   await assertFirstSetupBootTarget({ venueDir: config.venueDir, stateDir: config.stateDir });
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
@@ -871,27 +892,6 @@ async function bootServer(
   // masking it would erase the difference between a wrong password and none at all. Pinned by
   // `recovery-surface.test.ts` → "the caught error's own words on the page".
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
-  // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
-  // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
-  // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
-  if (config.maxTickMs >= DUTY_BUDGET_MS[DRAIN_DUTY]) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_MAX_TICK_MS",
-      reason: "at_or_above_drain_budget",
-    });
-  }
-  // Each configured built-SPA directory must hold an `index.html`; checked before the store is opened
-  // or migrations run, and in both modes, so a wrong or never-built dir fails the boot loudly.
-  if (config.dashboardAppDir !== undefined) {
-    assertBuiltApp(config.dashboardAppDir, "WAITRON_DASHBOARD_APP_DIR");
-  }
-  if (config.tillAppDir !== undefined) {
-    assertBuiltApp(config.tillAppDir, "WAITRON_TILL_APP_DIR");
-  }
-  if (config.setupAppDir !== undefined) {
-    assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
-  }
-
   // Before ANY write, including migrations: a host pointed at another environment's database must
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);

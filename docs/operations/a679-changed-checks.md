@@ -420,3 +420,31 @@ remains open. The current server-consumer checks pass 46 cases, the unchanged fi
 20, and eight repository guard files pass 4,768. Both package compilers, source lint/format and
 the provisioning build pass. The independently installed revised tree passes 186 focused cases.
 No package threshold, exclusion or ignore changes.
+
+
+## Task 4 startup configuration order, 2026-10-17
+
+With a configured setup directory missing `index.html`, or a maximum tick interval at the drain
+budget, you receive `server.config_invalid` before the server inspects setup workspace files.
+The workspace admission check remains before module configuration and the venue opener.
+
+After rebasing onto main `f4ef363028efdb5670054cc083e937939a0e1364`, this command first fails
+both existing cases with `setup.attempt_uncertain`, then passes them after moving the existing
+configuration checks ahead of workspace inspection:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/boot.test.ts --maxWorkers=1 \
+  -t 'fails the boot LOUDLY when WAITRON_SETUP_APP_DIR|rejects WAITRON_MAX_TICK_MS at or above'
+```
+
+No assertion or fixture changes. The complete boot, first-setup entry, resolution entry, failed-start
+and clock-wiring suites pass 129 tests. The plan's five-file setup/readiness command passes 59;
+the provisioning CLI and venue-apply files pass 108. The unchanged golden huella and immutability
+pair passes 20; the module-boundary, dependency-cycle and deployment-image guards pass 3,146.
+Server types, scoped lint, source formatting and whitespace checks pass.
+
+In an independently installed disposable checkout, removing the maximum-tick check fails its
+existing refusal case. Restoring it and removing the setup-app check fails the other refusal case.
+Restoring both returns two passes. The receipt directory is `a679-cli-entry-20261017-0254`.
+These checks qualify the startup change and selected rebased consumers. CLI lifecycle integration,
+provisioning coverage and the remaining hour-plan tasks are still open.
