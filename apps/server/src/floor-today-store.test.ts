@@ -46,7 +46,7 @@ import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { updateZone } from "./tables.js";
 import {
   commandFor,

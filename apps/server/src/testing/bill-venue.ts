@@ -1,3 +1,4 @@
+import { observedClosingBody } from "./party-close-fixture.js";
 import { observedWholePaymentBody } from "./whole-payment-fixture.js";
 import { observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
@@ -343,7 +344,15 @@ export async function send(
   const payload =
     database === undefined
       ? body
-      : observedWholePaymentBody(database, path, await observedPaymentBody(database, path, body));
+      : observedWholePaymentBody(
+          database,
+          path,
+          await observedClosingBody(
+            database,
+            path,
+            await observedPaymentBody(database, path, body),
+          ),
+        );
   const res = await app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },

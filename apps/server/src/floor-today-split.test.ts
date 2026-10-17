@@ -27,7 +27,7 @@ import { defaultLayout } from "./testing/floor-sets.js";
 import { partsOf } from "./floor-today-parts.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import {
   OPERATOR,

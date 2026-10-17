@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -263,13 +264,17 @@ describe("amendment attendance in the command transaction", () => {
       const before = await state();
       const expectedPartyRevision = await revisionOf(v, partyId);
       const command = () =>
-        run((tx) =>
+        run(async (tx) =>
           recordUnpaidDeparture(
             tx,
             deps(rejected ? refuse : recordAttendanceFact),
             v.cfg,
             partyId,
-            { expectedPartyRevision, reason: "Guests left" },
+            {
+              expectedPartyRevision,
+              expectedEdits: await closingEditsForTest(tx, partyId),
+              reason: "Guests left",
+            },
             operator(OPERATOR),
           ),
         );

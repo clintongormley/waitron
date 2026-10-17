@@ -34,7 +34,7 @@ import { moveBill } from "./testing/move-bill-fixture.js";
 
 import { fireGroup, snoozeReminder } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import {
   cashContribution,

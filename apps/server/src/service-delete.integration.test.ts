@@ -48,7 +48,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { ALL_MODULES, enabledFloorAnnotators, enabledTableRemovals } from "./modules.js";
-import { finishTable, leaveTables, moduleCoreServices } from "./parties.js";
+import { finishTable, leaveTables, moduleCoreServices } from "./testing/party-close-fixture.js";
 import {
   cashContribution,
   commandFor,

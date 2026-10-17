@@ -19,7 +19,7 @@ import { writeMerge } from "./floor-today-merges.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { splitTable } from "./testing/table-action-fixture.js";
 import {
   activeTablesOf,

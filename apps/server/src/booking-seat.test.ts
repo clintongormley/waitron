@@ -21,7 +21,7 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import { finishTable, markTableCleared, moduleCoreServices, seatTable } from "./parties.js";
+import { finishTable, markTableCleared, moduleCoreServices, seatTable } from "./testing/party-close-fixture.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";

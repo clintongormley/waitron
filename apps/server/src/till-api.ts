@@ -2794,7 +2794,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
-      const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
+      const body = await readJsonBody<{
+        expectedPartyRevision?: unknown;
+        expectedEdits?: unknown;
+      }>(c);
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
         "expectedPartyRevision",
@@ -2804,7 +2807,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return finishTable(
           tx,
-          { partyId, expectedPartyRevision, operatorId: personId },
+          {
+            partyId,
+            expectedPartyRevision,
+            operatorId: personId,
+            expectedEdits: body.expectedEdits as BillEditExpected[],
+          },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, locationId: deps.cfg.locationId },

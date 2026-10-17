@@ -56,7 +56,7 @@ import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { finishTable, seatTable } from "./parties.js";
+import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState } from "./working-order.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
@@ -3431,13 +3431,46 @@ describe("a draft named on another party", () => {
 });
 
 describe("finishing the table", () => {
-  it("discards every open draft on the party, keeping its lines, with an event naming who finished", async () => {
+  it("retains every saved draft until its editor explicitly resolves it before Finish", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     const alex = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     const sam = await saveOnSeparateBill(v, partyId, SAM, null, 0, [item(v, "fish"), burger(v)]);
     const kept = { alex: await storedLines(alex.id), sam: await storedLines(sam.id) };
 
+    await refusedWritingNothing(
+      () =>
+        inTx(async (tx) =>
+          finishTable(tx, {
+            partyId,
+            expectedPartyRevision: await partyRevision(partyId),
+            operatorId: SAM,
+          }),
+        ),
+      { code: "draft.taken_over", params: { billId: alex.billId, ownerId: ALEX } },
+    );
+
+    for (const [draft, owner] of [
+      [alex, ALEX],
+      [sam, SAM],
+    ] as const) {
+      expect(await draftRow(draft.id)).toMatchObject({
+        state: "open",
+        revision: draft.revision,
+      });
+      expect((await eventsOf(draft.id)).at(-1)).toEqual({
+        kind: "created",
+        fromPerson: null,
+        toPerson: owner,
+        actorId: owner,
+        detail: {},
+      });
+    }
+    expect(await storedLines(alex.id)).toEqual(kept.alex);
+    expect(await storedLines(sam.id)).toEqual(kept.sam);
+    expect((await draftsOf(v, partyId)).map((d) => d.id).sort()).toEqual([alex.id, sam.id].sort());
+    await save(v, partyId, ALEX, alex.id, alex.revision, []);
+    await save(v, partyId, SAM, sam.id, sam.revision, []);
     const { state } = await inTx(async (tx) =>
       finishTable(tx, {
         partyId,
@@ -3445,26 +3478,7 @@ describe("finishing the table", () => {
         operatorId: SAM,
       }),
     );
-
     expect(state).toBe("closed");
-    for (const [draft, owner] of [
-      [alex, ALEX],
-      [sam, SAM],
-    ] as const) {
-      expect(await draftRow(draft.id)).toMatchObject({
-        state: "discarded",
-        revision: draft.revision + 1,
-      });
-      expect((await eventsOf(draft.id)).at(-1)).toEqual({
-        kind: "discarded",
-        fromPerson: owner,
-        toPerson: owner,
-        actorId: SAM,
-        detail: {},
-      });
-    }
-    expect(await storedLines(alex.id)).toEqual(kept.alex);
-    expect(await storedLines(sam.id)).toEqual(kept.sam);
     expect(await draftsOf(v, partyId)).toEqual([]);
     await expect(
       save(v, partyId, ALEX, alex.id, alex.revision + 1, [item(v, "beer")]),

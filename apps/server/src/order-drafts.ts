@@ -687,7 +687,6 @@ export async function moveDraftsToParty(
   }
 }
 
-/** Finishing a table: every open draft on the party is discarded with an event, its lines kept. */
 export async function discardPartyDrafts(
   tx: Transaction,
   partyId: string,

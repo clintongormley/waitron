@@ -16,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
 import { eq } from "drizzle-orm";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
@@ -88,18 +88,26 @@ async function eventKey(
 }
 
 describe("accepted draft attendance capture", () => {
-  it("Finish table captures the discard under its acting worker", async () => {
+  it("Finish table preserves another worker's draft and attendance", async () => {
     const draft = await save();
     vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
-    expect(
-      await run((tx) =>
+    await expect(
+      run((tx) =>
         finishTable(
           tx,
           { partyId, expectedPartyRevision: 0, operatorId: other },
           { recorder: recordAttendanceFact, locationId: v.cfg.locationId },
         ),
       ),
-    ).toEqual({ state: "closed" });
+    ).rejects.toMatchObject({
+      code: "draft.taken_over",
+      params: { ownerId: OPERATOR, billId: tabId },
+    });
+    const [party] = await suite.db.select().from(parties).where(eq(parties.id, partyId));
+    expect([party!.state, party!.revision]).toEqual(["open", 0]);
+    expect(
+      (await suite.db.select().from(orderDrafts)).map((d) => [d.id, d.state, d.revision]),
+    ).toEqual([[draft.id, "open", draft.revision]]);
     expect((await operations()).map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
       [await eventKey(draft.id, "created"), OPERATOR, v.cfg.locationId, "2026-01-05T09:00:00.000Z"],
       [
@@ -108,24 +116,17 @@ describe("accepted draft attendance capture", () => {
         v.cfg.locationId,
         "2026-01-05T09:00:00.000Z",
       ],
-      [await eventKey(draft.id, "discarded"), other, v.cfg.locationId, "2026-01-05T14:00:00.000Z"],
-      [
-        `${draft.id}:${draft.revision + 1}:discard`,
-        other,
-        v.cfg.locationId,
-        "2026-01-05T14:00:00.000Z",
-      ],
     ]);
   });
-  it("a close capture refusal rolls back the party, draft and attendance", async () => {
+  it("a refused Finish reaches no close capture and retains the party, draft and attendance", async () => {
     const draft = await save();
     const before = await operations();
     const events = await suite.db.select().from(orderDraftEvents);
     vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
-    const refusing: AttendanceRecorder = async (tx, fact) => {
+    const refusing = vi.fn<AttendanceRecorder>(async (tx, fact) => {
       await recordAttendanceFact(tx, fact);
       throw new AppError("attendance.invalid", { reason: "discard refused" });
-    };
+    });
     await expect(
       run((tx) =>
         finishTable(
@@ -134,7 +135,11 @@ describe("accepted draft attendance capture", () => {
           { recorder: refusing, locationId: v.cfg.locationId },
         ),
       ),
-    ).rejects.toMatchObject({ code: "attendance.invalid" });
+    ).rejects.toMatchObject({
+      code: "draft.taken_over",
+      params: { ownerId: OPERATOR, billId: tabId },
+    });
+    expect(refusing).not.toHaveBeenCalled();
     expect(await operations()).toEqual(before);
     expect(await suite.db.select().from(orderDraftEvents)).toEqual(events);
     expect(

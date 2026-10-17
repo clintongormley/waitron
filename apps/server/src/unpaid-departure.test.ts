@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -1066,6 +1067,7 @@ describe("two departures at once, and a failure part-way", () => {
       `/api/parties/${party.partyId}/unpaid-departure`,
       {
         expectedPartyRevision: revisionOf(party.partyId),
+        expectedEdits: await inTx(venue, (tx) => closingEditsForTest(tx, party.partyId)),
         reason: REASON,
       },
     );

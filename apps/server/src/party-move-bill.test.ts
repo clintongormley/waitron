@@ -22,7 +22,7 @@ import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
 import { switchOff } from "./testing/live-table.js";
 import { createOpenOrder, listHeldOrders, markServed, parkOrder } from "./working-order.js";

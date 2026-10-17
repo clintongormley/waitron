@@ -64,7 +64,7 @@ import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { finishTable, seatTable } from "./parties.js";
+import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./testing/bill-action-fixture.js";

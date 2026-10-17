@@ -65,7 +65,7 @@ import {
   readTabLines,
   unmarkServed,
 } from "./working-order.js";
-import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
+import { finishTable, seatTable, partyRevisionOfOrder } from "./testing/party-close-fixture.js";
 import "./errors.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { fireGroup } from "./order-groups.js";

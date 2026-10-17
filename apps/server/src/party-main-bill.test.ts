@@ -11,7 +11,13 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { listTablesWithState } from "./working-order.js";
 
 import { placeGroups, submitGroups } from "./testing/group-submit-fixture.js";
-import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
+import {
+  finishTable,
+  partyZone,
+  readPartyBills,
+  setMainBill,
+  setPartyName,
+} from "./testing/party-close-fixture.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
 import {
   OPERATOR,
@@ -178,7 +184,12 @@ describe("the main bill", () => {
         lines: [{ menuItemId: v.item("Flan"), quantity: "1" }],
       }),
     );
-    await pay(v, tabId, "12.00");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, tabId)),
+    );
     const before = {
       bills: await billsOfParty(v, partyId),
       party: await partyRow(v, partyId),

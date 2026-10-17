@@ -19,7 +19,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listOrders } from "./orders-list.js";
-import { finishTable, holderOf } from "./parties.js";
+import { finishTable, holderOf } from "./testing/party-close-fixture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";

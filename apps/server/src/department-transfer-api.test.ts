@@ -1,3 +1,4 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -44,7 +45,7 @@ import {
   settleIssuedOwingNothing,
 } from "./testing/whole-payment-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { closeParty, openParty } from "./parties.js";
+import { closeParty, openParty } from "./testing/party-close-fixture.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
@@ -167,7 +168,7 @@ async function post(cookie: string, path: string, body: unknown = {}) {
   const response = await app.request(path, {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await observedClosingBody(suite.db, path, body)),
   });
   const text = await response.text();
   return { status: response.status, body: text.startsWith("{") ? JSON.parse(text) : text };

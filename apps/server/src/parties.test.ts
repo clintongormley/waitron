@@ -50,7 +50,7 @@ import {
   runServiceCommand,
   partyFamily,
   type PartyBill,
-} from "./parties.js";
+} from "./testing/party-close-fixture.js";
 import {
   placedCounterBillMovedTo,
   provisionBillVenue,

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { diningTables, partyTables } from "@waitron/db";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { listOrders, type OrderListFilter } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";

@@ -1,3 +1,4 @@
+import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
@@ -136,7 +137,13 @@ async function send(
   return app(suite.db).request(path, {
     method,
     headers,
-    body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)),
+    body: JSON.stringify(
+      await observedClosingBody(
+        suite.db,
+        path,
+        await observedGroupSubmitBody(suite.db, path, body),
+      ),
+    ),
   });
 }
 

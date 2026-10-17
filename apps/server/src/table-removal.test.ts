@@ -29,8 +29,8 @@ import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { finishTable, leaveTables } from "./parties.js";
-import { combineParties } from "./table-actions.js";
+import { finishTable, leaveTables } from "./testing/party-close-fixture.js";
+import { combineParties } from "./testing/table-action-fixture.js";
 import { removeLiveTables, tablesTied } from "./table-removal.js";
 import {
   billRow,

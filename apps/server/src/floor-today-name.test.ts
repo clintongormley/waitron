@@ -27,7 +27,7 @@ import {
   takeOffToday,
 } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { finishTable, partyRevision } from "./parties.js";
+import { finishTable, partyRevision } from "./testing/party-close-fixture.js";
 import { moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import {
   commandFor,

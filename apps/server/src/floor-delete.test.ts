@@ -30,7 +30,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { floorDeletionFor } from "./floor-delete.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { leaveTables, finishTable } from "./parties.js";
+import { leaveTables, finishTable } from "./testing/party-close-fixture.js";
 import {
   setupPartyVenue,
   inTx,

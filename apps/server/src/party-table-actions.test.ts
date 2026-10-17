@@ -21,7 +21,7 @@ import { readDrafts } from "./order-drafts.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { finishTable, readPartyBills, setPartyName } from "./parties.js";
+import { finishTable, readPartyBills, setPartyName } from "./testing/party-close-fixture.js";
 import { switchOff } from "./testing/live-table.js";
 import { listExpoQueue } from "./working-order.js";
 import {

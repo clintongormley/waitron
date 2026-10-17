@@ -20,7 +20,7 @@ import { ensureToday, moveToday, resetZone } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { finishTable } from "./parties.js";
+import { finishTable } from "./testing/party-close-fixture.js";
 import {
   commandFor,
   inTx,
