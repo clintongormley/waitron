@@ -97,9 +97,7 @@ export const products = table(
       .$type<"public" | "staff_only" | "not_sold_separately">()
       .notNull()
       .default("public"),
-    // A content-addressed `<sha256>.<ext>` filename served by apps/server's /media route, never
-    // bytes. Null just means "no picture" — unlike `allergens`' null, which is a PENDING state the
-    // till surfaces.
+    // The photo's original hash filename is its stable reference; media resolves its current picture.
     image: label("image"),
     // Its own tile colour, lowercase #rrggbb; null takes its category's. A variant's own value is
     // ignored: it reads its parent's.

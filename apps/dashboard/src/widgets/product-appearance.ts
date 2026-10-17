@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import {
@@ -150,7 +151,7 @@ export class ProductAppearance extends LitElement {
           this.openPanel();
         }}
       >
-        ${shown ? html`<img src=${`/media/${encodeURIComponent(shown)}`} alt="" />` : nothing}
+        ${shown ? html`<img src=${liveMediaImage(shown, "square")} alt="" />` : nothing}
         <span class="pencil"><wt-icon name="pencil"></wt-icon></span></button
       ><slot></slot>
       ${!this.image && this.inheritedImage ? html`<span class="caption" data-test="inherited-caption" id=${this.#captionId}>${t("editor.inherited_image_alt")}</span>` : nothing}

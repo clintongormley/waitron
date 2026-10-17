@@ -85,8 +85,8 @@ export interface ListedVariant extends ProductVariant {
 /**
  * The slice of one product row the dashboard reads out of `GET /management-api/catalogues/:id/products`
  * — the whole `Product` catalogue's `operations.ts` returns. `unitPrice` is a GROSS (VAT-inclusive)
- * two-place decimal STRING, never a number; `image` is a bare `<sha256>.<ext>` filename served at
- * `/media/<image>`, or null when there is no picture.
+ * two-place decimal STRING, never a number; `image` holds the photo's original hash filename as a
+ * stable reference, or null. Media resolves the current picture separately.
  */
 export interface Product {
   id: string;

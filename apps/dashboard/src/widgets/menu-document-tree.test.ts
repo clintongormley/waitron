@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import type { MenuTarget } from "@waitron/catalogue/src/menu-document-types.js";
@@ -16,6 +17,7 @@ import {
   mountWidget,
 } from "./test-helpers.js";
 
+useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
 let locale: string;
 beforeEach(async () => {
@@ -41,7 +43,7 @@ function fixture(): MenuDocument {
     "Frozen lunch",
   );
   doc.offers.mi!.customerName = { es: "Cerveza fría", en: "Cold beer" };
-  doc.offers.mi!.image = "lager.webp";
+  doc.offers.mi!.image = mediaTestReference("lager.webp");
   doc.offers.juice!.color = "#aabbcc";
   doc.offers.juice!.customerName = null;
   return doc;
@@ -220,7 +222,7 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
         {
           id: "lager",
           name: "Counter lager",
-          image: "lager.webp",
+          image: mediaTestReference("lager.webp"),
           color: null,
           available: true,
         } as MenuStructureTable["products"][number],
@@ -250,7 +252,11 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
   const otherPhoto = b.querySelector<HTMLElement>("[part~='product-media']")!;
   expect(photo.getBoundingClientRect().width).toBe(otherPhoto.getBoundingClientRect().width);
   expect(photo.getBoundingClientRect().height).toBe(otherPhoto.getBoundingClientRect().height);
-  expect(photo.querySelector("img")!.getAttribute("src")).toBe("/media/lager.webp");
+  await vi.waitFor(() =>
+    expect(photo.querySelector("img")!.getAttribute("src")).toBe(
+      `/media/renditions/v1/${mediaTestReference("lager.webp")}/square/7500-2500-200.webp`,
+    ),
+  );
   const colour = row(el, "juice")!.querySelector<HTMLElement>("[part~='media-frame']")!;
   expect(getComputedStyle(colour).backgroundColor).toBe("rgb(170, 187, 204)");
   expect(colour.getBoundingClientRect().width).toBe(photo.getBoundingClientRect().width);
@@ -263,7 +269,7 @@ it("puts a section's photo at the same size and position as Structure's section 
   const document = fixture();
   const section = document.root.members[0]!;
   if (section.kind !== "section") throw new Error("Fixture needs its section");
-  section.image = "drinks.webp";
+  section.image = mediaTestReference("drinks.webp");
   const el = await mount(document);
   const { el: structure } = await mountWidget<MenuStructureTable>(
     "dashboard-menu-structure-table",
@@ -296,7 +302,11 @@ it("puts a section's photo at the same size and position as Structure's section 
   expect(photo.getBoundingClientRect().left - frame.getBoundingClientRect().left).toBe(
     swatch.getBoundingClientRect().left - otherFrame.getBoundingClientRect().left,
   );
-  expect(photo.querySelector("img")!.getAttribute("src")).toBe("/media/drinks.webp");
+  await vi.waitFor(() =>
+    expect(photo.querySelector("img")!.getAttribute("src")).toBe(
+      `/media/renditions/v1/${mediaTestReference("drinks.webp")}/square/7500-2500-200.webp`,
+    ),
+  );
 });
 
 it.each([390, 1280])(

@@ -56,11 +56,13 @@ export class WtSlider extends LitElement {
   @property({ type: Number }) step = 1;
   @property({ type: Number }) value = 0;
   @property({ type: Boolean, reflect: true }) disabled = false;
+  @property({ type: Boolean }) continuous = false;
   @property() error = "";
   /** The number under the latest drag, until a new `value` replaces it. */
   @state() private shown: number | null = null;
 
   readonly #id = uniqueId("wt-slider");
+  #lastContinuousInput: number | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("value")) this.shown = null;
@@ -69,10 +71,19 @@ export class WtSlider extends LitElement {
   #onInput(event: Event): void {
     event.stopPropagation();
     this.shown = Number((event.target as HTMLInputElement).value);
+    if (this.continuous) {
+      this.value = this.shown;
+      this.#lastContinuousInput = this.value;
+      dispatchWtChange(this, event, { value: this.value });
+    }
   }
 
   #onChange(event: Event): void {
+    event.stopPropagation();
     const value = Number((event.target as HTMLInputElement).value);
+    const matchingInput = this.continuous && value === this.#lastContinuousInput;
+    this.#lastContinuousInput = null;
+    if (matchingInput) return;
     this.value = value;
     dispatchWtChange(this, event, { value });
   }
@@ -80,7 +91,7 @@ export class WtSlider extends LitElement {
   override render() {
     const errorId = `${this.#id}-error`;
     const shown = this.shown ?? this.value;
-    return html`<div class="row">
+    return html`<div class="row" aria-disabled=${this.disabled ? "true" : nothing}>
         <label for=${this.#id} part="label">${this.label}</label>
         <span part="value" aria-hidden="true">${shown}</span>
       </div>

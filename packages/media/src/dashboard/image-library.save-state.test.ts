@@ -11,6 +11,10 @@ const image: LibraryImage = {
   names: { en: "Bread", es: "Pan" },
   createdAt: "2026-10-08T10:00:00Z",
   updatedAt: "2026-10-08T10:00:00Z",
+  framing: { x: 2500, y: 7500, zoom: 200 },
+  revision: 3,
+  sourceFilename: "bread.png",
+  originalFilename: null,
   usageCount: 0,
 };
 let el: ImageLibrary;
@@ -98,6 +102,8 @@ it("a changed refused edit stays primary and can retry without another edit", as
   expect(api.updateImage).toHaveBeenCalledTimes(2);
   expect(api.updateImage).toHaveBeenLastCalledWith("bread", {
     names: { en: "Edited bread", es: "Pan" },
+    framing: { x: 2500, y: 7500, zoom: 200 },
+    expectedRevision: 3,
   });
 });
 

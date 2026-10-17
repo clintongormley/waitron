@@ -1,3 +1,5 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
@@ -10,10 +12,14 @@ import { MEDIA_STRINGS } from "./strings.js";
 
 const image: LibraryImage = {
   id: "one",
-  filename: "one.jpg",
+  filename: mediaTestReference("one.jpg"),
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: mediaTestReference("one.jpg"),
+  originalFilename: null,
   usageCount: 0,
 };
 let el: ImageLibrary;
@@ -268,7 +274,11 @@ it("previews the chosen file when uploading and the stored image when editing", 
       .shadowRoot!.querySelector("wt-file-input[name=image-file]")
       ?.shadowRoot!.querySelector<HTMLImageElement>("img");
   expect(editing).not.toBeNull();
-  expect(editing!.src).toContain("/media/one.jpg");
+  await vi.waitFor(() =>
+    expect(editing!.src).toContain(
+      `/media/renditions/v1/${mediaTestReference("one.jpg")}/square/7500-2500-200.webp`,
+    ),
+  );
   el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
     new CustomEvent("wt-close", { bubbles: true, composed: true }),
   );
@@ -698,6 +708,8 @@ it("retains every translation while editing enabled languages and keeps a draft 
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Nuevo pan", en: "Bread" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });
@@ -893,6 +905,8 @@ it("keeps draft translations under their languages when the default changes live
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Pan editado", en: "Bread", fr: "Pain" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });
@@ -1100,6 +1114,8 @@ it("saves the image when Enter is pressed in a name field", async () => {
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Pan editado", en: "Bread" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });
@@ -1581,7 +1597,7 @@ it("says a refused translation in a language the form does not show above Save, 
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
-it("says a photo refusal on an edit, which has no photo field, above Save and leaves Save working", async () => {
+it("says a photo refusal beside the replacement field and above Save, leaving retry working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({ code: "image.too_large", params: {}, status: 400 });
   await mount(client);
@@ -1592,15 +1608,13 @@ it("says a photo refusal on an edit, which has no photo field, above Save and le
   click("[data-test=save]");
 
   await vi.waitFor(async () =>
-    expect(await bottomOf()).toBe(
-      `The image could not be saved. ${codeMessage("image.too_large")}`,
-    ),
+    expect(await bottomOf()).toBe("Correct the highlighted fields to continue."),
   );
   expect(
     el
       .shadowRoot!.querySelector("wt-file-input[name=image-file]")
-      ?.shadowRoot!.querySelector("[data-error]") ?? null,
-  ).toBeNull();
+      ?.shadowRoot!.querySelector("[data-error]")?.textContent,
+  ).toBe(codeMessage("image.too_large"));
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
@@ -1752,7 +1766,9 @@ for (const picker of [false, true]) {
     expect((modal as HTMLElement & { heading: string }).heading).toBe("Pan");
     const shown = modal.querySelector<HTMLImageElement>("img")!;
     expect(shown.alt).toBe("Pan");
-    expect(shown.getAttribute("src")).toBe("/media/one.jpg");
+    await vi.waitFor(() =>
+      expect(shown.getAttribute("src")).toBe(`/media/${mediaTestReference("one.jpg")}`),
+    );
     expect(client.getImage).toHaveBeenCalledWith("one");
     expect(el.shadowRoot!.querySelectorAll("wt-modal")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("wt-input[name=name-es]")).toBeNull();
@@ -1885,7 +1901,12 @@ async function previewClosed() {
 
 it("shows the uses of the image opened last when an earlier image's lookup answers late", async () => {
   const client = api();
-  const two = { ...image, id: "two", filename: "two.jpg", names: { es: "Tostada" } };
+  const two = {
+    ...image,
+    id: "two",
+    filename: mediaTestReference("two.jpg"),
+    names: { es: "Tostada" },
+  };
   client.listImages.mockResolvedValue({ images: [image, two], total: 2 });
   const first = deferred<{ image: LibraryImage; uses: ImageUsage[] }>();
   client.getImage
@@ -1907,7 +1928,7 @@ it("shows the uses of the image opened last when an earlier image's lookup answe
   await el.updateComplete;
   expect((viewer() as HTMLElement & { heading: string }).heading).toBe("Tostada");
   expect(viewer()!.querySelector<HTMLImageElement>("img")!.getAttribute("src")).toBe(
-    "/media/two.jpg",
+    `/media/${mediaTestReference("two.jpg")}`,
   );
   expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]);
 });
@@ -2150,4 +2171,32 @@ it("A651 picker hides its inner title, keeps white tile selection and selects fr
   expect(client.uploadImage).not.toHaveBeenCalled();
   expect(client.updateImage).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("[data-test=image-preview]")).toBeNull();
+});
+
+const mediaReplacements = useMediaPresentations();
+
+it("uses square framed cards and editor previews, with the complete current source in the full viewer", async () => {
+  await mount();
+  const reference = image.filename;
+  const replacement = mediaTestReference("replacement.webp");
+  const card = el.shadowRoot!.querySelector<HTMLImageElement>("[data-image=one] img")!;
+  await vi.waitFor(() =>
+    expect(card.getAttribute("src")).toBe(
+      `/media/renditions/v1/${reference}/square/7500-2500-200.webp`,
+    ),
+  );
+  const box = card.getBoundingClientRect();
+  expect(box.width / box.height).toBeCloseTo(1, 2);
+  expect(getComputedStyle(card).objectFit).toBe("cover");
+  thumbnail("one").click();
+  const modal = await openedViewer();
+  const full = modal.querySelector("img")!;
+  await vi.waitFor(() => expect(full.getAttribute("src")).toBe(`/media/${reference}`));
+  mediaReplacements.set(reference, replacement);
+  invalidateMediaImages();
+  await vi.waitFor(() => expect(full.getAttribute("src")).toBe(`/media/${replacement}`));
+  expect(card.getAttribute("src")).toBe(
+    `/media/renditions/v1/${replacement}/square/7500-2500-200.webp`,
+  );
+  expect(image.filename).toBe(reference);
 });

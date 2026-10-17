@@ -8,6 +8,11 @@ declare module "@waitron/shared" {
     "image.too_large": { maxBytes: number };
     "image.invalid_query": Record<string, never>;
     "image.invalid_file": Record<string, never>;
+    "image.invalid_framing": { field: "framing" };
+    "image.busy": Record<string, never>;
+    "image.changed": { imageId: string };
+    "image.reference_conflict": { imageId: string };
+    "image.hash_conflict": { filename: string };
     "image.too_many_pixels": { maxPixels: number };
   }
 }

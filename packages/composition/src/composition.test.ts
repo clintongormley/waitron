@@ -124,7 +124,7 @@ describe("ALL_MODULES backup contribution", () => {
       ALL_MODULES.find((module) => module.name === "media")?.classification?.map(
         (table) => table.table,
       ),
-    ).toEqual(["media_images", "media_image_data"]);
+    ).toEqual(["media_images", "media_image_data", "media_image_blobs", "media_image_edits"]);
   });
   it("a module may omit backup (open contribution set)", () => {
     const identity = ALL_MODULES.find((m) => m.name === "identity");

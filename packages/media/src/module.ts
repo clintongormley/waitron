@@ -8,6 +8,12 @@ import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 export const MEDIA_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("media_images", "state", "shared image metadata; copied to standbys"),
   classify("media_image_data", "state", "shared image bytes; copied to standbys"),
+  classify(
+    "media_image_blobs",
+    "state",
+    "immutable replacement sources shared by photo identities",
+  ),
+  classify("media_image_edits", "state", "current picture, framing and revision for each photo"),
 ];
 export const MEDIA_CHANGE_SOURCES: readonly ChangeSource[] = [
   { table: "media_images", type: "media_images" },
@@ -16,8 +22,13 @@ export const MEDIA_CONFIGURATION_TRANSFER = {
   kind: "tables",
   validate: validateMediaConfiguration,
   tables: [
-    { name: "media_images", before: ["products", "sections", "section_members"] },
+    {
+      name: "media_images",
+      before: ["media_image_edits", "products", "sections", "section_members"],
+    },
     { name: "media_image_data", before: ["products", "sections", "section_members"] },
+    { name: "media_image_blobs", before: ["media_image_edits"] },
+    { name: "media_image_edits", before: ["products", "sections", "section_members"] },
   ],
 } as const;
 export const MEDIA_PERMISSIONS: readonly ModulePermission[] = [

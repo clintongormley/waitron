@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,7 +12,16 @@ import {
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
-import { MEDIA_MIGRATIONS, mediaImages, uploadImage } from "@waitron/media";
+import {
+  MEDIA_MIGRATIONS,
+  MEDIA_MODULE,
+  mediaImages,
+  mediaImageBlobs,
+  uploadImage,
+  prepareImage,
+  saveImage,
+  readCurrentImage,
+} from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -24,6 +34,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import * as logoModule from "./receipt-logo.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { moduleCoreServices } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
 const suite = useVenueDb({
@@ -319,6 +331,302 @@ describe("replacement department receipt HTTP contract", () => {
     ).toBe(204);
     expect((await rows()).receipts[0]!.logoRasters).toEqual(before);
     expect(decode).not.toHaveBeenCalled();
+  });
+
+  async function splitPicture(reversed = false) {
+    const pixels = Buffer.alloc(800 * 200 * 3);
+    for (let y = 0; y < 200; y++)
+      for (let x = 0; x < 800; x++) {
+        const value = x < 400 !== reversed ? 255 : 0;
+        pixels.fill(value, (y * 800 + x) * 3, (y * 800 + x + 1) * 3);
+      }
+    const bytes = await sharp(pixels, { raw: { width: 800, height: 200, channels: 3 } })
+      .png()
+      .toBuffer();
+    return prepareImage(new Uint8Array(bytes), { maxUploadBytes: 20 * 1024 * 1024 });
+  }
+  it.each([false, true])(
+    "settings prepares the current framed source (replacement=%s)",
+    async (replacement) => {
+      const f = await fixture();
+      const original = await splitPicture();
+      const { image } = await withTransaction(suite.db, (tx) =>
+        uploadImage(tx, { image: original, names: { es: "Logo" } }),
+      );
+      const next = replacement ? await splitPicture(true) : null;
+      await withTransaction(suite.db, (tx) =>
+        saveImage(
+          tx,
+          image.id,
+          {
+            names: image.names,
+            expectedRevision: image.revision,
+            framing: { x: 7500, y: 5000, zoom: 200 },
+          },
+          next,
+          undefined,
+          "es",
+        ),
+      );
+      expect(
+        (
+          await f.put(
+            body({ receipt: { operationDescription: "Deli meals", logo: image.filename } }),
+          )
+        ).status,
+      ).toBe(204);
+      const rasters = (await rows()).receipts[0]!.logoRasters!;
+      for (const width of ["58mm", "80mm"] as const) {
+        expect(new Set(Buffer.from(rasters[width].data, "base64"))).toEqual(
+          new Set([replacement ? 0 : 255]),
+        );
+      }
+      expect((await rows()).receipts[0]!.receipt.logo).toBe(image.filename);
+    },
+  );
+
+  it("refuses a photo revision changed during raster preparation without overwriting settings", async () => {
+    const f = await fixture();
+    const original = await splitPicture();
+    const next = await splitPicture(true);
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: original, names: { es: "Logo" } }),
+    );
+    const before = await rows();
+    const draw = logoModule.drawLogoRasters;
+    vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
+      await withTransaction(suite.db, (tx) =>
+        saveImage(
+          tx,
+          image.id,
+          {
+            names: image.names,
+            expectedRevision: image.revision,
+            framing: { x: 5000, y: 5000, zoom: 100 },
+          },
+          next,
+          undefined,
+          "es",
+        ),
+      );
+      return draw(bytes);
+    });
+    await refusal(
+      await f.put(body({ receipt: { operationDescription: "New meals", logo: image.filename } })),
+      409,
+      "image.changed",
+      { imageId: image.id },
+    );
+    expect(await rows()).toEqual(before);
+  });
+
+  it("a kept-raster shortcut refuses a replacement queued between its snapshot and final write", async () => {
+    const f = await fixture();
+    const source = await splitPicture();
+    const replacement = await splitPicture(true);
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: source, names: { es: "Logo" } }),
+    );
+    expect(
+      (await f.put(body({ receipt: { operationDescription: "Deli meals", logo: image.filename } })))
+        .status,
+    ).toBe(204);
+    const rasters = await logoModule.drawLogoRasters(replacement.bytes);
+    let entered!: () => void;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const read = VENUE_SERVICE.readDepartmentLogoRasters;
+    vi.spyOn(VENUE_SERVICE, "readDepartmentLogoRasters").mockImplementation(async (...args) => {
+      const result = await read(...args);
+      entered();
+      await gate;
+      return result;
+    });
+    const saving = f.put(
+      body({ receipt: { operationDescription: "Stale meals", logo: image.filename } }),
+    );
+    await ready;
+    const updating = withTransaction(suite.db, (tx) =>
+      saveImage(
+        tx,
+        image.id,
+        { names: image.names, framing: image.framing, expectedRevision: image.revision },
+        replacement,
+        rasters,
+        "es",
+      ),
+    );
+    release();
+    await updating;
+    const afterPhoto = await rows();
+    await refusal(await saving, 409, "image.changed", { imageId: image.id });
+    expect(await rows()).toEqual(afterPhoto);
+    expect((await rows()).receipts[0]!.receipt.operationDescription).toBe("Deli meals");
+    expect((await rows()).receipts[0]!.logoRasters).toEqual(rasters);
+  });
+
+  function mediaRoute(
+    f: Awaited<ReturnType<typeof fixture>>,
+    render: (bytes: Uint8Array) => ReturnType<typeof logoModule.drawLogoRasters>,
+  ) {
+    registerModulePermissions([
+      ...(MEDIA_MODULE.permissions ?? []),
+      { permission: "venue_service.manage", grantedFrom: "manager" },
+    ]);
+    const app = new Hono();
+    MEDIA_MODULE.routes!.mount(
+      app,
+      {
+        db: suite.db,
+        cfg: { locationId: f.cfg.locationId, contentDefaultLanguage: "es" },
+        core: moduleCoreServices(f.cfg, []),
+        renderReceiptLogo: render,
+      },
+      () => {},
+    );
+    return app;
+  }
+  function replacementForm(
+    image: { names: Record<string, string>; revision: number },
+    bytes: Uint8Array,
+  ) {
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array(bytes)], "replacement.webp", { type: "image/webp" }));
+    form.set("names", JSON.stringify(image.names));
+    form.set("framing", JSON.stringify({ x: 5000, y: 5000, zoom: 100 }));
+    form.set("expectedRevision", String(image.revision));
+    return form;
+  }
+
+  it.each(["preparation", "write"] as const)(
+    "a %s failure rolls the photo and every receipt raster back through HTTP",
+    async (failure) => {
+      const f = await fixture();
+      const source = await splitPicture();
+      const next = await splitPicture(true);
+      const { image } = await withTransaction(suite.db, (tx) =>
+        uploadImage(tx, { image: source, names: { es: "Logo" } }),
+      );
+      expect(
+        (
+          await f.put(
+            body({ receipt: { operationDescription: "Deli meals", logo: image.filename } }),
+          )
+        ).status,
+      ).toBe(204);
+      const before = await rows();
+      const beforePhoto = await readCurrentImage(suite.db, image.filename);
+      const beforeBlobs = await suite.db.select().from(mediaImageBlobs);
+      const mediaApp = mediaRoute(
+        f,
+        failure === "preparation"
+          ? async () => {
+              throw new Error("test render refused");
+            }
+          : logoModule.drawLogoRasters,
+      );
+      if (failure === "write")
+        await suite.db.execute(
+          sql`create trigger refuse_photo_edit before update on media_image_edits begin select raise(abort, 'test edit refused'); end`,
+        );
+      try {
+        const response = await mediaApp.request(`/management-api/images/${image.id}`, {
+          method: "PATCH",
+          headers: { cookie: f.headers.cookie },
+          body: replacementForm(image, next.bytes),
+        });
+        expect(response.status).toBe(500);
+        expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+        expect(await rows()).toEqual(before);
+        expect(await readCurrentImage(suite.db, image.filename)).toEqual(beforePhoto);
+        expect(await suite.db.select().from(mediaImageBlobs)).toEqual(beforeBlobs);
+      } finally {
+        if (failure === "write")
+          await suite.db.execute(sql`drop trigger if exists refuse_photo_edit`);
+      }
+    },
+  );
+
+  it("photo HTTP save refreshes only the final matching logo choices after attach, clear and switch during preparation", async () => {
+    const f = await fixture();
+    const source = await splitPicture();
+    const replacement = await splitPicture(true);
+    const other = await samplePreparedImage({ width: 51, height: 12 });
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: source, names: { es: "Logo" } }),
+    );
+    const { image: otherImage } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: other, names: { es: "Other" } }),
+    );
+    expect(
+      (await f.put(body({ receipt: { operationDescription: "Deli meals", logo: image.filename } })))
+        .status,
+    ).toBe(204);
+    const rasters = (await rows()).receipts[0]!.logoRasters!;
+    const otherRasters = await logoModule.drawLogoRasters(other.bytes);
+    const [retained] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: f.cfg.locationId,
+        name: "Retained",
+        tradingName: "Retained",
+        active: false,
+      })
+      .returning();
+    const [attached] = await suite.db
+      .insert(departments)
+      .values({ locationId: f.cfg.locationId, name: "Attached", tradingName: "Attached" })
+      .returning();
+    await suite.db.insert(departmentReceipts).values([
+      { departmentId: retained!.id, receipt: { logo: image.filename }, logoRasters: rasters },
+      { departmentId: attached!.id, receipt: {} },
+    ]);
+    let prepared: Awaited<ReturnType<typeof logoModule.drawLogoRasters>> | undefined;
+    const mediaApp = mediaRoute(f, async (bytes) => {
+      prepared = await logoModule.drawLogoRasters(bytes);
+      await withTransaction(suite.db, async (tx) => {
+        await tx
+          .update(departmentReceipts)
+          .set({ receipt: { operationDescription: "Deli meals" }, logoRasters: null })
+          .where(eq(departmentReceipts.departmentId, f.departmentId));
+        await tx
+          .update(departmentReceipts)
+          .set({ receipt: { logo: otherImage.filename }, logoRasters: otherRasters })
+          .where(eq(departmentReceipts.departmentId, retained!.id));
+        await tx
+          .update(departmentReceipts)
+          .set({ receipt: { logo: image.filename }, logoRasters: rasters })
+          .where(eq(departmentReceipts.departmentId, attached!.id));
+      });
+      return prepared;
+    });
+    const response = await mediaApp.request(`/management-api/images/${image.id}`, {
+      method: "PATCH",
+      headers: { cookie: f.headers.cookie },
+      body: replacementForm(image, replacement.bytes),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).image).toMatchObject({
+      id: image.id,
+      filename: image.filename,
+      sourceFilename: replacement.filename,
+      revision: image.revision + 1,
+    });
+    const receipts = (await rows()).receipts;
+    expect(receipts.find((row) => row.departmentId === f.departmentId)!.logoRasters).toBeNull();
+    expect(receipts.find((row) => row.departmentId === retained!.id)!).toMatchObject({
+      receipt: { logo: otherImage.filename },
+      logoRasters: otherRasters,
+    });
+    expect(receipts.find((row) => row.departmentId === attached!.id)!).toMatchObject({
+      receipt: { logo: image.filename },
+      logoRasters: prepared,
+    });
   });
   it.each(["permission", "department", "languages", "policy", "hidden-text", "image"])(
     "rechecks %s after logo decoding and preserves the concurrent change",

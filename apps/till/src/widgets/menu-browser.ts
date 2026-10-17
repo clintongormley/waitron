@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus } from "../menu-filter.js";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -69,7 +70,7 @@ function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
 }
 
 function thumb(image: string): TemplateResult {
-  return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
+  return html`<img class="thumb" src=${liveMediaImage(image, "till")} alt="" />`;
 }
 
 const paints = new Map<string, string>();

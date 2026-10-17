@@ -13,6 +13,10 @@ const image: LibraryImage = {
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T10:00:00Z",
   updatedAt: "2026-09-12T10:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: "bread.png",
+  originalFilename: null,
   usageCount: 1,
 };
 beforeEach(() => {

@@ -12,6 +12,10 @@ const image: LibraryImage = {
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: "one.jpg",
+  originalFilename: null,
   usageCount: 0,
 };
 class ImageLeaveApp extends LitElement {
@@ -168,6 +172,8 @@ it("a refused Image update retains the exact submitted metadata and remains prot
   );
   expect(app.client.updateImage).toHaveBeenCalledWith("one", {
     names: { es: "Pan editado", en: "Bread" },
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    expectedRevision: 1,
   });
   cancel(library);
   expect((await question()).open).toBe(true);
@@ -363,4 +369,149 @@ it("a duplicate Upload response from a replaced editor cannot close or label its
   expect(library.shadowRoot!.querySelector("[data-test=duplicate-upload]")).toBeNull();
   expect(library.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("navigation sees the framing subdraft as a child of the photo, while Escape discards it without accepting", async () => {
+  const library = await mount();
+  await userEvent.click(
+    page.elementLocator(library.shadowRoot!.querySelector("[data-test=adjust-framing]")!),
+  );
+  await library.updateComplete;
+  const framing = library.shadowRoot!.querySelector("media-photo-framing-dialog")!;
+  const c = document.createElement("canvas");
+  c.width = 80;
+  c.height = 80;
+  framing.source = c.toDataURL();
+  await framing.updateComplete;
+  await vi.waitFor(() =>
+    expect(framing.shadowRoot!.querySelector("wt-slider")!.disabled).toBe(false),
+  );
+  framing.shadowRoot!.querySelector<HTMLElement>("[data-test=frame]")!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+  const proceed = vi.fn();
+  const leaving = app.leave.coordinator.request({
+    scopes: [library],
+    reason: "navigation",
+    proceed,
+  });
+  const q = await question();
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await leaving;
+  expect(proceed).not.toHaveBeenCalled();
+  const closed = new Promise((resolve) =>
+    framing.addEventListener("close", resolve, { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await expect
+    .poll(() => library.shadowRoot!.querySelector("media-photo-framing-dialog"))
+    .toBeNull();
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(
+    library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+      .disabled,
+  ).toBe(true);
+  expect(app.client.updateImage).not.toHaveBeenCalled();
+});
+
+it("reconnecting a retained framing window keeps its unaccepted private changes protected", async () => {
+  const library = await mount();
+  await userEvent.click(
+    page.elementLocator(library.shadowRoot!.querySelector("[data-test=adjust-framing]")!),
+  );
+  await library.updateComplete;
+  const framing = library.shadowRoot!.querySelector("media-photo-framing-dialog")!;
+  const c = document.createElement("canvas");
+  c.width = 80;
+  c.height = 80;
+  framing.source = c.toDataURL();
+  await framing.updateComplete;
+  await vi.waitFor(() =>
+    expect(framing.shadowRoot!.querySelector("wt-slider")!.disabled).toBe(false),
+  );
+  framing.shadowRoot!.querySelector<HTMLElement>("[data-test=frame]")!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+  const container = framing.parentNode!;
+  framing.remove();
+  expect(app.leave.coordinator.isDirty([library])).toBe(false);
+  container.appendChild(framing);
+  await framing.updateComplete;
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+});
+
+it("accepted framing and replacement stay under the picker's parent leave scope and discard without writing", async () => {
+  const library = await mount();
+  const selected = new File(["replacement"], "another-plate.png", { type: "image/png" });
+  file(library, selected);
+  await library.updateComplete;
+  await userEvent.click(
+    page.elementLocator(library.shadowRoot!.querySelector("[data-test=adjust-framing]")!),
+  );
+  await library.updateComplete;
+  const framing = library.shadowRoot!.querySelector("media-photo-framing-dialog")!;
+  framing.dispatchEvent(
+    new CustomEvent("done", {
+      detail: { framing: { x: 7000, y: 3000, zoom: 250 } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await library.updateComplete;
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+  cancel(library);
+  const q = await question();
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(library.shadowRoot!.querySelector("[data-test=photo-filename]")!.textContent).toBe(
+    selected.name,
+  );
+  const closed = editorClosed(library);
+  cancel(library);
+  await question();
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await closed;
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(app.client.updateImage).not.toHaveBeenCalled();
+});
+
+it("conflict reload asks before discarding a photo's file draft and Keep retains it", async () => {
+  const library = await mount();
+  file(library, new File(["replacement"], "my-photo.png", { type: "image/png" }));
+  await edit(library, "My name");
+  app.client.updateImage.mockRejectedValueOnce({ code: "image.changed" });
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await vi.waitFor(() =>
+    expect(library.shadowRoot!.querySelector("[data-test=reload-photo]")).not.toBeNull(),
+  );
+  app.client.getImage.mockResolvedValue({
+    image: { ...image, names: { es: "Newer photo" }, revision: 7 },
+    uses: [],
+  });
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=reload-photo]")!.click();
+  await vi.waitFor(() =>
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true),
+  );
+  const q = await question();
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(library.shadowRoot!.querySelector("[data-test=photo-filename]")!.textContent).toBe(
+    "my-photo.png",
+  );
+  expect(
+    library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
+  ).toBe("My name");
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=reload-photo]")!.click();
+  await vi.waitFor(() => expect(q.open).toBe(true));
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await vi.waitFor(() =>
+    expect(
+      library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
+    ).toBe("Newer photo"),
+  );
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(app.client.updateImage).toHaveBeenCalledTimes(1);
 });

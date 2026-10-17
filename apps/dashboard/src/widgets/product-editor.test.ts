@@ -5,6 +5,8 @@ import { registerIcons, type ComboboxOption } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
+  mediaTestReference,
+  useMediaPresentations,
   chooseOption,
   formMessageOf,
   middleWithin,
@@ -27,6 +29,7 @@ import { EACH_CHOICE } from "./variant-table.js";
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
 // cannot catch a defect in it.
+useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
@@ -3952,7 +3955,7 @@ it("asks the screen to open a saved variant's own page", async () => {
 it("hands the variants section and window the base price and photo a blank one falls back to", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
-    value: { ...product, image: "coffee.png", variants: [small, large] },
+    value: { ...product, image: mediaTestReference("coffee.png"), variants: [small, large] },
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
@@ -3962,7 +3965,7 @@ it("hands the variants section and window the base price and photo a blank one f
   expect(table.basePrice).toBe("9.50");
   const form = variantForm(el) as unknown as { basePrice: string; inheritedImage: string | null };
   expect(form.basePrice).toBe("9.50");
-  expect(form.inheritedImage).toBe("coffee.png");
+  expect(form.inheritedImage).toBe(mediaTestReference("coffee.png"));
 });
 
 it("points a refused translation at an Active variant only, as the server checks only those", () => {
@@ -4004,7 +4007,7 @@ const litre = { id: "litre", name: { en: "Litre" }, abbreviation: { en: "l" } };
 const parentValues: InheritedValues = {
   name: "Coffee",
   description: { en: "Roasted in house" },
-  image: "coffee.png",
+  image: mediaTestReference("coffee.png"),
   unitPrice: "9.00",
   vatClass: "reduced",
   unitId: litre.id,
@@ -4353,7 +4356,7 @@ it("shows the parent's category, inherited nutritional values and photo", async 
     `${t("editor.nutrition.dietary")}: ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
   );
   const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
-  expect(upload.inheritedImage).toBe("coffee.png");
+  expect(upload.inheritedImage).toBe(mediaTestReference("coffee.png"));
   expect(upload.image).toBeNull();
 });
 
@@ -5568,7 +5571,7 @@ it("returns from the nested image picker to the appearance panel's image action"
 });
 
 it("keeps a chosen photo's large preview out of the compact image-and-colour panel", async () => {
-  const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+  const el = await mountWithPhoto({ value: { ...saved, image: mediaTestReference("own.png") } });
   appearance(el).openPanel();
   const upload = photoControl(el);
   await upload.updateComplete;
@@ -5580,7 +5583,7 @@ const nameGroup = (el: ProductEditor) =>
   el.shadowRoot!.querySelector<HTMLElement>('[data-section="name"]')!;
 
 it("puts the photo beside Name, which takes the rest of the row, and not in Descriptors", async () => {
-  const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+  const el = await mountWithPhoto({ value: { ...saved, image: mediaTestReference("own.png") } });
   const upload = photoControl(el) as HTMLElementTagNameMap["dashboard-image-upload"];
   expect(upload.thumbnail).toBe(false);
   expect(nameGroup(el).contains(upload)).toBe(true);
@@ -5588,7 +5591,11 @@ it("puts the photo beside Name, which takes the rest of the row, and not in Desc
   expect(photoButton(el).getAttribute("aria-label")).toBe(
     `${t("image.label")} · ${t("editor.color")}`,
   );
-  expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/own.png");
+  await vi.waitFor(() =>
+    expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe(
+      `/media/renditions/v1/${mediaTestReference("own.png")}/square/7500-2500-200.webp`,
+    ),
+  );
   const photo = photoButton(el).getBoundingClientRect();
   const name = el.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.getBoundingClientRect();
   expect(name.left).toBeGreaterThan(photo.right);
@@ -5598,7 +5605,7 @@ it("puts the photo beside Name, which takes the rest of the row, and not in Desc
 
 it("keeps the photo and Name within the width the other fields stop at, on a desktop", async () => {
   await atDesktopWidth(async () => {
-    const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+    const el = await mountWithPhoto({ value: { ...saved, image: mediaTestReference("own.png") } });
     await photoControl(el).updateComplete;
     const right = (selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(selector)!.getBoundingClientRect().right;
@@ -5608,7 +5615,7 @@ it("keeps the photo and Name within the width the other fields stop at, on a des
 });
 
 it.each([
-  ["its own photo", "own.png"],
+  ["its own photo", mediaTestReference("own.png")],
   ["the placeholder", null],
 ])("opens the image library from %s, and holds Save while it is open", async (_, image) => {
   const el = await mountWithPhoto({ value: { ...saved, image } });
@@ -5623,7 +5630,7 @@ it.each([
 });
 
 it("removes the photo from the appearance panel, and saves none", async () => {
-  const el = await mountWithPhoto({ value: { ...saved, image: "own.png" } });
+  const el = await mountWithPhoto({ value: { ...saved, image: mediaTestReference("own.png") } });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   appearance(el).openPanel();
@@ -5642,7 +5649,11 @@ it("removes the photo from the appearance panel, and saves none", async () => {
 
 it("shows a variant's inherited photo beside its Name, described as the main product's for a screen reader only", async () => {
   const el = await mountVariant();
-  expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/coffee.png");
+  await vi.waitFor(() =>
+    expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe(
+      `/media/renditions/v1/${mediaTestReference("coffee.png")}/square/7500-2500-200.webp`,
+    ),
+  );
   const caption = appearance(el).shadowRoot!.querySelector("[data-test=inherited-caption]")!;
   expect(caption.textContent!.trim()).toBe(t("editor.inherited_image_alt"));
   expect(photoButton(el).getAttribute("aria-describedby")).toBe(caption.id);
@@ -5663,13 +5674,17 @@ it("marks the photo invalid on a refused photo, with the reason under it", async
 });
 
 it("keeps the thumbnail and colour panel without an image-library api", async () => {
-  const el = await mountPricing({ ...saved, image: "own.png" });
+  const el = await mountPricing({ ...saved, image: mediaTestReference("own.png") });
   expect(el.shadowRoot!.querySelector("dashboard-image-upload")).toBeNull();
   const name = el.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!.getBoundingClientRect();
   const group = nameGroup(el).getBoundingClientRect();
   expect(name.left).toBeGreaterThan(group.left);
   expect(name.right).toBe(group.right);
-  expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe("/media/own.png");
+  await vi.waitFor(() =>
+    expect(photoButton(el).querySelector("img")!.getAttribute("src")).toBe(
+      `/media/renditions/v1/${mediaTestReference("own.png")}/square/7500-2500-200.webp`,
+    ),
+  );
 });
 
 it.each([

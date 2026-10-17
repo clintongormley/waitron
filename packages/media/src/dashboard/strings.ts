@@ -1,5 +1,19 @@
 import { makeT, registerCatalogue, registerCodeMessages } from "@waitron/dashboard-kit";
 const en = {
+  "image.adjust_framing": "Adjust framing",
+  "image.replace_photo": "Replace photo",
+  "image.zoom": "Zoom (%)",
+  "image.lists": "Lists",
+  "image.till_buttons": "Till buttons",
+  "image.reset": "Reset",
+  "image.done": "Done",
+  "image.photo_position": "Photo position",
+  "image.framing_instruction":
+    "Drag the photo to place it. Use arrow keys to move 1%, or Shift and an arrow to move 10%.",
+  "image.photo_loading": "Loading photo…",
+  "image.photo_load_error": "The photo could not be loaded.",
+  "image.reload_photo": "Discard changes and reload photo",
+
   "nav.images": "Image library",
   "image.upload": "Upload photo",
   "image.upload_many": "Upload photos",
@@ -7,7 +21,7 @@ const en = {
   "image.back": "Back",
   "image.duplicate_reused": "Existing photo reused:",
   "image.duplicate_metadata_kept": "Its name is unchanged.",
-  "image.edit": "Edit image",
+  "image.edit": "Edit photo",
   "action.edit": "Edit",
   "image.name": "Name",
   "image.preview": "Selected photo preview",
@@ -69,6 +83,20 @@ const en = {
   "image.uses_error": "Could not look up where this image is used.",
 } as const;
 const es: Record<keyof typeof en, string> = {
+  "image.adjust_framing": "Ajustar encuadre",
+  "image.replace_photo": "Reemplazar foto",
+  "image.zoom": "Zoom (%)",
+  "image.lists": "Listas",
+  "image.till_buttons": "Botones de caja",
+  "image.reset": "Restablecer",
+  "image.done": "Listo",
+  "image.photo_position": "Posición de la foto",
+  "image.framing_instruction":
+    "Arrastra la foto para colocarla. Usa las flechas para mover un 1%, o Mayús y una flecha para mover un 10%.",
+  "image.photo_loading": "Cargando foto…",
+  "image.photo_load_error": "No se pudo cargar la foto.",
+  "image.reload_photo": "Descartar cambios y volver a cargar la foto",
+
   "nav.images": "Biblioteca de imágenes",
   "image.upload": "Subir foto",
   "image.upload_many": "Subir fotos",
@@ -76,7 +104,7 @@ const es: Record<keyof typeof en, string> = {
   "image.back": "Volver",
   "image.duplicate_reused": "Se ha reutilizado la foto existente:",
   "image.duplicate_metadata_kept": "Su nombre no ha cambiado.",
-  "image.edit": "Editar imagen",
+  "image.edit": "Editar foto",
   "action.edit": "Editar",
   "image.name": "Nombre",
   "image.preview": "Vista previa de la foto seleccionada",
@@ -156,6 +184,26 @@ registerCodeMessages({
   "image.invalid_file": {
     en: "The photo could not be read. It may be damaged, so try exporting it again.",
     es: "No se pudo leer la foto. Puede que esté dañada, así que prueba a exportarla de nuevo.",
+  },
+  "image.invalid_framing": {
+    en: "Adjust the photo framing again.",
+    es: "Vuelve a ajustar el encuadre de la foto.",
+  },
+  "image.busy": {
+    en: "The photo service is busy. Try again shortly.",
+    es: "El servicio de fotos está ocupado. Vuelve a intentarlo en breve.",
+  },
+  "image.changed": {
+    en: "This photo has changed. Reload it before saving again.",
+    es: "Esta foto ha cambiado. Vuelve a cargarla antes de guardar de nuevo.",
+  },
+  "image.reference_conflict": {
+    en: "This photo's original file already belongs to another library entry. Edit that photo or choose another file.",
+    es: "El archivo original de esta foto ya pertenece a otra entrada de la biblioteca. Edita esa foto o elige otro archivo.",
+  },
+  "image.hash_conflict": {
+    en: "The stored photo does not match its file. Choose another file.",
+    es: "La foto almacenada no coincide con su archivo. Elige otro archivo.",
   },
   "image.too_many_pixels": {
     en: "The photo has too many pixels. Export a smaller copy and try again.",

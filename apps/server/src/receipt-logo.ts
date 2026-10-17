@@ -27,19 +27,16 @@ export async function drawLogoRasters(bytes: Uint8Array): Promise<ReceiptLogoRas
 }
 
 export interface LogoCache {
-  get(filename: string, paperWidth: PaperWidth): MonoRaster | undefined;
-  set(filename: string, paperWidth: PaperWidth, raster: MonoRaster): void;
+  get(identity: string, paperWidth: PaperWidth): MonoRaster | undefined;
+  set(identity: string, paperWidth: PaperWidth, raster: MonoRaster): void;
 }
 
-/**
- * The logos drawn lately. A library filename is the hash of its bytes (checked again on import), so
- * what one draws on one paper never changes and an entry never goes stale.
- */
+/** Callers key a picture by its immutable source, framing and rendition version. */
 export function createLogoCache(limit = 8): LogoCache {
   const entries = new Map<string, MonoRaster>();
   return {
-    get(filename, paperWidth) {
-      const key = `${filename} ${paperWidth}`;
+    get(identity, paperWidth) {
+      const key = `${identity} ${paperWidth}`;
       const raster = entries.get(key);
       if (raster !== undefined) {
         entries.delete(key);
@@ -47,8 +44,8 @@ export function createLogoCache(limit = 8): LogoCache {
       }
       return raster;
     },
-    set(filename, paperWidth, raster) {
-      const key = `${filename} ${paperWidth}`;
+    set(identity, paperWidth, raster) {
+      const key = `${identity} ${paperWidth}`;
       entries.delete(key);
       entries.set(key, raster);
       if (entries.size > limit) entries.delete(entries.keys().next().value!);
@@ -68,21 +65,21 @@ export interface PreviewImage {
  */
 export async function drawPreviewLogo(
   cache: LogoCache,
-  filename: string,
+  identity: string,
   paperWidth: PaperWidth,
   image: PreviewImage,
 ): Promise<MonoRaster | null> {
-  const cached = cache.get(filename, paperWidth);
+  const cached = cache.get(identity, paperWidth);
   if (cached !== undefined) return (await image.exists()) ? cached : null;
-  const bytes = await image.bytes();
-  if (bytes === null) return null;
   let raster: MonoRaster;
   try {
+    const bytes = await image.bytes();
+    if (bytes === null) return null;
     raster = await drawLogo(bytes, paperWidth);
   } catch (error) {
     if (isAppError(error) && error.code === "image.invalid_file") return null;
     throw error;
   }
-  cache.set(filename, paperWidth, raster);
+  cache.set(identity, paperWidth, raster);
   return raster;
 }

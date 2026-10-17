@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { binary, id, json, label, newId, now, table, ts } from "@waitron/db";
+import { binary, count, id, json, label, newId, now, table, ts } from "@waitron/db";
 
 export const mediaImages = table(
   "media_images",
@@ -42,5 +42,64 @@ export const mediaImageData = table(
       columns: [t.imageId],
       foreignColumns: [mediaImages.id],
     }).onDelete("cascade"),
+  ],
+);
+
+export const mediaImageBlobs = table(
+  "media_image_blobs",
+  {
+    hash: label("hash").primaryKey(),
+    bytes: binary("bytes").notNull(),
+  },
+  (t) => [
+    check(
+      "media_image_blobs_hash_ck",
+      sql`length(${t.hash}) = 64 and ${t.hash} not glob '*[^0-9a-f]*' and instr(${t.hash}, char(0)) = 0`,
+    ),
+  ],
+);
+
+export const mediaImageEdits = table(
+  "media_image_edits",
+  {
+    imageId: id("image_id").primaryKey(),
+    sourceHash: label("source_hash"),
+    focusX: count("focus_x").notNull().default(5000),
+    focusY: count("focus_y").notNull().default(5000),
+    zoom: count("zoom").notNull().default(100),
+    revision: count("revision").notNull().default(1),
+    originalFilename: label("original_filename"),
+  },
+  (t) => [
+    foreignKey({
+      name: "media_image_edits_image_fk",
+      columns: [t.imageId],
+      foreignColumns: [mediaImages.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "media_image_edits_source_fk",
+      columns: [t.sourceHash],
+      foreignColumns: [mediaImageBlobs.hash],
+    }).onDelete("restrict"),
+    check(
+      "media_image_edits_focus_x_ck",
+      sql`typeof(${t.focusX}) = 'integer' and ${t.focusX} between 0 and 10000`,
+    ),
+    check(
+      "media_image_edits_focus_y_ck",
+      sql`typeof(${t.focusY}) = 'integer' and ${t.focusY} between 0 and 10000`,
+    ),
+    check(
+      "media_image_edits_zoom_ck",
+      sql`typeof(${t.zoom}) = 'integer' and ${t.zoom} between 100 and 400`,
+    ),
+    check(
+      "media_image_edits_revision_ck",
+      sql`typeof(${t.revision}) = 'integer' and ${t.revision} between 1 and 9007199254740991`,
+    ),
+    check(
+      "media_image_edits_filename_ck",
+      sql`${t.originalFilename} is null or (length(${t.originalFilename}) <= 255 and instr(${t.originalFilename}, char(0)) = 0 and instr(${t.originalFilename}, char(10)) = 0 and instr(${t.originalFilename}, char(13)) = 0)`,
+    ),
   ],
 );

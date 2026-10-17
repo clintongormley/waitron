@@ -1,3 +1,5 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { dpiValue, safeWidthDots } from "@waitron/printing/src/layout.js";
@@ -17,7 +19,7 @@ async function open(el: ImageUpload): Promise<HTMLElement> {
   await el.updateComplete;
   return el.shadowRoot!.querySelector("media-image-picker")!;
 }
-function select(picker: HTMLElement, filename = "abc123.png"): void {
+function select(picker: HTMLElement, filename = mediaTestReference("abc123.png")): void {
   picker.dispatchEvent(
     new CustomEvent("select-image", {
       detail: { filename, names: { es: "Pan", en: "Bread" } },
@@ -52,7 +54,7 @@ describe("image-upload", () => {
     const picker = await open(el);
     expect((picker as HTMLElement & { request: unknown }).request).toBe(api.imageLibraryRequest);
     select(picker);
-    expect(changed.mock.calls[0]![0].detail).toEqual({ image: "abc123.png" });
+    expect(changed.mock.calls[0]![0].detail).toEqual({ image: mediaTestReference("abc123.png") });
     expect(changed.mock.calls[0]![0].bubbles).toBe(true);
     expect(changed.mock.calls[0]![0].composed).toBe(true);
     await el.updateComplete;
@@ -65,18 +67,24 @@ describe("image-upload", () => {
     select(await open(el));
     await el.updateComplete;
     const img = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!;
-    expect(img.getAttribute("src")).toBe("/media/abc123.png");
+    await vi.waitFor(() =>
+      expect(img.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("abc123.png")}/square/7500-2500-200.webp`,
+      ),
+    );
     expect(img.alt).toBe("Bread");
   });
   it("shows a pre-set preview without requesting the library", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api,
-      image: "seed.webp",
+      image: mediaTestReference("seed.webp"),
     });
-    expect(
-      el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.getAttribute("src"),
-    ).toBe("/media/seed.webp");
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.getAttribute("src"),
+      ).toBe(`/media/renditions/v1/${mediaTestReference("seed.webp")}/square/7500-2500-200.webp`),
+    );
     expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBeTruthy();
     expect(api.imageLibraryRequest).not.toHaveBeenCalled();
   });
@@ -84,7 +92,7 @@ describe("image-upload", () => {
     const api = stubApi();
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api,
-      image: "seed.webp",
+      image: mediaTestReference("seed.webp"),
     });
     const changed = vi.fn();
     el.addEventListener("image-changed", changed);
@@ -97,7 +105,7 @@ describe("image-upload", () => {
   it("announces pending selection and cancellation without changing an existing image", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
-      image: "seed.webp",
+      image: mediaTestReference("seed.webp"),
     });
     const pending = vi.fn();
     const changed = vi.fn();
@@ -111,12 +119,12 @@ describe("image-upload", () => {
     await el.updateComplete;
     expect(pending.mock.calls[1]![0].detail).toEqual({ open: false });
     expect(changed).not.toHaveBeenCalled();
-    expect(el.image).toBe("seed.webp");
+    expect(el.image).toBe(mediaTestReference("seed.webp"));
   });
   it("closes the library from its Cancel button without changing the image", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
-      image: "seed.webp",
+      image: mediaTestReference("seed.webp"),
     });
     const pending = vi.fn();
     const changed = vi.fn();
@@ -131,7 +139,7 @@ describe("image-upload", () => {
       { open: false },
     ]);
     expect(changed).not.toHaveBeenCalled();
-    expect(el.image).toBe("seed.webp");
+    expect(el.image).toBe(mediaTestReference("seed.webp"));
   });
   // The picker sits inside a host form whose own keydown handling (Enter submits, Escape closes)
   // must not act on keys typed into the library.
@@ -157,12 +165,16 @@ describe("image-upload", () => {
       setLocale(locale);
       const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
         api: stubApi(),
-        inheritedImage: "parent.png",
+        inheritedImage: mediaTestReference("parent.png"),
       });
       const inherited = el.shadowRoot!.querySelector<HTMLImageElement>(
         "[data-test=inherited-preview]",
       )!;
-      expect(inherited.getAttribute("src")).toBe("/media/parent.png");
+      await vi.waitFor(() =>
+        expect(inherited.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("parent.png")}/square/7500-2500-200.webp`,
+        ),
+      );
       expect(inherited.alt).toBe(t("editor.inherited_image_alt"));
       expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
@@ -175,7 +187,7 @@ describe("image-upload", () => {
       setLocale(locale);
       const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
         api: stubApi(),
-        inheritedImage: "parent.png",
+        inheritedImage: mediaTestReference("parent.png"),
       });
       const changed = vi.fn();
       el.addEventListener("image-changed", changed);
@@ -214,8 +226,8 @@ describe("image-upload", () => {
       cleanupWidgets();
       return { left: box.left, top: box.top, width: box.width, height: box.height };
     };
-    expect(await place({ inheritedImage: "parent.png" })).toEqual(
-      await place({ image: "own.png" }),
+    expect(await place({ inheritedImage: mediaTestReference("parent.png") })).toEqual(
+      await place({ image: mediaTestReference("own.png") }),
     );
   });
 
@@ -228,13 +240,15 @@ describe("image-upload", () => {
   it("drops the inherited photo once the variant has one of its own", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
-      image: "own.png",
-      inheritedImage: "parent.png",
+      image: mediaTestReference("own.png"),
+      inheritedImage: mediaTestReference("parent.png"),
     });
     expect(el.shadowRoot!.querySelector("[data-test=inherited-preview]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=inherited-hint]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=preview]")!.getAttribute("src")).toBe(
-      "/media/own.png",
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=preview]")!.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("own.png")}/square/7500-2500-200.webp`,
+      ),
     );
     const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       "[data-test=remove-image]",
@@ -281,7 +295,7 @@ describe("image-upload while disabled", () => {
   it("disables Choose image and Remove, and a click on either changes nothing", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
-      image: "own.png",
+      image: mediaTestReference("own.png"),
       disabled: true,
     });
     const changed = vi.fn();
@@ -292,7 +306,7 @@ describe("image-upload while disabled", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
     await el.updateComplete;
     expect(changed).not.toHaveBeenCalled();
-    expect(el.image).toBe("own.png");
+    expect(el.image).toBe(mediaTestReference("own.png"));
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
   });
 
@@ -300,7 +314,7 @@ describe("image-upload while disabled", () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
       thumbnail: true,
-      image: "own.png",
+      image: mediaTestReference("own.png"),
       disabled: true,
     });
     const photo = el.shadowRoot!.querySelector<HTMLButtonElement>(
@@ -316,7 +330,7 @@ describe("image-upload while disabled", () => {
   it("closes a library left open, saying so, and takes nothing chosen there", async () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
       api: stubApi(),
-      image: "own.png",
+      image: mediaTestReference("own.png"),
     });
     const states = vi.fn();
     const changed = vi.fn();
@@ -329,7 +343,7 @@ describe("image-upload while disabled", () => {
     expect(states.mock.calls.map(([detail]) => detail)).toEqual([{ open: true }, { open: false }]);
     select(picker);
     expect(changed).not.toHaveBeenCalled();
-    expect(el.image).toBe("own.png");
+    expect(el.image).toBe(mediaTestReference("own.png"));
     el.disabled = false;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
@@ -349,12 +363,16 @@ describe("image-upload as a thumbnail", () => {
   const picture = (el: ImageUpload) => button(el).querySelector<HTMLImageElement>("img");
 
   it("is one button showing the product's own photo, at the size of the product list's thumbnail", async () => {
-    const { el, host } = await thumbnail({ image: "own.png" });
+    const { el, host } = await thumbnail({ image: mediaTestReference("own.png") });
     host.style.setProperty("--wt-tap-min", "47px");
     expect(el.shadowRoot!.querySelectorAll("button, wt-button")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
     expect(el.shadowRoot!.textContent!.trim()).toBe("");
-    expect(picture(el)!.getAttribute("src")).toBe("/media/own.png");
+    await vi.waitFor(() =>
+      expect(picture(el)!.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("own.png")}/square/7500-2500-200.webp`,
+      ),
+    );
     const box = button(el).getBoundingClientRect();
     expect([box.width, box.height]).toEqual([47, 47]);
     const img = picture(el)!.getBoundingClientRect();
@@ -364,9 +382,9 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it.each([
-    ["en-GB", "own.png", "Change photo"],
+    ["en-GB", mediaTestReference("own.png"), "Change photo"],
     ["en-GB", null, "Add photo"],
-    ["es-ES", "own.png", "Cambiar foto"],
+    ["es-ES", mediaTestReference("own.png"), "Cambiar foto"],
     ["es-ES", null, "Añadir foto"],
   ] as const)("in %s, a photo %s is named %s", async (locale, image, name) => {
     setLocale(locale);
@@ -377,16 +395,20 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it("opens the library from the photo, and shows the photo chosen there", async () => {
-    const { el } = await thumbnail({ image: "own.png" });
+    const { el } = await thumbnail({ image: mediaTestReference("own.png") });
     const changed = vi.fn();
     el.addEventListener("image-changed", changed);
     button(el).click();
     await el.updateComplete;
-    select(el.shadowRoot!.querySelector("media-image-picker")!, "new.png");
+    select(el.shadowRoot!.querySelector("media-image-picker")!, mediaTestReference("new.png"));
     await el.updateComplete;
-    expect(changed.mock.calls[0]![0].detail).toEqual({ image: "new.png" });
+    expect(changed.mock.calls[0]![0].detail).toEqual({ image: mediaTestReference("new.png") });
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
-    expect(picture(el)!.getAttribute("src")).toBe("/media/new.png");
+    await vi.waitFor(() =>
+      expect(picture(el)!.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("new.png")}/square/7500-2500-200.webp`,
+      ),
+    );
   });
 
   it("draws an empty placeholder like the product list's when there is no photo, and it opens the library too", async () => {
@@ -421,9 +443,13 @@ describe("image-upload as a thumbnail", () => {
     "marks a variant's inherited photo with a dashed border, and names it the main product's for a screen reader only, in %s",
     async (locale) => {
       setLocale(locale);
-      const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
+      const { el, host } = await thumbnail({ inheritedImage: mediaTestReference("parent.png") });
       host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-      expect(picture(el)!.getAttribute("src")).toBe("/media/parent.png");
+      await vi.waitFor(() =>
+        expect(picture(el)!.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("parent.png")}/square/7500-2500-200.webp`,
+        ),
+      );
       expect(button(el).getAttribute("aria-label")).toBe(t("image.add_photo"));
       const style = getComputedStyle(button(el));
       expect([style.borderTopStyle, style.borderTopColor]).toEqual(["dashed", "rgb(7, 8, 9)"]);
@@ -444,15 +470,22 @@ describe("image-upload as a thumbnail", () => {
   );
 
   it("drops the inherited marking once the variant has a photo of its own", async () => {
-    const { el } = await thumbnail({ image: "own.png", inheritedImage: "parent.png" });
-    expect(picture(el)!.getAttribute("src")).toBe("/media/own.png");
+    const { el } = await thumbnail({
+      image: mediaTestReference("own.png"),
+      inheritedImage: mediaTestReference("parent.png"),
+    });
+    await vi.waitFor(() =>
+      expect(picture(el)!.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("own.png")}/square/7500-2500-200.webp`,
+      ),
+    );
     expect(el.shadowRoot!.querySelector("[data-test=inherited-caption]")).toBeNull();
     expect(button(el).hasAttribute("aria-describedby")).toBe(false);
     expect(getComputedStyle(button(el)).borderTopStyle).toBe("solid");
   });
 
   it("removes the photo from the library window's footer, and closes it", async () => {
-    const { el } = await thumbnail({ image: "own.png" });
+    const { el } = await thumbnail({ image: mediaTestReference("own.png") });
     const changed = vi.fn();
     const pending = vi.fn();
     el.addEventListener("image-changed", changed);
@@ -474,7 +507,7 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it("offers no Remove in the library window when there is no photo of its own", async () => {
-    for (const props of [{}, { inheritedImage: "parent.png" }]) {
+    for (const props of [{}, { inheritedImage: mediaTestReference("parent.png") }]) {
       const { el } = await thumbnail(props);
       expect(await open(el)).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=remove-image]")).toBeNull();
@@ -494,7 +527,7 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it("lays what it holds beside the photo, taking the rest of the row, with nothing under them for an inherited photo", async () => {
-    const { el, host } = await thumbnail({ inheritedImage: "parent.png" });
+    const { el, host } = await thumbnail({ inheritedImage: mediaTestReference("parent.png") });
     host.style.width = "390px";
     const field = document.createElement("div");
     field.style.height = "56px";
@@ -566,8 +599,12 @@ describe("image-upload as a receipt logo", () => {
       await page.viewport(1280, 900);
       try {
         const api = stubApi();
-        const { el } = await logo({ api, image: "own.png" });
-        expect(picture(el).getAttribute("src")).toBe("/media/own.png");
+        const { el } = await logo({ api, image: mediaTestReference("own.png") });
+        await vi.waitFor(() =>
+          expect(picture(el).getAttribute("src")).toBe(
+            `/media/renditions/v1/${mediaTestReference("own.png")}/display/7500-2500-200.webp`,
+          ),
+        );
         expect(picture(el).alt).toBe("");
         await expect.element(page.elementLocator(choose(el))).toHaveAccessibleName(change);
         const button = remove(el)!;
@@ -594,7 +631,7 @@ describe("image-upload as a receipt logo", () => {
 
   it("removes the logo from beside the picture, asking nothing of the image library, and moves focus to the empty box", async () => {
     const api = stubApi();
-    const { el } = await logo({ api, image: "own.png" });
+    const { el } = await logo({ api, image: mediaTestReference("own.png") });
     const changed = vi.fn();
     el.addEventListener("image-changed", changed);
     await userEvent.click(page.elementLocator(remove(el)!));
@@ -612,12 +649,12 @@ describe("image-upload as a receipt logo", () => {
     ["choosing an image", "select"],
     ["cancelling the library", "cancel"],
   ] as const)("hands focus back to the logo after %s", async (_, how) => {
-    for (const image of ["own.png", null]) {
+    for (const image of [mediaTestReference("own.png"), null]) {
       const { el } = await logo({ image });
       await userEvent.click(page.elementLocator(choose(el)));
       await el.updateComplete;
       const picker = el.shadowRoot!.querySelector<HTMLElement>("media-image-picker")!;
-      if (how === "select") select(picker, "new.png");
+      if (how === "select") select(picker, mediaTestReference("new.png"));
       else
         await userEvent.click(
           page.elementLocator(
@@ -637,10 +674,15 @@ describe("image-upload as a receipt logo", () => {
   ] as const)(
     "draws a %s logo in the box it prints in, enlarged or shrunk as printing does",
     async (_, width, height) => {
-      const { el } = await logo({ image: "own.png" });
+      const { el } = await logo({ image: mediaTestReference("own.png") });
       const img = picture(el);
       const loaded = new Promise((resolve) =>
         img.addEventListener("load", resolve, { once: true }),
+      );
+      await vi.waitFor(() =>
+        expect(img.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("own.png")}/display/7500-2500-200.webp`,
+        ),
       );
       img.src = png(width, height);
       await loaded;
@@ -656,7 +698,7 @@ describe("image-upload as a receipt logo", () => {
   );
 
   it.each([
-    ["the picture", "own.png"],
+    ["the picture", mediaTestReference("own.png")],
     ["the Add a logo box", null],
   ] as const)(
     "marks %s invalid in the danger colour, where focusFirstInvalid finds it",
@@ -673,7 +715,7 @@ describe("image-upload as a receipt logo", () => {
   );
 
   it.each([
-    ["the picture", "own.png"],
+    ["the picture", mediaTestReference("own.png")],
     ["the Add a logo box", null],
   ] as const)("is a tap target with a visible focus ring, as %s", async (_, image) => {
     const { el } = await logo({ image });
@@ -689,14 +731,14 @@ describe("image-upload as a receipt logo", () => {
   it("draws the logo on white paper in the dark theme", async () => {
     const { el } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",
-      { api: stubApi(), logo: true, image: "own.png" },
+      { api: stubApi(), logo: true, image: mediaTestReference("own.png") },
       "dark",
     );
     expect(getComputedStyle(choose(el)).backgroundColor).toBe("rgb(255, 255, 255)");
   });
 
   it("disables both buttons, and closes a library left open", async () => {
-    const { el } = await logo({ image: "own.png" });
+    const { el } = await logo({ image: mediaTestReference("own.png") });
     await userEvent.click(page.elementLocator(choose(el)));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
@@ -721,11 +763,15 @@ it("A651 chooses the full-size photo through the real nested picker and closes t
   setLocale("en-GB");
   const image = {
     id: "bread",
-    filename: "bread.png",
+    filename: mediaTestReference("bread.png"),
     names: { en: "Bread", es: "Pan" },
     createdAt: "2026-10-17T00:00:00Z",
     updatedAt: "2026-10-17T00:00:00Z",
     usageCount: 0,
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    revision: 1,
+    sourceFilename: mediaTestReference("bread.png"),
+    originalFilename: null,
   };
   const request = vi
     .fn()
@@ -749,9 +795,46 @@ it("A651 chooses the full-size photo through the real nested picker and closes t
   );
   await userEvent.click(library.shadowRoot!.querySelector("[data-test=select-preview]")!);
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull());
-  expect(el.image).toBe("bread.png");
+  expect(el.image).toBe(mediaTestReference("bread.png"));
   expect(changed).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({ detail: { image: "bread.png" } }),
+    expect.objectContaining({ detail: { image: mediaTestReference("bread.png") } }),
   );
   expect(request.mock.calls.every((call) => call[1] === "GET")).toBe(true);
 });
+
+const mediaReplacements = useMediaPresentations();
+
+it.each([
+  { thumbnail: false, logo: false, shape: "square" },
+  { thumbnail: true, logo: false, shape: "square" },
+  { thumbnail: false, logo: true, shape: "display" },
+])(
+  "refreshes a mounted $shape image without changing its stored selection",
+  async ({ thumbnail, logo, shape }) => {
+    const reference = mediaTestReference("parent.png");
+    const replacement = mediaTestReference("replacement.webp");
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: reference,
+      thumbnail,
+      logo,
+    });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    const img = el.shadowRoot!.querySelector("img")!;
+    await vi.waitFor(() =>
+      expect(img.getAttribute("src")).toBe(
+        `/media/renditions/v1/${reference}/${shape}/7500-2500-200.webp`,
+      ),
+    );
+    mediaReplacements.set(reference, replacement);
+    invalidateMediaImages();
+    await vi.waitFor(() =>
+      expect(img.getAttribute("src")).toBe(
+        `/media/renditions/v1/${replacement}/${shape}/7500-2500-200.webp`,
+      ),
+    );
+    expect(el.image).toBe(reference);
+    expect(changed).not.toHaveBeenCalled();
+  },
+);

@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -224,7 +225,7 @@ export class ImageUpload extends LitElement {
         ?disabled=${this.disabled}
         @click=${() => this.#setOpen(true)}
       >
-        ${shown ? html`<img src=${`/media/${encodeURIComponent(shown)}`} alt="" />` : nothing}
+        ${shown ? html`<img src=${liveMediaImage(shown, "square")} alt="" />` : nothing}
       </button>
       <slot></slot>
       ${
@@ -270,7 +271,7 @@ export class ImageUpload extends LitElement {
         ?disabled=${this.disabled}
         @click=${() => this.#setOpen(true)}
       >
-        <img src=${`/media/${encodeURIComponent(this.image)}`} alt="" />
+        <img src=${liveMediaImage(this.image, "display")} alt="" />
       </button>
       <wt-button
         data-test="remove-image"
@@ -321,14 +322,14 @@ export class ImageUpload extends LitElement {
               : nothing
         }
       </div>
-      ${this.image ? html`<img class="preview" part="preview" data-test="preview" src=${`/media/${encodeURIComponent(this.image)}`} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
+      ${this.image ? html`<img class="preview" part="preview" data-test="preview" src=${liveMediaImage(this.image, "square")} alt=${resolveEnabledContentText(this.image === this.#selectedFilename ? this.selectedNames : {}, currentLocale(), currentContentLanguages()) || t("image.preview_alt")} />` : nothing}
       ${
         !this.image && this.inheritedImage
           ? html`<img
               class="preview"
               part="preview"
               data-test="inherited-preview"
-              src=${`/media/${encodeURIComponent(this.inheritedImage)}`}
+              src=${liveMediaImage(this.inheritedImage, "square")}
               alt=${t("editor.inherited_image_alt")}
             />`
           : nothing

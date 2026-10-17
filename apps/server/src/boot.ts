@@ -166,6 +166,7 @@ import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
+import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { createAccountEmailSender } from "./account-email.js";
@@ -1836,6 +1837,7 @@ async function bootServer(
       operationDescriptionDefault,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
+    renderReceiptLogo: drawLogoRasters,
     core: moduleCoreServices(till, tableRemovals),
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);

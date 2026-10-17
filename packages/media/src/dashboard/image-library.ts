@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -29,6 +30,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } from "./client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
+import { sameFraming } from "./photo-framing-dialog.js";
+import { DEFAULT_FRAMING, type ImageFraming } from "../framing.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
@@ -82,6 +85,7 @@ function refusalField(error: unknown): string {
 interface ImageDraft {
   names: Record<string, string>;
   file: File | null;
+  framing: ImageFraming;
 }
 
 interface BatchPhoto {
@@ -201,8 +205,8 @@ export class ImageLibrary extends LitElement {
       }
       article img {
         width: 100%;
-        aspect-ratio: 4/3;
-        object-fit: contain;
+        aspect-ratio: 1;
+        object-fit: cover;
         background: var(--wt-color-surface);
       }
       .thumbnail {
@@ -330,15 +334,40 @@ export class ImageLibrary extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .preview {
-        justify-self: start;
-        width: 100%;
-        max-width: 320px;
-        aspect-ratio: 4/3;
-        object-fit: contain;
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
+      .photo-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
+      }
+      .photo-summary > img,
+      .photo-summary > media-photo-preview {
+        width: calc(var(--wt-tap-min) * 3);
+        aspect-ratio: 1;
+        object-fit: cover;
         border-radius: var(--wt-radius-md);
+      }
+      .photo-details {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .photo-links {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        flex-wrap: wrap;
+      }
+      .photo-links wt-file-input {
+        width: fit-content;
+      }
+      .photo-links wt-file-input::part(field) {
+        border: 0;
+        background: transparent;
+      }
+      .photo-links wt-button::part(button) {
+        color: var(--wt-color-primary-text);
+        padding-inline: 0;
       }
       nav {
         justify-content: end;
@@ -513,7 +542,12 @@ export class ImageLibrary extends LitElement {
     image: LibraryImage | null;
     names: Record<string, string>;
     file: File | null;
+    framing: ImageFraming;
   } | null = null;
+  @state() private framingOpen = false;
+  @state() private reloading = false;
+  #replacementUrl?: string;
+  #baseline?: ImageDraft;
   @state() private attempted = false;
   #suggestion: { language: string; name: string } | null = null;
   /** The last save's refusal, until Save is pressed again or, for a field's, that field changes. */
@@ -532,6 +566,7 @@ export class ImageLibrary extends LitElement {
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
+    !this.framingOpen &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
   #deleteGeneration = 0;
   #viewGeneration = 0;
@@ -553,6 +588,10 @@ export class ImageLibrary extends LitElement {
   }
   override connectedCallback(): void {
     super.connectedCallback();
+    if (this.editor) {
+      this.#syncReplacement();
+      this.#registerScope();
+    }
     window.addEventListener("dragenter", this.#pageEnter);
     window.addEventListener("dragleave", this.#pageLeave);
     window.addEventListener("dragover", this.#pageOver);
@@ -576,6 +615,8 @@ export class ImageLibrary extends LitElement {
     this.#dragDepth = 0;
     this.#createdIds.clear();
     this.#editorGeneration++;
+    this.framingOpen = false;
+    this.#releaseReplacement();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -651,6 +692,7 @@ export class ImageLibrary extends LitElement {
   #draft(): ImageDraft {
     return {
       file: this.editor!.file,
+      framing: { ...this.editor!.framing },
       names: Object.fromEntries(
         Object.entries(this.editor!.names)
           .map(([language, value]) => [language, value.trim()] as const)
@@ -662,32 +704,51 @@ export class ImageLibrary extends LitElement {
     if (this.batchRunning) return;
     this.#editorGeneration++;
     this.#scope?.dispose();
+    this.framingOpen = false;
+    this.#releaseReplacement();
 
     this.#suggestion = null;
     this.editor = {
       image,
       names: { ...image?.names },
       file: null,
+      framing: { ...(image?.framing ?? DEFAULT_FRAMING) },
     };
     this.attempted = false;
     this.refusal = null;
     this.duplicateImage = null;
+    this.#baseline = this.#draft();
+    this.#registerScope();
+  }
+  #registerScope(): void {
     const draft = draftScopeFor<ImageDraft>(this, {
       id: this,
       parent: this.draftParent,
       current: () => this.#draft(),
-      snapshot: (value) => ({ names: { ...value.names }, file: value.file }),
+      snapshot: (value) => ({
+        names: { ...value.names },
+        file: value.file,
+        framing: { ...value.framing },
+      }),
       equal: (a, b) =>
         a.file === b.file &&
+        sameFraming(a.framing, b.framing) &&
         Object.keys(a.names).length === Object.keys(b.names).length &&
         Object.entries(a.names).every(([language, value]) => b.names[language] === value),
       restore: (value) => {
         if (!this.editor) return;
-        this.editor = { ...this.editor, names: { ...value.names }, file: value.file };
+        this.editor = {
+          ...this.editor,
+          names: { ...value.names },
+          file: value.file,
+          framing: { ...value.framing },
+        };
+        this.#syncReplacement();
       },
     });
     this.#leave = draft.coordinator;
     this.#scope = draft.scope;
+    this.#scope.commit(this.#baseline!);
   }
   #closeEditor(): void {
     if (this.busy) return;
@@ -696,6 +757,9 @@ export class ImageLibrary extends LitElement {
     this.#leave = undefined;
 
     this.editor = null;
+    this.#baseline = undefined;
+    this.framingOpen = false;
+    this.#releaseReplacement();
   }
   #name(language: string, value: string): void {
     if (this.editor !== null)
@@ -704,18 +768,67 @@ export class ImageLibrary extends LitElement {
     this.#dropRefusal(`name-${language}`);
   }
   #file(file: File | null): void {
-    if (!this.editor || this.busy) return;
+    if (!this.editor || this.busy || this.framingOpen) return;
     const language = this.#suggestion?.language ?? currentContentLanguages().defaultLanguage;
     const names = { ...this.editor.names };
     const current = names[language] ?? "";
-    if (!current.trim() || current === this.#suggestion?.name) {
+    if (!this.editor.image && (!current.trim() || current === this.#suggestion?.name)) {
       const name = file ? imageNameFromFilename(file.name, language, t("image.file")) : "";
       names[language] = name;
       this.#suggestion = file ? { language, name } : null;
     }
-    this.editor = { ...this.editor, file, names };
+    this.editor = {
+      ...this.editor,
+      file,
+      names,
+      framing: { ...(file ? DEFAULT_FRAMING : (this.editor.image?.framing ?? DEFAULT_FRAMING)) },
+    };
+    this.#syncReplacement();
     this.#scope?.changed();
     this.#dropRefusal("file");
+  }
+  #releaseReplacement(): void {
+    if (this.#replacementUrl) URL.revokeObjectURL(this.#replacementUrl);
+    this.#replacementUrl = undefined;
+  }
+  #syncReplacement(): void {
+    this.#releaseReplacement();
+    if (this.editor?.file && this.isConnected)
+      this.#replacementUrl = URL.createObjectURL(this.editor.file);
+  }
+  #source(): string {
+    return this.#replacementUrl ?? `/media/${this.editor!.image!.sourceFilename}`;
+  }
+  async #closeFraming(framing?: ImageFraming): Promise<void> {
+    if (framing && this.editor) {
+      this.editor = { ...this.editor, framing: { ...framing } };
+      this.#scope?.changed();
+    }
+    this.framingOpen = false;
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>("[data-test=adjust-framing]")?.focus();
+  }
+  async #reloadPhoto(): Promise<void> {
+    const editor = this.editor;
+    if (!editor?.image || this.busy || this.reloading) return;
+    const generation = this.#editorGeneration;
+    this.reloading = true;
+    try {
+      const { image } = await this.api.getImage(editor.image.id);
+      if (generation !== this.#editorGeneration || this.editor !== editor) return;
+      if (this.#leave)
+        await this.#leave.request({
+          scopes: [this],
+          reason: "cancel",
+          proceed: () => this.#edit(image),
+        });
+      else this.#edit(image);
+    } catch (error) {
+      if (generation === this.#editorGeneration)
+        this.refusal = { field: "_form", code: codeOf(error) };
+    } finally {
+      this.reloading = false;
+    }
   }
   #dropRefusal(field: string): void {
     if (this.refusal?.field === field) this.refusal = null;
@@ -733,7 +846,7 @@ export class ImageLibrary extends LitElement {
     const editor = this.editor!;
     const config = currentContentLanguages();
     const errors = new Map<string, string>([
-      ...(editor.image === null ? [["file", ""] as const] : []),
+      ["file", ""],
       ...this.#languages().map((language) => [`name-${language}`, ""] as const),
     ]);
     if (!this.attempted) return errors;
@@ -748,7 +861,8 @@ export class ImageLibrary extends LitElement {
   }
   async #save(): Promise<void> {
     const editor = this.editor;
-    if (editor === null || this.busy || saveActionState(this.#scope).unchanged) return;
+    if (editor === null || this.busy || this.framingOpen || saveActionState(this.#scope).unchanged)
+      return;
     this.attempted = true;
     this.refusal = null;
     if ([...this.#checked().values()].some(Boolean)) {
@@ -774,18 +888,29 @@ export class ImageLibrary extends LitElement {
         this.duplicateImage = result.created ? null : result.image;
         this.#rememberImage(result.image);
       } else {
-        const result = await this.api.updateImage(editor.image.id, metadata);
+        const edit = {
+          ...metadata,
+          framing: editor.framing,
+          expectedRevision: editor.image.revision,
+        };
+        const result = editor.file
+          ? await this.api.updateImage(editor.image.id, edit, editor.file)
+          : await this.api.updateImage(editor.image.id, edit);
         if (generation !== this.#editorGeneration) return;
         this.#rememberImage(result.image);
+        if (this.editor) this.editor.image = result.image;
       }
       if (generation !== this.#editorGeneration) return;
       scope?.commit(submitted);
+      this.#baseline = submitted;
       if (this.editor !== editor) return;
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
 
       this.editor = null;
+      this.#baseline = undefined;
+      this.#releaseReplacement();
     } catch (error) {
       if (generation !== this.#editorGeneration) return;
       this.refusal = { field: refusalField(error), code: codeOf(error) };
@@ -871,7 +996,7 @@ export class ImageLibrary extends LitElement {
     >
       <div class="viewer">
         <img
-          src=${`/media/${encodeURIComponent(viewing.image.filename)}`}
+          src=${liveMediaImage(viewing.image.filename, "source")}
           alt=${name}
           @load=${(event: Event) => {
             const image = event.currentTarget as HTMLImageElement;
@@ -959,7 +1084,7 @@ export class ImageLibrary extends LitElement {
         : []),
       ...(marked ? [t("image.fix_fields")] : []),
     ].join(" ");
-    const preview = editor.image ? `/media/${encodeURIComponent(editor.image.filename)}` : null;
+    const preview = editor.image ? liveMediaImage(editor.image.filename, "square") : null;
     return html`<wt-modal
       size="standard"
       open
@@ -970,6 +1095,7 @@ export class ImageLibrary extends LitElement {
         this.#closeEditor();
       }}
       @keydown=${(event: KeyboardEvent) => {
+        if (this.framingOpen) return;
         if (this.busy && event.key === "Escape") event.preventDefault();
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"));
       }}
@@ -993,17 +1119,47 @@ export class ImageLibrary extends LitElement {
                   this.#file(event.detail.files[0] ?? null);
                 }}
               ></wt-file-input>`
-            : nothing
-        }
-        ${
-          preview
-            ? html`<img
-                class="preview"
-                data-test="preview"
-                src=${preview}
-                alt=${t("image.preview")}
-              />`
-            : nothing
+            : html`<div class="photo-summary">
+                ${
+                  editor.file || !sameFraming(editor.framing, editor.image.framing)
+                    ? html`<media-photo-preview
+                        .source=${this.#source()}
+                        .framing=${editor.framing}
+                        .label=${t("image.preview")}
+                      ></media-photo-preview>`
+                    : html`<img data-test="preview" src=${preview} alt=${t("image.preview")} />`
+                }
+                <div class="photo-details">
+                  <strong data-test="photo-filename"
+                    >${editor.file?.name ?? editor.image.originalFilename ?? editor.image.filename}</strong
+                  >
+                  <div class="photo-links">
+                    <wt-button
+                      data-test="adjust-framing"
+                      variant="ghost"
+                      ?disabled=${this.busy}
+                      @click=${() => {
+                        this.framingOpen = true;
+                      }}
+                      >${t("image.adjust_framing")}</wt-button
+                    >
+                    <wt-file-input
+                      name="image-file"
+                      compact
+                      accept="image/jpeg,image/png,image/webp"
+                      .locale=${currentLocale()}
+                      .files=${editor.file ? [editor.file] : []}
+                      .copy=${{ drop: "", choose: t("image.replace_photo"), replace: t("image.replace_photo"), previewAlt: t("image.preview") }}
+                      error=${fileError}
+                      ?disabled=${this.busy}
+                      @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+                        event.stopPropagation();
+                        this.#file(event.detail.files[0] ?? null);
+                      }}
+                    ></wt-file-input>
+                  </div>
+                </div>
+              </div>`
         }
         ${languages.map(
           (language) =>
@@ -1023,6 +1179,17 @@ export class ImageLibrary extends LitElement {
             </fieldset>`,
         )}
       </div>
+      ${
+        refusal?.code === "image.changed"
+          ? html`<wt-button
+              data-test="reload-photo"
+              variant="secondary"
+              ?disabled=${this.reloading}
+              @click=${() => void this.#reloadPhoto()}
+              >${t("image.reload_photo")}</wt-button
+            >`
+          : nothing
+      }
       <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
@@ -1037,11 +1204,29 @@ export class ImageLibrary extends LitElement {
         ><wt-button
           data-test="save"
           variant=${saveActionState(this.#scope).variant}
-          ?disabled=${saveActionState(this.#scope).unchanged || this.busy || invalid}
+          ?disabled=${saveActionState(this.#scope).unchanged || this.busy || this.framingOpen || invalid}
           @click=${() => void this.#save()}
           >${t("image.save")}</wt-button
         ></wt-form-actions
       >
+      ${
+        this.framingOpen
+          ? html`<media-photo-framing-dialog
+              .source=${this.#source()}
+              .framing=${editor.framing}
+              .draftParent=${this}
+              .opener=${this.shadowRoot!.querySelector<HTMLElement>("[data-test=adjust-framing]")}
+              @done=${(event: CustomEvent<{ framing: ImageFraming }>) => {
+                event.stopPropagation();
+                void this.#closeFraming(event.detail.framing);
+              }}
+              @close=${(event: Event) => {
+                event.stopPropagation();
+                void this.#closeFraming();
+              }}
+            ></media-photo-framing-dialog>`
+          : nothing
+      }
     </wt-modal>`;
   }
   override render() {
@@ -1143,7 +1328,7 @@ export class ImageLibrary extends LitElement {
                 @click=${() => void this.#view(image)}
               >
                 <img
-                  src=${`/media/${encodeURIComponent(image.filename)}`}
+                  src=${liveMediaImage(image.filename, "square")}
                   alt=${name}
                   loading="lazy"
                 /></button

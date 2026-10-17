@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import {
+  mediaTestReference,
+  useMediaPresentations,
   chooseOption,
   chooseOptions,
   expectRowMenusOnScreen,
@@ -18,6 +20,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
+useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es"));
@@ -1598,11 +1601,15 @@ describe("product-list", () => {
 
   it("renders a decorative thumbnail served from /media when image is set", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ image: "abc123.webp", name: "Croquetas" })],
+      products: [product({ image: mediaTestReference("abc123.webp"), name: "Croquetas" })],
     });
     const img = (await tableRoot(el)).querySelector<HTMLImageElement>("[data-test=thumb] img")!;
     expect(img).not.toBeNull();
-    expect(img.getAttribute("src")).toBe("/media/abc123.webp");
+    await vi.waitFor(() =>
+      expect(img.getAttribute("src")).toBe(
+        `/media/renditions/v1/${mediaTestReference("abc123.webp")}/square/7500-2500-200.webp`,
+      ),
+    );
     // The adjacent strong element already names the product, so repeating it as alt text is noisy.
     expect(img.getAttribute("alt")).toBe("");
     expect((await tableRoot(el)).querySelector("[data-test=thumb-placeholder]")).toBeNull();
@@ -1859,7 +1866,7 @@ it("ignores a right-button press on a product name", async () => {
 
 it("does not start the browser's native image drag from a product thumbnail", async () => {
   const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-    products: [product({ id: "pictured", image: "abc123.webp" })],
+    products: [product({ id: "pictured", image: mediaTestReference("abc123.webp") })],
   });
   const image = (await tableRoot(el)).querySelector<HTMLImageElement>('img[part="thumbnail"]')!;
   expect(image.draggable).toBe(false);
@@ -2688,7 +2695,7 @@ describe("the product list at phone width", () => {
 
   it("lines each name up with the price beside it, with a thumbnail, a placeholder or neither", async () => {
     const products = [
-      product({ id: "pictured", image: "abc123.webp" }),
+      product({ id: "pictured", image: mediaTestReference("abc123.webp") }),
       product({ id: "plain", variants: [{ ...bunVariant, unitPrice: "2.00" }] }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
@@ -3616,7 +3623,7 @@ describe("a product's variants in the list", () => {
       id: "cecina",
       name: "Cured beef cecina",
       primaryCategoryId: "deli",
-      image: "abc123.webp",
+      image: mediaTestReference("abc123.webp"),
       variants: [
         { ...bunVariant, id: "thin", name: "Thin cut", unitPrice: "38.00" },
         { ...bunVariant, id: "thick", name: "Thick cut", unitPrice: "40.00" },
@@ -5700,10 +5707,10 @@ describe("variant media slot", () => {
       id: "pollo",
       name: "Pollo asado",
       primaryCategoryId: "f",
-      image: "pollo.webp",
+      image: mediaTestReference("pollo.webp"),
       color: "#256bb1",
       variants: [
-        { ...bunVariant, id: "half", name: "1/2", image: "half.webp" },
+        { ...bunVariant, id: "half", name: "1/2", image: mediaTestReference("half.webp") },
         {
           ...bunVariant,
           id: "quarter",
@@ -5740,8 +5747,16 @@ describe("variant media slot", () => {
     const { root } = await mountOpen();
     const photo = (id: string) =>
       root.querySelector(`[data-test="color-${id}"] img[part="thumbnail"]`)?.getAttribute("src");
-    expect(photo("half")).toBe("/media/half.webp");
-    expect(photo("quarter")).toBe("/media/pollo.webp");
+    await vi.waitFor(() =>
+      expect(photo("half")).toBe(
+        `/media/renditions/v1/${mediaTestReference("half.webp")}/square/7500-2500-200.webp`,
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(photo("quarter")).toBe(
+        `/media/renditions/v1/${mediaTestReference("pollo.webp")}/square/7500-2500-200.webp`,
+      ),
+    );
     const placeholder = root.querySelector<HTMLElement>(
       '[data-test="color-pincho"] [data-test="thumb-placeholder"]',
     );

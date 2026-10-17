@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
   LitElement,
   css,
@@ -72,7 +73,7 @@ const KEY_STEPS: Record<string, number> = {
 };
 
 function thumb(image: string): TemplateResult {
-  return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
+  return html`<img class="thumb" src=${liveMediaImage(image, "till")} alt="" />`;
 }
 
 const paints = new Map<string, string>();

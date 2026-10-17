@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ReceiptLogoRasters } from "@waitron/layouts";
-import { imageExists, readImageBytes } from "@waitron/media";
+import { readCurrentImage, readPresentations, renderRendition } from "@waitron/media";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -28,6 +28,7 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "receipt.invalid": 400,
     "image.invalid_file": 422,
+    "image.changed": 409,
     "shared.invalid_id": 400,
     "department.not_found": 404,
   },
@@ -48,10 +49,9 @@ async function prepareLogo(
   kept: ReceiptLogoRasters | null,
 ) {
   if (logo === undefined) return undefined;
-  if (kept !== null) return kept;
-  const image = await readImageBytes(tx, logo);
+  const image = await readCurrentImage(tx, logo);
   if (image === null) throw logoNotFound();
-  return image.bytes;
+  return { ...image, kept };
 }
 
 export function mountDepartmentReceiptSettingsApi(
@@ -125,7 +125,13 @@ export function mountDepartmentReceiptSettingsApi(
             : null;
         return prepareLogo(tx, receipt.logo, kept);
       });
-      const rasters = prepared instanceof Uint8Array ? await drawLogoRasters(prepared) : prepared;
+      const rasters =
+        prepared === undefined
+          ? undefined
+          : (prepared.kept ??
+            (await drawLogoRasters(
+              await renderRendition(prepared.bytes, "display", prepared.framing),
+            )));
       await withTransaction(deps.db, async (tx) => {
         const checked = await checkedDepartmentReceiptWrite(
           tx,
@@ -136,8 +142,12 @@ export function mountDepartmentReceiptSettingsApi(
           deps.validateOperationDescription,
         );
         const { receipt } = checked.input;
-        if (receipt.logo !== undefined && !(await imageExists(tx, receipt.logo)))
-          throw logoNotFound();
+        if (receipt.logo !== undefined) {
+          const current = (await readPresentations(tx, [receipt.logo]))[receipt.logo];
+          if (!current) throw logoNotFound();
+          if (current.revision !== prepared?.revision)
+            throw new AppError("image.changed", { imageId: current.id });
+        }
         await VENUE_SERVICE.saveDepartmentReceiptSettings(
           tx,
           checked.scope,

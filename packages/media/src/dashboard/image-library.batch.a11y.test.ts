@@ -25,6 +25,10 @@ describe.each(["light", "dark"] as const)("batch accessibility (%s)", (theme) =>
       names: { en: "Bread" },
       createdAt: "2026-10-17T00:00:00Z",
       updatedAt: "2026-10-17T00:00:00Z",
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      revision: 1,
+      sourceFilename: "new.png",
+      originalFilename: null,
       usageCount: 0,
     };
     const upload = vi

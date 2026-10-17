@@ -1,3 +1,4 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { page, userEvent } from "vitest/browser";
@@ -8,6 +9,7 @@ import "@waitron/dashboard-modules";
 import type { ImageUpload } from "./image-upload.js";
 import type { DashboardApi } from "../api/client.js";
 
+useMediaPresentations();
 function stubApi(): DashboardApi {
   return {
     imageLibraryRequest: vi.fn().mockResolvedValue({ image: "abc.png" }),
@@ -17,11 +19,15 @@ function stubApi(): DashboardApi {
 function stubLibraryApi(): DashboardApi {
   const image = {
     id: "bread",
-    filename: "bread.png",
+    filename: mediaTestReference("bread.png"),
     names: { es: "Pan", en: "Bread" },
     createdAt: "2026-09-12T10:00:00Z",
     updatedAt: "2026-09-12T10:00:00Z",
     usageCount: 1,
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    revision: 1,
+    sourceFilename: mediaTestReference("bread.png"),
+    originalFilename: null,
   };
   return {
     imageLibraryRequest: vi.fn().mockResolvedValue({ images: [image], total: 1 }),

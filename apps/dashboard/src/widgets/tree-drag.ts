@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
 
@@ -73,7 +74,7 @@ export function dragGhost(ghost: DragGhost | null) {
   return html`<div class="drag-ghost" data-test="drag-ghost" aria-hidden="true">
     ${
       ghost.image
-        ? html`<img src=${`/media/${ghost.image}`} alt="" draggable="false" />`
+        ? html`<img src=${liveMediaImage(ghost.image, "square")} alt="" draggable="false" />`
         : ghost.folder
           ? html`<wt-icon name="folder" size="lg"></wt-icon>`
           : html`<span class="ghost-thumb"></span>`

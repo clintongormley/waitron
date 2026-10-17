@@ -1,3 +1,4 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
@@ -32,6 +33,7 @@ const profile: OwnProfile = {
   hasGoogle: false,
   passkeys: [],
 };
+useMediaPresentations();
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -846,11 +848,15 @@ it.each([
   async ({ use, path }) => {
     const image = {
       id: "image-one",
-      filename: "one.png",
+      filename: mediaTestReference("one.png"),
       names: { en: "Bread" },
       createdAt: "2026-10-06T10:00:00Z",
       updatedAt: "2026-10-06T10:00:00Z",
       usageCount: 1,
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      revision: 1,
+      sourceFilename: mediaTestReference("one.png"),
+      originalFilename: null,
     };
     const m = await mount(
       {

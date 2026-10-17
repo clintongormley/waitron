@@ -1,3 +1,4 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
@@ -7,13 +8,18 @@ import "./image-upload.js";
 import { cleanupWidgets, mountWidget, closeReportsDelivered } from "./test-helpers.js";
 import { t, setLocale } from "../i18n/t.js";
 
+useMediaPresentations();
 const image = {
   id: "one",
-  filename: "one.jpg",
+  filename: mediaTestReference("one.jpg"),
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
   usageCount: 0,
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: mediaTestReference("one.jpg"),
+  originalFilename: null,
 };
 class ImagePickerLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -130,6 +136,8 @@ it("saving the image child leaves the containing Product dirty and picker Cancel
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(app.request).toHaveBeenCalledWith("/management-api/images/one", "PATCH", {
     names: { es: "Pan editado", en: "Bread" },
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    expectedRevision: 1,
   });
   expect(app.leave.coordinator.isDirty([app])).toBe(true);
   upload.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
