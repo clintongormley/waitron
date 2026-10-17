@@ -81,6 +81,7 @@ import {
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
+import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import "./errors.js";
 
 /** What an adjustment asks, as a preview and an apply share it. */
@@ -454,6 +455,13 @@ export async function planAdjustment(
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
+      const cancelled = await readLineCancellations(tx, [target.id]);
+      if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
+        throw new AppError("adjustment.quantity_invalid", {
+          workingOrderId: orderId,
+          lineNo: target.lineNo,
+          quantity: ask.quantity ?? thousandthsToDecimal(covered),
+        });
       removed = partial ? covered : null;
       const left = familyAt(family, target.quantity - covered);
       cancelLeft = left;

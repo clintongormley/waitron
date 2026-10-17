@@ -121,6 +121,7 @@ import {
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
+  lineServiceCancellations,
   nowIso,
   orderGroups,
   orderTableLabels,
@@ -3118,20 +3119,56 @@ async function reduceLine(
     })
     .where(eq(workingOrderLines.id, target.id));
   await rescaleExtras(tx, children, remaining);
+  const ids = [target.id, ...children.map(({ child }) => child.id)];
+  const cancellations = await readLineCancellations(tx, ids);
+  const cancelled = cancellations.get(target.id) ?? 0;
+  if (cancelled > 0 && decimalToThousandths(remaining) === cancelled) {
+    const [beforeClamp] = await tx
+      .select({
+        served: workingOrderLines.servedQuantity,
+        servedAt: workingOrderLines.servedAt,
+        cancelledAt: lineServiceCancellations.cancelledAt,
+      })
+      .from(workingOrderLines)
+      .innerJoin(
+        lineServiceCancellations,
+        eq(lineServiceCancellations.lineId, workingOrderLines.id),
+      )
+      .where(eq(workingOrderLines.id, target.id));
+    // With no active food left, the cancellation row retains the service completion time.
+    const completedAt =
+      beforeClamp!.served < removed
+        ? nowIso()
+        : (beforeClamp!.servedAt ?? beforeClamp!.cancelledAt);
+    if (Date.parse(completedAt) > Date.parse(beforeClamp!.cancelledAt))
+      await tx
+        .update(lineServiceCancellations)
+        .set({ cancelledAt: completedAt })
+        .where(eq(lineServiceCancellations.lineId, target.id));
+  }
   for (const { child, perDish } of children) {
+    const quantity = decimalToThousandths(
+      extraQuantityFor(perDish, remaining, child.priceQuantity),
+    );
+    const active = serviceQuantities(quantity, 0, cancellations.get(child.id) ?? 0).active;
+    if (active === 0) {
+      await tx.delete(ticketItems).where(eq(ticketItems.workingOrderLineId, child.id));
+      continue;
+    }
     await tx
       .update(ticketItems)
-      .set({
-        quantity: decimalToThousandths(extraQuantityFor(perDish, remaining, child.priceQuantity)),
-      })
+      .set({ quantity: active })
       .where(eq(ticketItems.workingOrderLineId, child.id));
   }
-  await clampServed(tx, [target.id, ...children.map(({ child }) => child.id)]);
+  await clampServed(tx, ids);
   if (target.ticketItemId !== null) {
-    await tx
-      .update(ticketItems)
-      .set({ quantity: target.firedQuantity - removed })
-      .where(eq(ticketItems.id, target.ticketItemId));
+    if (target.firedQuantity <= removed)
+      await tx.delete(ticketItems).where(eq(ticketItems.id, target.ticketItemId));
+    else
+      await tx
+        .update(ticketItems)
+        .set({ quantity: target.firedQuantity - removed })
+        .where(eq(ticketItems.id, target.ticketItemId));
   }
 }
 
@@ -3548,25 +3585,32 @@ export async function markGroupServed(
   );
 }
 
-/**
- * After a line's quantity changed: what was served is cut to what it now holds, and `served_at`
- * says whether that is all of it, keeping the time it was first fully served.
- */
+// Charged cancellations complete service without counting as food actually served.
 async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
-  const { servedQuantity, quantity, servedAt } = workingOrderLines;
-  await tx
-    .update(workingOrderLines)
-    .set({
-      servedQuantity: sql`min(${servedQuantity}, ${quantity})`,
-      servedAt: sql`case when ${servedQuantity} >= ${quantity} then coalesce(${servedAt}, ${nowIso()}) end`,
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      served: workingOrderLines.servedQuantity,
+      servedAt: workingOrderLines.servedAt,
     })
-    .where(
-      and(
-        inArray(workingOrderLines.id, [...lineIds]),
-        sql`(${servedQuantity} > ${quantity} or (${servedAt} is not null) <> (${servedQuantity} >= ${quantity}))`,
-      ),
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, [...lineIds]));
+  const cancellations = await readLineCancellations(tx, lineIds);
+  for (const row of rows) {
+    const { active, served } = serviceQuantities(
+      row.quantity,
+      row.served,
+      cancellations.get(row.id) ?? 0,
     );
+    const servedAt = served > 0 && served === active ? (row.servedAt ?? nowIso()) : null;
+    if (served === row.served && servedAt === row.servedAt) continue;
+    await tx
+      .update(workingOrderLines)
+      .set({ servedQuantity: served, servedAt })
+      .where(eq(workingOrderLines.id, row.id));
+  }
 }
 
 /**
