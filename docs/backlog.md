@@ -1421,9 +1421,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
   ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
-  and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  Points 1–3 and 5 landed in Part 1 (feat/a722-1-week-view); 4 and 6 remain. [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+- **A722. The Calendar's Week: one day at a time on a phone, and prep stations in Show (owner,
+  2026-10-15).** On a phone the Week shows one day at a time, each row as its times in words over a
+  thin bar; Show lists prep stations in the Week and the Month. Left open by A722 Part 1, #1823.
+  [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
