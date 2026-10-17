@@ -902,3 +902,19 @@ checks control internet-clock observations and register a synthetic public PDF d
 not qualify real internet clocks, an actual PDF, custody or owner acceptance. The full
 provisioning coverage result above still fails its unchanged gate. The later hour-plan work
 and final acceptance/review/CI remain open.
+
+## Recovery preview and module admission (2026-10-17)
+
+Existing test checks and fixtures changed: none. New suites cover archive, bucket and managed-Cloud
+previews using real private database copies and the Cloud client's approved-point checks. The
+external Cloud responses and bucket download are synthetic. A known filing selection requires
+matching saved geography, module configuration and the original database/manifest migration counts;
+a module with an empty migration set may legitimately record zero. Missing or conflicting evidence leaves the
+preview without a filing selection. This field grants no operation authority.
+
+The new module recovery-preparation suite uses the existing activation writer and restore hook.
+It checks recovered counters, series retirement, a later surviving floor, exact committed replay,
+source/context/input changes, recovery-key operator scope and isolation. Its host state and clock
+observations are controlled fixtures. The adapter is not yet installed in the default recovery
+hosts; these cases do not qualify archive/bucket placement, matching-secret authentication,
+durable host evidence export, HTTP/CLI recovery or restart of those hosts. Task 7 remains open.

@@ -16,8 +16,14 @@ import {
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
 import "./errors.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
+import {
+  recoveryFiscalSelection,
+  type RecoveryFiscalSelection,
+} from "./recovery-fiscal-selection.js";
 
 export interface RecoveryBackupPreview {
+  readonly fiscalSelection?: RecoveryFiscalSelection;
   readonly sourceId: string;
   /** A bucket generation can contain several points; activation binds the bytes before migration. */
   readonly activationSourceId?: string;
@@ -36,6 +42,13 @@ export async function readRecoveryCopyPreview(
 ): Promise<RecoveryBackupPreview> {
   const { node } = readArtifactIdentity(copy.secretEntries);
   const directory = dirname(copy.databasePath);
+  const original = await openVenueDatabase(directory);
+  let recordedVersions: Record<string, number>;
+  try {
+    recordedVersions = await schemaVersionsByModule(original.venue, deps.modules);
+  } finally {
+    await original.close();
+  }
   // Only the validated private copy is upgraded; the source and live venue retain their bytes.
   await applyMigrations(
     directory,
@@ -45,12 +58,29 @@ export async function readRecoveryCopyPreview(
   try {
     const tenant = await readTenant(store.venue);
     const [location] = await store.venue
-      .select({ name: locations.name })
+      .select({
+        name: locations.name,
+        fiscalTerritory: locations.fiscalTerritory,
+        timeZone: locations.timeZone,
+      })
       .from(locations)
       .where(eq(locations.id, node.locationId));
     if (tenant === null || location === undefined)
       throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    const fiscalSelection = recoveryFiscalSelection(
+      {
+        country: tenant.country,
+        fiscalTerritory: location.fiscalTerritory,
+        timeZone: location.timeZone,
+      },
+      copy.manifest,
+      copy.secretEntries,
+      deps.modules,
+      deps.migrationsRoot,
+      recordedVersions,
+    );
     return {
+      ...(fiscalSelection === undefined ? {} : { fiscalSelection }),
       sourceId,
       createdAt: copy.manifest.createdAt,
       environment: copy.manifest.environment,
