@@ -8,6 +8,7 @@ import { installChangeFeed, locations, printers, runMigrations } from "@waitron/
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
 
 const options = migrationOptionsFor(manifestSets(), null);
 const core = options.find((set) => set.migrationsFolder.endsWith("/db/drizzle"))!;
@@ -48,32 +49,23 @@ try {
   if (previousFolder) rmSync(previousFolder, { recursive: true, force: true });
   throw error;
 }
-const created = tablesCreatedBy(
-  core.migrationsFolder,
-  journal.entries.slice(0, index).map((entry) => entry.tag),
-);
+const tags = journal.entries.map((entry) => entry.tag);
 const suite = useVenueDb({
   migrations: options.map((set) =>
     set === core
       ? {
           ...set,
           migrationsFolder: previousFolder!,
-          appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => created.has(table)),
+          appendOnlyTables: predecessorAppendOnly(
+            set.appendOnlyTables,
+            core.migrationsFolder,
+            tags.slice(0, index),
+            tags.slice(index),
+          ),
         }
       : set,
   ),
 });
-
-/** The tables a prefix of migrations creates, so a predecessor gets only its own append-only triggers. */
-function tablesCreatedBy(folder: string, tags: readonly string[]): Set<string> {
-  return new Set(
-    tags.flatMap((tag) =>
-      [
-        ...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE [`"]?(\w+)/gi),
-      ].map((match) => match[1]!),
-    ),
-  );
-}
 
 it("upgrades populated printers through the pre-canvas-retirement schema without changing settings, holder or device choices", async () => {
   await seedTenant(suite.db);

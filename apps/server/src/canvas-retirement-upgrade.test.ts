@@ -92,6 +92,7 @@ import { ALL_MODULES } from "./modules.js";
 import { applyMigrations } from "@waitron/migrations";
 import { provisionOrderVenue, billlessSale } from "./testing/order-venue.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
+import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
 
 const scratch: string[] = [];
 afterAll(() => {
@@ -105,31 +106,22 @@ function predecessor(root: string) {
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
   const index = journal.entries.findIndex((entry) => entry.tag.endsWith("_retire_canvases"));
   expect(index).toBeGreaterThan(0);
+  const tags = journal.entries.map((entry) => entry.tag);
   journal.entries = journal.entries.slice(0, index);
   writeFileSync(journalPath, JSON.stringify(journal));
-  const created = tablesCreatedBy(
-    core,
-    journal.entries.map((entry) => entry.tag),
-  );
   return migrationOptionsFor(manifestSets(), null).map((option) =>
     option.migrationsTable === CORE_MIGRATIONS.migrationsTable
       ? {
           ...option,
           migrationsFolder: core,
-          appendOnlyTables: (option.appendOnlyTables ?? []).filter((table) => created.has(table)),
+          appendOnlyTables: predecessorAppendOnly(
+            option.appendOnlyTables,
+            core,
+            tags.slice(0, index),
+            tags.slice(index),
+          ),
         }
       : option,
-  );
-}
-
-/** The tables a prefix of migrations creates, so a predecessor gets only its own append-only triggers. */
-function tablesCreatedBy(folder: string, tags: readonly string[]): Set<string> {
-  return new Set(
-    tags.flatMap((tag) =>
-      [
-        ...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE [`"]?(\w+)/gi),
-      ].map((match) => match[1]!),
-    ),
   );
 }
 
