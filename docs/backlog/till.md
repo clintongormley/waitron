@@ -2075,25 +2075,6 @@ name) with each order, and every list that shows orders names it: Held orders fi
 Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
 build after A757's board if it has been decided, else name the table alone.
 
-## A768. The till: open a table fast, and stop needing a reload
-
-**A768 (owner, 2026-10-16).** Two halves that share one idea: keep what the till has read, and ask
-the server cheaply whether it changed.
-
-- **Opening a table takes a second or two.** The order screen appears only after, in turn: the
-  draft being left is saved (`#flushDraft`); the zone's whole menu is re-read
-  (`listZoneOffers`, every open, the same zone included); for a seated table with no main bill,
-  its bills; then its lines and bills beside the draft. Time each step on a till first. Then keep
-  each zone's menu and check it with the existing `/api/menu-state` read (`MenuStatePoll` already
-  does this for the counter's zone and the open table's), re-reading only when it moved; switch to
-  the order screen at once with a loading state; and stop waiting on the save of the order left.
-- **Settings read once at page load go stale.** The till takes the venue's courses from its start
-  read (`listCourses`, `apps/server/src/till-api.ts`; `this.courses = till.courses`,
-  `apps/till/src/till-app.ts`) and never again. Seen 2026-10-16: no course headings or course
-  pickers on a table's unsent order until the till page was reloaded. Courses first; then every
-  other value from that read (bump mode, fire control, card provider, tips, receipt languages and
-  the rest) is either refreshed while the till is open or recorded as fixed until reload, with why.
-
 ## A669. An allergy at the table
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** At a table's first Send the waiter answers "Any allergies at this table?"; for

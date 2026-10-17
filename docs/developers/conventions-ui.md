@@ -1215,3 +1215,78 @@ Measured 2026-10-16: `pnpm --filter @waitron/dashboard exec vitest run
 src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed three cases with
 `italic` instead of `normal` before the selector correction. The assertion lives in
 `apps/dashboard/src/widgets/product-list.test.ts`, under **A668 effective allergen cells**.
+
+## What an open till keeps current
+
+A signed-in till keeps two things it has read, and asks `/api/menu-state` every 15 seconds
+(`POLL_MS`, `apps/till/src/state/menu-state-poll.ts`) whether either moved. The poll starts at
+sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
+
+**Each zone's menu.** The till keeps the menu of every zone it has read (`#zoneCatalogues`). A table
+in a zone already held shows that menu at once and sends one `/api/menu-state` check for the zone
+(`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
+published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and
+options) is applied in place. `liveFields` is a digest of each dish's course and reporting category
+(`liveFieldsDigest`, `packages/catalogue/src/menu-document.ts`); without it a dish moved to another
+course would not be noticed. The held menus are forgotten on every start (`#boot`, which a server
+switch runs again) and when the till is given a new `api`. Two limits:
+
+- A held menu's sold-out marks are as of its last full read until the check sent at the open
+  answers, or, if that check fails, until a later poll does.
+- Its department name is not checked; it changes only at the next full read of that zone.
+
+Pinned by `apps/till/src/till-app-open-table.test.ts`, under "A768 a held zone's menu" and "A768 a
+moved course or category is read again", and on the server by "menuState and listZoneOffers name
+the same live fields, and both move when a dish changes course"
+(`packages/venue-service/src/operations.test.ts`).
+
+A table opened from Find a bill does not show the order screen while it loads: the screen appears
+when the open completes, because `#onFindBillOpen` abandons the open once Find a bill stops
+showing. Pinned by "a bill opened from Find a bill shows no loading line, and Back during its read
+stops it" in the same file.
+
+**The start read.** `GET /api/till` answers `readTillSetup` (`apps/server/src/till-setup.ts`) plus
+`servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
+`/api/menu-state` names the same revision. When a poll names one the till has not applied,
+`#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
+receipt languages and invoice language, venue name and tax id, onboarding intent, bump mode, fire
+control, courses, card provider, card readers and the default reader, tips, the simplified-invoice
+limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
+once a read sent after it has been applied. A draft line keeps the course it was given, name
+included, after a refresh deletes that course.
+
+Some of those values change only when the server restarts, and the revision covers them, so an open
+till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
+(`loadTillConfig`, `apps/server/src/till-config.ts`), the simplified-invoice limit from the fiscal
+backend at boot (`apps/server/src/boot.ts`), and the onboarding intent from the server's
+configuration.
+
+Fixed until the till starts again (a reload, or a server switch, which runs `#boot` again):
+
+- `locale`: the venue's display language, read when the server starts (`readVenueLocale`,
+  `apps/server/src/boot.ts`). The till uses it before sign-in, on a kitchen screen, and for a
+  person who has saved no language of their own; a person's saved language wins
+  (`resolveActiveLocale`, `packages/shared/src/locales.ts`).
+- `servers`: the till's router follows the primary on its own among the servers it was given at
+  start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). `nodeId` is in the answer
+  but the till does not read it.
+- The profile's values: form factor, capabilities, idle logout, starting screen and whether clocking
+  is offered. `#applyProfileSetup` applies them at start, on a profile switch
+  (`#enterSwitchedProfile`) and when the device's zone selection changes
+  (`#reconcileSavedDeviceZones`), and at no other time. They change the layout and which screens the
+  till offers; applied mid-session they could take away the screen the person is on, and at those
+  three points the till already lays itself out again (A768's owner decision 4).
+- A kitchen screen in device mode: nothing. Nobody signs in on it, so it runs no poll (backlog A785).
+
+Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
+revision"): courses reach an open table, bump mode and fire control reach the station screen, the
+same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
+one across a poll, a profile switch, a change of zones and a server switch. The default reader is
+checked only beside a profile switch. No test checks the refresh of the other values in the list
+above; they ride on the same assignment in `#applyVenueSetup`. On the server,
+`apps/server/src/till-api.setup-revision.test.ts` checks that the revision is the same on both
+reads, stays while nothing changes, and moves when a course is added or renamed and when bump mode
+changes.
+
+Nothing guards a new field: a new `/api/till` field moves the revision, but reaches an open till
+only once someone adds it to `#applyVenueSetup`.

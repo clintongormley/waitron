@@ -1944,11 +1944,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
   [Detail](backlog/till.md#a765-say-which-table-an-order-belongs-to)
 
-- **A768. The till: open a table fast, and stop needing a reload (owner, 2026-10-16).** Opening a
-  table waits on up to four requests in a row, one re-reading the zone's whole menu; keep each
-  zone's menu and check it with `/api/menu-state`. Courses, and other settings read once when the
-  page loads, stay stale until a reload — seen: no course grouping until the till was reloaded.
-  [Detail](backlog/till.md#a768-the-till-open-a-table-fast-and-stop-needing-a-reload)
+- **A785. A kitchen screen in device mode keeps its start-up settings until reload (left open by
+  A768, 2026-10-17).** Its bump mode and fire control never refresh: the menu-state poll that
+  carries the setup revision starts only when someone signs in, and a kitchen screen in device mode
+  has nobody signed in. Its station queue read could name the revision, as `/api/menu-state` does.
+
+- **A786. A seated table with no main bill reads its bills before its lines (left open by A768,
+  2026-10-17).** The lines read needs the bill `billToOpen` picks, so opening such a table sends
+  two requests one after the other. A768's after-change probe timed it at 241–266 ms, against
+  113–120 ms for a second table in the same zone.
+
+- **A787. Profile values on an open till refresh only at a profile switch or a change of zones
+  (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
+  whether clocking is offered change the till's layout, so they are applied only where the till
+  already lays itself out again (A768's owner decision 4). Decide whether any of them should follow
+  a profile edit made on the dashboard while the till is open.
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642. The drag's override sheet is added to the document and to every
