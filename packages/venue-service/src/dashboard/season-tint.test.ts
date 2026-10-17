@@ -56,13 +56,17 @@ describe("season tint tokens", () => {
 });
 
 /** Reads a computed colour, as `rgb(…)`/`rgba(…)` or the `color(srgb …)` Chromium gives a
- *  `color-mix`, into 0–1 channels. */
+ *  `color-mix`, into 0–1 channels. One not fully opaque throws: an undeclared token computes to
+ *  transparent black, whose channels alone read as black. */
 function channels(value: string): [number, number, number] {
-  const srgb = /^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)/.exec(value);
-  if (srgb) return [Number(srgb[1]), Number(srgb[2]), Number(srgb[3])];
-  const rgb = /^rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)/.exec(value);
-  if (rgb) return [Number(rgb[1]) / 255, Number(rgb[2]) / 255, Number(rgb[3]) / 255];
-  throw new Error(`unreadable colour ${value}`);
+  const srgb = /^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/.exec(value);
+  const rgb = /^rgba?\(([\d.]+),? ([\d.]+),? ([\d.]+)(?:,? ([\d.]+))?\)$/.exec(value);
+  const scale = srgb ? 1 : 255;
+  const found = srgb ?? rgb;
+  if (!found) throw new Error(`unreadable colour ${value}`);
+  if (found[4] !== undefined && Number(found[4]) < 1)
+    throw new Error(`translucent colour ${value}`);
+  return [Number(found[1]) / scale, Number(found[2]) / scale, Number(found[3]) / scale];
 }
 function contrast(a: string, b: string): number {
   const luminance = (value: string) => {
