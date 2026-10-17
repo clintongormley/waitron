@@ -109,7 +109,7 @@ export class SlotPicker extends LitElement {
   @property({ type: Boolean, reflect: true }) sheet = false;
   @state() private everyone = false;
   /** Free, on leave, or working at that time ("working 18:00–00:00"). */
-  #status(personId: string): { busy: boolean; words: string } {
+  #status(personId: string, start: number, end: number): { busy: boolean; words: string } {
     if (
       this.week.absences.some(
         (a) =>
@@ -119,13 +119,6 @@ export class SlotPicker extends LitElement {
       )
     )
       return { busy: true, words: t("staffing.rota.leave") };
-    const cutover = this.week.days.find(
-      (d) => d.businessDay === this.pickedSlot.businessDay,
-    )!.cutover;
-    const start =
-      Date.parse(`${this.pickedSlot.businessDay}T${cutover}:00Z`) + this.pickedSlot.start * 60000;
-    const end =
-      Date.parse(`${this.pickedSlot.businessDay}T${cutover}:00Z`) + this.pickedSlot.end * 60000;
     const overlapping = this.week.shifts.filter(
       (s) =>
         s.personId === personId &&
@@ -152,6 +145,12 @@ export class SlotPicker extends LitElement {
       : holders;
     const area = this.week.areas.find((a) => areaKey(a.area) === areaKey(this.pickedSlot.area))!;
     const length = slotMinutes(this.week, this.pickedSlot);
+    const cutover = this.week.days.find(
+      (d) => d.businessDay === this.pickedSlot.businessDay,
+    )!.cutover;
+    const dayStart = Date.parse(`${this.pickedSlot.businessDay}T${cutover}:00Z`);
+    const start = dayStart + this.pickedSlot.start * 60000;
+    const end = dayStart + this.pickedSlot.end * 60000;
     // The popup it sits in carries this text as its heading, which is what a screen reader hears.
     return html`<div>
       <p class="title" data-test="picker-title" aria-hidden="true">
@@ -162,7 +161,7 @@ export class SlotPicker extends LitElement {
       </p>
       ${!holders.length ? html`<p>${t("staffing.rota.no_holders")}</p>` : nothing}
       ${people.map((p) => {
-        const status = this.#status(p.personId);
+        const status = this.#status(p.personId, start, end);
         return html`<button
           data-person=${p.personId}
           ?data-busy=${status.busy}
