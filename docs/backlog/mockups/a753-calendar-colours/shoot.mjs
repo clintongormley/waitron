@@ -3,6 +3,7 @@
 // Every contrast ratio on the boards is computed here (WCAG 2 relative luminance, the same formula
 // as packages/ui-core/src/tokens/colors.test.ts) and printed as a table; a pair under 4.5:1
 // in either theme stops the run.
+/* global console */
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
