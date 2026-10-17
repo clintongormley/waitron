@@ -702,7 +702,7 @@ export class OpeningHoursWeekView extends LitElement {
       window.addEventListener("pointercancel", this.#swipeEnd);
       this.#swipeFrom = { id: event.pointerId, x: event.clientX, y: event.clientY };
     } else {
-      // A second contact makes the gesture a pinch or a hold until every contact has lifted.
+      // A second contact ends the swipe; none starts until every contact has ended.
       this.#swipeFrom = undefined;
     }
     this.#contacts.add(event.pointerId);

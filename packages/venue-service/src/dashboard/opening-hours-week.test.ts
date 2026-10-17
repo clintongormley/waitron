@@ -1081,7 +1081,7 @@ describe("Opening hours week on a phone", () => {
     expect(sent).toEqual([{ date: "2026-12-02" }]);
   });
 
-  it("a finger lifted off the card leaves the next swipe working", async () => {
+  it("a lift the card does not hear leaves the next swipe working", async () => {
     const el = await mount({ date: "2026-12-01" });
     const sent = events<{ date: LocalDate }>(el, "week-change");
     const finger = fingersOn(el);
@@ -1128,7 +1128,11 @@ describe("Opening hours week on a phone", () => {
     const el = await mount({ date: "2026-12-01" });
     const sent = events<{ date: LocalDate }>(el, "week-change");
     fingersOn(el)("pointerdown", 1, 106);
+    const removed = vi.spyOn(window, "removeEventListener");
     el.remove();
+    expect(removed).toHaveBeenCalledWith("pointerup", expect.any(Function));
+    expect(removed).toHaveBeenCalledWith("pointercancel", expect.any(Function));
+    removed.mockRestore();
     document.body.append(el);
     await el.updateComplete;
     await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });

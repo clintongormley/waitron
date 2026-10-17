@@ -4099,8 +4099,8 @@ Opening hours' Year.
   as wide as the longest title for the 22nd to the 28th of each month of 2026 in any interface
   language (`dayTitleCandidateDates`). ‹ › step a day, and so does a swipe across the card with a
   finger or a pen, a left swipe to the next day and a right swipe to the one before, once it travels
-  at least 48 px and more than twice as far across as down; a second finger on the card ends it, and
-  no swipe starts again until every finger on the card has lifted.
+  at least 48 px and more than twice as far across as down; a second finger or pen on the card ends it,
+  and no swipe starts again until every one of them has lifted.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
