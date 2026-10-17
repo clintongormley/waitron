@@ -32,8 +32,8 @@ export class RotaDay extends LitElement {
         min-width: 0;
         overflow-wrap: anywhere;
       }
-      h2,
-      h3 {
+      h3,
+      h4 {
         margin: 0;
         font-size: var(--wt-font-size-md);
         font-weight: var(--wt-font-weight-bold);
@@ -43,7 +43,7 @@ export class RotaDay extends LitElement {
         flex-direction: column;
         min-width: 0;
       }
-      h3 {
+      h4 {
         margin-block-end: var(--wt-space-2);
       }
       .person {
@@ -91,7 +91,7 @@ export class RotaDay extends LitElement {
     return html`${groups.map(
       (role) =>
         html`<section data-role=${role.id}>
-          <h3><span class="swatch" data-colour=${role.colour}></span>${role.name}</h3>
+          <h4><span class="swatch" data-colour=${role.colour}></span>${role.name}</h4>
           ${match!.slots
             .filter((s) => s.slot.staffRoleId === role.id)
             .map((s) => slotCard(this, s.slot, s.status, day.cutover))}
@@ -100,7 +100,7 @@ export class RotaDay extends LitElement {
     )}${
       day.notInSlot.length > 0
         ? html`<section data-role="not-in-slot">
-            <h3>${t("staffing.rota.not_in_slot")}</h3>
+            <h4>${t("staffing.rota.not_in_slot")}</h4>
             ${day.notInSlot.map((n) => notInSlotCard(this, n))}
           </section>`
         : nothing
@@ -150,11 +150,11 @@ export class RotaDay extends LitElement {
     const day = this.week?.days.find((d) => d.businessDay === this.businessDay);
     if (!day || !this.show) return nothing;
     const words = dayWords(this.week, this.show, day.businessDay);
-    return html`<h2 data-day-head=${day.businessDay}>
+    return html`<h3 data-day-head=${day.businessDay}>
         ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(day.businessDay))}${
           words ? html`<small>${words}</small>` : nothing
         }
-      </h2>
+      </h3>
       ${this.show.kind === "area" ? this.#area(day, this.show) : this.#everyone(day)}`;
   }
 }

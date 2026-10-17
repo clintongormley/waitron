@@ -76,6 +76,7 @@ async function mount(missing = false) {
     throw Error(`unexpected ${method} ${path}`);
   });
   const f = document.createElement("div");
+  f.style.width = "1280px";
   frames.push(f);
   document.body.append(f);
   applyTokens(f);

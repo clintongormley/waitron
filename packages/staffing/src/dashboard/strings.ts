@@ -116,6 +116,8 @@ const en = {
     "No shifts this week yet. Click a day in someone's row to fill a slot or add a shift.",
   "staffing.rota.no_shifts_hint_phone":
     "No shifts this week yet. Tap a person to fill a slot or add a shift.",
+  "staffing.rota.days": "Days",
+  "staffing.rota.needs_attention": "needs attention",
   "staffing.rota.choose": "Choose a person",
   "staffing.rota.no_holders": "Nobody holds this staff role. Show everyone to choose someone else.",
 
@@ -333,6 +335,8 @@ const es: Record<keyof typeof en, string> = {
     "Aún no hay turnos esta semana. Haz clic en un día de la fila de alguien para cubrir un puesto o añadir un turno.",
   "staffing.rota.no_shifts_hint_phone":
     "Aún no hay turnos esta semana. Toca a una persona para cubrir un puesto o añadir un turno.",
+  "staffing.rota.days": "Días",
+  "staffing.rota.needs_attention": "requiere atención",
   "staffing.rota.choose": "Elige una persona",
   "staffing.rota.no_holders":
     "Nadie tiene este rol de personal. Muestra a todo el mundo para elegir a otra persona.",

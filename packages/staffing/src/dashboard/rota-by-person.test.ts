@@ -43,10 +43,11 @@ async function mount(
   el.canWrite = true;
   el.open = vi.fn();
   frame.append(el);
-  await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy());
+  const drawn = parseInt(width) < 560 ? "rota-day" : "rota-by-person";
+  await vi.waitFor(() => expect(el.shadowRoot?.querySelector(drawn)).toBeTruthy());
   const grid = el.shadowRoot!.querySelector<
     LitElement & { week: RotaWeek; breaches: RosterBreach[] }
-  >("rota-by-person")!;
+  >(drawn)!;
   await grid.updateComplete;
   return { el, grid, root: grid.shadowRoot!, request: client.request };
 }
@@ -167,7 +168,15 @@ describe("the Rota by person", () => {
     expect(root.querySelector("button[data-shift]")).toBeNull();
     expect(root.querySelector("[data-test=day-add]")).toBeNull();
   });
-  it.each(["390px", "1280px"])("contains its scrolling grid at %s", async (width) => {
+  it("at 390px Everyone's one day fits within the view", async () => {
+    const { el, grid } = await mount(false, "390px");
+    expect(grid.localName).toBe("rota-day");
+    expect(el.shadowRoot!.querySelector("rota-by-person")).toBeNull();
+    expect(grid.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(grid.scrollWidth).toBeLessThanOrEqual(grid.clientWidth);
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+  });
+  it.each(["1280px"])("contains its scrolling grid at %s", async (width) => {
     const { grid, root } = await mount(false, width);
     expect(grid.getBoundingClientRect().width).toBeLessThanOrEqual(parseInt(width));
     const scroll = root.querySelector<HTMLElement>("[data-test=grid-scroll]")!;

@@ -1,6 +1,6 @@
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
-import { afterEach, describe, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, describe, expect, onTestFinished, test, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -38,6 +38,13 @@ afterEach(() => {
   cleanup();
   setLocale("en");
 });
+async function useViewport(width: number, height: number) {
+  const before = [innerWidth, innerHeight] as const;
+  await page.viewport(width, height);
+  await vi.waitFor(() => expect(innerWidth).toBe(width));
+  onTestFinished(() => page.viewport(...before));
+}
+type Phone = "phone area" | "phone everyone" | "phone closed day";
 describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => {
   test.each([
     "draft",
@@ -57,9 +64,15 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     "open-slots",
     "unpainted",
     "everyone-empty",
+    "phone area",
+    "phone everyone",
+    "phone closed day",
   ])("%s", async (state) => {
     setLocale("en");
+    const phone = state.startsWith("phone");
+    if (phone) await useViewport(390, 844);
     await mountThemed("<div></div>", theme);
+    if (!phone) host.style.width = "1280px";
     const client = rotaApi(async (week) => {
       if (state === "loading") return new Promise(() => undefined);
       if (state === "error") throw { code: "connection.failed" };
@@ -109,12 +122,34 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     el.week = "2026-11-30";
     el.canWrite = true;
     el.open = () => undefined;
-    if (state === "everyone" || state === "open-slots" || state === "everyone-empty")
+    if (
+      state === "everyone" ||
+      state === "open-slots" ||
+      state === "everyone-empty" ||
+      state === "phone everyone"
+    )
       el.params = { area: "everyone" };
     if (state === "draft" || state === "unpainted") el.canOpenStaffing = true;
     if (state === "unpainted") el.canWriteStaffing = true;
     host.append(el);
-    if (state === "loading")
+    if (phone) {
+      await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-day")).toBeTruthy());
+      const shown = { "phone area": 4, "phone everyone": 1, "phone closed day": 0 }[state as Phone];
+      await userEvent.click(
+        el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=strip] button")[shown]!,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=publish-week]")).toBeTruthy(),
+      );
+      const day = el.shadowRoot!.querySelector<import("lit").LitElement>("rota-day")!;
+      await day.updateComplete;
+      if (state === "phone area")
+        expect(day.shadowRoot!.querySelector("[data-slot=empty]")).toBeTruthy();
+      if (state === "phone everyone")
+        expect(day.shadowRoot!.querySelector("[data-test=person]")).toBeTruthy();
+      if (state === "phone closed day")
+        expect(day.shadowRoot!.querySelector("[data-day-head]")!.textContent).toContain("Closed");
+    } else if (state === "loading")
       await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
     else if (state === "error")
       await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[role=alert]")).toBeTruthy());

@@ -73,6 +73,7 @@ async function mount(
     return result;
   };
   const frame = document.createElement("div");
+  frame.style.width = "1280px";
   frames.push(frame);
   document.body.append(frame);
   applyTokens(frame);

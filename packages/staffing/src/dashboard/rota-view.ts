@@ -9,12 +9,14 @@ import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/f
 import { areaKey, type AreaRef, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { weekTitleParts } from "./format.js";
+import { dateFormat, utc, weekTitleParts } from "./format.js";
 import {
   EVERYONE,
   attentionTargets,
   chosenShow,
+  dayCounts,
   hasSlots,
+  isClosed,
   openSlots,
   paintTarget,
   rolesShown,
@@ -27,6 +29,7 @@ import {
 import { STAFFING_STRINGS, countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
 import "./rota-by-person.js";
+import "./rota-day.js";
 import "./rota-popup.js";
 import { openHeading } from "./open-slots-menu.js";
 import { slotHeading } from "./slot-picker.js";
@@ -37,6 +40,23 @@ const step = (day: string, n: number) =>
   new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 
 type PopupPick = { key: string; grid: string; selector: string; fallback: string };
+type Grid = LitElement & { focusTarget(target: Target): boolean };
+
+/** Below this many pixels of the rota's own width it draws one day: the Calendar Week's
+ *  `PHONE_WIDTH` (`opening-hours-week.ts`), which venue-service does not export. */
+export const PHONE_WIDTH = 560;
+
+/** The calendar date now in `timeZone`. */
+function dateIn(timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 let widthCandidates: TemplateResult[] | undefined;
 /** The titles of every week whose Monday falls in 2026, in each interface language, its month
@@ -168,6 +188,77 @@ export class RotaView extends LitElement {
       .unpainted p {
         margin: 0 0 var(--wt-space-3);
       }
+      .head.phone {
+        flex-wrap: wrap;
+      }
+      .phone .fixed-title {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .phone .strip,
+      .phone wt-combobox,
+      .phone .end {
+        flex-basis: 100%;
+      }
+      .phone .end {
+        margin-inline-start: 0;
+      }
+      .strip {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: var(--wt-space-1);
+      }
+      .strip button {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-1) 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+      .strip button:focus-visible {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .strip button[data-closed] {
+        color: var(--wt-color-text-muted);
+      }
+      .strip button[aria-pressed="true"] {
+        border-color: var(--wt-color-primary);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      .strip .date {
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .strip .dot {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-end: var(--wt-space-1);
+        width: var(--wt-space-2);
+        height: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-warning);
+      }
+      .foot {
+        position: sticky;
+        bottom: 0;
+        margin-block-start: var(--wt-space-3);
+        padding-block: var(--wt-space-2);
+        background: var(--wt-color-bg);
+      }
+      .foot wt-button {
+        display: block;
+        width: 100%;
+      }
       .unpainted .actions {
         display: flex;
         flex-wrap: wrap;
@@ -202,6 +293,9 @@ export class RotaView extends LitElement {
   @state() private changingError = "";
   @state() private publishing = false;
   @state() private publishError = "";
+  @state() narrow = false;
+  /** The phone's shown business day. */
+  @state() private day = "";
   // The rota observation triggers this read; a second live observation would duplicate it.
   readonly #warningQueries = new QueryController(
     this,
@@ -217,6 +311,16 @@ export class RotaView extends LitElement {
   /** The pick the popup was last opened for: a slot key, or a person's day. */
   #shownFor: string | undefined;
   #generation = 0;
+  /** The day a week arrow asked for, shown once the host moves to its week. */
+  #arriving: string | undefined;
+  #narrowing = 0;
+  readonly #resizes = new ResizeObserver(([entry]) => {
+    const narrow = entry!.contentRect.width < PHONE_WIDTH;
+    cancelAnimationFrame(this.#narrowing);
+    // Set in this callback, the redraw would change the host's height inside the observer's own
+    // pass, which the browser reports as a resize loop.
+    this.#narrowing = requestAnimationFrame(() => (this.narrow = narrow));
+  });
   /** The target each count button last focused, to step on from. */
   #stepped: Partial<Record<"unfilled" | "partly" | "over", Target>> = {};
   readonly #queries = new QueryController(
@@ -232,11 +336,21 @@ export class RotaView extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.#watching = "";
+    // Measured now as well, so a phone's first paint is already its day.
+    const box = getComputedStyle(this);
+    const around = ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"] as const;
+    this.narrow =
+      this.getBoundingClientRect().width -
+        around.reduce((sum, side) => sum + parseFloat(box[side]), 0) <
+      PHONE_WIDTH;
+    this.#resizes.observe(this);
     this.requestUpdate();
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.#generation++;
+    this.#resizes.disconnect();
+    cancelAnimationFrame(this.#narrowing);
   }
   override willUpdate() {
     if ((this.params.area ?? "") !== this.#area) {
@@ -248,6 +362,10 @@ export class RotaView extends LitElement {
     if (this.week && this.week !== this.#watching) {
       this.#watching = this.week;
       this.#generation++;
+      const arriving = this.#arriving;
+      this.#arriving = undefined;
+      this.day =
+        arriving && arriving >= this.week && arriving <= step(this.week, 6) ? arriving : "";
       this.editor = undefined;
       this.warnings = undefined;
       this.warningsError = "";
@@ -270,6 +388,10 @@ export class RotaView extends LitElement {
       .watchRota(this.#queries, week, (read) => {
         this.read = read;
         this.loadError = "";
+        if (week === this.week && !read.days.some((d) => d.businessDay === this.day)) {
+          const today = dateIn(read.timeZone);
+          this.day = read.days.some((d) => d.businessDay === today) ? today : week;
+        }
         this.warnings = undefined;
         void this.api
           .watchRotaWarnings(this.#warningQueries, read.locationId, week, (warnings) => {
@@ -310,7 +432,17 @@ export class RotaView extends LitElement {
   #pick(): PopupPick | undefined {
     if (this.picked) {
       const selector = `[data-slot="${this.picked.key}"]`;
-      return { key: this.picked.key, grid: "rota-by-area", selector, fallback: selector };
+      const grid = this.narrow ? "rota-day" : "rota-by-area";
+      return { key: this.picked.key, grid, selector, fallback: selector };
+    }
+    if (this.openDay && this.narrow) {
+      const person = `[data-person="${this.openDay.personId}"]`;
+      return {
+        key: `${this.openDay.personId} ${this.openDay.businessDay}`,
+        grid: "rota-day",
+        selector: `${person} [data-test=person]`,
+        fallback: person,
+      };
     }
     if (this.openDay) {
       const cell = `[data-person="${this.openDay.personId}"] td[data-day="${this.openDay.businessDay}"]`;
@@ -380,6 +512,11 @@ export class RotaView extends LitElement {
   }
   #go(week: string, area = this.params.area) {
     this.open("rota", { week, ...(area ? { area } : {}) });
+  }
+  /** A week arrow: the phone keeps its weekday in the week it moves to. */
+  #stepWeek(days: number) {
+    if (this.day) this.#arriving = step(this.day, days);
+    this.#go(step(this.week, days));
   }
   async #fill(slot: Slot, personId: string) {
     const pick = this.#pick(),
@@ -494,9 +631,22 @@ export class RotaView extends LitElement {
       !!b && (["businessDay", "slotKey", "shiftId", "header"] as const).every((k) => a[k] === b[k]);
     const next =
       targets[(targets.findIndex((t) => same(t, this.#stepped[kind])) + 1) % targets.length]!;
-    const grid = this.renderRoot.querySelector<
-      LitElement & { focusTarget(target: Target): boolean }
-    >(show.kind === "everyone" ? "rota-by-person" : "rota-by-area")!;
+    if (this.narrow) {
+      this.day = next.businessDay;
+      await this.updateComplete;
+    }
+    if (this.narrow && next.header) {
+      const button = this.renderRoot.querySelector<HTMLElement>(
+        `[data-test=strip] [data-day="${next.businessDay}"]`,
+      )!;
+      button.focus();
+      button.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this.#stepped[kind] = next;
+      return;
+    }
+    const grid = this.renderRoot.querySelector<Grid>(
+      this.narrow ? "rota-day" : show.kind === "everyone" ? "rota-by-person" : "rota-by-area",
+    )!;
     await grid.updateComplete;
     if (grid.focusTarget(next)) this.#stepped[kind] = next;
   }
@@ -582,7 +732,7 @@ export class RotaView extends LitElement {
     if (!this.week) return nothing;
     return weekTitleParts(this.week).map((part) => {
       const { month } = part;
-      if (!month || !this.canOpenStaffing) return part.text;
+      if (!month || !this.canOpenStaffing || this.narrow) return part.text;
       return html`<button
         type="button"
         class="title-link"
@@ -594,17 +744,108 @@ export class RotaView extends LitElement {
       </button>`;
     });
   }
+  /** The phone's week: a button per day, marked when it needs attention and muted when Closed. */
+  #strip(read: RotaWeek, show: Show) {
+    return html`<div
+      class="strip"
+      role="group"
+      aria-label=${t("staffing.rota.days")}
+      data-test="strip"
+    >
+      ${read.days.map(({ businessDay }) => {
+        const counts = dayCounts(read, show, businessDay);
+        const attention = counts.unfilled + counts.partly + counts.over > 0;
+        return html`<button
+          type="button"
+          data-day=${businessDay}
+          aria-pressed=${businessDay === this.day ? "true" : "false"}
+          ?data-attention=${attention}
+          ?data-closed=${isClosed(read, show, businessDay)}
+          @click=${() => {
+            this.day = businessDay;
+          }}
+        >
+          <span>${dateFormat({ weekday: "short" }).format(utc(businessDay))}</span>
+          <span class="date">${dateFormat({ day: "numeric" }).format(utc(businessDay))}</span>
+          ${
+            attention
+              ? html`<span class="dot" aria-hidden="true"></span>
+                  <span class="visually-hidden">${t("staffing.rota.needs_attention")}</span>`
+              : nothing
+          }
+        </button>`;
+      })}
+    </div>`;
+  }
+  readonly #editShift = (e: CustomEvent<{ shiftId: string }>) => {
+    this.editor = e.detail;
+  };
+  readonly #pickSlot = (e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
+    this.picked = e.detail.slot;
+    this.#anchor = e.detail.anchor;
+    this.actionError = "";
+  };
+  readonly #openDay = (
+    e: CustomEvent<{ personId: string; businessDay: string; anchor: HTMLElement }>,
+  ) => {
+    const { personId, businessDay, anchor } = e.detail;
+    const open = openSlots(this.read!, personId, businessDay);
+    this.openDay = { personId, businessDay, offered: open.own.length + open.other.length > 0 };
+    this.#anchor = anchor;
+    this.actionError = "";
+  };
+  #grid(read: RotaWeek, show: Show) {
+    const editable = this.canWrite && read.version?.status !== "published" && !this.busy;
+    const breaches = this.warnings?.breaches ?? [];
+    if (this.narrow)
+      return html`<rota-day
+        .week=${read}
+        .show=${show}
+        .businessDay=${this.day}
+        .breaches=${breaches}
+        .editable=${editable}
+        .canAdd=${read.areas.length > 0}
+        @edit-shift=${this.#editShift}
+        @pick-slot=${this.#pickSlot}
+        @open-day=${this.#openDay}
+      ></rota-day>`;
+    if (show.kind === "everyone")
+      return html`<rota-by-person
+        .week=${read}
+        .canAdd=${read.areas.length > 0}
+        .breaches=${breaches}
+        .editable=${editable}
+        @edit-shift=${this.#editShift}
+        @open-day=${this.#openDay}
+      ></rota-by-person>`;
+    if (rolesShown(read, show).length === 0 && !read.days.some((d) => d.notInSlot.length > 0))
+      return nothing;
+    return html`<rota-by-area
+      .week=${read}
+      .breaches=${breaches}
+      .area=${show.area}
+      .editable=${editable}
+      @edit-shift=${this.#editShift}
+      @add-shift=${(
+        e: CustomEvent<{ businessDay: string; area: AreaRef; staffRoleId: string }>,
+      ) => {
+        this.editor = e.detail;
+      }}
+      @pick-slot=${this.#pickSlot}
+    ></rota-by-area>`;
+  }
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
     const show = read ? chosenShow(read, this.params.area) : undefined;
     const attention = read && show ? this.#attention(read, show) : undefined;
     const published = read?.version?.status === "published";
-    return html`<div class="head" data-test="bar">
+    const action = read ? this.#action(read) : nothing;
+    return html`<div class="head ${this.narrow ? "phone" : ""}" data-test="bar">
         <wt-button
           variant="secondary"
           data-test="previous-week"
           aria-label=${t("staffing.rota.previous")}
-          @click=${() => this.#go(step(this.week, -7))}
+          @click=${() => this.#stepWeek(-7)}
           >‹</wt-button
         >
         ${fixedTitle(html`<h2 data-test="week">${this.#title(show)}</h2>`, titleCandidates())}
@@ -612,12 +853,13 @@ export class RotaView extends LitElement {
           variant="secondary"
           data-test="next-week"
           aria-label=${t("staffing.rota.next")}
-          @click=${() => this.#go(step(this.week, 7))}
+          @click=${() => this.#stepWeek(7)}
           >›</wt-button
         >
         ${
           read
-            ? html`<wt-combobox
+            ? html`${this.narrow ? this.#strip(read, show!) : nothing}
+                <wt-combobox
                   name="area"
                   label=${t("staffing.month.area")}
                   search="never"
@@ -637,7 +879,7 @@ export class RotaView extends LitElement {
                       : nothing
                   }
                   <span class="attention" data-test="attention">${attention!.body}</span>
-                  ${this.#labour()} ${this.#action(read)}
+                  ${this.#labour()} ${this.narrow ? nothing : action}
                 </div>`
             : nothing
         }
@@ -659,65 +901,13 @@ export class RotaView extends LitElement {
                 read.areas.length > 0 &&
                 this.canWrite &&
                 weekShiftCount(read) === 0
-                  ? html`<p data-test="no-shifts-hint">${t("staffing.rota.no_shifts_hint")}</p>`
+                  ? html`<p data-test="no-shifts-hint">
+                      ${t(this.narrow ? "staffing.rota.no_shifts_hint_phone" : "staffing.rota.no_shifts_hint")}
+                    </p>`
                   : nothing
               }
               ${show!.kind === "area" && !hasSlots(read, show!) ? this.#unpainted(read, show!) : nothing}
-              ${
-                show!.kind === "everyone"
-                  ? html`<rota-by-person
-                      .week=${read}
-                      .canAdd=${read.areas.length > 0}
-                      .breaches=${this.warnings?.breaches ?? []}
-                      .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                      @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                        this.editor = e.detail;
-                      }}
-                      @open-day=${(
-                        e: CustomEvent<{
-                          personId: string;
-                          businessDay: string;
-                          anchor: HTMLElement;
-                        }>,
-                      ) => {
-                        const { personId, businessDay, anchor } = e.detail;
-                        const open = openSlots(read, personId, businessDay);
-                        this.openDay = {
-                          personId,
-                          businessDay,
-                          offered: open.own.length + open.other.length > 0,
-                        };
-                        this.#anchor = anchor;
-                        this.actionError = "";
-                      }}
-                    ></rota-by-person>`
-                  : rolesShown(read, show!).length > 0 ||
-                      read.days.some((d) => d.notInSlot.length > 0)
-                    ? html`<rota-by-area
-                        .week=${read}
-                        .breaches=${this.warnings?.breaches ?? []}
-                        .area=${show!.area}
-                        .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                        @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                          this.editor = e.detail;
-                        }}
-                        @add-shift=${(
-                          e: CustomEvent<{
-                            businessDay: string;
-                            area: AreaRef;
-                            staffRoleId: string;
-                          }>,
-                        ) => {
-                          this.editor = e.detail;
-                        }}
-                        @pick-slot=${(e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
-                          this.picked = e.detail.slot;
-                          this.#anchor = e.detail.anchor;
-                          this.actionError = "";
-                        }}
-                      ></rota-by-area>`
-                    : nothing
-              }
+              ${this.#grid(read, show!)}
               <rota-popup
                 .heading=${this.picked ? slotHeading(read, this.picked) : this.openDay ? openHeading(read, this.openDay.personId, this.openDay.businessDay) : ""}
                 @rota-popup-close=${this.#popupClosed}
@@ -789,6 +979,7 @@ export class RotaView extends LitElement {
           if (!this.busy) this.publishing = false;
         }}
         @publish=${() => void this.#publish()}
-      ></rota-publish-dialog>`;
+      ></rota-publish-dialog>
+      ${this.narrow && action !== nothing ? html`<div class="foot" data-test="foot">${action}</div>` : nothing}`;
   }
 }

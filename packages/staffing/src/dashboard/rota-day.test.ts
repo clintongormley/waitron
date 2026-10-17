@@ -65,7 +65,7 @@ describe("rota-day in an area", () => {
     const { root } = await mount(kitchen, "2026-12-01", { week });
     const groups = [...root.querySelectorAll<HTMLElement>("[data-role]")];
     expect(groups.map((g) => g.dataset.role)).toEqual(["head", "sous"]);
-    expect(text(groups[0]!.querySelector("h3"))).toBe("Head chef");
+    expect(text(groups[0]!.querySelector("h4"))).toBe("Head chef");
     expect(groups[0]!.querySelector(".swatch")!.getAttribute("data-colour")).toBe("purple");
     expect(text(groups[0]!.querySelector("[data-slot=filled]"))).toContain("09:00–17:00 Ana");
     const part = groups[1]!.querySelector("[data-slot=part]")!;
@@ -107,7 +107,7 @@ describe("rota-day in an area", () => {
     week.days[0]!.notInSlot.push({ shiftId: "loose", outsideWeek: false });
     const { root } = await mount(kitchen, "2026-11-30", { week });
     const group = root.querySelector("[data-role=not-in-slot]")!;
-    expect(text(group.querySelector("h3"))).toBe("Not in a slot");
+    expect(text(group.querySelector("h4"))).toBe("Not in a slot");
     expect(text(group.querySelector("[data-shift=loose]"))).toBe("09:00–17:00 Laia");
     expect(text(group.querySelector("[data-shift=unlinked]"))).toContain(
       "belongs to the previous week",

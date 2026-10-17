@@ -338,6 +338,7 @@ it("passes canWriteStaffing from the Staffing entry in ctx.calendarViews", async
   ] as const;
   for (const [calendarViews, expected] of cases) {
     const container = document.createElement("div");
+    container.style.width = "1280px";
     document.body.append(container);
     containers.push(container);
     render(rota.create({ request, calendarViews }, host).render(), container);
@@ -353,6 +354,7 @@ it("opens the Rota's Everyone destination declared for search on the real view",
   expect(rota.searchDestinations?.map((x) => x.params)).toEqual([{ area: "everyone" }]);
   for (const destination of rota.searchDestinations!) {
     const container = document.createElement("div");
+    container.style.width = "1280px";
     document.body.append(container);
     containers.push(container);
     const request = (async (path: string) =>

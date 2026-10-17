@@ -26,7 +26,7 @@ async function mount(
   client = rotaApi().api,
   width = "1280px",
   params: Record<string, string> = {},
-  grid = "rota-by-area",
+  grid = parseInt(width) < 560 ? "rota-day" : "rota-by-area",
 ) {
   const f = document.createElement("div");
   f.style.width = width;
@@ -290,6 +290,7 @@ describe("the Rota by area", () => {
           : Promise.resolve(rotaWeek(w)),
       );
       const f = document.createElement("div");
+      f.style.width = "1280px";
       document.body.append(f);
       frames.push(f);
       applyTokens(f);
@@ -323,7 +324,7 @@ describe("the Rota by area", () => {
       expect(el.shadowRoot!.querySelector("[data-test=load-error]")).toBeNull(),
     );
   });
-  it.each(["390px", "900px", "1280px"])(
+  it.each(["900px", "1280px"])(
     "keeps the page width at %s and lets the grid scroll",
     async (width) => {
       const el = await mount(undefined, width);
@@ -334,6 +335,12 @@ describe("the Rota by area", () => {
       if (parseInt(width) >= 900) expect(scroller.scrollWidth).toBe(scroller.clientWidth);
     },
   );
+  it("keeps the page width at 390px, drawing one day with nothing wider than the view", async () => {
+    const el = await mount(undefined, "390px");
+    expect(el.shadowRoot!.querySelector("rota-day")).toBeTruthy();
+    expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+  });
 });
 
 describe("the Rota's Show menu", () => {
@@ -1307,5 +1314,229 @@ describe("the Rota's empty weeks", () => {
   it("Everyone with a shift this week draws no hint", async () => {
     const el = await mount(undefined, "1280px", { area: "everyone" }, "rota-by-person");
     expect(q(el, "[data-test=no-shifts-hint]")).toBeNull();
+  });
+});
+
+describe("the Rota on a phone", () => {
+  type Day = LitElement & { businessDay: string };
+  const day = (el: View) => q<Day>(el, "rota-day")!;
+  const strip = (el: View) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-test=strip] button"),
+  ];
+  async function phone(client = rotaApi().api, params: Record<string, string> = {}) {
+    await useViewport(390, 844);
+    return mount(client, "390px", params);
+  }
+  it("below 560 px it draws one day: the strip, Show, the bar's words, the day, and the action at the foot", async () => {
+    const el = (await phone()) as View & { canOpenStaffing: boolean };
+    el.canOpenStaffing = true;
+    await vi.waitFor(() => expect(q(el, "[data-test=publish-week]")).toBeTruthy());
+    await el.updateComplete;
+    expect(q(el, "rota-by-area")).toBeNull();
+    const group = q(el, "[data-test=strip]")!;
+    expect(group.getAttribute("role")).toBe("group");
+    expect(group.getAttribute("aria-label")).toBe("Days");
+    await userEvent.click(strip(el)[3]!);
+    const days = strip(el);
+    expect(days.map((b) => b.dataset.day)).toEqual([
+      "2026-11-30",
+      "2026-12-01",
+      "2026-12-02",
+      "2026-12-03",
+      "2026-12-04",
+      "2026-12-05",
+      "2026-12-06",
+    ]);
+    const friday = days[4]!;
+    expect(friday.hasAttribute("data-attention")).toBe(true);
+    expect(normal(friday.textContent!)).toBe("Fri 4 needs attention");
+    expect(days[2]!.hasAttribute("data-attention")).toBe(false);
+    expect(normal(days[2]!.textContent!)).toBe("Wed 2");
+    expect(days[0]!.hasAttribute("data-closed")).toBe(true);
+    expect(getComputedStyle(days[0]!).color).toBe(tokenColour("--wt-color-text-muted"));
+    expect(getComputedStyle(days[1]!).color).toBe(tokenColour("--wt-color-text"));
+    const pressed = days.filter((b) => b.getAttribute("aria-pressed") === "true");
+    expect(pressed.map((b) => b.dataset.day)).toEqual([day(el).businessDay]);
+    expect(show(el)).toBeTruthy();
+    expect(q(el, "[data-test=state]")).toBeTruthy();
+    expect(normal(q(el, "[data-test=attention]")!.textContent!)).toBe(
+      "1 unfilled · 1 partly uncovered · 1 over",
+    );
+    const week = q(el, "[data-test=week]")!;
+    expect(week.querySelector("button")).toBeNull();
+    expect(normal(week.textContent!)).toBe("30 Nov – 6 Dec 2026");
+    expect(getComputedStyle(week).textDecorationLine).toBe("none");
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+    expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    const foot = el.shadowRoot!.lastElementChild as HTMLElement;
+    const publish = q(el, "[data-test=publish-week]")!;
+    expect(foot.contains(publish)).toBe(true);
+    expect(q(el, "[data-test=bar]")!.contains(publish)).toBe(false);
+    expect(Math.abs(box(publish).width - box(el).width)).toBeLessThanOrEqual(1);
+    const frame = frames[0]!;
+    frame.style.height = "250px";
+    frame.style.overflow = "auto";
+    await new Promise(requestAnimationFrame);
+    expect(box(el).bottom).toBeGreaterThan(box(frame).bottom + 50);
+    expect(Math.abs(box(foot).bottom - box(frame).bottom)).toBeLessThanOrEqual(1);
+    expect(foot.contains(publish) && box(publish).bottom <= box(frame).bottom).toBe(true);
+    frame.scrollTop = frame.scrollHeight;
+    await new Promise(requestAnimationFrame);
+    expect(Math.abs(box(foot).bottom - box(el).bottom)).toBeLessThanOrEqual(1);
+  });
+  it("a strip button shows its day; the week arrows step a week and keep the weekday", async () => {
+    const el = await phone(undefined, { area: "station:kitchen" });
+    await userEvent.click(strip(el)[3]!);
+    await el.updateComplete;
+    expect(day(el).businessDay).toBe("2026-12-03");
+    expect(strip(el)[3]!.getAttribute("aria-pressed")).toBe("true");
+    expect(strip(el)[0]!.getAttribute("aria-pressed")).toBe("false");
+    q(el, "[data-test=next-week]")!.click();
+    expect(el.open).toHaveBeenCalledWith("rota", { week: "2026-12-07", area: "station:kitchen" });
+    el.week = "2026-12-07";
+    await vi.waitFor(() => expect(day(el)?.businessDay).toBe("2026-12-10"));
+    q(el, "[data-test=previous-week]")!.click();
+    expect(el.open).toHaveBeenLastCalledWith("rota", {
+      week: "2026-11-30",
+      area: "station:kitchen",
+    });
+    el.week = "2026-11-30";
+    await vi.waitFor(() => expect(day(el)?.businessDay).toBe("2026-12-03"));
+    el.week = "2026-12-14";
+    await vi.waitFor(() => expect(day(el)?.businessDay).toBe("2026-12-14"));
+  });
+  it("the shown day starts on the venue's today when it is in the week, else Monday", async () => {
+    await useViewport(390, 844);
+    const at = async (now: string) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(now));
+      try {
+        return await mount(undefined, "390px");
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    // Friday 00:30 in Europe/Madrid, the read's zone; still Thursday in UTC.
+    expect(day(await at("2026-12-03T23:30:00Z")).businessDay).toBe("2026-12-04");
+    expect(day(await at("2026-12-10T10:00:00Z")).businessDay).toBe("2026-11-30");
+  });
+  it("on a phone a count shows the target's day before focusing it", async () => {
+    const el = await phone(undefined, { area: "station:kitchen" });
+    await userEvent.click(strip(el)[0]!);
+    const count = (kind: string) => q(el, `[data-test=attention] [data-kind=${kind}]`)!;
+    const focused = () => day(el).shadowRoot!.activeElement as HTMLElement | null;
+    count("unfilled").click();
+    await vi.waitFor(() => expect(focused()?.dataset.slot).toBe("empty"));
+    expect(day(el).businessDay).toBe("2026-12-04");
+    count("over").click();
+    await vi.waitFor(() => expect(focused()?.dataset.shift).toBe("over"));
+    expect(day(el).businessDay).toBe("2026-12-03");
+    count("partly").click();
+    await vi.waitFor(() => expect(focused()?.dataset.slot).toBe("part"));
+    expect(day(el).businessDay).toBe("2026-12-01");
+  });
+  it("in Everyone on a phone the unfilled count selects the next day with unfilled slots and focuses its strip button", async () => {
+    const el = await phone(
+      rotaApi(async (w) => {
+        const read = rotaWeek(w);
+        const empty = read.days[4]!.areas[0]!.match.slots[0]!;
+        read.days[5]!.areas[0]!.match.slots.push({
+          slot: { ...empty.slot, key: "empty2", businessDay: "2026-12-05" },
+          status: { kind: "unfilled" },
+        });
+        return read;
+      }).api,
+      { area: "everyone" },
+    );
+    await userEvent.click(strip(el)[0]!);
+    const unfilled = q(el, "[data-test=attention] [data-kind=unfilled]")!;
+    unfilled.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(strip(el)[4]));
+    expect(strip(el)[4]!.getAttribute("aria-pressed")).toBe("true");
+    expect(day(el).businessDay).toBe("2026-12-04");
+    unfilled.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(strip(el)[5]));
+    expect(day(el).businessDay).toBe("2026-12-05");
+    unfilled.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(strip(el)[4]));
+    q(el, "[data-test=attention] [data-kind=over]")!.click();
+    await vi.waitFor(() =>
+      expect((day(el).shadowRoot!.activeElement as HTMLElement | null)?.dataset.shift).toBe("over"),
+    );
+    expect(day(el).businessDay).toBe("2026-12-03");
+  });
+  it("in Everyone with no shifts a phone says to tap a person", async () => {
+    const el = await phone(rotaApi(async (w) => noShifts(w)).api, { area: "everyone" });
+    await vi.waitFor(() => expect(q(el, "[data-test=no-shifts-hint]")).toBeTruthy());
+    expect(normal(q(el, "[data-test=no-shifts-hint]")!.textContent!)).toBe(
+      "No shifts this week yet. Tap a person to fill a slot or add a shift.",
+    );
+  });
+  it("the phone's day sends its picks, open days and edits to the wide grids' handlers", async () => {
+    const el = await phone(undefined, { area: "station:kitchen" });
+    await userEvent.click(strip(el)[4]!);
+    await day(el).updateComplete;
+    await userEvent.click(day(el).shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!);
+    await vi.waitFor(() =>
+      expect(
+        q<LitElement & { pickedSlot: { key: string } }>(el, "slot-picker")?.pickedSlot.key,
+      ).toBe("empty"),
+    );
+    const popup = () =>
+      q(el, "rota-popup")!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+    await vi.waitFor(() => expect(popup()).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    el.params = { area: "everyone" };
+    await vi.waitFor(() =>
+      expect(day(el).shadowRoot!.querySelector("[data-test=person]")).toBeTruthy(),
+    );
+    await userEvent.click(
+      day(el).shadowRoot!.querySelector<HTMLElement>("[data-person=marc] [data-test=person]")!,
+    );
+    const menu = () =>
+      q<LitElement & { personId: string; businessDay: string }>(el, "rota-open-slots");
+    await vi.waitFor(() => expect(menu()).toBeTruthy());
+    expect([menu()!.personId, menu()!.businessDay]).toEqual(["marc", "2026-12-04"]);
+    await vi.waitFor(() => expect(popup()).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(menu()).toBeNull());
+    await userEvent.click(strip(el)[1]!);
+    await day(el).updateComplete;
+    await userEvent.click(day(el).shadowRoot!.querySelector<HTMLElement>("[data-shift=filled]")!);
+    const dialog = q<LitElement & { open: boolean; shiftId?: string }>(el, "rota-shift-dialog")!;
+    await vi.waitFor(() => expect(dialog.open).toBe(true));
+    expect(dialog.shiftId).toBe("filled");
+  });
+  it("a week arrow pressed before the week has loaded steps the week", async () => {
+    await useViewport(390, 844);
+    const f = document.createElement("div");
+    f.style.width = "390px";
+    document.body.append(f);
+    frames.push(f);
+    applyTokens(f);
+    const el = document.createElement("staffing-rota") as View;
+    el.api = rotaApi(() => new Promise(() => undefined)).api;
+    el.week = "2026-11-30";
+    el.open = vi.fn();
+    f.append(el);
+    await el.updateComplete;
+    q(el, "[data-test=next-week]")!.click();
+    expect(el.open).toHaveBeenCalledWith("rota", { week: "2026-12-07" });
+    el.week = "2026-12-07";
+    await el.updateComplete;
+    expect(title(el)).toBe("7 – 13 Dec 2026");
+  });
+  it("growing past 560 px goes back to the week grid", async () => {
+    const el = (await phone()) as View & { canOpenStaffing: boolean };
+    el.canOpenStaffing = true;
+    frames[0]!.style.width = "1280px";
+    await vi.waitFor(() => expect(q(el, "rota-by-area")).toBeTruthy());
+    expect(q(el, "rota-day")).toBeNull();
+    expect(q(el, "[data-test=strip]")).toBeNull();
+    expect(q(el, "[data-test=week] button")).toBeTruthy();
+    frames[0]!.style.width = "390px";
+    await vi.waitFor(() => expect(q(el, "rota-day")).toBeTruthy());
+    expect(q(el, "rota-by-area")).toBeNull();
   });
 });
