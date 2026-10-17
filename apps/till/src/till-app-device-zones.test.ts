@@ -130,33 +130,29 @@ async function mount(chosen: DeviceZoneSelection, over: Record<string, unknown> 
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] }),
-    getTill: vi
-      .fn()
-      .mockResolvedValue({
-        locale: "en-GB",
-        invoiceLocale: "en-GB",
-        venueName: "Restaurant",
-        nif: "B12345678",
-        orderFlow: "prepay",
-        bumpMode: "line",
-        fireControl: "waiter",
-        courses: [],
-        cardProvider: "none",
-        tipsEnabled: false,
-        formFactor: "till",
-        capabilities: ["take-orders"],
-        inactivityTimeoutSeconds: null,
-        nodeId: "node",
-        servers: [],
-      }),
-    getDeviceIdentity: vi
-      .fn()
-      .mockResolvedValue({
-        deviceId: "device",
-        name: "Till",
-        formFactor: "till",
-        profileId: "profile",
-      }),
+    getTill: vi.fn().mockResolvedValue({
+      locale: "en-GB",
+      invoiceLocale: "en-GB",
+      venueName: "Restaurant",
+      nif: "B12345678",
+      orderFlow: "prepay",
+      bumpMode: "line",
+      fireControl: "waiter",
+      courses: [],
+      cardProvider: "none",
+      tipsEnabled: false,
+      formFactor: "till",
+      capabilities: ["take-orders"],
+      inactivityTimeoutSeconds: null,
+      nodeId: "node",
+      servers: [],
+    }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "device",
+      name: "Till",
+      formFactor: "till",
+      profileId: "profile",
+    }),
     getDeviceZones: vi.fn().mockResolvedValue(chosen),
     listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue(chosen.startingZoneId ?? "bar")),
     listZoneOffers: vi.fn(async (id: string) => catalogue(id)),
