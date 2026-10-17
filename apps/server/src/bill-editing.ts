@@ -1,10 +1,109 @@
 import { and, eq } from "drizzle-orm";
-import { billEditStates, orderDrafts, type Transaction } from "@waitron/db";
+import {
+  billEditStates,
+  nowIso,
+  orderDraftLines,
+  orderDraftRecalledLines,
+  orderDrafts,
+  type Transaction,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, isUuid } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import "./errors.js";
+
+export async function acquireBillEditor(
+  tx: Transaction,
+  billId: string,
+  operatorId: string,
+  expected: BillEditExpected,
+): Promise<BillEditState> {
+  const edit = await requireBillEditor(tx, billId, operatorId, expected);
+  if (edit.editorId !== null) return edit;
+  // Validate nonempty work before acquiring; create its outbox in the same transaction.
+  await writeEditor(tx, edit, operatorId);
+  return readBillEditState(tx, billId);
+}
+
+export async function closeBillDraft(
+  tx: Transaction,
+  billId: string,
+  operatorId: string,
+  expected: BillEditExpected,
+  state: "submitted" | "discarded",
+): Promise<BillEditState> {
+  const edit = await requireBillEditor(tx, billId, operatorId, expected);
+  if (edit.draftId === null) return edit;
+  const [fresh] = await tx
+    .select({ id: orderDraftLines.id })
+    .from(orderDraftLines)
+    .where(eq(orderDraftLines.draftId, edit.draftId))
+    .limit(1);
+  const [source] = await tx
+    .select({ id: orderDraftRecalledLines.id })
+    .from(orderDraftRecalledLines)
+    .where(eq(orderDraftRecalledLines.draftId, edit.draftId))
+    .limit(1);
+  if (fresh !== undefined || source !== undefined) throw invalid("lines");
+  await tx
+    .update(orderDrafts)
+    .set({ state, revision: edit.draftRevision! + 1, updatedAt: nowIso() })
+    .where(eq(orderDrafts.id, edit.draftId));
+  await writeEditor(tx, edit, null);
+  return readBillEditState(tx, billId);
+}
+
+// Record the ownership event and attendance in this same transaction at the command root.
+export async function transferBillEditor(
+  tx: Transaction,
+  billId: string,
+  operatorId: string,
+  expected: BillEditExpected,
+): Promise<BillEditState> {
+  const edit = await comparedBillEdit(tx, billId, expected);
+  if (edit.draftId === null || edit.editorId === operatorId) return edit;
+  await tx
+    .update(orderDrafts)
+    .set({ ownerId: operatorId, revision: edit.draftRevision! + 1, updatedAt: nowIso() })
+    .where(eq(orderDrafts.id, edit.draftId));
+  await writeEditor(tx, edit, operatorId);
+  return readBillEditState(tx, billId);
+}
+
+// Validate the complete affected set before relocating; a common foreign editor may follow it.
+export async function relocateBillEditor(
+  tx: Transaction,
+  billId: string,
+  expected: BillEditExpected,
+): Promise<BillEditState> {
+  const edit = await comparedBillEdit(tx, billId, expected);
+  if (edit.draftId !== null)
+    await tx
+      .update(orderDrafts)
+      .set({ revision: edit.draftRevision! + 1, updatedAt: nowIso() })
+      .where(eq(orderDrafts.id, edit.draftId));
+  await writeEditor(tx, edit, edit.editorId);
+  return readBillEditState(tx, billId);
+}
+
+async function comparedBillEdit(tx: Transaction, billId: string, expected: BillEditExpected) {
+  const wanted = parseBillEditExpected(expected);
+  if (wanted.billId !== billId) throw invalid("expectedEdit.billId");
+  const edit = await readBillEditState(tx, billId);
+  requireExpectedState(edit, wanted);
+  return edit;
+}
+
+async function writeEditor(tx: Transaction, edit: BillEditState, editorId: string | null) {
+  await tx
+    .insert(billEditStates)
+    .values({ billId: edit.billId, editorId, editorVersion: edit.editorVersion + 1 })
+    .onConflictDoUpdate({
+      target: billEditStates.billId,
+      set: { editorId, editorVersion: edit.editorVersion + 1 },
+    });
+}
 
 export function parseBillEditExpecteds(value: unknown): BillEditExpected[] {
   if (!Array.isArray(value)) throw invalid("expectedEdits");
