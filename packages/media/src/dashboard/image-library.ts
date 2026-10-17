@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -201,8 +202,8 @@ export class ImageLibrary extends LitElement {
       }
       article img {
         width: 100%;
-        aspect-ratio: 4/3;
-        object-fit: contain;
+        aspect-ratio: 1;
+        object-fit: cover;
         background: var(--wt-color-surface);
       }
       .thumbnail {
@@ -875,7 +876,7 @@ export class ImageLibrary extends LitElement {
     >
       <div class="viewer">
         <img
-          src=${`/media/${encodeURIComponent(viewing.image.filename)}`}
+          src=${liveMediaImage(viewing.image.filename, "source")}
           alt=${name}
           @load=${(event: Event) => {
             const image = event.currentTarget as HTMLImageElement;
@@ -963,7 +964,7 @@ export class ImageLibrary extends LitElement {
         : []),
       ...(marked ? [t("image.fix_fields")] : []),
     ].join(" ");
-    const preview = editor.image ? `/media/${encodeURIComponent(editor.image.filename)}` : null;
+    const preview = editor.image ? liveMediaImage(editor.image.filename, "square") : null;
     return html`<wt-modal
       size="standard"
       open
@@ -1147,7 +1148,7 @@ export class ImageLibrary extends LitElement {
                 @click=${() => void this.#view(image)}
               >
                 <img
-                  src=${`/media/${encodeURIComponent(image.filename)}`}
+                  src=${liveMediaImage(image.filename, "square")}
                   alt=${name}
                   loading="lazy"
                 /></button

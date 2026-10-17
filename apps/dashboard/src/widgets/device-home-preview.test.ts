@@ -1,3 +1,5 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
@@ -75,7 +77,7 @@ function drinks(extra: Partial<Extract<DocumentMember, { kind: "section" }>> = {
       { kind: "section" }
     >),
     color: "#b12525",
-    image: "drinks.webp",
+    image: mediaTestReference("drinks.webp"),
     ...extra,
   };
 }
@@ -114,7 +116,7 @@ function lunch(
   if (offer("mi-lemonade"))
     Object.assign(offer("mi-lemonade")!, {
       unitPrice: "2.50",
-      image: "lemonade.webp",
+      image: mediaTestReference("lemonade.webp"),
       color: "#256bb1",
     });
   if (offer("mi-ham")) Object.assign(offer("mi-ham")!, { unit: KILO, color: "#b12525" });
@@ -397,7 +399,11 @@ describe("dashboard-device-home-preview", () => {
       const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
       const lemonade = tile(el, "structure", "Lemonade");
       const img = image(lemonade)!;
-      expect(img.getAttribute("src")).toBe("/media/lemonade.webp");
+      await vi.waitFor(() =>
+        expect(img.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("lemonade.webp")}/till/7500-2500-200.webp`,
+        ),
+      );
       expect(img.getAttribute("alt")).toBe("");
       expect(img.compareDocumentPosition(lemonade.querySelector(".name")!)).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -410,7 +416,11 @@ describe("dashboard-device-home-preview", () => {
       expect(fillOf(ham)).toBe("rgb(177, 37, 37)");
 
       const section = tile(el, "structure", "Drinks para clientes");
-      expect(image(section)!.getAttribute("src")).toBe("/media/drinks.webp");
+      await vi.waitFor(() =>
+        expect(image(section)!.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("drinks.webp")}/till/7500-2500-200.webp`,
+        ),
+      );
       expect(section.hasAttribute("data-painted")).toBe(false);
       expect(section.querySelector(".kind")!.textContent!.trim()).toBe("Section");
       // The thumbnail takes the folder icon's place.
@@ -786,8 +796,12 @@ describe("dashboard-device-home-preview", () => {
     it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
       const painted = bar({
         color: "#256bb1",
-        image: "bar-folder.webp",
-        fixed: { names: { es: "Barra para clientes" }, color: "#256bb1", image: "bar-folder.webp" },
+        image: mediaTestReference("bar-folder.webp"),
+        fixed: {
+          names: { es: "Barra para clientes" },
+          color: "#256bb1",
+          image: mediaTestReference("bar-folder.webp"),
+        },
       });
       const shortcut = [sectionTile("s-drinks")];
       const { el } = await mount({ document: twice(painted, shortcut) });
@@ -796,9 +810,13 @@ describe("dashboard-device-home-preview", () => {
       const thumbnails = await mount({
         document: display("handheld", { tiles: "thumbnails" }, twice(painted, shortcut)),
       });
-      expect(
-        image(tile(thumbnails.el, "shortcuts", "Barra para clientes"))!.getAttribute("src"),
-      ).toBe("/media/bar-folder.webp");
+      await vi.waitFor(() =>
+        expect(
+          image(tile(thumbnails.el, "shortcuts", "Barra para clientes"))!.getAttribute("src"),
+        ).toBe(
+          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
+        ),
+      );
       await click(el, tile(el, "shortcuts", "Barra para clientes"));
       expect(breadcrumb(el)).toBe("Home › Barra para clientes");
 
@@ -1451,4 +1469,38 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     await press(el, "sc-chips", "ArrowLeft");
     expect(status(el)).toBe("Chips $& {index} {total} moved to position 1 of 2");
   });
+});
+
+const mediaReplacements = useMediaPresentations();
+
+it("an unchanged menu document's product and section thumbnails follow photo replacements", async () => {
+  const document = display("handheld", { tiles: "thumbnails" });
+  const original = JSON.stringify(document);
+  const { el } = await mount({ document });
+  const reference = mediaTestReference("lemonade.webp");
+  const sectionReference = mediaTestReference("drinks.webp");
+  const replacement = mediaTestReference("replacement.webp");
+  const img = image(tile(el, "structure", "Lemonade"))!;
+  const sectionImg = image(tile(el, "structure", "Drinks para clientes"))!;
+  await vi.waitFor(() =>
+    expect(img.getAttribute("src")).toBe(
+      `/media/renditions/v1/${reference}/till/7500-2500-200.webp`,
+    ),
+  );
+  mediaReplacements.set(reference, replacement);
+  mediaReplacements.set(sectionReference, replacement);
+  invalidateMediaImages();
+  await vi.waitFor(() =>
+    expect(img.getAttribute("src")).toBe(
+      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(sectionImg.getAttribute("src")).toBe(
+      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
+    ),
+  );
+  const box = img.getBoundingClientRect();
+  expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
+  expect(JSON.stringify(document)).toBe(original);
 });

@@ -1,4 +1,4 @@
-import { expect, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens } from "./tokens/index.js";
 import type { WtDialog } from "./components/wt-dialog.js";
 import type { WtFormActions } from "./components/wt-form-actions.js";
@@ -171,4 +171,50 @@ export function middleWithin(line: DOMRect): (box: DOMRect) => boolean {
     const at = (box.top + box.bottom) / 2;
     return at >= line.top && at <= line.bottom;
   };
+}
+
+/** Valid stored references for browser fixtures; labels remain readable at their call sites. */
+export function mediaTestReference(label: string): string {
+  const dot = label.lastIndexOf(".");
+  const hex = [...new TextEncoder().encode(label.slice(0, dot))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `${hex.padEnd(64, "0")}.${label.slice(dot + 1)}`;
+}
+
+/** Supplies the public metadata boundary while keeping the real image directive mounted. */
+export function useMediaPresentations() {
+  const replacements = new Map<string, string>();
+  beforeEach(() => {
+    replacements.clear();
+    const original = globalThis.fetch.bind(globalThis);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+      const url = new URL(String(input), location.origin);
+      if (url.pathname !== "/media/presentations") return original(input, options);
+      const images = Object.fromEntries(
+        (url.searchParams.get("references") ?? "")
+          .split(",")
+          .filter(Boolean)
+          .map((reference) => {
+            const source = replacements.get(reference) ?? reference;
+            return [
+              reference,
+              {
+                id: reference,
+                revision: replacements.has(reference) ? 2 : 1,
+                source: `/media/${source}`,
+                square: `/media/renditions/v1/${source}/square/7500-2500-200.webp`,
+                till: `/media/renditions/v1/${source}/till/7500-2500-200.webp`,
+                display: `/media/renditions/v1/${source}/display/7500-2500-200.webp`,
+              },
+            ];
+          }),
+      );
+      return new Response(JSON.stringify({ images }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+  return replacements;
 }

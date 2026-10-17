@@ -1,3 +1,5 @@
+import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
+import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, setContentLanguages } from "@waitron/ui";
@@ -661,7 +663,10 @@ describe("till-menu-browser", () => {
     });
 
     describe("tile modes", () => {
-      const photo = product("photo", "Photo", { image: "cafe.webp", color: "#b12525" });
+      const photo = product("photo", "Photo", {
+        image: mediaTestReference("cafe.webp"),
+        color: "#b12525",
+      });
       const blue = product("blue", "Blue", { image: null, color: "#256bb1" });
       const bare = product("bare", "Bare");
       const pictured = section(
@@ -670,7 +675,7 @@ describe("till-menu-browser", () => {
         { en: "Pictured (EN)" },
         [member("photo")],
         null,
-        "drinks.webp",
+        mediaTestReference("drinks.webp"),
       );
       const tiled = (values: Partial<HomeDisplay>, device: HomeDevice = "till") =>
         display(
@@ -690,7 +695,11 @@ describe("till-menu-browser", () => {
         });
         const photoTile = entry(thumbnails.el, "structure", "Photo");
         const img = image(photoTile)!;
-        expect(img.getAttribute("src")).toBe("/media/cafe.webp");
+        await vi.waitFor(() =>
+          expect(img.getAttribute("src")).toBe(
+            `/media/renditions/v1/${mediaTestReference("cafe.webp")}/till/7500-2500-200.webp`,
+          ),
+        );
         expect(img.getAttribute("alt")).toBe("");
         expect(img.parentElement!.firstElementChild).toBe(img);
         expect(img.compareDocumentPosition(photoTile.querySelector(".name")!)).toBe(
@@ -707,7 +716,11 @@ describe("till-menu-browser", () => {
         ).toBe("rgb(37, 107, 177)");
 
         const sectionTile = entry(thumbnails.el, "structure", "Pictured (EN)");
-        expect(image(sectionTile)!.getAttribute("src")).toBe("/media/drinks.webp");
+        await vi.waitFor(() =>
+          expect(image(sectionTile)!.getAttribute("src")).toBe(
+            `/media/renditions/v1/${mediaTestReference("drinks.webp")}/till/7500-2500-200.webp`,
+          ),
+        );
         expect(sectionTile.querySelector("wt-icon")).toBeNull();
         expect(sectionTile.querySelector(".kind")!.textContent!.trim()).toBe("Section");
 
@@ -2336,8 +2349,8 @@ describe("till-menu-browser", () => {
       const folder: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
-        image: "bar-folder.webp",
-        fixed: { color: "#256bb1", image: "bar-folder.webp" },
+        image: mediaTestReference("bar-folder.webp"),
+        fixed: { color: "#256bb1", image: mediaTestReference("bar-folder.webp") },
       };
       const menu = (tiles: HomeDisplay["tiles"]) =>
         display("till", { tiles }, lunch({ structure: { members: [folder] } }));
@@ -2350,7 +2363,11 @@ describe("till-menu-browser", () => {
       expect(getComputedStyle(painted.querySelector(".name")!).color).toBe("rgb(255, 255, 255)");
       const thumbnails = await mount({ menu: menu("thumbnails") });
       const pictured = entry(thumbnails.el, "structure", "Bar (EN)");
-      expect(pictured.querySelector("img")!.getAttribute("src")).toBe("/media/bar-folder.webp");
+      await vi.waitFor(() =>
+        expect(pictured.querySelector("img")!.getAttribute("src")).toBe(
+          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
+        ),
+      );
     });
 
     it("the same included menu in two lists draws each copy with its own name", async () => {
@@ -2451,8 +2468,12 @@ describe("till-menu-browser", () => {
       const paintedBar: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
-        image: "bar-folder.webp",
-        fixed: { names: { en: "Bar (EN)" }, color: "#256bb1", image: "bar-folder.webp" },
+        image: mediaTestReference("bar-folder.webp"),
+        fixed: {
+          names: { en: "Bar (EN)" },
+          color: "#256bb1",
+          image: mediaTestReference("bar-folder.webp"),
+        },
       };
       const shortcut = [sectionTile("sec-drinks")];
       const { el } = await mount({ menu: twice(paintedBar, shortcut) });
@@ -2464,9 +2485,13 @@ describe("till-menu-browser", () => {
       const thumbnails = await mount({
         menu: display("till", { tiles: "thumbnails" }, twice(paintedBar, shortcut)),
       });
-      expect(
-        entry(thumbnails.el, "shortcuts", "Bar (EN)").querySelector("img")!.getAttribute("src"),
-      ).toBe("/media/bar-folder.webp");
+      await vi.waitFor(() =>
+        expect(
+          entry(thumbnails.el, "shortcuts", "Bar (EN)").querySelector("img")!.getAttribute("src"),
+        ).toBe(
+          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
+        ),
+      );
       await tap(el, tile);
       expect(breadcrumb(el)).toBe("Home › Bar (EN)");
 
@@ -3032,4 +3057,33 @@ it.each(
     setLocale(before);
     await page.viewport(1280, 844);
   }
+});
+
+const mediaReplacements = useMediaPresentations();
+
+it("keeps the published menu and chosen order unchanged while mounted thumbnails follow replacements", async () => {
+  const reference = mediaTestReference("cafe.webp");
+  const replacement = mediaTestReference("replacement.webp");
+  const menu = display("till", { tiles: "thumbnails" });
+  const original = JSON.stringify(menu);
+  const products = [{ ...cafe, image: reference }, ...PRODUCTS.filter((p) => p.id !== cafe.id)];
+  const { el, store } = await mount({ menu, products });
+  const img = entry(el, "shortcuts", "Café").querySelector("img")!;
+  await vi.waitFor(() =>
+    expect(img.getAttribute("src")).toBe(
+      `/media/renditions/v1/${reference}/till/7500-2500-200.webp`,
+    ),
+  );
+  mediaReplacements.set(reference, replacement);
+  invalidateMediaImages();
+  await vi.waitFor(() =>
+    expect(img.getAttribute("src")).toBe(
+      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
+    ),
+  );
+  const box = img.getBoundingClientRect();
+  expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
+  expect(JSON.stringify(menu)).toBe(original);
+  expect(products[0]!.image).toBe(reference);
+  expect(store.lines).toHaveLength(0);
 });

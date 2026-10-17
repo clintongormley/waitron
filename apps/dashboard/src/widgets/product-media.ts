@@ -1,3 +1,4 @@
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
 import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { fill } from "../i18n/t.js";
@@ -104,6 +105,6 @@ export function productMediaFrame(image: string | null, color: string | null, in
     data-test=${image ? "thumb" : "thumb-placeholder"}
     style=${painted ? `--product-media-color:${color}` : nothing}
     aria-hidden="true"
-    >${image ? html`<img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false" />` : nothing}</span
+    >${image ? html`<img part="thumbnail" src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : nothing}</span
   >`;
 }
