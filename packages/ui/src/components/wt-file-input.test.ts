@@ -223,3 +223,13 @@ test("unnamed file controls retain an accessible chooser and show non-image size
   expect(el.shadowRoot!.querySelector("img")).toBeNull();
   expect(input(el).getAttribute("aria-invalid")).toBe("false");
 });
+
+test.each([
+  [999999, "1 MB"],
+  [999949, "999.9 kB"],
+])("rounds %s bytes without a thousand-unit label", async (bytes, wanted) => {
+  const el = await setup();
+  el.files = [new File([new Uint8Array(bytes)], "photo.png", { type: "image/png" })];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".size")!.textContent).toBe(wanted);
+});

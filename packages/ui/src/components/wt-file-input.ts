@@ -175,7 +175,7 @@ export class WtFileInput extends LitElement {
     this.#change(event, [...event.dataTransfer!.files]);
   }
   #size(file: File): string {
-    const unit = file.size >= 1_000_000 ? "MB" : file.size >= 1_000 ? "kB" : "B";
+    const unit = Math.round(file.size / 100) / 10 >= 1_000 ? "MB" : file.size >= 1_000 ? "kB" : "B";
     const divisor = unit === "MB" ? 1_000_000 : unit === "kB" ? 1_000 : 1;
     return `${new Intl.NumberFormat(this.locale, { maximumFractionDigits: 1 }).format(file.size / divisor)} ${unit}`;
   }

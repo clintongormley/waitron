@@ -97,9 +97,18 @@ site.
 
 ## Add a photograph once
 
-Open **Image library**, choose **Upload photo**, and select a JPEG, PNG or WebP file. Give it a short
-name that helps you find it. The name is required in your default content language; names in your
-other content languages are optional.
+For several photos, open **Image library** and drop them anywhere on the page, or select
+**choose files**. Uploads start immediately. A file named `patatas-bravas.jpg` starts as
+**Patatas bravas** in your default content language. The progress line counts uploaded photos;
+a new photo has a **New** badge. If one upload fails, you see its file name and the reason, and
+the other uploads continue.
+
+To check a name before uploading, choose **Upload photos**. In the upload window, drop one photo
+onto **Photo**, or choose a JPEG, PNG or WebP file. You see its preview, file name and size, and
+can use **Choose another** to replace the selection. Its suggested name comes from the file name;
+change it before **Save** if needed. Choosing another file keeps a name you typed yourself.
+The name is required in your default content language; names in your other content languages
+are optional.
 
 Waitron keeps a smaller copy of each photograph rather than the file you chose. A phone photo is
 often several megabytes, and a library of thousands of them would make every backup and every
@@ -110,7 +119,7 @@ anyone who has a photo's address can open it. Files up to 20 MB are accepted. If
 as too large, has too many pixels or cannot be read, export a smaller copy from your photo app and
 upload that instead.
 
-For the bread photograph, you might enter **Pan de verano** as the Spanish name. Leave the English
+In the upload window, for the bread photograph, you might enter **Pan de verano** as the Spanish name. Leave the English
 name blank until you have a translation. Choose **Save** to add the photo to the library; cancelling
 before Save leaves it out of the library.
 
@@ -128,12 +137,13 @@ On a product's or a variant's own page, select the photo beside the name to open
 With no photo it is an empty square; on a variant's page with no photo of its own, it shows the main
 product's photo with a dashed border. In a variant's small window or a section's editor, select
 **Choose image**. Then select **Use image** on the photograph you want, and save to keep the
-association. You can reuse one photograph on several products. Uploading the same file again finds the existing image and keeps its existing
+association. You can also click the photo to inspect it at full size, then choose **Use image**
+there; **Back** returns to the grid. You can reuse one photograph on several products. Uploading the same file again finds the existing image and keeps its existing
 names, as long as Waitron's image library has not been upgraded in between: a newer version may make
 a slightly different copy, which is then stored as a new image. A notice identifies the reused image
 and lets you open it for editing.
 
-Choose **Edit** on the photograph's card in the library to add translations or change its name.
+Open the photograph's **⋮** menu and choose **Edit** to add translations or change its name.
 Editing this shared record changes the metadata wherever that photograph is reused.
 
 ## Remove a use before deleting the photograph
@@ -143,7 +153,7 @@ at the bottom of the library window the photo opens, shown when there is a photo
 variant's small window it sits beside **Choose image** whenever a photo is shown, and is greyed out while that photo is the main product's, because the variant has no photo of its own to remove. The photograph
 stays in the library for your other products.
 
-To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
+To remove the photograph itself, choose **Delete** in its **⋮** menu and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
 including archived products, and to those sections, a section shown by its internal name. Remove
 the photograph from each editable record before trying deletion again. An archived product opens

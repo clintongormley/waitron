@@ -162,6 +162,9 @@ export class ImageLibrary extends LitElement {
       header {
         justify-content: space-between;
       }
+      .picker-header {
+        justify-content: end;
+      }
       .filters {
         margin-block: var(--wt-space-4);
         align-items: end;
@@ -442,6 +445,20 @@ export class ImageLibrary extends LitElement {
       if (item.image && !images.has(item.image.id)) extra.set(item.image.id, item.image);
     return [...extra.values(), ...images.values()];
   }
+  #rememberImage(image: LibraryImage): void {
+    this.batch = this.batch.map((item) =>
+      item.image?.id === image.id ? { ...item, image } : item,
+    );
+  }
+  #forgetImage(id: string): void {
+    this.#createdIds.delete(id);
+    this.batch = this.batch.map((item) => {
+      if (item.image?.id !== id) return item;
+      const next = { ...item };
+      delete next.image;
+      return next;
+    });
+  }
   #renderBatch() {
     const uploaded = this.batch.filter(
       (item) => item.status === "uploaded" || item.status === "reused",
@@ -468,7 +485,9 @@ export class ImageLibrary extends LitElement {
     ${
       this.batch.length
         ? html`<div class="batch-progress" role="status">
-              ${t("image.batch_progress").replace("{done}", String(uploaded)).replace("{total}", String(this.batch.length))}
+              ${t(this.batch.length === 1 ? "image.batch_progress_one" : "image.batch_progress")
+                .replace("{done}", String(uploaded))
+                .replace("{total}", String(this.batch.length))}
             </div>
             <ul class="batch-list">
               ${this.batch.map(
@@ -753,7 +772,12 @@ export class ImageLibrary extends LitElement {
         const result = await this.api.uploadImage(editor.file!, metadata);
         if (generation !== this.#editorGeneration) return;
         this.duplicateImage = result.created ? null : result.image;
-      } else await this.api.updateImage(editor.image.id, metadata);
+        this.#rememberImage(result.image);
+      } else {
+        const result = await this.api.updateImage(editor.image.id, metadata);
+        if (generation !== this.#editorGeneration) return;
+        this.#rememberImage(result.image);
+      }
       if (generation !== this.#editorGeneration) return;
       scope?.commit(submitted);
       if (this.editor !== editor) return;
@@ -904,6 +928,7 @@ export class ImageLibrary extends LitElement {
         this.deletion = { ...deletion, uses: result.uses };
         return;
       }
+      this.#forgetImage(deletion.image.id);
       this.deletion = null;
     } catch {
       this.deleteError = true;
@@ -1020,11 +1045,11 @@ export class ImageLibrary extends LitElement {
     </wt-modal>`;
   }
   override render() {
-    return html`<header>
+    return html`<header class=${this.picker ? "picker-header" : nothing}>
         ${this.picker ? nothing : html`<h1>${t("nav.images")}</h1>`}
         <wt-button
           data-test="upload"
-          variant="primary"
+          variant=${this.picker ? "secondary" : "primary"}
           ?disabled=${this.batchRunning}
           @click=${() => this.#edit(null)}
           >${t("image.upload_many")}</wt-button
@@ -1129,6 +1154,7 @@ export class ImageLibrary extends LitElement {
               <wt-row-actions align="end" label=${`${t("image.actions")}: ${name}`}>
                 <wt-button
                   data-test=${`edit-${image.id}`}
+                  ?disabled=${this.batchRunning}
                   variant="secondary"
                   align="start"
                   aria-label=${`${t("action.edit")}: ${name}`}
@@ -1137,6 +1163,7 @@ export class ImageLibrary extends LitElement {
                 >
                 <wt-button
                   data-test=${`delete-${image.id}`}
+                  ?disabled=${this.batchRunning}
                   variant="secondary"
                   align="start"
                   aria-label=${`${t("image.delete")}: ${name}`}

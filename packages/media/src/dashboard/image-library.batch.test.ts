@@ -242,10 +242,117 @@ it("an old batch response cannot overwrite a newly mounted batch", async () => {
   await old.promise;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-image=stale]")).toBeNull();
-  expect(text()).toContain("0 of 1 photos uploaded.");
+  expect(text()).toContain("0 of 1 photo uploaded.");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!
+      .disabled,
+  ).toBe(true);
+  drag("drop", [file("intruder.png")]);
+  expect(api.uploadImage).toHaveBeenCalledTimes(2);
   current.resolve({ image: image("current", "Current batch"), created: true });
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-image=current]")).not.toBeNull(),
   );
   expect(api.uploadImage).toHaveBeenCalledTimes(2);
+});
+
+it("deleting an uploaded photo removes its cached tile and New badge after a confirmed refreshed row", async () => {
+  const api = await mount();
+  const uploaded = image("x", "Uploaded");
+  api.uploadImage.mockResolvedValue({ image: uploaded, created: true });
+  api.listImages.mockResolvedValue({ images: [uploaded, image("y", "Other")], total: 2 });
+  Object.assign(api, {
+    getImage: vi.fn().mockResolvedValue({ image: uploaded, uses: [] }),
+    deleteImage: vi.fn().mockImplementation(async () => {
+      api.listImages.mockResolvedValue({ images: [image("y", "Renamed other")], total: 1 });
+      return { deleted: true, uses: [] };
+    }),
+  });
+  drag("drop", [file("x.png")]);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=x]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!
+        .disabled,
+    ).toBe(false),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-x]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-image=y] h2")!.textContent).toBe("Renamed other"),
+  );
+  expect(el.shadowRoot!.querySelector("[data-image=x]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-new]")).toBeNull();
+});
+it("renaming a batch photo outside the query displays the saved name without losing its badge", async () => {
+  const api = await mount();
+  const uploaded = image("outside", "Before");
+  api.uploadImage.mockResolvedValue({ image: uploaded, created: true });
+  api.updateImage.mockResolvedValue({
+    image: { ...uploaded, names: { en: "Saved name", es: "Before" } },
+  });
+  drag("drop", [file("outside.png")]);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-image=outside]")).not.toBeNull(),
+  );
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!
+        .disabled,
+    ).toBe(false),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-outside]")!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("[name=name-en]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Saved name" } }),
+  );
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
+  expect(el.shadowRoot!.querySelector("[data-image=outside] h2")!.textContent).toBe("Saved name");
+  expect(el.shadowRoot!.querySelector("[data-image=outside] [data-new]")).not.toBeNull();
+});
+it("Edit and Delete are natively disabled while another photo uploads", async () => {
+  const api = await mount();
+  const existing = image("existing", "Existing");
+  api.listImages.mockResolvedValue({ images: [existing], total: 1 });
+  api.liveData.invalidate([{ type: "media_images" }]);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-image=existing]")).not.toBeNull(),
+  );
+  const pending = deferred<{ image: LibraryImage; created: boolean }>();
+  api.uploadImage.mockReturnValueOnce(pending.promise);
+  drag("drop", [file("new.png")]);
+  await el.updateComplete;
+  for (const action of ["edit", "delete"]) {
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test=${action}-existing]`,
+    )!;
+    await button.updateComplete;
+    expect(button.disabled).toBe(true);
+    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+  }
+  pending.resolve({ image: image("new", "New"), created: true });
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-existing]")!
+        .disabled,
+    ).toBe(false),
+  );
+});
+it.each([
+  ["en", "1 of 1 photo uploaded."],
+  ["es", "1 de 1 foto subida."],
+])("uses singular progress for one photo (%s)", async (locale, wanted) => {
+  setLocale(locale);
+  const api = await mount();
+  setLocale(locale);
+  api.uploadImage.mockResolvedValue({ image: image("one", "Pan"), created: true });
+  drag("drop", [file("one.png")]);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector(".batch-progress")!.textContent!.trim()).toBe(wanted),
+  );
 });

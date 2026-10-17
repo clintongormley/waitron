@@ -2129,6 +2129,9 @@ it("A651 picker hides its inner title, keeps white tile selection and selects fr
   expect(el.shadowRoot!.querySelector("h1")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=upload]")).not.toBeNull();
   expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!.variant,
+  ).toBe("secondary");
+  expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=select-one]")!
       .variant,
   ).toBe("secondary");
