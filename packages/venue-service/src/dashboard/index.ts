@@ -10,7 +10,7 @@ import "./venue-operations-screen.js";
 import "./service-settings-panel.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
-import "./periods-screen.js";
+import "./periods-list.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -94,10 +94,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         const api = new OpeningHoursApi(ctx.request, ctx.liveData);
         return {
           render: (readOnly = false) =>
-            html`<dashboard-periods-screen
-              .api=${api}
-              .readOnly=${readOnly}
-            ></dashboard-periods-screen>`,
+            html`<periods-list .api=${api} .readOnly=${readOnly}></periods-list>`,
         };
       },
     },

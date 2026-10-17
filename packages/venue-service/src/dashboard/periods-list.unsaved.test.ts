@@ -5,7 +5,7 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import "./periods-screen.js";
+import "./periods-list.js";
 
 function model(): OpeningHoursModel {
   return {
@@ -59,7 +59,7 @@ class PeriodsLeaveApp extends LitElement {
     return model();
   }) as DashboardRequest);
   override render() {
-    return html`<dashboard-periods-screen .api=${this.api}></dashboard-periods-screen
+    return html`<periods-list .api=${this.api}></periods-list
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
@@ -74,7 +74,7 @@ async function mount() {
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
-  const screen = app.shadowRoot!.querySelector("dashboard-periods-screen")!;
+  const screen = app.shadowRoot!.querySelector("periods-list")!;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
   const table =
     screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;

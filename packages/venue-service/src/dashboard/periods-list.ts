@@ -52,8 +52,8 @@ const chipTints = unsafeCSS(
 
 /** Every active department's periods, grouped under it. Cell markup lives in the table's shadow
  *  root, so each colour and season tint is its own part. */
-@customElement("dashboard-periods-screen")
-export class PeriodsScreen extends LitElement {
+@customElement("periods-list")
+export class PeriodsList extends LitElement {
   static override styles = [
     baseStyles,
     css`
@@ -482,6 +482,6 @@ export class PeriodsScreen extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-periods-screen": PeriodsScreen;
+    "periods-list": PeriodsList;
   }
 }

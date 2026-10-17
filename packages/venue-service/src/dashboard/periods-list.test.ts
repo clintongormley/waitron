@@ -5,10 +5,10 @@ import { applyTokens, type WtDataTable } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 import { seasonTints } from "./season-tint.js";
 
-import "./periods-screen.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -107,7 +107,7 @@ function answering(
 }
 
 async function mount(request: DashboardRequest = answering(), readOnly = false) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(request);
   el.readOnly = readOnly;
   applyTokens(el);
@@ -116,10 +116,10 @@ async function mount(request: DashboardRequest = answering(), readOnly = false) 
   await el.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-async function loaded(el: PeriodsScreen) {
+async function loaded(el: PeriodsList) {
   await expect.poll(() => table(el)).not.toBeNull();
   const grid = table(el)!;
   await grid.updateComplete;

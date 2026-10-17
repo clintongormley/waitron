@@ -6,7 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
-import type { PeriodsScreen } from "./periods-screen.js";
+import type { PeriodsList } from "./periods-list.js";
 
 const containers: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -323,7 +323,7 @@ it("registers Periods between Opening hours and Prep stations, readable with ven
   document.body.append(container);
   containers.push(container);
   render(handle.render(true), container);
-  const screen = container.querySelector<PeriodsScreen>("dashboard-periods-screen")!;
+  const screen = container.querySelector<PeriodsList>("periods-list")!;
   expect(screen.readOnly).toBe(true);
   expect(screen.api.liveData).toBe(liveData);
   await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());

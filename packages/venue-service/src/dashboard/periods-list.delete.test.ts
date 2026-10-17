@@ -7,9 +7,9 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 
-import "./periods-screen.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -96,7 +96,7 @@ async function mount(
   into: HTMLElement = document.body,
   liveData?: LiveData,
 ) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(request, liveData);
   applyTokens(el);
   if (into === document.body) hosts.push(el);
@@ -105,20 +105,20 @@ async function mount(
   await table(el)!.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-function rowButton(el: PeriodsScreen, test: string, id = "p1") {
+function rowButton(el: PeriodsList, test: string, id = "p1") {
   const row = table(el)!.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
   const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`);
   expect(button, `${test} on ${id}`).not.toBeNull();
   return button!;
 }
-const deleteDialog = (el: PeriodsScreen) =>
+const deleteDialog = (el: PeriodsList) =>
   el.shadowRoot!.querySelector<PeriodDeleteDialog>("period-delete-dialog");
-const periodDialog = (el: PeriodsScreen) =>
+const periodDialog = (el: PeriodsList) =>
   el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
-async function removePeriod(el: PeriodsScreen, id = "p1") {
+async function removePeriod(el: PeriodsList, id = "p1") {
   await table(el)!.updateComplete;
   rowButton(el, "delete-period", id).click();
   await el.updateComplete;

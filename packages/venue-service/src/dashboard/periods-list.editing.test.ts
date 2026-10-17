@@ -8,9 +8,9 @@ import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 
-import "./periods-screen.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -95,7 +95,7 @@ async function mount(
   request: DashboardRequest = (async () => structuredClone(model())) as DashboardRequest,
   readOnly = false,
 ) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(withPaintedIn(request));
   el.readOnly = readOnly;
   applyTokens(el);
@@ -105,21 +105,21 @@ async function mount(
   await table(el)!.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-const periodRow = (el: PeriodsScreen, id: string) =>
+const periodRow = (el: PeriodsList, id: string) =>
   table(el)!.rows.find((row) => row.kind === "period" && row.id === id) as
     (PeriodRow & { kind: "period" }) | undefined;
-function editButton(el: PeriodsScreen, id = "p1") {
+function editButton(el: PeriodsList, id = "p1") {
   const grid = table(el)!;
   const row = grid.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
   const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-period]");
   expect(button, `Edit on ${id}`).not.toBeNull();
   return button!;
 }
-const dialogOf = (el: PeriodsScreen) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
-async function edit(el: PeriodsScreen, existing?: string) {
+const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
+async function edit(el: PeriodsList, existing?: string) {
   await table(el)!.updateComplete;
   if (existing) editButton(el, existing).click();
   else el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
@@ -687,7 +687,7 @@ it("+ Add period: a chosen department a live update deactivates is no longer sen
 it("+ Add period is disabled until the periods have been read, and after a failed first read", async () => {
   let fail!: (error: unknown) => void;
   let reads = 0;
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(
     withPaintedIn((() =>
       ++reads === 1
@@ -717,7 +717,7 @@ it("+ Add period is disabled until the periods have been read, and after a faile
 
 it("Edit shows Painted in as links from the page's own read, with no extra request", async () => {
   const paintedReads: string[] = [];
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi((async (path: string, method: string) => {
     if (path === PAINTED_IN) {
       paintedReads.push(method);
@@ -806,7 +806,7 @@ async function live(write: () => Promise<unknown> = async () => undefined) {
   const liveData = new LiveData();
   let current = liveFixture();
   const writes: unknown[][] = [];
-  const screen = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const screen = document.createElement("periods-list") as PeriodsList;
   screen.api = new OpeningHoursApi(
     withPaintedIn((async (path, method, body) => {
       if (method === "GET") return structuredClone(current);

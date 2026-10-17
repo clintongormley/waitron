@@ -5,8 +5,8 @@ import { cleanup, expectRowMenusOnScreen, host } from "@waitron/ui/src/test-help
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
-import type { PeriodsScreen } from "./periods-screen.js";
-import "./periods-screen.js";
+import type { PeriodsList } from "./periods-list.js";
+import "./periods-list.js";
 
 afterEach(() => {
   cleanup();
@@ -98,7 +98,7 @@ function paintedIn(nowhere: boolean): PaintedInRow[] {
 
 async function mount(state: string, theme: "light" | "dark") {
   const wrapper = await mountThemed("<div></div>", theme);
-  const screen = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const screen = document.createElement("periods-list") as PeriodsList;
   screen.api = new OpeningHoursApi((async (path: string, method: string) => {
     if (path.endsWith("/delete-impact"))
       return {

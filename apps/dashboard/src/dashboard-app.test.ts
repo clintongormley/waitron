@@ -8218,7 +8218,7 @@ describe("mounted public department dialogs", () => {
     expect(
       pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
     ).toEqual(["/manage/periods"]);
-    await expect.poll(() => find(app, "dashboard-periods-screen")).not.toBeNull();
+    await expect.poll(() => find(app, "periods-list")).not.toBeNull();
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   });
 
