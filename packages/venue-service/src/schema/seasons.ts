@@ -13,6 +13,7 @@ import {
   table,
   timeOfDay,
 } from "@waitron/db";
+import type { CalendarColour } from "@waitron/shared";
 import { menuPeriods } from "./menus.js";
 import { departments, zoneServicePolicies } from "./service.js";
 
@@ -25,6 +26,9 @@ export const seasons = table(
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     startsOn: label("starts_on").notNull(), // MM-DD
+    // No CHECK: adding one rebuilds seasons, and the rebuild's DROP cascades its weeks. Refused by
+    // saveSeasons and validateSeasonWeeks instead.
+    colour: label("colour").$type<CalendarColour>().notNull().default("grey"),
   },
   (t) => [
     foreignKey({

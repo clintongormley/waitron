@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { SeasonChips } from "./season-chips.js";
+import type { SeasonChip, SeasonChips } from "./season-chips.js";
 import type { SeasonDialog } from "./season-dialog.js";
 import "./season-chips.js";
 
@@ -10,11 +10,11 @@ afterEach(() => {
   cleanup();
   setLocale("en");
 });
-const seasons = [
-  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" },
-  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" },
-  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
-  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-29" },
+const seasons: SeasonChip[] = [
+  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31", colour: "green" },
+  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31", colour: "amber" },
+  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
+  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-29", colour: "blue" },
 ];
 const api = {
   saveSeason: async () => {

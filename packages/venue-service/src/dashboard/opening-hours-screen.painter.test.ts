@@ -23,8 +23,8 @@ function yearRead(year: number): OpeningHoursYear {
     timeZone: "Europe/Madrid",
     today: "2026-12-14",
     seasons: [
-      { id: "spring", name: "Spring", startsOn: "03-01", lastDay: "11-30" },
-      { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
+      { id: "spring", name: "Spring", startsOn: "03-01", lastDay: "11-30", colour: "green" },
+      { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
     ],
     days: [],
     publicHolidaysAvailable: true,

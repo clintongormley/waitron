@@ -1,5 +1,6 @@
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
-const AUTUMN = { id: "autumn", name: "Autumn", startsOn: "09-01" };
+import type { Season } from "../season-rules.js";
+const AUTUMN: Season = { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" };
 const terraceWeek = () =>
   [1, 2, 3, 4, 5, 6, 0].map((weekday) => ({
     weekday,

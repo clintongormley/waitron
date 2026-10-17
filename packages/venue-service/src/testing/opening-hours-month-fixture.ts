@@ -117,8 +117,8 @@ export function monthModel(overrides: Partial<OpeningHoursMonth> = {}): OpeningH
     month: "2026-12",
     today: "2026-12-30",
     seasons: [
-      { id: "autumn", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
-      { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
     ],
     days,
     ...overrides,

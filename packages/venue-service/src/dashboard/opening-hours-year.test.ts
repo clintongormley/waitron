@@ -17,11 +17,11 @@ afterEach(() => {
   setLocale("en");
 });
 
-const seasons = [
-  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
-  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" },
-  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" },
-  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
+const seasons: OpeningHoursYear["seasons"][number][] = [
+  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
+  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31", colour: "green" },
+  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31", colour: "amber" },
+  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
 ];
 const holiday = (date: LocalDate, name: string): HolidayFact => ({
   id: `h-${date}`,
@@ -212,7 +212,10 @@ describe("Opening hours year", () => {
     ).toEqual(["4", "1", "2", "3", "4"]);
     const five = await mount(
       yearModel({
-        seasons: [...seasons, { id: "x", name: "Late", startsOn: "12-20", lastDay: "02-28" }],
+        seasons: [
+          ...seasons,
+          { id: "x", name: "Late", startsOn: "12-20", lastDay: "02-28", colour: "purple" },
+        ],
         days: yearModel().days.map((day) =>
           day.date >= "2027-12-20" ? { ...day, seasonId: "x" } : day,
         ),

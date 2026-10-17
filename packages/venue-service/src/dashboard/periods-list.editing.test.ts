@@ -65,7 +65,7 @@ function model(): OpeningHoursModel {
       { id: "drinks", name: "Drinks", active: true, includes: [] },
       { id: "staff", name: "Staff snacks", active: true, includes: [] },
     ],
-    seasons: [{ id: "winter", name: "Winter", startsOn: "12-01" }],
+    seasons: [{ id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" }],
     currentSeasonId: "winter",
     departments: [
       {

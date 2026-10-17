@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
+import type { Season } from "../season-rules.js";
 import { chosenSeasonId, seasonWeek } from "./season-choice.js";
 
-const seasons = [
-  { id: "winter", name: "Winter", startsOn: "12-01" },
-  { id: "spring", name: "Spring", startsOn: "03-01" },
-  { id: "summer", name: "Summer", startsOn: "06-01" },
+const seasons: Season[] = [
+  { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
+  { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+  { id: "summer", name: "Summer", startsOn: "06-01", colour: "amber" },
 ];
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));

@@ -27,8 +27,8 @@ export function painterModel(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     seasons: [
-      { id: "spring", name: "Spring", startsOn: "03-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ],
     currentSeasonId: "winter",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],

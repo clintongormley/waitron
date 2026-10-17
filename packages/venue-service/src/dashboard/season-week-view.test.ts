@@ -1,9 +1,10 @@
 import { expect, it } from "vitest";
+import type { Season } from "../season-rules.js";
 import { seasonIdOn } from "./season-week-view.js";
 
-const seasons = [
-  { id: "winter", name: "Winter", startsOn: "12-01" },
-  { id: "autumn", name: "Autumn", startsOn: "09-01" },
+const seasons: Season[] = [
+  { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
+  { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
 ];
 it.each([
   ["2030-11-30", "autumn"],

@@ -49,8 +49,8 @@ function model(): OpeningHoursModel {
       { id: "bar", name: "Bar menu", active: true, includes: [] },
     ],
     seasons: [
-      { id: "winter", name: "Winter", startsOn: "12-01" },
-      { id: "summer", name: "Summer", startsOn: "06-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
+      { id: "summer", name: "Summer", startsOn: "06-01", colour: "amber" },
     ],
     currentSeasonId: "winter",
     departments: [
@@ -205,6 +205,7 @@ it("paints every period colour's swatch and every season tint's chip", async () 
     id: `s${index}`,
     name: `Season ${index}`,
     startsOn: `${String(index + 1).padStart(2, "0")}-01`,
+    colour: CALENDAR_COLOURS[index]!,
   }));
   data.departments = [
     {
@@ -529,10 +530,10 @@ it.each(
         { id: "deli", name: "Deli takeaway", active: true, includes: [] },
       ];
       data.seasons = [
-        { id: "spring", name: "Primavera", startsOn: "03-01" },
-        { id: "summer", name: "Verano", startsOn: "06-01" },
-        { id: "autumn", name: "Otoño", startsOn: "09-01" },
-        { id: "winter", name: "Invierno", startsOn: "12-01" },
+        { id: "spring", name: "Primavera", startsOn: "03-01", colour: "green" },
+        { id: "summer", name: "Verano", startsOn: "06-01", colour: "amber" },
+        { id: "autumn", name: "Otoño", startsOn: "09-01", colour: "orange" },
+        { id: "winter", name: "Invierno", startsOn: "12-01", colour: "blue" },
       ];
       data.departments = [
         {

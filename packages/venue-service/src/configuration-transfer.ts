@@ -264,6 +264,7 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
       refuse("seasons.name");
     if (parseSeasonStart(row.starts_on) === null || starts.has(row.starts_on))
       refuse("seasons.starts_on");
+    if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("seasons.colour");
     names.add(row.name);
     starts.add(row.starts_on);
     seasonIds.add(row.id);

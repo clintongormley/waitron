@@ -79,6 +79,18 @@ describe("ensureDefaultSeasons", () => {
     expect(stored).toEqual(first);
   });
 
+  it("gives a new location Spring green, Summer amber, Autumn orange and Winter blue", async () => {
+    const locationId = await newLocation("Coloured seasons");
+    await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+    const stored = await withTransaction(db, (tx) => readSeasons(tx, { locationId }));
+    expect(stored.map(({ name, colour }) => [name, colour])).toEqual([
+      ["Spring", "green"],
+      ["Summer", "amber"],
+      ["Autumn", "orange"],
+      ["Winter", "blue"],
+    ]);
+  });
+
   it("leaves a location that already has a season alone", async () => {
     const locationId = await newLocation("One season");
     const [own] = await db
@@ -86,7 +98,7 @@ describe("ensureDefaultSeasons", () => {
       .values({ locationId, name: "All year", startsOn: "01-01" })
       .returning({ id: seasons.id });
     const result = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
-    expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01" }]);
+    expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
     expect(await withTransaction(db, (tx) => readSeasons(tx, { locationId }))).toEqual(result);
   });
 
@@ -268,7 +280,7 @@ describe("saveSeason", () => {
     const saved = await scoped((tx) =>
       saveSeason(tx, v.cfg, v.lateAutumn, { name: " Fall ", startsOn: "11-01" }, AT, 0),
     );
-    expect(saved).toEqual({ id: v.lateAutumn, name: "Fall", startsOn: "11-01" });
+    expect(saved).toEqual({ id: v.lateAutumn, name: "Fall", startsOn: "11-01", colour: "grey" });
   });
 
   it("moves Winter to 11-15, so 20 November resolves to Winter on the next read", async () => {
@@ -277,7 +289,7 @@ describe("saveSeason", () => {
     const saved = await scoped((tx) =>
       saveSeason(tx, v.cfg, v.winter, { name: "Winter", startsOn: "11-15" }, AT, 0),
     );
-    expect(saved).toEqual({ id: v.winter, name: "Winter", startsOn: "11-15" });
+    expect(saved).toEqual({ id: v.winter, name: "Winter", startsOn: "11-15", colour: "grey" });
     expect(await seasonOnDay(v, "2030-11-20")).toBe(v.winter);
     expect(await restaurantWeek(v, v.winter)).toEqual(v.winterWeek);
   });
@@ -343,7 +355,7 @@ describe("saveSeason", () => {
     const renamed = await scoped((tx) =>
       saveSeason(tx, v.cfg, v.lateAutumn, { name: "Fall", startsOn: "11-01" }, AT, 1),
     );
-    expect(renamed).toEqual({ id: v.lateAutumn, name: "Fall", startsOn: "11-01" });
+    expect(renamed).toEqual({ id: v.lateAutumn, name: "Fall", startsOn: "11-01", colour: "grey" });
     expect(
       await refusal(
         scoped((tx) =>
@@ -381,6 +393,7 @@ describe("addSeason", () => {
       id: expect.any(String),
       name: "Christmas weeks",
       startsOn: "12-20",
+      colour: "grey",
     });
     expect(await seasonOnDay(v, "2030-12-20")).toBe(christmas.id);
     expect(await restaurantWeek(v, christmas.id)).toEqual(v.winterWeek);

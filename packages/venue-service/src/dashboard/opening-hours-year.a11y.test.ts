@@ -13,11 +13,11 @@ afterEach(() => {
   setLocale("en");
 });
 
-const seasons = [
-  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
-  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" },
-  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" },
-  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
+const seasons: OpeningHoursYear["seasons"][number][] = [
+  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
+  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31", colour: "green" },
+  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31", colour: "amber" },
+  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
 ];
 
 function yearModel(overrides: Partial<OpeningHoursYear> = {}): OpeningHoursYear {

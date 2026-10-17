@@ -335,12 +335,13 @@ describe("the season routes", () => {
         expectedClockRevision: 0,
       }),
       200,
-      { id: r.seasons.Summer, name: "Verano", startsOn: "06-15" },
+      { id: r.seasons.Summer, name: "Verano", startsOn: "06-15", colour: "amber" },
     );
     expect(await stored(r)).toContainEqual({
       id: r.seasons.Summer,
       name: "Verano",
       startsOn: "06-15",
+      colour: "amber",
     });
   });
 
@@ -353,7 +354,7 @@ describe("the season routes", () => {
     });
     expect(response.status).toBe(201);
     const added = (await response.json()) as { id: string };
-    expect(added).toEqual({ id: added.id, name: "Feria", startsOn: "04-20" });
+    expect(added).toEqual({ id: added.id, name: "Feria", startsOn: "04-20", colour: "grey" });
     expect((await stored(r)).map(({ name }) => name)).toEqual([
       "Spring",
       "Feria",

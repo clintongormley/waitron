@@ -4,12 +4,37 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { SeasonChips, SeasonChip, SeasonWrites } from "./season-chips.js";
 import type { SeasonDialog } from "./season-dialog.js";
+import type { Season } from "../season-rules.js";
 import "./season-chips.js";
 
-const winter = { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-29" };
-const spring = { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" };
-const summer = { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" };
-const autumn = { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" };
+const winter: SeasonChip = {
+  id: "w",
+  name: "Winter",
+  startsOn: "12-01",
+  lastDay: "02-29",
+  colour: "blue",
+};
+const spring: SeasonChip = {
+  id: "sp",
+  name: "Spring",
+  startsOn: "03-01",
+  lastDay: "05-31",
+  colour: "green",
+};
+const summer: SeasonChip = {
+  id: "su",
+  name: "Summer",
+  startsOn: "06-01",
+  lastDay: "08-31",
+  colour: "amber",
+};
+const autumn: SeasonChip = {
+  id: "a",
+  name: "Autumn",
+  startsOn: "09-01",
+  lastDay: "11-30",
+  colour: "orange",
+};
 const four: SeasonChip[] = [spring, summer, autumn, winter];
 
 let el: SeasonChips;
@@ -23,9 +48,14 @@ function fakeApi(overrides: Partial<SeasonWrites> = {}) {
   return {
     saveSeason: vi.fn(async (id: string, input: { name: string; startsOn: string }) => ({
       id,
+      colour: "grey" as const,
       ...input,
     })),
-    addSeason: vi.fn(async (input: { name: string; startsOn: string }) => ({ id: "n", ...input })),
+    addSeason: vi.fn(async (input: { name: string; startsOn: string }) => ({
+      id: "n",
+      colour: "grey" as const,
+      ...input,
+    })),
     deleteSeason: vi.fn(async () => {}),
     readSeasonDeleteImpact: vi.fn(async () => ({
       departments: [
@@ -88,7 +118,13 @@ const fieldError = (name: string) =>
   dq<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.error;
 
 it("labels each chip from the server's last day and tints it by start order, repeating after four", async () => {
-  const fifth = { id: "x", name: "Late summer", startsOn: "08-01", lastDay: "08-31" };
+  const fifth: SeasonChip = {
+    id: "x",
+    name: "Late summer",
+    startsOn: "08-01",
+    lastDay: "08-31",
+    colour: "teal",
+  };
   await mount([spring, summer, { ...fifth }, autumn, winter]);
   expect(chips().map((chip) => chip.textContent!.replace(/\s+/g, " ").trim())).toEqual([
     "Spring · 1 Mar – 31 May ✎",
@@ -503,8 +539,8 @@ it("keeps a save busy when an earlier save, sent before the chips were moved, an
   const api = fakeApi({
     saveSeason: vi.fn(
       (id: string, input: { name: string; startsOn: string }) =>
-        new Promise<{ id: string; name: string; startsOn: string }>((resolve) =>
-          answers.push(() => resolve({ id, ...input })),
+        new Promise<Season>((resolve) =>
+          answers.push(() => resolve({ id, colour: "grey", ...input })),
         ),
     ),
   });

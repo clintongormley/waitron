@@ -1,14 +1,21 @@
+import type { CalendarColour } from "@waitron/shared";
+
 export interface Season {
   id: string;
   name: string;
   startsOn: string; // MM-DD
+  colour: CalendarColour;
 }
 
-export const DEFAULT_SEASONS: readonly { name: string; startsOn: string }[] = [
-  { name: "Spring", startsOn: "03-01" },
-  { name: "Summer", startsOn: "06-01" },
-  { name: "Autumn", startsOn: "09-01" },
-  { name: "Winter", startsOn: "12-01" },
+export const DEFAULT_SEASONS: readonly {
+  name: string;
+  startsOn: string;
+  colour: CalendarColour;
+}[] = [
+  { name: "Spring", startsOn: "03-01", colour: "green" },
+  { name: "Summer", startsOn: "06-01", colour: "amber" },
+  { name: "Autumn", startsOn: "09-01", colour: "orange" },
+  { name: "Winter", startsOn: "12-01", colour: "blue" },
 ];
 
 const SEASON_START = /^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;

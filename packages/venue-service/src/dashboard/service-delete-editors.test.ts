@@ -123,7 +123,7 @@ function hoursFixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" }],
     currentSeasonId: "autumn",
     menus: [{ id: "m1", name: "Menu", active: true, includes: [] }],
     departments: ["d1", "d2"].map((id, index) => ({

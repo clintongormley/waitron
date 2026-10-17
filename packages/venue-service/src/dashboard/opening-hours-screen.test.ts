@@ -875,7 +875,9 @@ describe("Year view", () => {
       year,
       timeZone: "Europe/Madrid",
       today: "2026-10-12",
-      seasons: [{ id: "all", name: "All year", startsOn: "01-01", lastDay: "12-31" }],
+      seasons: [
+        { id: "all", name: "All year", startsOn: "01-01", lastDay: "12-31", colour: "grey" },
+      ],
       days: [
         {
           date: `${year}-10-13`,
@@ -1800,8 +1802,8 @@ describe("Month view", () => {
 
   const withWinter = (data: OpeningHoursModel) => {
     data.seasons = [
-      { id: "autumn", name: "Autumn", startsOn: "09-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ];
     data.currentSeasonId = "autumn";
   };

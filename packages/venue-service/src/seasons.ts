@@ -24,9 +24,16 @@ import { departmentDayRanges, departmentDays, seasons } from "./schema/seasons.j
 import { departments } from "./schema/service.js";
 import "./errors.js";
 
+const SEASON_COLUMNS = {
+  id: seasons.id,
+  name: seasons.name,
+  startsOn: seasons.startsOn,
+  colour: seasons.colour,
+};
+
 export async function readSeasons(tx: Transaction, cfg: VenueScope): Promise<Season[]> {
   return tx
-    .select({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn })
+    .select(SEASON_COLUMNS)
     .from(seasons)
     .where(eq(seasons.locationId, cfg.locationId))
     .orderBy(asc(seasons.startsOn));
@@ -38,7 +45,7 @@ export async function ensureDefaultSeasons(tx: Transaction, cfg: VenueScope): Pr
   const inserted = await tx
     .insert(seasons)
     .values(DEFAULT_SEASONS.map((season) => ({ ...season, locationId: cfg.locationId })))
-    .returning({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn });
+    .returning(SEASON_COLUMNS);
   // "The rows emitted by the RETURNING clause appear in an arbitrary order" (sqlite.org/lang_returning.html).
   return byStart(inserted);
 }
@@ -94,7 +101,7 @@ export async function saveSeason(
   );
   await tx.update(seasons).set(parsed).where(eq(seasons.id, id));
   if (moved) await checkScheduleAfterSeasonWrite(tx, cfg, "startsOn");
-  return { id, ...parsed };
+  return { id, ...parsed, colour: own.colour };
 }
 
 /** Adds a season holding a copy of the department and zone weeks of the season it splits, so
@@ -112,8 +119,8 @@ export async function addSeason(
   const split = seasonOn(all, `2001-${parsed.startsOn}`)!;
   const [added] = await tx
     .insert(seasons)
-    .values({ ...parsed, locationId: cfg.locationId })
-    .returning({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn });
+    .values({ ...parsed, colour: "grey", locationId: cfg.locationId })
+    .returning(SEASON_COLUMNS);
   const { dayCutover } = await readLocationClock(tx, cfg.locationId);
   const only = { seasonIds: [split.id], weekdays: [0, 1, 2, 3, 4, 5, 6] };
   const departmentWeeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover, only);

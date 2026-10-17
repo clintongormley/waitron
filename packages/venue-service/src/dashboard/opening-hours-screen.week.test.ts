@@ -32,8 +32,8 @@ function model(): OpeningHoursModel {
     dayCutover: "06:00",
     menus: [],
     seasons: [
-      { id: "autumn", name: "Autumn", startsOn: "09-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ],
     currentSeasonId: "winter",
     departments: DEPARTMENTS,
