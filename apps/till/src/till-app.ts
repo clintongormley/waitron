@@ -8702,7 +8702,12 @@ export class TillApp extends LitElement {
             this.#tableDefaultMenuId,
           );
         } catch {
-          if (left() || offerRequest !== this.#tableOfferRequest) return;
+          if (
+            left() ||
+            offerRequest !== this.#tableOfferRequest ||
+            session !== this.#operatorSession
+          )
+            return;
           this.#leaveFailedOpen(shownEarly, left, session);
           this.#loadTableOffers(
             undefined,
@@ -8817,6 +8822,7 @@ export class TillApp extends LitElement {
             opened.sync.store.appendLines(carried.lines);
           this.#showDraft(opened);
         } catch (error) {
+          if (session !== this.#operatorSession) return;
           this.#leaveFailedOpen(shownEarly, left, session);
           this.errorKey = tableWriteError(error);
           await this.#refreshFloor();

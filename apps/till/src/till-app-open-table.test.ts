@@ -1229,6 +1229,52 @@ describe("A768 the order screen shows at once", () => {
     expect(banner(el)!.textContent).toContain(t("table.error"));
   });
 
+  it("a menu read that fails after a server switch leaves the switch's message", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    let fail!: () => void;
+    api.listZoneOffers.mockImplementation(async (zoneId: string) =>
+      zoneId === "z2"
+        ? new Promise((_, reject) => (fail = () => reject(new TypeError("Failed to fetch"))))
+        : catalogue("v1"),
+    );
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el);
+    expect(fail).toBeDefined();
+    await switchServer();
+    expect(banner(el)!.textContent).toContain(t("server.switched"));
+    const floorReads = api.getTablesState.mock.calls.length;
+    fail();
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(t("server.switched"));
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+  });
+
+  it("a seating that fails after a server switch leaves the switch's message", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    let refuse!: () => void;
+    api.getTablesState.mockResolvedValue([mesa4, mesa7, table("t5", "5", null)]);
+    api.seatTable = vi.fn(
+      () =>
+        new Promise(
+          (_, reject) => (refuse = () => reject({ code: "table.occupied", status: 409 })),
+        ),
+    );
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(refuse).toBeDefined();
+    await switchServer();
+    expect(banner(el)!.textContent).toContain(t("server.switched"));
+    const floorReads = api.getTablesState.mock.calls.length;
+    refuse();
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(t("server.switched"));
+    expect(api.getTablesState.mock.calls.length).toBe(floorReads);
+  });
+
   it("a free table whose seating is refused goes back to the floor with the error", async () => {
     const free = table("t5", "5", null);
     const { el } = await mountApp({
