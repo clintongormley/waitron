@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
@@ -156,7 +157,14 @@ const till = {
 };
 
 const offers: ZoneOfferCatalogue = {
-  service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+  service: {
+    open: true,
+    zoneOpen: true,
+    periodName: null,
+    periodOccurrenceKey: null,
+    keepOpen: null,
+    zoneKeepOpen: null,
+  },
   context: {
     departmentName: "Restaurant",
     zoneId: zone.id,
@@ -182,6 +190,7 @@ let api: TillApi;
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

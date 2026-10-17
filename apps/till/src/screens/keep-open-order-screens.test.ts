@@ -75,6 +75,7 @@ for (const kind of ["counter", "table"] as const) {
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
+        periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         zoneKeepOpen: null,
         keepOpen: { ...subject, extendedUntil },
       });
@@ -93,6 +94,7 @@ for (const kind of ["counter", "table"] as const) {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         zoneKeepOpen: null,
         keepOpen: { ...subject, running: false },
       });
@@ -120,6 +122,7 @@ for (const kind of ["counter", "table"] as const) {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       });

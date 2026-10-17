@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "./device-zones.js";
 import { vi, expect } from "vitest";
 import type { TillApp } from "../src/till-app.js";
 import "../src/till-app.js";
@@ -55,6 +56,7 @@ export async function mountEquipmentApp(
     }),
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(["terrace"])),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
       context: {
         zoneId: "terrace",
@@ -65,7 +67,14 @@ export async function mountEquipmentApp(
       offers: [],
       menus: [],
       defaultMenuId: null,
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: null,
+        periodOccurrenceKey: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
     }),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),

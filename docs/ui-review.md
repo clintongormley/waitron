@@ -121,9 +121,10 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   Paths use `/manage/<section>` and `/tabs/<key>`, with nested selections as path segments.
 - Keep unsaved canvas tabs out of URL writes, including when you reselect them. Embedded station
   pickers keep their selection local; an enrolled kitchen display opens the kitchen screen its device chose.
-- Keep history for meaningful navigation. Payment and modifier steps do not add entries; menu choice
-  stays in browser session storage as the last menu viewed across new and parked orders. Every new
-  login resets it to the default, including the PIN login required after refresh.
+- Keep history for meaningful navigation. Payment and modifier steps do not add entries. Since A740
+  (2026-10-17), menu memory belongs to the device, profile and zone for one service-period occurrence,
+  including another operator's login or a browser restart. A boundary expires the choice; an active
+  basket, draft or request defers the grid/default change until the next safe empty order.
 - Remember vegan, vegetarian, no-meat and no-fish filters throughout the login, shared by counter and
   table ordering. New and parked orders retain the selection; a new login clears it. Filter changes
   add no browser history entries and leave the basket intact.

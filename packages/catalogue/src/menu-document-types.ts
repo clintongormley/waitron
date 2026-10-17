@@ -388,6 +388,7 @@ export interface MenuState {
     open: boolean;
     zoneOpen: boolean;
     periodName: string | null;
+    periodOccurrenceKey: string | null;
     zoneKeepOpen: {
       zoneId: string;
       zoneName: string;

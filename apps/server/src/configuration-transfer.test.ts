@@ -6834,3 +6834,38 @@ describe("special days in a configuration transfer", () => {
     ).toEqual([{ n: 0 }]);
   });
 });
+
+it("exports profile zone settings but leaves enrolled device zone selections behind", async () => {
+  const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Selected till", formFactor: "till" })
+      .returning();
+    const [device] = await tx
+      .insert(devices)
+      .values({
+        locationId: source.locationId,
+        deviceProfileId: profile!.id,
+        label: "Selected till",
+        tokenHash: "hash",
+      })
+      .returning();
+    const cfg = { locationId: locationId(source.locationId) };
+    const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, cfg, device!.id);
+    expect(current.startingZoneId).not.toBeNull();
+    await VENUE_SERVICE.setDeviceZoneSelection(tx, cfg, device!.id, {
+      ...current,
+      startingZoneId: current.startingZoneId!,
+    });
+    expect(await VENUE_SERVICE.countDeviceZoneSelections(tx, device!.id)).toBe(1);
+  });
+  const exported = await exportConfigurationTables(suite.db, ALL_MODULES);
+  expect(exported.tables).toHaveProperty("device_profile_service_access");
+  expect(exported.tables).toHaveProperty("device_profile_zones");
+  expect(exported.tables).not.toHaveProperty("device_zone_selections");
+  expect(exported.tables).not.toHaveProperty("device_zone_selection_zones");
+});

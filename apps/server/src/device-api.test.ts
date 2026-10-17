@@ -26,6 +26,8 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { parkOrder, placeOrder } from "./working-order.js";
+import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mountDeviceApi } from "./device-api.js";
 import { readApprovedProfiles, switchActiveProfile } from "./device.js";
 import {
@@ -264,7 +266,7 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
  *  `host` overrides the request `Host` header. */
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string | null; host?: string } = {},
 ): Promise<Response> {
@@ -4347,3 +4349,81 @@ describe("a device's approved profiles and switching its active one", () => {
     });
   });
 });
+
+it.each([false, true])(
+  "profile deletion cascades saved zone selections only on hard delete (retire=%s)",
+  async (retire) => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const device = await enrolTill(app, venue, "Zone till");
+    const secondProfileId = await seedProfile("till");
+    const save = () =>
+      withTransaction(suite.db, async (tx) => {
+        const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId);
+        expect(current.startingZoneId).not.toBeNull();
+        await VENUE_SERVICE.setDeviceZoneSelection(tx, venue.cfg, device.deviceId, {
+          ...current,
+          startingZoneId: current.startingZoneId!,
+        });
+      });
+    await save();
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: secondProfileId })
+      .where(eq(devices.id, device.deviceId));
+    await save();
+    if (retire) {
+      await suite.db
+        .update(devices)
+        .set({ deviceProfileId: device.profileId })
+        .where(eq(devices.id, device.deviceId));
+      expect(
+        (
+          await send(app, "POST", `/management-api/devices/${device.deviceId}/revoke`, {
+            cookie: venue.managerCookie,
+          })
+        ).status,
+      ).toBe(204);
+    }
+    const profiles = new Hono();
+    mountManagementApi(
+      profiles,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        credentialKeyRing: TOTP_KEY_RING,
+      },
+      noopLog,
+    );
+    const result = await send(
+      profiles,
+      "DELETE",
+      `/management-api/device-profiles/${device.profileId}`,
+      { cookie: venue.managerCookie },
+    );
+    expect(result.status).toBe(204);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.countDeviceZoneSelections(tx, device.deviceId),
+      ),
+    ).toBe(retire ? 2 : 1);
+    const [first] = await suite.db
+      .select()
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, device.profileId));
+    if (retire) expect(first?.retiredAt).toEqual(expect.any(String));
+    else expect(first).toBeUndefined();
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: secondProfileId })
+      .where(eq(devices.id, device.deviceId));
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.readDeviceZoneSelection(tx, venue.cfg, device.deviceId),
+      ),
+    ).toMatchObject({ profileId: secondProfileId, adjusted: false });
+  },
+);

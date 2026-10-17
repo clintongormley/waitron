@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { leaveCoordinatorFor, type WtCombobox } from "@waitron/ui";
@@ -80,7 +81,14 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
     offer("offer-flan", "Flan", "desserts"),
   ].map((each) => ({ ...each, unitPrice: prices[each.name] ?? each.unitPrice }));
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId: "z1",
@@ -203,6 +211,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -3563,6 +3572,7 @@ describe("till-app: other people's drafts and taking one over", () => {
           open: true,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },
@@ -3624,7 +3634,14 @@ describe("till-app: other people's drafts and taking one over", () => {
 
 describe("till-app: a menu published while a table's draft is open (D9)", () => {
   const state = (versionId: string, soldOut: string[] = []) => ({
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4295,7 +4312,14 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
 
 describe("till-app: a draft line that cannot be sold now", () => {
   const state = (soldOut: string[]) => ({
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: [{ menuId: "lunch", versionId: "v1", orderable: true, sendable: true }],
     unavailable: { products: soldOut, optionLabels: [] },
   });
@@ -4629,7 +4653,14 @@ describe("till-app: a draft line that cannot be sold now", () => {
       defaultMenuId: null,
     });
     const at = (versionId: string) => ({
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: null,
+        periodOccurrenceKey: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
       unavailable: { products: [], optionLabels: [] },
     });

@@ -1,3 +1,4 @@
+import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import type {
   RefundableTender,
   TenderRefundRequest,
@@ -2413,8 +2414,8 @@ export class TillApi {
     );
   }
 
-  getTill(): Promise<TillInfo> {
-    return this.#request<TillInfo>("/api/till", "GET");
+  getTill(options: ReadOptions = {}): Promise<TillInfo> {
+    return this.#request<TillInfo>("/api/till", "GET", undefined, options.signal);
   }
 
   getContentLanguages(): Promise<ContentLanguages> {
@@ -3254,6 +3255,22 @@ export class TillApi {
     return this.#request<DeviceProfileSwitched>("/api/device/active-profile", "POST", {
       profileId,
     });
+  }
+
+  getDeviceZones(options: ReadOptions = {}): Promise<DeviceZoneSelection> {
+    return this.#request<DeviceZoneSelection>(
+      "/api/device/zones",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  setDeviceZones(
+    input: DeviceZoneSelectionInput,
+    options: ReadOptions = {},
+  ): Promise<DeviceZoneSelection> {
+    return this.#request<DeviceZoneSelection>("/api/device/zones", "PUT", input, options.signal);
   }
 
   /** The device's equipment → `GET /api/device/equipment`, as the device the cookie names. */

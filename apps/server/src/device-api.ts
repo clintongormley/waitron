@@ -1,5 +1,7 @@
 // Side-effect only: keeps the codes this file throws reachable from it. See the note atop `errors.ts`.
 import "./errors.js";
+import { currentZoneDevice } from "./device-zones.js";
+import type { DeviceZoneSelectionInput } from "@waitron/module";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
@@ -136,6 +138,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_admitted": 403,
   "device_profile.incompatible": 400,
   "device.payment_in_progress": 409,
+  "device_zones.invalid": 400,
+  "device_zones.changed": 409,
   // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
   "device.pairing_closed": 403,
@@ -326,6 +330,39 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         approvedProfiles,
         kitchenScreens,
       });
+    }),
+  );
+
+  app.get("/api/device/zones", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession({ db: deps.db }, c, { passive: true });
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const device = await currentZoneDevice(tx, deps.cfg, session);
+          return VENUE_SERVICE.readDeviceZoneSelection(tx, deps.cfg, device.deviceId);
+        }),
+      );
+    }),
+  );
+
+  app.put("/api/device/zones", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession({ db: deps.db }, c);
+      const body = await readJsonBody<unknown>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body))
+        throw new AppError("device_zones.invalid", { field: "profileId" });
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const device = await currentZoneDevice(tx, deps.cfg, session);
+          await assertNoPaymentInProgress(tx, device.deviceId);
+          return VENUE_SERVICE.setDeviceZoneSelection(
+            tx,
+            deps.cfg,
+            device.deviceId,
+            body as DeviceZoneSelectionInput,
+          );
+        }),
+      );
     }),
   );
 

@@ -14,7 +14,7 @@ export interface MenuStatePollOptions {
   /** The zones whose offers the till holds now, read afresh at every tick. */
   zones(): readonly string[];
   onState(zoneId: string, state: MenuStateAnswer): void;
-  onTick?(): void;
+  onTick?(signal: AbortSignal): void | Promise<void>;
 }
 
 /**
@@ -26,6 +26,7 @@ export class MenuStatePoll {
   readonly #options: MenuStatePollOptions;
   #timer?: ReturnType<typeof setInterval>;
   readonly #reads = new Set<AbortController>();
+  #tickRead?: AbortController;
   #requested = 0;
   /** Per zone, the newest request whose answer has been reported. */
   readonly #applied = new Map<string, number>();
@@ -54,8 +55,34 @@ export class MenuStatePoll {
   }
 
   #tick(): void {
-    this.#options.onTick?.();
+    if (this.#options.onTick && !this.#tickRead) void this.#readTick();
     for (const zoneId of this.#options.zones()) void this.#readZone(zoneId, ++this.#requested);
+  }
+
+  async #readTick(): Promise<void> {
+    const read = new AbortController();
+    const release = () => {
+      clearTimeout(limit);
+      this.#reads.delete(read);
+      if (this.#tickRead === read) this.#tickRead = undefined;
+    };
+    const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
+    read.signal.addEventListener("abort", release, { once: true });
+    this.#tickRead = read;
+    this.#reads.add(read);
+    try {
+      await this.#options.onTick!(read.signal);
+    } catch (error) {
+      if (
+        !read.signal.aborted &&
+        this.#tickRead === read &&
+        (error as { code?: string } | undefined)?.code === "session.required"
+      )
+        this.stop();
+    } finally {
+      read.signal.removeEventListener("abort", release);
+      release();
+    }
   }
 
   async #readZone(zoneId: string, request: number): Promise<void> {

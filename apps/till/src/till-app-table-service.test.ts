@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import {
@@ -153,7 +154,14 @@ const till = {
 
 function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): ZoneOfferCatalogue {
   const body: ZoneOfferCatalogue = {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId: floorZone.id,
@@ -200,7 +208,6 @@ const counterOffers = zoneOffers(
   "cat-default",
 );
 
-/** A dining zone with two menus, neither named as the zone's default — the second is MARKED default. */
 const diningMenus = [
   { id: "menu-lunch", name: "Lunch", isDefault: false },
   { id: "menu-dinner", name: "Dinner", isDefault: true },
@@ -213,12 +220,13 @@ const diningOffers = zoneOffers(
       { ...cafe, id: "cordero", name: "Cordero", catalogueId: "menu-dinner" },
     ],
   },
-  null,
+  "menu-dinner",
 );
 
 let api: TillApi;
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -412,13 +420,16 @@ describe("till-app table ordering: the table's menus", () => {
     );
   });
 
-  it("falls back to the menu marked default when the table's zone names none", async () => {
-    const { el } = await mountApp();
+  it("does not invent a table default when the server explicitly names none", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn(async () => ({ ...diningOffers, defaultMenuId: null })),
+    });
     const screen = await toTableOrder(el);
 
     expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id);
     expect(screen.menus).toEqual(diningOffers.menus);
-    expect(screen.selectedMenuId).toBe("menu-dinner");
+    expect(screen.selectedMenuId).toBe("");
+    expect(screen.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
   });
 
   it("switches the TABLE's menu on a pick, leaving the counter's menu and its stored preference alone", async () => {
@@ -2559,6 +2570,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           open: true,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },
@@ -2612,6 +2624,7 @@ describe("till-app table ordering: a menu published while a table is open", () =
           open: true,
           zoneOpen: true,
           periodName: null,
+          periodOccurrenceKey: null,
           keepOpen: null,
           zoneKeepOpen: null,
         },

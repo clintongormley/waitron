@@ -113,6 +113,13 @@ import {
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
 
+import {
+  readDeviceZoneSelection,
+  setDeviceZoneSelection,
+  countDeviceZoneSelections,
+  removeDeviceZoneSelections,
+} from "./device-zone-selection.js";
+
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
   readPartyAllergy,
@@ -193,6 +200,10 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readDevicesKitchenScreens,
   setDeviceKitchenScreens,
   countDeviceKitchenScreens,
+  readDeviceZoneSelection,
+  setDeviceZoneSelection,
+  countDeviceZoneSelections,
+  removeDeviceZoneSelections,
   copyProfileKitchenScreens,
   removeDeviceKitchenScreens,
   assertDeviceKitchenScreens,

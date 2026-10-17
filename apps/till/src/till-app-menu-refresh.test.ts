@@ -1,3 +1,4 @@
+import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -126,7 +127,14 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
 
 function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -167,7 +175,14 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: [{ menuId: "lunch", versionId: version, orderable: true, sendable: true }],
     unavailable: { ...NOTHING, ...unavailable },
   };
@@ -212,6 +227,7 @@ const till = {
 let api: Record<string, ReturnType<typeof vi.fn>>;
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["zone-dining"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -863,6 +879,9 @@ describe("a refresh overtaken by a change of service area", () => {
       serviceMode: "prepay" as const,
     });
     const { el } = await mountApp({
+      getDeviceZones: vi
+        .fn()
+        .mockResolvedValue(deviceZonesFixture(["zone-counter", "zone-terrace"], ["zone-dining"])),
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue({ ...V1, zones: [zone("zone-counter"), zone("zone-terrace")] }),
@@ -890,6 +909,9 @@ describe("an offers load", () => {
     emit(counter(el), "logout");
     await flush(el);
     api.listDefaultZoneOffers.mockResolvedValue(
+      catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+    );
+    api.listZoneOffers.mockResolvedValue(
       catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
     );
     await toCounter(el);
@@ -1252,6 +1274,9 @@ describe("the poll's own costs", () => {
       serviceMode: "prepay" as const,
     });
     const { el } = await mountApp({
+      getDeviceZones: vi
+        .fn()
+        .mockResolvedValue(deviceZonesFixture(["zone-counter", "zone-terrace"], ["zone-dining"])),
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue({ ...V1, zones: [zone("zone-counter"), zone("zone-terrace")] }),
@@ -1282,6 +1307,7 @@ describe("a sign-in whose offers fail to load", () => {
     emit(counter(el), "logout");
     await flush(el);
     api.listDefaultZoneOffers.mockRejectedValue(new TypeError("Failed to fetch"));
+    api.listZoneOffers.mockRejectedValue(new TypeError("Failed to fetch"));
     await toCounter(el);
 
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
@@ -2049,7 +2075,14 @@ describe("the menu's Device Home Page", () => {
     await toCounter(el);
     const shown = browser(el).menu;
     api.menuState.mockResolvedValue({
-      service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: null,
+        periodOccurrenceKey: null,
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
       menus: [{ menuId: "lunch", versionId: "v2", orderable: true, sendable: true }],
       unavailable: NOTHING,
     } satisfies MenuState);
@@ -2081,6 +2114,7 @@ describe("a device behind the live version (§9)", () => {
     v1.menus[0] = { ...v1.menus[0]!, structure: { members: [drinks, burger] } };
     const v2 = catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(v1)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(v1),
       listZoneOffers: vi.fn().mockResolvedValue(v2),
     });
@@ -2110,6 +2144,7 @@ describe("keep-open changes refresh the order screen", () => {
     open: true,
     zoneOpen: true,
     periodName: "Lunch",
+    periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
     zoneKeepOpen: null,
     keepOpen: {
       periodId: "lunch",
@@ -2222,6 +2257,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
     open: false,
     zoneOpen: true,
     periodName: null,
+    periodOccurrenceKey: null,
     zoneKeepOpen: null,
     keepOpen: {
       periodId: "lunch",
@@ -2247,6 +2283,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
           open: true,
           zoneOpen: true,
           periodName: "Lunch",
+          periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
           zoneKeepOpen: null,
           keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
         },
@@ -2264,6 +2301,7 @@ it("passes keep-open recovery through a standalone table drill", async () => {
               open: true,
               zoneOpen: true,
               periodName: "Lunch",
+              periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
               zoneKeepOpen: null,
               keepOpen: { ...service.keepOpen, running: true, extendedUntil: "14:30" },
             },
@@ -2343,6 +2381,7 @@ for (const kind of ["counter", "table"] as const) {
       open: true,
       zoneOpen: true,
       periodName: "Lunch",
+      periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
       keepOpen: null,
       zoneKeepOpen: {
         zoneId: kind === "counter" ? "zone-counter" : "zone-dining",
@@ -2429,6 +2468,13 @@ it.each(["counter", "table"] as const)(
     source.menus.push(other);
     source.offers.push(otherOffer);
     const reads = {
+      getDeviceZones: vi
+        .fn()
+        .mockResolvedValue(
+          kind === "counter"
+            ? deviceZonesFor(source)
+            : deviceZonesFixture(undefined, ["zone-dining"]),
+        ),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(source),
       listZoneOffers: vi.fn().mockResolvedValue(source),
     };

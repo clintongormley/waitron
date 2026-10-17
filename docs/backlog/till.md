@@ -1055,7 +1055,7 @@ original finding; its four-surface count and five-entry list no longer describe 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
-  Counter's owner-approved redesign remains A738–A740. The handheld, kitchen screen and pass need
+  Counter's remaining owner-approved redesign is A738–A739. The handheld, kitchen screen and pass need
   their own designs. Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
 
@@ -1174,19 +1174,6 @@ arriving, but open periods are told apart only by their start time, to the milli
   each status element was inserted already holding its text and removed when loading ended. The
   schedule screen's was read, not run, and no real screen reader was tried. **Next action:** decide
   whether to keep an empty status region on the page and fill it later, and test that sequence.
-
-## The counter till may start in a zone its service zone dropdown does not list
-
-- **The counter till may start in a zone its service zone dropdown does not list** (found
-  2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
-  in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
-  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
-  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
-  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
-  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
-  for it (2026-10-06).
-  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
-  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
 
 ## Unresolved observation from W101 verification
 
@@ -1533,6 +1520,22 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
 
 ## Decisions and deliberate limits
 
+### Device zones and period menu memory (A740)
+
+Owner, 2026-10-15 and 2026-10-16: a till shows the zones you select from its profile's permitted
+zones, and opens a fresh order at its saved starting zone after sign-in. Counter becomes a list
+with several counter zones. Floor shows only table zones, with List/Map and its zone menu on the
+pills' row. Choose the subset under Settings → Zones on this device; there is no manual default-menu
+setting.
+
+Within a service-period occurrence, each device and zone remembers its last selected menu across
+operators and restarts. Lunch → Drinks stays on Drinks until the next occurrence, including a
+new day's Lunch with the same name. The department's timetable supplies the next default. An order
+or payment in progress keeps its context, with the grid/default change deferred until safe.
+The implementation choices and acceptance cases are in the
+[A740 plan](../superpowers/plans/2026-10-16-a740-zones-on-device.md).
+
+
 - **Party allergy answers on a join (owner, 2026-10-16; A669).** Keep Allergies whenever either
   party has that answer. Otherwise an unanswered party leaves the combined party unanswered, so
   the next Send asks again; keep No allergies only when both parties answered No allergies.
@@ -1851,6 +1854,9 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
+
+2026-10-17: A740 implements device zones and period-scoped menu memory. The remaining Counter
+redesign is A738–A739. The dated design and campaign-order notes below retain their original scope.
 
 2026-10-16: A182 part 2 replaces the authored screens described in this design's source snapshot
 with [fixed device screens](../developers/design-system.md#fixed-device-screens). Start A738–A740

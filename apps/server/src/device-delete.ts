@@ -132,6 +132,7 @@ async function deviceDeleteRules(
     .innerJoin(cardReaders, eq(cardReaders.id, deviceCardReaders.readerId))
     .where(eq(deviceCardReaders.deviceId, id));
   const kitchenScreens = await VENUE_SERVICE.countDeviceKitchenScreens(tx, id);
+  const zoneSelections = await VENUE_SERVICE.countDeviceZoneSelections(tx, id);
 
   const ends: DeleteImpactItem[] = [
     counted("sessions", openSessions.length),
@@ -145,6 +146,7 @@ async function deviceDeleteRules(
     named("approved_profiles", approved),
     named("card_reader", chosenReader),
     counted("kitchen_screens", kitchenScreens),
+    counted("zone_selections", zoneSelections),
   ];
   return {
     target: { id: device.id, name: device.name },
@@ -202,6 +204,7 @@ export async function deleteDevice(
   await tx.delete(deviceApprovedProfiles).where(eq(deviceApprovedProfiles.deviceId, id));
   await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, id));
   await VENUE_SERVICE.removeDeviceKitchenScreens(tx, id);
+  await VENUE_SERVICE.removeDeviceZoneSelections(tx, id);
   await tx
     .update(devices)
     .set({

@@ -79,6 +79,7 @@ describe("fixed Counter menu browser", () => {
         open: true,
         zoneOpen: false,
         periodName: "Lunch",
+        periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -88,6 +89,7 @@ describe("fixed Counter menu browser", () => {
       open: true,
       zoneOpen: true,
       periodName: "Lunch",
+      periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
       keepOpen: null,
       zoneKeepOpen: null,
     };

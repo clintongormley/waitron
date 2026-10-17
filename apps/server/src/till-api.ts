@@ -1,3 +1,4 @@
+import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection, TillReaderProvider } from "@waitron/shared";
 import type { Hono } from "hono";
@@ -1530,20 +1531,41 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/default-service-zone/offers", (c) =>
     run(c, log, async () => {
-      const { device } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
-        const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-          profileId: device.deviceProfileId,
-        });
-        const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
+        const device = await currentZoneDevice(tx, deps.cfg, session);
+        const selection = await VENUE_SERVICE.readDeviceZoneSelection(
+          tx,
+          deps.cfg,
+          device.deviceId,
+        );
+        const counters = selection.zones.filter(
+          (zone) =>
+            zone.serviceMode !== "table_tab" &&
+            (device.formFactor !== "till" || selection.selectedZoneIds.includes(zone.id)),
+        );
+        let context: Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneContext>>;
+        if (device.formFactor === "till") {
+          const zoneId =
+            counters.find((zone) => zone.id === selection.startingZoneId)?.id ?? counters[0]?.id;
+          if (zoneId === undefined)
+            throw new AppError("device_profile.no_service_zone", {
+              profileId: device.deviceProfileId,
+            });
+          context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        } else {
+          context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
+            profileId: device.deviceProfileId,
+          });
+        }
         const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
         return {
           context: {
             ...context,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
-          zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
-            (zone) => zone.serviceMode !== "table_tab" && inScope(scope, zone.id),
+          zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter((zone) =>
+            counters.some((counter) => counter.id === zone.id),
           ),
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
         };

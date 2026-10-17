@@ -90,7 +90,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | GET /api/attendance/items/:itemId/approvers | none: own worker request | same foreign-item case in till-attendance-api.test.ts |
  * | POST /api/attendance/commands | none: own question/item/target scope | same foreign-item case in till-attendance-api.test.ts |
  * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
- * | GET  /api/default-service-zone/offers                   | profile start; list    | "starts at the profile's starting zone and lists..." |
+ * | GET/PUT /api/device/zones | current admitted session; PUT checks live profile/selection snapshot and subset | device-zones-api.test.ts: "refuses a foreign zone or profile...", "rechecks %s %s..."; allowed: "serves admitted staff..." |
+ * | GET  /api/default-service-zone/offers                   | Till selection / handheld profile start | "starts Counter in a selected counter...", "keeps its profile..." |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses GET for a zone outside the profile department |
  * | PUT  /api/service-zones/:zoneId/period-extension        | path zone              | till-api.keep-open.test.ts: refuses PUT for a zone outside the profile department |
@@ -1342,6 +1343,50 @@ describe("a Restaurant profile on another department's zone", () => {
   });
 });
 
+describe("device display zones keep profile permissions", () => {
+  it("starts Counter in a selected counter even when the saved starting zone is a table", async () => {
+    const cookie = await signIn(restaurantProfile);
+    const current = await send(cookie, "GET", "/api/device/zones");
+    expect(current.status).toBe(200);
+    const saved = await send(cookie, "PUT", "/api/device/zones", {
+      ...current.body,
+      selectedZoneIds: [f.counter, f.restTables],
+      startingZoneId: f.restTables,
+    });
+    expect(saved.status).toBe(200);
+    const offers = await send(cookie, "GET", "/api/default-service-zone/offers");
+    expect(offers.status).toBe(200);
+    expect(offers.body.context).toMatchObject({ zoneId: f.counter, serviceMode: "prepay" });
+    expect((offers.body.zones as { id: string }[]).map((zone) => zone.id)).toEqual([f.counter]);
+    expect((await send(cookie, "GET", `/api/service-zones/${f.bar}/offers`)).status).toBe(200);
+    expect((await send(cookie, "GET", `/api/working-orders/${f.restOrder}`)).status).toBe(200);
+    expect(await send(cookie, "GET", `/api/service-zones/${f.deliCounter}/offers`)).toEqual(
+      notAllowed(f.deliCounter),
+    );
+  });
+
+  it("refuses a fresh Counter read when the display selection contains only a table zone", async () => {
+    const cookie = await signIn(restaurantProfile);
+    const current = await send(cookie, "GET", "/api/device/zones");
+    expect(
+      (
+        await send(cookie, "PUT", "/api/device/zones", {
+          ...current.body,
+          selectedZoneIds: [f.restTables],
+          startingZoneId: f.restTables,
+        })
+      ).status,
+    ).toBe(200);
+    expect(await send(cookie, "GET", "/api/default-service-zone/offers")).toEqual({
+      status: 409,
+      body: {
+        error: { code: "device_profile.no_service_zone", params: { profileId: restaurantProfile } },
+      },
+    });
+    expect((await send(cookie, "GET", `/api/service-zones/${f.bar}/offers`)).status).toBe(200);
+  });
+});
+
 describe("a profile with no department row", () => {
   it.each(ROUTES.filter(([, method]) => method === "GET"))(
     "answers %s without a zone refusal",
@@ -1351,10 +1396,10 @@ describe("a profile with no department row", () => {
     },
   );
 
-  it("starts at the counter default and lists every department's counter zones", async () => {
+  it("starts at the first effective counter and lists every department's counter zones", async () => {
     const answer = await send(plain, "GET", "/api/default-service-zone/offers");
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ context: { zoneId: f.counter } });
+    expect(answer.body).toMatchObject({ context: { zoneId: f.bar } });
     const zones = (answer.body.zones as { id: string }[]).map((zone) => zone.id);
     expect(zones).toEqual(expect.arrayContaining([f.counter, f.bar, f.deliCounter]));
   });
@@ -1751,3 +1796,53 @@ describe("the bill and invoice lookups", () => {
     );
   });
 });
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "%s keeps its profile's table starting zone when it has no counter",
+  async (formFactor) => {
+    const profileId = await profile();
+    await inTx(v, async (tx) => {
+      await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
+      await setProfileServiceAccess(tx, v.cfg, profileId, {
+        departmentId: await departmentOf(tx, f.restTables),
+        allowedZoneIds: [f.restTables],
+        startingZoneId: f.restTables,
+      });
+    });
+    const cookie = await signIn(profileId);
+    const answer = await send(cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect(answer.body.context).toMatchObject({ zoneId: f.restTables, serviceMode: "table_tab" });
+    expect(answer.body.zones).toEqual([]);
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "%s keeps its profile start instead of a stored Till display preference",
+  async (formFactor) => {
+    const profileId = await profile();
+    await inTx(v, async (tx) => {
+      await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
+      await setProfileServiceAccess(tx, v.cfg, profileId, {
+        departmentId: await departmentOf(tx, f.restTables),
+        allowedZoneIds: [f.restTables, f.counter],
+        startingZoneId: f.restTables,
+      });
+    });
+    const cookie = await signIn(profileId);
+    const current = await send(cookie, "GET", "/api/device/zones");
+    expect(
+      (
+        await send(cookie, "PUT", "/api/device/zones", {
+          ...current.body,
+          selectedZoneIds: [f.counter],
+          startingZoneId: f.counter,
+        })
+      ).status,
+    ).toBe(200);
+    const answer = await send(cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect(answer.body.context).toMatchObject({ zoneId: f.restTables, serviceMode: "table_tab" });
+    expect((answer.body.zones as { id: string }[]).map((zone) => zone.id)).toEqual([f.counter]);
+  },
+);

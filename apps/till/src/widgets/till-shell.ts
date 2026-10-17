@@ -53,6 +53,10 @@ const LEAVE_ORDER: readonly BarItem[] = [
  * `transferCount` alone does not owe one. */
 const CONTENT_PROPERTIES: readonly PropertyKey[] = [
   "formFactor",
+  "counterZones",
+  "selectedCounterZoneId",
+  "showCounter",
+  "showFloor",
   "affordances",
   "operatorName",
   "transferAvailable",
@@ -139,9 +143,45 @@ export class TillShell extends LitElement {
         background: var(--wt-color-surface-raised);
       }
 
-      .tab[aria-selected="true"] {
+      .tab[aria-selected="true"],
+      .tab[aria-pressed="true"] {
         background: var(--wt-color-surface-raised);
         border-color: var(--wt-color-border);
+      }
+
+      [data-counter-zones]::part(trigger) {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      [data-counter-zones][data-active]::part(trigger) {
+        background: var(--wt-color-surface-raised);
+        border-color: var(--wt-color-border);
+      }
+
+      [data-counter-zone] {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+        text-align: start;
+      }
+      [data-counter-zone]:hover {
+        background: var(--wt-color-surface-raised);
+      }
+      [data-counter-zone]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .zone-check {
+        width: var(--wt-space-4);
       }
 
       .session {
@@ -240,6 +280,10 @@ export class TillShell extends LitElement {
 
   @property() formFactor: FormFactor = "till";
   @property() activeScreen?: BuiltInScreen;
+  @property({ attribute: false }) counterZones: readonly { id: string; name: string }[] = [];
+  @property() selectedCounterZoneId = "";
+  @property({ type: Boolean }) showCounter = true;
+  @property({ type: Boolean }) showFloor = true;
   @property() operatorName = "";
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
@@ -645,7 +689,9 @@ export class TillShell extends LitElement {
             ></wt-count-badge>`
           : nothing
       }
-      ${this.#items(moved, true)}${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
+      ${this.#items(moved, true)}
+      ${this.formFactor === "till" ? html`<wt-button class="settings" variant="ghost" align="start" @click=${() => this.#emit("open-settings")}>${t("device_zones.settings")}</wt-button>` : nothing}
+      ${moved.has("operator") ? this.#operatorAndLogout("ghost") : nothing}
     </wt-row-actions>`;
   }
 
@@ -658,8 +704,15 @@ export class TillShell extends LitElement {
     const moved = this.#moved();
     this.#shown = moved;
     if (this.#menuOpen()) this.#held = moved;
-    const screens = builtInScreensFor(this.formFactor);
-    const activeScreen = resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null);
+    const screens = builtInScreensFor(this.formFactor).filter(
+      (screen) =>
+        this.formFactor !== "till" || (screen === "counter" ? this.showCounter : this.showFloor),
+    );
+    const requestedScreen = resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null);
+    const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];
+    const counterMenu =
+      this.formFactor === "till" && this.showCounter && this.counterZones.length > 1;
+    const counterLabel = `${t("tab.counter")}: ${this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? ""}`;
     return html`
       <div class="shell">
         ${
@@ -670,19 +723,44 @@ export class TillShell extends LitElement {
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
                   ${this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
-                  <nav class="tabs" role="tablist">
-                    ${screens.map(
-                      (screen) => html`
-                        <button
-                          type="button"
-                          class="tab"
-                          role="tab"
-                          aria-selected=${screen === activeScreen ? "true" : "false"}
-                          @click=${() => this.#emit("screen-select", { screen })}
-                        >
-                          ${this.#screenTitle(screen)}
-                        </button>
-                      `,
+                  <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
+                    ${screens.map((screen) =>
+                      screen === "counter" && this.counterZones.length > 1
+                        ? html`<wt-row-actions
+                            data-counter-zones
+                            ?data-active=${screen === activeScreen}
+                            label=${counterLabel}
+                          >
+                            <span slot="trigger">${`${counterLabel} ▾`}</span>
+                            <div role="menu">
+                              ${this.counterZones.map(
+                                (zone) =>
+                                  html`<button
+                                    type="button"
+                                    role="menuitemradio"
+                                    data-counter-zone=${zone.id}
+                                    aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
+                                    @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}
+                                  >
+                                    <span class="zone-check" aria-hidden="true"
+                                      >${zone.id === this.selectedCounterZoneId ? "✓" : ""}</span
+                                    >${zone.name}
+                                  </button>`,
+                              )}
+                            </div>
+                          </wt-row-actions>`
+                        : html`
+                            <button
+                              type="button"
+                              class="tab"
+                              role=${counterMenu ? nothing : "tab"}
+                              aria-selected=${counterMenu ? nothing : screen === activeScreen ? "true" : "false"}
+                              aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
+                              @click=${() => this.#emit("screen-select", { screen })}
+                            >
+                              ${this.#screenTitle(screen)}
+                            </button>
+                          `,
                     )}
                   </nav>
                   <div class="session">

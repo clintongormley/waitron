@@ -34,6 +34,11 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 /** `[child table, child columns, parent table]`, one row per foreign key. */
 const EXPECTED_FOREIGN_KEYS = [
+  ["device_zone_selections", ["device_id"], "devices"],
+  ["device_zone_selections", ["device_profile_id"], "device_profiles"],
+  ["device_zone_selections", ["starting_zone_id"], "floor_zones"],
+  ["device_zone_selection_zones", ["device_id", "device_profile_id"], "device_zone_selections"],
+  ["device_zone_selection_zones", ["zone_id"], "floor_zones"],
   ["absences", ["decided_by_person_id"], "persons"],
   ["absences", ["person_id"], "persons"],
   ["acks", ["registro_id"], "registros_facturacion"],

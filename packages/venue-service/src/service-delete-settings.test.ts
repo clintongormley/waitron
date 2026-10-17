@@ -62,6 +62,8 @@ import { readDeviceKitchenScreens, readProfileKitchenScreens } from "./kitchen-s
 import { resolveNewOrderZone } from "./operations.js";
 import { replaceMenuWeek } from "./menu-timetable.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { VENUE_SERVICE } from "./service.js";
+import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
@@ -766,5 +768,44 @@ it("delete ignores another location and preserves defaults when the removed zone
     await clearServiceDeleteSettings(tx, f.cfg, [f.forbidden], null);
     expect((await resolveNewOrderZone(tx, f.cfg, {})).zoneId).toBe(f.gone);
     expect(await tx.select().from(departments)).toEqual(before.departments);
+  });
+});
+
+it("zone deletion reports device choices and clears only the deleted zone references", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const [device] = await tx
+      .insert(devices)
+      .values({
+        ...f.cfg,
+        deviceProfileId: f.explicit,
+        label: "Restaurant till",
+        tokenHash: randomUUID(),
+      })
+      .returning();
+    const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, f.cfg, device!.id);
+    await VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, device!.id, {
+      ...current,
+      selectedZoneIds: [f.gone, f.allowed],
+      startingZoneId: f.gone,
+    });
+    expect(await readServiceDeleteSettings(tx, f.cfg, [f.gone], null)).toContainEqual({
+      key: "screen_zones",
+      count: 1,
+      targets: [{ id: device!.id, name: "Restaurant till" }],
+    });
+    await clearServiceDeleteSettings(tx, f.cfg, [f.gone], null);
+    expect(await tx.select().from(deviceZoneSelections)).toEqual([
+      { deviceId: device!.id, deviceProfileId: f.explicit, startingZoneId: null },
+    ]);
+    expect(await tx.select().from(deviceZoneSelectionZones)).toEqual([
+      { deviceId: device!.id, deviceProfileId: f.explicit, zoneId: f.allowed },
+    ]);
+    await tx.delete(floorZones).where(eq(floorZones.id, f.gone));
+    expect(await VENUE_SERVICE.readDeviceZoneSelection(tx, f.cfg, device!.id)).toMatchObject({
+      selectedZoneIds: [f.allowed],
+      startingZoneId: f.allowed,
+      adjusted: true,
+    });
   });
 });

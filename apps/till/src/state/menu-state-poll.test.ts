@@ -4,7 +4,14 @@ import type { MenuState } from "../api/client.js";
 
 function state(versionId: string): MenuState {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: null,
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: [{ menuId: "lunch", versionId, orderable: true, sendable: true }],
     unavailable: { products: [], optionLabels: [] },
   };
@@ -38,6 +45,113 @@ afterEach(() => {
 });
 
 describe("MenuStatePoll", () => {
+  it("bounds its extra read to one in flight even with no menu zones", async () => {
+    let answer!: () => void;
+    const signals: AbortSignal[] = [];
+    const onTick = vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+    });
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(30_000);
+    expect(onTick).toHaveBeenCalledOnce();
+    expect(signals[0]!.aborted).toBe(false);
+    answer();
+    await settle();
+    vi.advanceTimersByTime(15_000);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    poll.stop();
+    expect(signals[1]!.aborted).toBe(true);
+    answer();
+    await settle();
+  });
+
+  it("cancels an extra read after 25 seconds and starts a replacement on the next tick", async () => {
+    const signals: AbortSignal[] = [];
+    const onTick = vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<void>(() => {});
+    });
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(40_000);
+    expect(signals[0]?.aborted).toBe(true);
+    vi.advanceTimersByTime(5_000);
+    expect(signals).toHaveLength(2);
+    poll.stop();
+    await settle();
+  });
+
+  it("an old extra read finishing after stop cannot release a new session's read", async () => {
+    const answers: (() => void)[] = [];
+    const onTick = vi.fn(() => new Promise<void>((resolve) => answers.push(resolve)));
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    poll.stop();
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    answers[0]!();
+    await settle();
+    vi.advanceTimersByTime(15_000);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    poll.stop();
+    answers[1]!();
+    await settle();
+  });
+
+  it("contains an extra read's refusal and keeps the next tick usable", async () => {
+    const onTick = vi.fn().mockRejectedValue(new TypeError("offline"));
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    await settle();
+    vi.advanceTimersByTime(15_000);
+    await settle();
+    expect(onTick).toHaveBeenCalledTimes(2);
+    expect(poll.running).toBe(true);
+    poll.stop();
+  });
+
+  it("a session.required extra read stops polling even without menu zones", async () => {
+    const onTick = vi.fn().mockRejectedValue({ code: "session.required" });
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    await settle();
+    expect(poll.running).toBe(false);
+    vi.advanceTimersByTime(30_000);
+    expect(onTick).toHaveBeenCalledOnce();
+  });
+
+  it("a cancelled extra read's session refusal cannot stop the replacement session", async () => {
+    let fail!: (reason: unknown) => void;
+    const onTick = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            fail = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const poll = new MenuStatePoll({ read: vi.fn(), zones: () => [], onState: vi.fn(), onTick });
+    poll.start();
+    vi.advanceTimersByTime(15_000);
+    poll.stop();
+    poll.start();
+    fail({ code: "session.required" });
+    await settle();
+    expect(poll.running).toBe(true);
+    vi.advanceTimersByTime(15_000);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    poll.stop();
+  });
+
   it("reads each named zone every 15 seconds once started, and reports each answer with its zone", async () => {
     const { read, reads } = pendingRead();
     const onState = vi.fn();

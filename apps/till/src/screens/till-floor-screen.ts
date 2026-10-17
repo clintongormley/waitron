@@ -243,15 +243,29 @@ export class TillFloorScreen extends LitElement {
       /* The view toggle stays visible in an embedded card without its own header. */
       .actions {
         display: flex;
-        flex-wrap: wrap;
+        flex: none;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-inline-start: auto;
+      }
+
+      .zone-toolbar {
+        display: flex;
+        min-width: 0;
         align-items: center;
         gap: var(--wt-space-2);
       }
 
       .tabs {
         display: flex;
-        flex-wrap: wrap;
+        min-width: 0;
+        overflow-x: auto;
+        flex-wrap: nowrap;
         gap: var(--wt-space-2);
+      }
+      .tabs > * {
+        flex: none;
+        white-space: nowrap;
       }
 
       .map {
@@ -565,11 +579,8 @@ export class TillFloorScreen extends LitElement {
    * redraws the floor when the next reminder falls due. */
   @property({ attribute: false }) now?: number;
 
-  /**
-   * A zone id, `null` for the no-zone tab, or `undefined` before the operator has picked one — kept
-   * distinct so the default tracks the current tab order even before the zones prop has settled.
-   */
   @state() private activeZone: string | undefined = undefined;
+  @property() selectedZoneId: string | undefined = undefined;
   /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
@@ -647,6 +658,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("selectedZoneId")) this.activeZone = this.selectedZoneId;
     if (changed.has("tables") && this.askingSeats === null && this.askingBills === null)
       this.#pending = null;
     if (
@@ -1757,24 +1769,26 @@ export class TillFloorScreen extends LitElement {
                 }
               </header>`
         }
-        <div class="actions">
-          <wt-button
-            class="view-toggle"
-            data-view-toggle
-            variant="secondary"
-            @click=${() => this.#toggleView(view)}
-          >
-            ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
-          </wt-button>
-          ${this.#zoneMenu(planned, activeKey)}
+        <div class="zone-toolbar">
+          ${
+            tabs.length > 1
+              ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
+                  ${tabs.map((tab) => this.#tab(tab, activeKey))}
+                </nav>`
+              : nothing
+          }
+          <div class="actions">
+            <wt-button
+              class="view-toggle"
+              data-view-toggle
+              variant="secondary"
+              @click=${() => this.#toggleView(view)}
+            >
+              ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+            </wt-button>
+            ${this.#zoneMenu(planned, activeKey)}
+          </div>
         </div>
-        ${
-          tabs.length > 0
-            ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
-                ${tabs.map((tab) => this.#tab(tab, activeKey))}
-              </nav>`
-            : nothing
-        }
         ${
           refusedZone === undefined
             ? nothing

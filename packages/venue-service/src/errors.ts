@@ -10,6 +10,11 @@ export type MenuUse =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "device.not_found": { deviceId: string };
+    "device_zones.invalid": {
+      field: "profileId" | "snapshot" | "selectedZoneIds" | "startingZoneId";
+    };
+    "device_zones.changed": Record<string, never>;
     "allergy.invalid": { field: string };
     "allergy.out_of_date": { revision: number };
     "kitchen_note.invalid": { field: "note" | "scope" | "revision" };

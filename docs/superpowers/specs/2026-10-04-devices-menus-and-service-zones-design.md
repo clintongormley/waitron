@@ -1,5 +1,10 @@
 # Devices, menus and service zones
 
+> **2026-10-17 — A740:** [Zones on a device](../../developers/design-system.md#fixed-device-screens)
+> supersedes the browsing and starting-zone rules below for the till. Device selections persist
+> within the profile's permission bounds; menu memory belongs to the device and zone for one
+> service-period occurrence. Historical W97 decisions remain below.
+
 > **2026-10-07 — A366:** §2 and §4's station and watcher bindings are replaced by [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md).
 
 **Status:** Conversation decisions agreed with the owner on 2026-10-04; written spec awaiting

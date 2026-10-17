@@ -1,7 +1,12 @@
+import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
+import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
+import "./widgets/device-zones-dialog.js";
+import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
+import { deviceZoneNavigation } from "./state/device-zones.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
-import { defaultMenu, type DietPredicate } from "./menu-filter.js";
+import { type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -1728,6 +1733,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeDeviceZones();
+    this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
     this.#tenderRefundRead++;
     this.#stopClocking();
@@ -1898,9 +1905,15 @@ export class TillApp extends LitElement {
     this.#store.subscribe(() => {
       this.#evaluateBasket(false);
       this.#syncBasketDraft();
+      this.#reconcileSavedDeviceZones();
     });
     this.#store.on("refused", (payload) => {
       const refusal = payload as BasketRefusal;
+      if (
+        refusal.code === "menu_period.not_running" &&
+        !this.#deviceZoneAllows(this.counterServiceZoneId)
+      )
+        return;
       this.errorKey =
         refusal.code === "menu_period.not_running"
           ? "menu.last_orders_ended"
@@ -2033,10 +2046,11 @@ export class TillApp extends LitElement {
   @state() private tableService: MenuStateAnswer["service"] | null = null;
   @state() private counterDepartmentName = "";
   @state() private tableDepartmentName = "";
-  /** What {@link products} and {@link tableProducts} are built from, so a poll's unavailable set
-   * applies without reloading them. */
+  /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
+  readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
+  readonly #tableGridOffers = new ZoneOfferIndex();
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -2134,6 +2148,7 @@ export class TillApp extends LitElement {
 
   #syncPartylessDraft(): void {
     if (!this.isConnected) return;
+    if (this.#tableMenuPending) this.#followTableMenu();
     this.#partylessUnsubscribe ??= this.#partylessDraft.subscribe(() => this.#syncPartylessDraft());
     if (!this.#partylessScope) {
       this.#partylessScope = this.leave.coordinator.register({
@@ -2173,7 +2188,7 @@ export class TillApp extends LitElement {
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
-    onTick: () => {
+    onTick: (signal) => {
       const tab = this.#activeTab();
       if (
         this.#inShell() &&
@@ -2182,6 +2197,7 @@ export class TillApp extends LitElement {
         this.#tabNeedsFloorData(tab)
       )
         void this.#refreshFloorZones();
+      return this.#readLiveDeviceZones(signal);
     },
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
     // A table's zone only while its order is on screen: each read takes a turn of the write lock.
@@ -2232,11 +2248,32 @@ export class TillApp extends LitElement {
   /** Bumped when the operator's session ends by logout or a server switch, so an answer arriving
    * afterwards can tell that the session it was asked in has ended. */
   #operatorSession = 0;
-  @state() private counterServiceZones: ServiceZoneSummary[] = [];
+  @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
+  @state() private deviceSettingsOpen = false;
+  @state() private deviceZonesOpen = false;
+  @state() private deviceZonesReading = false;
+  @state() private deviceZonesSaving = false;
+  @state() private deviceZonesEditing: DeviceZoneSelection | null = null;
+  @state() private deviceZonesReadError = "";
+  @state() private deviceZonesRefusal?: DeviceZonesRefusal;
+  @state() private deviceZonesNotice = "";
+  #deviceZonesOpening = 0;
+  #deviceZonesRead = 0;
+  #deviceZonesWrite = 0;
+  #pendingDeviceZoneSelection: DeviceZoneSelection | null = null;
+  #pendingDeviceZoneSetup?: TillInfo;
+  #pendingDeviceZoneSetupRead = false;
+  @state() private profileServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
-  /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
-   * zone's default). Held in memory only, so a reload starts from the profile's starting zone. */
-  #browsing?: { personId: string; zoneId: string; menuId: string | null };
+  #zoneMenuMemory?: ZoneMenuMemory;
+  #counterDefaultMenuId: string | null = null;
+  #tableDefaultMenuId: string | null = null;
+  #counterMenuPending = false;
+  #pendingCounterMenus?: TillZoneMenu[];
+  #counterOffersDue = false;
+  #tableMenuPending = false;
+  #pendingTableMenus?: TillZoneMenu[];
+  readonly #polledOccurrences = new Map<string, string | null>();
   /** Per counter zone, the default menu its latest menu-state answer named. */
   readonly #polledDefaults = new Map<string, string | null>();
   #counterOfferRequest = 0;
@@ -2681,22 +2718,39 @@ export class TillApp extends LitElement {
     });
   }
 
-  #requestedTab(): BuiltInScreen | undefined {
-    const requested = this.#url.read("till-tab");
+  #deviceNavigation() {
+    return this.formFactor === undefined || this.deviceZoneSelection === null
+      ? null
+      : deviceZoneNavigation(this.formFactor, this.deviceZoneSelection);
+  }
+
+  #homeScreen(): BuiltInScreen | undefined {
     return this.formFactor === undefined
       ? undefined
-      : resolveBuiltInScreen(this.formFactor, requested);
+      : this.formFactor === "till"
+        ? (this.#deviceNavigation()?.home ?? undefined)
+        : homeScreenFor(this.formFactor);
+  }
+
+  #resolveScreen(requested: string | null): BuiltInScreen | undefined {
+    if (this.formFactor === undefined) return undefined;
+    if (this.formFactor !== "till") return resolveBuiltInScreen(this.formFactor, requested);
+    const navigation = this.#deviceNavigation();
+    if (requested === "counter" && navigation?.counterZoneIds.length) return "counter";
+    if (requested === "floor" && navigation?.floorZoneIds.length) return "floor";
+    return this.#homeScreen();
+  }
+
+  #requestedTab(): BuiltInScreen | undefined {
+    return this.#resolveScreen(this.#url.read("till-tab"));
   }
 
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
-    this.activeTabKey =
-      this.formFactor === undefined
-        ? undefined
-        : resolveBuiltInScreen(this.formFactor, key ?? null);
+    this.activeTabKey = this.#resolveScreen(key ?? null);
     if (key !== undefined)
       this.#writeUrl(
         {
-          "till-tab": key,
+          "till-tab": this.activeTabKey ?? null,
           ...(retainDestination ? {} : { "till-view": null, "till-station": null }),
         },
         replace,
@@ -2751,6 +2805,11 @@ export class TillApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    this.#reconcileSavedDeviceZones();
+    if (this.operatorName !== "" && !this.#loginPending) {
+      if (this.#counterMenuPending) this.#followDefault();
+      if (this.#tableMenuPending) this.#followTableMenu();
+    }
     if (changed.has("nfcNotice") && this.nfcNotice !== null)
       this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
   }
@@ -3813,43 +3872,63 @@ export class TillApp extends LitElement {
       this.#startClocking(personId, signIn, session, !switched);
     }
     this.#polledDefaults.clear();
+    this.#polledOccurrences.clear();
+    this.#counterMenuPending = false;
+    this.#tableMenuPending = false;
     // Refresh restores regular destinations only after login; sale context remains local.
     this.drill = undefined;
     this.#floorLoaded = false;
+    this.deviceZoneSelection = null;
     let offerLoadFailed: CounterError | false = false;
-    // The same person signing in again, with nobody else in between, comes back to the zone they
-    // left and the menu they chose there.
-    const returning = this.#browsing?.personId === personId ? this.#browsing : undefined;
-    let keptMenu: string | null = null;
+    const retainedZone = this.#store.lines.length > 0 ? this.counterServiceZoneId : undefined;
     try {
-      let catalogue = await this.api.listDefaultZoneOffers();
-      if (replaced()) return;
-      if (
-        returning !== undefined &&
-        returning.zoneId !== catalogue.context.zoneId &&
-        (catalogue.zones ?? []).some((zone) => zone.id === returning.zoneId)
-      ) {
-        try {
-          catalogue = {
-            ...(await this.api.listZoneOffers(returning.zoneId)),
-            zones: catalogue.zones,
-          };
-        } catch {
-          // The zone left can no longer be read: start from the profile's starting zone.
-        }
+      if (this.formFactor === "till") {
+        const selection = await this.api.getDeviceZones();
         if (replaced()) return;
+        this.deviceZoneSelection = selection;
+        this.profileServiceZones = [...selection.zones];
       }
-      const { zones, context } = catalogue;
-      this.#loadCounterOffers(catalogue);
-      this.counterServiceZones = zones ?? [];
-      this.counterServiceZoneId = context.zoneId;
-      this.api.setServiceZone(context.zoneId);
-      this.receiptPrintMode = context.receiptPrintMode ?? "auto";
-      if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
-      if (returning?.zoneId === context.zoneId) keptMenu = returning.menuId;
+      if (
+        this.formFactor === "till" &&
+        !this.#deviceNavigation()?.counterZoneIds.length &&
+        retainedZone === undefined
+      ) {
+        this.#loadCounterOffers({
+          offers: [],
+          menus: [],
+          service: {
+            open: false,
+            zoneOpen: false,
+            periodName: null,
+            periodOccurrenceKey: null,
+            keepOpen: null,
+            zoneKeepOpen: null,
+          },
+        });
+        this.counterServiceZoneId = "";
+      } else {
+        const catalogue =
+          retainedZone === undefined
+            ? await this.api.listDefaultZoneOffers()
+            : await this.api.listZoneOffers(retainedZone);
+        if (replaced()) return;
+        const { zones, context } = catalogue;
+        this.#loadCounterOffers(catalogue);
+        if (this.formFactor !== "till") this.profileServiceZones = zones ?? [];
+        this.counterServiceZoneId = context.zoneId;
+        this.api.setServiceZone(context.zoneId);
+        this.receiptPrintMode = context.receiptPrintMode ?? "auto";
+        if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
+      }
     } catch (error) {
       if (replaced()) return;
       offerLoadFailed = zoneLoadError(error);
+      if (
+        ["device_profile.no_service_zone", "service_zone.default_missing"].includes(
+          (error as { code?: string })?.code ?? "",
+        )
+      )
+        this.deviceZoneSelection = null;
       this.#loadCounterOffers(
         {
           offers: [],
@@ -3858,23 +3937,23 @@ export class TillApp extends LitElement {
             open: false,
             zoneOpen: true,
             periodName: null,
+            periodOccurrenceKey: null,
             keepOpen: null,
             zoneKeepOpen: null,
           },
         },
         false,
       );
-      this.counterServiceZones = [];
-      this.counterServiceZoneId = "";
+      if (this.deviceZoneSelection === null) this.profileServiceZones = [];
+      this.counterServiceZoneId = retainedZone ?? "";
     }
-    const kept =
-      keptMenu !== null && this.menus.some((menu) => menu.id === keptMenu && menu.orderable);
-    this.#selectMenu(kept ? keptMenu! : this.#defaultCatalogueId());
-    this.#browsing = {
-      personId,
-      zoneId: this.counterServiceZoneId,
-      menuId: kept ? keptMenu : null,
-    };
+    const menuId = this.#resolveZoneMenu(
+      this.counterServiceZoneId,
+      this.counterService?.periodOccurrenceKey ?? null,
+      this.menus,
+      this.#counterDefaultMenuId,
+    );
+    if (retainedZone === undefined) this.#selectMenu(menuId);
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.#loginPending = false;
@@ -3894,19 +3973,11 @@ export class TillApp extends LitElement {
       this.#pendingNfc = undefined;
       if (code !== undefined) void this.#pickUpNfc(code);
     });
-    const firstTab = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
+    const firstTab = this.#homeScreen();
     const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
-    this.#setActiveTab(
-      switched
-        ? this.formFactor === undefined
-          ? undefined
-          : homeScreenFor(this.formFactor)
-        : this.#requestedTab(),
-      true,
-      true,
-    );
+    this.#setActiveTab(switched ? this.#homeScreen() : this.#requestedTab(), true, true);
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
@@ -4195,10 +4266,6 @@ export class TillApp extends LitElement {
     return this.stations.find((station) => station.isDefault)?.id;
   }
 
-  #defaultCatalogueId(menus: TillZoneMenu[] = this.menus): string {
-    return defaultMenu(menus)?.id ?? "";
-  }
-
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
     if (this.#tableCatalogueActive()) {
@@ -4206,8 +4273,8 @@ export class TillApp extends LitElement {
       return;
     }
     this.#selectMenu(event.detail.id);
-    if (this.#browsing !== undefined && this.selectedCatalogueId === event.detail.id)
-      this.#browsing = { ...this.#browsing, menuId: event.detail.id };
+    if (this.selectedCatalogueId === event.detail.id)
+      this.#rememberZoneMenu(this.counterServiceZoneId, this.counterService, event.detail.id);
   }
 
   #tableCatalogueActive(): boolean {
@@ -4218,6 +4285,7 @@ export class TillApp extends LitElement {
     if (!this.isConnected) return;
     if (id !== "" && !this.tableMenus.some((menu) => menu.id === id && menu.orderable)) return;
     this.tableSelectedCatalogueId = id;
+    this.#rememberZoneMenu(this.#tableZoneId, this.tableService, id);
   }
 
   #selectDiet(predicate: DietPredicate | null): void {
@@ -4235,44 +4303,44 @@ export class TillApp extends LitElement {
     if (!this.isConnected) return;
     if (id !== "" && !this.menus.some((menu) => menu.id === id && menu.orderable)) return;
     this.selectedCatalogueId = id;
-    try {
-      sessionStorage.setItem("waitron.lastMenu", id);
-    } catch {
-      // The current selection still works when browser storage is unavailable.
-    }
   }
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
     const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
-    if (this.#store.lines.length > 0) {
+    if (this.#store.lines.length > 0 || this.#counterOrderInFlight()) {
       this.errorKey = "service_zone.basket_active";
       this.requestUpdate();
       return;
     }
-    if (!this.counterServiceZones.some((zone) => zone.id === zoneId)) return;
+    if (!this.profileServiceZones.some((zone) => zone.id === zoneId)) return;
+    if (this.formFactor === "till" && !this.#deviceNavigation()?.counterZoneIds.includes(zoneId))
+      return;
     const request = ++this.#counterOfferRequest;
     const session = this.#operatorSession;
     try {
       const catalogue = await this.api.listZoneOffers(zoneId);
-      const { menus, defaultMenuId, context } = catalogue;
+      const { context } = catalogue;
       if (
         request !== this.#counterOfferRequest ||
         session !== this.#operatorSession ||
-        this.#store.lines.length > 0
+        this.#store.lines.length > 0 ||
+        this.#counterOrderInFlight() ||
+        (this.formFactor === "till" && !this.#deviceNavigation()?.counterZoneIds.includes(zoneId))
       )
         return;
       this.#loadCounterOffers(catalogue);
-      this.#polledDefaults.delete(this.counterServiceZoneId);
+      this.#polledDefaults.delete(context.zoneId);
+      this.#polledOccurrences.delete(context.zoneId);
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       this.stage = "order";
       this.collectFlow = undefined;
+      this.#onTabSelect("counter");
       await this.#refreshStationQueue();
       if (session !== this.#operatorSession) return;
-      this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
-      this.#browsing = { personId: this.operatorPersonId, zoneId: context.zoneId, menuId: null };
+      this.#followDefault();
       this.errorKey = undefined;
     } catch (error) {
       if (request === this.#counterOfferRequest && session === this.#operatorSession)
@@ -4282,20 +4350,45 @@ export class TillApp extends LitElement {
 
   #loadCounterOffers(
     catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
-      Partial<Pick<ZoneOfferCatalogue, "context">>,
+      Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
+    const deferGrid =
+      loaded &&
+      (this.#pendingCounterMenus !== undefined ||
+        (this.#counterOffers.loaded &&
+          this.counterService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+      (this.#store.lines.length > 0 || this.#requestsOut());
     this.#counterOffers.load(catalogue, loaded);
     this.#store.canSelectProduct = (product) =>
-      this.#counterOffers.selectable.has(product.catalogueId ?? "");
-    this.menus = catalogue.menus;
+      this.#deviceZoneAllows(this.counterServiceZoneId) &&
+      this.#counterOffers.selectable.has(product.catalogueId ?? "") &&
+      (this.#pendingCounterMenus === undefined ||
+        (this.#counterOffers.byId.has(product.menuItemId ?? "") &&
+          this.#counterOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId));
+    if (deferGrid) {
+      this.#pendingCounterMenus = catalogue.menus;
+      this.menus = this.menus.map((menu) => {
+        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+      });
+      this.#counterMenuPending = true;
+    } else {
+      this.#pendingCounterMenus = undefined;
+      this.#counterGridOffers.load(catalogue, loaded);
+      this.menus = catalogue.menus;
+    }
+    this.#counterDefaultMenuId =
+      catalogue.defaultMenuId === undefined
+        ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
+        : catalogue.defaultMenuId;
     this.counterService = loaded ? catalogue.service : null;
     this.counterDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
     this.#showCounterOffers();
   }
 
   #showCounterOffers(): void {
-    this.products = this.#counterOffers.products();
+    this.products = this.#counterGridOffers.products();
     this.#evaluateBasket();
   }
 
@@ -4307,16 +4400,38 @@ export class TillApp extends LitElement {
   #loadTableOffers(
     zoneId: string | undefined,
     catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
-      Partial<Pick<ZoneOfferCatalogue, "context">>,
+      Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
     const before = this.#tableOffers.versions;
+    const deferGrid =
+      loaded &&
+      zoneId === this.#tableZoneId &&
+      (this.#pendingTableMenus !== undefined ||
+        (this.#tableOffers.loaded &&
+          this.tableService?.periodOccurrenceKey !== catalogue.service.periodOccurrenceKey)) &&
+      this.#tableMenuBusy();
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
-    this.tableMenus = catalogue.menus;
+    if (deferGrid) {
+      this.#pendingTableMenus = catalogue.menus;
+      this.tableMenus = this.tableMenus.map((menu) => {
+        const live = catalogue.menus.find((entry) => entry.id === menu.id);
+        return { ...menu, orderable: live?.orderable ?? false, sendable: live?.sendable ?? false };
+      });
+      this.#tableMenuPending = true;
+    } else {
+      this.#pendingTableMenus = undefined;
+      this.#tableGridOffers.load(catalogue, loaded);
+      this.tableMenus = catalogue.menus;
+    }
+    this.#tableDefaultMenuId =
+      catalogue.defaultMenuId === undefined
+        ? (catalogue.menus.find((menu) => menu.isDefault)?.id ?? null)
+        : catalogue.defaultMenuId;
     this.tableService = loaded ? catalogue.service : null;
     this.tableDepartmentName = loaded ? (catalogue.context?.departmentName ?? "") : "";
-    this.tableProducts = this.#tableOffers.products();
+    this.tableProducts = this.#tableGridOffers.products();
     if (!loaded) return;
     const { versions, byId } = this.#tableOffers;
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
@@ -4425,26 +4540,35 @@ export class TillApp extends LitElement {
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
     if (zoneId === this.counterServiceZoneId) {
-      if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
+      const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
+      if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)
+        this.#showCounterOffers();
       if (state.defaultMenuId !== undefined) this.#polledDefaults.set(zoneId, state.defaultMenuId);
       const serviceMoved =
         state.service.open !== this.counterService?.open ||
         state.service.zoneOpen !== this.counterService?.zoneOpen ||
         state.service.periodName !== this.counterService?.periodName ||
+        state.service.periodOccurrenceKey !== this.counterService?.periodOccurrenceKey ||
         keepOpenMoved(state.service.keepOpen, this.counterService?.keepOpen) ||
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
-      const busy = this.submitting || this.parking || this.placing;
+      this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
+      const busy = this.#requestsOut();
+      if ((menusMoved(this.menus, state.menus) || serviceMoved) && busy) {
+        this.#counterOffersDue = true;
+        this.#counterMenuPending = true;
+      }
       if (
         (menusMoved(this.menus, state.menus) || serviceMoved) &&
         !busy &&
         this.basketRefresh === undefined
       )
         void this.#refreshBasket().then(() => this.#followDefault());
-      else if (!busy) this.#followDefault();
+      else this.#followDefault();
     }
     if (zoneId === this.#tableZoneId) {
-      if (this.#tableOffers.setUnavailable(state.unavailable)) {
-        this.tableProducts = this.#tableOffers.products();
+      const unavailableMoved = this.#tableOffers.setUnavailable(state.unavailable);
+      if (this.#tableGridOffers.setUnavailable(state.unavailable) || unavailableMoved) {
+        this.tableProducts = this.#tableGridOffers.products();
         this.#markRounds();
         this.#markDraft(true);
       }
@@ -4452,6 +4576,7 @@ export class TillApp extends LitElement {
         state.service.open !== this.tableService?.open ||
         state.service.zoneOpen !== this.tableService?.zoneOpen ||
         state.service.periodName !== this.tableService?.periodName ||
+        state.service.periodOccurrenceKey !== this.tableService?.periodOccurrenceKey ||
         keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen) ||
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.tableService?.zoneKeepOpen);
       if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
@@ -4462,19 +4587,123 @@ export class TillApp extends LitElement {
     }
   }
 
-  #followDefault(): void {
-    const menuId = this.#polledDefaults.get(this.counterServiceZoneId);
-    const selectedRunning = this.menus.some(
-      (menu) => menu.id === this.selectedCatalogueId && menu.orderable,
-    );
-    if (!selectedRunning) {
-      this.#selectMenu(menuId ?? this.#defaultCatalogueId());
-      return;
+  #menuMemory(): ZoneMenuMemory {
+    if (this.#zoneMenuMemory === undefined) {
+      let storage: Storage | null = null;
+      try {
+        storage = localStorage;
+      } catch {
+        // A refused storage getter still permits this app instance's choices.
+      }
+      this.#zoneMenuMemory = new ZoneMenuMemory(storage);
     }
-    if (menuId === undefined || menuId === null) return;
-    if (this.#browsing?.menuId !== null || this.#store.lines.length > 0) return;
+    return this.#zoneMenuMemory;
+  }
+
+  #zoneMenuIdentity(zoneId: string | undefined): ZoneMenuIdentity | undefined {
+    if (zoneId === undefined || zoneId === "" || this.deviceId === undefined) return undefined;
+    return {
+      origin: this.router?.current ?? location.origin,
+      deviceId: this.deviceId,
+      profileId: this.deviceZoneSelection?.profileId ?? this.activeProfileId,
+      zoneId,
+    };
+  }
+
+  #resolveZoneMenu(
+    zoneId: string | undefined,
+    occurrenceKey: string | null,
+    menus: readonly TillZoneMenu[],
+    defaultMenuId: string | null,
+  ): string {
+    const identity = this.#zoneMenuIdentity(zoneId);
+    if (identity !== undefined)
+      return this.#menuMemory().resolve(identity, occurrenceKey, menus, defaultMenuId);
+    return menus.find((menu) => menu.id === defaultMenuId && menu.orderable)?.id ?? "";
+  }
+
+  #rememberZoneMenu(
+    zoneId: string | undefined,
+    service: MenuStateAnswer["service"] | null,
+    menuId: string,
+  ): void {
+    const identity = this.#zoneMenuIdentity(zoneId);
+    if (identity !== undefined && service?.periodOccurrenceKey != null && menuId !== "")
+      this.#menuMemory().remember(identity, service.periodOccurrenceKey, menuId);
+  }
+
+  #followDefault(): void {
+    if (this.#store.lines.length === 0 && !this.#requestsOut()) {
+      if (this.#basketRefreshing !== undefined) return;
+      if (this.#counterOffersDue) {
+        this.#counterOffersDue = false;
+        void this.#refreshBasket().then((result) => {
+          if (result === "failed") this.#counterOffersDue = true;
+          else this.#followDefault();
+        });
+        return;
+      }
+      if (this.#pendingCounterMenus !== undefined) {
+        this.menus = this.#pendingCounterMenus;
+        this.#pendingCounterMenus = undefined;
+        this.#counterGridOffers.load({ offers: this.#counterOffers.live, menus: this.menus });
+        this.#showCounterOffers();
+      }
+    }
+    const zoneId = this.counterServiceZoneId;
+    const menuId = this.#resolveZoneMenu(
+      zoneId,
+      this.#polledOccurrences.has(zoneId)
+        ? this.#polledOccurrences.get(zoneId)!
+        : (this.counterService?.periodOccurrenceKey ?? null),
+      this.menus,
+      this.#polledDefaults.has(zoneId)
+        ? this.#polledDefaults.get(zoneId)!
+        : this.#counterDefaultMenuId,
+    );
+    this.#counterMenuPending =
+      this.#counterOffersDue ||
+      this.#pendingCounterMenus !== undefined ||
+      menuId !== this.selectedCatalogueId;
+    if (this.#store.lines.length > 0 || this.#requestsOut()) return;
+    this.#counterMenuPending = false;
     this.#selectMenu(menuId);
   }
+
+  #followTableMenu(): void {
+    if (!this.#tableMenuBusy() && this.#pendingTableMenus !== undefined) {
+      this.tableMenus = this.#pendingTableMenus;
+      this.#pendingTableMenus = undefined;
+      this.#tableGridOffers.load({ offers: this.#tableOffers.live, menus: this.tableMenus });
+      this.tableProducts = this.#tableGridOffers.products();
+    }
+    const menuId = this.#resolveZoneMenu(
+      this.#tableZoneId,
+      this.tableService?.periodOccurrenceKey ?? null,
+      this.tableMenus,
+      this.#tableDefaultMenuId,
+    );
+    this.#tableMenuPending =
+      this.#pendingTableMenus !== undefined || menuId !== this.tableSelectedCatalogueId;
+    if (this.#tableMenuBusy()) return;
+    this.#tableMenuPending = false;
+    this.tableSelectedCatalogueId = menuId;
+  }
+
+  #tableMenuBusy(): boolean {
+    return (
+      (this.#draftSync?.store.lines.length ?? 0) > 0 ||
+      this.#partylessDraft.lines.length > 0 ||
+      this.#draftSync?.saving === true ||
+      this.#draftSync?.store.sending === true ||
+      this.#requestsOut()
+    );
+  }
+
+  readonly #tableProductSelectable = (product: TillProduct): boolean =>
+    this.#pendingTableMenus === undefined ||
+    (this.#tableOffers.byId.has(product.menuItemId ?? "") &&
+      this.#tableOffers.versions.get(product.catalogueId ?? "") === product.menuVersionId);
 
   #clearBasket(): void {
     this.#store.clear();
@@ -4497,11 +4726,7 @@ export class TillApp extends LitElement {
       )
         return false;
       this.#loadTableOffers(zoneId, catalogue);
-      if (
-        !catalogue.menus.some((menu) => menu.id === this.tableSelectedCatalogueId && menu.orderable)
-      )
-        this.tableSelectedCatalogueId =
-          catalogue.defaultMenuId ?? this.#defaultCatalogueId(catalogue.menus);
+      this.#followTableMenu();
       return true;
     } catch {
       return false;
@@ -4515,13 +4740,19 @@ export class TillApp extends LitElement {
    * load while the basket has lines: reload the counter zone's offers, then compare the basket.
    */
   #refreshBasket(): Promise<"adopted" | "confirming" | "failed"> {
-    this.#basketRefreshing ??= (async () => {
+    if (this.#basketRefreshing !== undefined) return this.#basketRefreshing;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const pending = (async () => {
       const zoneId = this.counterServiceZoneId;
       const action = this.#counterOfferRequest;
       const request = ++this.#counterRefreshRequest;
       try {
-        const catalogue = await this.api.listZoneOffers(zoneId);
+        const catalogue = await api.listZoneOffers(zoneId);
         if (
+          !this.isConnected ||
+          session !== this.#operatorSession ||
+          api !== this.api ||
           request !== this.#counterRefreshRequest ||
           action !== this.#counterOfferRequest ||
           zoneId !== this.counterServiceZoneId
@@ -4532,8 +4763,11 @@ export class TillApp extends LitElement {
         return "failed";
       }
       return this.#reconcileBasket();
-    })().finally(() => (this.#basketRefreshing = undefined));
-    return this.#basketRefreshing;
+    })().finally(() => {
+      if (this.#basketRefreshing === pending) this.#basketRefreshing = undefined;
+    });
+    this.#basketRefreshing = pending;
+    return pending;
   }
 
   /** Nothing relevant changed: the lines take the live version silently. Otherwise the dialog. */
@@ -7321,6 +7555,215 @@ export class TillApp extends LitElement {
     this.equipmentOpen = true;
   }
 
+  #closeDeviceZones(): void {
+    this.deviceZonesOpen = false;
+    this.deviceZonesReading = false;
+    this.deviceZonesSaving = false;
+    this.#deviceZonesOpening++;
+    this.#deviceZonesRead++;
+  }
+
+  #openDeviceZones(): void {
+    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    this.deviceSettingsOpen = false;
+    if (this.deviceZonesOpen) return;
+    this.#deviceZonesOpening++;
+    this.deviceZonesEditing = this.deviceZoneSelection;
+    this.deviceZonesRefusal = undefined;
+    this.deviceZonesReadError = "";
+    this.deviceZonesOpen = true;
+    void this.#readDeviceZonesEditor();
+  }
+
+  async #readDeviceZonesEditor(): Promise<void> {
+    const read = ++this.#deviceZonesRead;
+    const opening = this.#deviceZonesOpening;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const write = this.#deviceZonesWrite;
+    const current = () =>
+      this.isConnected &&
+      this.deviceZonesOpen &&
+      opening === this.#deviceZonesOpening &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      read === this.#deviceZonesRead &&
+      write === this.#deviceZonesWrite;
+    this.deviceZonesReading = true;
+    try {
+      const selection = await api.getDeviceZones();
+      if (!current()) return;
+      this.deviceZonesEditing = selection;
+      this.deviceZonesReadError = "";
+    } catch {
+      if (current()) this.deviceZonesReadError = t("device_zones.read_failed");
+    } finally {
+      if (current()) this.deviceZonesReading = false;
+    }
+  }
+
+  #hidesOrderZone(input: Pick<DeviceZoneSelectionInput, "selectedZoneIds">): boolean {
+    return (
+      (this.#store.lines.length > 0 &&
+        !input.selectedZoneIds.includes(this.counterServiceZoneId)) ||
+      ((this.#partylessDraft.lines.length > 0 || (this.#draftSync?.store.lines.length ?? 0) > 0) &&
+        this.#tableZoneId !== undefined &&
+        !input.selectedZoneIds.includes(this.#tableZoneId))
+    );
+  }
+
+  #deviceZoneAllows(zoneId: string): boolean {
+    if (this.formFactor !== "till") return true;
+    const scope = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
+    return scope?.selectedZoneIds.includes(zoneId) === true;
+  }
+
+  async #readLiveDeviceZones(signal: AbortSignal): Promise<void> {
+    if (!this.isConnected || this.operatorName === "" || this.formFactor !== "till") return;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const profile = this.activeProfileId;
+    const opening = this.#deviceZonesOpening;
+    const write = this.#deviceZonesWrite;
+    const current = () =>
+      !signal.aborted &&
+      this.isConnected &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      profile === this.activeProfileId &&
+      opening === this.#deviceZonesOpening &&
+      write === this.#deviceZonesWrite;
+    const selection = await api.getDeviceZones({ signal });
+    if (!current()) return;
+    const previous = this.#pendingDeviceZoneSelection ?? this.deviceZoneSelection;
+    if (
+      !this.#pendingDeviceZoneSetupRead &&
+      previous?.snapshot === selection.snapshot &&
+      previous.profileId === selection.profileId &&
+      previous.startingZoneId === selection.startingZoneId &&
+      previous.selectedZoneIds.length === selection.selectedZoneIds.length &&
+      previous.selectedZoneIds.every((id) => selection.selectedZoneIds.includes(id))
+    ) {
+      this.#reconcileSavedDeviceZones();
+      return;
+    }
+    this.#pendingDeviceZoneSelection = selection;
+    this.#pendingDeviceZoneSetupRead = true;
+    this.requestUpdate();
+    if (this.deviceZonesOpen) {
+      this.#deviceZonesRead++;
+      this.deviceZonesReading = false;
+      this.deviceZonesEditing = selection;
+    }
+    const setup = await api.getTill({ signal });
+    if (!current()) return;
+    this.#pendingDeviceZoneSetupRead = false;
+    this.#pendingDeviceZoneSetup = setup;
+    this.#reconcileSavedDeviceZones();
+  }
+
+  #reconcileSavedDeviceZones(): void {
+    const selection = this.#pendingDeviceZoneSelection;
+    if (
+      !this.isConnected ||
+      this.operatorName === "" ||
+      !selection ||
+      this.#pendingDeviceZoneSetupRead ||
+      this.#hidesOrderZone(selection) ||
+      this.#requestsOut()
+    )
+      return;
+    this.#pendingDeviceZoneSelection = null;
+    if (this.#pendingDeviceZoneSetup) {
+      const previousTimeout = this.#inactivityTimeoutSeconds;
+      this.#applyProfileSetup(this.#pendingDeviceZoneSetup);
+      this.#pendingDeviceZoneSetup = undefined;
+      this.activeProfileId = selection.profileId;
+      if (this.#inactivityTimeoutSeconds !== previousTimeout) this.#configureSessionActivity();
+    }
+    this.deviceZoneSelection = selection;
+    this.profileServiceZones = [...selection.zones];
+    const tab = this.#resolveScreen(this.activeTabKey ?? null);
+    this.#setActiveTab(tab, true, true);
+    if (tab === "floor" && !this.#floorLoaded) void this.#loadFloorData();
+    if (
+      tab === "counter" &&
+      !this.#deviceNavigation()?.counterZoneIds.includes(this.counterServiceZoneId)
+    ) {
+      const zoneId = this.#deviceNavigation()?.counterZoneIds[0];
+      if (zoneId)
+        void this.#onCounterZoneSelected(
+          new CustomEvent("counter-zone-selected", { detail: { zoneId } }),
+        );
+    }
+  }
+
+  async #saveDeviceZones(input: DeviceZoneSelectionInput): Promise<void> {
+    if (
+      !this.deviceZonesOpen ||
+      this.deviceZonesSaving ||
+      !this.isConnected ||
+      this.operatorName === ""
+    )
+      return;
+    if (this.#hidesOrderZone(input) || this.#requestsOut()) {
+      this.deviceZonesRefusal = { message: t("device_zones.order_in_zone") };
+      return;
+    }
+    const opening = this.#deviceZonesOpening;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const device = this.deviceId;
+    const write = ++this.#deviceZonesWrite;
+    this.#deviceZonesRead++;
+    this.deviceZonesReading = false;
+    const current = () =>
+      this.isConnected &&
+      this.deviceZonesOpen &&
+      opening === this.#deviceZonesOpening &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      device === this.deviceId &&
+      write === this.#deviceZonesWrite;
+    this.deviceZonesSaving = true;
+    this.deviceZonesRefusal = undefined;
+    try {
+      const selection = await api.setDeviceZones(input);
+      if (!current()) return;
+      this.shadowRoot!.querySelector("till-device-zones-dialog")?.acceptSaved(input);
+      this.#closeDeviceZones();
+      this.#pendingDeviceZoneSelection = selection;
+      this.#pendingDeviceZoneSetup = undefined;
+      this.#pendingDeviceZoneSetupRead = false;
+      this.deviceZonesNotice = "";
+      this.#reconcileSavedDeviceZones();
+      const savedWrite = this.#deviceZonesWrite;
+      try {
+        await api.getDeviceZones();
+      } catch {
+        if (
+          this.isConnected &&
+          session === this.#operatorSession &&
+          api === this.api &&
+          device === this.deviceId &&
+          savedWrite === this.#deviceZonesWrite
+        )
+          this.deviceZonesNotice = t("device_zones.read_failed");
+      }
+    } catch (error) {
+      if (current()) {
+        const refusal = error as { code?: string; params?: { field?: string } };
+        this.deviceZonesRefusal = { code: refusal.code, field: refusal.params?.field };
+      }
+    } finally {
+      if (current()) this.deviceZonesSaving = false;
+    }
+  }
+
   /** Whether the device answered; either way the equipment held is shown. */
   async #readEquipment(): Promise<boolean> {
     const changed = this.#equipmentChanged;
@@ -7495,7 +7938,6 @@ export class TillApp extends LitElement {
     this.#startingScreen = till.startingScreen ?? null;
   }
 
-  /** The new profile's setup, and browsing begun again from its starting zone and default menu. */
   async #enterSwitchedProfile(session: number): Promise<void> {
     try {
       const till = await this.api.getTill();
@@ -7508,7 +7950,6 @@ export class TillApp extends LitElement {
     await this.#readIdentity();
     await this.#readEquipment();
     if (session !== this.#operatorSession) return;
-    this.#browsing = undefined;
     await this.#enterSignedIn(
       {
         personId: this.operatorPersonId,
@@ -7750,7 +8191,6 @@ export class TillApp extends LitElement {
     this.overrideError = null;
   }
 
-  /** Clear the completed order and return home, retaining this browser tab's menu preference. */
   #onNewSale(): void {
     if (!this.#inShell()) return;
     this.#dismissStationChoices();
@@ -7764,7 +8204,7 @@ export class TillApp extends LitElement {
     this.stage = "order";
     this.collectFlow = undefined;
     this.errorKey = undefined;
-    const home = this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor);
+    const home = this.#homeScreen();
     this.#setActiveTab(home, true);
     if (home === "counter") void this.#loadStations();
     this.#popDrill();
@@ -7824,7 +8264,9 @@ export class TillApp extends LitElement {
       !builtInScreensFor(this.formFactor).some((screen) => screen === key)
     )
       return;
-    const tab = resolveBuiltInScreen(this.formFactor, key);
+    const tab = this.#resolveScreen(key);
+    if (tab === undefined) return;
+    key = tab;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     this.#setActiveTab(key, replace, fromHistory);
@@ -8003,11 +8445,15 @@ export class TillApp extends LitElement {
     if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
         const catalogue = await this.api.listZoneOffers(table.zoneId);
-        const { menus, defaultMenuId } = catalogue;
         if (left() || offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession)
           return;
         this.#loadTableOffers(table.zoneId, catalogue);
-        this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
+        this.tableSelectedCatalogueId = this.#resolveZoneMenu(
+          table.zoneId,
+          catalogue.service.periodOccurrenceKey,
+          catalogue.menus,
+          this.#tableDefaultMenuId,
+        );
       } catch {
         if (left() || offerRequest !== this.#tableOfferRequest) return;
         this.#loadTableOffers(
@@ -8019,6 +8465,7 @@ export class TillApp extends LitElement {
               open: false,
               zoneOpen: true,
               periodName: null,
+              periodOccurrenceKey: null,
               keepOpen: null,
               zoneKeepOpen: null,
             },
@@ -8041,6 +8488,7 @@ export class TillApp extends LitElement {
             open: false,
             zoneOpen: true,
             periodName: null,
+            periodOccurrenceKey: null,
             keepOpen: null,
             zoneKeepOpen: null,
           },
@@ -8385,7 +8833,10 @@ export class TillApp extends LitElement {
     this.#draftSync = sync;
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {
-      if (sync === this.#draftSync) this.#markDraft(false, false);
+      if (sync === this.#draftSync) {
+        this.#markDraft(false, false);
+        if (this.#tableMenuPending) this.#followTableMenu();
+      }
     });
     return { sync, read: read ? await sync.load() : true };
   }
@@ -11006,6 +11457,15 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#counterRefreshRequest++;
+    this.#basketRefreshing = undefined;
+    this.#closeDeviceZones();
+    this.deviceSettingsOpen = false;
+    this.deviceZonesEditing = null;
+    this.deviceZonesNotice = "";
+    this.#pendingDeviceZoneSelection = null;
+    this.#pendingDeviceZoneSetup = undefined;
+    this.#pendingDeviceZoneSetupRead = false;
     this.#clearTenderRefundSession();
     this.#stopClocking();
     this.#readerPayments.clear();
@@ -11024,6 +11484,9 @@ export class TillApp extends LitElement {
     this.#equipmentPoll.stop();
     this.#stopFloorPoll();
     this.#polledDefaults.clear();
+    this.#polledOccurrences.clear();
+    this.#counterMenuPending = false;
+    this.#tableMenuPending = false;
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
@@ -11656,7 +12119,7 @@ export class TillApp extends LitElement {
     if (!this.#inShell()) return;
     const fromFindBill = this.drill?.kind === "find-bill";
     this.errorKey = undefined;
-    this.#setActiveTab(this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor));
+    this.#setActiveTab(this.#homeScreen());
     void this.#loadStations();
     this.#popDrill();
     if (fromFindBill)
@@ -11707,10 +12170,7 @@ export class TillApp extends LitElement {
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
-    this.#setActiveTab(
-      this.formFactor === undefined ? undefined : homeScreenFor(this.formFactor),
-      true,
-    );
+    this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
@@ -11783,9 +12243,7 @@ export class TillApp extends LitElement {
   }
 
   #activeTab(): BuiltInScreen | undefined {
-    return this.formFactor === undefined
-      ? undefined
-      : resolveBuiltInScreen(this.formFactor, this.activeTabKey ?? null);
+    return this.#resolveScreen(this.activeTabKey ?? null);
   }
 
   #tableOrderTabKey(): "order" | undefined {
@@ -11823,9 +12281,16 @@ export class TillApp extends LitElement {
         .menus=${this.menus}
         .service=${this.counterService}
         .departmentName=${this.counterDepartmentName}
-        .zoneName=${this.counterServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
+        .zoneName=${this.profileServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
         .selectedMenuId=${this.selectedCatalogueId}
-        .serviceZones=${this.counterServiceZones}
+        .menuSelectionRequired=${true}
+        .serviceZones=${
+          this.formFactor === "till"
+            ? this.profileServiceZones.filter((zone) =>
+                this.#deviceNavigation()?.counterZoneIds.includes(zone.id),
+              )
+            : this.profileServiceZones
+        }
         .selectedServiceZoneId=${this.counterServiceZoneId}
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
@@ -11863,7 +12328,18 @@ export class TillApp extends LitElement {
     if (tab === "floor")
       return html`<till-floor-screen
         embedded
-        .zones=${this.zones}
+        .zones=${
+          this.formFactor === "till"
+            ? this.zones.filter((zone) => this.#deviceNavigation()?.floorZoneIds.includes(zone.id))
+            : this.zones
+        }
+        .selectedZoneId=${
+          this.#deviceNavigation()?.floorZoneIds.includes(
+            this.deviceZoneSelection?.startingZoneId ?? "",
+          )
+            ? (this.deviceZoneSelection?.startingZoneId ?? undefined)
+            : undefined
+        }
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
         .api=${this.api}
@@ -11880,6 +12356,8 @@ export class TillApp extends LitElement {
     return html`<till-table-order-screen
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
+      .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
+      .productSelectable=${this.#tableProductSelectable}
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
@@ -11896,6 +12374,7 @@ export class TillApp extends LitElement {
       .departmentName=${this.tableDepartmentName}
       .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
       .selectedMenuId=${this.tableSelectedCatalogueId}
+      .menuSelectionRequired=${true}
       .selectedDiet=${this.selectedDiet}
       .statuses=${this.statuses}
       .courses=${this.courses}
@@ -11971,7 +12450,23 @@ export class TillApp extends LitElement {
 
   #activeTabBody(): TemplateResult | typeof nothing {
     const tab = this.#activeTab();
-    return tab !== undefined ? this.#tabBody(tab) : nothing;
+    return tab !== undefined
+      ? this.#tabBody(tab)
+      : html`<section data-device-zones-empty role="status">
+          <p>${codeMessage("device_profile.no_service_zone")}</p>
+          <wt-button
+            data-open-device-settings
+            variant="secondary"
+            @click=${() => (this.deviceSettingsOpen = true)}
+            >${t("device_zones.settings")}</wt-button
+          >
+          <wt-button
+            data-retry-device-zones
+            variant="secondary"
+            @click=${() => void this.#enterSignedIn({ personId: this.operatorPersonId, displayName: this.operatorName, permissions: this.permissions })}
+            >${t("find_page.retry")}</wt-button
+          >
+        </section>`;
   }
 
   /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap
@@ -11985,6 +12480,8 @@ export class TillApp extends LitElement {
         return html`<till-table-order-screen
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
+          .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
+          .productSelectable=${this.#tableProductSelectable}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
@@ -12001,6 +12498,7 @@ export class TillApp extends LitElement {
           .departmentName=${this.tableDepartmentName}
           .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
           .selectedMenuId=${this.tableSelectedCatalogueId}
+          .menuSelectionRequired=${true}
           .selectedDiet=${this.selectedDiet}
           .statuses=${this.statuses}
           .courses=${this.courses}
@@ -12353,6 +12851,8 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @open-equipment=${() => void this.#onOpenEquipment()}
+        @open-settings=${() => (this.deviceSettingsOpen = true)}
+        @open-device-zones=${() => this.#openDeviceZones()}
         @open-profile=${() => void this.#onOpenProfile()}
         @logout=${() => this.#requestLeave(() => this.#onLogout(), "signout")}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => {
@@ -12361,7 +12861,7 @@ export class TillApp extends LitElement {
         }}
         @diet-filter-selected=${(e: CustomEvent<{ predicate: DietPredicate | null }>) =>
           this.#selectDiet(e.detail.predicate)}
-        @counter-zone-selected=${(event: Event) => void this.#onCounterZoneSelected(event)}
+        @counter-zone-selected=${(event: Event) => this.#requestLeave(() => this.#onCounterZoneSelected(event))}
         @keep-open-changed=${(e: CustomEvent<{ zoneId: string }>) => {
           e.stopPropagation();
           void this.#menuPoll.readNow(e.detail.zoneId);
@@ -12387,6 +12887,55 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.errorKey ? html`<p class="error" role="alert">${errorMessage}</p>` : nothing}
+        ${this.deviceZonesNotice ? html`<p role="status">${this.deviceZonesNotice}</p>` : nothing}
+        ${
+          this.#pendingDeviceZoneSelection && this.#hidesOrderZone(this.#pendingDeviceZoneSelection)
+            ? html`<p role="status" data-device-zones-pending>
+                ${t("device_zones.order_in_zone")}
+              </p>`
+            : nothing
+        }
+        ${
+          this.deviceSettingsOpen
+            ? html`<wt-dialog
+                ${trackDialog()}
+                .open=${true}
+                .heading=${t("device_zones.settings")}
+                @wt-close=${() => (this.deviceSettingsOpen = false)}
+              >
+                <wt-button
+                  data-settings-equipment
+                  variant="secondary"
+                  @click=${() => {
+                    this.deviceSettingsOpen = false;
+                    void this.#onOpenEquipment();
+                  }}
+                  >${t("equipment.open")}</wt-button
+                >
+                <wt-button
+                  data-settings-zones
+                  variant="secondary"
+                  @click=${() => this.#openDeviceZones()}
+                  >${t("device_zones.title")}</wt-button
+                >
+              </wt-dialog>`
+            : nothing
+        }
+        ${
+          this.deviceZonesOpen
+            ? html`<till-device-zones-dialog
+                .open=${true}
+                .selection=${this.deviceZonesEditing}
+                .loading=${this.deviceZonesReading}
+                .busy=${this.deviceZonesSaving}
+                .readError=${this.deviceZonesReadError}
+                .refusal=${this.deviceZonesRefusal}
+                @save-device-zones=${(event: CustomEvent<DeviceZoneSelectionInput>) => void this.#saveDeviceZones(event.detail)}
+                @retry-device-zones=${() => void this.#readDeviceZonesEditor()}
+                @close-device-zones=${() => this.#closeDeviceZones()}
+              ></till-device-zones-dialog>`
+            : nothing
+        }
         ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
         ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
         <wt-toast
@@ -12657,6 +13206,10 @@ export class TillApp extends LitElement {
                         html`<till-shell
                           .formFactor=${shellFormFactor}
                           .activeScreen=${this.activeTabKey}
+                          .counterZones=${this.deviceZoneSelection?.zones.filter((zone) => this.#deviceNavigation()?.counterZoneIds.includes(zone.id)) ?? []}
+                          .selectedCounterZoneId=${this.counterServiceZoneId}
+                          .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}
+                          .showFloor=${this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
                           .operatorName=${this.operatorName}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
@@ -12689,7 +13242,7 @@ export class TillApp extends LitElement {
                               : html`<till-department-transfers
                                   .currentTabId=${this.#currentTransferTabId()}
                                   .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
-                                  .serviceZones=${this.counterServiceZones}
+                                  .serviceZones=${this.profileServiceZones}
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}
                                   .snapshot=${this.transferSnapshot}

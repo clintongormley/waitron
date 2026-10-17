@@ -101,3 +101,5 @@ export { readCalendarMonthPlan } from "./opening-hours-calendar.js";
 export * from "./order-kitchen-notes.js";
 
 export * from "./party-allergy.js";
+export * from "./device-zone-selection.js";
+export type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";

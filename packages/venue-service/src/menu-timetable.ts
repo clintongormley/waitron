@@ -393,6 +393,7 @@ export async function resolveDepartmentService(
     departmentId,
     open: false,
     periodId: null,
+    periodOccurrenceKey: null,
     periodName: null,
     customerMenuId: null,
     orderableMenuIds: [],
@@ -411,7 +412,7 @@ export async function resolveDepartmentService(
   const context = serviceDayContext(clock, moment.businessDay);
   const previousContext = serviceDayContext(clock, addDays(moment.businessDay, -1));
   const ranges = withExtension(day.ranges, day.extension, context.dayCutover);
-  const running = rangeInForce(ranges, moment.minute, context.dayCutover, context);
+  const running = rangeInForce(serviceRuns(ranges), moment.minute, context.dayCutover, context);
   const period =
     running === null ? undefined : periods.find((entry) => entry.id === running.periodId);
   const occurrences = [
@@ -455,6 +456,10 @@ export async function resolveDepartmentService(
     departmentId,
     open: period !== undefined,
     periodId: period?.id ?? null,
+    periodOccurrenceKey:
+      period === undefined || running === null
+        ? null
+        : JSON.stringify([departmentId, moment.businessDay, period.id, running.startsAt]),
     periodName: period?.name ?? null,
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,

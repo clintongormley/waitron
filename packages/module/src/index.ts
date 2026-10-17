@@ -44,6 +44,8 @@ export type {
   KitchenScreenScope,
   ProfileKitchenScreens,
   DeviceKitchenScreen,
+  DeviceZoneSelection,
+  DeviceZoneSelectionInput,
   ScreenSlot,
   ResolvedKitchenScreen,
   Named,

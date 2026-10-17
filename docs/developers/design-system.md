@@ -4425,19 +4425,21 @@ only after login and device validation. A kitchen display opens the one kitchen 
 chose and cannot open operator destinations from a path. A primary key outside the device's fixed
 choices returns to its home screen by replacing the current history entry.
 Only meaningful navigation pushes history. Payment steps, modifier dialogs and draft edits do not;
-an automatic return home after payment replaces the current entry. The till holds the menu choice in
-memory for the tab, retained through new and parked orders. At a counter where nobody has picked
-a menu by hand, the till moves to its department's current customer menu, as the till's periodic
-menu check reports it, provided the basket is empty: it
-does so when that check arrives, unless a sale, a hold or an order is being sent, and when the
-basket is cleared. A table's menu is not moved to follow the default. A person who signs in again
-with nobody else signed in between comes back to the zone they left, while it is still offered, and
-the menu they chose there, while that zone still offers it. A different person, a sign-in after a
-reload (refresh returns to PIN login) or a profile switch starts at the device's starting zone (the
-profile's, or else the venue's counter default) and that zone's default menu, or its first. It
-belongs in neither the path nor browser history.
+an automatic return home after payment replaces the current entry. Menu choices belong to the
+device and zone within one service-period occurrence. For example, choosing Drinks during Lunch
+keeps Drinks when you return to that zone or another operator signs in on the same device. A new
+occurrence expires that choice, even when its name and default menu are unchanged. Counter and
+table ordering then use the server's orderable default; a null default selects no menu.
 
-Dietary filters (vegan, vegetarian, no meat and no fish) follow the same login boundary. The till app
+A boundary defers the grid and selected-menu change while the affected basket or draft has lines,
+or a request is in flight. Availability and sending refusals still follow live offers, and price
+changes retain the existing review dialog. The next empty order receives the fresh grid and
+default. Menu choices use browser storage scoped by server origin, device, profile and zone, with
+an in-memory fallback when storage fails. They belong in neither the path nor browser history.
+Every fresh-order sign-in on a till starts at its saved starting zone. Restoring an order keeps
+that order's zone and recorded prices.
+
+Dietary filters (vegan, vegetarian, no meat and no fish) reset at sign-in. The till app
 owns the selection and passes it to counter and table-order screens, including embedded Order.
 Screen changes, menu changes, payment and new or parked orders retain the selection. Tapping the
 selected filter clears it everywhere; a new login starts with no dietary filter. Changing a filter
@@ -4504,7 +4506,7 @@ screens; there is no saved screen layout or screen editor.
 
 | Device | Primary screens | Home |
 | --- | --- | --- |
-| Till | Counter, Floor | Counter |
+| Till | Selected Counter and Floor zones | Saved starting zone |
 | Phone or tablet handheld | Floor, Order | Floor |
 | Kitchen display | Kitchen | Kitchen |
 
@@ -4520,6 +4522,14 @@ device's `formFactor`. Configuration exports use format 3; an older export is re
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.
+
+On a till, Settings → Zones on this device lets you show a subset of the profile's permitted zones
+and choose the starting zone. These choices stay with the device and profile across operators and
+restarts. A display choice grants no permission. Counter is one tab for one counter zone and a
+checked list for several. Floor contains only selected table zones; its pills disappear with one
+zone. The pills, List/Map and zone menu share one toolbar, including at phone width. A device with
+no permitted zones shows an explanation, Settings and Retry. Live narrowing keeps the current
+order or payment in place, refuses new forbidden picks and reconciles navigation when safe.
 
 ### Counter basket and payment space
 

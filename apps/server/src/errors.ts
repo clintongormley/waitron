@@ -865,11 +865,6 @@ declare module "@waitron/shared" {
     /** A manager approved, for a device, a profile of another form factor than its active one. */
     "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
-     * A device id matched no device. The management routes answer it for a deleted device too
-     * (`deleted_at` set), and `PATCH /management-api/devices/:id` for a disabled one.
-     */
-    "device.not_found": { deviceId: string };
-    /**
      * Accepting a device under a name an active device at its location already has
      * (`devices_location_label_active_key`). The admin renames the device.
      */

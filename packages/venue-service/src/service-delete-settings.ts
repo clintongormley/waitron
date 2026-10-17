@@ -11,6 +11,7 @@ import {
   deviceProfileZones,
 } from "./schema/service.js";
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
+import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -240,6 +241,36 @@ async function settings(
     oldCounter === undefined
       ? undefined
       : (surviving.find((row) => row.departmentId === oldCounter.departmentId) ?? surviving[0]);
+  const deviceChoices = await tx
+    .select({
+      deviceId: devices.id,
+      profileId: deviceZoneSelectionZones.deviceProfileId,
+      zoneId: deviceZoneSelectionZones.zoneId,
+      name: devices.label,
+      deletedAt: devices.deletedAt,
+    })
+    .from(deviceZoneSelectionZones)
+    .innerJoin(devices, eq(devices.id, deviceZoneSelectionZones.deviceId))
+    .where(inArray(deviceZoneSelectionZones.zoneId, zoneIds));
+  const deviceStarts = await tx
+    .select({
+      deviceId: devices.id,
+      profileId: deviceZoneSelections.deviceProfileId,
+      zoneId: deviceZoneSelections.startingZoneId,
+      name: devices.label,
+      deletedAt: devices.deletedAt,
+    })
+    .from(deviceZoneSelections)
+    .innerJoin(devices, eq(devices.id, deviceZoneSelections.deviceId))
+    .where(inArray(deviceZoneSelections.startingZoneId, zoneIds));
+  const deviceZoneReferences = [
+    ...new Map(
+      [...deviceChoices, ...deviceStarts].map((row) => [
+        JSON.stringify([row.deviceId, row.profileId, row.zoneId]),
+        row,
+      ]),
+    ).values(),
+  ];
   const compare = createLabelComparator();
   const targets = (rows: DeleteTarget[]) =>
     [...new Map(rows.map((row) => [row.id, { id: row.id, name: row.name }])).values()].sort(
@@ -266,8 +297,11 @@ async function settings(
     },
     {
       key: "screen_zones",
-      count: screenDevices.length + screenProfiles.length,
+      count: screenDevices.length + screenProfiles.length + deviceZoneReferences.length,
       targets: targets([
+        ...deviceZoneReferences
+          .filter((row) => row.deletedAt === null)
+          .map((row) => ({ id: row.deviceId, name: row.name })),
         ...screenDevices
           .filter((row) => row.devices.deletedAt === null)
           .map((row) => ({ id: row.devices.id, name: row.devices.label })),
@@ -370,6 +404,13 @@ export async function clearServiceDeleteSettings(
   await tx
     .delete(deviceProfileServiceAccess)
     .where(inArray(deviceProfileServiceAccess.deviceProfileId, selected.obsoleteIds));
+  await tx
+    .delete(deviceZoneSelectionZones)
+    .where(inArray(deviceZoneSelectionZones.zoneId, selected.zoneIds));
+  await tx
+    .update(deviceZoneSelections)
+    .set({ startingZoneId: null })
+    .where(inArray(deviceZoneSelections.startingZoneId, selected.zoneIds));
   // Keep explicit parents: zero zone memberships must continue to mean no zones.
   await tx
     .delete(deviceKitchenScreenZones)

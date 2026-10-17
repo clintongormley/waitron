@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -78,7 +79,14 @@ function offers(
   serviceMode: ZoneOfferCatalogue["context"]["serviceMode"] = "prepay",
 ): ZoneOfferCatalogue {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: "fixture-period-1",
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     context: {
       departmentName: "Restaurant",
       zoneId,
@@ -117,7 +125,14 @@ const TERRAZA = offers("zone-terraza", [CENA, ALMUERZO, DESAYUNOS], "cena");
 
 function state(menus: Menu[], defaultMenuId?: string): MenuState & { defaultMenuId?: string } {
   return {
-    service: { open: true, zoneOpen: true, periodName: null, keepOpen: null, zoneKeepOpen: null },
+    service: {
+      open: true,
+      zoneOpen: true,
+      periodName: null,
+      periodOccurrenceKey: "fixture-period-1",
+      keepOpen: null,
+      zoneKeepOpen: null,
+    },
     menus: menus.map((menu) => ({
       menuId: menu.id,
       versionId: "v1",
@@ -170,6 +185,11 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
+    getDeviceZones: vi
+      .fn()
+      .mockResolvedValue(
+        deviceZonesFixture(["zone-barra", "zone-terraza"], ["z1", "zone-comedor"]),
+      ),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -262,6 +282,8 @@ async function park(el: TillApp): Promise<void> {
 }
 
 beforeEach(() => {
+  for (const key of Object.keys(localStorage))
+    if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
   setLocale("en-GB");
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 2, groups: [] }));
@@ -272,6 +294,374 @@ afterEach(() => {
   sessionStorage.removeItem("waitron.lastMenu");
 });
 
+describe("device and zone period memory", () => {
+  const running = (catalogue: ZoneOfferCatalogue, occurrence = "lunch-day-1") => ({
+    ...catalogue,
+    service: { ...catalogue.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
+  });
+  const names = (el: TillApp) =>
+    [
+      ...(counter(el)
+        .shadowRoot!.querySelector("till-menu-browser")
+        ?.shadowRoot!.querySelectorAll(".name") ?? []),
+    ].map((node) => node.textContent?.trim());
+  async function selectZone(el: TillApp, zoneId: string) {
+    emit(counter(el), "counter-zone-selected", { zoneId });
+    await flush(el);
+  }
+  async function pick(el: TillApp, id: string) {
+    emit(counter(el), "menu-selected", { id });
+    await flush(el);
+  }
+  const catalogueApi = () => ({
+    listDefaultZoneOffers: vi.fn(async () => running(BARRA)),
+    listZoneOffers: vi.fn(async (id: string) => running(id === "zone-terraza" ? TERRAZA : BARRA)),
+    menuState: vi.fn(async (id: string) => ({
+      ...state(id === "zone-terraza" ? [CENA, ALMUERZO, DESAYUNOS] : [DESAYUNOS, ALMUERZO]),
+      service: running(BARRA).service,
+    })),
+  });
+
+  beforeEach(() => {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
+  });
+  afterEach(() => {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
+  });
+
+  it("restores a manual menu independently on each zone return", async () => {
+    const { el } = await mountApp(catalogueApi());
+    await signIn(el);
+    await pick(el, "almuerzo");
+    expect(names(el)).toEqual(["Menú del día"]);
+    await selectZone(el, "zone-terraza");
+    await pick(el, "desayunos");
+    await selectZone(el, "zone-barra");
+    expect(selected(el)).toBe("almuerzo");
+    expect(names(el)).toEqual(["Menú del día"]);
+    await selectZone(el, "zone-terraza");
+    expect(selected(el)).toBe("desayunos");
+    expect(names(el)).toEqual(["Tostada"]);
+  });
+
+  it("starts every empty-order sign-in at the saved starting zone and shares its menu across operators", async () => {
+    const { el } = await mountApp(catalogueApi());
+    await signIn(el);
+    await pick(el, "almuerzo");
+    await selectZone(el, "zone-terraza");
+    await pick(el, "desayunos");
+    await signInAgain(el);
+    expect(counter(el).selectedServiceZoneId).toBe("zone-barra");
+    expect(names(el)).toEqual(["Menú del día"]);
+    await signInAgain(el, "p2");
+    expect(counter(el).selectedServiceZoneId).toBe("zone-barra");
+    expect(names(el)).toEqual(["Menú del día"]);
+  });
+
+  it("restores the device menu after the app restarts without inheriting another device or profile", async () => {
+    const { el } = await mountApp(catalogueApi());
+    await signIn(el);
+    await pick(el, "almuerzo");
+    el.remove();
+    const { el: reloaded } = await mountApp(catalogueApi());
+    await signIn(reloaded, "p2");
+    expect(names(reloaded)).toEqual(["Menú del día"]);
+    reloaded.remove();
+    const { el: other } = await mountApp({
+      ...catalogueApi(),
+      getDeviceIdentity: vi.fn(async () => ({
+        deviceId: "other",
+        name: "Other",
+        formFactor: "till",
+      })),
+    });
+    await signIn(other);
+    expect(names(other)).toEqual(["Tostada"]);
+    other.remove();
+    const { el: profile } = await mountApp({
+      ...catalogueApi(),
+      getDeviceZones: vi.fn(async () => ({
+        ...deviceZonesFixture(["zone-barra", "zone-terraza"]),
+        profileId: "other-profile",
+      })),
+    });
+    await signIn(profile);
+    expect(names(profile)).toEqual(["Tostada"]);
+  });
+
+  it("expires a manual menu on a new occurrence even with the same name, versions and default", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state([DESAYUNOS, ALMUERZO], "desayunos"),
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    current = running(BARRA, "lunch-day-2");
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
+    expect(selected(el)).toBe("desayunos");
+    expect(names(el)).toEqual(["Tostada"]);
+  });
+
+  it("defers the new occurrence selection until the basket clears while retaining its original price", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state([DESAYUNOS, ALMUERZO], "desayunos"),
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    add(el, ALMUERZO);
+    current = running(BARRA, "lunch-day-2");
+    await poll(el);
+    expect(selected(el)).toBe("almuerzo");
+    expect(
+      counter(el).store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    await park(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(selected(el)).toBe("desayunos");
+    expect(names(el)).toEqual(["Tostada"]);
+  });
+
+  it.each([false, true])(
+    "keeps an existing basket's zone across operators even when its new scope refuses offers: %s",
+    async (refused) => {
+      const { el } = await mountApp(catalogueApi());
+      await signIn(el);
+      await selectZone(el, "zone-terraza");
+      add(el, CENA);
+      const before = counter(el).store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]);
+      if (refused) {
+        api.getDeviceZones.mockResolvedValue(deviceZonesFixture(["zone-barra"]));
+        api.listZoneOffers.mockRejectedValue({ code: "service_zone.not_allowed" });
+      }
+      await signInAgain(el, "p2");
+      expect(counter(el).selectedServiceZoneId).toBe("zone-terraza");
+      expect(
+        counter(el).store.lines.map((line) => [
+          line.product.productId,
+          line.quantity,
+          line.product.unitPrice,
+        ]),
+      ).toEqual(before);
+      expect(api.setServiceZone).toHaveBeenLastCalledWith("zone-terraza");
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.parkOrder).not.toHaveBeenCalled();
+      if (refused) {
+        counter(el).store.addProduct(menuOfferToTillProduct(offer(CENA), "v1"), "1");
+        expect(
+          counter(el).store.lines.map((line) => [
+            line.product.productId,
+            line.quantity,
+            line.product.unitPrice,
+          ]),
+        ).toEqual(before);
+        expect(names(el)).toEqual([]);
+      }
+    },
+  );
+
+  it("keeps the visible grid and menu list through a boundary until the basket is held", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    add(el, ALMUERZO);
+    const store = counter(el).store;
+    const orderId = store.id;
+    const laterLunch = { ...ALMUERZO, product: "Afternoon sandwich" };
+    current = running(offers("zone-barra", [CENA, laterLunch], "cena"), "afternoon");
+    await poll(el);
+    expect(names(el)).toEqual(["Menú del día"]);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
+    expect(store.id).toBe(orderId);
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    await park(el);
+    expect(store.lineCount).toBe(0);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["cena", "almuerzo"]);
+  });
+
+  it("loads a boundary skipped during a real card request before the next empty order", async () => {
+    let current = running(BARRA);
+    let answer!: (value: { outcome: "captured"; ticket: TillSaleResult }) => void;
+    const payment = new Promise<{ outcome: "captured"; ticket: TillSaleResult }>((resolve) => {
+      answer = resolve;
+    });
+    const pay = vi.fn<TillApi["pay"]>(() => payment);
+    const cancelCardPayment = vi.fn();
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      pay,
+      cancelCardPayment,
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    add(el, ALMUERZO);
+    const store = counter(el).store;
+    const orderId = store.id;
+    emit(counter(el), "collect-card", { readerId: "reader-1" });
+    await flush(el);
+    expect(pay).toHaveBeenCalledOnce();
+    const submitted = structuredClone(pay.mock.calls[0]);
+    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    await poll(el);
+    expect(names(el)).toEqual(["Menú del día"]);
+    expect(store.id).toBe(orderId);
+    expect(
+      store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    expect(pay.mock.calls).toEqual([submitted]);
+    expect(submitted?.[0]).toMatchObject({ id: orderId, readerId: "reader-1" });
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+    answer({ outcome: "captured", ticket: saleResult });
+    await payment;
+    await flush(el);
+    emit(counter(el), "new-sale");
+    await flush(el);
+    expect(store.lineCount).toBe(0);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(pay).toHaveBeenCalledOnce();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(cancelCardPayment).not.toHaveBeenCalled();
+  });
+
+  it("keeps old grid prices and live unavailability until an unchanged default is safe to show", async () => {
+    let current = running(BARRA);
+    let unavailable: string[] = [];
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        service: current.service,
+        defaultMenuId: current.defaultMenuId,
+        menus: current.menus.map((menu) => ({
+          menuId: menu.id,
+          versionId: menu.versionId,
+          orderable: menu.orderable,
+          sendable: menu.sendable,
+        })),
+        unavailable: { products: unavailable, optionLabels: [] },
+      })),
+    });
+    await signIn(el);
+    add(el, DESAYUNOS);
+    const store = counter(el).store;
+    const refusals: unknown[] = [];
+    store.on("refused", (value) => refusals.push(value));
+    current = {
+      ...running(BARRA, "afternoon"),
+      menus: BARRA.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: BARRA.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["3.00", "3.00"]);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).not.toBeNull();
+    store.setLineQuantity(0, "2");
+    expect(store.lines.map((line) => [line.quantity, line.product.unitPrice])).toEqual([
+      ["1", "3.00"],
+    ]);
+    expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    unavailable = ["Tostada"];
+    await poll(el);
+    expect(counter(el).products.find((product) => product.productId === "Tostada")?.available).toBe(
+      false,
+    );
+    expect(store.lines[0]?.blocked).toBe("unavailable");
+    await park(el);
+    expect(selected(el)).toBe("desayunos");
+    expect(counter(el).products.map((product) => product.unitPrice)).toEqual(["4.00", "4.00"]);
+  });
+
+  it("recovers a deferred boundary offers read after its first safe-order read fails", async () => {
+    let current = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state(current.menus.map((menu) => ({ id: menu.id, name: menu.name, product: "" }))),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    Object.assign(el, { submitting: true });
+    current = running(offers("zone-barra", [CENA], "cena"), "afternoon");
+    await poll(el);
+    api.listZoneOffers.mockRejectedValueOnce(new TypeError("offline"));
+    Object.assign(el, { submitting: false });
+    await flush(el);
+    expect(names(el)).toEqual(["Tostada"]);
+    await poll(el);
+    expect(selected(el)).toBe("cena");
+    expect(names(el)).toEqual(["Croquetas"]);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("respects an explicit null default after memory expires instead of selecting the first menu", async () => {
+    let current: ZoneOfferCatalogue = running(BARRA);
+    const { el } = await mountApp({
+      ...catalogueApi(),
+      listZoneOffers: vi.fn(async () => current),
+      menuState: vi.fn(async () => ({
+        ...state([DESAYUNOS, ALMUERZO]),
+        defaultMenuId: current.defaultMenuId,
+        service: current.service,
+      })),
+    });
+    await signIn(el);
+    await pick(el, "almuerzo");
+    current = {
+      ...running(BARRA, "lunch-day-2"),
+      defaultMenuId: null,
+      menus: BARRA.menus.map((menu) => ({ ...menu, isDefault: false })),
+    };
+    await poll(el);
+    expect(selected(el)).toBe("");
+    expect(names(el)).toEqual([]);
+  });
+});
+
 describe("period service at the counter", () => {
   it("end-offset poll closes selection with unchanged service and versions, then marks grace expiry", async () => {
     const running = {
@@ -280,6 +670,7 @@ describe("period service at the counter", () => {
         open: true,
         zoneOpen: true,
         periodName: "Breakfast",
+        periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -347,6 +738,7 @@ describe("period service at the counter", () => {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -406,6 +798,7 @@ describe("period service at the counter", () => {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -441,6 +834,7 @@ describe("period service at the counter", () => {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -456,7 +850,7 @@ describe("period service at the counter", () => {
     await poll(el);
     expect(counter(el).shadowRoot!.querySelector("[data-service-closed]")).not.toBeNull();
     expect(counter(el).store.lineCount).toBe(1);
-    expect(selected(el)).toBe("");
+    expect(selected(el)).toBe("desayunos");
     api.listZoneOffers.mockResolvedValue(BARRA);
     api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "desayunos"));
     await poll(el);
@@ -474,6 +868,7 @@ describe("period service at the counter", () => {
         open: true,
         zoneOpen: true,
         periodName: "Breakfast",
+        periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -486,6 +881,7 @@ describe("period service at the counter", () => {
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
+        periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -509,7 +905,7 @@ describe("period service at the counter", () => {
     });
     await poll(el);
     expect(api.listZoneOffers).toHaveBeenCalledWith("zone-barra");
-    expect(selected(el)).toBe("almuerzo");
+    expect(selected(el)).toBe("desayunos");
     expect(
       counter(el).store.lines.map((line) => [
         line.product.productId,
@@ -686,9 +1082,45 @@ describe("the remembered default and the session", () => {
 
     emit(counter(el), "logout");
     await flush(el);
-    reload(BARRA);
+    await signIn(el, "p2");
+    emit(counter(el), "menu-selected", { id: "desayunos" });
     await flush(el);
-    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("desayunos");
+    reload(TERRAZA);
+    await flush(el);
+    expect(selected(el)).toBe("desayunos");
+    expect(counter(el).selectedServiceZoneId).toBe("zone-barra");
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos"]);
+  });
+
+  it("does not let a previous session's pending offers block a new session's refresh", async () => {
+    let answer!: (value: ZoneOfferCatalogue) => void;
+    const listZoneOffers = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<ZoneOfferCatalogue>((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue(BARRA);
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn(async () => offers("zone-barra", [DESAYUNOS], "desayunos")),
+      listZoneOffers,
+    });
+    await signIn(el);
+    api.menuState.mockResolvedValue(state([DESAYUNOS, ALMUERZO], "almuerzo"));
+    await poll(el);
+    expect(listZoneOffers).toHaveBeenCalledTimes(1);
+    emit(counter(el), "logout");
+    await flush(el);
+    await signIn(el, "p2");
+    await poll(el);
+    expect(listZoneOffers).toHaveBeenCalledTimes(2);
+    expect(selected(el)).toBe("almuerzo");
+    answer(TERRAZA);
+    await flush(el);
+    expect(counter(el).menus.map((menu) => menu.id)).toEqual(["desayunos", "almuerzo"]);
+    expect(selected(el)).toBe("almuerzo");
   });
 
   it("is forgotten when the device switches profile, which signs in again without signing out", async () => {
@@ -777,6 +1209,244 @@ describe("an open table's order", () => {
       "till-table-order-screen",
     )!;
 
+  async function openRememberedTable(current: () => ZoneOfferCatalogue) {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn(async (id: string) => (id === "zone-comedor" ? current() : BARRA)),
+      getTablesState: vi.fn(async () => [table]),
+      listZones: vi.fn(async () => [
+        {
+          id: "zone-comedor",
+          name: "Comedor",
+          active: true,
+          displayOrder: 0,
+          serviceMode: "table_tab",
+        },
+      ]),
+      listStatuses: vi.fn(async () => []),
+      getTabLines: vi.fn(async () => ({ lines: [], revision: 0, editSentLines: true })),
+      listDrafts: drafts.listDrafts,
+      saveDraft: drafts.saveDraft,
+      submitDraft: drafts.submitDraft,
+      menuState: vi.fn(async (id: string) =>
+        id === "zone-comedor"
+          ? {
+              ...state([DESAYUNOS, ALMUERZO]),
+              defaultMenuId: current().defaultMenuId,
+              service: current().service,
+            }
+          : state([DESAYUNOS, ALMUERZO]),
+      ),
+    });
+    await signIn(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    return el;
+  }
+  const runningTable = (occurrence = "table-lunch-1"): ZoneOfferCatalogue => ({
+    ...COMEDOR,
+    service: { ...COMEDOR.service, periodName: "Lunch", periodOccurrenceKey: occurrence },
+  });
+
+  it("keeps the table grid through a boundary until its draft clears", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
+    await flush(el);
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(ALMUERZO), "v1"), "1");
+    await flush(el);
+    const id = browser.store.id;
+    const names = () =>
+      [
+        ...tableScreen(el)
+          .shadowRoot!.querySelector("till-menu-browser")!
+          .shadowRoot!.querySelectorAll(".name"),
+      ].map((node) => node.textContent?.trim());
+    current = {
+      ...offers(
+        "zone-comedor",
+        [CENA, { ...ALMUERZO, product: "Afternoon sandwich" }],
+        "cena",
+        "table_tab",
+      ),
+      service: runningTable("afternoon").service,
+    };
+    await poll(el);
+    expect(names()).toEqual(["Menú del día"]);
+    expect(browser.store.id).toBe(id);
+    expect(
+      browser.store.lines.map((line) => [
+        line.product.productId,
+        line.quantity,
+        line.product.unitPrice,
+      ]),
+    ).toEqual([["Menú del día", "1", "3.00"]]);
+    browser.store.clear();
+    await flush(el);
+    expect(tableScreen(el).selectedMenuId).toBe("cena");
+    expect(names()).toEqual(["Croquetas"]);
+  });
+
+  it("waits for Settings to close before asking to refresh a table draft", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      zoneId === "zone-comedor"
+        ? {
+            service: current.service,
+            defaultMenuId: current.defaultMenuId,
+            menus: current.menus.map((menu) => ({
+              menuId: menu.id,
+              versionId: menu.versionId,
+              orderable: menu.orderable,
+              sendable: menu.sendable,
+            })),
+            unavailable: { products: [], optionLabels: [] },
+          }
+        : state([DESAYUNOS, ALMUERZO]),
+    );
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "open-settings");
+    await flush(el);
+    const settings = el.shadowRoot!.querySelector<import("@waitron/ui").WtDialog>("wt-dialog")!;
+    expect(settings.open).toBe(true);
+    current = {
+      ...runningTable(),
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).toBeNull();
+    const closed = new Promise<void>((resolve) =>
+      settings.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await settings.requestClose("cancel");
+    await closed;
+    await poll(el);
+    expect(el.shadowRoot!.querySelector("till-basket-refresh-dialog")).not.toBeNull();
+    expect(browser.store.lines.map((line) => [line.quantity, line.product.unitPrice])).toEqual([
+      ["1", "3.00"],
+    ]);
+  });
+
+  it("refuses an increased table quantity from a grid retained under an obsolete version", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    const browser =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    browser.store.addProduct(menuOfferToTillProduct(offer(DESAYUNOS), "v1"), "1");
+    await flush(el);
+    current = {
+      ...runningTable("afternoon"),
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, versionId: "v2" })),
+      offers: COMEDOR.offers.map((item) => ({ ...item, unitPrice: "4.00" })),
+    };
+    await poll(el);
+    const refusals: unknown[] = [];
+    browser.store.on("refused", (value) => refusals.push(value));
+    browser.store.setLineQuantity(0, "2");
+    expect(
+      browser.store.lines.map((line) => [
+        line.quantity,
+        line.product.unitPrice,
+        line.product.menuVersionId,
+      ]),
+    ).toEqual([["1", "3.00", "v1"]]);
+    expect(refusals).toEqual([{ code: "menu_period.not_running" }]);
+    browser.store.clear();
+    await flush(el);
+    const fresh =
+      tableScreen(el).shadowRoot!.querySelector<
+        import("./widgets/menu-browser.js").TillMenuBrowser
+      >("till-menu-browser")!;
+    expect(fresh.products.map((product) => [product.unitPrice, product.menuVersionId])).toEqual([
+      ["4.00", "v2"],
+    ]);
+  });
+
+  it("shows no implicit first menu when a new table occurrence has no default", async () => {
+    let current = runningTable();
+    const el = await openRememberedTable(() => current);
+    emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
+    await flush(el);
+    current = {
+      ...runningTable("table-lunch-2"),
+      defaultMenuId: null,
+      menus: COMEDOR.menus.map((menu) => ({ ...menu, isDefault: false })),
+    };
+    await poll(el);
+    expect(tableScreen(el).selectedMenuId).toBe("");
+    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+  });
+
+  it("restores the table-zone menu when the table is reopened within its occurrence", async () => {
+    const el = await openRememberedTable(() => runningTable());
+    emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
+    await flush(el);
+    expect(tableScreen(el).selectedMenuId).toBe("almuerzo");
+    emit(tableScreen(el), "back-to-floor");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el);
+    expect(tableScreen(el).selectedMenuId).toBe("almuerzo");
+    const browser = tableScreen(el).shadowRoot!.querySelector("till-menu-browser")!;
+    expect(
+      [...browser.shadowRoot!.querySelectorAll(".name")].map((node) => node.textContent?.trim()),
+    ).toEqual(["Menú del día"]);
+  });
+
+  it.each([false, true])(
+    "expires the table-zone manual menu on a same-name boundary, deferring for a draft: %s",
+    async (hasDraft) => {
+      let current = runningTable();
+      const el = await openRememberedTable(() => current);
+      emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
+      await flush(el);
+      const browser = tableScreen(el).shadowRoot!.querySelector<
+        HTMLElement & { store: import("./state/working-order.js").WorkingOrderStore }
+      >("till-menu-browser")!;
+      if (hasDraft) browser.store.addProduct(menuOfferToTillProduct(offer(ALMUERZO), "v1"), "1");
+      await flush(el);
+      current = runningTable("table-lunch-2");
+      await poll(el);
+      expect(tableScreen(el).selectedMenuId).toBe(hasDraft ? "almuerzo" : "desayunos");
+      expect(api.listZoneOffers).toHaveBeenLastCalledWith(
+        "zone-comedor",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      if (hasDraft) {
+        expect(
+          browser.store.lines.map((line) => [
+            line.product.productId,
+            line.quantity,
+            line.product.unitPrice,
+          ]),
+        ).toEqual([["Menú del día", "1", "3.00"]]);
+        browser.store.removeLine(0);
+        await flush(el);
+        expect(tableScreen(el).selectedMenuId).toBe("desayunos");
+      }
+    },
+  );
+
   it("names the table's department independently of the counter when it is closed", async () => {
     const closed = {
       ...COMEDOR,
@@ -785,6 +1455,7 @@ describe("an open table's order", () => {
         open: false,
         zoneOpen: true,
         periodName: null,
+        periodOccurrenceKey: null,
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -829,6 +1500,7 @@ describe("an open table's order", () => {
         open: true,
         zoneOpen: true,
         periodName: "Breakfast",
+        periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -840,6 +1512,7 @@ describe("an open table's order", () => {
         open: true,
         zoneOpen: true,
         periodName: "Lunch",
+        periodOccurrenceKey: '["department","2026-10-12","Lunch","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },
@@ -896,7 +1569,7 @@ describe("an open table's order", () => {
     await flush(el);
     current = lunch;
     await poll(el);
-    expect(tableScreen(el).selectedMenuId).toBe("almuerzo");
+    expect(tableScreen(el).selectedMenuId).toBe("desayunos");
     expect(
       browser.store.lines.map((line) => [
         line.product.productId,
@@ -919,6 +1592,7 @@ describe("an open table's order", () => {
         open: true,
         zoneOpen: true,
         periodName: "Breakfast",
+        periodOccurrenceKey: '["department","2026-10-12","Breakfast","08:00"]',
         keepOpen: null,
         zoneKeepOpen: null,
       },

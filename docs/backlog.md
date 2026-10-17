@@ -109,7 +109,7 @@ come after the eight above:
   area. **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)
   (S3, S6, S10 cover Q27–Q29).**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
-  table service_). The counter redesign is A738–A740; the handheld, kitchen screen and pass still
+  table service_). The remaining counter redesign is A738–A739; the handheld, kitchen screen and pass still
   need their own designs.
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
@@ -1993,12 +1993,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reproduced and fixed; the Demo card reader goes; no receipt screen after paying. After A738.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
-- **A740 — zones on a device (owner, 2026-10-15; open).** A zone's menus, prices and trading name
-  come from its department; what differs per zone is how it is paid, collection numbers, receipt
-  printing and kitchen routing.
-  [Implementation plan](superpowers/plans/2026-10-16-a740-zones-on-device.md) records the device-selection migration and tests; implementation remains open.
-  [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
-
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
   (used by MOVED slips) reads a counter order whose delivery table was released as the counter,
   while `orderTableLabels` (used by tickets and correction slips) names it by its kept
@@ -2657,7 +2651,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
-  Counter design and implementation remain A738–A740; the handheld, kitchen screen and pass need
+  Counter design and implementation remain A738–A739; the handheld, kitchen screen and pass need
   their own designs. A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
@@ -2717,12 +2711,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   remove it when loading ends. **Next action:** decide whether to keep an empty status region on the
   page and fill it later, and test that sequence.
   [Detail](backlog/till.md#three-till-loading-lines-may-not-be-announced)
-
-- **The counter till may start in a zone its service zone dropdown does not list** (found
-  2026-09-14; read, not run). **Next action:** find whether a `table_tab` zone can be the counter
-  default or a profile's starting zone; if it can, decide whether that is refused where it is set or
-  handled by the till.
-  [Detail](backlog/till.md#the-counter-till-may-start-in-a-zone-its-service-zone-dropdown-does-not-list)
 
 - **The till's four choice dialogs (`apps/till/src/widgets/`) each carry their own radio-option
   styles, which could be one shared set** — left open by C114 (#1022, a copy printed in another
