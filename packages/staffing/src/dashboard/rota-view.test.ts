@@ -422,32 +422,88 @@ type Button = HTMLElementTagNameMap["wt-button"];
 const counts = (el: View) => [...q(el, "[data-test=attention]")!.querySelectorAll(".count")];
 
 describe("the Rota's bar", () => {
-  it("the bar holds the week, Show, then the state, the counts, the labour count and Publish, in that order, on one row at 1280", async () => {
-    await useViewport(1280, 900);
-    const el = await mount(withWarnings().api);
-    await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
-    await el.updateComplete;
+  const barParts = (el: View) => {
     const shown = counts(el);
     expect(shown.map((b) => [b.localName, normal(b.textContent!)])).toEqual([
       ["button", "1 unfilled"],
       ["button", "1 partly uncovered"],
       ["button", "1 over"],
     ]);
-    const order = [
+    const still = q(el, "[data-test=still-published]");
+    const left = [
       q(el, "[data-test=previous-week]")!,
       q(el, "[data-test=week]")!,
       q(el, "[data-test=next-week]")!,
       show(el),
+    ];
+    const right = [
       q(el, "[data-test=state]")!,
+      ...(still ? [still] : []),
       ...shown,
       q(el, "[data-test=labour-count]")!,
       q(el, "[data-test=publish-week]")!,
     ];
-    const first = centre(order[0]!);
-    for (const n of order) expect(Math.abs(centre(n) - first)).toBeLessThanOrEqual(1);
-    const lefts = order.map((n) => box(n).left);
+    return { left, right };
+  };
+  const inOrder = (parts: Element[]) => {
+    const lefts = parts.map((n) => box(n).left);
     for (let i = 1; i < lefts.length; i++) expect(lefts[i]).toBeGreaterThan(lefts[i - 1]!);
-    expect(box(q(el, "[data-test=state]")!).left - box(show(el)).right).toBeGreaterThanOrEqual(64);
+  };
+  const oneRow = (parts: Element[]) => {
+    const first = centre(parts[0]!);
+    for (const n of parts) expect(Math.abs(centre(n) - first)).toBeLessThanOrEqual(1);
+  };
+  const changing = () => withWarnings().api;
+  const ordinary = () =>
+    withWarnings(async (w) => {
+      const r = rotaWeek(w);
+      r.version = { id: "draft", status: "draft", changedSincePublished: false };
+      return r;
+    }).api;
+  async function barAt(width: number, api: StaffingApi) {
+    await useViewport(width, 900);
+    const el = await mount(api, `${width}px`);
+    await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
+    await el.updateComplete;
+    return el;
+  }
+  it("the bar holds the week, Show, then the state, the counts, the labour count and Publish, in that order, on one row at 1440 while the week is being changed", async () => {
+    const el = await barAt(1440, changing());
+    const { left, right } = barParts(el);
+    expect(right).toHaveLength(7);
+    oneRow([...left, ...right]);
+    inOrder([...left, ...right]);
+    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(72);
+  });
+  it("at 1280 a week being changed moves the whole right-hand group below the week and Show, right-aligned, in order, overlapping nothing", async () => {
+    const el = await barAt(1280, changing());
+    const { left, right } = barParts(el);
+    oneRow(left);
+    oneRow(right);
+    inOrder(left);
+    inOrder(right);
+    const leftBottom = Math.max(...left.map((n) => box(n).bottom));
+    for (const n of right) expect(box(n).top).toBeGreaterThanOrEqual(leftBottom);
+    const all = [...left, ...right];
+    for (const a of all)
+      for (const b of all) {
+        if (a === b) continue;
+        const [p, r] = [box(a), box(b)];
+        const overlap =
+          p.left < r.right && r.left < p.right && p.top < r.bottom && r.top < p.bottom;
+        expect(overlap).toBe(false);
+      }
+    const bar = box(q(el, "[data-test=bar]")!);
+    expect(Math.abs(bar.right - box(right.at(-1)!).right)).toBeLessThanOrEqual(1);
+    expect(box(right[0]!).left - bar.left).toBeGreaterThanOrEqual(64);
+  });
+  it("at 1280 an ordinary draft with counts and a labour count fits on one row", async () => {
+    const el = await barAt(1280, ordinary());
+    const { left, right } = barParts(el);
+    expect(q(el, "[data-test=still-published]")).toBeNull();
+    oneRow([...left, ...right]);
+    inOrder([...left, ...right]);
+    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(64);
   });
   it("the labour count leads with a warning sign and is drawn in the danger colour", async () => {
     const el = await mount(withWarnings().api);
@@ -564,6 +620,26 @@ describe("the Rota's bar", () => {
     expect(normal(q(everyone, "[data-test=attention]")!.textContent!)).toBe("No shifts yet");
     const kitchen = await mount(rotaApi(empty).api);
     expect(normal(q(kitchen, "[data-test=attention]")!.textContent!)).toBe("Nothing to fill");
+  });
+  it("a week whose only shift is carried in from the previous week reads No shifts yet and keeps Publish quiet", async () => {
+    const carried = async (w: string) => {
+      const r = noShifts(w);
+      const prior = rotaWeek(w).shifts.find((x) => x.shiftId === "unlinked")!;
+      r.shifts = [prior];
+      r.days[0]!.notInSlot = [{ shiftId: "unlinked", outsideWeek: true }];
+      return r;
+    };
+    const el = await mount(
+      withWarnings(carried).api,
+      "1280px",
+      { area: "everyone" },
+      "rota-by-person",
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
+    expect(normal(q(el, "[data-test=attention]")!.textContent!)).toBe("No shifts yet");
+    const publish = q<Button>(el, "[data-test=publish-week]")!;
+    expect(publish.variant).toBe("secondary");
+    expect(publish.disabled).toBe(true);
   });
   it("the counts are not a live region; their words are announced from a hidden status", async () => {
     const el = await mount();

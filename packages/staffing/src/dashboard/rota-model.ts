@@ -34,12 +34,19 @@ export function weekCounts(
   };
 }
 
+/** Shifts whose own business day is in the week; the read also carries the previous week's
+ * shift that runs into Monday. */
+export function weekShiftCount(read: RotaWeek): number {
+  const days = new Set(read.days.map((d) => d.businessDay));
+  return read.shifts.filter((s) => days.has(s.businessDay)).length;
+}
+
 export type Summary = "counts" | "all_filled" | "no_shifts" | "nothing_to_fill";
 
 export function summary(read: RotaWeek, show: Show): Summary {
   const counts = weekCounts(read, show);
   if (counts.unfilled + counts.partly + counts.over > 0) return "counts";
   if (matchesFor(read, show).some((m) => m.slots.length > 0)) return "all_filled";
-  if (show.kind === "everyone" && read.shifts.length === 0) return "no_shifts";
+  if (show.kind === "everyone" && weekShiftCount(read) === 0) return "no_shifts";
   return "nothing_to_fill";
 }

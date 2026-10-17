@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { rotaWeek } from "../testing/rota-fixture.js";
-import { EVERYONE, chosenShow, matchesFor, summary, weekCounts } from "./rota-model.js";
+import {
+  EVERYONE,
+  chosenShow,
+  matchesFor,
+  summary,
+  weekCounts,
+  weekShiftCount,
+} from "./rota-model.js";
 import type { RotaWeek } from "../staffing-types.js";
 
 describe("the Rota's Show choice", () => {
@@ -122,6 +129,14 @@ describe("the week's attention counts and their summary", () => {
     read.shifts = [];
     expect(summary(read, everyone)).toBe("no_shifts");
     expect(summary(read, kitchen(read))).toBe("nothing_to_fill");
+  });
+  it("counts only shifts whose own day is in the week", () => {
+    const read = noSlots();
+    read.shifts = read.shifts.filter((s) => s.shiftId === "unlinked");
+    expect(read.shifts).toHaveLength(1);
+    expect(weekShiftCount(read)).toBe(0);
+    expect(summary(read, everyone)).toBe("no_shifts");
+    expect(weekShiftCount(rotaWeek())).toBe(4);
   });
   it("says there is nothing to fill with no slot in scope", () => {
     const read = noSlots();

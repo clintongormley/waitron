@@ -10,7 +10,14 @@ import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { dateLabel } from "./format.js";
 import { hours } from "./rota-format.js";
-import { EVERYONE, chosenShow, summary, weekCounts, type Show } from "./rota-model.js";
+import {
+  EVERYONE,
+  chosenShow,
+  summary,
+  weekCounts,
+  weekShiftCount,
+  type Show,
+} from "./rota-model.js";
 import { breachText } from "./rota-warnings.js";
 import { countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
@@ -391,7 +398,7 @@ export class RotaView extends LitElement {
         @click=${() => void this.#changeWeek()}
         >${t("staffing.rota.change_week")}</wt-button
       >`;
-    const ready = !!this.warnings && read.shifts.length > 0;
+    const ready = !!this.warnings && weekShiftCount(read) > 0;
     return html`<wt-button
       data-test="publish-week"
       variant=${ready ? "primary" : "secondary"}
