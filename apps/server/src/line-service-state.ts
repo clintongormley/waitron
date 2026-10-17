@@ -31,6 +31,23 @@ export function serviceQuantities(
   return { active, served: actualServed, remaining: active - actualServed };
 }
 
+export function serviceCompletedAt(line: {
+  quantity: number;
+  servedQuantity: number;
+  servedAt: string | null;
+  cancelledQuantity: number;
+  cancelledAt: string | null;
+}): string | null {
+  const quantities = serviceQuantities(line.quantity, line.servedQuantity, line.cancelledQuantity);
+  if (quantities.remaining > 0) return null;
+  if (quantities.active === 0) return line.cancelledAt;
+  const servedAt = line.servedAt;
+  const cancelledAt = line.cancelledAt;
+  if (servedAt === null) return cancelledAt;
+  if (cancelledAt === null) return servedAt;
+  return Date.parse(servedAt) > Date.parse(cancelledAt) ? servedAt : cancelledAt;
+}
+
 export async function readLineCancellations(
   tx: Transaction,
   lineIds: readonly string[],

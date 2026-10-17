@@ -23,6 +23,7 @@ import {
 import { MAX_UNIT_PRECISION, assertQuantityPrecision } from "@waitron/catalogue";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
+import { readLineCancellations } from "./line-service-state.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -228,7 +229,8 @@ export async function recallToDraft(
         throw new AppError("ticket.already_started", {
           ticketItemId: started.ticketItemId,
         });
-      if (line.servedQuantity > 0) throw invalid("lineId");
+      const cancellations = await readLineCancellations(tx, [lineId]);
+      if (line.servedQuantity > 0 || (cancellations.get(lineId) ?? 0) > 0) throw invalid("lineId");
       const [reserved] = await tx
         .select({ id: orderDraftRecalledLines.id })
         .from(orderDraftRecalledLines)

@@ -2116,6 +2116,9 @@ build after A757's board if it has been decided, else name the table alone.
   one Discount…, Cancel item with charge or no-charge by the dish's state); Recall returns a dish
   to the New order; Pay waits for unsent dishes; Away and the pass's Done go; each pass fires only
   what it sees. [Panel mockups](mockups/a773-order-panel/).
+  The unlanded Task 20 foundation retains cancelled charges separately from active food through
+  bill splits. Fire, serving, Recall and reminder reads now consume that state; the cancellation
+  command, screen projection and public refund handoff remain to be built.
   Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](mockups/a773-courses-and-groups/)
 

@@ -1,4 +1,5 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import { readLineCancellations, serviceCompletedAt } from "./line-service-state.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -21,6 +22,7 @@ import { staffPresentationName } from "@waitron/catalogue";
 import {
   devices,
   kitchenCourses,
+  lineServiceCancellations,
   nowIso,
   orderGroupEvents,
   orderGroups,
@@ -615,7 +617,11 @@ async function releaseGroup(
   attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
   const lines = await tx
-    .select({ id: workingOrderLines.id, workingOrderId: workingOrderLines.workingOrderId })
+    .select({
+      id: workingOrderLines.id,
+      workingOrderId: workingOrderLines.workingOrderId,
+      quantity: workingOrderLines.quantity,
+    })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
@@ -626,9 +632,14 @@ async function releaseGroup(
       ),
     )
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
-  if (lines.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
+  const cancellations = await readLineCancellations(
+    tx,
+    lines.map((line) => line.id),
+  );
+  const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
+  if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   const byOrder = new Map<string, string[]>();
-  for (const line of lines) {
+  for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
   }
   const [group] = await tx
@@ -1314,14 +1325,7 @@ export interface ReleaseReminder {
   dueAt: string | null;
 }
 
-/**
- * The party's release reminder (D11). `groups` are the party's groups in sequence, removed ones left
- * out; `lines` are dish lines, each fully served when its `servedAt` is set. The group waiting is the
- * first held one. While a fired group before it has a dish line unserved there is no time, a snooze
- * included; otherwise it is due at its snooze (`remindAt`), else `minutes` after the latest served
- * time of those fired groups. A fired group with no dish line neither holds it up nor dates it. With
- * `minutes` null the venue has reminders off, and there is none.
- */
+/** `servedAt` carries the effective completion time, including charged cancellation. */
 export function releaseReminder(
   groups: readonly Pick<OrderGroup, "id" | "state" | "remindAt">[],
   lines: readonly { groupId: string | null; servedAt: string | null }[],
@@ -1378,9 +1382,17 @@ export async function readReleaseReminders(
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   if (groups.length === 0) return reminders;
   const lines = await tx
-    .select({ groupId: workingOrderLines.groupId, servedAt: workingOrderLines.servedAt })
+    .select({
+      groupId: workingOrderLines.groupId,
+      quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
+      servedAt: workingOrderLines.servedAt,
+      cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
+      cancelledAt: lineServiceCancellations.cancelledAt,
+    })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
         inArray(
@@ -1400,7 +1412,9 @@ export async function readReleaseReminders(
       partyId,
       releaseReminder(
         own.map((group) => ({ ...group, state: group.state as "held" | "fired" })),
-        lines.filter((line) => ids.has(line.groupId!)),
+        lines
+          .filter((line) => ids.has(line.groupId!))
+          .map((line) => ({ groupId: line.groupId, servedAt: serviceCompletedAt(line) })),
         minutes,
       ),
     );
@@ -1549,6 +1563,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       unitPrecision: workingOrderLines.unitPrecision,
       servedQuantity: workingOrderLines.servedQuantity,
       servedAt: workingOrderLines.servedAt,
+      cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
+      cancelledAt: lineServiceCancellations.cancelledAt,
       sentAt: workingOrderLines.sentAt,
       note: workingOrderLines.note,
       groupId: workingOrderLines.groupId,
@@ -1564,6 +1580,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(inArray(workingOrders.partyId, family), onShownBill()))
     .orderBy(
@@ -1617,7 +1634,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     if (line.recalled) continue;
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
-    dishes.push(line);
+    dishes.push({ groupId: line.groupId, servedAt: serviceCompletedAt(line) });
     const row: CurrentOrderRow = {
       lineId: line.id,
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
