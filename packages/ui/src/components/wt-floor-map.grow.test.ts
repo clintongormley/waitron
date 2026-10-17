@@ -511,6 +511,7 @@ it("a move while the host is hidden leaves the drag's travel as it was", async (
   hold(el, 300, 150);
   move(el, 375, 150);
   await settled(el);
+  // Read before hiding: a hidden host's box is empty, so at() would point elsewhere.
   const client = at(el, 375, 150);
   el.style.display = "none";
   await settled(el);

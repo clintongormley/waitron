@@ -795,7 +795,7 @@ The floor screen uses today's plan for every zone's map. Its Unplaced tray uses 
 `wt-table-token` with the table's shown name and seat count (`#trayItem`, `apps/till/src/screens/till-floor-screen.ts`).
 The floor screen hands the map each table's `fixed` and, for a party
 at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
-the table it is over, and a party's tables are joined by a line. `canDrag` and the details sheet's
+the table marked as its drop target, and a party's tables are joined by a line. `canDrag` and the details sheet's
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
 the sheet offers no changes for today and there is no zone menu. With it, on a zone with today's
 plan or a saved plan (the zone list's `hasPlan`, so a saved plan with no tables still offers Reset),
@@ -862,7 +862,7 @@ moves, so after the view refits under a still finger the release sends the marke
 wherever the finger now is. A held group with a `fixed` member is not drawn moved: a copy of its
 shapes at half opacity (`part="ghost"`) is drawn where the drag would put it, and while a table
 is marked `data-drop-target` a 1 px `--wt-color-primary` line (`<svg part="drag-link">`) joins the
-group's centre and that table's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
+group's centre and that table's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false, or while the view's scale is 0 (a hidden host the map has refitted), a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
 longer has the held table ends the drag, and its release sends nothing; one that keeps it keeps the
 drag. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is

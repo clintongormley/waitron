@@ -60,7 +60,7 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    squares are exactly today's `round(dx / scale)`. A still finger moves nothing after a refit; the
    table keeps moving at finger speed on screen. A wheel zoom during a drag is banked the same way
    (today it rescales the travel already made; no existing test covers it). A move while the
-   scale is not above 0, as on a hidden host, whose fit is 0, banks nothing and moves nothing.
+   scale is not above 0, as on a hidden host the map has refitted, banks nothing and moves nothing.
 5. **A waiter's own pan or zoom is kept, and turns the growth off.** A drag that starts on a touched
    view has no drag's crop: the map publishes the tables' ratio and nothing changes during the drag.
    A pan or zoom during a drag stops the drag's crop growing, but the map keeps publishing it until
@@ -83,7 +83,7 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
 8. **Residuals, recorded as short backlog entries in Task 5:** a crop that grows in proportion (a
    diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today;
    and after the view has rescaled during a drag the drawn table lags the finger (decision 4). The
-   drop-target highlight is the table under the pointer at the latest move (`#targetAt`), and the
+   drop-target highlight is the table under the pointer at the latest move the map drew (`#targetAt`), and the
    drop sends the table the highlight marks (`#sendDrop` reads `drag.targetId`), so after a refit
    that follows the last move the highlight can be on a table the finger has left, and the drop
    goes to that table — or to none, if a new `tables` has since taken the mark off it. (Fixed

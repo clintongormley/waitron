@@ -76,7 +76,7 @@ interface Drag {
   dy: number;
   x: number;
   y: number;
-  /** The first other table under the pointer at the latest move `canDrag` allowed. */
+  /** The first other table under the pointer at the latest move the map drew. */
   targetId: string | null;
 }
 
@@ -631,7 +631,7 @@ export class WtFloorMap extends LitElement {
   }
 
   /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale.
-   * Null, and nothing banked, while the scale is not above 0, as on a hidden host. */
+   * Null, and nothing banked, while the scale is not above 0, as on a hidden host the map has refitted. */
   #travelled(dx: number, dy: number): { x: number; y: number } | null {
     const scale = this.#view!.scale;
     if (!(scale > 0)) return null;
