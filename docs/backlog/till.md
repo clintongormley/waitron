@@ -964,6 +964,11 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 ## Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain text
 
+2026-10-16: A668-5 retires the basket, station queue and expo warning reads and removes their
+three guard exceptions. The remaining scope is `apps/till/src/widgets/diet-badges.ts`: warning
+and success text tokens at lines 131 and 117, respectively. The paragraph below records the
+original finding; its four-surface count and five-entry list no longer describe the current tree.
+
 - **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
   text.** The token is `--wt-color-warning-text`, declared in no theme; what exists in
   `packages/ui-core/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`),

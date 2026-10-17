@@ -11,13 +11,11 @@ import "./till-expo-screen.js";
 import "./till-station-screen.js";
 import "./till-counter-screen.js";
 import "./till-schedule-screen.js";
-import "./till-allergen-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillExpoScreen } from "./till-expo-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
-import type { TillAllergenScreen } from "./till-allergen-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 
 const DEFAULT_FRAME = [414, 896] as const;
@@ -113,13 +111,6 @@ const screens: [string, () => Promise<HTMLElement>, string, { left: number; widt
     "schedule",
     async () =>
       (await mountWidget<TillScheduleScreen>("till-schedule-screen", { api: pendingApi })).el,
-    ".head",
-    CARD_SPACING,
-  ],
-  [
-    "allergens",
-    async () =>
-      (await mountWidget<TillAllergenScreen>("till-allergen-screen", { products: [] })).el,
     ".head",
     CARD_SPACING,
   ],

@@ -9,11 +9,11 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { type Decimal, decimal, formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
+import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
-import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
+import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type {
@@ -78,6 +78,7 @@ export interface StoredLines {
 export class TillBasket extends LitElement {
   static override styles = [
     baseStyles,
+    nutritionIconStyles,
     dietBadgeStyles,
     lineExtrasEditorStyles,
     priceWasStyles,
@@ -226,43 +227,11 @@ export class TillBasket extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The line's AS-SERVED allergen profile (modifier↔allergen, Task 7) — indented under the dish
-         like its options, a label plus the declared codes as chips, with a "not fully reviewed" note
-         when the dish's own allergens are unreviewed (the Cautious policy, visible to the waiter). */
-      .line-allergens {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-1) var(--wt-space-2);
-        padding: var(--wt-space-1) 0 var(--wt-space-2);
-        padding-left: var(--wt-space-4);
-        font-size: var(--wt-font-size-sm, 0.85em);
-        color: var(--wt-color-text-muted);
-      }
-
-      .allergen-label {
-        font-weight: 600;
-      }
-
       .allergen-chip {
         display: inline-block;
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-full, 999px);
-      }
-
-      /* The pending note earns emphasis — a waiter must not read an unreviewed dish as allergen-free. */
-      .allergen-pending {
-        color: var(--wt-color-warning-text, var(--wt-color-text));
-        font-weight: 600;
-      }
-
-      /* The as-served DIET & contains row (dietary-classification, Task 7) — indented under the dish
-         like its allergen row, beneath it. The badge/chip look comes from the shared dietBadgeStyles;
-         only the indent + spacing is basket-specific. */
-      .line-diet {
-        padding: 0 0 var(--wt-space-2);
-        padding-left: var(--wt-space-4);
       }
 
       /* A selected extra's OWN allergens/diet (nutrition redesign, pass 1), indented under its option
@@ -459,7 +428,8 @@ export class TillBasket extends LitElement {
         return html`
           <div class="line">
             <span class="name" part="name"
-              ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot>${
+              ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
+              >${this.#nutrition(line)}${
                 line.notOffered ? notOfferedMarker() : nothing
               }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
                 line.unavailableOnServer === true &&
@@ -573,7 +543,6 @@ export class TillBasket extends LitElement {
             `,
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
-          ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
           <div class="line-after"><slot name=${`after-${index}`}></slot></div>
         `;
       })}
@@ -634,13 +603,6 @@ export class TillBasket extends LitElement {
         })}
       </div>
     `;
-  }
-
-  /** Only with real diet data, so a no-recipe item (a coffee) never shows a "not reviewed" note. */
-  #dietRow(line: OrderLine, index: number) {
-    const hasDietData = line.product.dietDerivation != null || line.product.dietOverride != null;
-    if (!hasDietData) return nothing;
-    return dietBadges(asServedDiet(line), `line-diet-${index}`);
   }
 
   /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
@@ -844,33 +806,12 @@ export class TillBasket extends LitElement {
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
-  #allergenRow(line: OrderLine, index: number) {
-    const hasExtras = (line.extras ?? []).length > 0;
-    const hasAllergens = line.product.allergens != null;
-    if (!hasExtras && !hasAllergens) return nothing;
-
-    const asServed = asServedAllergens(line);
-    const locale = currentLocale();
-    const codes = Object.keys(asServed.allergens).sort();
-    return html`
-      <div class="line-allergens" data-test=${`line-allergens-${index}`}>
-        <span class="allergen-label">${t("allergens.as_served")}</span>
-        ${
-          codes.length > 0
-            ? codes.map(
-                (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
-              )
-            : asServed.pending
-              ? nothing
-              : html`<span class="allergen-none">${t("allergens.as_served_none")}</span>`
-        }
-        ${
-          asServed.pending
-            ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`
-            : nothing
-        }
-      </div>
-    `;
+  #nutrition(line: OrderLine) {
+    const served = asServedAllergens(line);
+    return nutritionIcons(
+      served.pending ? null : served.allergens,
+      nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations),
+    );
   }
 }
 

@@ -21,7 +21,6 @@ import "../widgets/held-orders.js";
 import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
-import "./till-allergen-screen.js";
 import type {
   CounterWaitingOrder,
   FloorZone,
@@ -199,7 +198,6 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) makeAtStations: Station[] = [];
   /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
   @property({ type: Boolean }) orderInFlight = false;
-  /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
   @property({ attribute: false }) service: MenuState["service"] | null = {
@@ -228,7 +226,6 @@ export class TillCounterScreen extends LitElement {
   @property() operatorName = "";
   @property() invoiceLocale = "es-ES";
 
-  @state() private showAllergens = false;
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   /** A sale or order is being sent: the visible half of the app's guard against a second send. */
@@ -333,14 +330,6 @@ export class TillCounterScreen extends LitElement {
 
   #hasDietData(): boolean {
     return hasDietData(this.products);
-  }
-
-  #openAllergens(): void {
-    this.showAllergens = true;
-  }
-
-  #closeAllergens(): void {
-    this.showAllergens = false;
   }
 
   #menuControls(): TemplateResult {
@@ -505,13 +494,6 @@ export class TillCounterScreen extends LitElement {
                   >
                     ${t("equipment.open")}
                   </wt-button>
-                  <wt-button
-                    class="allergens"
-                    variant="secondary"
-                    @click=${() => this.#openAllergens()}
-                  >
-                    ${t("allergens.open")}
-                  </wt-button>
                   <wt-button class="floor" variant="secondary" @click=${() => this.#showFloor()}>
                     ${t("floor.open")}
                   </wt-button>
@@ -543,17 +525,7 @@ export class TillCounterScreen extends LitElement {
                 </div>
               </div>`
         }
-        ${
-          this.showAllergens
-            ? html`<till-allergen-screen
-                class="allergen-screen"
-                .products=${this.products}
-                .locale=${currentLocale()}
-                .invoiceLocale=${this.invoiceLocale}
-                @close-allergens=${() => this.#closeAllergens()}
-              ></till-allergen-screen>`
-            : this.#gridBody()
-        }
+        ${this.#gridBody()}
       </div>
     `;
   }

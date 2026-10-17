@@ -123,6 +123,12 @@ answers, which this spec now follows:
    allergens and diets and its note added (A738, `docs/backlog/till.md`), not this spec's info
    window.
 
+## Keyboard access, owner answer 2026-10-16
+
+The owner approved a keyboard exception to the earlier “only a long press” answer: Shift+F10 or
+the context-menu key opens information for the focused product. A tap or Enter still adds the dish.
+The proposed Spanish labels are approved: Añadir al pedido, Dieta and Alérgenos pendientes de revisión.
+
 ## Mockups
 
 In [docs/backlog/mockups/a668-allergen-icons/](../../backlog/mockups/a668-allergen-icons/):

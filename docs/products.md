@@ -36,7 +36,7 @@ line list, a retrieved order and your sales reports. Use whatever the venue actu
 Two optional names sit beside it, each in its own folded section:
 
 - A **customer-facing name**, under **Descriptors**, with one field per content language. This is
-  what a diner reads: the receipt, the invoice, and the printed allergen sheet. A receipt and an
+  what a diner reads: the receipt and the invoice. A receipt and an
   invoice show the default language's customer-facing name whatever language they print in; leave
   it blank there and they show another language's, or the staff name when no language has one.
 - A **kitchen name**, under **Kitchen**. This is what the kitchen ticket prints and what the kitchen
@@ -221,3 +221,22 @@ up to three optional sides from **Guarniciones**: Padrón peppers (2.00), mixed 
 house bread (0.50). These prices apply to one portion added to the chicken, so you can try an
 extra priced differently from the same product sold on its own.
 
+
+
+## Read a dish’s nutrition at the till
+
+Hold a product button down to open its information window. You see the dish’s allergens, including
+its cereals or nuts, and its diet labels. An unreviewed dish says so in the window. Choose **Add to
+order** to select the dish, or **Close** to return without adding it.
+
+The small nutrition mark appears only when the dish has declared allergens or diet labels. You
+can still hold an unmarked button to check its review state. A short tap anywhere on the button,
+including the mark, adds the dish as usual.
+
+Order lines show nutrition icons after the dish’s name. An unreviewed dish shows no icons; check its
+information window rather than treating the absence of icons as a declaration. Extras keep their
+own nutrition separate from the dish. There is no separate Allergens screen or printed allergen
+sheet in the till.
+
+Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
+still selects the dish (owner decision, 2026-10-16).

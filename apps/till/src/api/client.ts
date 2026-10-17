@@ -579,7 +579,13 @@ export interface CurrentOrderKitchen {
 
 /** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
  * one, a paid one included. Only a `released` row can be marked served; its extras are served with it. */
+export interface LineNutrition {
+  allergens: ProductAllergens | null;
+  dietaryDeclarations: string[];
+}
+
 export interface CurrentOrderRow {
+  nutrition?: LineNutrition;
   lineId: string;
   workingOrderId: string;
   lineNo: number;
@@ -2063,6 +2069,7 @@ export interface TabLines {
  * marker (`null` ⇒ still to serve).
  */
 export interface TabLine {
+  nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in
    * {@link OrderGroup.lineIds}; a child extras row never is. */
   id: string;

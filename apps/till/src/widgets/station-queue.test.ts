@@ -691,14 +691,15 @@ describe("till-station-queue", () => {
       expect(cell.textContent).toMatch(/milk/i);
     });
 
-    it("shows a not-reviewed warning when the dish's own allergens are pending", async () => {
+    it("omits the retired not-reviewed warning when the dish's own allergens are pending", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingItem],
         view: "rail",
         stationId: "st-p",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-p"]')!;
-      expect(item.textContent).toContain(t("allergens.not_reviewed"));
+      expect(item.querySelector(".allergen-pending")).toBeNull();
+      expect(item.textContent).not.toMatch(/review|revisi/i);
     });
 
     it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {

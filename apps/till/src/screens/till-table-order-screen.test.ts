@@ -5653,3 +5653,121 @@ describe("closed department ordering", () => {
     expect(el.lines.map((line) => line.id)).toEqual(["line-1"]);
   });
 });
+
+describe("A668 nutrition after table-order names", () => {
+  it("shows nutrition in the last-added draft summary and the draft review row", async () => {
+    const draft = new WorkingOrderStore();
+    const dish: TillProduct = {
+      ...cafe,
+      allergens: { milk: {} },
+      dietaryDeclarations: ["no_meat"],
+    };
+    draft.addProduct(dish, "1");
+    const { el } = await mount({ draftStore: draft });
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
+      ),
+    ).not.toBeNull();
+    await openReview(el);
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-select] .draft-line-name wt-icon[name="allergen-milk"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-draft-select] .draft-line-name wt-icon[name="diet-no_meat"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("shows nutrition in a group row before Current orders has been read", async () => {
+    const line: TabLine = {
+      ...pendingLine,
+      groupId: "held",
+      nutrition: { allergens: { gluten: { kinds: ["rye"] } }, dietaryDeclarations: ["kosher"] },
+    };
+    const { el } = await mount({
+      lines: [line],
+      groups: [{ ...orderGroup("held", "held"), lineIds: [line.id] }],
+      currentOrders: null,
+    });
+    await openDrawer(el);
+    const name = el.shadowRoot!.querySelector("[data-group-line] .group-line-name")!;
+    expect(name.querySelector('wt-icon[name="allergen-gluten"]')?.getAttribute("label")).toMatch(
+      /rye|centeno/i,
+    );
+    expect(name.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
+  });
+
+  it("shows each persisted pending and served line's own nutrition without reading the current menu", async () => {
+    const { el } = await mount({
+      lines: [
+        {
+          ...pendingLine,
+          sentAt: null,
+          firedAt: null,
+          state: null,
+          nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["no_fish"] },
+        },
+        { ...servedLine, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["halal"] } },
+      ],
+    });
+    await openDrawer(el);
+    expect(
+      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="allergen-milk"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="diet-no_fish"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="allergen-eggs"]'),
+    ).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="diet-halal"]'),
+    ).not.toBeNull();
+  });
+  it("shows sent dishes from other bills with their own nutrition in Current orders", async () => {
+    const { el } = await mount({
+      currentOrders: {
+        revision: 1,
+        reminder: null,
+        groups: [],
+        ungrouped: [
+          {
+            lineId: "other-bill-line",
+            workingOrderId: "other-bill",
+            lineNo: 5,
+            name: "Other bill dish",
+            quantity: "1.000",
+            unitPrecision: 0,
+            servedQuantity: "0.000",
+            servedAt: null,
+            released: true,
+            kitchen: null,
+            note: null,
+            extras: [],
+            nutrition: {
+              allergens: { nuts: { kinds: ["hazelnuts"] } },
+              dietaryDeclarations: ["kosher"],
+            },
+          },
+        ],
+      },
+    });
+    await openDrawer(el);
+    const row = el.shadowRoot!.querySelector(
+      '[data-group-line="other-bill-line"] .group-line-name',
+    )!;
+    expect(row.querySelector('wt-icon[name="allergen-nuts"]')?.getAttribute("label")).toMatch(
+      /hazelnut|avellana/i,
+    );
+    expect(row.querySelector('wt-icon[name="diet-kosher"]')).not.toBeNull();
+  });
+});

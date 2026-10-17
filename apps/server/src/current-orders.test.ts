@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
@@ -997,6 +998,19 @@ async function linesByName(partyId: string) {
 }
 
 describe("readCurrentOrders (spec §4)", () => {
+  it("carries effective live dish nutrition on a sent current-order row", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [line(v, "steak")]);
+    await suite.db.execute(
+      sql`update products set allergens = ${JSON.stringify({ gluten: { kinds: ["barley"] } })}, dietary_declarations = ${JSON.stringify(["halal"])} where name = 'steak'`,
+    );
+    const read = await currentOrders(s.partyId);
+    expect(read.groups[0]!.rows[0]).toMatchObject({
+      nutrition: { allergens: { gluten: { kinds: ["barley"] } }, dietaryDeclarations: ["halal"] },
+    });
+  });
+
   it("reads every group in sequence with each dish row's served count and kitchen state, across a paid bill, a split one and a later one", async () => {
     const v = await setupVenue();
     const s = await seated(v);

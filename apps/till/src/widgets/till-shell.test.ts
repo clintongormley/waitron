@@ -205,30 +205,27 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector(".schedule")).toBeNull();
   });
 
-  it("emits show-expo, show-schedule, open-allergens and logout from the header chrome", async () => {
+  it("emits show-expo, show-schedule and logout from the header chrome", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "till",
       activeScreen: "counter",
       affordances: ["expo", "schedule"],
     });
     const fired: string[] = [];
-    for (const type of ["show-expo", "show-schedule", "open-allergens", "logout"]) {
+    for (const type of ["show-expo", "show-schedule", "logout"]) {
       el.addEventListener(type, () => fired.push(type));
     }
     el.shadowRoot!.querySelector<HTMLElement>(".expo")!.click();
     el.shadowRoot!.querySelector<HTMLElement>(".schedule")!.click();
-    el.shadowRoot!.querySelector<HTMLElement>(".allergens")!.click();
     el.shadowRoot!.querySelector<HTMLElement>(".logout")!.click();
-    expect(fired).toEqual(["show-expo", "show-schedule", "open-allergens", "logout"]);
+    expect(fired).toEqual(["show-expo", "show-schedule", "logout"]);
   });
 
-  it("offers Equipment beside Allergens, emitting open-equipment", async () => {
+  it("offers Equipment without the retired Allergens action, emitting open-equipment", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", { formFactor: "till" });
     const equipment = el.shadowRoot!.querySelector<HTMLElement>("wt-button.equipment")!;
     expect(equipment.textContent).toContain(t("equipment.open"));
-    expect(equipment.previousElementSibling).toBe(
-      el.shadowRoot!.querySelector("wt-button.allergens"),
-    );
+    expect(el.shadowRoot!.querySelector("wt-button.allergens")).toBeNull();
     let fired = 0;
     el.addEventListener("open-equipment", () => (fired += 1));
     equipment.click();
@@ -437,7 +434,7 @@ describe("till-shell", () => {
             "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(12);
+        expect(controls.length).toBe(11);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
           .map((c) => {
@@ -529,7 +526,6 @@ const menuActions = [
   [".expo", "show-expo"],
   [".station", "show-station"],
   [".schedule", "show-schedule"],
-  [".allergens", "open-allergens"],
   [".profile", "open-profile"],
   [".equipment", "open-equipment"],
   ["[data-open-transfers]", "open-transfers"],
@@ -616,7 +612,6 @@ describe("till-shell at phone width", () => {
         "expo",
         "station",
         "schedule",
-        "allergens",
         "profile",
         "equipment",
         "department-transfers",
@@ -821,7 +816,6 @@ describe("till-shell at phone width", () => {
         "expo",
         "station",
         "schedule",
-        "allergens",
         "profile",
         "equipment",
         "department-transfers",
@@ -860,7 +854,6 @@ describe("till-shell above phone width", () => {
     ["transfers", "[data-open-transfers]"],
     ["equipment", ".equipment"],
     ["profile", ".profile"],
-    ["allergens", ".allergens"],
     ["schedule", ".schedule"],
     ["station", ".station"],
     ["expo", ".expo"],
@@ -1007,7 +1000,6 @@ describe("till-shell above phone width", () => {
     transfers: ['[data-test="department-transfers"]', "[data-open-transfers]"],
     equipment: [".equipment"],
     profile: [".profile"],
-    allergens: [".allergens"],
     schedule: [".schedule"],
   };
 
@@ -1085,21 +1077,12 @@ describe("till-shell above phone width", () => {
                         "transfers",
                         "equipment",
                         "profile",
-                        "allergens",
                         "schedule",
                         "station",
                         "expo",
                         "operator",
                       ]
-                    : [
-                        "transfers",
-                        "equipment",
-                        "allergens",
-                        "schedule",
-                        "station",
-                        "expo",
-                        "operator",
-                      ],
+                    : ["transfers", "equipment", "schedule", "station", "expo", "operator"],
                 );
                 expectOneRow(el);
                 host.remove();
@@ -1225,7 +1208,6 @@ describe("till-shell above phone width", () => {
         "expo",
         "station",
         "schedule",
-        "allergens",
         "profile",
         "equipment",
         "department-transfers",
@@ -1269,7 +1251,7 @@ describe("till-shell above phone width", () => {
 
   it("refits when the operator's name grows", async () => {
     await withLocale("en-GB", () =>
-      atViewport(1280, async () => {
+      atViewport(1100, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", full);
         await settle(el);
         const was = inMore(el).length;
@@ -1417,7 +1399,7 @@ describe("till-shell above phone width", () => {
 
   it("keeps every item in an open More when an item earlier in the leaving order appears", async () => {
     await withLocale("en-GB", () =>
-      atViewport(900, async () => {
+      atViewport(800, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           ...full,
           canSwitchProfile: false,
@@ -1427,7 +1409,7 @@ describe("till-shell above phone width", () => {
         const held = inMore(el);
         // Profile would come third in the leaving order, so with three or more items already in
         // More its arrival shifts the count's slice by one.
-        expect(held).toContain("allergens");
+        expect(held).toContain("schedule");
         await userEvent.click(triggerOf(el));
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
         await page.viewport(ROOMY_WIDTH, 844);
@@ -1490,7 +1472,7 @@ describe("till-shell above phone width", () => {
         // A tap's click reaches the shell after More has hidden itself, and the redraw this asks
         // for runs before the popover's toggle event, which comes as a later task.
         el.addEventListener("click", () => el.requestUpdate(), { once: true });
-        await userEvent.click(menuOf(el)!.querySelector<HTMLElement>(".allergens")!);
+        await userEvent.click(menuOf(el)!.querySelector<HTMLElement>(".schedule")!);
         await settle(el);
         const { el: fresh } = await mountWidget<TillShell>("till-shell", full);
         await settle(fresh);
@@ -1627,7 +1609,7 @@ describe("till-shell above phone width", () => {
     "fits as a fresh bar does when %s before the first refit has finished [batch %#]",
     async (_how, start, first, second, from, to) => {
       await withLocale("en-GB", () =>
-        atViewport(1280, async () => {
+        atViewport(1100, async () => {
           const { el: fresh } = await mountWidget<TillShell>("till-shell", {
             ...full,
             ...start,

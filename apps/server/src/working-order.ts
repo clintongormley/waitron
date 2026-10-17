@@ -1,3 +1,4 @@
+import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
@@ -3476,6 +3477,7 @@ export async function assertTabOpen(tx: Transaction, tabId: string): Promise<num
 /** One line of an OPEN tab. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
  *  re-price. */
 export interface TabLine {
+  nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in the group's
    *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-groups.ts`). */
   id: string;
@@ -3572,6 +3574,10 @@ export async function readTabLines(
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  const nutrition = await readLineNutrition(
+    tx,
+    rows.map((row) => row.id),
+  );
   const menuItemByLine = new Map(
     (await VENUE_SERVICE.listLineContexts(tx, cfg, tabId)).map((context) => [
       context.workingOrderLineId,
@@ -3584,6 +3590,7 @@ export async function readTabLines(
     const sold = soldProduct(row);
     return {
       id: row.id,
+      ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,

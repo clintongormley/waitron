@@ -666,13 +666,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A668 — allergen information on the till (owner, 2026-10-14;
-  spec approved 2026-10-15).** Remove the Allergens screen, add the `allergies` mark and
-  long-press info window, put allergen icons after order-line names, and remove the kitchen's
-  "not reviewed" warning. The shared icons, editor, Products list and publishing warnings are
-  delivered by A668-4, A668-2 and A668-3.
-  [Spec](superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md),
-  [mockups](backlog/mockups/a668-allergen-icons/)
 
 - **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
   `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
@@ -683,7 +676,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A printed menu carries each dish's allergen icons after its name and a key on the page naming
   every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
   online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
-  till's Allergens screen goes.
+  till no longer offers a separate Allergens screen.
 
 - **A651 — drop photos to upload them, and tidy the image library and its picker (owner,
   2026-10-14; open).** Photos dropped anywhere on the library page upload at once, several at a
@@ -1938,6 +1931,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   handles and Delete. Role lists with or after editable roles.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own)
 
+- **Review follow-up: nutrition for extras in Current orders.** The A668-5 reviewer’s
+  read-only finding is that Current orders’ extra summaries carry names and quantities, while the
+  pending/served child rows can show their own nutrition icons. Reproduce the two views with a
+  dish and a differently declared extra, then decide whether the Current orders wire and rows
+  should carry the extra’s nutrition too. The visual difference is unverified; A668-5’s explicit
+  dish-name scope does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`)
+  and `apps/till/src/screens/till-table-order-screen.ts` (`#currentRow`).
+
 - **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
   bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
   name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
@@ -2395,7 +2396,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a-phones-chrome-drew-a-white-page-for-the-box-watch-not-a-job-yet)
 
 - **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
-  button stops short of the right edge; the Schedule and Allergens screens draw their own copy of
+  button stops short of the right edge; the Schedule screen draws its own copy of
   the card's border and padding.
   [Detail](backlog/till.md#two-small-phone-width-points-a414-left-1495)
 
@@ -2623,11 +2624,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tables to staff, including handover and how assignments appear on the floor dashboard. The current
   workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
 
-- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
-  text.** **Next action:** whoever takes the till layout pass below decides whether these four want
-  `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
-  `--wt-color-danger` the dish picker's refusals now use.
-  [Detail](backlog/till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
+- **Diet badges still read undeclared caution and success text colours.** A668-5 removes the
+  basket and kitchen reads from the original “Four till surfaces ask for a caution colour” finding.
+  **Next action:** choose declared theme tokens or define the intended text tokens for
+  `diet-badges.ts`, then remove its two `FALLBACK_READS` exceptions.
+  [Original finding and remaining scope](backlog/till.md#four-till-surfaces-ask-for-a-caution-colour-that-is-defined-nowhere-so-all-four-render-as-plain-text)
 
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found while looking at the real screens for B1 Task 12.
@@ -3172,7 +3173,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
   grep) and can be retired.
 
-- The till reads its fallback receipt language and the allergen sheet's language only when it
+- The till reads its fallback receipt language only when it
   starts (again after a server switch or an enrolment), so a change reaches those after a
   reload. The on-screen ticket follows each sale's own language.
 
@@ -4987,6 +4988,17 @@ the tree. What remains, largest first:
   the four files it fixed and still failed `fiscal-allocation-migration`, `guarded-teardowns`,
   `menu-sections-upgrade`, `mutation-shard` and `pre-push`.
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
+
+- **The installer's timeout-diagnostic test expired before reaching Docker.** During A668-5's
+  normal push, the 700 ms case retained self-update curl/copy calls but no Docker call, and its
+  existing `/docker/` assertion failed. The menu-upgrade populated case also exceeded 30 seconds.
+  Both files then passed all 105 cases in isolation, without a code or test change; no repair is
+  claimed. Investigate the full-suite workload and the diagnostic's preparation phase.
+  A further full hook failed the mutation-shard fixture's 30-second bound and two step-watch
+  cases (a 212 ms phase against a 100 ms limit, then a missing diagnostic match). A770 (#1816)
+  reproduced paused-thread failures and changed those watchdog test budgets; A668-5 resumed on
+  that main commit. The installer, menu-upgrade and mutation-fixture timing still need investigation.
+  [Receipt](backlog/ci.md#a668-5-normal-push-recurrence-2026-10-16).
 
 - **`scripts/spawn-timeout-budget.test.ts` never judges `scripts/ci-workflow.test.mjs` or
   `scripts/migration-upgrade.test.ts`.** Its `budgets()` returns `unreadable: true` for both, on

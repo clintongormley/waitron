@@ -2500,8 +2500,6 @@ describe("till-app", () => {
         { type: "show-station", detail: undefined },
         { type: "show-expo", detail: undefined },
         { type: "show-schedule", detail: undefined },
-        { type: "open-allergens", detail: undefined },
-        { type: "close-allergens", detail: undefined },
         { type: "new-sale", detail: undefined },
         { type: "back-to-counter", detail: undefined },
         { type: "back-to-floor", detail: undefined },
@@ -2536,8 +2534,6 @@ describe("till-app", () => {
         "show-expo",
         "show-schedule",
         "show-floor",
-        "open-allergens",
-        "close-allergens",
         "new-sale",
         "back-to-counter",
         "back-to-floor",
@@ -12670,35 +12666,15 @@ describe("till-app", () => {
       expect(el.shadowRoot!.querySelector("till-expo-screen")!.getAttribute("slot")).toBe("drill");
     });
 
-    it("pushes the allergens drill-in from the shell's Allergens affordance (full product set)", async () => {
+    it("ignores the retired Allergens action and URL", async () => {
+      history.replaceState(null, "", "/tabs/counter/view/allergens");
       const el = await toShellCounter();
       emit(shell(el)!, "open-allergens");
-      await el.updateComplete;
-      const allergen = el.shadowRoot!.querySelector<HTMLElement & { products: unknown[] }>(
-        "till-allergen-screen",
-      );
-      expect(drill(el)).not.toBeNull();
-      expect(allergen).not.toBeNull();
-      expect(allergen!.getAttribute("slot")).toBe("drill");
-      // The drill gets the FULL product set (allergen lookup spans every menu).
-      expect(allergen!.products).toEqual([
-        expect.objectContaining({
-          id: "cafe",
-          productId: "cafe",
-          menuItemId: "menu-item-cafe-0",
-          unitPrice: "1.50",
-        }),
-      ]);
-    });
-
-    it("pops the allergens drill-in on its own close-allergens", async () => {
-      const el = await toShellCounter();
-      emit(shell(el)!, "open-allergens");
-      await el.updateComplete;
-      emit(el.shadowRoot!.querySelector("till-allergen-screen")!, "close-allergens");
-      await el.updateComplete;
-      expect(drill(el)).toBeNull();
+      await flush(el);
       expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
+      expect(shell(el)!.shadowRoot!.querySelector(".allergens")).toBeNull();
+      expect(drill(el)).toBeNull();
+      expect(location.pathname).toBe("/tabs/counter");
     });
 
     it("pops a drill-in back to the counter tab on back-to-counter", async () => {
@@ -13928,7 +13904,6 @@ describe("persistent till destinations", () => {
     ["show-schedule", "schedule", "till-schedule-screen"],
     ["show-station", "station", "till-station-screen"],
     ["show-expo", "expo", "till-expo-screen"],
-    ["open-allergens", "allergens", "till-allergen-screen"],
   ])("restores %s with Back, Forward, login and refresh", async (event, view, selector) => {
     const { el } = await mountApp();
     await toCounter(el);
@@ -13949,10 +13924,7 @@ describe("persistent till destinations", () => {
     await toCounter(fresh);
     expect(fresh.shadowRoot!.querySelector(selector)).not.toBeNull();
     expect(location.pathname).toBe(destination);
-    emit(
-      fresh.shadowRoot!.querySelector(selector)!,
-      view === "allergens" ? "close-allergens" : "back-to-counter",
-    );
+    emit(fresh.shadowRoot!.querySelector(selector)!, "back-to-counter");
     await flush(fresh);
     expect(location.pathname).toBe("/tabs/counter");
     await traverse("back", fresh);

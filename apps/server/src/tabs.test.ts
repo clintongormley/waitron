@@ -30,6 +30,7 @@ import {
   createExtraList,
   addProductToMenu,
   createProduct,
+  setProductVariants,
   EACH_UNIT,
   units,
   updateUnit,
@@ -643,6 +644,83 @@ describe("markServed / unmarkServed", () => {
 });
 
 describe("readTabLines", () => {
+  it("carries the effective dish nutrition on held table lines without an extras overlay", async () => {
+    const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    await suite.db.execute(
+      sql`update products set allergens = ${JSON.stringify({ milk: {} })}, dietary_declarations = ${JSON.stringify(["no_meat"])} where id = ${cafeId}`,
+    );
+    await suite.db.execute(
+      sql`update products set allergens = ${JSON.stringify({ eggs: {} })} where id = ${aguaId}`,
+    );
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          hold: true,
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+    const pending = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(pending.find((line) => line.productId === cafeId)).toMatchObject({
+      nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["no_meat"] },
+    });
+    expect(pending.find((line) => line.productId === aguaId)).toMatchObject({
+      nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] },
+    });
+    expect(pending.find((line) => line.productId === cafeId)!.sentAt).toBeNull();
+  });
+
+  it("reads a selected variant's own nutrition rather than its parent's", async () => {
+    const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
+    const variantId = await asApp(cfg, async (tx) => {
+      const [variant] = await setProductVariants(
+        tx,
+        cafeId,
+        [
+          {
+            name: "Large",
+            customerName: { [LOCALE]: "Taza grande" },
+            kitchenName: "KDS large",
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        LOCALE,
+      );
+      await tx.execute(
+        sql`update products set allergens = ${JSON.stringify({ milk: {} })}, dietary_declarations = ${JSON.stringify(["halal"])} where id = ${cafeId}`,
+      );
+      await tx.execute(
+        sql`update products set allergens = ${JSON.stringify({ nuts: { kinds: ["almonds"] } })}, dietary_declarations = ${JSON.stringify(["kosher"])} where id = ${variant!.id}`,
+      );
+      await republishMenus(tx);
+      return variant!.id;
+    });
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, variantId, quantity: "1" }]),
+    );
+    const rows = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(rows[0]).toMatchObject({
+      productId: variantId,
+      nutrition: { allergens: { nuts: { kinds: ["almonds"] } }, dietaryDeclarations: ["kosher"] },
+    });
+    expect(rows[0]!.nutrition!.allergens).not.toHaveProperty("milk");
+    await db.execute(
+      sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
+    );
+    const inherited = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(inherited[0]!.nutrition).toEqual({
+      allergens: { milk: {} },
+      dietaryDeclarations: ["halal"],
+    });
+  });
+
   it("reads an open tab's lines in line_no order with locked gross price, quantity and served state", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

@@ -12,14 +12,13 @@ export const tillPath: UrlPathConfig = {
   },
 };
 
-export type TillDestination = "schedule" | "station" | "expo" | "allergens" | "hours" | "find-bill";
+export type TillDestination = "schedule" | "station" | "expo" | "hours" | "find-bill";
 
 export function isTillDestination(value: string | null | undefined): value is TillDestination {
   return (
     value === "schedule" ||
     value === "station" ||
     value === "expo" ||
-    value === "allergens" ||
     value === "hours" ||
     value === "find-bill"
   );
