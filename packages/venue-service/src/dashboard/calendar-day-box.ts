@@ -1,7 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { flatParent, scrollTargets } from "./flat-tree.js";
 import { placePopover } from "./painter.js";
 
@@ -17,7 +16,6 @@ export interface DayBoxRow {
 export class CalendarDayBox extends LitElement {
   static override styles = [
     baseStyles,
-    dayNameWordStyles,
     css`
       [popover] {
         position: fixed;
@@ -216,9 +214,7 @@ export class CalendarDayBox extends LitElement {
       <h2 id="heading" tabindex="-1">${this.heading}</h2>
       ${
         this.name
-          ? html`<span class="name" data-test="name" data-kind=${this.nameKind} title=${this.name}
-              >${dayNameWords(this.name)}</span
-            >`
+          ? html`<span class="name" data-test="name" data-kind=${this.nameKind}>${this.name}</span>`
           : nothing
       }
       ${this.line ? html`<p class="line" data-test="line">${this.line}</p>` : nothing}

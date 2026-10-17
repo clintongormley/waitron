@@ -159,7 +159,7 @@ describe("a too-long word in the Week's phone day", () => {
     expect(names[0]!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
   });
 
-  it("is cut the same way in the day box", async () => {
+  it("is shown whole in the day box, carried onto as many lines as it needs", async () => {
     await resizeViewport(390, 800);
     const word = LONG_WORD.repeat(3);
     const anchor = document.createElement("button");
@@ -172,8 +172,17 @@ describe("a too-long word in the Week's phone day", () => {
       nameKind: "special",
     });
     box.show(anchor);
+    const popover = box.shadowRoot!.querySelector("[popover]")!;
     const name = box.shadowRoot!.querySelector('[data-test="name"]')!;
-    expect(expectWholeWords([name])).toEqual([word]);
-    expect(name.querySelector(".word")!.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    expect(name.textContent!.trim()).toBe(word);
+    for (const el of [name, ...name.querySelectorAll("*")])
+      expect(el.scrollWidth, el.textContent!).toBeLessThanOrEqual(el.clientWidth || el.scrollWidth);
+    const [{ tops }] = wordLines(name);
+    expect(tops.length).toBeGreaterThan(1);
+    const edge =
+      popover.getBoundingClientRect().right - parseFloat(getComputedStyle(popover).paddingRight);
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(edge + 0.5);
   });
 });

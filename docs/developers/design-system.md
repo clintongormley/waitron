@@ -4113,8 +4113,10 @@ Opening hours' Year.
   neighbouring months' dates faint, and each date heading carries only the day's number (the
   column heading names the weekday) and a Today marker. Each date shows its special day's name
   and its public holiday's name, the holiday's in red and given once when the two are the same
-  (a day's name, here, in the Week and in the day box, breaks only between its words; a word too
-  wide for its place is cut with an ellipsis, and the name's tooltip holds it whole),
+  (a day's name, here, in the Week and in the day box, breaks only between its words; here and in
+  the Week a word too wide for its place is cut with an ellipsis, and the name's tooltip holds it
+  whole; the day box shows the whole name, carrying only a word wider than the box onto the next
+  line),
   and a bar of hours per active department, or, with one department picked,
   a bar for it and one per zone. A zone's bar shows the zone's own hours, its department's hours
   less the zone's closed times (`zoneOwnHours`, `zone-own-hours.ts`): the bar stops where the zone
