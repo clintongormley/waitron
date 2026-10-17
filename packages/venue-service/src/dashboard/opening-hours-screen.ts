@@ -438,13 +438,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
-    const month = this.moduleView
-      ? this.moduleView.params["month"]
-      : this.view === "month"
-        ? this.shownMonth()
-        : this.view === "week"
-          ? weekMonth(this.shownWeekDate())
-          : "";
+    const month = this.moduleView ? this.moduleView.params["month"] : this.readMonth();
     this.openCalendarView(id, month ? { month } : {});
   }
   private static readonly ViewHost = class implements CalendarViewHost {
@@ -1204,11 +1198,12 @@ export class OpeningHoursScreen extends LitElement {
     this.endFocusHandOff();
     if (this.isConnected && focusLost()) name.focus();
   }
+  private writeChanges(changes: Record<string, string | null>) {
+    void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
+      this.followUrl(),
+    );
+  }
   private month() {
-    const write = (changes: Record<string, string | null>) =>
-      void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
-        this.followUrl(),
-      );
     return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
       <opening-hours-month
         .model=${this.monthModel}
@@ -1222,19 +1217,15 @@ export class OpeningHoursScreen extends LitElement {
         @month-year-open=${this.openYearFromMonth}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
-          write({ view: "month", month: event.detail.month, date: null, to: null });
+          this.writeChanges({ view: "month", month: event.detail.month, date: null, to: null });
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
-          write({ department: event.detail.departmentId || null, zone: null });
+          this.writeChanges({ department: event.detail.departmentId || null, zone: null });
         }}
       ></opening-hours-month>`;
   }
   private week() {
-    const write = (changes: Record<string, string | null>) =>
-      void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
-        this.followUrl(),
-      );
     return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
       <opening-hours-week
         .model=${this.monthModel}
@@ -1243,11 +1234,11 @@ export class OpeningHoursScreen extends LitElement {
         .departments=${this.model!.departments}
         @week-change=${(event: CustomEvent<{ date: string }>) => {
           event.stopPropagation();
-          write({ view: "week", week: event.detail.date });
+          this.writeChanges({ view: "week", week: event.detail.date });
         }}
         @week-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
-          write({ department: event.detail.departmentId || null, zone: null });
+          this.writeChanges({ department: event.detail.departmentId || null, zone: null });
         }}
       ></opening-hours-week>`;
   }

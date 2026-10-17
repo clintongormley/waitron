@@ -50,7 +50,8 @@ afterEach(async () => {
 
 /** Every month read is answered with the fixture's December, which holds 30 November to
  *  3 January, so it serves each week these tests draw. */
-async function mount(address: string, calendar?: Screen["calendar"]) {
+/** With `hold`, the opening-hours read never answers. */
+async function mount(address: string, calendar?: Screen["calendar"], hold = false) {
   history.replaceState(null, "", address);
   const months: string[] = [];
   const request = (async (path: string) => {
@@ -59,7 +60,7 @@ async function mount(address: string, calendar?: Screen["calendar"]) {
       months.push(month[1]!);
       return monthModel({ month: month[1]! });
     }
-    if (path.includes("/opening-hours/year?")) return new Promise(() => {});
+    if (hold || path.includes("/opening-hours/year?")) return new Promise(() => {});
     return model();
   }) as DashboardRequest;
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
@@ -68,7 +69,8 @@ async function mount(address: string, calendar?: Screen["calendar"]) {
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
-  await expect.poll(() => week(el)?.model).toBeDefined();
+  if (hold) await expect.poll(() => el.shadowRoot?.querySelector("h1")).not.toBeNull();
+  else await expect.poll(() => week(el)?.model).toBeDefined();
   await el.updateComplete;
   return { el, months };
 }
@@ -100,18 +102,20 @@ describe("the Week at its address", () => {
     expect(location.pathname).toBe("/manage/opening-hours/view/week");
   });
 
-  it.each(["2026-13-40", "abc", "0099-12-28"])(
+  it.each(["2026-13-40", "abc", "0099-12-28", "0100-01-15", "9999-01-15"])(
     "/view/week/week/%s draws the week holding the venue's today and leaves the address as written",
     async (value) => {
+      const address = `/manage/opening-hours/view/week/week/${value}`;
       const pushed = pushedPaths();
       const replaced = vi.spyOn(history, "replaceState");
-      const { el } = await mount(`/manage/opening-hours/view/week/week/${value}`);
-      replaced.mockClear();
+      const { el } = await mount(address);
       expect(week(el)!.date).toBe("2026-12-02");
       await el.updateComplete;
-      expect(location.pathname).toBe(`/manage/opening-hours/view/week/week/${value}`);
+      expect(location.pathname).toBe(address);
       expect(pushed()).toEqual([]);
-      expect(replaced).not.toHaveBeenCalled();
+      expect(
+        replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+      ).toEqual([address]);
       expect(painter(el)).toBeNull();
     },
   );
@@ -215,5 +219,27 @@ describe("the Calendar switch from the Week", () => {
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/staffing/month/2026-12");
+  });
+
+  it("a module view chosen on the Week before the opening-hours read answers carries no month", async () => {
+    const errors: unknown[] = [];
+    const caught = (event: ErrorEvent) => errors.push(event.error);
+    addEventListener("error", caught);
+    onTestFinished(() => removeEventListener("error", caught));
+    const { el } = await mount(
+      "/manage/opening-hours/view/week/week/2027-01-02",
+      {
+        ctx: { request: (async () => undefined) as DashboardRequest },
+        views: [{ view: staffing, canWrite: true }],
+      },
+      true,
+    );
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        "[data-test=calendar-switch] input[value=staffing]",
+      )!,
+    );
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/staffing");
+    expect(errors).toEqual([]);
   });
 });
