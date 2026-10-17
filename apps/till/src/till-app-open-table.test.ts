@@ -1178,6 +1178,100 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual([]);
   });
 
+  /** Mesa 9 free, its seating held until `seat` is called, and who each save was sent as. */
+  function mountHeldSeating(): {
+    savedBy: string[];
+    seat: () => void;
+    mounted: ReturnType<typeof mountApp>;
+  } {
+    const savedBy: string[] = [];
+    const free = table("t9", "9", null);
+    const seated = table(
+      "t9",
+      "9",
+      party({ id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"] }),
+    );
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    const mounted = mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn(async () => {
+        await held;
+        vi.mocked(api.getTablesState).mockResolvedValue([mesa4, mesa7, seated]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        savedBy.push(server.personId);
+        return server.saveDraft(...args);
+      }),
+    });
+    return { savedBy, seat: () => answer(), mounted };
+  }
+
+  async function seatMesa9WithBeer(el: TillApp): Promise<void> {
+    await openMesa(el, "t9");
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(api.seatTable).toHaveBeenCalledOnce();
+  }
+
+  const pastSaveDelay = () =>
+    new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+  const beersOwnedBy = (personId: string) =>
+    server.drafts
+      .filter((draft) => draft.ownerId === personId)
+      .flatMap((draft) => draft.lines.map((line) => line.menuItemId));
+
+  it("after a restart with no sign-out, lines carried to a table whose seating answers once the next person is in are not saved as them", async () => {
+    const { savedBy, seat, mounted } = mountHeldSeating();
+    const { el } = await mounted;
+    await seatMesa9WithBeer(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    await flush(el, 6);
+    seat();
+    await flush(el, 6);
+    await pastSaveDelay();
+    await flush(el, 6);
+    expect(savedBy).not.toContain("p2");
+    expect(beersOwnedBy("p2")).not.toContain("offer-beer");
+  });
+
+  it("after a restart with no sign-out, lines carried to a table whose seating answers while the next person's sign-in loads are not saved as them", async () => {
+    const { savedBy, seat, mounted } = mountHeldSeating();
+    const { el } = await mounted;
+    await seatMesa9WithBeer(el);
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+    seat();
+    await flush(el, 6);
+    await pastSaveDelay();
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+    await pastSaveDelay();
+    await flush(el, 6);
+    expect(savedBy).not.toContain("p2");
+    expect(beersOwnedBy("p2")).not.toContain("offer-beer");
+  });
+
+  it("after a restart with no sign-out, lines carried to a table whose seating answers once the same person is back in are saved as them", async () => {
+    const { savedBy, seat, mounted } = mountHeldSeating();
+    const { el } = await mounted;
+    await seatMesa9WithBeer(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p1", "Ana");
+    await flush(el, 6);
+    seat();
+    await flush(el, 6);
+    await pastSaveDelay();
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+    expect(beersOwnedBy("p1")).toEqual(["offer-beer"]);
+  });
+
   it("a server switch lets go of a left draft whose background save got no answer", async () => {
     const { el, switchServer } = await mountWithRouter();
     await openMesa(el);

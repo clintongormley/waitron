@@ -1648,6 +1648,7 @@ export class TillApp extends LitElement {
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
+    this.#sessionPersonId = "";
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
@@ -2279,6 +2280,9 @@ export class TillApp extends LitElement {
   /** Bumped when the operator's session ends by logout or a server switch, so an answer arriving
    * afterwards can tell that the session it was asked in has ended. */
   #operatorSession = 0;
+  /** The person the server session now belongs to, and so the person any draft save goes in as. It
+   * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
+  #sessionPersonId = "";
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -3867,6 +3871,7 @@ export class TillApp extends LitElement {
     this.clockedOut = false;
     this.#loginPending = true;
     if (personId !== this.operatorPersonId) this.#dropOthersDrafts(personId);
+    this.#sessionPersonId = personId;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
@@ -8618,7 +8623,11 @@ export class TillApp extends LitElement {
         : undefined;
     const unlock = unassigned?.lockEdits();
     const carried = unassigned
-      ? { note: unassigned.kitchenNote, lines: unassigned.lines.slice() }
+      ? {
+          note: unassigned.kitchenNote,
+          lines: unassigned.lines.slice(),
+          carrier: this.#sessionPersonId,
+        }
       : undefined;
     const offerRequest = ++this.#tableOfferRequest;
     const visit = ++this.#orderVisit;
@@ -8665,7 +8674,7 @@ export class TillApp extends LitElement {
     offerRequest: number,
     withTableIds?: string[],
     left: () => boolean = () => false,
-    carried?: { note: string | null; lines: OrderLine[] },
+    carried?: { note: string | null; lines: OrderLine[]; carrier: string },
     shownEarly = false,
   ): Promise<void> {
     try {
@@ -8820,7 +8829,8 @@ export class TillApp extends LitElement {
           };
           const opened = await this.#openDraft(false, session);
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-          if (carried && opened?.sync && carried.lines.length > 0)
+          // A restart with no sign-out keeps the session counter, so the next person may be in by now.
+          if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0)
             opened.sync.store.appendLines(carried.lines);
           this.#showDraft(opened);
         } catch (error) {
@@ -9084,7 +9094,7 @@ export class TillApp extends LitElement {
     if (party === null) return { sync: undefined, read: true };
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
-    if (kept?.personId === this.operatorPersonId) {
+    if (kept?.personId === this.#sessionPersonId) {
       this.#draftSync = kept;
       void this.#flushDraft();
       return { sync: kept, read: true };
@@ -9093,7 +9103,7 @@ export class TillApp extends LitElement {
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
-      personId: this.operatorPersonId,
+      personId: this.#sessionPersonId,
       rebuild: (lines) =>
         lines.map((line) =>
           fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
@@ -9150,8 +9160,9 @@ export class TillApp extends LitElement {
     else this.#reconcileDraft();
   }
 
-  /** At a sign-in: the server takes the person from the session, so a save of anyone else's draft
-   * sent from now on would be saved as the person signing in. */
+  /** At a sign-in: the server takes the person from the session, so a save sent from now on goes in
+   * as the person signing in: a new draft becomes theirs, and one naming another person's draft is
+   * refused. */
   #dropOthersDrafts(personId: string): void {
     if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
     for (const sync of [...this.#leavingDrafts.keys()])
@@ -12528,7 +12539,7 @@ export class TillApp extends LitElement {
     const sync = this.#draftSync;
     const unsaved = [...this.#unsavedDrafts.values()];
     this.#unsavedDrafts.clear();
-    const own = unsaved.filter((each) => each.personId === this.operatorPersonId);
+    const own = unsaved.filter((each) => each.personId === this.#sessionPersonId);
     for (const each of unsaved) if (!own.includes(each)) each.drop();
     const leaving = [...this.#leavingDrafts.keys(), ...own];
     if (sync !== undefined || leaving.length > 0) {
