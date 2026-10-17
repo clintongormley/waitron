@@ -127,6 +127,7 @@ export {
   orderDraftState,
   orderDrafts,
 } from "./schema/order-drafts.js";
+export { orderDraftRecalledLines } from "./schema/order-draft-recalled-lines.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
 export { kitchenTimingDefaults, kitchenStationTiming } from "./schema/kitchen-timing.js";

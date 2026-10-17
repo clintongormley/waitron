@@ -204,6 +204,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "the lines of an unsent order; copied to a standby, never drained back",
   ),
+  classify(
+    "order_draft_recalled_lines",
+    "state",
+    "exclusive draft references to priced bill lines awaiting resend; copied to a standby, never drained back",
+  ),
   appendOnly(
     "order_draft_events",
     "state",
