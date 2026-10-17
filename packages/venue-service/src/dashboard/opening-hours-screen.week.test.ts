@@ -390,6 +390,16 @@ describe("from the Week to the Month, the Year and the day box", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await el.updateComplete;
       expect(dayBox(el)).toBeNull();
+      if (press === "keyboard") {
+        const expected = () =>
+          view === "month"
+            ? monthView(el)!.shadowRoot!.querySelector("[data-test=month-year]")
+            : yearView(el)!.shadowRoot!.querySelector(
+                '[data-month="2026-12"] [data-test=month-name]',
+              );
+        await expect.poll(expected).toBeTruthy();
+        await expect.poll(focused).toBe(expected());
+      }
     },
   );
 
@@ -430,5 +440,88 @@ describe("from the Week to the Month, the Year and the day box", () => {
       .toBe("/manage/opening-hours/view/week/department/rest/week/2026-12-09");
     await expect.poll(() => painter(el)).toBeNull();
     expect(week(el)!.date).toBe("2026-12-09");
+  });
+});
+
+describe("Open this week from the day box", () => {
+  /** Mounts the Month or the Year; with `holdMonths`, no month read ever answers. */
+  async function mountView(address: string, { readOnly = false, holdMonths = false } = {}) {
+    history.replaceState(null, "", address);
+    const request = (async (path: string) => {
+      const month = /\/opening-hours\/month\?month=([\d-]+)$/.exec(path);
+      if (month) return holdMonths ? new Promise(() => {}) : monthModel({ month: month[1]! });
+      const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
+      if (year) return yearRead(Number(year[1]));
+      return model();
+    }) as DashboardRequest;
+    const el = document.createElement("dashboard-opening-hours-screen") as Screen;
+    el.api = new OpeningHoursApi(request);
+    el.readOnly = readOnly;
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await expect.poll(() => (monthView(el) ?? yearView(el))?.model).toBeDefined();
+    await el.updateComplete;
+    await (monthView(el) ?? yearView(el))!.updateComplete;
+    return el;
+  }
+  const dateIn = (view: HTMLElement, date: string) =>
+    view.shadowRoot!.querySelector<HTMLElement>(`td[data-date="${date}"] button`)!;
+  const openWeek = (el: Screen) => dayBox(el)!.querySelector<HTMLElement>("[data-test=open-week]");
+
+  it("Open this week from the Month opens that date's week, keeping the department", async () => {
+    const el = await mountView("/manage/opening-hours/view/month/department/rest/month/2026-12");
+    await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const pushed = pushedPaths();
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect
+      .poll(() => pushed().at(-1))
+      .toBe("/manage/opening-hours/view/week/department/rest/week/2026-12-10");
+    await expect.poll(() => week(el)?.model).toBeDefined();
+    await week(el)!.updateComplete;
+    expect(
+      [...week(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=day-name]")].map(
+        (name) => name.dataset["date"],
+      ),
+    ).toEqual([
+      "2026-12-07",
+      "2026-12-08",
+      "2026-12-09",
+      "2026-12-10",
+      "2026-12-11",
+      "2026-12-12",
+      "2026-12-13",
+    ]);
+    await expect.poll(focused).toBe(dayName(el, "2026-12-10"));
+  });
+
+  it("Open this week from the Year, while the box's month still loads", async () => {
+    const el = await mountView("/manage/opening-hours/view/year/year/2026", { holdMonths: true });
+    await userEvent.click(dateIn(yearView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.message).toBe("Loading…");
+    expect(boxButtons(el)).toEqual(["Make a special day", "Open this week"]);
+    const pushed = pushedPaths();
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect
+      .poll(() => pushed().at(-1))
+      .toBe("/manage/opening-hours/view/week/week/2026-12-10");
+    await expect.poll(() => week(el)?.date).toBe("2026-12-10");
+  });
+
+  it("a viewer's box offers Open this week too", async () => {
+    const el = await mountView("/manage/opening-hours/view/month/month/2026-12", {
+      readOnly: true,
+    });
+    await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await expect
+      .poll(() => boxButtons(el))
+      .toEqual(["Show Winter's standard week", "Open this week"]);
   });
 });

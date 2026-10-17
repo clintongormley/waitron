@@ -163,19 +163,23 @@ export class OpeningHoursScreen extends LitElement {
   @state() private monthModel?: OpeningHoursMonth;
   @state() private monthReadError = "";
   private readonly monthWatch = new MonthWatch();
-  /** The Year's or the Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
   /** The month read behind the Year's day box, held while that box is open. */
   @state() private boxMonth?: OpeningHoursMonth;
   private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
-  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's year link held focus
-   *  as it opened the Year, and the Year draws its month names only once its read arrives. Only
+  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's or the Week's year link
+   *  held focus as it opened the Year, and the Year draws its month names only once its read arrives. Only
    *  the address change numbered `navigation` keeps it; `armed` once that change has been followed. */
   private focusHandOff?: { month: string; navigation: number; armed: boolean };
   private readonly endFocusHandOff = () => {
     this.focusHandOff = undefined;
     document.removeEventListener("focusin", this.endFocusHandOff, true);
+  };
+  private weekFocus?: { date: LocalDate; navigation: number };
+  private readonly endWeekFocus = () => {
+    this.weekFocus = undefined;
+    document.removeEventListener("focusin", this.endWeekFocus, true);
   };
   /** Counts the addresses followed, so a hand-off can tell its own navigation from any other. */
   private navigations = 0;
@@ -534,6 +538,7 @@ export class OpeningHoursScreen extends LitElement {
     this.boxMonthWatch.stop();
     this.afterDayBox = undefined;
     this.endFocusHandOff();
+    this.endWeekFocus();
     this.generation = {};
     super.disconnectedCallback();
   }
@@ -558,6 +563,7 @@ export class OpeningHoursScreen extends LitElement {
     )
       void this.placeDayBox();
     if (this.focusHandOff?.armed) void this.focusPendingMonth();
+    if (this.weekFocus) void this.focusPendingWeekDay();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     // A new list without the shown view returns to Opening hours, replacing the address naming it.
@@ -1062,7 +1068,7 @@ export class OpeningHoursScreen extends LitElement {
     const error = year ? this.boxMonthError : "";
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
-      // The department picker is the Month's: the Year lists every department.
+      // The Month and the Week pick a department; the Year lists every one.
       const departmentId = year ? "" : this.departmentId;
       return {
         shown: openingHoursDay(day, read.seasons, this.model!.departments, departmentId),
@@ -1135,7 +1141,66 @@ export class OpeningHoursScreen extends LitElement {
             >`
           : nothing
       }
+      ${
+        this.view === "year" || this.view === "month"
+          ? html`<wt-button
+              variant="secondary"
+              data-test="open-week"
+              @click=${act(() => this.openWeekFromBox(open.date))}
+              >${t("day.open_week")}</wt-button
+            >`
+          : nothing
+      }
     </calendar-day-box>`;
+  }
+  /** Focus left on the page by the box's Open this week goes to the date's name in the Week, which
+   *  draws its names only once its month read arrives. */
+  private openWeekFromBox(date: LocalDate) {
+    this.endWeekFocus();
+    const pending = { date, navigation: this.navigations + 1 };
+    this.weekFocus = pending;
+    document.addEventListener("focusin", this.endWeekFocus, true);
+    void Promise.resolve(
+      this.url.write({
+        dashboard: "opening-hours",
+        view: "week",
+        week: date,
+        month: null,
+        year: null,
+        date: null,
+        to: null,
+      }),
+    ).then(() => {
+      this.followUrl();
+      if (this.weekFocus === pending && this.navigations !== pending.navigation)
+        this.endWeekFocus();
+      else void this.focusPendingWeekDay();
+    });
+  }
+  private async focusPendingWeekDay() {
+    const pending = this.weekFocus;
+    if (!pending || this.navigations < pending.navigation) return;
+    // The view the box sat over still holds focus until the Week replaces it.
+    await this.updateComplete;
+    if (this.weekFocus !== pending) return;
+    if (
+      this.navigations !== pending.navigation ||
+      !focusLost() ||
+      this.view !== "week" ||
+      this.moduleView ||
+      this.overlaid()
+    ) {
+      this.endWeekFocus();
+      return;
+    }
+    const week = this.shadowRoot?.querySelector("opening-hours-week");
+    await week?.updateComplete;
+    const name = week?.shadowRoot?.querySelector<HTMLElement>(
+      `[data-test=day-name][data-date="${pending.date}"]`,
+    );
+    if (this.weekFocus !== pending || !name) return;
+    this.endWeekFocus();
+    if (this.isConnected && focusLost()) name.focus();
   }
   private heldFocus(view: EventTarget | null, selector: string) {
     if (!(view instanceof LitElement) || this.shadowRoot?.activeElement !== view) return null;
@@ -1262,7 +1327,8 @@ export class OpeningHoursScreen extends LitElement {
         @week-year-open=${(event: CustomEvent<{ year: number }>) => {
           this.dropDayBox();
           const year = String(event.detail.year).padStart(4, "0");
-          const first = weekDates(this.shownWeekDate()).find((date) => date.startsWith(year))!;
+          const first =
+            weekDates(this.shownWeekDate()).find((date) => date.startsWith(year)) ?? `${year}-01`;
           this.openYearHolding(event, "[data-test=week-year]", first.slice(0, 7));
         }}
         @week-change=${(event: CustomEvent<{ date: string }>) => {

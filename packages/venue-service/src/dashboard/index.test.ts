@@ -389,3 +389,38 @@ it("opens each declared prep-station search destination on its named tab", async
     container.remove();
   }
 });
+
+it("declares the Calendar's Week as a search destination", async () => {
+  const destinations = VENUE_SERVICE_DASHBOARD.searchDestinations?.filter(
+    (x) => x.screen === "opening-hours",
+  );
+  expect(destinations?.map((x) => x.path)).toEqual([
+    "/manage/opening-hours/view/year/window/seasons",
+    "/manage/opening-hours/view/year",
+    "/manage/opening-hours/view/month",
+    "/manage/opening-hours/view/week",
+  ]);
+  const model = {
+    dayCutover: "06:00",
+    currentBusinessDay: "2026-12-02",
+    menus: [],
+    seasons: [],
+    departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
+  };
+  const request = (async (path: string) =>
+    path.includes("/opening-hours/month?")
+      ? new Promise(() => {})
+      : model) as import("@waitron/dashboard-kit").DashboardRequest;
+  history.replaceState(null, "", destinations!.at(-1)!.path);
+  const contribution = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
+    (x) => x.screen.id === "opening-hours",
+  )!;
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(contribution.create({ request }).render(), container);
+  const screen = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull(),
+  );
+});

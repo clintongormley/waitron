@@ -40,6 +40,12 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
       labelKey: "opening.view.month",
       path: "/manage/opening-hours/view/month",
     },
+    {
+      id: "venue-service:week",
+      screen: "opening-hours",
+      labelKey: "opening.view.week",
+      path: "/manage/opening-hours/view/week",
+    },
     ...(["stations", "routing", "times"] as const).map((view) => ({
       id: `venue-service:prep:${view}`,
       screen: "prep-stations",

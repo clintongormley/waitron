@@ -1087,7 +1087,7 @@ describe("Year view", () => {
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe(t("day.loading"));
     expect(dayBox(el)!.line).toBe("");
-    expect(boxButtons(el)).toEqual(["Make a special day"]);
+    expect(boxButtons(el)).toEqual(["Make a special day", "Open this week"]);
     await expect.poll(() => held.length).toBe(1);
     const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
     held[0]!.release(monthModel({ month: "2026-12" }));
@@ -1134,7 +1134,11 @@ describe("Year view", () => {
     await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
     expect(dayBox(el)!.message).toBe("");
     expect(dayBox(el)!.line).toBe("");
-    expect(boxButtons(el)).toEqual(["Edit special day", "Edit All year's standard week"]);
+    expect(boxButtons(el)).toEqual([
+      "Edit special day",
+      "Edit All year's standard week",
+      "Open this week",
+    ]);
   });
 
   it("fills the box once a reread of its failed month succeeds", async () => {
@@ -1267,11 +1271,11 @@ describe("Year view", () => {
     yearDate(await shownYear(view), "2026-10-13").click();
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe(t("day.loading"));
-    expect(boxButtons(el)).toEqual(["Show All year's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show All year's standard week", "Open this week"]);
     await expect.poll(() => held.length).toBe(1);
     held[0]!.release(await redated("2026-10"));
     await expect.poll(() => dayBox(el)?.line).not.toBe("");
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
     expect(boxButton(el, "special-edit")).toBeNull();
     expect(boxButton(el, "special-add")).toBeNull();
   });
@@ -1819,7 +1823,11 @@ describe("Month view", () => {
     expect(placed.bottom).toBeLessThanOrEqual(innerHeight);
     expect(box.heading).toBe(formatDate("2026-12-10"));
     expect(box.line).toBe("Winter standard hours");
-    expect(boxButtons(el)).toEqual(["Make a special day", "Edit Winter's standard week"]);
+    expect(boxButtons(el)).toEqual([
+      "Make a special day",
+      "Edit Winter's standard week",
+      "Open this week",
+    ]);
   });
 
   it("Edit Winter's standard week opens the season painter on that season, keeping the month's department", async () => {
@@ -1935,7 +1943,7 @@ describe("Month view", () => {
       withWinter,
     );
     await openBox(el, await shown(view));
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => el.shadowRoot!.querySelector("season-painter")?.seasonId)
