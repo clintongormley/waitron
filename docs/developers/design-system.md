@@ -3821,8 +3821,8 @@ key to the tints, not buttons (`keyOnly` on `season-chips.ts`). These are planne
 station closures and service extensions do not change them. A default station shows "Always open: this is the default
 station" and no month. A failed read shows "This station's times could not be loaded. It will be
 tried again." above the month until that read succeeds again. The month is not kept in the
-address: the tab opens on the browser's current month. The Calendar's Show picker offers the same
-reading in the Month and the Week (below). Special days are made and painted in Opening hours' special-day painter, opened
+address: the tab opens on the browser's current month. The Calendar's Show picker draws a station's
+times in the Month and the Week (below). Special days are made and painted in Opening hours' special-day painter, opened
 from the Year, the Month or the Week.
 
 ### Tabbed management pages
@@ -4099,7 +4099,7 @@ Opening hours' Year.
   day, and pointing at it names it, as does the date's spoken label. A row with no hours that day is an empty grey bar, the same height as a bar with
   hours, and, unless the whole date is closed, is read out as "<name> closed". A date closed all day adds
   Closed to its first name, or reads Closed with none, and draws its names in the closed date's
-  colour. Above the dates, ‹, the month's name and year, › and the Show department picker share one
+  colour. Above the dates, ‹, the month's name and year, › and the Show picker share one
   row, which wraps at phone width; ‹ › step months, and the year is a link that opens the Year. The
   month's name and year sit in a box as wide as the shown year's longest month title in any
   interface language (`fixed-title.ts`), so ‹ and › stay put. Arrow keys move between
@@ -4127,7 +4127,7 @@ Opening hours' Year.
   its name, with its special day's and public holiday's names, and has one row per active
   department, or, with one department picked in Show, a row for it and one per zone. ‹ › step a
   week. In the title ("28 Dec 2026 – 3 Jan 2027") each month name opens that Month and each year
-  that Year, keeping the department; the title keeps one width, as wide as the longest title of a
+  that Year, keeping the department, or in the Month the station; the title keeps one width, as wide as the longest title of a
   week starting in 2026 in any interface language (`fixed-title.ts`). Time runs left to right from
   each day's changeover, every day on one scale, the week's longest day, so a shorter day's track
   ends early. The ruler above the days is labelled every two hours from Monday's changeover, so a

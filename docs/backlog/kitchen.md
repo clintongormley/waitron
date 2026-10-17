@@ -144,18 +144,19 @@ list does not exist.
 
 **A725 (owner, 2026-10-15).** Mockup: [prep stations](mockups/a718-a727-calendar-and-stations/14-prep-stations.png). Files:
 `packages/venue-service/src/dashboard/prep-stations-screen.ts`, `station-table.ts`,
-`station-editor.ts`, `station-colour-picker.ts`, the Times tab, the sidebar order,
+`station-editor.ts`, `station-colour-picker.ts`, `opening-hours-screen.ts`, the Times tab, the sidebar order,
 `apps/server/src/kitchen.ts`, `packages/db/src/schema/kitchen-stations.ts`.
 
 1. **Prep stations sits just after Departments and zones** in the sidebar.
 2. **The Times tab and each station's "When it gets orders" link go** (`station-table.ts:79`). What
    the tab showed has moved to the Calendar's Show picker (`calendar-show.ts`), offered to the
-   same people as the Times tab. Landing deletes the open notes
-   "The Times tab opens on the browser's current month" and "Supervisors have no dashboard path to a
-   prep station's times"; the second's question becomes who may open the Calendar's station view.
+   same people as the Times tab. Landing deletes the open note
+   "The Times tab opens on the browser's current month", and takes the Times tab out of "Supervisors
+   have no dashboard path to a prep station's times", whose question stays open (service-periods.md,
+   Decision 12 points at it).
 3. **No drag handles, and stations listed by name everywhere**, the default one among them (it keeps
    its "Default" label). The stored order (`displayOrder`, `reorderStations` in `kitchen.ts`) is
-   also read by kitchen timing and the stations-down list: move them to name order and remove the
+   also read by kitchen timing, the stations-down list and the Calendar's Show (`opening-hours-screen.ts`): move them to name order and remove the
    reorder route and the column, unless one turns out to need a hand-set order.
 4. **A new station's colour is the first one no station uses.** The dashboard's Add station does
    this; the server does not, so a station created without a colour — the default Kitchen, or one a

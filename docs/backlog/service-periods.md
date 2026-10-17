@@ -326,7 +326,7 @@ Re-check when a new year's list is added.
   tab's year and Staffing's year are plain text, since neither has a Year view.
 
 - **The Week's address takes over `view/week` ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 1; plan default, sent to the owner as an FYI, 2026-10-17).** The Week is
-  `/manage/opening-hours/view/week[/department/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
+  `/manage/opening-hours/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
   the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
   painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
   names a season, department, zone or `?station=` still opens it.

@@ -107,6 +107,10 @@ is the old view A506-6 removed. The Calendar's Staffing view reads `/management-
 through `StaffingApi.watchMonth` on the `staffing-month` dependencies
 (`packages/staffing/src/dashboard/live-queries.ts`), which spread venue-service's
 `CALENDAR_MONTH_PLAN_READS`.
+2026-10-17, A722-3: the Calendar's Month and Week read `/management-api/stations` through
+`OpeningHoursApi.watchStations` on the `prep-stations-list` dependencies, and a shown station's
+`…/service-times` through `watchStationTimes`, as the Times tab does; a read-only Calendar reads
+neither.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

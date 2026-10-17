@@ -1501,7 +1501,14 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
 
 - **The Week's title and ruler scroll away with the days**; whether to pin them is open — left open
-  by the Week view at desktop width, #1823.
+  by A722 Part 1, #1823.
+
+- **A prep station is drawn by two paths in the Month.** The Times tab works the station's rows out
+  itself and hands them over with `stationMode`; the Calendar hands over a `StationShow`. The Month
+  and the Week each repeat the loading, "Always open" and ready cases, the "Always open" paragraph
+  is drawn in three places, and the screen and the Times tab each keep their own watch on a
+  station's times. One `StationShow` from both callers, one shared drawing of those cases and one
+  watch would leave `stationMode` only for what differs — left open by A722 Part 3's review.
 
 - **The painter cannot resize a block by dragging its edge**; painting over a block lengthens it
   and painting Closed shortens it — left open by A506-8, #1634.
