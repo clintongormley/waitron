@@ -43,6 +43,25 @@ const header = (el: TillTicketView) =>
 afterEach(cleanupWidgets);
 
 describe("per-answer receipt presentation", () => {
+  it("uses the answer's immutable current logo URL and retains the earlier answer after replacement", async () => {
+    const firstUrl = `/media/renditions/v1/${"b".repeat(64)}.webp/display/7500-2500-200.webp`;
+    const nextUrl = `/media/renditions/v1/${"c".repeat(64)}.webp/display/5000-5000-100.webp`;
+    const first = answer({ ...rich, receiptTrim: { ...rich.receiptTrim, logoUrl: firstUrl } });
+    const saved = structuredClone(first);
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", { result: first, issuer });
+    expect(el.shadowRoot!.querySelector<HTMLImageElement>("img.logo")!.getAttribute("src")).toBe(
+      firstUrl,
+    );
+    el.result = answer({ ...rich, receiptTrim: { ...rich.receiptTrim, logoUrl: nextUrl } });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector<HTMLImageElement>("img.logo")!.getAttribute("src")).toBe(
+      nextUrl,
+    );
+    expect(first).toEqual(saved);
+    expect(el.result.receiptTrim.logo).toBe(rich.receiptTrim.logo);
+    expect(el.shadowRoot!.textContent).toContain("Filed Legal SL");
+    expect(el.shadowRoot!.textContent).toContain("2,00");
+  });
   it.each([false, true])(
     "uses department address permission %j beside filed identity",
     async (printAddress) => {

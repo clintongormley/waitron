@@ -713,35 +713,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-## A652 — frame a photo for its thumbnails
-
-Owner, 2026-10-14. Boards, in [mockups/a652-photo-framing/](mockups/a652-photo-framing/): 1 Edit
-photo, 2 Adjust framing. A first draft put the framing inside Edit photo; the owner found it messy,
-so it has a window of its own.
-
-**Today** every thumbnail shows the centre of the photo (`object-fit: cover` with no position):
-squares in the dashboard's lists and trees, 4:3 on the till's buttons
-(`apps/till/src/widgets/menu-browser.ts`) and on the dashboard's device home preview. A photo with
-the dish in its lower half shows mostly table. Only one copy of each photo is stored, its long edge
-shrunk to 1600 pixels (`STORED_LONG_EDGE`, `packages/media/src/prepare.ts`).
-
-1. **Edit photo** (board 1) shows the photo as framed, with its file name and two links:
-   Adjust framing and Replace photo. The names follow as today.
-2. **Adjust framing** (board 2) is its own window: the photo inside a large square frame, dragged
-   to place it, a Zoom slider under it, then two small previews labelled Lists (square) and Till
-   buttons (4:3). Reset returns to the centre at no zoom; Done goes back to Edit photo, and nothing
-   is saved until Save there.
-3. **One framing per photo**, stored as a point on the photo and a zoom, and used by every place
-   that shows it in any shape (recommended over one framing per use: more work for the person, and
-   no restaurant case for it was found). Every thumbnail in the list above reads it.
-4. **Replace photo** swaps the picture and keeps the photo's names and every product, variant,
-   section, folder and receipt logo that uses it. It is new: editing a photo today cannot change its file.
-   Replacing resets the framing to the centre at no zoom (owner, 2026-10-14): a new photo rarely
-   has the dish where the old one did.
-5. **The library grid's size.** The grid loads the full 1600-pixel copy for each tile, 24 a page,
-   about 4 MB at the average size (left open by photos shrunk on upload, #543). Decide while
-   building whether framing also produces a small copy for thumbnails; that question was its own
-   entry until this one.
 
 ## Translate all: run the end-to-end check on the Santet venue against a local Waitron Cloud
 
@@ -946,6 +917,31 @@ Where a board and this text differ, this text wins. The library is
 6. **The picker's full-size photo** (board 5) gains Use image, drawn blue, beside Back. Today it
    opens with no way to choose the photo from it.
 
+
+### A652 — frame a photo for its thumbnails
+
+Owner, 2026-10-14: Edit photo opens Adjust framing as a separate window. Drag and Zoom share
+one focal point and zoom for the square Lists preview and the 4:3 Till buttons preview. Reset
+returns to the centre at 100%; Done returns to the unsaved photo draft. Only the outer Save
+persists names, accepted framing and a replacement file. Replacing resets framing while retaining
+names, photo identity and every use. The full-photo viewer shows the complete current source.
+The [boards](mockups/a652-photo-framing/) record these decisions.
+
+Implementation, 2026-10-17: original hash filenames remain stable references and still serve
+immutable original bytes. Replacement blobs and sparse framing/revision overrides travel in the
+venue database and configuration transfer. Published/queued menu documents and their hashes do
+not change; their presentation resolves the current photo. Already returned receipt presentations
+and queued print payloads retain their earlier picture. A photo save refreshes all currently
+matching department receipt rasters in the same transaction, including retained departments.
+
+The grid uses square renditions bounded to 480 pixels; till tiles use 480×360, without enlarging
+tiny inputs. These are bounded in-memory cached responses generated from durable source bytes.
+Recipe URLs include source, framing and algorithm version. A removed recipe version returns 404;
+raw content-hash URLs keep their byte identity. The [implementation plan](../superpowers/plans/2026-10-17-a652-photo-framing.md)
+records the limits, collision policy, measured large-input byte reduction and tiny-seed counterexample.
+The old “about 4 MB per page” estimate was not a measurement. Current upload dedup preserves the
+matched photo's names/framing; an occupied retired-original alias is refused when no current source
+matches, rather than silently returning a different picture.
 
 ### A647 — tidy the product editor
 

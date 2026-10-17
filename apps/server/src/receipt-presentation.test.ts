@@ -20,9 +20,12 @@ import {
   saleReceiptHeaders,
 } from "@waitron/venue-service";
 import { readReceiptPresentation } from "./receipt-presentation.js";
+import { MEDIA_MIGRATIONS, uploadImage, saveImage } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
+import * as media from "@waitron/media";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 async function fixture(header: "department" | "null" | "absent" = "department") {
   const [place] = await suite.db
@@ -88,6 +91,66 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
 }
 
 describe("department-only on-screen receipt", () => {
+  it("keeps optional receipt facts when the logo presentation read fails and reports that read", async () => {
+    const f = await fixture();
+    const logo = `${"d".repeat(64)}.png`;
+    await f.authored({ logo, phone: "910111111" });
+    const read = vi
+      .spyOn(media, "readPresentations")
+      .mockRejectedValue(new Error("unavailable image table"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await f.read();
+      expect(result.receiptTrim).toEqual({ logo, phone: "910111111" });
+      expect(warn).toHaveBeenCalledWith("receipt.optional_read_failed", {
+        operation: "readReceiptLogoPresentation",
+        code: "receipt.read_failed",
+      });
+    } finally {
+      read.mockRestore();
+      warn.mockRestore();
+    }
+  });
+  it("resolves a current immutable logo URL while preserving the photo reference and earlier answer", async () => {
+    const f = await fixture();
+    const source = await samplePreparedImage({ width: 800, height: 200 });
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: source, names: { es: "Logo", en: "Logo" } }),
+    );
+    await f.authored({ logo: image.filename, phone: "910111111" });
+    const before = await f.read();
+    const snapshot = structuredClone(before);
+    expect(before.receiptTrim).toMatchObject({
+      logo: image.filename,
+      logoUrl: `/media/renditions/v1/${source.filename}/display/5000-5000-100.webp`,
+      phone: "910111111",
+    });
+    const replacement = await samplePreparedImage({ width: 900, height: 300 });
+    await withTransaction(suite.db, (tx) =>
+      saveImage(
+        tx,
+        image.id,
+        {
+          names: image.names,
+          framing: { x: 7500, y: 2500, zoom: 200 },
+          expectedRevision: image.revision,
+        },
+        replacement,
+        {
+          "58mm": { widthDots: 8, heightDots: 1, data: "AA==" },
+          "80mm": { widthDots: 8, heightDots: 1, data: "AA==" },
+        },
+        "es",
+      ),
+    );
+    const after = await f.read();
+    expect(after.receiptTrim).toMatchObject({
+      logo: image.filename,
+      logoUrl: `/media/renditions/v1/${replacement.filename}/display/7500-2500-200.webp`,
+      phone: "910111111",
+    });
+    expect(before).toEqual(snapshot);
+  });
   it.each(["department", "null", "absent"] as const)(
     "has no optional decoration for an empty %s context",
     async (header) => {

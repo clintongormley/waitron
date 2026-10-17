@@ -98,21 +98,24 @@ export async function saveImage(
   return readImage(tx, id);
 }
 
-export async function readCurrentImage(tx: Transaction, reference: string) {
+export async function readCurrentImageMetadata(tx: Transaction, reference: string) {
   const [row] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
     .where(eq(mediaImages.filename, reference));
   if (!row) return null;
   const current = await readImage(tx, row.id);
+  return {
+    imageId: current.id,
+    revision: current.revision,
+    sourceFilename: current.sourceFilename,
+    framing: current.framing,
+  };
+}
+
+export async function readCurrentImage(tx: Transaction, reference: string) {
+  const current = await readCurrentImageMetadata(tx, reference);
+  if (!current) return null;
   const source = await readImageBytes(tx, current.sourceFilename);
-  return (
-    source && {
-      imageId: current.id,
-      revision: current.revision,
-      sourceFilename: current.sourceFilename,
-      framing: current.framing,
-      bytes: source.bytes,
-    }
-  );
+  return source && { ...current, bytes: source.bytes };
 }

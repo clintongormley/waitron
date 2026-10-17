@@ -138,13 +138,40 @@ With no photo it is an empty square; on a variant's page with no photo of its ow
 product's photo with a dashed border. In a variant's small window or a section's editor, select
 **Choose image**. Then select **Use image** on the photograph you want, and save to keep the
 association. You can also click the photo to inspect it at full size, then choose **Use image**
-there; **Back** returns to the grid. You can reuse one photograph on several products. Uploading the same file again finds the existing image and keeps its existing
-names, as long as Waitron's image library has not been upgraded in between: a newer version may make
-a slightly different copy, which is then stored as a new image. A notice identifies the reused image
-and lets you open it for editing.
+there; **Back** returns to the grid. You can reuse one photograph on several products. Uploading a
+file that a current library photo already uses finds that entry and keeps its names and framing.
+A notice identifies the reused photo and lets you open it for editing. An image-library upgrade
+can prepare a different copy, which is stored as a new photo. If an original file belongs to an
+entry whose picture you replaced, and no current photo uses that file, Waitron asks you to edit
+that entry or choose another file.
 
-Open the photograph's **⋮** menu and choose **Edit** to add translations or change its name.
-Editing this shared record changes the metadata wherever that photograph is reused.
+Open the photograph's **⋮** menu and choose **Edit** to add translations, change its name, frame
+the picture or replace it. The window shows its upload file name; an older photo without a recorded
+file name shows its stored name instead.
+
+## Frame or replace a photo
+
+If a thumbnail shows mostly table instead of the dish, choose **Adjust framing** in **Edit photo**.
+Drag the photo inside the square and use **Zoom** to move closer. You can also focus the square
+and use the arrow keys; hold Shift to move farther. **Lists** shows the square crop and
+**Till buttons** shows the 4:3 crop. They share one focal point and zoom, so you adjust a photo once
+for every place that uses it. The full-photo viewer still shows the complete current picture.
+
+**Reset** returns to the centre at 100% zoom. **Done** brings your framing back to Edit photo;
+it has not saved anything yet. Escape or a click outside Adjust framing discards only the changes
+you have not accepted with Done. Choose **Save** in Edit photo to keep the names and framing
+together, or Cancel to discard the outer draft.
+
+Choose **Replace photo** to select another JPEG, PNG or WebP file. Its file name appears in the
+window, while every translated name stays as you left it. Replacement resets the framing because
+the new dish may be in a different place; use Adjust framing again before Save if needed.
+Products, variants, sections, folders, receipt-logo choices and published or queued menus keep
+using this library entry and show its current picture. Other open screens pick it up on a
+successful refresh. A receipt presentation or print job already produced keeps its earlier picture.
+
+If someone else saves the photo while you edit, your Save asks you to reload instead of
+overwriting their changes. **Discard changes and reload photo** reads their version. Until you
+choose that action, your file, names and framing remain available to review.
 
 ## Remove a use before deleting the photograph
 

@@ -2566,6 +2566,8 @@ values explicitly; with a leave coordinator, Keep editing retains your draft. Su
 closes before the library refresh, so a failed refresh offers no second submission. Local preview
 URLs are released when their file or editor is replaced or disconnected. An old image load cannot
 paint over a newer source.
+The framing window keeps its original baseline across a temporary disconnect, so reconnecting
+does not accept a private draft or remove its navigation protection.
 
 #### Protect an edited dialog before closing it
 

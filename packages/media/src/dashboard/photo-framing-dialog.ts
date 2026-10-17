@@ -168,6 +168,7 @@ export class PhotoFramingDialog extends LitElement {
   #pointer?: { id: number; x: number; y: number };
   @state() private dragging = false;
   #scope?: DraftScope<ImageFraming>;
+  #baseline: ImageFraming = { ...DEFAULT_FRAMING };
   override connectedCallback(): void {
     super.connectedCallback();
     const { scope } = draftScopeFor(this, {
@@ -181,6 +182,7 @@ export class PhotoFramingDialog extends LitElement {
       },
     });
     this.#scope = scope;
+    this.#scope.commit(this.#baseline);
   }
   override disconnectedCallback(): void {
     this.#scope?.dispose();
@@ -192,6 +194,7 @@ export class PhotoFramingDialog extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("framing")) {
       this.draft = { ...this.framing };
+      this.#baseline = { ...this.framing };
       this.#scope?.commit(this.draft);
     }
     if (changed.has("source")) {
@@ -400,6 +403,7 @@ export class PhotoFramingDialog extends LitElement {
           data-test="done"
           variant="primary"
           @click=${() => {
+            this.#baseline = { ...this.draft };
             this.#scope?.commit(this.draft);
             this.dispatchEvent(
               new CustomEvent("done", {

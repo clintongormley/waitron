@@ -4,6 +4,9 @@ import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
+import { prepareImage, uploadImage, saveImage, renderRendition } from "@waitron/media";
+import { drawLogoRasters } from "./receipt-logo.js";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
@@ -51,6 +54,7 @@ import {
   createCategory,
   createProduct,
   listAvailableProducts,
+  contentLanguages,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -2523,6 +2527,90 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       "Tel. +34 910 000 000",
       "hola@deli.test",
     ]);
+  });
+
+  it("a photo replacement refreshes both papers and retained department logos while queued receipt bytes stay fixed", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await suite.db.insert(departments).values({
+      locationId: cfg.locationId,
+      name: "Retained logo department",
+      tradingName: "Retained",
+      active: false,
+    });
+    const [languages] = await suite.db.select().from(contentLanguages);
+    expect(languages).toBeDefined();
+    const language = languages!.defaultLanguage;
+    async function solid(background: string) {
+      const bytes = await sharp({ create: { width: 800, height: 200, channels: 3, background } })
+        .png()
+        .toBuffer();
+      return prepareImage(new Uint8Array(bytes), { maxUploadBytes: 20 * 1024 * 1024 });
+    }
+    const white = await solid("white");
+    const black = await solid("black");
+    const { image } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image: white, names: { [language]: "Logo" } }),
+    );
+    const whiteRasters = await drawLogoRasters(white.bytes);
+    await storeReceipt({ logo: image.filename, phone: "910111111", logoRasters: whiteRasters });
+    const first = await sellOne(cfg, each, zoneId);
+    const answer = structuredClone(first);
+    const queued = await printJobsFor(cfg);
+    const saved = await suite.db
+      .select({
+        departmentId: departmentReceipts.departmentId,
+        receipt: departmentReceipts.receipt,
+      })
+      .from(departmentReceipts);
+    const policies = await suite.db.select().from(departmentSalePolicies);
+    const framing = { x: 7500, y: 5000, zoom: 200 };
+    const blackRasters = await drawLogoRasters(
+      await renderRendition(black.bytes, "display", framing),
+    );
+    await withTransaction(suite.db, (tx) =>
+      saveImage(
+        tx,
+        image.id,
+        { names: image.names, framing, expectedRevision: image.revision },
+        black,
+        blackRasters,
+        language,
+      ),
+    );
+    expect(
+      await suite.db
+        .select({
+          departmentId: departmentReceipts.departmentId,
+          receipt: departmentReceipts.receipt,
+        })
+        .from(departmentReceipts),
+    ).toEqual(saved);
+    expect(await suite.db.select().from(departmentSalePolicies)).toEqual(policies);
+    const retained = await suite.db.select().from(departmentReceipts);
+    expect(retained.length).toBeGreaterThanOrEqual(2);
+    for (const row of retained)
+      for (const paper of ["58mm", "80mm"] as const) {
+        expect(row.logoRasters![paper]).not.toEqual(whiteRasters[paper]);
+        expect(new Set(Buffer.from(row.logoRasters![paper].data, "base64"))).toEqual(
+          new Set([255]),
+        );
+      }
+    expect(await printJobsFor(cfg)).toEqual(queued);
+    const second = await sellOne(cfg, each, zoneId);
+    const payloads = await receiptPayloads(cfg);
+    expect(payloads).toHaveLength(2);
+    expect(new Set(pictures(payloads[0]!).at(-1)![2])).toEqual(new Set([0]));
+    expect(new Set(pictures(payloads[1]!).at(-1)![2])).toEqual(new Set([255]));
+    expect(first.receiptTrim).toMatchObject({
+      logo: image.filename,
+      logoUrl: `/media/renditions/v1/${white.filename}/display/5000-5000-100.webp`,
+    });
+    expect(second.receiptTrim).toMatchObject({
+      logo: image.filename,
+      logoUrl: `/media/renditions/v1/${black.filename}/display/7500-5000-200.webp`,
+    });
+    expect(first).toEqual(answer);
   });
 
   it("prints no address when the receipt switches it off", async () => {

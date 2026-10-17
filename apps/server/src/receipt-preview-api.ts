@@ -13,7 +13,13 @@ import {
 import { departments } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import { resolveDevicePrinterIds, type ReceiptConfig } from "@waitron/layouts";
-import { imageExists, readImageBytes } from "@waitron/media";
+import {
+  imageExists,
+  readImageBytes,
+  readCurrentImageMetadata,
+  renditionUrl,
+  renderRendition,
+} from "@waitron/media";
 import { textGrid, type EscSetting, type MonoRaster, type PaperWidth } from "@waitron/printing";
 import {
   createErrorBoundary,
@@ -229,14 +235,28 @@ async function renderDraftPreview(
   const { receipt, printer, available, locale, receiptHeader, issuer, address, savedLogo } =
     snapshot;
   const filename = receipt.logo;
+  const current =
+    filename === undefined || savedLogo !== null
+      ? null
+      : await readCurrentImageMetadata(deps.db, filename);
   const logo =
     filename === undefined
       ? null
       : (savedLogo ??
-        (await drawPreviewLogo(logoCache, filename, printer.paperWidth, {
-          exists: () => imageExists(deps.db, filename),
-          bytes: async () => (await readImageBytes(deps.db, filename))?.bytes ?? null,
-        })));
+        (current === null
+          ? null
+          : await drawPreviewLogo(
+              logoCache,
+              renditionUrl(current.sourceFilename, "display", current.framing),
+              printer.paperWidth,
+              {
+                exists: () => imageExists(deps.db, filename),
+                bytes: async () => {
+                  const source = await readImageBytes(deps.db, current.sourceFilename);
+                  return source ? renderRendition(source.bytes, "display", current.framing) : null;
+                },
+              },
+            )));
   const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
   const job = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
     drawReceipt({

@@ -4,6 +4,7 @@ import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { readLocationAddress } from "./venue-address.js";
+import { readPresentations } from "@waitron/media";
 
 export async function readReceiptPresentation(
   tx: Transaction,
@@ -38,14 +39,23 @@ export async function readReceiptPresentation(
   } catch {
     diagnostic({ operation: "readLocationAddress", code: "receipt.read_failed" });
   }
+  const receiptTrim = resolveReceiptTrim(
+    department?.receipt ?? null,
+    {},
+    printedLanguage,
+    current.locale,
+  );
+  if (receiptTrim.logo) {
+    try {
+      const image = (await readPresentations(tx, [receiptTrim.logo]))[receiptTrim.logo];
+      if (image) receiptTrim.logoUrl = image.display;
+    } catch {
+      diagnostic({ operation: "readReceiptLogoPresentation", code: "receipt.read_failed" });
+    }
+  }
   return {
     receiptHeader: header?.departmentId == null ? undefined : header,
-    receiptTrim: resolveReceiptTrim(
-      department?.receipt ?? null,
-      {},
-      printedLanguage,
-      current.locale,
-    ),
+    receiptTrim,
     venueAddress,
     receiptSettings: { printAddress: department?.receipt.printAddress === true },
   };

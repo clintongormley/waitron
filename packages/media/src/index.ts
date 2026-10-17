@@ -8,3 +8,4 @@ export * from "./logo.js";
 export * from "./framing.js";
 export * from "./image-edits.js";
 export * from "./renditions.js";
+export { readPresentations, renditionUrl } from "./presentation.js";

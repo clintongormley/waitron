@@ -23,6 +23,7 @@ export interface DepartmentReceiptWrite {
 
 export interface PrintedReceiptTrim {
   logo?: string;
+  logoUrl?: string;
   phone?: string;
   email?: string;
   headerSubtitle?: string;

@@ -1,5 +1,6 @@
 import { registerModulePermissions } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ import {
   tenantReceipts,
   withTransaction,
 } from "@waitron/db";
-import { mediaImages, uploadImage } from "@waitron/media";
+import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
@@ -890,6 +891,62 @@ describe("the receipt preview's top block", () => {
     // A fresh mount has nothing drawn yet, and the image will no longer decode.
     expect(sizes(await rendered({ logo }))).toEqual([]);
   });
+
+  it.each(["framing", "replacement"] as const)(
+    "refreshes a cached logo after %s without changing its alias",
+    async (kind) => {
+      async function pattern(reversed: boolean, width: number, height: number) {
+        const pixels = Buffer.alloc(width * height * 3);
+        for (let y = 0; y < height; y++)
+          for (let x = 0; x < width; x++) {
+            const value = x < width / 2 !== reversed ? 255 : 0;
+            pixels.fill(value, (y * width + x) * 3, (y * width + x + 1) * 3);
+          }
+        const bytes = await sharp(pixels, { raw: { width, height, channels: 3 } })
+          .png()
+          .toBuffer();
+        return prepareImage(new Uint8Array(bytes), { maxUploadBytes: 20 * 1024 * 1024 });
+      }
+      const source = await pattern(false, 800, 200);
+      const { image } = await withTransaction(suite.db, (tx) =>
+        uploadImage(tx, { image: source, names: { es: "Logo" } }),
+      );
+      const mounted = app();
+      const draw = async () => {
+        const response = await mounted.request("/management-api/receipt-preview", {
+          method: "POST",
+          headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+          body: JSON.stringify({ departmentId, receipt: { logo: image.filename }, policy }),
+        });
+        expect(response.status).toBe(200);
+        return (await response.json()) as ReceiptPreviewResponse;
+      };
+      expect(sizes(await draw())).toEqual([[504, 126]]);
+      const replacement = kind === "replacement" ? await pattern(true, 600, 300) : null;
+      await withTransaction(suite.db, (tx) =>
+        saveImage(
+          tx,
+          image.id,
+          {
+            names: image.names,
+            expectedRevision: image.revision,
+            framing: { x: 7500, y: 5000, zoom: 200 },
+          },
+          replacement,
+          undefined,
+          "es",
+        ),
+      );
+      const after = await draw();
+      expect(sizes(after)).toEqual(kind === "replacement" ? [[320, 160]] : [[504, 126]]);
+      const picture = pictures(after)[0];
+      expect(picture?.kind).toBe("image");
+      if (picture?.kind !== "image") throw new Error("Missing logo picture");
+      expect(new Set(Buffer.from(picture.data, "base64"))).toEqual(
+        new Set([kind === "replacement" ? 0 : 255]),
+      );
+    },
+  );
 
   it("draws no logo once the unsaved logo's image is deleted, though it was drawn before", async () => {
     const logo = await libraryImage(44);

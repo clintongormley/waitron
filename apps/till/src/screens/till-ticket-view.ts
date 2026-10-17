@@ -692,7 +692,7 @@ export class TillTicketView extends LitElement {
             r.receiptTrim?.logo
               ? html`<img
                   class="logo"
-                  src=${`/media/${encodeURIComponent(r.receiptTrim.logo)}`}
+                  src=${r.receiptTrim.logoUrl ?? `/media/${encodeURIComponent(r.receiptTrim.logo)}`}
                   alt=""
                 />`
               : nothing

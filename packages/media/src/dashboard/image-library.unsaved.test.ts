@@ -416,6 +416,32 @@ it("navigation sees the framing subdraft as a child of the photo, while Escape d
   expect(app.client.updateImage).not.toHaveBeenCalled();
 });
 
+it("reconnecting a retained framing window keeps its unaccepted private changes protected", async () => {
+  const library = await mount();
+  await userEvent.click(
+    page.elementLocator(library.shadowRoot!.querySelector("[data-test=adjust-framing]")!),
+  );
+  await library.updateComplete;
+  const framing = library.shadowRoot!.querySelector("media-photo-framing-dialog")!;
+  const c = document.createElement("canvas");
+  c.width = 80;
+  c.height = 80;
+  framing.source = c.toDataURL();
+  await framing.updateComplete;
+  await vi.waitFor(() =>
+    expect(framing.shadowRoot!.querySelector("wt-slider")!.disabled).toBe(false),
+  );
+  framing.shadowRoot!.querySelector<HTMLElement>("[data-test=frame]")!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+  const container = framing.parentNode!;
+  framing.remove();
+  expect(app.leave.coordinator.isDirty([library])).toBe(false);
+  container.appendChild(framing);
+  await framing.updateComplete;
+  expect(app.leave.coordinator.isDirty([library])).toBe(true);
+});
+
 it("accepted framing and replacement stay under the picker's parent leave scope and discard without writing", async () => {
   const library = await mount();
   const selected = new File(["replacement"], "another-plate.png", { type: "image/png" });

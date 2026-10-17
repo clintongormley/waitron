@@ -58,9 +58,10 @@ its first lines here and its whole text in its area's detail file under `docs/ba
   same replication link. A cloud mirror is reached over WireGuard, so two containers on one machine
   joined by WireGuard IS the cloud test.
 - **Product images live in the venue database (`venue.db`) and are served from it** (2026-09-08).
-  Replication, backup, restore and a cloud move are then one mechanism. The URL is
-  content-addressed and served `immutable`, so each device fetches each image once until its bytes
-  change.
+  Replication, backup, restore and a cloud move are then one mechanism. Original and replacement
+  source URLs hash immutable bytes. A stable photo reference resolves its current small rendition
+  through a recipe URL containing source, framing and version; changing the picture or framing
+  produces a new recipe. The rendition cache can be rebuilt from the database.
 - **Backups leave the primary.** Destinations, in build order now that the mirror comes afterwards
   (2026-09-12): an S3-compatible bucket, Google
   Drive, then the mirror once it exists. All three hang off the existing `StorageBackend` seat.
@@ -95,10 +96,9 @@ Everything not listed here needs more spec work first.
    (_Modules, data and code health_). Its revised design awaits agreement.
 5. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-6. **A652 — frame a photo for its thumbnails** (_Menus and the catalogue_).
-7. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
+6. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
-8. **A681 — a light / dark / follow-device theme choice in the apps** (_Users, sign-in and the
+7. **A681 — a light / dark / follow-device theme choice in the apps** (_Users, sign-in and the
    dashboard shell_).
 
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
@@ -677,14 +677,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
   till no longer offers a separate Allergens screen.
 
-- **A652 — frame a photo for its thumbnails (owner, 2026-10-14; open).** Edit photo gains
-  "Adjust framing", a window where the person drags the photo inside a square frame and zooms, with
-  square and 4:3 previews; the result is one setting per photo that every thumbnail uses (today
-  each shows the photo's centre). Edit photo also gains "Replace photo", which swaps the picture
-  and keeps its names and every use.
-  [Detail](backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails),
-  [mockups](backlog/mockups/a652-photo-framing/),
-  [implementation plan](superpowers/plans/2026-10-17-a652-photo-framing.md). Crop geometry, image rendering, the opt-in live slider and durable photo edits are implemented on the feature branch; APIs, thumbnail consumers, the photo editor and receipt preparation wiring remain unbuilt.
 
 - **A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
   `apps/dashboard/src/widgets/product-list.ts`: "Standalone ordering" gets a shorter heading,
