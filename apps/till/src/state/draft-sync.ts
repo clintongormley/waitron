@@ -540,7 +540,7 @@ export class DraftSync {
     this.#cancelTimer();
     this.#closed = true;
     this.#lockAuthority();
-    return Promise.resolve(this.#unsaved || this.#saving ? "failed" : "saved");
+    return this.#queue.then(() => (this.#unsaved || this.#saving ? "failed" : "saved"));
   }
 
   /** After a submission answered: the `sent` lines leave, and the rest are taken as the server's
@@ -685,7 +685,7 @@ export class DraftSync {
         return { refused: "draft.out_of_date" };
       this.#quietly(() => this.store.adoptLines(replacements));
       this.#unsaved = true;
-      return await this.#save(signal, true);
+      return await this.#save(signal);
     } catch {
       return "failed";
     } finally {
@@ -735,17 +735,14 @@ export class DraftSync {
     this.#timer = undefined;
   }
 
-  #save(signal?: AbortSignal, preserveCandidate = false): Promise<DraftSaveOutcome> {
+  #save(signal?: AbortSignal): Promise<DraftSaveOutcome> {
     this.#queue = this.#queue
-      .then(() => this.#saveNow(signal, preserveCandidate))
+      .then(() => this.#saveNow(signal))
       .catch((): DraftSaveOutcome => "failed");
     return this.#queue;
   }
 
-  async #saveNow(
-    signal: AbortSignal | undefined,
-    preserveCandidate: boolean,
-  ): Promise<DraftSaveOutcome> {
+  async #saveNow(signal: AbortSignal | undefined): Promise<DraftSaveOutcome> {
     if (this.#ended) return "failed";
     if (this.#edit === null || this.candidate !== null) return this.#editorRefusal ?? "failed";
     if (this.#editorRefusal !== undefined) return this.#editorRefusal;
@@ -777,7 +774,7 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended || this.#invalidateSave(expectedEdit)) return "failed";
-      return await this.#refused(error, preserveCandidate);
+      return await this.#refused(error);
     } finally {
       this.#saving = false;
       limit.done();
@@ -811,9 +808,8 @@ export class DraftSync {
     return true;
   }
 
-  /** Ordinary draft conflicts reload. A placement correction keeps its candidate on refusal,
-   * so a concurrent save cannot erase the arrangement being recovered. */
-  async #refused(error: unknown, preserveCandidate: boolean): Promise<DraftSaveOutcome> {
+  /** A refused arrangement remains separate from the saved outbox returned by recovery. */
+  async #refused(error: unknown): Promise<DraftSaveOutcome> {
     const refusal = asRefusal(error);
     if (refusal === undefined) {
       this.#unsaved = true;
@@ -823,7 +819,7 @@ export class DraftSync {
       await this.#load();
       return "failed";
     }
-    if (DRAFT_REFUSALS.has(refusal.refused) && !preserveCandidate) {
+    if (DRAFT_REFUSALS.has(refusal.refused)) {
       this.#unsaved = true;
       this.retainCandidate();
       const reloaded = await this.#load();

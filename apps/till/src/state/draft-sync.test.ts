@@ -647,8 +647,15 @@ describe("DraftSync: signing out", () => {
     const queued = draft.flush();
 
     const closed = draft.close();
+    const onClosed = vi.fn();
+    void closed.then(onClosed);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(draft.store.editsLocked).toBe(true);
     answer();
     await closed;
+    expect(onClosed).toHaveBeenCalledOnce();
     await queued;
     await settle();
 

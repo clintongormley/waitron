@@ -317,6 +317,7 @@ const browser = (el: TillApp) =>
 const draft = (el: TillApp) => tableOrder(el)!.draftStore!;
 const rows = (el: TillApp) =>
   draft(el).lines.map((line) => `${line.product.name} ×${line.quantity}`);
+const retainedCandidate = (el: TillApp) => tableOrder(el)!.retainedDraft;
 
 async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promise<void> {
   server.personId = personId;
@@ -1121,12 +1122,16 @@ describe("till-app: a table's draft is kept on the server", () => {
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
-    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(rows(el)).toEqual([]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(draft(el).editsLocked).toBe(true);
     expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
     expect(api.submitDraft).not.toHaveBeenCalled();
     api.saveDraft.mockImplementation(async (partyId, save) =>
-      structuredClone(server.save(partyId, save)),
+      server.snapshot(server.save(partyId, save)),
     );
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
     emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -1149,6 +1154,8 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(tableOrder(el)!.draftStore).toBeNull();
     emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-4" });
     await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.draftStore).not.toBeNull();
     expect(rows(el)).toEqual(["Beer ×1"]);
     answer();
     await flush(el);
@@ -1358,7 +1365,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 });
 
 describe("till-app: an order that moves to another party", () => {
-  it("saves the person's edits to the party they were made on, then shows the new party's draft", async () => {
+  it("retains local edits without saving to the old party, then reads the relocated bill", async () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
@@ -1393,23 +1400,26 @@ describe("till-app: an order that moves to another party", () => {
     emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
     await flush(el, 6);
 
-    expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([
-      ["v9", 1],
-      ["v1", 1],
-    ]);
+    expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([["v9", 1]]);
+    expect(api.saveDraft).not.toHaveBeenCalled();
     expect(api.listDrafts).toHaveBeenLastCalledWith("v9", expect.anything());
     expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(retainedCandidate(el)).toMatchObject({ personId: "p1", partyId: "v1", billId: "wo-4" });
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(draft(el).editsLocked).toBe(true);
   });
 });
 
 describe("till-app: signing out with a draft", () => {
-  it("shows the box-update bar instead of reloading while the sign-out's save of the draft is still out", async () => {
+  it("shows the box-update bar instead of reloading while the draft's earlier save is still out", async () => {
     const answer = holdNextSave();
     const reload = vi.fn();
     const { el } = await mountApp();
     el.reload = reload;
     await openMesa(el);
     await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledOnce();
 
     emit(tableOrder(el)!, "logout");
     await flush(el);
@@ -1418,7 +1428,7 @@ describe("till-app: signing out with a draft", () => {
     expect(api.logout).not.toHaveBeenCalled();
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
-    expect(unload.defaultPrevented).toBe(false);
+    expect(unload.defaultPrevented).toBe(true);
     window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
     await flush(el);
 
@@ -1456,13 +1466,15 @@ describe("till-app: signing out with a draft", () => {
     expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
   });
 
-  it("reloads only once the sign-out's save of the draft is answered, when Reload was pressed while it was out", async () => {
+  it("reloads only once the earlier save is answered, when Reload was pressed while it was out", async () => {
     const answer = holdNextSave();
     const reload = vi.fn();
     const { el } = await mountApp();
     el.reload = reload;
     await openMesa(el);
     await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledOnce();
     emit(tableOrder(el)!, "logout");
     await flush(el);
     window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
@@ -1481,7 +1493,7 @@ describe("till-app: signing out with a draft", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  it("saves the draft before the session ends", async () => {
+  it("ends the session without starting a save and retains its person's local candidate", async () => {
     const { el } = await mountApp();
     await openMesa(el);
     await tap(el, "Beer");
@@ -1489,12 +1501,26 @@ describe("till-app: signing out with a draft", () => {
     emit(tableOrder(el)!, "logout");
     await flush(el);
 
-    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.saveDraft).not.toHaveBeenCalled();
     expect(api.logout).toHaveBeenCalledOnce();
-    expect(api.saveDraft.mock.invocationCallOrder[0]!).toBeLessThan(
-      api.logout.mock.invocationCallOrder[0]!,
-    );
     expect(lock(el)).not.toBeNull();
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(retainedCandidate(el)).toBeNull();
+    expect(rows(el)).toEqual([]);
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(rows(el)).toEqual([]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(api.saveDraft).not.toHaveBeenCalled();
   });
 
   it("never sends one person's queued save after another has signed in", async () => {
@@ -1572,7 +1598,9 @@ describe("till-app: switching the device's profile with a table order open", () 
 
     expect(switchDeviceProfile).not.toHaveBeenCalled();
     expect(profileDialog(el)!.notice).toBe("draft_unsaved");
-    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(rows(el)).toEqual([]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(draft(el).editsLocked).toBe(true);
   });
 
   it("saves a change still waiting to be saved before the switch is sent", async () => {
@@ -2072,11 +2100,11 @@ describe("till-app: sending the draft", () => {
       },
     );
 
-    it("keeps corrected local lines when their save loses a revision race", async () => {
+    it("retains corrected local lines separately when their save loses a revision race", async () => {
       const { el, store, before, detail } = await raced("submit");
       api
         .saveDraft!.mockImplementationOnce(async (partyId, save) =>
-          structuredClone(server.save(partyId, save)),
+          server.snapshot(server.save(partyId, save)),
         )
         .mockImplementationOnce(() => {
           const own = server.drafts[0]!;
@@ -2087,13 +2115,23 @@ describe("till-app: sending the draft", () => {
       emit(tableOrder(el)!, "submit-draft", detail);
       await vi.waitFor(() => expect(store.sending).toBe(false));
       await flush(el, 6);
-      expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
-      expect(store.lines.map((line) => line.place)).toEqual([
+      expect(rows(el)).toEqual(["Steak ×9", "Beer ×9", "Flan ×9"]);
+      expect(draft(el).editsLocked).toBe(true);
+      expect(
+        retainedCandidate(el)?.lines.map((line) => [line.product.name, line.quantity]),
+      ).toEqual([
+        ["Steak", "1"],
+        ["Beer", "1"],
+        ["Flan", "1"],
+      ]);
+      expect(retainedCandidate(el)?.lines.map((line) => line.place)).toEqual([
         { kind: "fire" },
         { kind: "fire" },
         { kind: "new", slot: 8, afterGroupId: "held-desserts" },
       ]);
-      expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+      expect(retainedCandidate(el)?.lines.map((line) => line.draftLineId)).toEqual(
+        before.map((line) => line.draftLineId),
+      );
       expect(server.drafts[0]!.lines.map((line) => line.quantity)).toEqual(["9", "9", "9"]);
       expect(api.saveDraft).toHaveBeenCalledTimes(2);
       expect(api.submitDraft).toHaveBeenCalledOnce();
@@ -2407,7 +2445,9 @@ describe("till-app: sending the draft", () => {
       t("table.draft_taken_over_unsent").replace("{name}", "Sam"),
     );
     expect(banner(el)!.textContent).not.toContain(codeMessage("draft.taken_over"));
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
   });
 
   it("says someone else took it over when the refusal names no one", async () => {
@@ -2469,8 +2509,10 @@ describe("till-app: sending the draft", () => {
     await act(el, "fire-all");
 
     expect(api.submitDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(t("table.error"));
-    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(banner(el)?.textContent ?? "").toContain(t("table.error"));
+    expect(rows(el)).toEqual([]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    expect(draft(el).editsLocked).toBe(true);
   });
 
   it("says a refused save and sends nothing", async () => {
@@ -4073,7 +4115,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     await flush(el, 6);
   }
 
-  it("A773 keeps Alex's take-over controls available after Pay names his unsent dishes", async () => {
+  it("A773 Pay requires takeover before paying a colleague's bill", async () => {
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({
         code: "bill.unsent_dishes",
@@ -4085,7 +4127,10 @@ describe("till-app: other people's drafts and taking one over", () => {
     await openAs(el, SAM, "Sam");
     emit(tableOrder(el)!, "pay-tab", { method: "cash", tendered: "3.00" });
     await flush(el, 6);
-    expect(banner(el)!.textContent).toContain("Alex: 2 unsent dishes");
+    expect(banner(el)?.textContent ?? "").toContain(
+      t("table.draft_taken_over_unsaved").replace("{name}", "Alex"),
+    );
+    expect(api.recordSale).not.toHaveBeenCalled();
     expect(tableOrder(el)!.orderId).toBe("wo-4");
     await takeOver(el);
     expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
@@ -4108,7 +4153,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     const alexs = savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
 
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
     await reviewed(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Alex has an unsent order",
@@ -4130,7 +4176,16 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
       "v1",
       alexs.id,
-      alexs.revision,
+      {
+        revision: alexs.revision,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: alexs.id,
+          draftRevision: alexs.revision,
+        },
+        submissionId: expect.any(String),
+      },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(dialogOpen(el)).toBe(false);
@@ -4152,7 +4207,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     await flush(el, 6);
     await openAs(el, ALEX, "Alex");
 
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
     await reviewed(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Taken over by Sam",
@@ -4163,34 +4219,49 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(panelOf(el).takeOver).not.toBeNull();
   });
 
-  it("adds Alex's lines into the draft Sam already holds, and keeps that draft's id", async () => {
+  it("takes over this bill in place without absorbing the taker's other bill", async () => {
     const { el } = await mountApp();
     const alexs = savedBy(ALEX, "Alex", "offer-beer", "offer-flan");
     const sams = savedBy(SAM, "Sam", "offer-flan", "offer-steak");
+    sams.billId = "wo-check";
+    server.drafts.find((draft) => draft.id === sams.id)!.billId = "wo-check";
+    const before = structuredClone(sams);
     await openAs(el, SAM, "Sam");
-    expect(rows(el)).toEqual(["Flan ×1", "Steak ×1"]);
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
 
     await takeOver(el);
 
     expect(api.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
       "v1",
       alexs.id,
-      alexs.revision,
+      {
+        revision: alexs.revision,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: alexs.id,
+          draftRevision: alexs.revision,
+        },
+        submissionId: expect.any(String),
+      },
       expect.anything(),
     );
-    expect(rows(el)).toEqual(["Flan ×2", "Steak ×1", "Beer ×1"]);
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(server.drafts.find((draft) => draft.id === sams.id)).toEqual(before);
     expect(panels(el)).toEqual([]);
     await browsing(el);
     await tap(el, "Steak");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenLastCalledWith(
       "v1",
-      expect.objectContaining({ draftId: sams.id, revision: sams.revision + 1 }),
+      expect.objectContaining({ draftId: alexs.id, revision: alexs.revision + 1 }),
       expect.anything(),
     );
+    expect(server.drafts.find((draft) => draft.id === sams.id)).toEqual(before);
   });
 
-  it("drops Alex's save refused because Sam took the draft over, says the change was not saved, and shows it taken over", async () => {
+  it("retains Alex's refused save separately and shows Sam's saved bill read-only", async () => {
     const { el } = await mountApp();
     await openAs(el, ALEX, "Alex");
     await tap(el, "Beer");
@@ -4212,7 +4283,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)!.textContent).toBe(
       "Sam has taken over this order. Your last change was not saved.",
     );
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer", "Flan"]);
     await reviewed(el);
     expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -4222,45 +4295,58 @@ describe("till-app: other people's drafts and taking one over", () => {
 
     await tap(el, "Steak");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
-    expect(api.saveDraft).toHaveBeenCalledTimes(3);
-    expect(api.saveDraft).toHaveBeenLastCalledWith(
-      "v1",
-      expect.objectContaining({ draftId: null, revision: 0 }),
-      expect.anything(),
-    );
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer", "Flan"]);
+    expect(server.drafts).toHaveLength(1);
   });
 
-  it("takes nothing over, and says so, when Sam's own change could not be saved first", async () => {
+  it("takes over only the saved bill without retrying Sam's retained failed save", async () => {
     const { el } = await mountApp({
       saveDraft: vi.fn(server.saveDraft).mockRejectedValueOnce(new TypeError("Failed to fetch")),
     });
-    savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
-    await browsing(el);
-    press(el, "Flan");
+    await tap(el, "Flan");
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el, 6);
+    const alex = savedBy(ALEX, "Alex", "offer-beer");
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
 
     await takeOver(el);
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
-    expect(api.takeOverDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
     expect(dialogOpen(el)).toBe(false);
-    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(server.drafts.find((draft) => draft.id === alex.id)?.ownerId).toBe(SAM);
+    expect(server.drafts).toHaveLength(1);
+    expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
-  it("keeps the words of a refusal of Sam's own change, and takes nothing over", async () => {
+  it("shows a known takeover refusal without saving or merging the retained candidate", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
+      takeOverDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
-    savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
-    await browsing(el);
-    press(el, "Flan");
+    await tap(el, "Flan");
+    const alex = savedBy(ALEX, "Alex", "offer-beer");
+    const before = structuredClone(alex);
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
 
     await takeOver(el);
 
-    expect(api.takeOverDraft).not.toHaveBeenCalled();
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    expect(api.takeOverDraft).toHaveBeenCalledOnce();
     expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(server.drafts).toEqual([before]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
   it("says a take-over that got no answer, having read the drafts again", async () => {
@@ -4313,15 +4399,18 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)).toBeNull();
   });
 
-  it("sends no take-over as the next person when Sam's take-over was waiting on his own save at sign-out", async () => {
+  it("sends no takeover as the next person when it was waiting on Sam's already-sent save at sign-out", async () => {
     const { el } = await mountApp();
-    const alex = savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
-    await browsing(el);
     const answer = holdNextSave();
-    press(el, "Flan");
-    await takeOver(el);
+    await tap(el, "Flan");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenCalledOnce();
+    const alex = savedBy(ALEX, "Alex", "offer-beer");
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    await takeOver(el);
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
 
     emit(shell(el), "logout");
     await flush(el);
@@ -4332,6 +4421,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.takeOverDraft).not.toHaveBeenCalled();
     expect(server.drafts.find((each) => each.id === alex.id)!.ownerId).toBe(ALEX);
     expect(banner(el)).toBeNull();
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.logout).not.toHaveBeenCalled();
   });
 
   it("answers a take-over asked for with no table's draft open, sending nothing", async () => {
@@ -4473,7 +4564,8 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(dialogOpen(el)).toBe(false);
     await reviewed(el);
     expect(panelOf(el)).toMatchObject({ heading: "Alex has an unsent order", lines: ["Beer ×2"] });
-    expect(rows(el)).toEqual([]);
+    expect(rows(el)).toEqual(["Beer ×2"]);
+    expect(draft(el).editsLocked).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.takeOverDraft).toHaveBeenCalledOnce();
     expect(api.saveDraft).not.toHaveBeenCalled();
@@ -4646,7 +4738,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
   });
 
-  it("asks nothing while the take-over question is open, and asks at the next poll once it is closed", async () => {
+  it("offers no repricing of another editor's saved bill before or after cancelling takeover", async () => {
     server.personId = "p-alex";
     server.personName = "Alex";
     server.save("v1", {
@@ -4686,7 +4778,10 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await flush(el);
     await poll(el);
 
-    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+    expect(refresh(el)).toBeNull();
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.saveDraft).not.toHaveBeenCalled();
   });
 
   it("asks nothing while a dish's choices are open in the table's menu, and asks at the next poll once they are closed", async () => {
@@ -4810,11 +4905,12 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refresh(el)).toBeNull();
     answer();
     await flush(el, 6);
-    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(api.saveDraft).not.toHaveBeenCalled();
     expect(refresh(el)).toBeNull();
 
     await poll(el);
-    expect(refreshText(el)).toContain("Beer €6.00");
+    expect(refreshText(el)).not.toContain("Beer");
     expect(refreshText(el)).toContain("Flan €5.00");
   });
 
@@ -7736,7 +7832,9 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       expect(api.recordSale).not.toHaveBeenCalled();
       expect(api.collectOrder).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
-      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(rows(el)).toEqual([]);
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+      expect(draft(el).editsLocked).toBe(true);
       expect(tableOrder(el)!.orderId).toBe("wo-4");
       expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
     },

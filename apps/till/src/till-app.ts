@@ -8828,7 +8828,7 @@ export class TillApp extends LitElement {
         leaving.partyId !== this.tables.find((row) => row.id === tableId)?.party?.id
       )
         this.#releaseDraft(leaving);
-      else await this.#flushDraft();
+      else if (this.#draftReady) await this.#flushDraft();
       if (abandoned() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
@@ -9507,13 +9507,17 @@ export class TillApp extends LitElement {
     if (sync === undefined) return true;
     const session = this.#operatorSession;
     const saved = await sync.flush();
-    if (saved === "failed" && session === this.#operatorSession && sync === this.#draftSync)
-      this.errorKey = "table.draft_save_failed";
+    if (
+      saved !== "saved" &&
+      (saved === "failed" || saved.refused !== "session.required") &&
+      session === this.#operatorSession &&
+      sync === this.#draftSync
+    )
+      this.errorKey = saved === "failed" ? "table.draft_save_failed" : draftRefusalError(saved);
     return saved === "saved";
   }
 
-  /** An order that moved to another party, by a merge or a move, takes that party's draft; the
-   * person's edits are saved to the party they were made on first. */
+  /** Relocation invalidates the old party's write scope; retain its candidate for review. */
   async #followPartyDraft(): Promise<void> {
     const sync = this.#draftSync;
     if (
@@ -9522,7 +9526,8 @@ export class TillApp extends LitElement {
     )
       return;
     const session = this.#operatorSession;
-    if (!(await this.#flushDraft())) return;
+    if (sync.partyId === this.orderParty?.id && this.#draftReady && !(await this.#flushDraft()))
+      return;
     if (this.#draftSync !== sync) return;
     const party = this.orderParty?.id;
     await this.#savesOutFor(party);
@@ -9965,6 +9970,12 @@ export class TillApp extends LitElement {
     try {
       const saved = await sync.flush(request.signal);
       if (saved !== "saved") {
+        if (
+          (saved === "failed" || saved.refused !== "session.required") &&
+          session === this.#operatorSession &&
+          sync === this.#draftSync
+        )
+          this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         if (screen.currentDeadEndsCheck(checkId))
           this.#previewSaveOutcome = { sent, outcome: saved };
         return;
@@ -12824,13 +12835,12 @@ export class TillApp extends LitElement {
     return index < 0 ? undefined : billName(this.orderParty?.displayName ?? "", index);
   }
 
-  /** Charges another bill of the party from the same screen. */
   async #onTakePayment(event: Event): Promise<void> {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const session = this.#operatorSession;
     const visit = this.#orderVisit;
     const billId = this.activeTabId;
-    if (!(await this.#flushDraft())) return;
+    if (this.#draftReady && !(await this.#flushDraft())) return;
     if (
       session !== this.#operatorSession ||
       visit !== this.#orderVisit ||
