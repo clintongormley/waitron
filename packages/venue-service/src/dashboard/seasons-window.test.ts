@@ -386,7 +386,6 @@ const rowErrorsShown = (el: SeasonsWindow) =>
   ).length;
 
 it("Save is quiet and disabled until the draft changes, and an undone edit makes it quiet again", async () => {
-  // Moved from season-chips.test.ts:128-143's disabled and variant checks.
   const el = await mount();
   expect([save(el).disabled, save(el).variant]).toEqual([true, "secondary"]);
   await change(el, "season-0-name", "Deep winter");
@@ -396,7 +395,6 @@ it("Save is quiet and disabled until the draft changes, and an undone edit makes
 });
 
 it("one Save sends every change with the clock revision the draft was clean at, then says it saved", async () => {
-  // Moved from season-chips.test.ts:128, :145, :163, :478 and :489.
   const returned: Saved = [{ id: "x", name: "X", startsOn: "01-01", colour: "grey" }];
   const saveSeasons = vi.fn(async () => returned);
   const el = await mount(false, { saveSeasons });
@@ -468,7 +466,6 @@ it("swapping two starts sends one request holding both", async () => {
 });
 
 it("asks for a name and a start before sending, beside each row, with one message at the bottom", async () => {
-  // Moved from season-chips.test.ts:178 and :430.
   const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
   const el = await mount(false, { saveSeasons });
   await press(el, button(el, "add-season")!);
@@ -535,7 +532,6 @@ it.each([
 ] as const)(
   "puts a refused field under its row, and keeps Save enabled (%o)",
   async (params, key, where, message) => {
-    // Moved from season-chips.test.ts:226 (every row) and :346.
     const saveSeasons = vi.fn(async () => {
       throw { code: "season.invalid", params };
     });
@@ -612,7 +608,6 @@ it.each([
 ])(
   "says an end-offset clash, a changed or pending business-day start and the last season at the bottom (%o)",
   async (refusal, message) => {
-    // Moved from season-chips.test.ts:249 (every row), :286 and :301.
     const saveSeasons = vi.fn(async () => {
       throw refusal;
     });
@@ -630,7 +625,6 @@ it.each([
 );
 
 it("while saving, Save shows busy, nothing else acts, and Escape does not close", async () => {
-  // Moved from season-chips.test.ts:376 and :399.
   const { answer, reject } = held();
   const saveSeasons = vi.fn(() => answer);
   const el = await mount(false, { saveSeasons });
@@ -667,8 +661,6 @@ it("Enter in a field presses Save", async () => {
 });
 
 it("a save's answer that arrives after the window was closed and reopened neither closes the new window nor commits its draft", async () => {
-  // Moved from season-chips.test.ts:501 ("keeps a save busy when an earlier save…"): an answer from
-  // an earlier opening must not end a later one's state.
   const { answer, resolve } = held();
   const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
   const events = savedEvents();
@@ -868,7 +860,6 @@ const notes = (el: SeasonsWindow) =>
   );
 
 it("binning a stored season says where its days go and what is lost", async () => {
-  // Moved from season-chips.test.ts:194, :211 and :361 (the delete confirmation's wording).
   const autumn = heldImpact();
   const spring = heldImpact();
   const summer = heldImpact();
@@ -937,7 +928,6 @@ it("a newer impact read's answer wins over an older one", async () => {
 });
 
 it("Spanish: the bin and the delete note", async () => {
-  // Moved from season-chips.test.ts:445.
   try {
     setLocale("es");
     const el = await mount(false, {
@@ -962,7 +952,6 @@ it("Spanish: the bin and the delete note", async () => {
 });
 
 it("a season another session deleted is marked under a row the person changed", async () => {
-  // Moved from season-chips.test.ts:318 and :529.
   const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
   const el = await mount(false, { saveSeasons });
   await change(el, "season-0-name", "Deep winter");

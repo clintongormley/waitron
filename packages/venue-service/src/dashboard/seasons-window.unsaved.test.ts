@@ -79,7 +79,6 @@ async function choose(decision: "keep" | "discard") {
 }
 
 it("asks before closing a changed draft, and Keep keeps the rows", async () => {
-  // Moved from season-dialog.unsaved.test.ts:67.
   const el = await mount();
   expect(unload()).toBe(false);
   await change(el, 0, "Deep winter");
@@ -98,7 +97,6 @@ it("asks before closing a changed draft, and Keep keeps the rows", async () => {
 });
 
 it("restoring the opened values closes without asking", async () => {
-  // Moved from season-dialog.unsaved.test.ts:86.
   const el = await mount();
   await change(el, 0, "Cold");
   await change(el, 0, "Winter");
@@ -109,7 +107,6 @@ it("restoring the opened values closes without asking", async () => {
 });
 
 it("a close asked in the turn a Save starts is refused", async () => {
-  // Moved from season-dialog.unsaved.test.ts:96.
   const el = await mount();
   await change(el, 0, "Cold");
   save(el).shadowRoot!.querySelector("button")!.click();

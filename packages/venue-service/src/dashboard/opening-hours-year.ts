@@ -10,7 +10,6 @@ import type { OpeningHoursYear, OpeningHoursYearDay } from "../opening-hours-cal
 import { MONTHS, monthGrid } from "./calendar-grid.js";
 import { areaAddress, nationalCoverage } from "./holiday-coverage-text.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
-import type { SeasonWrites } from "./season-chips.js";
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { DayPicker } from "./day-picking.js";
@@ -200,12 +199,7 @@ export class OpeningHoursYearView extends LitElement {
   /** Set by the host when the year read failed: with no `model`, the month names are still drawn,
    *  as the only way left to a month. */
   @property({ type: Boolean }) readFailed = false;
-  /** The season writes the chips send. */
-  @property({ attribute: false }) api?: SeasonWrites;
   @property({ attribute: false }) areaApi?: HolidayAreaWrites;
-  /** Every special day the host knows, not only this year's: a season's end-offset refusal can name
-   *  a repeating day in a later year. */
-  @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   @state() private areaError = "";
   @state() private areaBusy = false;
@@ -482,12 +476,7 @@ export class OpeningHoursYearView extends LitElement {
       [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
-    return html`<season-chips
-        .seasons=${model.seasons}
-        .clockRevision=${model.clockRevision}
-        .api=${this.api}
-        .specialDays=${this.specialDays}
-        .readOnly=${this.readOnly}
+    return html`<season-chips .seasons=${model.seasons} .readOnly=${this.readOnly}
         ><wt-button
           data-test="open-seasons"
           variant="secondary"

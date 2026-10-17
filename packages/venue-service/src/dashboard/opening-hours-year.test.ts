@@ -418,29 +418,18 @@ describe("Opening hours year", () => {
     expect(opened).toEqual([{ date: "2027-03-01" }]);
   });
 
-  it("hands the seasons, the clock revision, the api and every special day to the chips", async () => {
-    const api = {
-      saveSeason: vi.fn(),
-      addSeason: vi.fn(),
-      deleteSeason: vi.fn(),
-      readSeasonDeleteImpact: vi.fn(),
-    };
-    const specialDays = [
-      { id: "fair", name: "Town fair" },
-      { id: "later", name: "Next year's fair" },
-    ];
-    const el = await mount(yearModel(), { api, specialDays });
-    const chips = root(el).querySelector("season-chips")!;
-    expect(chips.seasons).toEqual(seasons);
-    expect(chips.clockRevision).toBe(7);
-    expect(chips.api).toBe(api);
-    expect(chips.specialDays).toEqual(specialDays);
-    expect(chips.readOnly).toBe(false);
-    const changed = vi.fn();
-    document.body.addEventListener("season-changed", changed);
-    chips.dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
-    document.body.removeEventListener("season-changed", changed);
-    expect(changed).toHaveBeenCalledTimes(1);
+  it("hands the seasons and read-only to the chips", async () => {
+    for (const readOnly of [false, true]) {
+      const el = await mount(yearModel(), { readOnly });
+      const chips = root(el).querySelector("season-chips")!;
+      expect(chips.seasons).toEqual(seasons);
+      expect(chips.readOnly).toBe(readOnly);
+      for (const writing of ["api", "clockRevision", "specialDays", "draftParent"])
+        expect(writing in chips).toBe(false);
+      expect(
+        chips.shadowRoot!.querySelector("[data-test=season-edit], [data-test=add-season]"),
+      ).toBeNull();
+    }
   });
 
   it("sends calendar-day-open for a date, a viewer's too", async () => {

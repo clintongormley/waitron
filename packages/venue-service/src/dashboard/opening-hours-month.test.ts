@@ -799,7 +799,6 @@ describe("Opening hours month", () => {
     );
     const chips = root(el).querySelector("season-chips")!;
     expect(chips.seasons.map((season) => season.id)).toEqual(["autumn", "winter"]);
-    expect(chips.clockRevision).toBe(4);
   });
 
   it("moves between dates with the arrow keys, holding one Tab stop", async () => {

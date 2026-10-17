@@ -18,7 +18,6 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "./season-chips.js";
 import "./seasons-window.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
@@ -1516,18 +1515,11 @@ export class OpeningHoursScreen extends LitElement {
                   .model=${this.yearModel}
                   .year=${this.shownYear()}
                   .readFailed=${this.yearReadError !== ""}
-                  .api=${this.api}
                   .areaApi=${this.areaWrites}
-                  .specialDays=${this.knownSpecialDays}
                   .readOnly=${this.readOnly}
                   @calendar-day-open=${this.openDayBox}
                   @calendar-days-open=${this.openDays}
-                  @season-dialog-open=${() => this.readKnownSpecialDays()}
                   @season-week-open=${this.openSeasonWeek}
-                  @season-changed=${(event: Event) => {
-                    event.stopPropagation();
-                    this.api.rereadWithSpecialDays();
-                  }}
                   @year-change=${(event: CustomEvent<{ year: number }>) => {
                     event.stopPropagation();
                     void Promise.resolve(

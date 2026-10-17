@@ -259,7 +259,7 @@ describe("links into the painter", () => {
     const painter = await shownPainter(el);
     expect(painter.seasonId).toBe("spring");
     expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2027);
-    expect(seasonChips.shadowRoot!.querySelector("season-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
     await cancel(painter);
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
     await expect.poll(() => painterOf(el)).toBeNull();
@@ -354,17 +354,6 @@ describe("links into the painter", () => {
     } finally {
       guard.dispose();
     }
-  });
-
-  it("a season chip's ✎ still opens the season dialog and not the painter", async () => {
-    const el = await mount("/manage/opening-hours/view/year/year/2027");
-    const seasonChips = await chips(el);
-    seasonChips
-      .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-edit]")!
-      .click();
-    await expect.poll(() => seasonChips.shadowRoot!.querySelector("season-dialog")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
-    expect(painterOf(el)).toBeNull();
   });
 
   it.each([
@@ -761,7 +750,7 @@ describe("a viewer's painter", () => {
     expect(painter.seasonId).toBe("spring");
     expect(painter.readOnly).toBe(true);
     expect(frame(painter).shadowRoot!.querySelector("[data-test=save]")).toBeNull();
-    expect(seasonChips.shadowRoot!.querySelector("season-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
     frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
     await expect.poll(() => painterOf(el)).toBeNull();

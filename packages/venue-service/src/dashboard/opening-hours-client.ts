@@ -12,11 +12,6 @@ import type { PrepStation } from "./routing-client.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
 
-export interface SeasonInput {
-  name: string;
-  /** "MM-DD", never "02-29". */
-  startsOn: string;
-}
 /** The departments whose painted hours deleting a season would lose. */
 export interface SeasonDeleteImpact {
   departments: { id: string; name: string }[];
@@ -258,15 +253,6 @@ export class OpeningHoursApi {
       ...weeks,
       expectedClockRevision,
     });
-  }
-  saveSeason(id: string, input: SeasonInput, expectedClockRevision: number): Promise<Season> {
-    return this.request(`${BASE}/seasons/${at(id)}`, "PUT", { ...input, expectedClockRevision });
-  }
-  addSeason(input: SeasonInput, expectedClockRevision: number): Promise<Season> {
-    return this.request(`${BASE}/seasons`, "POST", { ...input, expectedClockRevision });
-  }
-  deleteSeason(id: string, expectedClockRevision: number): Promise<void> {
-    return this.request(`${BASE}/seasons/${at(id)}`, "DELETE", { expectedClockRevision });
   }
   saveSeasons(change: SeasonChange, expectedClockRevision: number): Promise<Season[]> {
     return this.request(`${BASE}/seasons`, "PUT", { ...change, expectedClockRevision });
