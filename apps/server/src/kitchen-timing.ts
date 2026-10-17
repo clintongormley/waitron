@@ -116,7 +116,7 @@ export async function assertKitchenTimingStations(
     .from(kitchenStations)
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(eq(kitchenStations.locationId, cfg.locationId))
-    .orderBy(kitchenStations.displayOrder, kitchenStations.name);
+    .orderBy(kitchenStations.name, kitchenStations.id);
   for (const station of stations) {
     assertStationTiming(station, defaults, station);
   }

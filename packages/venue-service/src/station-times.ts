@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock, venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
@@ -100,12 +100,7 @@ export async function stationDestinations(
         ne(kitchenStations.id, stationId),
       ),
     )
-    .orderBy(
-      desc(kitchenStations.isDefault),
-      asc(kitchenStations.displayOrder),
-      asc(kitchenStations.name),
-      asc(kitchenStations.id),
-    );
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const model = await routingModel(tx, cfg, at);
   const open = new Set(
     model.stationTimes.filter((row) => row.status.open).map((row) => row.stationId),

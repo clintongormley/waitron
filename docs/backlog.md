@@ -1674,8 +1674,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and its colour
   picked with the shared `wt-colour-chooser` (#1828). The branch checkpoint has those colour/editor
   changes, swatches, sidebar placement, name-sorted Stations/Calendar choices and no row drag
-  controls. The Times tab and row links are retired with Calendar coverage; the Add form's order
-  field and backend order retirement remain. [Implementation plan](superpowers/plans/2026-10-17-a725-prep-stations.md). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  controls. The Times tab and row links are retired with Calendar coverage; the Add order field, backend
+  ordering and stored column are retired too. The populated native-drop and upgrade checks pass;
+  configuration exports use format 4. Final authenticated-app checks, review, CI and landing remain. [Implementation plan](superpowers/plans/2026-10-17-a725-prep-stations.md). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
   get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the

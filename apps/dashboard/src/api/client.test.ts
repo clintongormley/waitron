@@ -1647,31 +1647,29 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("createStation can carry an optional displayOrder + isDefault", async () => {
+  it("createStation carries isDefault without manual order", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s2" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createStation({ name: "Barra", displayOrder: 2, isDefault: true })).toEqual({
+    expect(await api.createStation({ name: "Barra", isDefault: true })).toEqual({
       id: "s2",
     });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Barra", displayOrder: 2, isDefault: true }),
+      body: JSON.stringify({ name: "Barra", isDefault: true }),
     });
   });
 
   it("updateStation PATCHes the addressed station's mutable slice (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(
-      api.updateStation("s1", { name: "Pase", displayOrder: 1 }),
-    ).resolves.toBeUndefined();
+    await expect(api.updateStation("s1", { name: "Pase" })).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1", {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pase", displayOrder: 1 }),
+      body: JSON.stringify({ name: "Pase" }),
     });
   });
 

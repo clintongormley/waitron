@@ -618,7 +618,6 @@ describe("opening a table station move while its station list is pending", () =>
     {
       id: "bar",
       name: "Bar",
-      displayOrder: 0,
       isDefault: false,
       active: true,
       open: true,
@@ -629,7 +628,6 @@ describe("opening a table station move while its station list is pending", () =>
     {
       id: "kitchen",
       name: "Kitchen",
-      displayOrder: 1,
       isDefault: true,
       active: true,
       open: true,
@@ -1256,7 +1254,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       {
         id: "bar",
         name: "Bar",
-        displayOrder: 0,
         isDefault: true,
         active: true,
         open: true,
@@ -1267,7 +1264,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       {
         id: "grill",
         name: "Grill",
-        displayOrder: 1,
         isDefault: false,
         active: true,
         open: true,

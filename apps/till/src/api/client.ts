@@ -1235,7 +1235,6 @@ export interface PlaceOrderResult {
 export interface Station {
   id: string;
   name: string;
-  displayOrder: number;
   isDefault: boolean;
   active: boolean;
   open: boolean;

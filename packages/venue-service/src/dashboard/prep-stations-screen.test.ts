@@ -67,7 +67,6 @@ const view: PrepStationsView = {
       active: true,
       colour: "blue",
       isDefault: true,
-      displayOrder: 1,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -548,7 +547,7 @@ it("keeps whole-station editing out of Routing while showing the grid", async ()
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="name"]')).not.toBeNull();
-  expect(q(el, '[data-test="displayOrder"]')).not.toBeNull();
+  expect(q(el, '[data-test="displayOrder"]')).toBeNull();
   expect(q(el, '[data-test="overdue"]')).not.toBeNull();
   expect(a.updateStation).not.toHaveBeenCalled();
 });
@@ -632,7 +631,6 @@ it("creates a station from the modal with the chosen thresholds", async () => {
   await settle(el);
   expect(a.createStation).toHaveBeenCalledWith({
     name: "Terrace",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -688,7 +686,6 @@ it("a new station starts on the first colour no station has, and is created with
   await settle(el);
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -989,7 +986,7 @@ function fallbackView(): PrepStationsView {
     ...view,
     stations: [
       ...view.stations,
-      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false, displayOrder: 2 },
+      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false },
     ],
     routing: {
       ...view.routing,
@@ -1098,7 +1095,7 @@ it("does not create an unnamed station", async () => {
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
   await settle(el);
-  await editSaveField(el, q(el, 'wt-input[name="displayOrder"]')!, "2");
+  await editSaveField(el, q(el, 'wt-input[name="warmAfterMinutes"]')!, "6");
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(a.createStation).not.toHaveBeenCalled();
@@ -1124,7 +1121,7 @@ it("refreshes the Stations row after a kitchen-stations live change", async () =
   await vi.waitFor(() => expect(stationRow(el, "bar").textContent).toContain("New bar"));
   expect(load).toHaveBeenCalledTimes(2);
 });
-it("creates a station with its name, order and thresholds when Enter is pressed in Order", async () => {
+it("creates a station with its name and thresholds when Enter is pressed in Name", async () => {
   const a = api();
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
@@ -1132,11 +1129,8 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
   q(el, '[data-test="name"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
-  q(el, '[data-test="displayOrder"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "3" } }),
-  );
   await settle(el);
-  q(el, '[data-test="displayOrder"]')!
+  q(el, '[data-test="name"]')!
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -1149,7 +1143,6 @@ it("creates a station with its name, order and thresholds when Enter is pressed 
   await settle(el);
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace bar",
-    displayOrder: 3,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -1257,7 +1250,7 @@ it("guards repeated Enter rename saves while a station write is pending and allo
   expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
 });
 
-it("refuses negative order and invalid warm and forgotten thresholds together when creating", async () => {
+it("refuses invalid warm and forgotten thresholds together when creating", async () => {
   const a = api();
   const el = await mount(a);
   q(el, '[data-test="new-station"]')!.click();
@@ -1266,7 +1259,6 @@ it("refuses negative order and invalid warm and forgotten thresholds together wh
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
   for (const [field, value] of [
-    ["displayOrder", "-1"],
     ["warmAfterMinutes", "0"],
     ["forgottenAfterMinutes", "10"],
   ]) {
@@ -1277,7 +1269,7 @@ it("refuses negative order and invalid warm and forgotten thresholds together wh
   await settle(el);
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  for (const field of ["displayOrder", "warmAfterMinutes", "forgottenAfterMinutes"])
+  for (const field of ["warmAfterMinutes", "forgottenAfterMinutes"])
     expect(q(el, `[data-field-error="${field}"]`)).not.toBeNull();
   expect(a.createStation).not.toHaveBeenCalled();
   expect(a.updateStation).not.toHaveBeenCalled();
@@ -2859,9 +2851,9 @@ it("preserves an unknown printer id on the Stations table", async () => {
 it("Stations orders tied station positions by name and omits deleted stations", async () => {
   const server = structuredClone(ticketView);
   server.stations = [
-    { ...upstairs, id: "zulu", name: "Zulu", displayOrder: 1 },
-    { ...upstairs, id: "disabled", name: "A disabled", displayOrder: 0, active: false },
-    { ...view.stations[0]!, name: "Alpha", displayOrder: 1 },
+    { ...upstairs, id: "zulu", name: "Zulu" },
+    { ...upstairs, id: "disabled", name: "A disabled", active: false },
+    { ...view.stations[0]!, name: "Alpha" },
   ];
   history.replaceState(null, "", "/manage/prep-stations/view/stations");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(server) }));
@@ -4485,8 +4477,8 @@ describe("Save follows changes", () => {
     expect(form.button().variant).toBe("primary");
     expect(form.button().disabled).toBe(true);
     form
-      .query('wt-input[name="displayOrder"]')!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2" } }));
+      .query('wt-input[name="overdueAfterMinutes"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "12" } }));
     await settle(form.el);
     expect(form.button().disabled).toBe(true);
     form
@@ -4697,7 +4689,6 @@ describe("The station editor", () => {
     await settle(el);
     expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
       name: "Grill",
-      displayOrder: 0,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -4813,13 +4804,12 @@ it.each([
         fallbackStationId: "wrong-fallback",
       },
     );
-    next.stations.push({ ...upstairs, id: "open", name: "Open kitchen", displayOrder: 3 });
+    next.stations.push({ ...upstairs, id: "open", name: "Open kitchen" });
     next.stations.push({
       ...upstairs,
       id: "off",
       name: "Off kitchen",
       active: false,
-      displayOrder: 4,
     });
     next.routing.stationTimes.push({
       ...next.routing.stationTimes[1]!,
@@ -4867,8 +4857,8 @@ it.each(["en", "es"] as const)(
     setLocale(locale);
     const loaded = withUpstairs({ open: false, why: "closed_by_hand" });
     loaded.stations.push(
-      { ...upstairs, id: "terrace", name: "Terrace", displayOrder: 3 },
-      { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 4 },
+      { ...upstairs, id: "terrace", name: "Terrace" },
+      { ...upstairs, id: "disabled", name: "Disabled bar", active: false },
     );
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
     await settle(el);
@@ -5080,7 +5070,6 @@ it.each(["en", "es"] as const)("A725 Add station uses the shared popup in %s", a
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
     colour: "teal",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -5107,7 +5096,6 @@ it("A725 Add station ignores a colour outside the station palette", async () => 
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
     colour: "red",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -5149,7 +5137,6 @@ it("A725 ignores a colour event from a closed Add station opening", async () => 
   expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
     colour: "red",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -5185,7 +5172,6 @@ it("A725 holds the colour popup closed while Add station is saving", async () =>
   expect(createStation).toHaveBeenCalledExactlyOnceWith({
     name: "Terrace",
     colour: "red",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -5196,9 +5182,9 @@ it("A725 lists Stations by name with Default in place and no row grips", async (
   setLocale("en");
   const server = structuredClone(view);
   server.stations = [
-    { ...view.stations[0]!, id: "zulu", name: "Zulu", displayOrder: 0, isDefault: true },
-    { ...view.stations[0]!, id: "bar", name: "Bar", displayOrder: 1, isDefault: false },
-    { ...view.stations[0]!, id: "alpha", name: "Alpha", displayOrder: 2, isDefault: false },
+    { ...view.stations[0]!, id: "zulu", name: "Zulu", isDefault: true },
+    { ...view.stations[0]!, id: "bar", name: "Bar", isDefault: false },
+    { ...view.stations[0]!, id: "alpha", name: "Alpha", isDefault: false },
     { ...view.stations[0]!, id: "gone", name: "A deleted", active: false },
   ];
   server.routing.defaultStationId = "zulu";
@@ -5254,3 +5240,22 @@ it.each(["en", "es"] as const)(
     expect(el.shadowRoot!.querySelector('[slot="times"]')).toBeNull();
   },
 );
+
+it("A725 Add station has no manual order field and sends no retired key", async () => {
+  const a = api();
+  const el = await mount(a);
+  await settle(el);
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  expect(q(el, 'wt-input[name="displayOrder"]')).toBeNull();
+  await editSaveField(el, q(el, 'wt-input[name="name"]')!, "A725 Kitchen");
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "A725 Kitchen",
+    colour: "red",
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 10,
+    forgottenAfterMinutes: 15,
+  });
+});

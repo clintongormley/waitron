@@ -396,7 +396,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 3,
+  version: 4,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -4309,7 +4309,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
   },
 );
 
-it("transfers department receipt choices and explicit or inherited zone choices in format 3", async () => {
+it("A725 transfers station and department choices in format 4", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -4349,7 +4349,10 @@ it("transfers department receipt choices and explicit or inherited zone choices 
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(3);
+  expect(exported.version).toBe(4);
+  expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
+  for (const station of exported.tables.kitchen_stations!)
+    expect(station).not.toHaveProperty("display_order");
   expect(exported.venue.location).not.toHaveProperty("receiptPrintMode");
   expect(exported.venue.location).not.toHaveProperty("drawerOpenPolicy");
   const decoded = decodeConfigurationBundle(

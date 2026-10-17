@@ -83,7 +83,8 @@ export function stationPrintersDownQuery(
         and ${laterDocument}.rowid > ${printJobs}.rowid)`,
       ),
     )
-    .groupBy(kitchenStations.id, kitchenStations.name, printers.id, printers.name);
+    .groupBy(kitchenStations.id, kitchenStations.name, printers.id, printers.name)
+    .orderBy(kitchenStations.name, kitchenStations.id, printers.name, printers.id);
 }
 
 export async function stationPrintersDown(
@@ -183,7 +184,7 @@ export async function stationScreensDark(
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, [...waiting]))
-    .orderBy(kitchenStations.displayOrder, kitchenStations.name);
+    .orderBy(kitchenStations.name, kitchenStations.id);
   return stations.map((station) => ({
     stationId: station.id,
     stationName: station.name,

@@ -87,12 +87,8 @@ async function venue() {
       .returning({ id: staffRoles.id });
     const [pass] = await tx
       .insert(kitchenStations)
-      .values({ locationId: v.cfg.locationId, name: "Pass", displayOrder: 1 })
+      .values({ locationId: v.cfg.locationId, name: "Pass" })
       .returning({ id: kitchenStations.id });
-    await tx
-      .update(kitchenStations)
-      .set({ displayOrder: 2 })
-      .where(eq(kitchenStations.id, v.stationId));
     const [special] = await tx
       .insert(specialDays)
       .values({ locationId: v.cfg.locationId, name: "Fiesta" })
@@ -137,12 +133,12 @@ async function switchOff(area: AreaRef, active: boolean) {
 }
 
 describe("listStaffingAreas", () => {
-  it("lists active departments, then active stations in display order", async () => {
+  it("A725 lists active departments, then active stations by name", async () => {
     const v = await venue();
     expect(await inTx((tx) => listStaffingAreas(tx, v.cfg))).toEqual([
       { area: dept(v), name: "Dining room" },
-      { area: { kind: "station", id: v.passId }, name: "Pass" },
       { area: grill(v), name: "Grill" },
+      { area: { kind: "station", id: v.passId }, name: "Pass" },
     ]);
   });
 });
@@ -161,8 +157,8 @@ describe("season staffing", () => {
     const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
     expect(read.areas).toEqual([
       { area: dept(v), name: "Dining room", weekdays: { ...emptyWeek(), 5: [early, late] } },
-      { area: { kind: "station", id: v.passId }, name: "Pass", weekdays: emptyWeek() },
       { area: grill(v), name: "Grill", weekdays: { ...emptyWeek(), 0: [block(v.cook)] } },
+      { area: { kind: "station", id: v.passId }, name: "Pass", weekdays: emptyWeek() },
     ]);
   });
 
@@ -363,18 +359,18 @@ describe("special-day staffing", () => {
           ],
         },
         {
-          area: { kind: "station", id: v.passId },
-          name: "Pass",
-          dates: [
-            { dateId: v.aug14, date: "2026-08-14", blocks: null },
-            { dateId: v.aug15, date: "2026-08-15", blocks: null },
-          ],
-        },
-        {
           area: grill(v),
           name: "Grill",
           dates: [
             { dateId: v.aug14, date: "2026-08-14", blocks: [] },
+            { dateId: v.aug15, date: "2026-08-15", blocks: null },
+          ],
+        },
+        {
+          area: { kind: "station", id: v.passId },
+          name: "Pass",
+          dates: [
+            { dateId: v.aug14, date: "2026-08-14", blocks: null },
             { dateId: v.aug15, date: "2026-08-15", blocks: null },
           ],
         },

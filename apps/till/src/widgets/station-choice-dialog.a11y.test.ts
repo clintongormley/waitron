@@ -25,7 +25,6 @@ describe.each(["light", "dark"] as const)("station choice dialog a11y (%s)", (th
             {
               id: "grill",
               name: "Parrilla",
-              displayOrder: 0,
               isDefault: true,
               active: true,
               open: true,
@@ -36,7 +35,6 @@ describe.each(["light", "dark"] as const)("station choice dialog a11y (%s)", (th
             {
               id: "bar",
               name: "Barra",
-              displayOrder: 1,
               isDefault: false,
               active: true,
               open: false,
@@ -68,7 +66,6 @@ describe.each(["light", "dark"] as const)("station choice dialog a11y (%s)", (th
           {
             id: "grill",
             name: "Parrilla",
-            displayOrder: 0,
             isDefault: true,
             active: true,
             open: true,
@@ -79,7 +76,6 @@ describe.each(["light", "dark"] as const)("station choice dialog a11y (%s)", (th
           {
             id: "bar",
             name: "Barra",
-            displayOrder: 1,
             isDefault: false,
             active: true,
             open: false,

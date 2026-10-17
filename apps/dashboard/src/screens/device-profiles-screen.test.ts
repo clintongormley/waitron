@@ -1118,7 +1118,6 @@ describe("device-profiles-screen kitchen screens", () => {
   const station = (id: string, name: string, active = true): Station => ({
     id,
     name,
-    displayOrder: 0,
     isDefault: false,
     active,
     showsRestOfOrder: false,
@@ -2016,7 +2015,6 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const grill: Station = {
       id: "s1",
       name: "Grill",
-      displayOrder: 0,
       isDefault: false,
       active: true,
       showsRestOfOrder: false,

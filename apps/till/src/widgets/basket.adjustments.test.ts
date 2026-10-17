@@ -131,7 +131,6 @@ describe("till-basket: a stored counter order", () => {
       {
         id: "bar",
         name: "Bar",
-        displayOrder: 1,
         isDefault: false,
         active: true,
         open: true,
@@ -142,7 +141,6 @@ describe("till-basket: a stored counter order", () => {
       {
         id: "grill",
         name: "Grill",
-        displayOrder: 2,
         isDefault: true,
         active: true,
         open: true,

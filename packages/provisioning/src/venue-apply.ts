@@ -307,7 +307,6 @@ export async function applyVenue(
             locationId,
             name: "Cocina",
             colour: await nextStationColour(tx, locationId),
-            displayOrder: 0,
             isDefault: true,
             active: true,
           });

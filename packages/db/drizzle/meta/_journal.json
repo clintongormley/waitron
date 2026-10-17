@@ -1170,6 +1170,13 @@
       "when": 1792203642436,
       "tag": "0166_sale_receipt_guests",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "6",
+      "when": 1792240316739,
+      "tag": "0167_retire_station_order",
+      "breakpoints": true
     }
   ]
 }

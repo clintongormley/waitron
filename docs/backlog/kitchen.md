@@ -181,8 +181,9 @@ list does not exist.
 colours, the Add/Edit shared popup, row swatches and sidebar placement are implemented. The
 Stations table and Calendar choices use name order, and the station row drag controls are removed.
 The Times tab and row links are retired, with their range, empty-day, station-change, recovery,
-reconnect and themed accessibility checks exercised through Calendar. The Add form's order field
-and backend/storage order retirement remain open.
+reconnect and themed accessibility checks exercised through Calendar. The Add order field and
+backend/storage station order are retired; configuration exports use format 4 and refuse older
+formats. The populated native-column-drop test and the migration upgrade walk passed.
 The complete branch still needs its final review, push, CI and landing.
 
 ## Whole-order note correction volume

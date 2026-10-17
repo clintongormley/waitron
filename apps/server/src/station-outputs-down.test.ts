@@ -798,3 +798,37 @@ describe("passScreensDark", () => {
     });
   });
 });
+
+it("A725 down printers and dark station screens use station and printer names", async () => {
+  const f = await setup();
+  const z = await f.printer(f.bar, "Zulu printer");
+  const a = await f.printer(f.bar, "Alpha printer");
+  const k = await f.printer(f.grill, "Kitchen printer");
+  for (const id of [z, a, k]) await job(f.venue.cfg.locationId, id);
+  expect(
+    (await stationPrintersDown(suite.db, f.venue.cfg.locationId, at)).map(
+      ({ stationName, printerName }) => [stationName, printerName],
+    ),
+  ).toEqual([
+    ["Bar", "Alpha printer"],
+    ["Bar", "Zulu printer"],
+    ["Cocina", "Kitchen printer"],
+  ]);
+  const profileId = await profile("kds");
+  for (const stationId of [f.grill, f.bar]) {
+    await waitingItem(f.venue, stationId, "2026-10-02T17:50:00.000Z");
+    await stationScreenDevice({
+      locationId: f.venue.cfg.locationId,
+      label: randomUUID(),
+      deviceProfileId: profileId,
+      stationId,
+      tokenHash: randomUUID(),
+      lastSeenAt: null,
+    });
+  }
+  expect(
+    (await stationScreensDark(suite.db, f.venue.cfg.locationId, at)).map(
+      ({ stationName }) => stationName,
+    ),
+  ).toEqual(["Bar", "Cocina"]);
+});

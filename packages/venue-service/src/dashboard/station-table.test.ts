@@ -16,7 +16,6 @@ function station(overrides: Partial<PrepStation> & Pick<PrepStation, "id" | "nam
   return {
     active: true,
     isDefault: false,
-    displayOrder: 0,
     colour: "blue",
     ...overrides,
   } as PrepStation;
@@ -82,8 +81,8 @@ it("names its columns in Spanish, and says so when there are no stations", async
 });
 it("omits deleted stations and their supplied status while preserving Default", async () => {
   const el = await mount([
-    station({ id: "disabled", name: "Old kitchen", active: false, displayOrder: 0 }),
-    station({ id: "bar", name: "Bar", isDefault: true, displayOrder: 1 }),
+    station({ id: "disabled", name: "Old kitchen", active: false }),
+    station({ id: "bar", name: "Bar", isDefault: true }),
   ]);
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),
@@ -96,9 +95,9 @@ it("omits deleted stations and their supplied status while preserving Default", 
 });
 it("orders stations by name despite legacy positions", async () => {
   const el = await mount([
-    station({ id: "zulu", name: "Zulu", displayOrder: 1 }),
-    station({ id: "alpha", name: "Alpha", displayOrder: 1 }),
-    station({ id: "first", name: "Yankee", displayOrder: 0 }),
+    station({ id: "zulu", name: "Zulu" }),
+    station({ id: "alpha", name: "Alpha" }),
+    station({ id: "first", name: "Yankee" }),
   ]);
   expect(
     [...table(el)!.querySelectorAll("tbody tr")].map((row) => row.textContent?.trim()),

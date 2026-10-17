@@ -24,7 +24,6 @@ const stations: Station[] = [
   {
     id: "st-1",
     name: "Cocina",
-    displayOrder: 0,
     isDefault: true,
     active: true,
     open: true,
@@ -35,7 +34,6 @@ const stations: Station[] = [
   {
     id: "st-2",
     name: "Barra",
-    displayOrder: 1,
     isDefault: false,
     active: true,
     open: true,
@@ -1813,7 +1811,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     {
       id: "st-c",
       name: "Cocina",
-      displayOrder: 0,
       isDefault: true,
       active: true,
       open: true,
@@ -1824,7 +1821,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     {
       id: "st-g",
       name: "Grill",
-      displayOrder: 1,
       isDefault: false,
       active: true,
       open: true,
@@ -1835,7 +1831,6 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     {
       id: "st-f",
       name: "Fryer",
-      displayOrder: 2,
       isDefault: false,
       active: true,
       open: true,

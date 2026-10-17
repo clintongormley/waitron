@@ -48,7 +48,6 @@ const view: PrepStationsView = {
       active: true,
       colour: "blue",
       isDefault: true,
-      displayOrder: 1,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -229,7 +228,6 @@ for (const rename of [false, true]) {
         : [
             {
               name: "Kitchen",
-              displayOrder: 0,
               warmAfterMinutes: 5,
               overdueAfterMinutes: 10,
               forgottenAfterMinutes: 15,
@@ -337,7 +335,6 @@ for (const rename of [false, true])
     });
   }
 for (const [name, changed, reverted] of [
-  ["displayOrder", "3", "0"],
   ["warmAfterMinutes", "6", "5"],
   ["overdueAfterMinutes", "12", "10"],
   ["forgottenAfterMinutes", "20", "15"],

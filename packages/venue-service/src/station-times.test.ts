@@ -608,28 +608,24 @@ describe("station today controls", () => {
     });
   });
 
-  it("offers the default first, then display order and name, leaving out unusable destinations", async () => {
+  it("A725 offers destinations by name, default among them, leaving out unusable destinations", async () => {
     const f = await db.transaction(async (tx) => {
       const f = await fixture(tx);
       await setStationToday(tx, f.cfg, f.downstairs, "closed", at);
       await tx.insert(kitchenStations).values([
-        { ...f.cfg, name: "Beta", displayOrder: 2, id: "00000000-0000-4000-8000-000000000003" },
-        { ...f.cfg, name: "Zulu", displayOrder: 1, id: "00000000-0000-4000-8000-000000000001" },
-        { ...f.cfg, name: "Alpha", displayOrder: 2, id: "00000000-0000-4000-8000-000000000002" },
+        { ...f.cfg, name: "Beta", id: "00000000-0000-4000-8000-000000000003" },
+        { ...f.cfg, name: "Zulu", id: "00000000-0000-4000-8000-000000000001" },
+        { ...f.cfg, name: "Alpha", id: "00000000-0000-4000-8000-000000000002" },
       ]);
-      await tx
-        .update(kitchenStations)
-        .set({ displayOrder: 9 })
-        .where(eq(kitchenStations.id, f.kitchen));
       return f;
     });
     expect(
       await db.transaction((tx) => stationTimes.stationDestinations(tx, f.cfg, f.upstairs, at)),
     ).toEqual([
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
-      { id: "00000000-0000-4000-8000-000000000001", name: "Zulu", isDefault: false },
       { id: "00000000-0000-4000-8000-000000000002", name: "Alpha", isDefault: false },
       { id: "00000000-0000-4000-8000-000000000003", name: "Beta", isDefault: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true },
+      { id: "00000000-0000-4000-8000-000000000001", name: "Zulu", isDefault: false },
     ]);
   });
 
@@ -642,16 +638,16 @@ describe("station today controls", () => {
     expect(
       await db.transaction((tx) => stationTimes.stationDestinations(tx, f.cfg, f.upstairs, at)),
     ).toEqual([
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
       { id: f.downstairs, name: "Downstairs bar", isDefault: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true },
     ]);
     expect(
       await db.transaction((tx) =>
         stationTimes.stationDestinations(tx, f.cfg, f.upstairs, new Date("2026-10-03T04:00:00Z")),
       ),
     ).toEqual([
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
       { id: f.downstairs, name: "Downstairs bar", isDefault: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true },
     ]);
   });
 

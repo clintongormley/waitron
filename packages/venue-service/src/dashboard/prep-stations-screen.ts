@@ -155,7 +155,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private draft: NewStation = {
     name: "",
     colour: "red",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -791,7 +790,6 @@ export class PrepStationsScreen extends LitElement {
     this.draft = {
       name: "",
       colour: firstUnusedStationColour(used),
-      displayOrder: 0,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -823,8 +821,6 @@ export class PrepStationsScreen extends LitElement {
     const d = this.draft;
     const errors: Record<string, string> = {};
     if (!d.name.trim()) errors.name = t("prep.name_required");
-    if (!Number.isInteger(d.displayOrder) || d.displayOrder < 0)
-      errors.displayOrder = t("prep.order_invalid");
     if (!Number.isInteger(d.warmAfterMinutes) || d.warmAfterMinutes < 1)
       errors.warmAfterMinutes = t("prep.threshold_invalid");
     if (!Number.isInteger(d.overdueAfterMinutes) || d.overdueAfterMinutes <= d.warmAfterMinutes)
@@ -1088,7 +1084,7 @@ export class PrepStationsScreen extends LitElement {
             this.editor = undefined;
         }}
         ><div class="form">
-          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("displayOrder", t("prep.order"))}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
+          ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#newStationPrinters()}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
         <wt-form-actions slot="footer">

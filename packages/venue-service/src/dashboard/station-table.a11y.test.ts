@@ -11,15 +11,14 @@ afterEach(() => {
 });
 
 const stations = [
-  { id: "bar", name: "Bar", colour: "blue", active: true, isDefault: true, displayOrder: 0 },
-  { id: "grill", name: "Grill", colour: "green", active: true, isDefault: false, displayOrder: 1 },
+  { id: "bar", name: "Bar", colour: "blue", active: true, isDefault: true },
+  { id: "grill", name: "Grill", colour: "green", active: true, isDefault: false },
   {
     id: "old",
     name: "Old kitchen",
     colour: "red",
     active: false,
     isDefault: false,
-    displayOrder: 2,
   },
 ] as PrepStation[];
 

@@ -245,7 +245,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
     .values({
       locationId: MIRROR_LOCATION_ID,
       name: "Kitchen",
-      displayOrder: 0,
       isDefault: true,
       active: true,
     })

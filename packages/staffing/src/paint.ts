@@ -49,7 +49,7 @@ export async function listStaffingAreas(tx: Transaction, cfg: Cfg): Promise<Staf
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
-    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   return [
     ...departmentRows.map((row) => ({
       area: { kind: "department", id: row.id } as AreaRef,

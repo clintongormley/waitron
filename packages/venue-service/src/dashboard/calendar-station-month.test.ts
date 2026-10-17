@@ -35,9 +35,8 @@ const STATIONS: PrepStation[] = [
   { id: "kitchen", name: "Kitchen", active: true, isDefault: true },
   { id: "grill", name: "Grill", active: true, isDefault: false },
   { id: "off", name: "Off", active: false, isDefault: false },
-].map((station, index) => ({
+].map((station) => ({
   ...station,
-  displayOrder: index,
   colour: "red",
   printMovedSlips: null,
   showsRestOfOrder: false,

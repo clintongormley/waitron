@@ -1023,11 +1023,11 @@ async function worksStation(
   return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
 }
 
-/** The location's stations, historical rows included, in display order. */
+/** The location's stations, historical rows included. */
 function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
   return tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
     .where(eq(kitchenStations.locationId, cfg.locationId))
-    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
 }

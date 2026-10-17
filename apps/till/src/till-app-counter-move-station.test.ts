@@ -66,7 +66,6 @@ const offers: ZoneOfferCatalogue = {
 const station = (id: string, name: string, displayOrder: number): Station => ({
   id,
   name,
-  displayOrder,
   isDefault: displayOrder === 0,
   active: true,
   open: true,

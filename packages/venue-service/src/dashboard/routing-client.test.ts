@@ -135,7 +135,6 @@ it("sends a station's printers in the station's own create and edit", async () =
   const api = new PrepStationsApi(request as unknown as DashboardRequest);
   const station = {
     name: "Grill",
-    displayOrder: 0,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -160,7 +159,6 @@ it("writes station changes to core and cells to venue-service", async () => {
   const api = new PrepStationsApi(request as DashboardRequest);
   await api.createStation({
     name: "Bar",
-    displayOrder: 2,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -168,7 +166,6 @@ it("writes station changes to core and cells to venue-service", async () => {
   });
   await api.updateStation("bar", {
     name: "Terrace bar",
-    displayOrder: 3,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
@@ -192,7 +189,6 @@ it("writes station changes to core and cells to venue-service", async () => {
       "POST",
       {
         name: "Bar",
-        displayOrder: 2,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
@@ -204,7 +200,6 @@ it("writes station changes to core and cells to venue-service", async () => {
       "PATCH",
       {
         name: "Terrace bar",
-        displayOrder: 3,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
@@ -297,7 +292,6 @@ it("creates station and its timing thresholds with one POST", async () => {
   await expect(
     api.createStation({
       name: "Bar",
-      displayOrder: 2,
       warmAfterMinutes: 3,
       overdueAfterMinutes: 8,
       forgottenAfterMinutes: 12,
@@ -310,7 +304,6 @@ it("creates station and its timing thresholds with one POST", async () => {
       "POST",
       {
         name: "Bar",
-        displayOrder: 2,
         warmAfterMinutes: 3,
         overdueAfterMinutes: 8,
         forgottenAfterMinutes: 12,
@@ -377,14 +370,6 @@ it("writes station targets for a category cell and a category zone cell", async 
         target: { kind: "station", stationId: "bar" },
       },
     ],
-  ]);
-});
-it("writes a complete station order as one active request even from a background client", async () => {
-  const request = vi.fn(async () => undefined);
-  const client = new PrepStationsApi(request as DashboardRequest).background;
-  await client.reorderStations(["bar", "kitchen"]);
-  expect(request.mock.calls).toEqual([
-    ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
   ]);
 });
 

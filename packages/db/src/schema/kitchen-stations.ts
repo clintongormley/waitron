@@ -15,7 +15,6 @@ export const kitchenStations = table(
     id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
     // Retired timing columns remain to avoid rebuilding this parent; effective timing uses kitchen_timing_defaults and kitchen_station_timing.
     warmAfterMinutes: count("warm_after_minutes").notNull().default(5),
     overdueAfterMinutes: count("overdue_after_minutes").notNull().default(10),

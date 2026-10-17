@@ -50,7 +50,6 @@ const view: PrepStationsView = {
       active: true,
       colour: "blue",
       isDefault: true,
-      displayOrder: 1,
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,

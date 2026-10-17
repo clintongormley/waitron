@@ -88,7 +88,7 @@ async function readStored(
           : inArray(deviceProfileKitchenScreenStations.deviceProfileId, [...profileIds]),
       ),
     )
-    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const zones = await tx
     .select({
       profileId: deviceProfileKitchenScreenZones.deviceProfileId,
@@ -374,7 +374,7 @@ async function placesHere(
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
-    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+    .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
     .from(floorZones)
