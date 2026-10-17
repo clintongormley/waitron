@@ -4263,6 +4263,17 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/workforce.md#a763-point-9-the-staffing-months-monday-rota-for-this-week-link-goes),
   [mockup](backlog/mockups/a763-rota/06-staffing-month.png)
 
+- **The Rota's empty-area message still says "add shifts by person" (left open by #1841).** The
+  approved board's words ("You can still add shifts by person." / "Puedes seguir añadiendo turnos
+  por persona.", `staffing.rota.unpainted_season` and `unpainted_plain` in
+  `packages/staffing/src/dashboard/strings.ts`) name the By person view A763 retired; the review
+  suggested "You can still add shifts in Everyone." Owner to choose the words.
+
+- **A link look for `wt-button` (left open by #1841).** The Rota's picker and open-slots menu draw
+  "Show everyone" and "Another shift…" as underlined links by restyling a `wt-button` locally
+  (`slot-picker.ts`, `open-slots-menu.ts`). A `link` variant on the shared button would replace both;
+  it changes a shared primitive, so it needs its token-painting and a11y tests.
+
 - **Staffing's day box: each area's staff roles and times.** The box lists each area's number; the
   mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
   block. Decision 13 of the [A720 plan](superpowers/plans/2026-10-15-a720-calendar-year-month.md),
