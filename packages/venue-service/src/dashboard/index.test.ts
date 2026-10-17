@@ -408,9 +408,11 @@ it("declares the Calendar's Week as a search destination", async () => {
     departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
   };
   const request = (async (path: string) =>
-    path.includes("/opening-hours/month?")
-      ? new Promise(() => {})
-      : model) as import("@waitron/dashboard-kit").DashboardRequest;
+    path === "/management-api/stations"
+      ? []
+      : path.includes("/opening-hours/month?")
+        ? new Promise(() => {})
+        : model) as import("@waitron/dashboard-kit").DashboardRequest;
   history.replaceState(null, "", destinations!.at(-1)!.path);
   const contribution = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
     (x) => x.screen.id === "opening-hours",

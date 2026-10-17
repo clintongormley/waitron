@@ -19,6 +19,7 @@ afterEach(() => {
 function request(state: string): DashboardRequest {
   return (async (path: string) => {
     if (state === "load-failed") throw new Error("offline");
+    if (path === "/management-api/stations") return [];
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: {
@@ -153,6 +154,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");
     screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked === "/management-api/stations") return [];
       if (asked.includes("/opening-hours/month?"))
         return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
       const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
@@ -179,6 +181,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");
     screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked === "/management-api/stations") return [];
       if (asked.includes("/opening-hours/month?"))
         return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
       const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
@@ -220,6 +223,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");
     screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked === "/management-api/stations") return [];
       if (asked.includes("/opening-hours/month?"))
         return monthModel({ month: new URL(asked, location.href).searchParams.get("month")! });
       const read = await (ready as (...args: unknown[]) => Promise<object>)(asked, ...rest);
@@ -256,6 +260,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
     const ready = request("ready");
     screen.api = new OpeningHoursApi((async (asked: string, ...rest: unknown[]) => {
+      if (asked === "/management-api/stations") return [];
       if (asked.includes("/opening-hours/month?"))
         return answered
           ? monthModel({ month: new URL(asked, location.href).searchParams.get("month")! })
