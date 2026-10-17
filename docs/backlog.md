@@ -1923,7 +1923,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 ### The till, devices and table service
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Designed, not built; follows A773-1. Every order line holds one portion with its
+  2026-10-18).** Owner-approved design, not built; follows A773-1, queued in lane G. Every order line holds one portion with its
   own extras ("2 ×" is display only); bills can be named and the name reaches kitchen tickets and
   the pass; the main bill and the Tab button go; every device shows one "Bill 1 of 3 ▾" switcher
   with Bill ⋯ and Table ⋯ menus; Move dishes… replaces Split by item and Transfer items; Split a
