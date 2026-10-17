@@ -387,7 +387,10 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     const oldJournal = before![journal]! as { created_at: number }[];
     const oldTimes = new Set(oldJournal.map((row) => row.created_at));
     const newJournal = actual[journal]! as { created_at: number }[];
-    expect(newJournal).toHaveLength(oldJournal.length + 7);
+    const currentJournal = JSON.parse(
+      readFileSync(join(CORE_MIGRATIONS.migrationsFolder, "meta", "_journal.json"), "utf8"),
+    ) as { entries: unknown[] };
+    expect(newJournal).toHaveLength(currentJournal.entries.length);
     expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
     const retained: Record<string, unknown[]> = {
       ...before!,

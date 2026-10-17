@@ -179,8 +179,7 @@ export class PrepStationsScreen extends LitElement {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
       this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
-      if (this.tab !== requested || this.#url.read("station") !== null)
-        this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
+      this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
     },
     {
       basePath: "/manage",

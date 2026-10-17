@@ -4121,7 +4121,7 @@ describe("dashboard URL navigation", () => {
     expect(reads).not.toContain("/management-api/venue-service/routing");
   });
 
-  it("offers a venue service manager Prep stations with every tab", async () => {
+  it("offers a venue service manager Prep stations with both tabs", async () => {
     history.replaceState(null, "", "/manage/prep-stations");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -4163,11 +4163,12 @@ describe("dashboard URL navigation", () => {
       [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')].map((tab) =>
         tab.getAttribute("data-key"),
       ),
-    ).toEqual(["stations", "routing", "times"]);
+    ).toEqual(["stations", "routing"]);
   });
 
   it("an old tester link opens the Routing tab", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager");
+    history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager?dev=1#saved");
+    const push = vi.spyOn(history, "pushState");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
@@ -4205,6 +4206,9 @@ describe("dashboard URL navigation", () => {
     expect(tabs.value).toBe("routing");
     expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
+    expect(location.search).toBe("?dev=1");
+    expect(location.hash).toBe("#saved");
+    expect(push).not.toHaveBeenCalled();
   });
   it.each([
     { modules: ["venue-service"], permissions: [] },
@@ -6525,9 +6529,9 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("service")).toEqual(["nav-bookings"]);
     expect(items("operations")).toEqual([
       "nav-venue-operations",
+      "nav-prep-stations",
       "nav-opening-hours",
       "nav-periods",
-      "nav-prep-stations",
       "nav-venue-settings",
     ]);
     expect(navItem(el, "venue-operations")!.textContent!.trim()).toBe("Departamentos y zonas");

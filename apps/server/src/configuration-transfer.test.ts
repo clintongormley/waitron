@@ -2387,7 +2387,7 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
   expect(transferred).toEqual(before);
 });
 
-it.each([null, [], {}, 1, false, "grey"])(
+it.each([null, [], {}, 1, false, "invalid-colour"])(
   "A725 refuses invalid imported station colour %j without retaining venue rows",
   async (colour) => {
     const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
