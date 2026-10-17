@@ -2543,6 +2543,30 @@ password manager reads, in two files, and the print agent's setup page, each hel
 lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
 added on a line that already has one passes.
 
+#### Frame or replace a library photo
+
+To bring an off-centre dish into its thumbnails, open **Edit photo**, then **Adjust framing**.
+The second window owns a separate draft. Drag inside the square, or focus it and use the arrow
+keys to move the focal point by 1% of the source; Shift changes the step to 10%. Zoom runs from
+100% to 400% and redraws during the drag. **Lists** shows the square crop and **Till buttons**
+shows its 4:3 counterpart. Both use the same focal point and zoom. Reset returns to the centre at
+100%; Done accepts that frame into Edit photo, even when you changed nothing. Escape or a
+backdrop click discards only the second window's unaccepted changes.
+
+Edit photo shows the framed picture and the upload's basename, falling back to the stored
+filename for a photo with no recorded basename. **Replace photo** stages a file and resets its
+framing, preserving every translated name. Only the outer Save sends the file, names and accepted
+framing together. While Adjust framing is open, the outer Save is disabled and nested Enter does
+not submit it. Cancel uses the existing leave coordinator. The framing window registers beneath
+its photo editor so navigation also sees its private changes.
+
+A background list refresh leaves an open draft alone. A refused save retains it and allows retry.
+If another save changed the photo's revision, **Discard changes and reload photo** reads its new
+values explicitly; with a leave coordinator, Keep editing retains your draft. Successful Save
+closes before the library refresh, so a failed refresh offers no second submission. Local preview
+URLs are released when their file or editor is replaced or disconnected. An old image load cannot
+paint over a newer source.
+
 #### Protect an edited dialog before closing it
 
 When a dialog holds staged edits, give its owner a draft scope with `draftScopeFor(this, owner)`

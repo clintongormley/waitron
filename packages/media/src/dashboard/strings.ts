@@ -1,5 +1,19 @@
 import { makeT, registerCatalogue, registerCodeMessages } from "@waitron/dashboard-kit";
 const en = {
+  "image.adjust_framing": "Adjust framing",
+  "image.replace_photo": "Replace photo",
+  "image.zoom": "Zoom (%)",
+  "image.lists": "Lists",
+  "image.till_buttons": "Till buttons",
+  "image.reset": "Reset",
+  "image.done": "Done",
+  "image.photo_position": "Photo position",
+  "image.framing_instruction":
+    "Drag the photo to place it. Use arrow keys to move 1%, or Shift and an arrow to move 10%.",
+  "image.photo_loading": "Loading photo…",
+  "image.photo_load_error": "The photo could not be loaded.",
+  "image.reload_photo": "Discard changes and reload photo",
+
   "nav.images": "Image library",
   "image.upload": "Upload photo",
   "image.upload_many": "Upload photos",
@@ -7,7 +21,7 @@ const en = {
   "image.back": "Back",
   "image.duplicate_reused": "Existing photo reused:",
   "image.duplicate_metadata_kept": "Its name is unchanged.",
-  "image.edit": "Edit image",
+  "image.edit": "Edit photo",
   "action.edit": "Edit",
   "image.name": "Name",
   "image.preview": "Selected photo preview",
@@ -69,6 +83,20 @@ const en = {
   "image.uses_error": "Could not look up where this image is used.",
 } as const;
 const es: Record<keyof typeof en, string> = {
+  "image.adjust_framing": "Ajustar encuadre",
+  "image.replace_photo": "Reemplazar foto",
+  "image.zoom": "Zoom (%)",
+  "image.lists": "Listas",
+  "image.till_buttons": "Botones de caja",
+  "image.reset": "Restablecer",
+  "image.done": "Listo",
+  "image.photo_position": "Posición de la foto",
+  "image.framing_instruction":
+    "Arrastra la foto para colocarla. Usa las flechas para mover un 1%, o Mayús y una flecha para mover un 10%.",
+  "image.photo_loading": "Cargando foto…",
+  "image.photo_load_error": "No se pudo cargar la foto.",
+  "image.reload_photo": "Descartar cambios y volver a cargar la foto",
+
   "nav.images": "Biblioteca de imágenes",
   "image.upload": "Subir foto",
   "image.upload_many": "Subir fotos",
@@ -76,7 +104,7 @@ const es: Record<keyof typeof en, string> = {
   "image.back": "Volver",
   "image.duplicate_reused": "Se ha reutilizado la foto existente:",
   "image.duplicate_metadata_kept": "Su nombre no ha cambiado.",
-  "image.edit": "Editar imagen",
+  "image.edit": "Editar foto",
   "action.edit": "Editar",
   "image.name": "Nombre",
   "image.preview": "Vista previa de la foto seleccionada",

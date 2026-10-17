@@ -1597,7 +1597,7 @@ it("says a refused translation in a language the form does not show above Save, 
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
-it("says a photo refusal on an edit, which has no photo field, above Save and leaves Save working", async () => {
+it("says a photo refusal beside the replacement field and above Save, leaving retry working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({ code: "image.too_large", params: {}, status: 400 });
   await mount(client);
@@ -1608,15 +1608,13 @@ it("says a photo refusal on an edit, which has no photo field, above Save and le
   click("[data-test=save]");
 
   await vi.waitFor(async () =>
-    expect(await bottomOf()).toBe(
-      `The image could not be saved. ${codeMessage("image.too_large")}`,
-    ),
+    expect(await bottomOf()).toBe("Correct the highlighted fields to continue."),
   );
   expect(
     el
       .shadowRoot!.querySelector("wt-file-input[name=image-file]")
-      ?.shadowRoot!.querySelector("[data-error]") ?? null,
-  ).toBeNull();
+      ?.shadowRoot!.querySelector("[data-error]")?.textContent,
+  ).toBe(codeMessage("image.too_large"));
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
