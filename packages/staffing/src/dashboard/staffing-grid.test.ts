@@ -955,6 +955,31 @@ test("the editor's text is Spanish under the Spanish locale", async () => {
   expect(save(el).textContent!.trim()).toBe("Guardar");
 });
 
+for (const [locale, deleteLabel] of [
+  ["es", "Eliminar"],
+  ["en", "Delete"],
+] as const) {
+  test(`in ${locale}, the editor's Save stands well apart from Delete, and its buttons sit clear of its fields`, async () => {
+    setLocale(locale);
+    const el = await grid({ mon: [sous] });
+    await userEvent.click(block(el, "mon"));
+    await el.updateComplete;
+    const space = (n: number) =>
+      parseFloat(getComputedStyle(el).getPropertyValue(`--wt-space-${n}`));
+    expect(space(3)).toBeGreaterThan(0);
+    expect(space(5)).toBeGreaterThan(space(3));
+    const cancelBox = cancel(el).getBoundingClientRect();
+    const deleteBox = menuButton(el, deleteLabel).getBoundingClientRect();
+    const saveBox = save(el).getBoundingClientRect();
+    const saveGap = saveBox.left - deleteBox.right;
+    expect(saveGap).toBeGreaterThanOrEqual(space(5));
+    expect(saveGap).toBeGreaterThan(deleteBox.left - cancelBox.right);
+    const fields = menu(el).querySelector(".fields")!.getBoundingClientRect();
+    const actions = menu(el).querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(actions.top - fields.bottom).toBeGreaterThanOrEqual(space(3));
+  });
+}
+
 test("Delete in the menu removes the block; Backspace on a focused block removes it too", async () => {
   const el = await grid({ mon: [headChef, sous] });
   const seen = changes(el);

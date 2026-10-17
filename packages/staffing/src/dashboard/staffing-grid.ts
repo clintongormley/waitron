@@ -223,13 +223,18 @@ export class StaffingGrid extends LitElement {
         flex: 1;
         min-inline-size: calc(var(--wt-space-6) * 5);
       }
+      .menu wt-form-actions {
+        margin-block-start: var(--wt-space-2);
+      }
       .menu wt-form-actions wt-button {
         width: auto;
       }
+      /* The editor is only as wide as its content, so Save keeps its distance from Delete here. */
       .menu .cancel-group {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+        margin-inline-end: var(--wt-space-4);
       }
     `,
   ];
