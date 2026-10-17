@@ -27,7 +27,7 @@ function swapNote(week: RotaWeek, shiftId: string) {
     : nothing;
 }
 export function warnings(breaches: RosterBreach[]) {
-  return breaches.map((b) => html`<small>${breachText(b)}</small>`);
+  return breaches.map((b) => html`<small class="danger">${breachText(b)}</small>`);
 }
 function areaNotes(host: CardHost, shiftId: string) {
   const shift = host.week.shifts.find((s) => s.shiftId === shiftId)!;
@@ -62,8 +62,8 @@ export function slotCard(host: CardHost, slot: Slot, status: SlotStatus, cutover
     status.kind === "unfilled"
       ? nothing
       : html` <strong>${personName(host.week, status.shiftId)}</strong>
-          ${status.kind === "partly_uncovered" ? html`<small>${tf("staffing.rota.uncovered", { times: status.uncovered.map((u) => `${minuteTime(u.start, cutover)}–${minuteTime(u.end, cutover)}`).join(", ") })}</small>` : nothing}
-          ${status.outsideRole ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}
+          ${status.kind === "partly_uncovered" ? html`<small class="danger">${tf("staffing.rota.uncovered", { times: status.uncovered.map((u) => `${minuteTime(u.start, cutover)}–${minuteTime(u.end, cutover)}`).join(", ") })}</small>` : nothing}
+          ${status.outsideRole ? html`<small class="warning">${t("staffing.rota.outside_role")}</small>` : nothing}
           ${areaNotes(host, status.shiftId)}`;
   const content = html`<span>${slot.startsAt}–${slot.endsAt}</span>
     ${status.kind === "unfilled" ? html`· <strong>${t("staffing.rota.fill")}</strong>` : assigned}`;
@@ -130,18 +130,20 @@ export function personShiftCard(host: CardHost, shift: Shift): TemplateResult {
     >
     ${overflow ? html`<small>${t(shift.businessDay < week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}
     ${over ? html`<small>${t("staffing.rota.over")}</small>` : nothing}
-    ${uncovered.length > 0 ? html`<small>${tf("staffing.rota.uncovered", { times: uncovered.join(", ") })}</small>` : nothing}
-    ${staffRole && !week.people.find((p) => p.personId === shift.personId)?.staffRoleIds.includes(staffRole.id) ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing}
+    ${uncovered.length > 0 ? html`<small class="danger">${tf("staffing.rota.uncovered", { times: uncovered.join(", ") })}</small>` : nothing}
+    ${staffRole && !week.people.find((p) => p.personId === shift.personId)?.staffRoleIds.includes(staffRole.id) ? html`<small class="warning">${t("staffing.rota.outside_role")}</small>` : nothing}
     ${swapNote(week, shift.shiftId)} ${warnings(shiftBreaches(host.breaches, shift.shiftId))}`;
+  const kind = over ? "over" : uncovered.length > 0 ? "partly_uncovered" : nothing;
   return host.editable
     ? html`<button
         class="card"
         data-shift=${shift.shiftId}
+        data-kind=${kind}
         @click=${() => emit(host, "edit-shift", { shiftId: shift.shiftId })}
       >
         ${content}
       </button>`
-    : html`<div class="card" data-shift=${shift.shiftId}>${content}</div>`;
+    : html`<div class="card" data-shift=${shift.shiftId} data-kind=${kind}>${content}</div>`;
 }
 
 /** A person's shifts drawn on a day: those of that business day, and those in no slot there. */

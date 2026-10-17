@@ -1962,3 +1962,62 @@ describe.each(["light", "dark"] as const)("the Rota's Draft pill (%s)", (theme) 
     expect(getComputedStyle(pill).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   });
 });
+
+describe.each(["light", "dark"] as const)("the Rota's card warnings (%s)", (theme) => {
+  async function themed(params: Record<string, string>, grid: string) {
+    await useViewport(1280, 900);
+    // Marc holds only Sous chef here, so his Head chef shift is outside his staff roles in
+    // Everyone too, as its slot says it is in the area.
+    const read = async (w: string) => {
+      const r = rotaWeek(w);
+      r.people.find((p) => p.personId === "marc")!.staffRoleIds = ["sous"];
+      return r;
+    };
+    const el = await mount(withWarnings(read).api, "1280px", params, grid);
+    frames[0]!.setAttribute("data-theme", theme);
+    await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
+    const inner = q<LitElement>(el, grid)!;
+    await inner.updateComplete;
+    return inner.shadowRoot!;
+  }
+  const words = (root: ShadowRoot, card: string, start: string) => {
+    const found = [...root.querySelectorAll(`${card} small`)].find((s) =>
+      normal(s.textContent!).startsWith(start),
+    );
+    expect(found, `${card} "${start}"`).toBeTruthy();
+    return getComputedStyle(found!).color;
+  };
+  const kinds = (root: ShadowRoot, at: (id: string) => string) => {
+    expect(words(root, at("part"), "uncovered")).toBe(tokenColour("--wt-color-danger"));
+    expect(words(root, at("filled"), "9 h rest")).toBe(tokenColour("--wt-color-danger"));
+    expect(words(root, at("outside"), "outside staff role")).toBe(
+      tokenColour("--wt-color-warning"),
+    );
+    expect(words(root, "[data-shift=over]", "not needed")).toBe(
+      tokenColour("--wt-color-text-muted"),
+    );
+  };
+  it("in an area, uncovered times and labour warnings are drawn in the danger colour, outside staff role in the warning colour, not needed muted", async () => {
+    const root = await themed({}, "rota-by-area");
+    kinds(root, (id) => `[data-slot=${id}]`);
+  });
+  it("in Everyone the same words take the same colours, and a partly uncovered or over shift's card takes the area grid's warning edge", async () => {
+    const root = await themed({ area: "everyone" }, "rota-by-person");
+    kinds(root, (id) => `[data-shift=${id}]`);
+    for (const [shift, kind] of [
+      ["part", "partly_uncovered"],
+      ["over", "over"],
+    ]) {
+      const card = root.querySelector<HTMLElement>(`[data-shift=${shift}]`)!;
+      expect(card.dataset.kind).toBe(kind);
+      expect(getComputedStyle(card).borderLeftColor).toBe(tokenColour("--wt-color-warning"));
+      expect(getComputedStyle(card).borderLeftWidth).toBe(
+        getComputedStyle(root.querySelector("[data-shift=part]")!).borderLeftWidth,
+      );
+    }
+    expect(root.querySelector<HTMLElement>("[data-shift=filled]")!.dataset.kind).toBeUndefined();
+    expect(getComputedStyle(root.querySelector("[data-shift=filled]")!).borderLeftColor).toBe(
+      tokenColour("--wt-color-border"),
+    );
+  });
+});

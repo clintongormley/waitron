@@ -154,8 +154,12 @@ export class RotaByArea extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
       }
-      small.counts {
+      small.counts,
+      small.warning {
         color: var(--wt-color-warning);
+      }
+      small.danger {
+        color: var(--wt-color-danger);
       }
       .note {
         font-size: var(--wt-font-size-sm);
