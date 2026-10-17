@@ -6,7 +6,7 @@ import { periodColourStyles } from "@waitron/venue-service/painter";
 import { areaKey } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, dateLabel, utc } from "./format.js";
-import { notInSlotCard, overCard, slotCard } from "./rota-cards.js";
+import { notInSlotCard, overCard, shiftOf, slotCard } from "./rota-cards.js";
 import { rotaModel, type Show, type Target } from "./rota-model.js";
 import { countWords, t, tf } from "./strings.js";
 
@@ -198,7 +198,7 @@ export class RotaByArea extends LitElement {
     const match = day.areas.find((a) => areaKey(a.area) === this.show.key)?.match;
     return html`<div class="cell">
       ${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => slotCard(this, s.slot, s.status, day.cutover))}${match?.over
-        .map((id) => this.week.shifts.find((s) => s.shiftId === id)!)
+        .map((id) => shiftOf(this.week, id))
         .filter((s) => s.staffRoleId === role.id)
         .map((s) => overCard(this, s))}${
         this.editable

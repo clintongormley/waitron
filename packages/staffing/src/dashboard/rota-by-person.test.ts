@@ -303,6 +303,35 @@ it("each card carries its staff role's colour, its time, its area and staff role
   await grid.updateComplete;
   expect(root.querySelector("[data-shift=filled]")!.textContent).toContain("2 h night work");
 });
+it("a card lists every uncovered time of its shift across the week in reading order, and is over when any day lists it over", async () => {
+  const { root } = await mount(false, "1280px", (r) => {
+    const part = r.days[1]!.areas[0]!.match.slots[1]!;
+    if (part.status.kind === "partly_uncovered")
+      part.status.uncovered = [
+        { start: 0, end: 60 },
+        { start: 480, end: 660 },
+      ];
+    r.days[2]!.cutover = "05:00";
+    r.days[2]!.areas[0]!.match.slots.push({
+      slot: { ...part.slot, key: "part-late", businessDay: r.days[2]!.businessDay },
+      status: {
+        kind: "partly_uncovered",
+        shiftId: "part",
+        outsideRole: false,
+        uncovered: [{ start: 1200, end: 1260 }],
+      },
+    });
+    r.days[5]!.areas[0]!.match.over = ["part"];
+    return r;
+  });
+  const card = root.querySelector<HTMLElement>("[data-person=joan] [data-shift=part]")!;
+  expect(card.textContent!.replace(/\s+/g, " ")).toContain(
+    "uncovered 06:00–07:00, 14:00–17:00, 01:00–02:00",
+  );
+  expect(card.textContent).toContain("not needed");
+  expect(card.dataset.kind).toBe("over");
+  expect(root.querySelector<HTMLElement>("[data-shift=filled]")!.dataset.kind).toBeUndefined();
+});
 it("under each name its staff roles and the week's hours, marked when over contract", async () => {
   const { root } = await mount();
   const joan = root.querySelector("[data-person=joan] th")!;

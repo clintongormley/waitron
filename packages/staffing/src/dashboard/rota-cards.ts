@@ -14,12 +14,53 @@ export type CardHost = HTMLElement & {
 };
 type Shift = RotaWeek["shifts"][number];
 
+/** A read's shifts and people by id, the shifts beyond their area's slots, and each partly
+ *  uncovered shift's uncovered times in reading order. */
+type CardIndex = {
+  shifts: Map<string, Shift>;
+  people: Map<string, RotaWeek["people"][number]>;
+  over: Set<string>;
+  uncovered: Map<string, string[]>;
+};
+const indexes = new WeakMap<RotaWeek, CardIndex>();
+
+/** Kept for as long as the read is: a read is never changed once drawn. */
+function indexOf(week: RotaWeek): CardIndex {
+  let index = indexes.get(week);
+  if (!index) {
+    index = {
+      shifts: new Map(week.shifts.map((s) => [s.shiftId, s])),
+      people: new Map(week.people.map((p) => [p.personId, p])),
+      over: new Set(),
+      uncovered: new Map(),
+    };
+    for (const d of week.days)
+      for (const a of d.areas) {
+        for (const id of a.match.over) index.over.add(id);
+        for (const { status } of a.match.slots)
+          if (status.kind === "partly_uncovered")
+            index.uncovered.set(status.shiftId, [
+              ...(index.uncovered.get(status.shiftId) ?? []),
+              ...status.uncovered.map(
+                (u) => `${minuteTime(u.start, d.cutover)}–${minuteTime(u.end, d.cutover)}`,
+              ),
+            ]);
+      }
+    indexes.set(week, index);
+  }
+  return index;
+}
+
+/** The read's shift with this id. */
+export function shiftOf(week: RotaWeek, shiftId: string): Shift {
+  return indexOf(week).shifts.get(shiftId)!;
+}
+
 function emit(host: CardHost, name: string, detail: unknown) {
   host.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
 function personName(week: RotaWeek, shiftId: string) {
-  const s = week.shifts.find((s) => s.shiftId === shiftId)!;
-  return week.people.find((p) => p.personId === s.personId)?.name ?? "";
+  return indexOf(week).people.get(shiftOf(week, shiftId).personId)?.name ?? "";
 }
 function swapNote(week: RotaWeek, shiftId: string) {
   return week.openSwaps.some((s) => s.fromShiftId === shiftId || s.toShiftId === shiftId)
@@ -42,7 +83,7 @@ export function weekBreaches(breaches: RosterBreach[], personId: string) {
   );
 }
 function areaNotes(host: CardHost, shiftId: string) {
-  const shift = host.week.shifts.find((s) => s.shiftId === shiftId)!;
+  const shift = shiftOf(host.week, shiftId);
   const daily = dailyBreaches(host.breaches, shift.personId, shift.businessDay);
   return html`${swapNote(host.week, shiftId)}${warnings([...shiftBreaches(host.breaches, shiftId), ...daily])}`;
 }
@@ -102,7 +143,7 @@ export function overCard(host: CardHost, s: Shift) {
 
 /** A shift in no slot, saying when it belongs to the week before or after. */
 export function notInSlotCard(host: CardHost, n: { shiftId: string; outsideWeek: boolean }) {
-  const s = host.week.shifts.find((s) => s.shiftId === n.shiftId)!;
+  const s = shiftOf(host.week, n.shiftId);
   return areaCard(
     host,
     n.shiftId,
@@ -118,18 +159,9 @@ export function personShiftCard(host: CardHost, shift: Shift): TemplateResult {
   const area = week.areas.find((a) => shift.area && areaKey(a.area) === areaKey(shift.area));
   const staffRole = week.staffRoles.find((r) => r.id === shift.staffRoleId);
   const overflow = shift.businessDay < week.week || shift.businessDay > week.days[6]!.businessDay;
-  const over = week.days.some((d) => d.areas.some((a) => a.match.over.includes(shift.shiftId)));
-  const uncovered = week.days.flatMap((d) =>
-    d.areas.flatMap((a) =>
-      a.match.slots.flatMap(({ status }) =>
-        status.kind === "partly_uncovered" && status.shiftId === shift.shiftId
-          ? status.uncovered.map(
-              (u) => `${minuteTime(u.start, d.cutover)}–${minuteTime(u.end, d.cutover)}`,
-            )
-          : [],
-      ),
-    ),
-  );
+  const index = indexOf(week);
+  const over = index.over.has(shift.shiftId);
+  const uncovered = index.uncovered.get(shift.shiftId) ?? [];
   const content = html`<span
       >${staffRole ? html`<span class="swatch" data-colour=${staffRole.colour}></span>` : nothing}${shiftTime(shift)}</span
     ><small
@@ -138,7 +170,7 @@ export function personShiftCard(host: CardHost, shift: Shift): TemplateResult {
     ${overflow ? html`<small>${t(shift.businessDay < week.week ? "staffing.rota.previous_week" : "staffing.rota.next_week")}</small>` : nothing}
     ${over ? html`<small>${t("staffing.rota.over")}</small>` : nothing}
     ${uncovered.length > 0 ? html`<small class="danger">${tf("staffing.rota.uncovered", { times: uncovered.join(", ") })}</small>` : nothing}
-    ${staffRole && !week.people.find((p) => p.personId === shift.personId)?.staffRoleIds.includes(staffRole.id) ? html`<small class="warning">${t("staffing.rota.outside_role")}</small>` : nothing}
+    ${staffRole && !index.people.get(shift.personId)?.staffRoleIds.includes(staffRole.id) ? html`<small class="warning">${t("staffing.rota.outside_role")}</small>` : nothing}
     ${swapNote(week, shift.shiftId)} ${warnings(shiftBreaches(host.breaches, shift.shiftId))}`;
   const kind = over ? "over" : uncovered.length > 0 ? "partly_uncovered" : nothing;
   return host.editable

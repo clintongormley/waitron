@@ -10,6 +10,7 @@ import {
   overCard,
   personDayShifts,
   personShiftCard,
+  shiftOf,
   slotCard,
   warnings,
   weekBreaches,
@@ -82,7 +83,7 @@ export class RotaDay extends LitElement {
   }
   #area(day: Day, show: Show & { kind: "area" }) {
     const match = day.areas.find((a) => areaKey(a.area) === show.key)?.match;
-    const shifts = (match?.over ?? []).map((id) => this.week.shifts.find((s) => s.shiftId === id)!);
+    const shifts = (match?.over ?? []).map((id) => shiftOf(this.week, id));
     const groups = this.week.staffRoles
       .filter(
         (r) =>
