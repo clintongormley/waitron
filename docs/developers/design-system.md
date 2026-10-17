@@ -4068,13 +4068,14 @@ Opening hours' Year.
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
   today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
   the dates are plain and nothing is picked.
-- **Week.** `/view/week[/department/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws the
-  Monday-to-Sunday week holding the `week` date, which need not be a Monday. A missing, malformed
+- **Week.** `/view/week[/department/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws,
+  when the Week itself is 560 px wide or more, the Monday-to-Sunday week holding the `week` date,
+  which need not be a Monday. A missing, malformed
   or out-of-range date shows the week holding the venue's today, and the address is left as
   written. An old `/view/week` bookmark opens the Week, not the season painter. Each day sits under
   its name, with its special day's and public holiday's names, and has one row per active
-  department, or, with one department picked in Show, a row for it and one per zone. On a wide
-  Week ‹ › step a week. In the title ("28 Dec 2026 – 3 Jan 2027") each month name opens that Month and each year
+  department, or, with one department picked in Show, a row for it and one per zone. ‹ › step a
+  week. In the title ("28 Dec 2026 – 3 Jan 2027") each month name opens that Month and each year
   that Year, keeping the department; the title keeps one width, as wide as the longest title of a
   week starting in 2026 in any interface language (`fixed-title.ts`). Time runs left to right from
   each day's changeover, every day on one scale, the week's longest day, so a shorter day's track
