@@ -11,7 +11,7 @@ export interface ColourChoice {
   value: string;
   /** The colour's name, in the screen's language. */
   label: string;
-  /** A CSS colour for its square: a `var(--wt-color-…)` read, so a theme repaints it. */
+  /** A CSS colour for its square: a token read such as `var(--wt-color-palette-red)`, so a theme repaints it. */
   fill: string;
   /** The names of the other things that use this colour, in the order to show them. */
   usedBy?: readonly string[];
@@ -101,9 +101,9 @@ export class WtColourChooser extends LitElement {
         cursor: pointer;
       }
 
+      /* A ring drawn with box-shadow, so the focus outline still shows on the checked tile. */
       .tile[aria-checked="true"] {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-primary);
-        outline-offset: calc(-1 * var(--wt-field-line-width-active));
+        box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
         font-weight: var(--wt-font-weight-bold);
       }
 
@@ -176,6 +176,9 @@ export class WtColourChooser extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     if (changed.has("disabled") && this.disabled) this.hide();
+    // An arrow key chooses as it moves, and focus follows the choice once the host has set it.
+    if (changed.has("value") && this.popup?.contains(this.shadowRoot!.activeElement))
+      this.tabStop()?.focus();
   }
 
   private get chosen(): ColourChoice | undefined {
@@ -186,13 +189,63 @@ export class WtColourChooser extends LitElement {
     return this.popup!.querySelector<HTMLButtonElement>('[role="radio"][tabindex="0"]');
   }
 
-  /** Below the trigger and as wide as it; Task 1b of A753 replaces this placement. */
+  /** `wt-combobox`'s placement: under the trigger, at least as wide, kept 8px inside the window. */
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup!;
-    popup.style.width = `${anchor.width}px`;
-    popup.style.left = `${anchor.left}px`;
-    popup.style.top = `${anchor.bottom}px`;
+    // The width is set before measuring, because it decides how the names wrap and so the height.
+    popup.style.width = "max-content";
+    popup.style.minWidth = `${anchor.width}px`;
+    popup.style.maxWidth = `${innerWidth - 16}px`;
+    const box = popup.getBoundingClientRect();
+    const maxLeft = Math.max(0, innerWidth - box.width - 8);
+    popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
+    popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
+  }
+
+  private closeAndReturnFocus(): void {
+    this.hide();
+    this.trigger.focus();
+  }
+
+  private onTriggerKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || this.popup!.matches(":popover-open")) return;
+    if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
+    // Prevented, or Enter and Space would also click the trigger and close what this opens.
+    event.preventDefault();
+    this.show();
+  }
+
+  private onPanelKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeAndReturnFocus();
+      return;
+    }
+    if (event.key === "Tab") {
+      // Not prevented: from the trigger, the browser's own Tab moves on out of the chooser.
+      this.closeAndReturnFocus();
+      return;
+    }
+    const tiles = [...this.popup!.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const current = tiles.indexOf(this.shadowRoot!.activeElement as HTMLButtonElement);
+    const last = tiles.length - 1;
+    let next: number;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown")
+      next = current >= last ? 0 : current + 1;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+      next = current <= 0 ? last : current - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = last;
+    else return;
+    event.preventDefault();
+    const value = tiles[next]!.dataset.value!;
+    if (value === this.value) {
+      event.stopPropagation();
+      tiles[next]!.focus();
+    } else dispatchWtChange(this, event, { value });
   }
 
   private onTriggerClick(event: MouseEvent): void {
@@ -275,6 +328,7 @@ export class WtColourChooser extends LitElement {
           popovertarget=${this.panelId}
           ?disabled=${this.disabled}
           @click=${this.onTriggerClick}
+          @keydown=${this.onTriggerKeydown}
         >
           ${chosen ? this.renderSwatch(chosen.fill) : nothing}
           <span class="value">${chosen?.label ?? ""}</span>
@@ -282,7 +336,13 @@ export class WtColourChooser extends LitElement {
         </button>
       </div>
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
-      <div id=${this.panelId} popover part="panel" @toggle=${this.onToggle}>
+      <div
+        id=${this.panelId}
+        popover
+        part="panel"
+        @toggle=${this.onToggle}
+        @keydown=${this.onPanelKeydown}
+      >
         <div
           role="radiogroup"
           aria-labelledby=${this.labelId}

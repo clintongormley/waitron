@@ -4,6 +4,7 @@ import { fieldLabelState } from "@waitron/ui-core/field-styles";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { focusFirstInvalid } from "../interactive.js";
 import "./wt-colour-chooser.js";
+import "./wt-modal.js";
 import type { ColourChoice, WtColourChooser } from "./wt-colour-chooser.js";
 
 afterEach(cleanup);
@@ -307,5 +308,232 @@ describe("changing choices", () => {
     expect(tile("red").getAttribute("aria-checked")).toBe("true");
     expect(tile("blue").getAttribute("aria-checked")).toBe("false");
     expect(tiles().filter((t) => t.getAttribute("tabindex") === "0")).toEqual([tile("red")]);
+  });
+});
+
+function hostSetsValue(el: WtColourChooser) {
+  const events: CustomEvent[] = [];
+  el.addEventListener("wt-change", (event) => {
+    events.push(event as CustomEvent);
+    el.value = (event as CustomEvent<{ value: string }>).detail.value;
+  });
+  return events;
+}
+
+describe("keys in the open panel", () => {
+  test("arrows, Home and End choose as they move, wrapping, one event each, and the panel stays open", async () => {
+    const { el, root, panel, tile } = await mountChooser();
+    const events = hostSetsValue(el);
+    await openByClick(el);
+    expect(root.activeElement).toBe(tile("blue"));
+    const steps: [string, string][] = [
+      ["{ArrowRight}", "green"],
+      ["{ArrowDown}", "purple"],
+      ["{ArrowDown}", "red"],
+      ["{ArrowUp}", "purple"],
+      ["{ArrowRight}", "red"],
+      ["{ArrowLeft}", "purple"],
+      ["{ArrowLeft}", "green"],
+      ["{Home}", "red"],
+      ["{End}", "purple"],
+    ];
+    for (const [key, value] of steps) {
+      events.length = 0;
+      await userEvent.keyboard(key);
+      expect(events.map((event) => event.detail)).toEqual([{ value }]);
+      expect(events[0]!.bubbles).toBe(true);
+      expect(events[0]!.composed).toBe(true);
+      await vi.waitFor(() => expect(root.activeElement).toBe(tile(value)));
+      expect(tile(value).getAttribute("aria-checked")).toBe("true");
+      expect(panel.matches(":popover-open")).toBe(true);
+    }
+  });
+
+  test("Home on the first tile, already chosen, sends nothing and keeps focus there", async () => {
+    const { el, root, panel, tile } = await mountChooser(
+      'name="colour" label="Colour" value="red"',
+    );
+    const changes = vi.fn();
+    el.addEventListener("wt-change", changes);
+    const outside = vi.fn();
+    host.addEventListener("keydown", outside);
+    await openByClick(el);
+    expect(root.activeElement).toBe(tile("red"));
+    await userEvent.keyboard("{Home}");
+    expect(changes).not.toHaveBeenCalled();
+    expect(outside).not.toHaveBeenCalled();
+    expect(root.activeElement).toBe(tile("red"));
+    expect(panel.matches(":popover-open")).toBe(true);
+  });
+
+  test("an arrow press bubbles no keydown above the chooser", async () => {
+    const { el } = await mountChooser();
+    hostSetsValue(el);
+    const outside = vi.fn();
+    host.addEventListener("keydown", outside);
+    await openByClick(el);
+    await userEvent.keyboard("{ArrowRight}");
+    expect(outside).not.toHaveBeenCalled();
+  });
+
+  test("controlled: when the host does not set value, the field keeps the old colour", async () => {
+    const { el, trigger, tile } = await mountChooser();
+    const changes: unknown[] = [];
+    el.addEventListener("wt-change", (event) => changes.push((event as CustomEvent).detail));
+    await openByClick(el);
+    await userEvent.keyboard("{ArrowRight}");
+    await el.updateComplete;
+    expect(changes).toEqual([{ value: "green" }]);
+    expect(trigger.textContent).toContain("Blue");
+    expect(trigger.textContent).not.toContain("Green");
+    expect(tile("blue").getAttribute("aria-checked")).toBe("true");
+    expect(tile("green").getAttribute("aria-checked")).toBe("false");
+  });
+
+  test("the focused checked tile shows the focus ring after a keyboard move", async () => {
+    const { el, root, tile } = await mountChooser();
+    hostSetsValue(el);
+    await openByClick(el);
+    await userEvent.keyboard("{ArrowRight}");
+    await vi.waitFor(() => expect(root.activeElement).toBe(tile("green")));
+    expect(tile("green").getAttribute("aria-checked")).toBe("true");
+    expect(tile("green").matches(":focus-visible")).toBe(true);
+    expect(getComputedStyle(tile("green")).outlineStyle).not.toBe("none");
+    // The checked mark itself draws no outline, so the outline above is the focus ring.
+    tile("amber").focus();
+    expect(tile("green").matches(":focus")).toBe(false);
+    expect(getComputedStyle(tile("green")).outlineStyle).toBe("none");
+    expect(getComputedStyle(tile("green")).boxShadow).not.toBe("none");
+    expect(getComputedStyle(tile("amber")).boxShadow).toBe("none");
+  });
+});
+
+describe("Escape", () => {
+  test("closes the panel, returns focus to the trigger, and goes no further", async () => {
+    const { el, root, trigger, panel } = await mountChooser();
+    const outside: KeyboardEvent[] = [];
+    host.addEventListener("keydown", (event) => outside.push(event));
+    let seen: KeyboardEvent | undefined;
+    panel.addEventListener("keydown", (event) => (seen = event), { capture: true });
+    await openByClick(el);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    expect(root.activeElement).toBe(trigger);
+    expect(outside).toEqual([]);
+    expect(seen?.key).toBe("Escape");
+    expect(seen?.defaultPrevented).toBe(true);
+  });
+
+  test("inside a guarded modal, the first Escape closes only the panel and the second reaches the modal", async () => {
+    host?.remove();
+    const modal = (await mount(
+      `<wt-modal open size="compact"><wt-colour-chooser name="colour" label="Colour" value="blue"></wt-colour-chooser></wt-modal>`,
+    )) as HTMLElement & { open: boolean; beforeClose?: () => Promise<boolean> };
+    const guard = vi.fn(() => Promise.resolve(true));
+    modal.beforeClose = guard;
+    const el = modal.querySelector("wt-colour-chooser")!;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const { root, trigger, panel } = parts(el);
+    await openByClick(el);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    expect(root.activeElement).toBe(trigger);
+    expect(guard).not.toHaveBeenCalled();
+    expect(modal.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(modal.open).toBe(false));
+    expect(guard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("leaving the panel", () => {
+  test("a real click outside closes the panel and leaves focus where it was clicked", async () => {
+    host?.remove();
+    // The input sits above the chooser, where the panel that opens below it cannot cover it.
+    await mount(
+      `<div><input name="other" /><wt-colour-chooser style="margin-top: 80px" name="colour" label="Colour" value="blue"></wt-colour-chooser></div>`,
+    );
+    const el = host.querySelector("wt-colour-chooser")!;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const other = host.querySelector("input")!;
+    const { panel } = parts(el);
+    await openByClick(el);
+    await userEvent.click(other);
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    expect(document.activeElement).toBe(other);
+  });
+
+  test("Tab from the checked tile moves focus out of the chooser and closes the panel", async () => {
+    host?.remove();
+    const el = (await mount(
+      `<wt-colour-chooser name="colour" label="Colour" value="blue"></wt-colour-chooser><input name="other" />`,
+    )) as WtColourChooser;
+    el.choices = CHOICES;
+    await el.updateComplete;
+    const other = host.querySelector("input")!;
+    const { root, panel, tile } = parts(el);
+    await openByClick(el);
+    expect(root.activeElement).toBe(tile("blue"));
+    await userEvent.keyboard("{Tab}");
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+    expect(document.activeElement).toBe(other);
+  });
+});
+
+describe("keys on the closed trigger", () => {
+  for (const key of ["{ArrowDown}", "{ArrowUp}", "{Enter}", " "]) {
+    test(`${key === " " ? "Space" : key} opens the panel on the checked tile`, async () => {
+      const { root, trigger, panel, tile } = await mountChooser();
+      trigger.focus();
+      await userEvent.keyboard(key);
+      await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+      await vi.waitFor(() => expect(root.activeElement).toBe(tile("blue")));
+      // The keyup of the key that opened it must not choose and close.
+      expect(panel.matches(":popover-open")).toBe(true);
+    });
+  }
+});
+
+describe("position", () => {
+  test("before the first painted frame the panel's top is at the trigger's bottom and its left at the trigger's left", async () => {
+    const { el, trigger, panel } = await mountChooser();
+    el.style.marginTop = "120px";
+    el.style.marginLeft = "16px";
+    el.style.width = "200px";
+    const firstFrame = new Promise<DOMRect>((resolve) => {
+      trigger.addEventListener(
+        "click",
+        () => requestAnimationFrame(() => resolve(panel.getBoundingClientRect())),
+        { once: true },
+      );
+    });
+    await userEvent.click(trigger);
+    const bounds = await firstFrame;
+    const anchor = trigger.getBoundingClientRect();
+    // Room on the right, so the left edge is seen aligned rather than pulled in by the gutter.
+    expect(anchor.left + bounds.width).toBeLessThanOrEqual(innerWidth - 8);
+    expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
+    expect(bounds.left).toBeCloseTo(anchor.left, 0);
+    expect(bounds.width).toBeGreaterThanOrEqual(anchor.width - 0.5);
+  });
+
+  test("near the bottom right of a 390px window the open panel stays inside it with an 8px margin", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(390, 700);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const { el, panel } = await mountChooser();
+      el.style.cssText = "position: fixed; right: 8px; bottom: 8px; width: 160px";
+      await openByClick(el);
+      const box = panel.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 });
