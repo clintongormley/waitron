@@ -19,6 +19,7 @@ import {
   showsName,
   snapToSquare,
   stepInside,
+  unionRect,
   type PlanPlacement,
 } from "./floor-plan-geometry.js";
 
@@ -89,6 +90,25 @@ describe("floor plan geometry", () => {
     expect(cropToTables([table(0, 0, 8, 8)])).toEqual({ x: -2, y: -2, width: 12, height: 12 });
     expect(cropToTables([table(10, 5, 8, 4)], 1)).toEqual({ x: 9, y: 4, width: 10, height: 6 });
     expect(cropToTables([])).toBeNull();
+  });
+
+  it("unites two boxes as the smallest box holding both", () => {
+    expect(
+      unionRect({ x: 8, y: 3, width: 12, height: 8 }, { x: 12, y: -1, width: 4, height: 6 }),
+    ).toEqual({
+      x: 8,
+      y: -1,
+      width: 12,
+      height: 12,
+    });
+    expect(
+      unionRect({ x: 0, y: 0, width: 2, height: 2 }, { x: -3, y: 1, width: 10, height: 0.5 }),
+    ).toEqual({
+      x: -3,
+      y: 0,
+      width: 10,
+      height: 2,
+    });
   });
 
   it("crops a rotated table by its turned box", () => {

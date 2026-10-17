@@ -9,14 +9,12 @@ import {
   nothing,
   unsafeCSS,
 } from "lit";
-import { styleMap } from "lit/directives/style-map.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
 import {
   baseStyles,
-  cropToTables,
   UrlStateController,
   buildZoneTabs,
   floorTrayStyles,
@@ -1821,12 +1819,9 @@ export class TillFloorScreen extends LitElement {
     unplaced: TableState[],
     activeKey: string | undefined,
   ): TemplateResult {
-    const crop = cropToTables(onMap.map((table) => table.placement));
-    const ratio = crop === null ? 1 : crop.width / crop.height;
     return html`
       <div class="map">
         <wt-floor-map
-          style=${styleMap({ "--floor-map-ratio": String(ratio) })}
           data-floor-map
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}

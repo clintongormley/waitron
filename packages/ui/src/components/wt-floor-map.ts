@@ -13,7 +13,7 @@ import {
   cropToTables,
   fitScale,
   showsName,
-  snapToSquare,
+  unionRect,
 } from "../floor-plan-geometry.js";
 
 /** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
@@ -76,8 +76,24 @@ interface Drag {
   dy: number;
   x: number;
   y: number;
-  /** The first other table under the pointer. */
+  /** The first other table under the pointer at the latest move the map drew. */
   targetId: string | null;
+}
+
+/**
+ * A drag's travel in squares: `x`, `y` made at earlier scales, plus the pointer's px since
+ * (`fromX`, `fromY`) at `scale`. Banked when the scale changes, so a view rescaled mid-drag does
+ * not rescale the travel already made.
+ */
+interface Travel {
+  x: number;
+  y: number;
+  fromX: number;
+  fromY: number;
+  scale: number;
+  /** The last move's px since the press. */
+  dx: number;
+  dy: number;
 }
 
 const MIN_ZOOM = 1 / 2;
@@ -388,6 +404,21 @@ export class WtFloorMap extends LitElement {
 
   #drag: Drag | null = null;
 
+  #travel: Travel | null = null;
+
+  #tablesCrop: PlanRect | null = null;
+
+  /** The crops this drag has drawn while the view was untouched, since it started or since
+   * `tables` last changed, united, so a drag back inward does not shrink the plan; null until such
+   * a drag of a movable group moves. */
+  #dragCrop: PlanRect | null = null;
+
+  /** Set by a fit to a drag's crop, cleared by the next fit. Ending a hold then refits an untouched
+   * view: the tables' crop can have the same ratio, so no resize would. */
+  #fittedToDrag = false;
+
+  #refitFrame = 0;
+
   /** Built from `tables` when it changes: the groups in `tables`' order, in reading order, and by
    * member id. */
   #groups: Group[] = [];
@@ -450,17 +481,19 @@ export class WtFloorMap extends LitElement {
       holdStart: (at) => {
         this.#held = tableOf(at.target);
         this.#held?.setAttribute("data-held", "");
+        this.#travel = null;
+        cancelAnimationFrame(this.#refitFrame);
       },
       longPress: (at) => {
-        this.#clearHeld();
+        this.#endDrag();
         const id = idOf(at.target);
         if (id !== null) this.#send("wt-table-details", id);
       },
       holdDrag: this.#onHoldDrag,
-      holdDrop: (at) => {
+      holdDrop: () => {
         const drag = this.#drag;
         this.#endDrag();
-        if (drag !== null) this.#sendDrop(drag, at);
+        if (drag !== null) this.#sendDrop(drag);
       },
       cancel: () => this.#endDrag(),
       pan: ({ dx, dy }) => this.#moveView(1, 0, 0, dx, dy),
@@ -478,6 +511,7 @@ export class WtFloorMap extends LitElement {
     this.#gestures = null;
     this.#dropPendingTap();
     this.#endDrag();
+    cancelAnimationFrame(this.#refitFrame);
   }
 
   readonly #onTap = (at: GesturePoint): void => {
@@ -530,21 +564,33 @@ export class WtFloorMap extends LitElement {
   #endDrag(): void {
     this.#clearHeld();
     this.#drag = null;
+    this.#dragCrop = null;
+    if (this.#fittedToDrag) {
+      // A frame later: the map's own update from the drop runs before its parent re-renders it.
+      cancelAnimationFrame(this.#refitFrame);
+      this.#refitFrame = requestAnimationFrame(this.#refitAfterDrag);
+    }
     this.requestUpdate();
   }
 
+  readonly #refitAfterDrag = (): void => {
+    if (this.#touched) return;
+    this.#needsFit = true;
+    this.requestUpdate();
+  };
+
   readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
-    if (!this.canDrag) return;
     const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
     const members = id === undefined ? undefined : this.#groupOf.get(id)?.members;
     const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
-    const scale = this.#view!.scale;
+    const squares = this.#travelled(dx, dy);
+    if (squares === null || !this.canDrag) return;
     // The whole group stays on the grid, as the server holds it when the move lands.
     const { dx: movedX, dy: movedY } = groupStep(
       members!.map((m) => m.placement),
-      { x: snapToSquare(dx, scale), y: snapToSquare(dy, scale) },
+      { x: Math.round(squares.x), y: Math.round(squares.y) },
     );
     const x = first.placement.x + movedX;
     const y = first.placement.y + movedY;
@@ -561,8 +607,49 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
+    if (!this.#touched) this.#dragCrop = this.#grownCrop(this.#dragCrop);
     this.requestUpdate();
   };
+
+  /** `from`, or the tables' crop, united with the crop of the tables as the drag draws them; null
+   * for a fixed group, so its drag never grows the plan. */
+  #grownCrop(from: PlanRect | null): PlanRect | null {
+    const drag = this.#drag!;
+    const group = this.#groupOf.get(drag.tableId)!;
+    if (group.fixed) return null;
+    const moved = this.tables.map((t) =>
+      group.members.includes(t)
+        ? { ...t.placement, x: t.placement.x + drag.dx, y: t.placement.y + drag.dy }
+        : t.placement,
+    );
+    return unionRect(from ?? this.#tablesCrop!, cropToTables(moved)!);
+  }
+
+  /** What the view fits and the ratio describes: a drag's crop until release, else the tables'. */
+  #crop(): PlanRect | null {
+    return this.#dragCrop ?? this.#tablesCrop;
+  }
+
+  /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale.
+   * Null, and nothing banked, while the scale is not above 0, as on a hidden host the map has refitted. */
+  #travelled(dx: number, dy: number): { x: number; y: number } | null {
+    const scale = this.#view!.scale;
+    if (!(scale > 0)) return null;
+    const travel = (this.#travel ??= { x: 0, y: 0, fromX: 0, fromY: 0, scale, dx: 0, dy: 0 });
+    if (travel.scale !== scale) {
+      travel.x += (travel.dx - travel.fromX) / travel.scale;
+      travel.y += (travel.dy - travel.fromY) / travel.scale;
+      travel.fromX = travel.dx;
+      travel.fromY = travel.dy;
+      travel.scale = scale;
+    }
+    travel.dx = dx;
+    travel.dy = dy;
+    return {
+      x: travel.x + (dx - travel.fromX) / scale,
+      y: travel.y + (dy - travel.fromY) / scale,
+    };
+  }
 
   #targetAt(at: GesturePoint, tableId: string): string | null {
     return (
@@ -572,14 +659,25 @@ export class WtFloorMap extends LitElement {
     );
   }
 
-  #sendDrop(drag: Drag, at: GesturePoint): void {
+  /** The drag's target while it still heads a group: the table `data-drop-target` marks, the drag
+   * link points at and a release sends. */
+  #markedTarget(drag: Drag | null): Group | null {
+    const targetId = drag?.targetId ?? null;
+    if (targetId === null) return null;
+    const group = this.#groupOf.get(targetId);
+    return group?.members[0]!.id === targetId ? group : null;
+  }
+
+  /** Sends the table `data-drop-target` marks, not the one under the pointer at release: a refit
+   * since the last move can make the two differ. */
+  #sendDrop(drag: Drag): void {
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
         detail: {
           tableId: drag.tableId,
           x: drag.x,
           y: drag.y,
-          targetId: this.#targetAt(at, drag.tableId),
+          targetId: this.#markedTarget(drag)?.members[0]!.id ?? null,
         },
         bubbles: true,
         composed: true,
@@ -734,18 +832,27 @@ export class WtFloorMap extends LitElement {
       this.#links = linksOf(this.#groups);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
+      this.#tablesCrop = cropToTables(this.tables.map((t) => t.placement));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
+      else if (this.#drag !== null && !this.#touched) this.#dragCrop = this.#grownCrop(null);
     }
+    const crop = this.#crop();
+    // A host whose CSS reads this is resized when it changes; the observer refits an untouched view.
+    this.style.setProperty(
+      "--floor-map-ratio",
+      String(crop === null ? 1 : crop.width / crop.height),
+    );
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
   }
 
   #fitView(): void {
     if (this.#size === null) return;
-    const crop = cropToTables(this.tables.map((t) => t.placement));
+    const crop = this.#crop();
     if (crop === null) return;
     const scale = fitScale(crop, this.#size);
+    this.#fittedToDrag = this.#dragCrop !== null;
     this.#fit = { scale, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
     this.#touched = false;
     this.#view = {
@@ -788,7 +895,7 @@ export class WtFloorMap extends LitElement {
       data-table-id=${first.id}
       data-fill=${first.fill}
       ?data-merge=${merged}
-      ?data-drop-target=${this.#drag?.targetId === first.id}
+      ?data-drop-target=${this.#markedTarget(this.#drag) === group}
       ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
@@ -829,15 +936,16 @@ export class WtFloorMap extends LitElement {
     </svg>`;
   }
 
-  /** A fixed group's copy where the drag would put it, and a line to the table under the pointer. */
+  /** A fixed group's copy where the drag would put it, and a line to the table marked as the drop
+   * target. */
   #renderFixedDrag(view: View): TemplateResult | typeof nothing {
     const drag = this.#drag;
     const group = drag === null ? undefined : this.#groupOf.get(drag.tableId);
     if (!group?.fixed) return nothing;
     const { box, members } = group;
-    const target = drag!.targetId === null ? undefined : this.#groupOf.get(drag!.targetId);
+    const target = this.#markedTarget(drag);
     const from = centreOf(box, view);
-    const to = target === undefined ? null : centreOf(target.box, view);
+    const to = target === null ? null : centreOf(target.box, view);
     return html`<span
         part="ghost"
         aria-hidden="true"

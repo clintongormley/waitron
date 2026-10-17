@@ -2041,12 +2041,6 @@ name) with each order, and every list that shows orders names it: Held orders fi
 Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
 build after A757's board if it has been decided, else name the table alone.
 
-## A766. The till's floor plan grows while a table is dragged past its edge
-
-**A766 (owner, 2026-10-16).** Dragging a table beyond the plan's edge on the till's floor leaves the
-plan its old size until the table is let go, so the waiter cannot see where it will land. Grow it
-as the table moves. Related open notes on the same drag are in A474 above.
-
 ## A768. The till: open a table fast, and stop needing a reload
 
 **A768 (owner, 2026-10-16).** Two halves that share one idea: keep what the till has read, and ask

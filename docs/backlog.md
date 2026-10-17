@@ -1936,10 +1936,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
   [Detail](backlog/till.md#a765-say-which-table-an-order-belongs-to)
 
-- **A766. The till's floor plan grows while a table is dragged past its edge (owner,
-  2026-10-16).** Today it grows only when the table is let go.
-  [Detail](backlog/till.md#a766-the-tills-floor-plan-grows-while-a-table-is-dragged-past-its-edge)
-
 - **A768. The till: open a table fast, and stop needing a reload (owner, 2026-10-16).** Opening a
   table waits on up to four requests in a row, one re-reading the zone's whole menu; keep each
   zone's menu and check it with `/api/menu-state`. Courses, and other settings read once when the
@@ -2237,6 +2233,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
   smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
+
+- **A drag that grows the till's plan in proportion refits nothing** — left open by A766 (#1824).
+  When no move of a drag changes the plan's ratio, say 12 × 8 squares straight to 15 × 10 in one
+  move, nothing resizes or refits the map, during the drag or at release, and the held table can
+  be drawn past the map's edge.
+
+- **After the till's map rescales mid-drag, the drawn table lags the finger** — left open by A766
+  (#1824); seen on the demo stack (`~/waitron-campaign-b/a766-shots`). A refit during a drag moves
+  the drawn table out from under a still finger.
 
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
