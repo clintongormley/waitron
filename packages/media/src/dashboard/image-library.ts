@@ -19,8 +19,11 @@ import {
 } from "@waitron/dashboard-kit";
 import { capitaliseFirst, resolveEnabledContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-file-input.js";
+import { imageNameFromFilename } from "./image-filename-name.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } from "./client.js";
@@ -81,6 +84,13 @@ interface ImageDraft {
   file: File | null;
 }
 
+interface BatchPhoto {
+  file: File;
+  status: "queued" | "uploading" | "uploaded" | "reused" | "failed";
+  image?: LibraryImage;
+  error?: string;
+}
+
 @customElement("dashboard-image-library")
 export class ImageLibrary extends LitElement {
   static override styles = [
@@ -88,7 +98,58 @@ export class ImageLibrary extends LitElement {
     css`
       :host {
         display: block;
+        position: relative;
+        min-height: 100%;
       }
+      .batch-chooser {
+        max-width: none;
+        margin-block: var(--wt-space-4);
+      }
+      .batch-progress {
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .batch-list {
+        padding-inline-start: var(--wt-space-5);
+        overflow-wrap: anywhere;
+      }
+      .drop-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        border: 1px dashed var(--wt-color-primary);
+        border-radius: var(--wt-radius-md);
+        display: grid;
+        place-items: center;
+        padding: var(--wt-space-4);
+        pointer-events: none;
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .drop-overlay::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--wt-color-surface-lifted);
+        opacity: 0.85;
+      }
+      .drop-overlay span {
+        position: relative;
+        background: var(--wt-color-surface);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-5);
+      }
+      [data-new] {
+        position: absolute;
+        inset-block-start: var(--wt-space-2);
+        inset-inline-start: var(--wt-space-2);
+        padding: var(--wt-space-1) var(--wt-space-2);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        border-radius: var(--wt-radius-sm);
+      }
+
       header,
       .filters,
       .actions,
@@ -100,6 +161,9 @@ export class ImageLibrary extends LitElement {
       }
       header {
         justify-content: space-between;
+      }
+      .picker-header {
+        justify-content: end;
       }
       .filters {
         margin-block: var(--wt-space-4);
@@ -116,8 +180,6 @@ export class ImageLibrary extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
       }
-      /* Wide enough for a card's Spanish Edit and Delete buttons to share a line;
-         image-library.narrow.test.ts measures it. */
       .grid {
         display: grid;
         grid-template-columns: repeat(
@@ -143,6 +205,9 @@ export class ImageLibrary extends LitElement {
         object-fit: contain;
         background: var(--wt-color-surface);
       }
+      .thumbnail {
+        position: relative;
+      }
       .thumb {
         position: relative;
         display: block;
@@ -166,22 +231,27 @@ export class ImageLibrary extends LitElement {
       .thumb:hover {
         border-color: var(--wt-color-primary);
       }
-      .chip {
-        position: absolute;
-        inset-block-end: var(--wt-space-2);
-        inset-inline-end: var(--wt-space-2);
-        padding: var(--wt-space-1) var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
+      .tile-title {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-2);
       }
-      .thumb:hover .chip,
-      .thumb:focus-visible .chip {
-        border-color: var(--wt-color-primary);
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
+      .tile-title h2 {
+        min-width: 0;
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .tile-title wt-row-actions {
+        flex: none;
+      }
+      .tile-title wt-row-actions::part(trigger) {
+        border: 1px solid var(--wt-color-border);
+      }
+      .use {
+        width: 100%;
+        margin-block-start: var(--wt-space-3);
       }
       /* Side by side wherever the dialog has room for 12 × --wt-tap-min plus the gap; one above
          the other where it has not. Driven by the dialog's width, not the viewport's. */
@@ -274,12 +344,6 @@ export class ImageLibrary extends LitElement {
         justify-content: end;
         margin-block: var(--wt-space-4);
       }
-      input[type="file"] {
-        font: inherit;
-        max-width: 100%;
-        min-width: 0;
-        min-height: var(--wt-tap-min);
-      }
       a {
         color: var(--wt-color-primary);
         overflow-wrap: anywhere;
@@ -289,6 +353,155 @@ export class ImageLibrary extends LitElement {
   @property({ attribute: false }) api!: ImageApi;
   @property({ type: Boolean }) picker = false;
   @property({ attribute: false }) draftParent?: object;
+  @state() private batch: BatchPhoto[] = [];
+  @state() private batchRunning = false;
+  @state() private dragCount: number | null = null;
+  #dragDepth = 0;
+  #batchGeneration = 0;
+  #createdIds = new Set<string>();
+  #canBatch(): boolean {
+    return (
+      this.isConnected &&
+      !this.picker &&
+      !this.batchRunning &&
+      !this.busy &&
+      !this.editor &&
+      !this.viewing &&
+      !this.deletion
+    );
+  }
+  #isFileDrag(event: DragEvent): boolean {
+    return event.dataTransfer?.types.includes("Files") ?? false;
+  }
+  readonly #pageEnter = (event: DragEvent): void => {
+    if (!this.#isFileDrag(event)) return;
+    event.preventDefault();
+    if (!this.#canBatch()) return;
+    this.#dragDepth++;
+    this.dragCount = [...(event.dataTransfer?.items ?? [])].filter(
+      (item) => item.kind === "file",
+    ).length;
+  };
+  readonly #pageLeave = (): void => {
+    this.#dragDepth = Math.max(0, this.#dragDepth - 1);
+    if (this.#dragDepth === 0) this.dragCount = null;
+  };
+  readonly #pageOver = (event: DragEvent): void => {
+    if (!this.#isFileDrag(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = this.#canBatch() ? "copy" : "none";
+  };
+  readonly #pageDrop = (event: DragEvent): void => {
+    this.#dragDepth = 0;
+    this.dragCount = null;
+    if (!this.#isFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.#uploadBatch([...(event.dataTransfer?.files ?? [])]);
+  };
+  async #uploadBatch(files: File[]): Promise<void> {
+    if (!files.length || !this.#canBatch()) return;
+    this.#dragDepth = 0;
+    this.dragCount = null;
+    const generation = ++this.#batchGeneration;
+    const language = currentContentLanguages().defaultLanguage;
+    const pending = files.map((file) => ({ file, status: "queued" as const }));
+    this.batch = pending;
+    this.batchRunning = true;
+    try {
+      for (let index = 0; index < pending.length; index++) {
+        if (!this.isConnected || generation !== this.#batchGeneration) return;
+        const file = pending[index]!.file;
+        this.batch = this.batch.map((item, at) =>
+          at === index ? { ...item, status: "uploading" } : item,
+        );
+        try {
+          const result = await this.api.uploadImage(file, {
+            names: { [language]: imageNameFromFilename(file.name, language, t("image.file")) },
+          });
+          if (!this.isConnected || generation !== this.#batchGeneration) return;
+          if (result.created) this.#createdIds.add(result.image.id);
+          this.batch = this.batch.map((item, at) =>
+            at === index
+              ? { ...item, image: result.image, status: result.created ? "uploaded" : "reused" }
+              : item,
+          );
+          await this.#load(true);
+        } catch (error) {
+          if (!this.isConnected || generation !== this.#batchGeneration) return;
+          this.batch = this.batch.map((item, at) =>
+            at === index ? { ...item, status: "failed", error: codeOf(error) } : item,
+          );
+        }
+      }
+    } finally {
+      if (generation === this.#batchGeneration) this.batchRunning = false;
+    }
+  }
+  #batchImages(): LibraryImage[] {
+    const images = new Map(this.images.map((image) => [image.id, image]));
+    const extra = new Map<string, LibraryImage>();
+    for (const item of this.batch)
+      if (item.image && !images.has(item.image.id)) extra.set(item.image.id, item.image);
+    return [...extra.values(), ...images.values()];
+  }
+  #rememberImage(image: LibraryImage): void {
+    this.batch = this.batch.map((item) =>
+      item.image?.id === image.id ? { ...item, image } : item,
+    );
+  }
+  #forgetImage(id: string): void {
+    this.#createdIds.delete(id);
+    this.batch = this.batch.map((item) => {
+      if (item.image?.id !== id) return item;
+      const next = { ...item };
+      delete next.image;
+      return next;
+    });
+  }
+  #renderBatch() {
+    const uploaded = this.batch.filter(
+      (item) => item.status === "uploaded" || item.status === "reused",
+    ).length;
+    return html`${
+      !this.picker
+        ? html`<wt-file-input
+            class="batch-chooser"
+            name="image-files"
+            compact
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            .locale=${currentLocale()}
+            .files=${[]}
+            .copy=${{ drop: t("image.drop_page"), choose: t("image.choose_files"), replace: t("image.choose_another"), previewAlt: t("image.preview") }}
+            ?disabled=${!this.#canBatch()}
+            @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+              event.stopPropagation();
+              void this.#uploadBatch(event.detail.files);
+            }}
+          ></wt-file-input>`
+        : nothing
+    }
+    ${
+      this.batch.length
+        ? html`<div class="batch-progress" role="status">
+              ${t(this.batch.length === 1 ? "image.batch_progress_one" : "image.batch_progress")
+                .replace("{done}", String(uploaded))
+                .replace("{total}", String(this.batch.length))}
+            </div>
+            <ul class="batch-list">
+              ${this.batch.map(
+                (item) =>
+                  html`<li>
+                    <strong>${item.file.name}</strong>
+                    ${item.status === "failed" ? html`<span class="error" data-upload-error role="alert">${codeMessage(item.error!)}</span>` : item.status === "reused" ? html`<span>${t("image.duplicate_reused")} ${this.#text(item.image!.names)}. ${t("image.duplicate_metadata_kept")}</span>` : item.status === "queued" || item.status === "uploading" ? html`<span>${t(item.status === "queued" ? "image.queued" : "image.uploading")}</span>` : nothing}
+                  </li>`,
+              )}
+            </ul>`
+        : nothing
+    }
+    ${this.dragCount !== null ? html`<div class="drop-overlay" data-test="drop-overlay" role="status"><span>${this.dragCount ? t(this.dragCount === 1 ? "image.drop_count_one" : "image.drop_count").replace("{count}", String(this.dragCount)) : t("image.drop_unknown")}</span></div>` : nothing}`;
+  }
   @state() private images: LibraryImage[] = [];
   @state() private total = 0;
   @state() private search = "";
@@ -302,7 +515,7 @@ export class ImageLibrary extends LitElement {
     file: File | null;
   } | null = null;
   @state() private attempted = false;
-  @state() private previewUrl: string | null = null;
+  #suggestion: { language: string; name: string } | null = null;
   /** The last save's refusal, until Save is pressed again or, for a field's, that field changes. */
   @state() private refusal: { field: string; code: string } | null = null;
   @state() private duplicateImage: LibraryImage | null = null;
@@ -340,6 +553,10 @@ export class ImageLibrary extends LitElement {
   }
   override connectedCallback(): void {
     super.connectedCallback();
+    window.addEventListener("dragenter", this.#pageEnter);
+    window.addEventListener("dragleave", this.#pageLeave);
+    window.addEventListener("dragover", this.#pageOver);
+    window.addEventListener("drop", this.#pageDrop);
     this.#unsubscribeLocale = subscribeLocale(() => {
       this.requestUpdate();
       this.offset = 0;
@@ -348,6 +565,16 @@ export class ImageLibrary extends LitElement {
     void this.#load();
   }
   override disconnectedCallback(): void {
+    window.removeEventListener("dragenter", this.#pageEnter);
+    window.removeEventListener("dragleave", this.#pageLeave);
+    window.removeEventListener("dragover", this.#pageOver);
+    window.removeEventListener("drop", this.#pageDrop);
+    this.#batchGeneration++;
+    this.batchRunning = false;
+    this.batch = [];
+    this.dragCount = null;
+    this.#dragDepth = 0;
+    this.#createdIds.clear();
     this.#editorGeneration++;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -357,13 +584,8 @@ export class ImageLibrary extends LitElement {
     this.viewing = null;
     clearTimeout(this.#searchTimer);
     this.#unsubscribeLocale?.();
-    this.#setPreview(null);
+
     super.disconnectedCallback();
-  }
-  /** Holds the object URL for a newly chosen file, revoking the previous one so it cannot leak. */
-  #setPreview(file: File | null): void {
-    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
-    this.previewUrl = file ? URL.createObjectURL(file) : null;
   }
   #text(value: Record<string, string>): string {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
@@ -437,9 +659,11 @@ export class ImageLibrary extends LitElement {
     };
   }
   #edit(image: LibraryImage | null): void {
+    if (this.batchRunning) return;
     this.#editorGeneration++;
     this.#scope?.dispose();
-    this.#setPreview(null);
+
+    this.#suggestion = null;
     this.editor = {
       image,
       names: { ...image?.names },
@@ -460,7 +684,6 @@ export class ImageLibrary extends LitElement {
       restore: (value) => {
         if (!this.editor) return;
         this.editor = { ...this.editor, names: { ...value.names }, file: value.file };
-        this.#setPreview(value.file);
       },
     });
     this.#leave = draft.coordinator;
@@ -471,7 +694,7 @@ export class ImageLibrary extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
-    this.#setPreview(null);
+
     this.editor = null;
   }
   #name(language: string, value: string): void {
@@ -479,6 +702,20 @@ export class ImageLibrary extends LitElement {
       this.editor = { ...this.editor, names: { ...this.editor.names, [language]: value } };
     this.#scope?.changed();
     this.#dropRefusal(`name-${language}`);
+  }
+  #file(file: File | null): void {
+    if (!this.editor || this.busy) return;
+    const language = this.#suggestion?.language ?? currentContentLanguages().defaultLanguage;
+    const names = { ...this.editor.names };
+    const current = names[language] ?? "";
+    if (!current.trim() || current === this.#suggestion?.name) {
+      const name = file ? imageNameFromFilename(file.name, language, t("image.file")) : "";
+      names[language] = name;
+      this.#suggestion = file ? { language, name } : null;
+    }
+    this.editor = { ...this.editor, file, names };
+    this.#scope?.changed();
+    this.#dropRefusal("file");
   }
   #dropRefusal(field: string): void {
     if (this.refusal?.field === field) this.refusal = null;
@@ -535,14 +772,19 @@ export class ImageLibrary extends LitElement {
         const result = await this.api.uploadImage(editor.file!, metadata);
         if (generation !== this.#editorGeneration) return;
         this.duplicateImage = result.created ? null : result.image;
-      } else await this.api.updateImage(editor.image.id, metadata);
+        this.#rememberImage(result.image);
+      } else {
+        const result = await this.api.updateImage(editor.image.id, metadata);
+        if (generation !== this.#editorGeneration) return;
+        this.#rememberImage(result.image);
+      }
       if (generation !== this.#editorGeneration) return;
       scope?.commit(submitted);
       if (this.editor !== editor) return;
       this.#scope?.dispose();
       this.#scope = undefined;
       this.#leave = undefined;
-      this.#setPreview(null);
+
       this.editor = null;
     } catch (error) {
       if (generation !== this.#editorGeneration) return;
@@ -561,7 +803,7 @@ export class ImageLibrary extends LitElement {
     else await this.#load();
   }
   async #inspectDeletion(image: LibraryImage): Promise<void> {
-    if (this.busy) return;
+    if (this.busy || this.batchRunning) return;
     const generation = ++this.#deleteGeneration;
     this.deleteError = false;
     try {
@@ -604,6 +846,13 @@ export class ImageLibrary extends LitElement {
       event.clientY > box.bottom
     )
       void this.#closeViewer(id);
+  }
+  #select(image: LibraryImage): void {
+    this.#viewGeneration++;
+    this.viewing = null;
+    this.dispatchEvent(
+      new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }),
+    );
   }
   #renderViewer() {
     const viewing = this.viewing;
@@ -663,8 +912,8 @@ export class ImageLibrary extends LitElement {
           data-test="close-preview"
           variant="secondary"
           @click=${() => void this.#closeViewer(viewing.image.id)}
-          >${t("image.close")}</wt-button
-        ></wt-form-actions
+          >${t(this.picker ? "image.back" : "image.close")}</wt-button
+        >${this.picker ? html`<wt-button data-test="select-preview" variant="primary" @click=${() => this.#select(viewing.image)}>${t("image.select")}</wt-button>` : nothing}</wt-form-actions
       >
     </wt-modal>`;
   }
@@ -679,6 +928,7 @@ export class ImageLibrary extends LitElement {
         this.deletion = { ...deletion, uses: result.uses };
         return;
       }
+      this.#forgetImage(deletion.image.id);
       this.deletion = null;
     } catch {
       this.deleteError = true;
@@ -709,12 +959,7 @@ export class ImageLibrary extends LitElement {
         : []),
       ...(marked ? [t("image.fix_fields")] : []),
     ].join(" ");
-    const preview =
-      editor.file !== null
-        ? this.previewUrl
-        : editor.image !== null
-          ? `/media/${encodeURIComponent(editor.image.filename)}`
-          : null;
+    const preview = editor.image ? `/media/${encodeURIComponent(editor.image.filename)}` : null;
     return html`<wt-modal
       size="standard"
       open
@@ -732,23 +977,22 @@ export class ImageLibrary extends LitElement {
       <div class="fields">
         ${
           editor.image === null
-            ? html`<label
-                  >${t("image.file")} *<input
-                    type="file"
-                    name="image-file"
-                    accept="image/jpeg,image/png,image/webp"
-                    required
-                    ?disabled=${this.busy}
-                    aria-invalid=${Boolean(fileError)}
-                    aria-describedby=${fileError ? "file-error" : nothing}
-                    @change=${(event: Event) => {
-                      const file = (event.target as HTMLInputElement).files?.[0] ?? null;
-                      this.#setPreview(file);
-                      this.editor = { ...editor, file };
-                      this.#scope?.changed();
-                      this.#dropRefusal("file");
-                    }} /></label
-                >${fileError ? html`<p id="file-error" class="error">${fileError}</p>` : nothing}`
+            ? html`<wt-file-input
+                name="image-file"
+                label=${t("image.file")}
+                required
+                accept="image/jpeg,image/png,image/webp"
+                .locale=${currentLocale()}
+                .files=${editor.file ? [editor.file] : []}
+                .copy=${{ drop: t("image.drop_one"), choose: t("image.choose_file"), replace: t("image.choose_another"), previewAlt: t("image.preview") }}
+                hint=${t("image.formats")}
+                error=${fileError}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+                  event.stopPropagation();
+                  this.#file(event.detail.files[0] ?? null);
+                }}
+              ></wt-file-input>`
             : nothing
         }
         ${
@@ -801,10 +1045,14 @@ export class ImageLibrary extends LitElement {
     </wt-modal>`;
   }
   override render() {
-    return html`<header>
-        <h1>${t("nav.images")}</h1>
-        <wt-button data-test="upload" @click=${() => this.#edit(null)}
-          >${t("image.upload")}</wt-button
+    return html`<header class=${this.picker ? "picker-header" : nothing}>
+        ${this.picker ? nothing : html`<h1>${t("nav.images")}</h1>`}
+        <wt-button
+          data-test="upload"
+          variant=${this.picker ? "secondary" : "primary"}
+          ?disabled=${this.batchRunning}
+          @click=${() => this.#edit(null)}
+          >${t("image.upload_many")}</wt-button
         >
       </header>
       <div class="filters">
@@ -862,6 +1110,7 @@ export class ImageLibrary extends LitElement {
             : nothing
         }
       </div>
+      ${this.#renderBatch()}
       ${
         this.duplicateImage
           ? html`<div role="status" data-test="duplicate-upload">
@@ -882,46 +1131,55 @@ export class ImageLibrary extends LitElement {
       ${this.loadError ? html`<p role="alert" class="error">${t("image.load_error")} <wt-button variant="secondary" @click=${() => void this.#load()}>${t("image.retry")}</wt-button></p>` : nothing}
       ${this.deleteError && this.deletion === null ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
       <div class="grid">
-        ${this.images.map((image) => {
+        ${this.#batchImages().map((image) => {
           const name = this.#text(image.names);
           return html`<article data-image=${image.id}>
-            <button
-              type="button"
-              class="thumb"
-              data-test=${`preview-${image.id}`}
-              aria-label=${`${t("image.preview_open")}: ${name}`}
-              @click=${() => void this.#view(image)}
-            >
-              <img
-                src=${`/media/${encodeURIComponent(image.filename)}`}
-                alt=${name}
-                loading="lazy"
-              /><span class="chip">${t("image.preview_open")}</span>
-            </button>
-            <h2>${name}</h2>
+            <div class="thumbnail">
+              <button
+                type="button"
+                class="thumb"
+                data-test=${`preview-${image.id}`}
+                aria-label=${`${t("image.preview_open")}: ${name}`}
+                @click=${() => void this.#view(image)}
+              >
+                <img
+                  src=${`/media/${encodeURIComponent(image.filename)}`}
+                  alt=${name}
+                  loading="lazy"
+                /></button
+              >${this.#createdIds.has(image.id) ? html`<span data-new>${t("image.new")}</span>` : nothing}
+            </div>
+            <div class="tile-title">
+              <h2>${name}</h2>
+              <wt-row-actions align="end" label=${`${t("image.actions")}: ${name}`}>
+                <wt-button
+                  data-test=${`edit-${image.id}`}
+                  ?disabled=${this.batchRunning}
+                  variant="secondary"
+                  align="start"
+                  aria-label=${`${t("action.edit")}: ${name}`}
+                  @click=${() => this.#edit(image)}
+                  >${t("action.edit")}</wt-button
+                >
+                <wt-button
+                  data-test=${`delete-${image.id}`}
+                  ?disabled=${this.batchRunning}
+                  variant="secondary"
+                  align="start"
+                  aria-label=${`${t("image.delete")}: ${name}`}
+                  @click=${() => void this.#inspectDeletion(image)}
+                  >${t("image.delete")}</wt-button
+                >
+              </wt-row-actions>
+            </div>
             <time datetime=${image.createdAt}
               >${new Date(image.createdAt).toLocaleDateString(currentLocale())}</time
             >
-            <div class="actions">
-              ${this.picker ? html`<wt-button class="use" data-test=${`select-${image.id}`} aria-label=${`${t("image.select")}: ${name}`} @click=${() => this.dispatchEvent(new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }))}>${t("image.select")}</wt-button>` : nothing}
-              <wt-button
-                data-test=${`delete-${image.id}`}
-                variant="secondary"
-                aria-label=${`${t("image.delete")}: ${name}`}
-                @click=${() => void this.#inspectDeletion(image)}
-                >${t("image.delete")}</wt-button
-              ><wt-button
-                data-test=${`edit-${image.id}`}
-                variant="secondary"
-                aria-label=${`${t("action.edit")}: ${name}`}
-                @click=${() => this.#edit(image)}
-                >${t("action.edit")}</wt-button
-              >
-            </div>
+            ${this.picker ? html`<wt-button class="use" variant="secondary" data-test=${`select-${image.id}`} aria-label=${`${t("image.select")}: ${name}`} @click=${() => this.#select(image)}>${t("image.select")}</wt-button>` : nothing}
           </article>`;
         })}
       </div>
-      ${this.images.length === 0 && !this.loadError ? html`<p>${t("image.empty")}</p>` : nothing}
+      ${this.#batchImages().length === 0 && !this.loadError ? html`<p>${t("image.empty")}</p>` : nothing}
       <nav aria-label=${t("image.page")}>
         <wt-button
           variant="secondary"

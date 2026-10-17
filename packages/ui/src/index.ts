@@ -27,6 +27,7 @@ export { WtSegmentedControl } from "./components/wt-segmented-control.js";
 export type { SegmentedOption } from "./components/wt-segmented-control.js";
 export type { SummaryField } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
+export { WtFileInput, type FileInputCopy } from "./components/wt-file-input.js";
 export { parseDecimalInput, formatDecimalInput, decimalMark } from "@waitron/ui-core";
 export { WtTextarea } from "./components/wt-textarea.js";
 export { WtPriceInput } from "./components/wt-price-input.js";

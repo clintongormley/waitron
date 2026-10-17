@@ -713,44 +713,6 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-## A651 — drop photos to upload them, and tidy the image library and its picker
-
-Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. Boards, in
-[mockups/a651-image-library/](mockups/a651-image-library/): 1 the library page, 2 photos dragged
-over it, 3 just after the drop, 4 the picker, 5 the picker's full-size photo, 6 the upload window.
-Where a board and this text differ, this text wins. The library is
-`packages/media/src/dashboard/image-library.ts`; the picker
-(`packages/media/src/dashboard/image-picker.ts`) places that same component inside the window
-`apps/dashboard/src/widgets/image-upload.ts` opens, with its `picker` flag set.
-
-1. **Drop several photos on the library page** (boards 2, 3). The whole page accepts the drop and
-   says "Drop 3 photos to upload them" while photos are dragged over it. Each photo uploads straight
-   away, with no window, its default-language name taken from its file name (`patatas-bravas.jpg`
-   becomes "Patatas bravas": extension dropped, dashes and underscores to spaces, first letter
-   capital). While they upload, a bar reads "2 of 3 photos uploaded." and each new photo shows a
-   New badge; no message says the names came from the file names (owner). The person renames one
-   later with Edit. A photo the server reports as already in the library (`created: false`) is
-   reused, as one uploaded through the window is today (`image.duplicate_reused`). The page also says "Drop photos anywhere on this
-   page to upload them, or choose files", and choose files takes several files too.
-2. **The upload window's Photo field becomes a drop area** (board 6): "Drop a photo here, or choose
-   a file · JPEG, PNG or WebP, up to 20 MB". Once a photo is chosen it shows the photo, its file
-   name and size, and "Choose another". This is a shared field primitive in `packages/ui`, under
-   the rule that a screen does not draw its own form field (CLAUDE.md §3), with the tests a new
-   `wt-*` primitive needs. Dropping one photo here fills the field and does not upload until Save.
-   Its default-language name is filled in from the file name, as on a drop on the page (owner,
-   2026-10-14), and can be changed before Save.
-3. **The Photo field's required mark is red**, as the Name field's already is (today it is black).
-4. **Library page** (board 1): the Upload photo button reads "Upload photos" and is drawn blue
-   (`variant="primary"`; today it is drawn like every other button). The "Preview" label over each photo goes; clicking the photo still
-   opens it. Edit and Delete leave the tile for a ⋮ menu beside the photo's name.
-5. **Picker** (board 4): only the window's "Choose image" title shows; the library's own "Image
-   library" heading goes. Each photo keeps the same ⋮ menu (Edit, Delete) and a full-width
-   Use image drawn white (owner: not blue, so a page of photos is not a page of blue buttons). The
-   big Edit and Delete buttons and the Preview label go. Upload photos stays (owner), so a photo
-   can be added and used without leaving the product.
-6. **The picker's full-size photo** (board 5) gains Use image, drawn blue, beside Back. Today it
-   opens with no way to choose the photo from it.
-
 ## A652 — frame a photo for its thumbnails
 
 Owner, 2026-10-14. Boards, in [mockups/a652-photo-framing/](mockups/a652-photo-framing/): 1 Edit
@@ -942,6 +904,48 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   unverified.
 
 ## Decisions and deliberate limits
+
+### A651 — drop photos to upload them, and tidy the image library and its picker
+
+Historical design observations and owner decisions, 2026-10-14. The field and tile contract is
+now in [the design system](../developers/design-system.md#primitives).
+
+Owner, 2026-10-14, from screenshots of the library, the picker and the upload window. Boards, in
+[mockups/a651-image-library/](mockups/a651-image-library/): 1 the library page, 2 photos dragged
+over it, 3 just after the drop, 4 the picker, 5 the picker's full-size photo, 6 the upload window.
+Where a board and this text differ, this text wins. The library is
+`packages/media/src/dashboard/image-library.ts`; the picker
+(`packages/media/src/dashboard/image-picker.ts`) places that same component inside the window
+`apps/dashboard/src/widgets/image-upload.ts` opens, with its `picker` flag set.
+
+1. **Drop several photos on the library page** (boards 2, 3). The whole page accepts the drop and
+   says "Drop 3 photos to upload them" while photos are dragged over it. Each photo uploads straight
+   away, with no window, its default-language name taken from its file name (`patatas-bravas.jpg`
+   becomes "Patatas bravas": extension dropped, dashes and underscores to spaces, first letter
+   capital). While they upload, a bar reads "2 of 3 photos uploaded." and each new photo shows a
+   New badge; no message says the names came from the file names (owner). The person renames one
+   later with Edit. A photo the server reports as already in the library (`created: false`) is
+   reused, as one uploaded through the window is today (`image.duplicate_reused`). The page also says "Drop photos anywhere on this
+   page to upload them, or choose files", and choose files takes several files too.
+2. **The upload window's Photo field becomes a drop area** (board 6): "Drop a photo here, or choose
+   a file · JPEG, PNG or WebP, up to 20 MB". Once a photo is chosen it shows the photo, its file
+   name and size, and "Choose another". This is a shared field primitive in `packages/ui`, under
+   the rule that a screen does not draw its own form field (CLAUDE.md §3), with the tests a new
+   `wt-*` primitive needs. Dropping one photo here fills the field and does not upload until Save.
+   Its default-language name is filled in from the file name, as on a drop on the page (owner,
+   2026-10-14), and can be changed before Save.
+3. **The Photo field's required mark is red**, as the Name field's already is (today it is black).
+4. **Library page** (board 1): the Upload photo button reads "Upload photos" and is drawn blue
+   (`variant="primary"`; today it is drawn like every other button). The "Preview" label over each photo goes; clicking the photo still
+   opens it. Edit and Delete leave the tile for a ⋮ menu beside the photo's name.
+5. **Picker** (board 4): only the window's "Choose image" title shows; the library's own "Image
+   library" heading goes. Each photo keeps the same ⋮ menu (Edit, Delete) and a full-width
+   Use image drawn white (owner: not blue, so a page of photos is not a page of blue buttons). The
+   big Edit and Delete buttons and the Preview label go. Upload photos stays (owner), so a photo
+   can be added and used without leaving the product.
+6. **The picker's full-size photo** (board 5) gains Use image, drawn blue, beside Back. Today it
+   opens with no way to choose the photo from it.
+
 
 ### A647 — tidy the product editor
 

@@ -442,10 +442,13 @@ it("the real logo library keeps an upload refusal visible without changing the r
   const root = library.shadowRoot!;
   await expect.poll(() => root.querySelector("[data-test=upload]")).toBeTruthy();
   await userEvent.click(page.elementLocator(root.querySelector("[data-test=upload]")!));
-  await expect.poll(() => root.querySelector("input[name=image-file]")).toBeTruthy();
+  const photoField = () => root.querySelector("wt-file-input[name=image-file]");
+  await expect
+    .poll(() => photoField()?.shadowRoot?.querySelector("input[name=image-file]"))
+    .toBeTruthy();
   const transfer = new DataTransfer();
   transfer.items.add(new File(["big"], "logo.png", { type: "image/png" }));
-  const file = root.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const file = photoField()!.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   root
@@ -456,7 +459,7 @@ it("the real logo library keeps an upload refusal visible without changing the r
   await library.updateComplete;
   await userEvent.click(page.elementLocator(root.querySelector("wt-modal [data-test=save]")!));
   await expect
-    .poll(() => root.querySelector("#file-error")?.textContent?.trim())
+    .poll(() => photoField()?.shadowRoot?.querySelector("[data-error]")?.textContent?.trim())
     .toBe(codeMessage("image.too_large"));
   expect(upload.image).toBeNull();
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();

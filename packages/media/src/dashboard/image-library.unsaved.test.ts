@@ -76,7 +76,11 @@ async function question() {
   return q;
 }
 function file(library: HTMLElement, value: File | null) {
-  const field = library.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
+  const field = library
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+      "wt-file-input[name=image-file]",
+    )!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
   const data = new DataTransfer();
   if (value) data.items.add(value);
   field.files = data.files;
@@ -134,9 +138,13 @@ it("Upload protects a selected opaque File and becomes clean when cleared", asyn
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
-  expect(library.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.src).toMatch(
-    /^blob:/,
-  );
+  expect(
+    library
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+        "wt-file-input[name=image-file]",
+      )!
+      .shadowRoot!.querySelector<HTMLImageElement>("img")!.src,
+  ).toMatch(/^blob:/);
   file(library, null);
   await library.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -196,8 +204,15 @@ it("replacing a selected File while asking invalidates the old answer, even for 
   oldChoice.click();
   expect(library.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   expect(
-    library.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]!.size,
+    library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+      "wt-file-input[name=image-file]",
+    )!.files[0]!.size,
   ).toBe(6);
+  expect(
+    library
+      .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+      .shadowRoot!.querySelector(".size")!.textContent,
+  ).toBe("6 B");
   expect(app.leave.coordinator.isDirty()).toBe(true);
 });
 it("replacing an Image editor while asking starts a clean scope and invalidates the old answer", async () => {
@@ -212,7 +227,13 @@ it("replacing an Image editor while asking starts a clean scope and invalidates 
   await expect.poll(() => q.open).toBe(false);
   oldChoice.click();
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(library.shadowRoot!.querySelector("input[type=file]")).not.toBeNull();
+  expect(
+    library
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+        "wt-file-input[name=image-file]",
+      )
+      ?.shadowRoot!.querySelector("input[type=file]") ?? null,
+  ).not.toBeNull();
   expect(
     library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-modal [name=name-es]")!
       .value,
@@ -255,7 +276,13 @@ it("a refused write from a replaced Image editor cannot mark the replacement fie
     ).toBe(false),
   );
   expect(library.shadowRoot!.querySelector("[name=name-es]")!.getAttribute("error")).toBe("");
-  expect(library.shadowRoot!.querySelector("input[type=file]")).not.toBeNull();
+  expect(
+    library
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
+        "wt-file-input[name=image-file]",
+      )
+      ?.shadowRoot!.querySelector("input[type=file]") ?? null,
+  ).not.toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 

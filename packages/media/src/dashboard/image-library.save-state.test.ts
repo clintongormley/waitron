@@ -103,7 +103,9 @@ it("a changed refused edit stays primary and can retry without another edit", as
 
 it("file selection enables upload and clearing it restores the blank baseline", async () => {
   await mount(true);
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
+  const input = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
   const selected = new DataTransfer();
   selected.items.add(new File(["bytes"], "bread.png", { type: "image/png" }));
   input.files = selected.files;

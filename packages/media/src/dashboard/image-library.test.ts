@@ -96,6 +96,11 @@ for (const { locale, edit, remove, use } of [
       ["one", "Pan"],
       ["two", "Tostada"],
     ]) {
+      const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        `[data-image=${id}] wt-row-actions`,
+      )!;
+      await menu.updateComplete;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
       for (const [test, label] of [
         [`edit-${id}`, edit],
         [`delete-${id}`, remove],
@@ -239,7 +244,9 @@ it("requires file and default-language name", async () => {
   await el.updateComplete;
   const transfer = new DataTransfer();
   transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
-  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const file = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Pan");
@@ -255,7 +262,11 @@ it("previews the chosen file when uploading and the stored image when editing", 
   await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  const editing = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]");
+  const editing =
+    el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]") ??
+    el
+      .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+      ?.shadowRoot!.querySelector<HTMLImageElement>("img");
   expect(editing).not.toBeNull();
   expect(editing!.src).toContain("/media/one.jpg");
   el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
@@ -264,14 +275,26 @@ it("previews the chosen file when uploading and the stored image when editing", 
   await el.updateComplete;
   click("[data-test=upload]");
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector("[data-test=preview]") ??
+      el
+        .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+        ?.shadowRoot!.querySelector("img") ??
+      null,
+  ).toBeNull();
   const transfer = new DataTransfer();
   transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
-  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const file = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   await el.updateComplete;
-  const preview = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]");
+  const preview =
+    el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]") ??
+    el
+      .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+      ?.shadowRoot!.querySelector<HTMLImageElement>("img");
   expect(preview).not.toBeNull();
   expect(preview!.src.startsWith("blob:")).toBe(true);
 });
@@ -284,7 +307,9 @@ it("explains when a duplicate photo reuses the existing image and keeps its meta
   await el.updateComplete;
   const transfer = new DataTransfer();
   transfer.items.add(new File(["same photo"], "bread.jpg", { type: "image/jpeg" }));
-  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const file = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Different name");
@@ -708,16 +733,20 @@ it("explains a photo the server could not read", async () => {
   await el.updateComplete;
   const transfer = new DataTransfer();
   transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
-  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const file = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Pan");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("#file-error")?.textContent).toContain(
-      "The photo could not be read",
-    ),
+    expect(
+      el
+        .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+        ?.shadowRoot!.querySelector("[data-error]")?.textContent,
+    ).toContain("The photo could not be read"),
   );
 });
 
@@ -994,7 +1023,9 @@ function deferred<T>() {
 function chooseFile(files: File[]) {
   const transfer = new DataTransfer();
   for (const file of files) transfer.items.add(file);
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  const input = el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
   input.files = transfer.files;
   input.dispatchEvent(new Event("change"));
 }
@@ -1080,16 +1111,30 @@ it("drops the preview and asks for a photo again when the chosen file is cleared
   chooseFile([new File(["photo"], "bread.jpg", { type: "image/jpeg" })]);
   field("name-es", "Pan");
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=preview]")).not.toBeNull();
+  expect(
+    el.shadowRoot!.querySelector("[data-test=preview]") ??
+      el
+        .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+        ?.shadowRoot!.querySelector("img") ??
+      null,
+  ).not.toBeNull();
   chooseFile([]);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector("[data-test=preview]") ??
+      el
+        .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+        ?.shadowRoot!.querySelector("img") ??
+      null,
+  ).toBeNull();
   click("[data-test=save]");
   await el.updateComplete;
   expect(client.uploadImage).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelector("#file-error")!.textContent).toBe(
-    "Choose a photo to upload.",
-  );
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+      ?.shadowRoot!.querySelector("[data-error]")!.textContent,
+  ).toBe("Choose a photo to upload.");
 });
 
 it("offers a retry after the library fails to load, and shows the images it then gets", async () => {
@@ -1309,8 +1354,15 @@ const nameInput = (language: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { error: string; value: string }>(
     `wt-input[name=name-${language}]`,
   )!;
-const fileInput = () => el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
-const fileError = () => el.shadowRoot!.querySelector("#file-error")?.textContent?.trim() ?? "";
+const fileInput = () =>
+  el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")!
+    .shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+const fileError = () =>
+  el
+    .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+    ?.shadowRoot!.querySelector("[data-error]")
+    ?.textContent?.trim() ?? "";
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 const photo = () => new File(["photo"], "bread.jpg", { type: "image/jpeg" });
 
@@ -1344,7 +1396,11 @@ it("on an invalid submission shows the field and bottom messages, focuses the ph
   expect(await bottomOf()).toBe(FIX_FIELDS);
   expect(saveButton().hasAttribute("disabled")).toBe(true);
   expect(nameInput("fr").value).toBe("Pain");
-  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(fileInput()));
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector("wt-file-input[name=image-file]")!.shadowRoot!.activeElement,
+    ).toBe(fileInput()),
+  );
   expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 
   setLocale("es-ES");
@@ -1378,6 +1434,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   await el.updateComplete;
 
   chooseFile([photo()]);
+  field("name-es", "");
   await el.updateComplete;
   expect(fileError()).toBe("");
   expect(await bottomOf()).toBe(FIX_FIELDS);
@@ -1418,7 +1475,11 @@ it.each([
     expect(fileInput().getAttribute("aria-invalid")).toBe("true");
     expect(await bottomOf()).toBe(FIX_FIELDS);
     expect(saveButton().hasAttribute("disabled")).toBe(false);
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(fileInput()));
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("wt-file-input[name=image-file]")!.shadowRoot!.activeElement,
+      ).toBe(fileInput()),
+    );
 
     field("name-es", "Pan blanco");
     await el.updateComplete;
@@ -1535,7 +1596,11 @@ it("says a photo refusal on an edit, which has no photo field, above Save and le
       `The image could not be saved. ${codeMessage("image.too_large")}`,
     ),
   );
-  expect(el.shadowRoot!.querySelector("#file-error")).toBeNull();
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-file-input[name=image-file]")
+      ?.shadowRoot!.querySelector("[data-error]") ?? null,
+  ).toBeNull();
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
@@ -1706,7 +1771,7 @@ for (const [locale, label] of [
     setLocale(locale);
     await mount();
     expect(thumbnail().getAttribute("aria-label")).toBe(`${label}: Pan`);
-    expect(thumbnail().textContent!.trim()).toBe(label);
+    expect(thumbnail().querySelector(".chip")).toBeNull();
     expect(thumbnail().type).toBe("button");
   });
 }
@@ -2037,3 +2102,52 @@ it.each(["department_receipts", "departments"])(
     await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
   },
 );
+
+it("A651 draws a primary plural upload action and places edit/delete in a named tile menu", async () => {
+  await mount();
+  const upload =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!;
+  expect(upload.textContent!.trim()).toBe("Upload photos");
+  expect(upload.variant).toBe("primary");
+  expect(el.shadowRoot!.querySelector(".chip")).toBeNull();
+  const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    "[data-image=one] wt-row-actions",
+  );
+  expect(menu).not.toBeNull();
+  await menu!.updateComplete;
+  await userEvent.click(menu!.shadowRoot!.querySelector("button")!);
+  expect(menu!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+  await userEvent.click(menu!.querySelector("[data-test=edit-one]")!);
+  await el.updateComplete;
+  expect(menu!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  expect(el.shadowRoot!.querySelector("[name=name-es]")).not.toBeNull();
+});
+it("A651 picker hides its inner title, keeps white tile selection and selects from the full photo once", async () => {
+  const client = await mount(api(), true);
+  const selected = vi.fn();
+  el.addEventListener("select-image", selected);
+  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=upload]")).not.toBeNull();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=upload]")!.variant,
+  ).toBe("secondary");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=select-one]")!
+      .variant,
+  ).toBe("secondary");
+  thumbnail().click();
+  const modal = await openedViewer();
+  const choose = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=select-preview]",
+  );
+  expect(choose).not.toBeNull();
+  expect(choose!.variant).toBe("primary");
+  expect(modal.querySelector("[data-test=close-preview]")!.textContent!.trim()).toBe("Back");
+  choose!.click();
+  await el.updateComplete;
+  expect(selected).toHaveBeenCalledOnce();
+  expect(selected.mock.calls[0]![0].detail).toEqual(image);
+  expect(client.uploadImage).not.toHaveBeenCalled();
+  expect(client.updateImage).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("[data-test=image-preview]")).toBeNull();
+});

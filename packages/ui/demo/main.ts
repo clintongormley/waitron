@@ -18,6 +18,7 @@ import "../src/components/wt-form-error-summary.js";
 import "../src/components/wt-data-table.js";
 import "../src/components/wt-icon.js";
 import "../src/components/wt-input.js";
+import "../src/components/wt-file-input.js";
 import "../src/components/wt-textarea.js";
 import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
@@ -207,6 +208,8 @@ const panel = (theme: "light" | "dark") => `
       >
       </wt-number-stepper>
     </div>
+    <wt-file-input name="photo" label="Photo" required accept="image/jpeg,image/png,image/webp" hint="JPEG, PNG or WebP, up to 20 MB"></wt-file-input>
+    <wt-file-input name="photos" label="Photos" multiple compact></wt-file-input>
     <wt-tabs label="Venue settings">
       <section slot="status"><p>Choose Team to manage your staff in a table.</p></section>
       <section slot="team">

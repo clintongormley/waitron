@@ -714,3 +714,44 @@ describe("image-upload as a receipt logo", () => {
     expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
   });
 });
+
+it("A651 chooses the full-size photo through the real nested picker and closes the outer window", async () => {
+  await import("@waitron/dashboard-modules");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+  setLocale("en-GB");
+  const image = {
+    id: "bread",
+    filename: "bread.png",
+    names: { en: "Bread", es: "Pan" },
+    createdAt: "2026-10-17T00:00:00Z",
+    updatedAt: "2026-10-17T00:00:00Z",
+    usageCount: 0,
+  };
+  const request = vi
+    .fn()
+    .mockImplementation(async (path: string) =>
+      path.includes("?") ? { images: [image], total: 1 } : { image, uses: [] },
+    );
+  const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+    api: { imageLibraryRequest: request },
+  });
+  const changed = vi.fn();
+  el.addEventListener("image-changed", changed);
+  const picker = await open(el);
+  await (picker as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const library = picker.shadowRoot!.querySelector("dashboard-image-library")!;
+  await vi.waitFor(() =>
+    expect(library.shadowRoot!.querySelector("[data-test=preview-bread]")).not.toBeNull(),
+  );
+  await userEvent.click(library.shadowRoot!.querySelector("[data-test=preview-bread]")!);
+  await vi.waitFor(() =>
+    expect(library.shadowRoot!.querySelector("[data-test=select-preview]")).not.toBeNull(),
+  );
+  await userEvent.click(library.shadowRoot!.querySelector("[data-test=select-preview]")!);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull());
+  expect(el.image).toBe("bread.png");
+  expect(changed).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ detail: { image: "bread.png" } }),
+  );
+  expect(request.mock.calls.every((call) => call[1] === "GET")).toBe(true);
+});
