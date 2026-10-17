@@ -3090,6 +3090,24 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   payment screen only. Not decided.
   [Detail](backlog/printers.md#find-a-bills-pay-offers-no-guests-field)
 
+- **Loose ends left by A663 Part 3b (#1827).**
+  - The default guests count is worked out twice, kept equal by hand: on the till to fill the
+    field (`defaultReceiptGuests`, `apps/till/src/state/receipt-guests.ts`) and on the server when
+    no count is sent (`storableDefault` and `readReceiptGuests`, `apps/server/src/receipt-guests.ts`).
+    A change to one that misses the other shows the waiter one number and stores another.
+  - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
+    amount does ask. The plan chose this; the owner has not said whether leaving should ask.
+  - The number is `guests` on the wire and in the `sale_receipt_guests` column, but `guestCount` on
+    the seat-a-table route, and Split a table uses `guests` for something else. Free to rename
+    before go-live.
+  - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
+    (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
+    `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guests` shows only at
+    the bottom: `refusalField` has no `guests` case.
+  - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
+    shapes only so older tests that pin the exact argument count keep passing; one call per path
+    sends the same request.
+
 - **Loose ends left by A661 (#1745).**
   - A661's six wording and behaviour choices were built on the recommended defaults. The owner's
     questions Q1–Q6 of 2026-10-15 are unanswered; change the build if the owner answers any of them
