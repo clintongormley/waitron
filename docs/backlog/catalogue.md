@@ -865,6 +865,11 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   a gap. Translate all fills the same dialog; its "Use fix" button waits for this change
   (its own entry in `docs/backlog.md`).
 
+  **Design checkpoint, 2026-10-17:** the [proposal](../superpowers/specs/2026-10-17-a682-translations-design.md)
+  covers all five points and Use fix in one future PR. Its unit choice is still open: add a required
+  staff name and abbreviation with optional translations (recommended), or retain at least one
+  translated name and abbreviation. Product implementation and the detailed plan await that choice.
+
 ## Open test gap from A201b (#1091)
 
 - **Open test gap from A201b** (#1091): removing `#closeLostList()` from `#includeMenu` in a
