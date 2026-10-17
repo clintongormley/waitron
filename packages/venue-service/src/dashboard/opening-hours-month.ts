@@ -24,7 +24,7 @@ import {
 } from "./hours-view.js";
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
-import { closedHatch } from "./period-colour-styles.js";
+import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
@@ -80,6 +80,7 @@ export class OpeningHoursMonthView extends LitElement {
     baseStyles,
     seasonTintStyles,
     fixedTitleStyles,
+    periodColourStyles,
     css`
       :host {
         display: block;
@@ -259,23 +260,8 @@ export class OpeningHoursMonthView extends LitElement {
       .gap {
         background: ${closedHatch};
       }
-      .segment[data-colour="red"] {
-        background: var(--wt-color-palette-red);
-      }
-      .segment[data-colour="amber"] {
-        background: var(--wt-color-palette-amber);
-      }
-      .segment[data-colour="grey"] {
-        background: var(--wt-color-palette-grey);
-      }
-      .segment[data-colour="blue"] {
-        background: var(--wt-color-palette-blue);
-      }
-      .segment[data-colour="green"] {
-        background: var(--wt-color-palette-green);
-      }
-      .segment[data-colour="purple"] {
-        background: var(--wt-color-palette-purple);
+      .segment {
+        background: var(--period-fill);
       }
       /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
          word kept for a screen reader; a station's date closed all day drops "No orders" there, its

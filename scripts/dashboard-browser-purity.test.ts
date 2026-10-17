@@ -38,6 +38,7 @@ const SUBPATHS: string[] = [
   "packages/venue-service/src/dashboard/calendar-day-box.ts",
   "packages/venue-service/src/dashboard/fixed-title.ts",
   "packages/venue-service/src/dashboard/calendar-colours.ts",
+  "packages/venue-service/src/dashboard/period-colour-styles.ts",
 ];
 
 function tsFiles(path: string): string[] {
