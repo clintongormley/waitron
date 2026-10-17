@@ -29,6 +29,12 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
       path: "/manage/opening-hours/view/year/window/seasons",
     },
     {
+      id: "venue-service:periods",
+      screen: "opening-hours",
+      labelKey: "period.title",
+      path: "/manage/opening-hours/view/year/window/periods",
+    },
+    {
       id: "venue-service:year",
       screen: "opening-hours",
       labelKey: "opening.view.year",

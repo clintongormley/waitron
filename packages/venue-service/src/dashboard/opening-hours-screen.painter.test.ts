@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
+import { userEvent } from "vitest/browser";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -42,6 +43,7 @@ function request(model: () => OpeningHoursModel, writes: unknown[] = []): Dashbo
     const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
     if (year) return yearRead(Number(year[1]));
     if (path.endsWith("/special-days")) return [];
+    if (path.endsWith("/menu-periods/painted-in")) return [];
     if (path.includes("/service-times?"))
       return {
         always: null,
@@ -757,6 +759,47 @@ describe("a viewer's painter", () => {
   });
 });
 
+async function periodsWindow(el: Screen) {
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods]"))
+    .not.toBeNull();
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "[data-test=calendar-window][data-window=periods]",
+  )!;
+  await modal.updateComplete;
+  const list = modal.querySelector("periods-list")!;
+  await expect.poll(() => list.shadowRoot?.querySelector("wt-data-table")).toBeTruthy();
+  const table =
+    list.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
+  await expect.poll(() => table.shadowRoot?.textContent ?? "").toContain("Dinner");
+  return { modal, list, table };
+}
+async function openPeriod(el: Screen) {
+  const { list, table } = await periodsWindow(el);
+  table
+    .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="period:p1"] button.row-activate')!
+    .click();
+  await list.updateComplete;
+  const dialog = list.shadowRoot!.querySelector("period-dialog")!;
+  expect(dialog, "period dialog opens").not.toBeNull();
+  await dialog.updateComplete;
+  return { list, dialog };
+}
+function screenGuard(app: () => PainterApp | undefined) {
+  return new NavigationGuard(window, {
+    isDirty: () => app()?.leave.coordinator.isDirty() ?? false,
+    request: (proceed, signal, destination) => {
+      const screen = app()!.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      return app()!.leave.coordinator.request({
+        scopes: screen.navigationScopes(new URL(destination)) ?? "all",
+        reason: "navigation",
+        proceed,
+        signal,
+      });
+    },
+  });
+}
+
 describe("the Calendar window address", () => {
   it("opens Seasons after loading and closes only its window pair", async () => {
     const el = await mount("/manage/opening-hours/view/year/year/2027/window/seasons");
@@ -854,6 +897,136 @@ describe("the Calendar window address", () => {
     } finally {
       guard.dispose();
     }
+  });
+  it("opens Periods after loading and closes only its window pair", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027/window/periods");
+    const { modal, list, table } = await periodsWindow(el);
+    expect(modal.getAttribute("aria-label")).toBe("Periods");
+    expect(list.readOnly).toBe(false);
+    expect(table.shadowRoot!.textContent).toContain("Lunch");
+    expect(list.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
+    const close = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=close-calendar-window]",
+    );
+    expect(close).not.toBeNull();
+    await close!.updateComplete;
+    expect(
+      close!.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
+    ).toBeGreaterThan(0);
+    close!.click();
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    expect(drawnView(el)).toBe("year");
+    expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+  });
+  it("a viewer's Periods window lists periods with nothing to change", async () => {
+    const el = await mount(
+      "/manage/opening-hours/view/year/window/periods",
+      undefined,
+      undefined,
+      true,
+    );
+    const { list, table } = await periodsWindow(el);
+    expect(list.readOnly).toBe(true);
+    expect(table.shadowRoot!.textContent).toContain("Lunch");
+    expect(list.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
+    expect(table.shadowRoot!.querySelector("[data-test=delete-period]")).toBeNull();
+    expect(list.shadowRoot!.querySelector("[data-test=delete-period]")).toBeNull();
+    expect(table.shadowRoot!.querySelector("button.row-activate")).toBeNull();
+  });
+  it("a station address keeps its Periods window and drops the station query", async () => {
+    const pushed = vi.spyOn(history, "pushState");
+    const el = await mount("/manage/opening-hours/view/year/window/periods?station=s1");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/year/window/periods");
+    expect(location.search).toBe("");
+    expect(pushed).not.toHaveBeenCalled();
+    await periodsWindow(el);
+  });
+  it("window-only Back and Forward retain the painter and its paint under Periods", async () => {
+    const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+    history.replaceState(null, "", base);
+    let app: PainterApp | undefined;
+    const guard = screenGuard(() => app);
+    try {
+      const mounted = await mountApp();
+      app = mounted.app;
+      const el = mounted.el;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      const before = painter.edited();
+      expect(before).toEqual({ departments: ["d1"], zones: [] });
+      await guard.write(`${base}/window/periods`);
+      await periodsWindow(el);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      history.back();
+      await expect.poll(() => location.pathname).toBe(base);
+      expect(painter.edited()).toEqual(before);
+      history.forward();
+      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+      await periodsWindow(el);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+    } finally {
+      guard.dispose();
+    }
+  });
+  it("closing the Periods window protects its period draft and keeps the painter's paint", async () => {
+    const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+    history.replaceState(null, "", base);
+    let app: PainterApp | undefined;
+    const guard = screenGuard(() => app);
+    try {
+      const mounted = await mountApp();
+      app = mounted.app;
+      const el = mounted.el;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      const before = painter.edited();
+      await guard.write(`${base}/window/periods`);
+      const { dialog } = await openPeriod(el);
+      dialog.shadowRoot!.querySelector<HTMLElement>("[name=name]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Brunch" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await dialog.updateComplete;
+      const closing = guard.write(base);
+      await choose(app, "keep");
+      await closing;
+      expect(location.pathname).toBe(`${base}/window/periods`);
+      expect(
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+      ).toBe("Brunch");
+      const discarding = guard.write(base);
+      await choose(app, "discard");
+      await discarding;
+      expect(location.pathname).toBe(base);
+      expect(el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+    } finally {
+      guard.dispose();
+    }
+  });
+  it("Escape in the window's period dialog closes only the dialog", async () => {
+    const el = await mount("/manage/opening-hours/view/year/window/periods");
+    const { list, dialog } = await openPeriod(el);
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("period-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await expect.poll(() => list.shadowRoot!.querySelector("period-dialog")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods]"),
+    ).not.toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/year/window/periods");
   });
 });
 

@@ -188,7 +188,7 @@ it("the period dialog's draft is asked about only under the list's draft parent"
     proceed() {},
   });
   await choose("keep");
-  expect(await asked).not.toBe("proceeded");
+  expect(await asked).toBe("kept");
   expect(
     await app.leave.coordinator.request({ scopes: [{}], reason: "navigation", proceed() {} }),
   ).toBe("proceeded");

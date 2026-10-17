@@ -395,6 +395,7 @@ it("declares the Calendar's Week as a search destination", async () => {
   );
   expect(destinations?.map((x) => x.path)).toEqual([
     "/manage/opening-hours/view/year/window/seasons",
+    "/manage/opening-hours/view/year/window/periods",
     "/manage/opening-hours/view/year",
     "/manage/opening-hours/view/month",
     "/manage/opening-hours/view/week",
