@@ -7626,7 +7626,7 @@ async function pickInOpenPanel(filter: WtCombobox, label: string): Promise<void>
   await filter.updateComplete;
 }
 
-test("Filters is drawn first, as an icon button named by its label, with its count and the panel it controls", async () => {
+test("Filters is drawn first, as an icon button named by its label and its count, with the panel it controls", async () => {
   const status = withStatus[1]!;
   const { el, root, trigger } = await filteredTable<RowS>(900, {
     rows: rowsS,
@@ -7639,10 +7639,10 @@ test("Filters is drawn first, as an icon button named by its label, with its cou
   expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
     search.getBoundingClientRect().left,
   );
-  expect(trigger.getAttribute("aria-label")).toBe("Filters");
+  expect(trigger.getAttribute("aria-label")).toBe("Filters 1");
   expect(trigger.querySelector('wt-icon[name="table-filter"]')).not.toBeNull();
   expect(trigger.querySelector(".filters-count")!.textContent).toBe("1");
-  expect(root.getElementById(trigger.getAttribute("aria-describedby")!)!.textContent).toBe("1");
+  expect(trigger.hasAttribute("aria-describedby")).toBe(false);
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
   expect(root.getElementById(trigger.getAttribute("aria-controls")!)).toBe(
     root.querySelector(".filters-panel"),

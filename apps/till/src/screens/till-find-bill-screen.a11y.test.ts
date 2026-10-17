@@ -88,7 +88,7 @@ describe.each(["light", "dark"] as const)("Find a bill %s", (theme) => {
       await expectNoA11yViolations(host);
       await userEvent.click(
         transactions.shadowRoot!.querySelector<HTMLElement>(
-          `[aria-label="${language === "en-GB" ? "Filters" : "Filtros"}"]`,
+          `[aria-label="${language === "en-GB" ? "Filters 1" : "Filtros 1"}"]`,
         )!,
       );
       await expectNoA11yViolations(host);

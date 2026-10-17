@@ -387,6 +387,16 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")!.textContent).toContain("1");
   });
 
+  it("names the drawer handle by what it draws, its word and its pending count", async () => {
+    const { el } = await mount({ lines: [pendingLine, servedLine] });
+    const handle = el
+      .shadowRoot!.querySelector("[data-open-drawer]")!
+      .shadowRoot!.querySelector("button")!;
+    await expect
+      .element(page.elementLocator(handle))
+      .toHaveAccessibleName(`${t("table.open_drawer")} 1`);
+  });
+
   it("hides the badge when nothing is pending", async () => {
     const { el } = await mount({ lines: [servedLine] });
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();

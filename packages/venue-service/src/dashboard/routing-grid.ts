@@ -4,7 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { isStationColour, type StationColour } from "@waitron/shared";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -88,6 +88,8 @@ const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b
  * row's own Every zone; or the same as it, drawn empty.
  */
 type CellStyle = "set" | "inherited" | "differs" | "blank";
+/** The cell's name around its station: "Drinks, Every zone: " and ", set here.". */
+type Spoken = { before: string; after: string };
 
 /**
  * A cell's content and the colour of the station it draws, if painted. `saved` is where the saved
@@ -308,6 +310,9 @@ export class RoutingGrid extends LitElement {
       td:not([data-station-colour]) > .cell:hover:not(:has(.cell-error)) {
         background: var(--wt-color-surface-lifted);
       }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
       .notes {
         display: flex;
         flex-direction: column;
@@ -499,13 +504,11 @@ export class RoutingGrid extends LitElement {
     return selectRoutingCell(this.#rules!, row, zoneId, this.#categoryOf(row), { skipOwn: true });
   }
 
-  /** Period lines and their marks show in the cell's button and are read as part of its name. */
-  #labelWithNote(label: string, ...notes: (string | null)[]): string {
-    return notes.reduce<string>(
-      (named, note) =>
-        note === null ? named : format("routing.cell_label_note", { label: named, note }),
-      label,
-    );
+  #spoken(row: string, zone: string, state: string): Spoken {
+    return {
+      before: format("routing.cell_before", { row, zone }),
+      after: format("routing.cell_after", { state }),
+    };
   }
 
   #fallbackSentence(stationId: string): string {
@@ -564,10 +567,10 @@ export class RoutingGrid extends LitElement {
       : html`<span class="cell-error" data-test="cell-error">${message}</span>`;
   }
 
-  /** `notes` are drawn inside the button, so the whole cell stays the target. */
+  /** `notes` are drawn inside the button, so the whole cell stays the target and they join its name. */
   #button(
     address: CellAddress,
-    label: string,
+    spoken: Spoken,
     target: RouteTarget | null,
     style: CellStyle,
     station: string,
@@ -575,7 +578,6 @@ export class RoutingGrid extends LitElement {
     notes: readonly (TemplateResult | null)[] = [],
   ) {
     const shownNotes = notes.filter((note) => note !== null);
-    const notesId = `notes-${encodeURIComponent(cellKey(address))}`;
     const blank = style === "blank";
     const look = {
       set: "",
@@ -583,19 +585,20 @@ export class RoutingGrid extends LitElement {
       differs: " inherited differs",
       blank: " inherited",
     }[style];
+    // WCAG 2.5.3: no aria-label; the name is what the cell draws, with its row, zone and state.
     return html`<button
       type="button"
       class="cell"
       data-test="routing-cell"
       data-target=${targetKey(target)}
       data-style=${style}
-      aria-label=${label}
-      aria-describedby=${shownNotes.length === 0 ? nothing : notesId}
       @click=${() => {
         this.editing = address;
       }}
     >
+      <span class="visually-hidden">${spoken.before}${blank ? station : ""}</span>
       <span class=${`station${look}`}>${blank ? "" : station}</span>
+      <span class="visually-hidden">${spoken.after}</span>
       ${(blank ? [] : lines).map((line) => {
         const dot = this.#colourOf(line.target);
         return html`<span class=${`line${look}`}
@@ -610,7 +613,7 @@ export class RoutingGrid extends LitElement {
               : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
           }`;
       })}
-      ${shownNotes.length === 0 ? nothing : html`<span class="notes" id=${notesId}>${shownNotes}</span>`}
+      ${shownNotes.length === 0 ? nothing : html`<span class="notes">${shownNotes}</span>`}
     </button>`;
   }
 
@@ -652,14 +655,10 @@ export class RoutingGrid extends LitElement {
               own?.target ?? inherited,
             );
     const text = this.#targetText(target);
-    const label = this.#labelWithNote(
-      format("routing.cell_label", {
-        row: this.#rowName(entry),
-        zone: zone.name,
-        value: text,
-        state: t(shown === null ? "routing.inherited" : "routing.set_here"),
-      }),
-      ...lines.flatMap((line) => [line.text, line.flagText ?? null]),
+    const spoken = this.#spoken(
+      this.#rowName(entry),
+      zone.name,
+      t(shown === null ? "routing.inherited" : "routing.set_here"),
     );
     const style: CellStyle =
       shown !== null
@@ -671,7 +670,7 @@ export class RoutingGrid extends LitElement {
             : period !== null && targetKey(target) !== targetKey(every)
               ? "differs"
               : "blank";
-    const content = this.#button(address, label, shown, style, text, lines, [
+    const content = this.#button(address, spoken, shown, style, text, lines, [
       this.#error(address),
       disabled === null
         ? null
@@ -714,20 +713,17 @@ export class RoutingGrid extends LitElement {
       };
     }
     const text = name ?? t("routing.no_station");
-    const label = this.#labelWithNote(
-      format("routing.cell_label", {
-        row: t("routing.all_categories"),
-        zone: t("routing.every_zone"),
-        value: text,
-        state: t("routing.default_state"),
-      }),
+    const spoken = this.#spoken(
+      t("routing.all_categories"),
+      t("routing.every_zone"),
+      t("routing.default_state"),
     );
     return {
       saved: target,
       colour,
       content: this.#button(
         address,
-        label,
+        spoken,
         target,
         "set",
         text,

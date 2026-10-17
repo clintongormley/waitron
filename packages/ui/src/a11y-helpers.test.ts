@@ -25,6 +25,10 @@ test("the same button is clean once aria-label restores its accessible name", as
 
 const COLOUR_READINGS = ["equalRatio", "fgAlpha", "colorParse"];
 
+const OVERLAPPED_TEXT =
+  '<div style="position:relative"><p style="color:var(--wt-color-text)">Overlapped words here</p>' +
+  '<div style="position:absolute;inset:0;background:var(--wt-color-surface);opacity:0.5"></div></div>';
+
 async function undecidedContrastReasons(): Promise<{ violations: string[]; reasons: string[] }> {
   const results = await axe.run(host);
   const reasons = results.incomplete
@@ -52,8 +56,16 @@ test.each(["light", "dark"] as const)("readable text passes (%s)", async (theme)
   await expectNoA11yViolations(host);
 });
 
-test("an undecided reading that is not about colour still passes", async () => {
+test("an undecided reading that is not about colour still passes: an empty field", async () => {
   await mountThemed('<wt-input label="Peso (kg)"></wt-input>', "light");
+  const { reasons } = await undecidedContrastReasons();
+  expect(reasons).toContain("emptyValue");
+  expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);
+  await expectNoA11yViolations(host);
+});
+
+test("an undecided reading that is not about colour still passes: an overlapping box", async () => {
+  await mountThemed(OVERLAPPED_TEXT, "light");
   const { reasons } = await undecidedContrastReasons();
   expect(reasons).toContain("bgOverlap");
   expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);

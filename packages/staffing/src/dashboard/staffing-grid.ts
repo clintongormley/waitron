@@ -498,11 +498,21 @@ export class StaffingGrid extends LitElement {
       "--lanes": String(lanes),
     });
   }
+  #drawn(block: StaffingBlock) {
+    return [
+      roleInitials(this.#role(block.staffRoleId)?.name ?? ""),
+      `×${block.headcount}`,
+      block.startsAt,
+      block.endsAt,
+    ] as const;
+  }
   #content(block: StaffingBlock) {
-    return html`<span class="text name"
-        >${roleInitials(this.#role(block.staffRoleId)?.name ?? "")}</span
-      ><span class="text">×${block.headcount}</span><span class="text">${block.startsAt}</span
-      ><span class="text">${block.endsAt}</span>`;
+    const [initials, headcount, startsAt, endsAt] = this.#drawn(block);
+    // The line breaks between spans draw nothing inside the flex block, but read as word breaks.
+    return html`<span class="text name">${initials}</span>
+      <span class="text">${headcount}</span>
+      <span class="text">${startsAt}</span>
+      <span class="text">${endsAt}</span>`;
   }
   #block(
     column: StaffingColumn,
@@ -513,13 +523,15 @@ export class StaffingGrid extends LitElement {
     const { start, end } = drawnSpan(block, this.cutover);
     const style = this.#position(start, end, place.lane, place.lanes);
     const colour = this.#role(block.staffRoleId)?.colour;
-    const label = `${column.label}, ${this.#describe(block)}`;
+    const title = `${column.label}, ${this.#describe(block)}`;
+    // The name ends with the drawn text as one run, so a spoken command naming it matches (WCAG 2.5.3).
+    const label = `${title}: ${this.#drawn(block).filter(Boolean).join(" ")}`;
     if (this.readOnly)
       return html`<div
         class="block"
         role="img"
         aria-label=${label}
-        title=${label}
+        title=${title}
         data-index=${index}
         data-colour=${colour ?? nothing}
         style=${style}
@@ -533,7 +545,7 @@ export class StaffingGrid extends LitElement {
       data-index=${index}
       data-colour=${colour ?? nothing}
       aria-label=${label}
-      title=${label}
+      title=${title}
       aria-haspopup="dialog"
       aria-controls="block-menu"
       aria-expanded=${expanded ? "true" : "false"}

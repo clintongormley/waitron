@@ -34,6 +34,11 @@ const codePartOf = (el: WtLanguageChooser) =>
   triggerOf(el).querySelector<HTMLElement>('[part="code"]')!;
 const namePartOf = (el: WtLanguageChooser) =>
   triggerOf(el).querySelector<HTMLElement>('[part="name"]')!;
+/** Only the drawn short code, without the visually hidden copy of the name beside it. */
+const codeTextOf = (el: WtLanguageChooser) =>
+  codePartOf(el).querySelector(".code-text")!.textContent!.trim();
+const hiddenNameOf = (el: WtLanguageChooser) =>
+  codePartOf(el).querySelector<HTMLElement>(".visually-hidden")!;
 /** The element holding focus, followed through every open shadow root. */
 function deepActive(): Element | null {
   let active = document.activeElement;
@@ -320,24 +325,27 @@ describe("wt-language-chooser", () => {
   it("shows the full name on the trigger and hides the short code, by default", async () => {
     const el = await mountChooser({ active: "en-GB", loadLocales: twoLocales });
     expect(nameOf(el)).toBe("English");
-    expect(codePartOf(el).textContent!.trim()).toBe("EN");
-    expect(codePartOf(el).getAttribute("aria-hidden")).toBe("true");
+    expect(codeTextOf(el)).toBe("EN");
+    await triggerOf(el).updateComplete;
+    await expect.element(page.elementLocator(innerTriggerOf(el))).toHaveAccessibleName("English");
     expect(getComputedStyle(namePartOf(el)).display).not.toBe("none");
     expect(getComputedStyle(codePartOf(el)).display).toBe("none");
 
     el.active = "es-ES";
     await el.updateComplete;
-    expect(codePartOf(el).textContent!.trim()).toBe("ES");
+    expect(codeTextOf(el)).toBe("ES");
   });
 
   it("names the trigger with the full language name, for a screen reader, on the inner button", async () => {
     const el = await mountChooser({ active: "es-ES", loadLocales: twoLocales });
     await triggerOf(el).updateComplete;
-    expect(innerTriggerOf(el).getAttribute("aria-label")).toBe("Español");
+    await expect.element(page.elementLocator(innerTriggerOf(el))).toHaveAccessibleName("Español");
 
     await open(el);
     await triggerOf(el).updateComplete;
-    expect(innerTriggerOf(el).getAttribute("aria-label")).toBe("Español (servidor)");
+    await expect
+      .element(page.elementLocator(innerTriggerOf(el)))
+      .toHaveAccessibleName("Español (servidor)");
   });
 
   it("a page's ::part rules swap the name for the code, and the trigger keeps the full name for a screen reader", async () => {
@@ -351,7 +359,11 @@ describe("wt-language-chooser", () => {
     expect(getComputedStyle(namePartOf(el)).display).toBe("none");
     expect(getComputedStyle(codePartOf(el)).display).not.toBe("none");
     expect(codePartOf(el).getBoundingClientRect().width).toBeGreaterThan(0);
-    expect(innerTriggerOf(el).getAttribute("aria-label")).toBe("English");
+    expect(codeTextOf(el)).toBe("EN");
+    expect(hiddenNameOf(el).getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    await expect
+      .element(page.elementLocator(innerTriggerOf(el)))
+      .toHaveAccessibleName("EN English");
   });
 
   it("the same ::part rules work from the shadow root of the app that holds it", async () => {
@@ -366,18 +378,21 @@ describe("wt-language-chooser", () => {
 
     expect(getComputedStyle(namePartOf(el)).display).toBe("none");
     expect(codePartOf(el).getBoundingClientRect().width).toBeGreaterThan(0);
-    expect(codePartOf(el).textContent!.trim()).toBe("ES");
-    expect(innerTriggerOf(el).getAttribute("aria-label")).toBe("Español");
+    expect(codeTextOf(el)).toBe("ES");
+    expect(hiddenNameOf(el).getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    await expect
+      .element(page.elementLocator(innerTriggerOf(el)))
+      .toHaveAccessibleName("ES Español");
   });
 
   it("shortens a language nobody has labelled from its code: the language subtag, or a bare code whole, uppercased", async () => {
     const el = await mountChooser({ active: "fr-FR", loadLocales: twoLocales });
-    expect(codePartOf(el).textContent!.trim()).toBe("FR");
+    expect(codeTextOf(el)).toBe("FR");
 
     el.active = "eu";
     await el.updateComplete;
     expect(nameOf(el)).toBe("eu");
-    expect(codePartOf(el).textContent!.trim()).toBe("EU");
+    expect(codeTextOf(el)).toBe("EU");
   });
 
   it("paints its menu from the surface and border tokens", async () => {

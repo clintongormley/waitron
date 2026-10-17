@@ -2,7 +2,7 @@ import { css } from "lit";
 
 /**
  * An icon-only `.icon-button`, pressed (`aria-pressed`) or open (`aria-expanded`), and the
- * `.icon-tooltip` inside it that shows its name on keyboard focus, and on hover where the primary
+ * `.icon-tooltip` inside it that shows its name (the Filters button's tooltip leaves out its count) on keyboard focus, and on hover where the primary
  * pointer can hover. The tooltip is `aria-hidden`: the button's `aria-label` is its name. Bind
  * `trackIconTooltip` to the button so Escape can hide the tooltip and a click on the tooltip does
  * not press the button.

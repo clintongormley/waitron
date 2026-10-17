@@ -3533,7 +3533,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
   `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen
-  using a required combobox without search is affected.
+  using a required combobox without search is affected. One way to fix it is moving the trigger to the
+  WAI-ARIA Authoring Practices' select-only combobox (`role="combobox"`, which can carry
+  `aria-required`); A775 kept the button and fixed only its name.
+  [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
 
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
@@ -5323,8 +5326,6 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
 - **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner).
-  **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
-  accessibility rule our screens fail, so it moves in its own PR with the fixes (A775).
   [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
 
 - **Bundled npm notices stop at a module-type-only package manifest.** Running

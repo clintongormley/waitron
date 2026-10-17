@@ -711,6 +711,34 @@ describe("till-station-queue", () => {
     });
   });
 
+  describe("an advanceable line's accessible name", () => {
+    const paella: StationQueueGroup = {
+      ...groupA,
+      items: [{ ...groupA.items[0]!, asServed: { allergens: { gluten: {} }, pending: false } }],
+    };
+
+    for (const view of ["kanban", "rail"] as const) {
+      it(`${view}: starts with the dish, carries its allergens and ends with the bump label`, async () => {
+        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+          groups: [paella],
+          view,
+          stationId: "st-1",
+        });
+        const line = el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-item="ti-1"]')!;
+        const advance = `${t("station.advance")} #5`;
+        const gluten = allergenName("gluten", currentLocale());
+        await expect
+          .element(page.elementLocator(line))
+          .toHaveAccessibleName(
+            new RegExp(`^2× Paella .*${gluten}.*${advance.replace("#", "\\#")}$`, "i"),
+          );
+        const hidden = line.querySelector(".visually-hidden")!;
+        expect(hidden.textContent).toBe(advance);
+        expect(hidden.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+      });
+    }
+  });
+
   describe("as-served diet badges", () => {
     const veganItem: StationQueueGroup = {
       kitchenNote: null,

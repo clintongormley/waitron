@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { format, formatDate, formatLongDate, formatWeekday } from "./hours-view.js";
+import { dateAroundDay, format, formatDate, formatLongDate, formatWeekday } from "./hours-view.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -56,4 +56,21 @@ it("names a weekday narrow or in full, and follows a change of language", () => 
   expect(formatLongDate("2026-10-12")).toBe("lunes, 12 de octubre de 2026");
   setLocale("en");
   expect(formatLongDate("2026-10-12")).toBe("Monday, 12 October 2026");
+});
+
+it("splits a date at its day number in each language's own order", () => {
+  const long = { weekday: "long", day: "numeric", month: "long", year: "numeric" } as const;
+  expect(dateAroundDay("2026-12-08", long)).toEqual({
+    before: "Tuesday, ",
+    after: " December 2026",
+  });
+  setLocale("es");
+  expect(dateAroundDay("2026-12-08", long)).toEqual({
+    before: "martes, ",
+    after: " de diciembre de 2026",
+  });
+  expect(dateAroundDay("2026-12-08", { day: "numeric", month: "long" })).toEqual({
+    before: "",
+    after: " de diciembre",
+  });
 });

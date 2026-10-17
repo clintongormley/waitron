@@ -176,6 +176,10 @@ async function routingGrid(el: PrepStationsScreen) {
   await grid?.updateComplete;
   return grid;
 }
+const containing = (words: string) => new RegExp(words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
+const spoken = (words: string) =>
+  new RegExp(`^${containing(words).source.replaceAll(", ", " ?, ")}$`);
 /** What a routing cell draws: its button's target and accessible name, and its refusal. */
 function gridCombo(grid: HTMLElement, row: string, zone: string) {
   const td = () =>
@@ -187,9 +191,8 @@ function gridCombo(grid: HTMLElement, row: string, zone: string) {
     get value() {
       return button()!.dataset.target!;
     },
-    get label() {
-      return button()!.getAttribute("aria-label")!;
-    },
+    /** The name a screen reader reads for the cell's button. */
+    named: () => expect.element(page.elementLocator(button()!)),
     get error() {
       return td().querySelector('[data-test="cell-error"]')?.textContent!.trim() ?? "";
     },
@@ -331,7 +334,7 @@ it.each(
       (await routingGrid(el))!.shadowRoot!.querySelector("table")!.getAttribute("aria-label"),
     ).toBe(locale === "en" ? "Routes" : "Rutas");
     const cocktails = gridCombo((await routingGrid(el))!, "c:cocktails", "every")!;
-    expect(cocktails.label).toContain("Drinks › Cocktails");
+    await cocktails.named().toHaveAccessibleName(containing("Drinks › Cocktails"));
     expect(cocktails.value).toBe("station:bar");
     await expectNoA11yViolations(el);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -1911,19 +1914,21 @@ it.each([
   {
     locale: "en",
     heading: "Category or product",
-    field: "All categories, Every zone: Bar, the default station",
+    field: "All categories, Every zone: Bar, the default station.",
     disable: "Delete",
   },
   {
     locale: "es",
     heading: "Categoría o producto",
-    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada",
+    field: "Todas las categorías, Todas las zonas: Bar, la estación predeterminada.",
     disable: "Eliminar",
   },
 ])(
   "uses category and Delete wording without deleted stations ($locale)",
   async ({ locale, heading, field, disable }) => {
     setLocale(locale);
+    // A cell's name is read from what it draws, so the grid's tab is the one shown.
+    history.replaceState(null, "", "/manage/prep-stations/view/routing");
     const disabled = { ...upstairs, active: false };
     const el = await mount(
       api({
@@ -1934,7 +1939,7 @@ it.each([
     expect(grid.shadowRoot!.querySelector("thead th")!.textContent!.trim()).toBe(heading);
     expect(q(el, '[data-test="delete-bar"]')!.textContent!.trim()).toBe(disable);
     expect(q(el, '[data-test="enable-upstairs"]')).toBeNull();
-    expect(gridCombo(grid, "all", "every")!.label).toBe(field);
+    await gridCombo(grid, "all", "every")!.named().toHaveAccessibleName(spoken(field));
   },
 );
 

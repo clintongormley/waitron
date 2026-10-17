@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { chooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillEnrolScreen } from "./till-enrol-screen.js";
 import type { TillApi } from "../api/client.js";
 
@@ -502,9 +502,10 @@ it("shows the language's full name at 1280 wide and its short code at 390, alway
   setLocale("es-ES");
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
   await flush(el);
-  const faces = await chooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!);
-  expect(faces.wide).toEqual({ shown: ["Español"], name: "Español" });
-  expect(faces.phone).toEqual({ shown: ["ES"], name: "Español" });
+  await expectChooserFaces(el.shadowRoot!.querySelector("wt-language-chooser")!, {
+    wide: { shown: ["Español"], name: "Español" },
+    phone: { shown: ["ES"], name: "ES Español" },
+  });
 });
 
 it("feeds its language chooser from the venue's locale list", async () => {

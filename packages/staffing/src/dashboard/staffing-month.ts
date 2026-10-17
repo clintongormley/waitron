@@ -12,7 +12,7 @@ import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateFormat, mondayFirst, utc } from "./format.js";
+import { dateAroundDay, dateFormat, mondayFirst, utc } from "./format.js";
 import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -203,6 +203,9 @@ export class StaffingMonthView extends LitElement {
       .count {
         flex: none;
         white-space: pre;
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
       /* A phone's width: the bar sits above its label, and today is marked on the number. */
       @container staffing-month (width < 560px) {
@@ -571,16 +574,8 @@ export class StaffingMonthView extends LitElement {
   ) {
     const isToday = day.date === today;
     const shown = this.#shown(day, chosen, names);
-    const label = [
-      cellLabel.format(utc(day.date)),
-      day.specialDay?.name ?? "",
-      day.closedAllDay ? t("staffing.month.closed") : "",
-      isToday ? t("staffing.month.today") : "",
-      ...shown.map(({ name, needed }) => `${name} ${needed}`),
-    ]
-      .filter(Boolean)
-      .join(", ");
-    const body = this.#dayBody(day, isToday, shown, largest);
+    const around = dateAroundDay(day.date, cellLabel);
+    const body = this.#dayBody(day, isToday, shown, largest, around);
     return html`<td
       data-date=${day.date}
       data-tint=${(day.seasonId && tints.get(day.seasonId)) || nothing}
@@ -592,7 +587,6 @@ export class StaffingMonthView extends LitElement {
           type="button"
           class="day"
           tabindex=${stop ? 0 : -1}
-          aria-label=${label}
           aria-current=${isToday ? "date" : nothing}
           @click=${() => {
             this.boxDate = day.date;
@@ -613,27 +607,40 @@ export class StaffingMonthView extends LitElement {
     isToday: boolean,
     shown: readonly { name: string; needed: number; unfilled: number | null }[],
     largest: number,
+    around: { before: string; after: string },
   ) {
+    const separator = html`<span class="visually-hidden">, </span>`;
+    const more = isToday || day.specialDay || day.closedAllDay || shown.length > 0;
     return html`
       <span class="top">
+        <span class="visually-hidden">${around.before}</span>
         <span class="date">${Number(day.date.slice(8))}</span>
+        <span class="visually-hidden">${around.after}${more ? ", " : ""}</span>
         ${isToday ? html`<span class="today">${t("staffing.month.today")}</span>` : nothing}
       </span>
       ${
         day.specialDay
-          ? html`<span class="special" data-test="special" title=${day.specialDay.name}
-              >${day.specialDay.name}</span
-            >`
+          ? html`${isToday ? separator : nothing}<span
+                class="special"
+                data-test="special"
+                title=${day.specialDay.name}
+                >${day.specialDay.name}</span
+              >`
           : nothing
       }
       ${
         day.closedAllDay
-          ? html`<span data-test="closed">${t("staffing.month.closed")}</span>`
+          ? html`${isToday || day.specialDay ? separator : nothing}<span data-test="closed"
+                >${t("staffing.month.closed")}</span
+              >`
           : nothing
       }
       ${shown.map(
-        ({ name, needed, unfilled }) =>
-          html`<span class="line" data-test="area-line">
+        ({ name, needed, unfilled }, index) =>
+          html`${index || isToday || day.specialDay || day.closedAllDay ? separator : nothing}<span
+              class="line"
+              data-test="area-line"
+            >
               <span
                 class="bar"
                 aria-hidden="true"
@@ -645,7 +652,7 @@ export class StaffingMonthView extends LitElement {
                 ><span class="name" data-test="area-name" title=${name}>${name}</span
                 ><span class="count" data-test="area-count">${` ${needed}`}</span></span
               > </span
-            >${unfilled !== null ? html`<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}`,
+            >${unfilled !== null ? html`${separator}<span class="unfilled" data-test="unfilled">${tf("staffing.rota.unfilled_count", { count: String(unfilled) })}</span>` : nothing}`,
       )}
     `;
   }

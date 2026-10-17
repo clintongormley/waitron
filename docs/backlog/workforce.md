@@ -226,7 +226,9 @@ formatting.** `stepMonth` and the first and last month in
 `add-dates-calendar.ts` and `opening-hours-month.ts` in `packages/venue-service/src/dashboard/`,
 and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, which the month and
 both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
-already shared through `@waitron/venue-service/dashboard/season-tint`). Next: move `stepMonth`
+already shared through `@waitron/venue-service/dashboard/season-tint`). The same file's
+`dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
+because venue-service's `exports` map does not include `hours-view.ts` (A775). Next: move `stepMonth`
 and the limits into a browser-safe venue-service file and export it.
 
 ## A703. Keeping a Calendar view's address words is a special case named in the app

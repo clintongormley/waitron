@@ -5043,11 +5043,11 @@ describe.each([
   ["signed out", signedOut],
 ] as const)("the banner's language chooser, %s", (_state, api) => {
   it.each([
-    [1280, "Español", "name"],
-    [390, "ES", "code"],
+    [1280, "Español", "name", "Español"],
+    [390, "ES", "code", "ES Español"],
   ] as const)(
     "at %ipx shows %s, names its trigger in full for a screen reader, and fits the window",
-    async (width, shown, part) => {
+    async (width, shown, part, accessibleName) => {
       const { el, unmount } = await mountInRealPage(api(), width, 844);
       try {
         const chooser = el.shadowRoot!.querySelector(
@@ -5059,10 +5059,11 @@ describe.each([
         const [visible, hidden] = part === "name" ? [name, code] : [code, name];
         expect(getComputedStyle(visible).display).not.toBe("none");
         expect(getComputedStyle(hidden).display).toBe("none");
-        expect(visible.textContent!.trim()).toBe(shown);
-        expect(trigger.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
-          "Español",
-        );
+        const drawn = part === "name" ? name : code.querySelector<HTMLElement>(".code-text")!;
+        expect(drawn.textContent!.trim()).toBe(shown);
+        await expect
+          .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
+          .toHaveAccessibleName(accessibleName);
         const banner = brandBanner(el)!;
         expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
         expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);

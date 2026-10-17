@@ -314,7 +314,7 @@ it("custom dates mark each field, keep the panel available, and never query unti
   await ready(el);
   await switchTab(el, "transactions");
   const grid = await ready(el, "transactions");
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters"]')!);
+  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 1"]')!);
   const change = (name: string, value: string) =>
     grid
       .querySelector(`[name="${name}"]`)!
@@ -333,7 +333,7 @@ it("custom dates mark each field, keep the panel available, and never query unti
   await el.updateComplete;
   expect(requests(fetcher, "/api/transactions")).toHaveLength(1);
   expect(
-    grid.shadowRoot!.querySelector('[aria-label="Filters"]')!.getAttribute("aria-expanded"),
+    grid.shadowRoot!.querySelector('[aria-label="Filters 1"]')!.getAttribute("aria-expanded"),
   ).toBe("true");
   change("to", "2026-10-25");
   await vi.waitFor(() => expect(requests(fetcher, "/api/transactions")).toHaveLength(2));
@@ -401,7 +401,7 @@ it("removing one chip keeps other filters; Clear all removes the date filter wit
     );
   await vi.waitFor(() => expect(requests(fetcher, "/api/transactions")).toHaveLength(4));
   await ready(el, "transactions");
-  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters"]')!);
+  await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>('[aria-label="Filters 2"]')!);
   await userEvent.click(grid.shadowRoot!.querySelector<HTMLElement>(".filters-clear-all")!);
   await vi.waitFor(() =>
     expect(requests(fetcher, "/api/transactions").at(-1)!.searchParams.get("preset")).toBe("any"),
@@ -553,6 +553,25 @@ it("reconnecting during the options read requests fresh options and ignores the 
   ]);
   expect(requests(fetcher, "/api/find-bill/options")).toHaveLength(2);
   expect(requests(fetcher)).toHaveLength(1);
+});
+it("names a filter chip by its drawn text, then what tapping it does", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const grid = table(el);
+  grid.chooseFilter("state", ["held"]);
+  await el.updateComplete;
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(
+      grid.querySelector('[data-chip="state"]')?.shadowRoot?.querySelector("button"),
+    ).toBeInstanceOf(HTMLButtonElement),
+  );
+  const chip = grid.querySelector('[data-chip="state"]')!;
+  const drawn = chip.textContent!.replace("×", "").trim();
+  expect(drawn).toMatch(/^State: \S/);
+  await expect
+    .element(page.elementLocator(chip.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleName(`${drawn}, Remove State filter`);
 });
 it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
   const { el, fetcher } = await mount();

@@ -7,16 +7,6 @@ their full text.
 
 - **#1179 (Vitest 5)** waits on Stryker (owner): see _A Vitest 5 retry has to re-measure mutation_
   below.
-- **axe-core 4.13 → 4.14 — held back in #1760 (A775, 2026-10-16).** 4.14.0's changelog: "**label-content-name-mismatch:** Enable rule by default (#5421)" — in 4.13.0 the
-  rule carried the `experimental` tag, which axe skips by default. On #1760's CI (run 38956342330)
-  it failed every package with accessibility tests that ran, except ui-core, whose only failure was
-  the helper self-test below; `packages/ui` did not run there (pnpm stopped after ui-core failed).
-  It failed most often on the shared `wt-combobox`; others
-  seen include the language chooser's trigger, the station queue's item buttons, the opening-hours
-  month's day cells and the data table's filters trigger (the full list is not yet taken). 4.14 also
-  reports an empty text box's undecided colour contrast as `emptyValue` instead of `bgOverlap`,
-  which the accessibility helpers' self-tests pin. It moves in its
-  own PR with those fixes (lane C, A775).
 
 ## Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed
 

@@ -65,6 +65,11 @@ const press = (el: StaffingMonthView, test: string) =>
   root(el).querySelector<HTMLElement>(`[data-test=${test}]`)!.click();
 const dayButton = (el: StaffingMonthView, date: string) =>
   cell(el, date).querySelector<HTMLButtonElement>("button.day");
+/** A day button's name, which comes from what it draws plus its visually hidden words. */
+const named = (button: HTMLElement) => expect.element(page.elementLocator(button));
+/** A whole name, word for word; a comma after a drawn block may read with a space before it. */
+const spoken = (words: string) =>
+  new RegExp(`^${words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll(", ", " ?, ")}$`);
 const dayBox = (el: StaffingMonthView) => root(el).querySelector("calendar-day-box");
 const boxButtons = (el: StaffingMonthView) =>
   [...(dayBox(el)?.querySelectorAll<HTMLElement>("wt-button") ?? [])].map((button) =>
@@ -389,7 +394,6 @@ describe("the Staffing view's month", () => {
           const day = td.querySelector<HTMLElement>(".day")!;
           return {
             attributes: [...td.attributes].map(({ name, value }) => `${name}=${value}`),
-            label: day.getAttribute("aria-label"),
             current: day.getAttribute("aria-current"),
             body: markup(day, "innerHTML"),
             bars: [...day.querySelectorAll<HTMLElement>("[data-test=bar]")].map((bar) => [
@@ -400,13 +404,28 @@ describe("the Staffing view's month", () => {
         }),
       };
     };
+    const days = () => [...root(el).querySelectorAll<HTMLElement>("tbody .day")];
+    const heard = (node: Node): string =>
+      node instanceof Element
+        ? node.getAttribute("aria-hidden") === "true"
+          ? ""
+          : [...node.childNodes].map(heard).join("")
+        : node instanceof Text
+          ? node.data
+          : "";
     const before = drawn();
+    const names = days().map((day) => heard(day).replace(/\s+/g, " ").trim());
+    for (const [index, day] of days().entries())
+      await named(day).toHaveAccessibleName(spoken(names[index]!));
     expect(before.cells.some(({ current }) => current === "date")).toBe(true);
     expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
     el.canWrite = true;
     await settled(el);
     expect(cell(el, "2026-12-02").querySelector("button.day")).not.toBeNull();
     expect(drawn()).toEqual(before);
+    expect(days()).toHaveLength(names.length);
+    for (const [index, day] of days().entries())
+      await named(day).toHaveAccessibleName(spoken(names[index]!));
   });
 
   it("speaks Spanish", async () => {
@@ -536,7 +555,7 @@ describe("the Staffing view's month", () => {
         params: { month: "2026-12", area: "department:dep-bar", week: "2026-11-30" },
       });
       const day = dayButton(el, "2026-12-04")!;
-      expect(day.getAttribute("aria-label")).toBe("Friday 4 December, Bar 2");
+      await named(day).toHaveAccessibleName(spoken("Friday 4 December, Bar 2"));
       expect(lines(el, "2026-12-04")).toEqual(["Bar 2"]);
       await openBox(el, "2026-12-04");
       await pressBoxButton(el, "Edit Winter's standard week");
@@ -585,7 +604,7 @@ describe("the Staffing view's month", () => {
         params: { month: "2026-12", area: "department:dep-bar" },
       });
       const day = dayButton(el, "2026-12-24")!;
-      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
+      await named(day).toHaveAccessibleName(spoken("Thursday 24 December, Christmas Eve, Bar 2"));
       expect(day.querySelector("[data-test=special]")!.textContent).toBe("Christmas Eve");
       await openBox(el, "2026-12-24");
       await pressBoxButton(el, "Edit Christmas Eve staffing");
@@ -602,18 +621,18 @@ describe("the Staffing view's month", () => {
         canWrite: true,
         params: { month: "2026-12", area: "department:dep-bar" },
       });
-      expect(dayButton(el, "2026-12-24")!.getAttribute("aria-label")).toBe(
-        "Thursday 24 December, Christmas Eve, Bar 2",
+      await named(dayButton(el, "2026-12-24")!).toHaveAccessibleName(
+        spoken("Thursday 24 December, Christmas Eve, Bar 2"),
       );
-      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
-        "Wednesday 2 December, Today, Bar 2",
+      await named(dayButton(el, "2026-12-02")!).toHaveAccessibleName(
+        spoken("Wednesday 2 December, Today, Bar 2"),
       );
-      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
-        "Monday 7 December, Closed",
+      await named(dayButton(el, "2026-12-07")!).toHaveAccessibleName(
+        spoken("Monday 7 December, Closed"),
       );
       const { el: every } = await mount({ canWrite: true });
-      expect(dayButton(every, "2026-12-24")!.getAttribute("aria-label")).toBe(
-        "Thursday 24 December, Christmas Eve, Restaurant 6, Bar 2, Kitchen 4",
+      await named(dayButton(every, "2026-12-24")!).toHaveAccessibleName(
+        spoken("Thursday 24 December, Christmas Eve, Restaurant 6, Bar 2, Kitchen 4"),
       );
     });
 
@@ -623,12 +642,42 @@ describe("the Staffing view's month", () => {
         canWrite: true,
         params: { month: "2026-12", area: "station:st-kitchen" },
       });
-      expect(dayButton(el, "2026-12-02")!.getAttribute("aria-label")).toBe(
-        "miércoles, 2 de diciembre, Hoy, Kitchen 4",
+      await named(dayButton(el, "2026-12-02")!).toHaveAccessibleName(
+        spoken("miércoles, 2 de diciembre, Hoy, Kitchen 4"),
       );
-      expect(dayButton(el, "2026-12-07")!.getAttribute("aria-label")).toBe(
-        "lunes, 7 de diciembre, Cerrado",
+      await named(dayButton(el, "2026-12-07")!).toHaveAccessibleName(
+        spoken("lunes, 7 de diciembre, Cerrado"),
       );
+    });
+
+    it("names today's special day with Today before its name, and an area's unfilled count after its number", async () => {
+      const { api } = fakeApi(async (month) => {
+        const read = staffingMonth(month);
+        read.today = "2026-12-24";
+        read.days.find((day) => day.date === "2026-12-24")!.areas[1]!.unfilled = 1;
+        return read;
+      });
+      for (const [locale, name] of [
+        ["en", "Thursday 24 December, Today, Christmas Eve, Bar 2, 1 unfilled"],
+        ["es", "jueves, 24 de diciembre, Hoy, Christmas Eve, Bar 2, 1 sin cubrir"],
+      ] as const) {
+        setLocale(locale);
+        const { el } = await mount({
+          api,
+          params: { month: "2026-12", area: "department:dep-bar" },
+        });
+        await named(dayButton(el, "2026-12-24")!).toHaveAccessibleName(spoken(name));
+      }
+    });
+
+    it("keeps a day's hidden words off the screen, at a phone's width and a desktop's", async () => {
+      for (const width of ["360px", "1000px"]) {
+        const { el } = await mount({ width });
+        const hidden = [...root(el).querySelectorAll<HTMLElement>("button.day .visually-hidden")];
+        expect(hidden.length).toBeGreaterThan(0);
+        for (const span of hidden)
+          expect(span.getBoundingClientRect().width, width).toBeLessThanOrEqual(1);
+      }
     });
 
     it("opens a special day without an area when the month shows every area", async () => {
@@ -653,7 +702,7 @@ describe("the Staffing view's month", () => {
         params: { month: "2026-12", area: "department:dep-bar" },
       });
       const day = dayButton(el, "2026-12-24")!;
-      expect(day.getAttribute("aria-label")).toBe("Thursday 24 December, Christmas Eve, Bar 2");
+      await named(day).toHaveAccessibleName(spoken("Thursday 24 December, Christmas Eve, Bar 2"));
       expect(day.tabIndex).toBe(-1);
       await openBox(el, "2026-12-24");
       await pressBoxButton(el, "Show Christmas Eve staffing");

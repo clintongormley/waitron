@@ -154,8 +154,9 @@ test("a block is a button drawn at its times, named by its day, staff role, head
   expect((at.top - box.top) / box.height).toBeCloseTo(3 / 24, 2);
   expect(at.height / box.height).toBeCloseTo(7.5 / 24, 2);
   expect(block(el, "tue").getAttribute("aria-label")).toBe(
-    "Tuesday, Head chef, 3 people, 09:00–16:30",
+    "Tuesday, Head chef, 3 people, 09:00–16:30: HC ×3 09:00 16:30",
   );
+  expect(block(el, "tue").getAttribute("title")).toBe("Tuesday, Head chef, 3 people, 09:00–16:30");
   expect(block(el, "tue").textContent).toContain("HC");
   expect(block(el, "tue").textContent).toContain("×3");
   expect(block(el, "tue").getAttribute("data-colour")).toBe("purple");
@@ -301,7 +302,7 @@ test("a block draws its staff role's initials, headcount and times on their own 
     tue: [{ staffRoleId: "dw", headcount: 2, startsAt: "13:00", endsAt: "16:30" }],
   });
   expect(block(el, "tue").getAttribute("aria-label")).toBe(
-    "Tuesday, Dishwasher, 2 people, 13:00–16:30",
+    "Tuesday, Dishwasher, 2 people, 13:00–16:30: Di ×2 13:00 16:30",
   );
   expect(
     [...block(el, "tue").querySelectorAll(".text")].map((line) => line.textContent!.trim()),
@@ -755,7 +756,9 @@ test("a column named in columnErrors marks its heading and describes its day", a
 test("a block whose staff role is unknown draws uncoloured and nameless rather than failing", async () => {
   const el = await grid({ mon: [{ ...headChef, staffRoleId: "gone" }] });
   expect(block(el, "mon").hasAttribute("data-colour")).toBe(false);
-  expect(block(el, "mon").getAttribute("aria-label")).toBe("Monday, 1 person, 09:00–16:30");
+  expect(block(el, "mon").getAttribute("aria-label")).toBe(
+    "Monday, 1 person, 09:00–16:30: ×1 09:00 16:30",
+  );
 });
 
 test("the text is Spanish under the Spanish locale", async () => {
@@ -766,10 +769,10 @@ test("the text is Spanish under the Spanish locale", async () => {
   expect(columnAction(el, "mon", "Seguir la temporada")).toBeDefined();
   const named = await grid({ tue: [headChef, sous] });
   expect(block(named, "tue", 0).getAttribute("aria-label")).toBe(
-    "Tuesday, Head chef, 1 persona, 09:00–16:30",
+    "Tuesday, Head chef, 1 persona, 09:00–16:30: HC ×1 09:00 16:30",
   );
   expect(block(named, "tue", 1).getAttribute("aria-label")).toBe(
-    "Tuesday, Sous chef, 2 personas, 09:00–15:00",
+    "Tuesday, Sous chef, 2 personas, 09:00–15:00: SC ×2 09:00 15:00",
   );
 });
 

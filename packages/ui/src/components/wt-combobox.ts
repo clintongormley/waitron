@@ -21,7 +21,7 @@ export interface ComboboxOption {
    * row that makes or opens something, rather than choosing a value, does not read as one more
    * item of the list. */
   primary?: true;
-  /** A second, muted line under the label in the open list, and the row's accessible description.
+  /** A second, muted line under the label in the open list; the row's name holds both lines.
    * Never shown on the closed trigger. */
   description?: string;
   /** Shown, matched by the search and reachable by the arrows, but never chosen or run. */
@@ -368,7 +368,7 @@ export class WtCombobox extends LitElement {
       primitive in this design system has one (design-system.md → Forms). */
   @property() name = "";
   // The host's aria-label names the field only when `label` is empty; with `hide-label` and a
-  // `label`, the `label` names it.
+  // `label`, the `label` stands first in the trigger's name.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
@@ -399,7 +399,7 @@ export class WtCombobox extends LitElement {
   /** Shown as the placeholder unless one is given, and kept as the trigger's description because a
    * placeholder disappears once something is chosen. */
   @property() hint = "";
-  /** Names the trigger by `label` without drawing it, and makes the field compact. */
+  /** Puts `label` first in the trigger's name without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   /** `"link"` draws the trigger as inline text, the chosen value followed by `actionLabel`, with no
    * field box, drawn label or chevron; `label` still names it, as hidden text before the value.
@@ -874,25 +874,20 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }
 
-  /** A described option is named by its label alone, so the description is read once, as the
-   * description, rather than run into the name. */
-  private renderOptionText(option: ComboboxOption, rowId: string) {
+  private renderOptionText(option: ComboboxOption) {
     const text = this.trimmedSearch ? closedText(option) : option.label;
     if (!option.description) {
       return html`<span class="option-label">${text}</span>`;
     }
     return html`<span class="option-text"
-      ><span class="option-label" id=${`${rowId}-label`}>${text}</span
-      ><span class="option-description" id=${`${rowId}-description`}
-        >${option.description}</span
-      ></span
+      ><span class="option-label">${text}</span
+      ><span class="option-description">${option.description}</span></span
     >`;
   }
 
   private renderOption(option: ComboboxOption, index: number) {
     const selected = this.isSelected(option);
     const rowId = `${this.listboxId}-${index}`;
-    const described = Boolean(option.description);
     // A search lists matches from every level, each shown by its full closed text, so none is indented.
     const depth = this.trimmedSearch ? 0 : (option.depth ?? 0);
     return html`
@@ -903,8 +898,6 @@ export class WtCombobox extends LitElement {
         role="option"
         aria-selected=${selected}
         aria-disabled=${option.disabled ? "true" : nothing}
-        aria-labelledby=${described ? `${rowId}-label` : nothing}
-        aria-describedby=${described ? `${rowId}-description` : nothing}
         @click=${(event: MouseEvent) => {
           this.activeIndex = index;
           this.activateOption(option, event);
@@ -920,7 +913,7 @@ export class WtCombobox extends LitElement {
             ? html`<wt-icon class="icon" name=${option.icon} aria-hidden="true"></wt-icon>`
             : nothing
         }
-        ${this.renderOptionText(option, rowId)}
+        ${this.renderOptionText(option)}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`
@@ -1019,8 +1012,13 @@ export class WtCombobox extends LitElement {
           class="field-control trigger"
           aria-haspopup="listbox"
           aria-expanded=${this.expanded}
-          aria-labelledby=${showLabel ? this.labelId : nothing}
-          aria-label=${triggerName || nothing}
+          aria-labelledby=${
+            showLabel
+              ? `${this.labelId} ${triggerId}`
+              : triggerName
+                ? `${this.labelId}-name ${triggerId}`
+                : nothing
+          }
           aria-invalid=${invalid}
           aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
           popovertarget="panel"
@@ -1028,6 +1026,11 @@ export class WtCombobox extends LitElement {
           @click=${this.onTriggerClick}
           @keydown=${this.onTriggerKeydown}
         >
+          ${
+            !showLabel && triggerName
+              ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
+              : nothing
+          }
           <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
           ${guard([this.reservedTexts], () =>
             this.reservedTexts.map(

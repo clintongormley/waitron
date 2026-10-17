@@ -9,6 +9,10 @@ afterEach(() => vi.restoreAllMocks());
 
 const COLOUR_READINGS = ["equalRatio", "fgAlpha", "colorParse"];
 
+const OVERLAPPED_TEXT =
+  '<div style="position:relative"><p style="color:var(--wt-color-text)">Overlapped words here</p>' +
+  '<div style="position:absolute;inset:0;background:var(--wt-color-surface);opacity:0.5"></div></div>';
+
 async function undecidedContrastReasons(
   host: HTMLElement,
 ): Promise<{ violations: string[]; reasons: string[] }> {
@@ -44,8 +48,20 @@ test.each(["light", "dark"] as const)("readable text passes (%s)", async (theme)
   await expectNoA11yViolations(host);
 });
 
-test("an undecided reading that is not about colour still passes", async () => {
+test("an undecided reading that is not about colour still passes: an empty field", async () => {
   const { host } = await mountWidget<WtInput>("wt-input", { label: "Peso (kg)" }, "light");
+  const { reasons } = await undecidedContrastReasons(host);
+  expect(reasons).toContain("emptyValue");
+  expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);
+  await expectNoA11yViolations(host);
+});
+
+test("an undecided reading that is not about colour still passes: an overlapping box", async () => {
+  const { host } = await mountWidget<HTMLDivElement>(
+    "div",
+    { innerHTML: OVERLAPPED_TEXT },
+    "light",
+  );
   const { reasons } = await undecidedContrastReasons(host);
   expect(reasons).toContain("bgOverlap");
   expect(reasons.filter((reason) => COLOUR_READINGS.includes(reason))).toEqual([]);
