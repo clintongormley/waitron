@@ -275,13 +275,14 @@ special-day write routes.
 **A753 (owner, 2026-10-16).** Points 2 and 3, one shared colour chooser and the Staff roles list
 naming who holds each role, landed in #NNNN.
 
-1. **More colours for periods** ("we need more colours for periods"). Periods, staff roles, menus
-   and special dates pick from the six calendar colours — red, amber, grey, blue, green, purple
-   (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts:6`; their tokens are the
-   `--wt-color-palette-*` pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette.
-   How many and which colours go to the owner first as a swatch board in both themes, each with
-   its text colour at readable contrast. Check whether a stored column or a CHECK lists the six
-   before adding any (a migration if so).
+1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
+   from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
+   `packages/venue-service/src/hours-types.ts:6`; their tokens are the `--wt-color-palette-*`
+   pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette. The owner's swatch board
+   is `docs/backlog/mockups/a753-calendar-colours/` (question in lane B's `questions.md`,
+   2026-10-17). Two CHECK constraints list the six, so growing it is a migration:
+   `menu_periods_colour_ck` (venue-service, latest snapshot `0055_snapshot.json`) and
+   `staff_roles_colour_ck` (staffing, `0001_snapshot.json`).
 
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
