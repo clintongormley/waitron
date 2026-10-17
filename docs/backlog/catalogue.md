@@ -845,6 +845,13 @@ focus to the "Scheduled versions" heading, which may no longer be there.
 
 ## A682. Translations: nothing required, every missing name reported, all languages side by side (owner, 2026-10-14)
 
+**Current checkpoint, 2026-10-17, after the unit answer:** unit option A is approved: required staff
+name and abbreviation, with every translated value optional. The [design addendum](../superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-reconciliation-spanish-and-approved-unit-option-a)
+records the remaining Spanish-text conflict. Keeping Spanish enabled and refusing a save for blank
+Spanish customer text are different rules; one worked example asks which the owner intends.
+Implementation and its detailed plan wait for that answer. The original points and earlier design
+checkpoint below remain as history; their pending unit A/B question is closed.
+
 - **A682. Translations: nothing required, every missing name reported, all languages side by side
   (owner, 2026-10-14).**
   1. No customer-facing name is required. A blank one falls back to the default-language name,

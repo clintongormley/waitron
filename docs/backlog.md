@@ -1011,12 +1011,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   removed; each is still deleted from its own row's ⋮. **Next action:** the owner says whether a bulk
   Delete is wanted.
 
-- **A682. Translations: nothing required, every missing name reported, all languages side by side
-  (owner, 2026-10-14).** No customer-facing name is required. The translations dialog shows one
-  field per enabled language on each row, so a name can be compared and filled in every language
-  at once. Translate all fills the same dialog; its "Use fix" button waits for this change.
-  [Design proposal](superpowers/specs/2026-10-17-a682-translations-design.md): choose units' fallback first;
-  separate required staff name/abbreviation recommended. Implementation and its plan await that choice.
+- **A682. Translations: every missing name reported, all languages side by side
+  (owner, 2026-10-14; clarification pending, 2026-10-17).** The translations dialog shows one
+  field per enabled language on each row. Translate all and its "Use fix" action use the same editor.
+  The owner approved required staff names and abbreviations for units, with optional translations.
+  The [design reconciliation](superpowers/specs/2026-10-17-a682-translations-design.md#2026-10-17-reconciliation-spanish-and-approved-unit-option-a)
+  asks whether Spanish must stay enabled or its customer text must be filled before saving.
+  Implementation and its detailed plan await that clarification.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

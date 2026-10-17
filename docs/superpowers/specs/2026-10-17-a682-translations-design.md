@@ -1,5 +1,11 @@
 # A682: optional translations, one editor, deliberate saves
 
+**Current status (2026-10-17, after 16:25): unit option A is approved.** Full design approval,
+implementation and the detailed plan await only the Spanish-text conflict in the
+[reconciliation addendum](#2026-10-17-reconciliation-spanish-and-approved-unit-option-a).
+The original proposal below is preserved as history, including its superseded pending unit question
+and initial status. The addendum records the current decisions and author's recommendation.
+
 **Status: NOT APPROVED. Product implementation and its detailed plan wait for the units choice below.** Design only, based on source
 at `6a4331b4d5e038ecdfc482318eaa6c9e5a5abefe`, read on 2026-10-17. Recommendations below are proposals, not owner approval.
 The existing default-switch test passed unchanged: `pnpm --filter @waitron/catalogue exec vitest run src/content-languages.test.ts
@@ -180,3 +186,77 @@ Future acceptance: the unit example; nine kinds/blank defaults; clear/disabled t
 personal edits; fresh/stale fixes on complete rows; unchanged publication/fiscal/snapshot rows and reprints. Use distinct audience
 fixture names; look in EN/ES, both themes, phone and desktop. In the future PR update `products.md`, `design-system.md`, operator
 wording and the backlog, retaining historical Translate all text with a dated pointer.
+
+## 2026-10-17 reconciliation: Spanish and approved unit option A
+
+Spanish being required everywhere leaves one visible conflict to settle: keeping a language enabled
+does not establish whether you must enter its customer text before saving. The decisions below
+replace the historical pending unit question; they do not approve the full design.
+
+At 16:15, asked about a Spanish venue with an unknown province, you answered, “I think Spanish is
+required everywhere”. The watcher reads this as Spanish names required regardless of province,
+with Catalonia's extra rule unchanged. That reading needs the distinction below before it can
+become a requirement to refuse saves.
+
+At 16:25, you approved **unit option A**: add a required language-independent staff name and
+abbreviation; every translated name and abbreviation is optional. You can clear both translated
+maps completely and retain the staff pair for displays and future snapshots. Option B remains in
+the original proposal only as a historical alternative. The A/B choice is closed.
+
+For example, give a unit staff name `Kilogramo` and staff abbreviation `kg`, then clear both
+translated maps to `{}`. Under approved A, saving that unit is allowed. With no translated values,
+displays retain `Kilogramo` / `kg`, and new receipt snapshots can retain staff `kg` through the
+proposed fallback. The report still flags its missing translated name and abbreviation in each
+enabled language, counting the unit once per language. Assess the pre-live migration/reset
+implications later; this addendum makes no verdict about them.
+
+### Enabled languages and entered text are separate requirements
+
+Reading [products.md, The three names](../../developers/products.md#the-three-names): staff and
+kitchen product/variant names are plain text, not language maps. Customer-facing names are language
+maps. A Spanish-looking staff name does not fill the Spanish customer field, and no Spanish kitchen
+map exists to require. Keep those audiences separate.
+
+Reading [The translation gap report](../../developers/products.md#the-translation-gap-report): a
+content-language save must retain the area's required-enabled languages, but “nothing makes that
+language's text complete”. Reading [Content languages per region](../../developers/products.md#content-languages-per-region):
+the wording describes languages Waitron keeps enabled and distinguishes existing venues' effective
+rules from their stored language list. These are documentation readings, not a new runtime experiment
+or legal finding. The 16:15 answer extends the Spanish requirement to an unknown province; it does
+not by itself settle the separate customer-text save rule.
+
+Take a Spanish venue whose province is unknown, with Spanish and English enabled and English as
+default. You enter staff `Patatas`, kitchen `PAPAS`, customer English `Potatoes`, and leave customer
+Spanish blank. These are proposed outcomes, not a runtime demonstration:
+
+| Interpretation                               | What happens when you save this product                                                                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keep Spanish enabled and report missing text | Save succeeds. The Spanish customer-name gap remains listed. Staff still see `Patatas`, the kitchen sees `PAPAS`, and English customer presentation uses `Potatoes`.                  |
+| Require entered Spanish customer text        | Save is refused until you explicitly enter Spanish customer text, even though Spanish is enabled and the staff name is `Patatas`. This adds validation beyond the original A682 rule. |
+
+**One owner question: for this `Patatas` / `PAPAS` / English `Potatoes` example with Spanish blank,
+does “Spanish is required everywhere” mean refusing the product save until you enter Spanish
+customer text, or keeping Spanish enabled and allowing the save while reporting the gap?**
+
+Author's recommendation, pending your answer: preserve A682's optional customer-text rule and
+require Spanish to stay enabled everywhere in Spain, including an unknown province. Report every
+missing enabled-language value, including Spanish and the default. This fits your later unit A
+answer, which explicitly allows clearing every translation. It is a recommendation, not approval.
+Do not copy staff names into translation maps or treat generated text as a compliance fix.
+
+If you choose stronger entered-text validation, the design must settle its exact domains and fields:
+product and variant customer names; options-list and options-label customer names; extras-list
+customer names; menu/root, section and included-menu override names; and whether unit translated
+names or abbreviations are covered despite approved A. It must also settle whether the rule refuses
+working-editor saves, publication, or both, including edits to existing incomplete items. Those are
+consequences to resolve in the design, not an approved policy or additional owner questions here.
+
+Under either interpretation, keep all other enabled languages reachable within the existing
+200-language bound. Switching the default stays free of completeness checks, and Catalonia keeps
+its additional Catalan-enabled rule. Existing venues' missing text remains listed; missing text
+must not block sales or boot, or trigger silent backfill. Never rewrite recorded snapshots, old
+fiscal data, published documents or hashes. Any new fallback applies to future snapshots only.
+
+Reuse the editor, Translate all, Use fix and deliberate-save design above unchanged. Full design
+approval, implementation and the detailed plan wait for this one visible conflict. No H2 permission
+is requested or granted here.
