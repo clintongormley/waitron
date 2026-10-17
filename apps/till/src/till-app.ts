@@ -4909,7 +4909,7 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
     const id = this.#store.id;
@@ -4938,7 +4938,7 @@ export class TillApp extends LitElement {
       const invoice = this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : undefined;
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        this.#store.kitchenNote !== null
+        guests !== undefined
           ? await this.api.recordSale(
               lines,
               tender,
@@ -4946,13 +4946,24 @@ export class TillApp extends LitElement {
               undefined,
               invoice,
               language,
-              this.#store.kitchenNote,
+              this.#store.kitchenNote ?? undefined,
+              guests,
             )
-          : language !== undefined
-            ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
-            : invoice
-              ? await this.api.recordSale(lines, tender, id, undefined, invoice)
-              : await this.api.recordSale(lines, tender, id);
+          : this.#store.kitchenNote !== null
+            ? await this.api.recordSale(
+                lines,
+                tender,
+                id,
+                undefined,
+                invoice,
+                language,
+                this.#store.kitchenNote,
+              )
+            : language !== undefined
+              ? await this.api.recordSale(lines, tender, id, undefined, invoice, language)
+              : invoice
+                ? await this.api.recordSale(lines, tender, id, undefined, invoice)
+                : await this.api.recordSale(lines, tender, id);
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
@@ -5080,6 +5091,7 @@ export class TillApp extends LitElement {
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
             ...(detail.allowOffline ? { allowOffline: true } : {}),
+            ...(detail.guests === undefined ? {} : { guests: detail.guests }),
             ...(detail.simulationOutcome === undefined
               ? {}
               : { simulationOutcome: detail.simulationOutcome }),
@@ -5941,7 +5953,7 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
     const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
@@ -5949,9 +5961,11 @@ export class TillApp extends LitElement {
     try {
       const language = this.#chosenReceiptLanguage(id);
       const result =
-        language === undefined
-          ? await this.api.collectOrder(id, tender)
-          : await this.api.collectOrder(id, tender, language);
+        guests !== undefined
+          ? await this.api.collectOrder(id, tender, language, guests)
+          : language === undefined
+            ? await this.api.collectOrder(id, tender)
+            : await this.api.collectOrder(id, tender, language);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
@@ -11528,7 +11542,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.submitting = true;
-    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
@@ -11543,9 +11557,23 @@ export class TillApp extends LitElement {
       )
         return;
       // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
-      this.result = presented
-        ? await this.api.collectOrder(id, tender)
-        : await this.api.recordSale([], tender, id);
+      this.result =
+        guests === undefined
+          ? presented
+            ? await this.api.collectOrder(id, tender)
+            : await this.api.recordSale([], tender, id)
+          : presented
+            ? await this.api.collectOrder(id, tender, undefined, guests)
+            : await this.api.recordSale(
+                [],
+                tender,
+                id,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                guests,
+              );
       this.#showTicket(id, bill?.receiptAvailable !== true);
     } catch (error) {
       paidMeanwhile = isPaymentsReceived(error);
@@ -12319,6 +12347,8 @@ export class TillApp extends LitElement {
         .receiptLanguages=${this.receiptLanguages}
         .fullInvoices=${this.fullInvoices}
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
+        .asksGuests=${this.invoiceChoice?.orderId !== this.#store.id}
+        .receiptGuests=${null}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
         .makeAtStations=${this.stations}

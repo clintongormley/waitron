@@ -9817,6 +9817,33 @@ describe("till-app", () => {
       expect(tenderPay(el).shadowRoot!.querySelector(".card-outcome")).toBeNull();
     });
 
+    it("sends the receipt's guests to the reader payment, and again on the retry after a decline", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ getTill: withReaderTill(), pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      const stepper = tenderPay(el).shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >('[name="guests"]')!;
+      await stepper.updateComplete;
+      const input = stepper.shadowRoot!.querySelector("input")!;
+      input.value = "3";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flush(el);
+
+      tapPayCard(el);
+      await flush(el);
+      await tenderPay(el).updateComplete;
+      expect(pay).toHaveBeenCalledOnce();
+      expect(pay.mock.calls[0]![0]).toMatchObject({ id: c.store.id, guests: 3 });
+
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!.click();
+      await flush(el);
+      expect(pay).toHaveBeenCalledTimes(2);
+      expect(pay.mock.calls[1]![0]).toMatchObject({ id: c.store.id, guests: 3 });
+    });
+
     it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });
@@ -11176,6 +11203,30 @@ describe("till-app", () => {
       });
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
       expect(waiting.mock.calls.length).toBeGreaterThan(reads);
+    });
+
+    it("Find a bill sends no guests, so the server keeps its own", async () => {
+      const { el } = await mountApp();
+      await toCounter(el);
+      const shell = el.shadowRoot!.querySelector<HTMLElement>("till-shell")!;
+      shell.shadowRoot!.querySelector<HTMLElement>(".find-bill")!.click();
+      await el.updateComplete;
+      const dialog = await selectDebt(el);
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(vi.mocked(currentApi.collectOrder).mock.calls).toStrictEqual([
+        ["wo-debt", { method: "cash", amount: "30.00" }],
+      ]);
     });
 
     it.each([true, false])(
