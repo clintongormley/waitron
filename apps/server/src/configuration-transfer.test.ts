@@ -6697,7 +6697,7 @@ describe("seasons in a configuration transfer", () => {
 
   async function seasonsOf(db: typeof suite.db, located: { locationId: string }) {
     return db
-      .select({ name: seasons.name, startsOn: seasons.startsOn })
+      .select({ name: seasons.name, startsOn: seasons.startsOn, colour: seasons.colour })
       .from(seasons)
       .where(eq(seasons.locationId, located.locationId))
       .orderBy(seasons.startsOn);
@@ -6818,7 +6818,7 @@ describe("seasons in a configuration transfer", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(seasons)
-        .set({ name: "Harvest", startsOn: "09-15" })
+        .set({ name: "Harvest", startsOn: "09-15", colour: "teal" })
         .where(and(eq(seasons.locationId, scope.locationId), eq(seasons.name, "Autumn")));
       const ids = new Map(
         (
@@ -6897,10 +6897,10 @@ describe("seasons in a configuration transfer", () => {
     });
 
     expect(exported).toEqual([
-      { name: "Spring", startsOn: "03-01" },
-      { name: "Summer", startsOn: "06-01" },
-      { name: "Harvest", startsOn: "09-15" },
-      { name: "Winter", startsOn: "12-01" },
+      { name: "Spring", startsOn: "03-01", colour: "green" },
+      { name: "Summer", startsOn: "06-01", colour: "amber" },
+      { name: "Harvest", startsOn: "09-15", colour: "teal" },
+      { name: "Winter", startsOn: "12-01", colour: "blue" },
     ]);
     expect(await seasonsOf(targetSuite.db, target)).toEqual(exported);
     expect(await saturdays(targetSuite.db)).toEqual([
