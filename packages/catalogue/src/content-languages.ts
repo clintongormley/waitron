@@ -87,13 +87,11 @@ export async function readContentTranslationCandidates(
   // `product`, `variant`, `option_list`, `option_label`, `extra_list`, `menu_section` and
   // `menu_include` are the kinds whose customer-facing name is optional, so the query filters a
   // wholly-absent one (null or {}) out of them: absent is not a gap, only a partly filled map is.
-  // The unfiltered `unit` kind has no optional customer name; its name stays required.
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
   // drizzle column mapping runs over the result.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
   // rows and the variant branch to the rest; otherwise each variant would be counted twice. A
-  // disabled variant is on no menu offer, so a language it lacks reaches no diner and must
-  // not block a change of default.
+  // disabled variant is on no menu offer.
   // A `menu_include` is the folder an include shows: the included menu's names with the ones the
   // include fixes in their place. It counts while the include shows its sections directly too,
   // because switching the folder back on restores the fixed names. An include fixing no name
@@ -187,8 +185,6 @@ export function contentLanguagesOr(
 export async function writeContentLanguages(
   tx: Transaction,
   config: ContentLanguages,
-  fallbackLanguage = config.defaultLanguage,
-  additionalGaps?: (tx: Transaction, language: string) => Promise<{ kind: string; id: string }[]>,
   requiredLanguages: readonly string[] = [],
 ): Promise<void> {
   const defaultLanguage = contentLanguageCode(config.defaultLanguage);
@@ -202,18 +198,6 @@ export async function writeContentLanguages(
   }
   const missing = requiredLanguages.find((language) => !languages.includes(language));
   if (missing !== undefined) throw new AppError("content.language_required", { language: missing });
-  const previous = await readContentLanguages(tx, fallbackLanguage);
-  if (previous.defaultLanguage !== defaultLanguage) {
-    const gaps = [
-      ...(await listContentTranslationGaps(tx, defaultLanguage)),
-      ...((await additionalGaps?.(tx, defaultLanguage)) ?? []),
-    ];
-    if (gaps.length > 0)
-      throw new AppError("content.default_missing", {
-        language: defaultLanguage,
-        count: gaps.length,
-      });
-  }
   const values = {
     defaultLanguage,
     languages: [defaultLanguage, ...languages.filter((language) => language !== defaultLanguage)],

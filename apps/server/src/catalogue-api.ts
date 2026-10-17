@@ -953,13 +953,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         languages: body.languages as string[],
       };
       await gated(c, sessionId, (tx) =>
-        writeContentLanguages(
-          tx,
-          config,
-          deps.venueLocale ?? FALLBACK_LOCALE,
-          deps.contentTranslationGaps,
-          deps.contentLanguageRules?.required,
-        ),
+        writeContentLanguages(tx, config, deps.contentLanguageRules?.required),
       );
       return c.body(null, 204);
     }),

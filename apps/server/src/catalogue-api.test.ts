@@ -680,6 +680,37 @@ describe("content-language configuration", () => {
     );
   });
 
+  it("switches the default over a partial customer name without copying staff or kitchen text", async () => {
+    const app = mountApp("en-GB");
+    const catalogueId = await createCatalogueVia(app, "Default switch menu");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Patatas",
+        kitchenName: "PAPAS",
+        customerName: { en: "Potatoes" },
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const before = (await suite.db.execute(sql`select * from products where id = ${id}`)).rows;
+    const response = await send(app, "PUT", "/management-api/content-languages", {
+      body: { defaultLanguage: "es", languages: ["en", "es"] },
+    });
+    expect(response.status).toBe(204);
+    expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual({
+      defaultLanguage: "es",
+      languages: ["es", "en"],
+    });
+    expect((await suite.db.execute(sql`select * from products where id = ${id}`)).rows).toEqual(
+      before,
+    );
+  });
+
   it("exposes language choices to public content readers without a management session", async () => {
     const app = mountApp("en-GB");
     const response = await send(app, "GET", "/api/content-languages", { cookie: null });

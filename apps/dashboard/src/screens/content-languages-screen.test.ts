@@ -470,13 +470,13 @@ describe("content languages screen", () => {
     const client = api({
       updateContentLanguages: vi
         .fn()
-        .mockRejectedValueOnce({ code: "content.default_missing" })
+        .mockRejectedValueOnce({ code: "content.languages_invalid" })
         .mockResolvedValue(undefined),
     });
     const el = await mount(client);
     q(el, "[data-test=set-default-de]")!.click();
     await vi.waitFor(() =>
-      expect(saveMessage(el)?.textContent).toBe(codeMessage("content.default_missing")),
+      expect(saveMessage(el)?.textContent).toBe(codeMessage("content.languages_invalid")),
     );
     expect(el.shadowRoot!.querySelectorAll("[data-error]")).toHaveLength(1);
     expect(saveMessage(el)!.getAttribute("role")).toBe("alert");

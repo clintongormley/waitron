@@ -168,46 +168,54 @@ const placeholders = (el: Form) => ({
 /** What a customer reading in `language` sees as the folder's name once `el` saves. */
 function customerSees(el: Form, language: string): string {
   const input = submitted(el) as IncludeFolderInput;
-  const { names } = folderPresentation(own, { showAsFolder: true, overrides: input.overrides! });
+  const { names } = folderPresentation(own, {
+    showAsFolder: true,
+    overrides: {
+      ...input.overrides,
+      names: Object.fromEntries(
+        Object.entries(input.overrides?.names ?? {}).filter(([, text]) => text.trim() !== ""),
+      ),
+    },
+  });
   return resolveMenuText(names, "Drinks list", { kind: "customer", language }, el.languages).text;
 }
-it("hints an emptied language with the default language's name the customer then reads", async () => {
+it("hints a cleared override with its inherited language before the default", async () => {
   const el = await includeForm();
   await type(el, "names-es", "");
-  expect(placeholders(el).es).toBe("Bar");
-  expect(customerSees(el, "es")).toBe("Bar");
+  expect(placeholders(el).es).toBe("Bebidas");
+  expect(customerSees(el, "es")).toBe("Bebidas");
 });
-it("hints every emptied name with the included menu's staff name, which the customer then reads", async () => {
+it("hints every cleared override with the included menu's inherited names", async () => {
   const el = await includeForm();
   await type(el, "names-en", "");
   await type(el, "names-es", "");
-  expect(placeholders(el)).toEqual({ en: "Drinks list", es: "Drinks list" });
-  expect(customerSees(el, "en")).toBe("Drinks list");
-  expect(customerSees(el, "es")).toBe("Drinks list");
+  expect(placeholders(el)).toEqual({ en: "Drinks", es: "Bebidas" });
+  expect(customerSees(el, "en")).toBe("Drinks");
+  expect(customerSees(el, "es")).toBe("Bebidas");
 });
-it("hints nothing for an emptied default-language name while another language keeps one, a save refused as before", async () => {
+it("hints inherited default text while another language keeps its name", async () => {
   const el = await includeForm();
   await type(el, "names-en", "");
-  expect(placeholders(el).en).toBe("");
+  expect(placeholders(el).en).toBe("Drinks");
   expect(submitted(el)).toEqual({
     showAsFolder: true,
     overrides: { names: { en: "" }, image: "folder-photo" },
   });
 });
-it("hints nothing when every shown name is emptied but the included menu keeps one in a language the venue does not show", async () => {
+it("keeps inherited enabled-language hints when the menu also has disabled-language text", async () => {
   const el = await includeForm({
     own: { ...own, names: { ...own.names, fr: "Boissons" } },
   });
   await type(el, "names-en", "");
   await type(el, "names-es", "");
-  expect(placeholders(el)).toEqual({ en: "", es: "" });
+  expect(placeholders(el)).toEqual({ en: "Drinks", es: "Bebidas" });
 });
-it("follows live edits: a name typed into the default language becomes the other languages' hint", async () => {
+it("prefers inherited language text over a live default override", async () => {
   const el = await includeForm();
   await type(el, "names-en", "");
   await type(el, "names-es", "");
   await type(el, "names-en", "Bar counter");
-  expect(placeholders(el).es).toBe("Bar counter");
+  expect(placeholders(el).es).toBe("Bebidas");
 });
 const errorText = (el: Form, id: string) =>
   el.shadowRoot!.querySelector(`#${id}`)!.textContent!.trim();
@@ -321,4 +329,20 @@ it("keeps the dialog open while its photo picker is open", async () => {
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
       .disabled,
   ).toBe(true);
+});
+
+it("hints inherited names while a cleared default override and an optional Spanish-only map remain savable", async () => {
+  const el = await includeForm();
+  await type(el, "names-en", "");
+  const input = field(el, "names-en")!;
+  await input.updateComplete;
+  const native = input.shadowRoot!.querySelector("input")!;
+  expect(native.required).toBe(false);
+  expect(native.value).toBe("");
+  expect(native.placeholder).toBe("Drinks");
+  expect(field(el, "names-es")!.placeholder).toBe("Bebidas");
+  expect(submitted(el)).toEqual({
+    showAsFolder: true,
+    overrides: { names: { en: "" }, image: "folder-photo" },
+  });
 });

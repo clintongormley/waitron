@@ -307,7 +307,7 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
   it("renders a refused save accessibly", async () => {
     const { el, host } = await mountWidget<ContentLanguagesScreen>(
       "dashboard-content-languages-screen",
-      { api: stubApi(LOADED, () => Promise.reject({ code: "content.default_missing" })) },
+      { api: stubApi(LOADED, () => Promise.reject({ code: "content.languages_invalid" })) },
       theme,
     );
     await flush(el);

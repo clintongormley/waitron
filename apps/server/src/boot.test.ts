@@ -3005,12 +3005,12 @@ describe("startServer — what a trading boot wires behind its management routes
     }
   }, 60_000);
 
-  it("counts a library image with no name in the new default language as a gap, refusing the change", async () => {
+  it("changes the default with a real library image gap and preserves its metadata", async () => {
     const current = (await (
       await fetch(`http://127.0.0.1:${port}/api/content-languages`)
-    ).json()) as { defaultLanguage: string };
+    ).json()) as { defaultLanguage: string; languages: string[] };
     const image = await samplePreparedImage({ width: 9, format: "png" });
-    await liveFixture(port, (tx) =>
+    const saved = await liveFixture(port, (tx) =>
       uploadImage(
         tx,
         {
@@ -3021,16 +3021,36 @@ describe("startServer — what a trading boot wires behind its management routes
       ),
     );
 
-    const response = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
-      method: "PUT",
-      headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-      body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr"] }),
-    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
+        method: "PUT",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr", "es"] }),
+      });
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "content.default_missing", params: { language: "fr", count: 1 } },
-    });
+      expect(response.status).toBe(204);
+      expect(await (await fetch(`http://127.0.0.1:${port}/api/content-languages`)).json()).toEqual({
+        defaultLanguage: "fr",
+        languages: ["fr", "es"],
+      });
+      const stored = await fetch(
+        `http://127.0.0.1:${port}/management-api/images/${saved.image.id}`,
+        {
+          headers: { cookie },
+        },
+      );
+      expect(stored.status).toBe(200);
+      expect(((await stored.json()) as { image: { names: unknown } }).image.names).toEqual({
+        [current.defaultLanguage]: "Pan",
+      });
+    } finally {
+      const restored = await fetch(`http://127.0.0.1:${port}/management-api/content-languages`, {
+        method: "PUT",
+        headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
+        body: JSON.stringify(current),
+      });
+      expect(restored.status).toBe(204);
+    }
   }, 60_000);
 
   it("answers the content-language rules it worked out from the venue's country at boot", async () => {
@@ -3038,9 +3058,8 @@ describe("startServer — what a trading boot wires behind its management routes
       headers: { cookie },
     });
     expect(response.status).toBe(200);
-    // A Spanish venue with no province: Spain's official languages, nothing required.
     expect(await response.json()).toEqual({
-      required: [],
+      required: ["es"],
       official: ["es", "ca", "ca-ES-valencia", "gl", "eu"],
     });
   }, 60_000);
