@@ -282,7 +282,7 @@ export class OpeningHoursWeekView extends LitElement {
         height: calc(var(--wt-tap-min) / 2);
         padding-inline: var(--wt-space-1);
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-border);
+        background: var(--wt-color-track);
         color: var(--wt-color-text);
         overflow: hidden;
         white-space: nowrap;

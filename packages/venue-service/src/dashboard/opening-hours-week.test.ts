@@ -119,7 +119,7 @@ describe("Opening hours week", () => {
     );
     const sunday = track(el, "2026-12-13", "rest");
     expect(sunday.textContent!.trim()).toBe("");
-    expect(getComputedStyle(sunday).backgroundColor).toBe(resolved(el, "--wt-color-border"));
+    expect(getComputedStyle(sunday).backgroundColor).toBe(resolved(el, "--wt-color-track"));
 
     el.date = "2026-12-14";
     await el.updateComplete;
@@ -135,7 +135,7 @@ describe("Opening hours week", () => {
     await el.updateComplete;
     const sixth = track(el, "2026-12-06", "rest");
     expect(sixth.textContent!.trim()).toBe("");
-    expect(getComputedStyle(sixth).backgroundColor).toBe(resolved(el, "--wt-color-border"));
+    expect(getComputedStyle(sixth).backgroundColor).toBe(resolved(el, "--wt-color-track"));
   });
 
   it("speaks each row whole", async () => {

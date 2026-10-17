@@ -461,7 +461,7 @@ New strings: `week.previous` "Previous week" / "Semana anterior"; `week.next` "N
      section names "Immaculate Conception" (`.name.holiday`); 14 Dec "Company dinners"
      (`.name.special`); 25 Dec shows "Christmas Day" once and its Restaurant track reads
      "Closed all day"; Sunday 6 Dec's Restaurant track is empty grey with no text
-     (`textContent.trim()` is "", computed background `--wt-color-border`), as board 3 note 3 asks.
+     (`textContent.trim()` is "", computed background `--wt-color-border`; 2026-10-17, A722 Part 4: now `--wt-color-track`), as board 3 note 3 asks.
   4. "speaks each row whole": with "rest" on 1 December the Terrace row's hidden line reads
      "Terrace: Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00";
      Sunday 6 Dec's Restaurant line reads "Restaurant: Closed"; every `.track` has

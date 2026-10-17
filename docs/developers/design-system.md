@@ -114,7 +114,7 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 ### Colour
 
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
-`--wt-color-surface-sunken`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
+`--wt-color-surface-sunken`, `--wt-color-track`, `--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`,
 `--wt-color-on-primary`, `--wt-color-primary-text`, `--wt-color-primary-hover`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-danger-hover`, `--wt-color-primary-disabled`,
 `--wt-color-on-primary-disabled`, `--wt-color-danger-disabled`, `--wt-color-on-danger-disabled`,
@@ -144,6 +144,11 @@ overlay/veil colour elsewhere, reuse it rather than inventing a new one.
 `--wt-color-border`, in the light theme, and `#101216`, the value of `--wt-color-bg`, in the dark,
 so in the dark theme a sold-out tile sits at the page's own level, below an available tile's
 `--wt-color-surface`.
+
+`--wt-color-track` is the empty track behind the Opening hours Week's bars, on the page on a wide
+screen and on a card on a phone: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
+dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--wt-color-text` at
+4.5:1 or more on it (the "bar track" cases in `packages/ui-core/src/tokens/colors.test.ts`).
 
 `--wt-color-surface-lifted` is the background of something picked up and moving, or of a row being
 pointed at or focused — for example a table row while a pointer drags it
