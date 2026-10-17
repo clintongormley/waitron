@@ -19,16 +19,22 @@ afterEach(() => {
   setLocale("en");
 });
 
-async function mount(readOnly = false) {
+type WindowApi = Pick<OpeningHoursApi, "saveSeasons" | "readSeasonDeleteImpact">;
+async function mount(
+  readOnly = false,
+  api: Partial<WindowApi> = {},
+  specialDays: { id: string; name: string }[] = [],
+) {
   const el = document.createElement("seasons-window");
   el.seasons = seasons;
   el.clockRevision = 3;
-  el.specialDays = [];
+  el.specialDays = specialDays;
   el.readOnly = readOnly;
   el.api = {
     saveSeasons: vi.fn(),
     readSeasonDeleteImpact: vi.fn(),
-  } as unknown as Pick<OpeningHoursApi, "saveSeasons" | "readSeasonDeleteImpact">;
+    ...api,
+  } as unknown as WindowApi;
   applyTokens(el);
   hosts.push(el);
   document.body.append(el);
@@ -341,3 +347,434 @@ it.each(["en", "es"] as const)(
     }
   },
 );
+
+type Saved = Awaited<ReturnType<WindowApi["saveSeasons"]>>;
+function held() {
+  let resolve!: (value: Saved) => void;
+  let reject!: (error: unknown) => void;
+  const answer = new Promise<Saved>((ok, fail) => {
+    resolve = ok;
+    reject = fail;
+  });
+  return { answer, resolve, reject };
+}
+function savedEvents() {
+  const events: CustomEvent<{ seasons: Saved }>[] = [];
+  const listen = (event: Event) => events.push(event as CustomEvent<{ seasons: Saved }>);
+  document.body.addEventListener("seasons-saved", listen);
+  listeners.push(() => document.body.removeEventListener("seasons-saved", listen));
+  return events;
+}
+const listeners: (() => void)[] = [];
+afterEach(() => {
+  for (const stop of listeners.splice(0)) stop();
+});
+const save = (el: SeasonsWindow) => button(el, "save-seasons")!;
+const bottom = (el: SeasonsWindow) =>
+  root(el).querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!.error;
+const startError = (el: SeasonsWindow, key: string) =>
+  [...root(el).querySelectorAll(`tr[data-row="${key}"] [data-error=startsOn]`)].map((node) =>
+    node.textContent!.trim(),
+  );
+const fieldError = (el: SeasonsWindow, name: string) =>
+  (field(el, name) as unknown as { error: string }).error;
+const rowErrorsShown = (el: SeasonsWindow) =>
+  [...root(el).querySelectorAll<HTMLElement>("tbody [data-error]")].length +
+  [...root(el).querySelectorAll<Field & { error: string }>("tbody [name]")].filter(
+    (control) => control.error,
+  ).length;
+
+it("Save is quiet and disabled until the draft changes, and an undone edit makes it quiet again", async () => {
+  // Moved from season-chips.test.ts:128-143's disabled and variant checks.
+  const el = await mount();
+  expect([save(el).disabled, save(el).variant]).toEqual([true, "secondary"]);
+  await change(el, "season-0-name", "Deep winter");
+  expect([save(el).disabled, save(el).variant]).toEqual([false, "primary"]);
+  await change(el, "season-0-name", "Winter");
+  expect([save(el).disabled, save(el).variant]).toEqual([true, "secondary"]);
+});
+
+it("one Save sends every change with the clock revision the draft was clean at, then says it saved", async () => {
+  // Moved from season-chips.test.ts:128, :145, :163, :478 and :489.
+  const returned: Saved = [{ id: "x", name: "X", startsOn: "01-01", colour: "grey" }];
+  const saveSeasons = vi.fn(async () => returned);
+  const el = await mount(false, { saveSeasons });
+  const events = savedEvents();
+  await press(el, button(el, "add-season")!);
+  const feriaColour = field(el, "season-4-colour").value;
+  await change(el, "season-0-name", "Deep winter");
+  await change(el, "season-1-colour", "teal");
+  await change(el, "season-2-day", "15");
+  await change(el, "season-4-name", "Feria");
+  await change(el, "season-4-month", "04");
+  await change(el, "season-4-day", "10");
+  await press(el, bins(el)[3]!);
+  el.clockRevision = 9;
+  await el.updateComplete;
+  await press(el, save(el));
+  await expect.poll(() => events.length).toBe(1);
+  expect(saveSeasons).toHaveBeenCalledTimes(1);
+  expect(saveSeasons).toHaveBeenCalledWith(
+    {
+      save: [
+        { id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" },
+        { id: "spring", name: "Spring", startsOn: "03-01", colour: "teal" },
+        { id: "summer", name: "Summer", startsOn: "06-15", colour: "amber" },
+        { name: "Feria", startsOn: "04-10", colour: feriaColour },
+      ],
+      delete: ["autumn"],
+    },
+    3,
+  );
+  expect(events[0]!.detail.seasons).toBe(returned);
+  expect([events[0]!.bubbles, events[0]!.composed]).toEqual([true, true]);
+  await el.updateComplete;
+  expect([save(el).disabled, save(el).variant, save(el).loading]).toEqual([
+    true,
+    "secondary",
+    false,
+  ]);
+});
+
+it("takes a clock revision that arrives while the draft is clean", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  el.clockRevision = 5;
+  await el.updateComplete;
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]![1]).toBe(5);
+});
+
+it("swapping two starts sends one request holding both", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-1-month", "06");
+  await change(el, "season-2-month", "03");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons).toHaveBeenCalledWith(
+    {
+      save: [
+        { id: "spring", name: "Spring", startsOn: "06-01", colour: "green" },
+        { id: "summer", name: "Summer", startsOn: "03-01", colour: "amber" },
+      ],
+      delete: [],
+    },
+    3,
+  );
+});
+
+it("asks for a name and a start before sending, beside each row, with one message at the bottom", async () => {
+  // Moved from season-chips.test.ts:178 and :430.
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await press(el, button(el, "add-season")!);
+  await press(el, save(el));
+  expect(saveSeasons).not.toHaveBeenCalled();
+  expect(fieldError(el, "season-4-name")).toBe("Enter a name.");
+  expect(startError(el, "new-1")).toEqual(["Choose a day and a month."]);
+  for (const part of ["day", "month"])
+    expect(field(el, `season-4-${part}`).hasAttribute("invalid"), part).toBe(true);
+  const message = root(el).querySelector<HTMLElement>(
+    'tr[data-row="new-1"] [data-error=startsOn]',
+  )!;
+  expect(message.id).not.toBe("");
+  expect(
+    root(el).querySelector('tr[data-row="new-1"] [role=group]')!.getAttribute("aria-describedby"),
+  ).toBe(message.id);
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  const name = field(el, "season-4-name");
+  await expect.poll(() => name.shadowRoot!.activeElement?.tagName).toBe("INPUT");
+  expect(save(el).disabled).toBe(true);
+  // The other rows are untouched.
+  expect(fieldError(el, "season-0-name")).toBe("");
+  expect(startError(el, "winter")).toEqual([]);
+
+  await change(el, "season-4-name", "Feria");
+  expect(fieldError(el, "season-4-name")).toBe("");
+  expect(save(el).disabled).toBe(true);
+  await change(el, "season-4-month", "04");
+  await change(el, "season-4-day", "10");
+  expect(startError(el, "new-1")).toEqual([]);
+  expect(bottom(el)).toBe("");
+  expect(save(el).disabled).toBe(false);
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+});
+
+it("marks two rows that share a name or a start", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-1-name", " Winter ");
+  await change(el, "season-2-month", "12");
+  await press(el, save(el));
+  expect(saveSeasons).not.toHaveBeenCalled();
+  expect(fieldError(el, "season-0-name")).toBe("Another season has this name.");
+  expect(fieldError(el, "season-1-name")).toBe("Another season has this name.");
+  expect(fieldError(el, "season-2-name")).toBe("");
+  expect(startError(el, "winter")).toEqual(["Another season starts on this day."]);
+  expect(startError(el, "summer")).toEqual(["Another season starts on this day."]);
+  expect(startError(el, "spring")).toEqual([]);
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+});
+
+it.each([
+  [{ field: "save.1.name", reason: "taken" }, "summer", "name", "Another season has this name."],
+  [
+    { field: "save.0.startsOn", reason: "taken" },
+    "spring",
+    "startsOn",
+    "Another season starts on this day.",
+  ],
+  [{ field: "save.0.startsOn" }, "spring", "startsOn", "Choose a day and a month."],
+  [{ field: "save.0.name" }, "spring", "name", "Enter a name."],
+  [{ field: "save.0.colour" }, "spring", "colour", "Choose a colour."],
+] as const)(
+  "puts a refused field under its row, and keeps Save enabled (%o)",
+  async (params, key, where, message) => {
+    // Moved from season-chips.test.ts:226 (every row) and :346.
+    const saveSeasons = vi.fn(async () => {
+      throw { code: "season.invalid", params };
+    });
+    const el = await mount(false, { saveSeasons });
+    const events = savedEvents();
+    await change(el, "season-1-name", "Early spring");
+    await change(el, "season-2-name", "High summer");
+    await press(el, save(el));
+    const index = rowKeys(el).indexOf(key);
+    const shown = () =>
+      where === "startsOn"
+        ? startError(el, key).join("")
+        : fieldError(el, `season-${index}-${where}`);
+    await expect.poll(shown).toBe(message);
+    expect(rowErrorsShown(el)).toBe(1);
+    expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+    expect([save(el).disabled, save(el).variant]).toEqual([false, "primary"]);
+    expect(events).toEqual([]);
+    if (where === "startsOn") await change(el, `season-${index}-day`, "2");
+    else if (where === "colour") await change(el, `season-${index}-colour`, "teal");
+    else await change(el, `season-${index}-name`, "Another");
+    expect(shown()).toBe("");
+    expect(bottom(el)).toBe("");
+  },
+);
+
+it("a refused field stays with the row the request named, not the row now at that place", async () => {
+  const saveSeasons = vi.fn(async () => {
+    throw { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } };
+  });
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-2-name", "High summer");
+  await press(el, save(el));
+  await expect.poll(() => fieldError(el, "season-2-name")).toBe("Another season has this name.");
+  expect(fieldError(el, "season-0-name")).toBe("");
+});
+
+it.each([
+  [
+    {
+      code: "season.invalid",
+      params: { field: "seasons", reason: "end_offset", seasonId: "autumn", weekday: 5 },
+    },
+    "A period’s end offset would run into Autumn on Friday.",
+  ],
+  [
+    {
+      code: "season.invalid",
+      params: { field: "seasons", reason: "end_offset", date: "2026-12-24", specialDayId: "sd1" },
+    },
+    "A period’s end offset would run into Christmas dinners on Thu, 24 Dec 2026.",
+  ],
+  [
+    {
+      code: "season.invalid",
+      params: { field: "seasons", reason: "end_offset", date: "2031-12-24", specialDayId: "other" },
+    },
+    "A period’s end offset would run into Wed, 24 Dec 2031.",
+  ],
+  [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
+  [
+    { code: "hours.clock_change_pending" },
+    "Cancel the pending business-day change before editing hours.",
+  ],
+  [
+    { code: "season.invalid", params: { field: "delete", reason: "last" } },
+    "A venue keeps at least one season.",
+  ],
+  [{ code: "season.not_found", params: { seasonId: "autumn" } }, "This season no longer exists."],
+  [{ code: "network.unavailable" }, "The change could not be saved."],
+])(
+  "says an end-offset clash, a changed or pending business-day start and the last season at the bottom (%o)",
+  async (refusal, message) => {
+    // Moved from season-chips.test.ts:249 (every row), :286 and :301.
+    const saveSeasons = vi.fn(async () => {
+      throw refusal;
+    });
+    const el = await mount(false, { saveSeasons }, [{ id: "sd1", name: "Christmas dinners" }]);
+    const events = savedEvents();
+    await change(el, "season-3-day", "15");
+    await press(el, save(el));
+    await expect.poll(() => bottom(el)).toBe(message);
+    expect(rowErrorsShown(el)).toBe(0);
+    expect(field(el, "season-3-day").value).toBe("15");
+    expect(root(el).querySelector("wt-modal")!.open).toBe(true);
+    expect(events).toEqual([]);
+    expect(save(el).disabled).toBe(false);
+  },
+);
+
+it("while saving, Save shows busy, nothing else acts, and Escape does not close", async () => {
+  // Moved from season-chips.test.ts:376 and :399.
+  const { answer, reject } = held();
+  const saveSeasons = vi.fn(() => answer);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  expect(save(el).loading).toBe(true);
+  for (const name of ["season-0-name", "season-0-day", "season-0-month", "season-0-colour"])
+    expect((field(el, name) as unknown as { disabled: boolean }).disabled, name).toBe(true);
+  for (const test of ["add-season", "cancel-seasons"])
+    expect(button(el, test)!.disabled, test).toBe(true);
+  for (const bin of bins(el)) expect(bin.disabled).toBe(true);
+  await press(el, save(el));
+  save(el).dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(saveSeasons).toHaveBeenCalledTimes(1);
+  const modal = root(el).querySelector("wt-modal")!;
+  expect(await modal.requestClose("escape")).toBe(false);
+  expect(await modal.requestClose("cancel")).toBe(false);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(modal.open).toBe(true);
+  reject({ code: "hours.clock_changed" });
+  await expect.poll(() => save(el).loading).toBe(false);
+  expect(field(el, "season-0-name").hasAttribute("disabled")).toBe(false);
+});
+
+it("Enter in a field presses Save", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  field(el, "season-0-name").shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+});
+
+it("a save's answer that arrives after the window was closed and reopened neither closes the new window nor commits its draft", async () => {
+  // Moved from season-chips.test.ts:501 ("keeps a save busy when an earlier save…"): an answer from
+  // an earlier opening must not end a later one's state.
+  const { answer, resolve } = held();
+  const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
+  const events = savedEvents();
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  expect(save(el).loading).toBe(true);
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  expect(save(el).loading).toBe(false);
+  await change(el, "season-0-name", "Cold");
+  resolve([...seasons]);
+  await answer;
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(save(el).loading).toBe(false);
+  expect([save(el).disabled, save(el).variant]).toEqual([false, "primary"]);
+  expect(field(el, "season-0-name").value).toBe("Cold");
+});
+
+it("the same answer without a reopen does say it saved", async () => {
+  const { answer, resolve } = held();
+  const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
+  const events = savedEvents();
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  resolve([...seasons]);
+  await expect.poll(() => events.length).toBe(1);
+});
+
+it("a refusal from an earlier opening shows nothing in the new one", async () => {
+  const { answer, reject } = held();
+  const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  reject({ code: "season.invalid", params: { field: "save.0.name", reason: "taken" } });
+  await answer.catch(() => undefined);
+  await el.updateComplete;
+  expect(bottom(el)).toBe("");
+  expect(rowErrorsShown(el)).toBe(0);
+});
+
+it("a Discard restores the baseline but never reuses a new row's key", async () => {
+  type Owner = {
+    current(): unknown;
+    snapshot(value: unknown): unknown;
+    equal(a: unknown, b: unknown): boolean;
+    restore(value: unknown): void;
+  };
+  let owner: Owner | undefined;
+  let base: unknown;
+  const provide = (event: Event) => {
+    (event as CustomEvent<{ accept(value: unknown): void }>).detail.accept({
+      register(registered: Owner) {
+        owner = registered;
+        base = registered.snapshot(registered.current());
+        return {
+          id: {},
+          changed() {},
+          isDirty: () => !registered.equal(base, registered.current()),
+          commit(value: unknown) {
+            base = registered.snapshot(value);
+          },
+          dispose() {},
+        };
+      },
+    });
+  };
+  document.body.addEventListener("wt-leave-coordinator", provide);
+  listeners.push(() => document.body.removeEventListener("wt-leave-coordinator", provide));
+  const el = await mount();
+  expect(owner).toBeDefined();
+  await press(el, button(el, "add-season")!);
+  await press(el, button(el, "add-season")!);
+  expect(rowKeys(el)).toContain("new-2");
+  owner!.restore(owner!.snapshot(base));
+  await el.updateComplete;
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn"]);
+  expect(save(el).disabled).toBe(true);
+  await press(el, button(el, "add-season")!);
+  expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn", "new-3"]);
+});
+
+it("an earlier opening's answer leaves the new opening's own Save busy", async () => {
+  const first = held();
+  const second = held();
+  const saveSeasons = vi
+    .fn<WindowApi["saveSeasons"]>()
+    .mockReturnValueOnce(first.answer)
+    .mockReturnValueOnce(second.answer);
+  const el = await mount(false, { saveSeasons });
+  const events = savedEvents();
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  el.remove();
+  document.body.append(el);
+  await el.updateComplete;
+  await change(el, "season-0-name", "Cold");
+  await press(el, save(el));
+  expect(saveSeasons).toHaveBeenCalledTimes(2);
+  expect(save(el).loading).toBe(true);
+  first.resolve([...seasons]);
+  await first.answer;
+  await el.updateComplete;
+  expect(save(el).loading).toBe(true);
+  expect(events).toEqual([]);
+  second.resolve([...seasons]);
+  await expect.poll(() => events.length).toBe(1);
+  expect(save(el).loading).toBe(false);
+});

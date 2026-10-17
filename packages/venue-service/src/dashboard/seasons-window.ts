@@ -1,7 +1,15 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, type LeaveReason } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  submitOnEnter,
+  type DraftScope,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -20,15 +28,23 @@ import {
   daysIn,
   draftOf,
   removeRow,
+  rowErrors,
   runsUntil,
   sameDraft,
+  seasonChange,
   type SeasonDraft,
   type SeasonRow,
+  type SeasonRowErrors,
 } from "./season-draft.js";
+import { seasonRefusalField, seasonRefusalText } from "./season-refusal.js";
+import { refusalOf, type Refusal } from "./refusal.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
 type RowField = "name" | "day" | "month" | "colour";
+type ErrorField = "name" | "startsOn" | "colour";
+const errorFieldOf = (field: RowField): ErrorField =>
+  field === "day" || field === "month" ? "startsOn" : field;
 
 @customElement("seasons-window")
 export class SeasonsWindow extends LitElement {
@@ -68,6 +84,11 @@ export class SeasonsWindow extends LitElement {
       .start {
         display: flex;
         gap: var(--wt-space-2);
+      }
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
       }
       .name wt-input {
         min-width: calc(var(--wt-space-8) * 4);
@@ -134,26 +155,127 @@ export class SeasonsWindow extends LitElement {
   /** Replaced whole on every change, so a restore can swap it while keeping the live `next`. */
   @state() private draft?: SeasonDraft;
   private baseline?: SeasonDraft;
+  @state() private attempted = false;
+  /** A refusal with the row keys of the request it answered, in the order of its `save` entries. */
+  @state() private refusal?: { refusal: Refusal; keys: readonly string[] };
+  /** The opening a Save in flight was sent from. */
+  @state() private saving?: object;
+  private scope?: DraftScope<SeasonDraft>;
+  /** Replaced on every connect and disconnect, so an answer sent from an earlier opening is ignored. */
+  private generation = {};
+  /** The clock revision the draft was last clean at. */
+  private revision = 0;
   private readonly colourChoices = new Map<string, ReturnType<typeof rememberedColourChoices>>();
   private users?: { draft: SeasonDraft; byKey: Map<string, readonly ColourUser[]> };
 
   override connectedCallback() {
     super.connectedCallback();
+    this.generation = {};
     this.dataset.test = "calendar-window";
     this.dataset.window = "seasons";
   }
-  protected override willUpdate() {
+  override disconnectedCallback() {
+    this.scope?.dispose();
+    this.scope = undefined;
+    this.generation = {};
+    super.disconnectedCallback();
+  }
+  protected override willUpdate(changed: PropertyValues<this>) {
     if (!this.draft) {
       this.baseline = draftOf(this.seasons);
       this.draft = this.baseline;
+    }
+    if (this.isConnected && !this.readOnly && !this.scope) {
+      const { scope } = draftScopeFor<SeasonDraft>(this, {
+        id: {},
+        parent: this.draftParent,
+        current: () => this.draft!,
+        snapshot: (draft) => draft,
+        equal: sameDraft,
+        // The live counter is kept, so a Discard never hands a later row a key already used.
+        restore: (snapshot) => {
+          this.draft = { ...snapshot, next: Math.max(this.draft!.next, snapshot.next) };
+        },
+      });
+      scope.commit(this.baseline!);
+      this.scope = scope;
+      if (!scope.isDirty()) this.revision = this.clockRevision;
+    } else if (changed.has("clockRevision") && !this.scope?.isDirty()) {
+      this.revision = this.clockRevision;
+    }
+  }
+  private get busy(): boolean {
+    return this.saving !== undefined && this.saving === this.generation;
+  }
+  private setDraft(draft: SeasonDraft) {
+    this.draft = draft;
+    this.scope?.changed();
+  }
+  /** The refused field, and the key of the row it belongs to. */
+  private refused(): { key: string; field: ErrorField; message: string } | undefined {
+    if (!this.refusal) return undefined;
+    const found = seasonRefusalField(this.refusal.refusal);
+    const key = found ? this.refusal.keys[found.index] : undefined;
+    return found && key !== undefined
+      ? { key, field: found.field, message: found.message }
+      : undefined;
+  }
+  private errorsOf(
+    row: SeasonRow,
+    own: Map<string, SeasonRowErrors>,
+  ): Partial<Record<ErrorField, string>> {
+    const errors: Partial<Record<ErrorField, string>> = {};
+    const mine = own.get(row.key);
+    if (mine?.name)
+      errors.name = t(mine.name === "taken" ? "season.name_taken" : "prep.name_required");
+    if (mine?.startsOn)
+      errors.startsOn = t(
+        mine.startsOn === "taken" ? "season.start_taken" : "season.start_required",
+      );
+    const refused = this.refused();
+    if (refused?.key === row.key) errors[refused.field] = refused.message;
+    return errors;
+  }
+  private ownErrors(): Map<string, SeasonRowErrors> {
+    return this.attempted ? rowErrors(this.rows) : new Map();
+  }
+  private async save() {
+    if (this.readOnly || this.busy || !this.api || saveActionState(this.scope).unchanged) return;
+    this.attempted = true;
+    this.refusal = undefined;
+    if (rowErrors(this.rows).size) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    const generation = this.generation;
+    const submitted = this.draft!;
+    const { change, keys } = seasonChange(submitted, this.baseline!);
+    this.saving = generation;
+    try {
+      const saved = await this.api.saveSeasons(change, this.revision);
+      if (generation !== this.generation) return;
+      this.scope?.commit(submitted);
+      this.dispatchEvent(
+        new CustomEvent<{ seasons: OpeningHoursModel["seasons"] }>("seasons-saved", {
+          detail: { seasons: saved },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      if (generation === this.generation) this.refusal = { refusal: refusalOf(error), keys };
+    } finally {
+      if (this.saving === generation) this.saving = undefined;
     }
   }
   private get rows(): readonly SeasonRow[] {
     return this.draft!.rows;
   }
   private change(key: string, field: RowField, value: string) {
+    const refused = this.refused();
+    if (refused?.key === key && refused.field === errorFieldOf(field)) this.refusal = undefined;
     const draft = this.draft!;
-    this.draft = {
+    this.setDraft({
       ...draft,
       rows: draft.rows.map((row) => {
         if (row.key !== key) return row;
@@ -162,7 +284,7 @@ export class SeasonsWindow extends LitElement {
         const day = row.day && Number(row.day) > daysIn(value) ? String(daysIn(value)) : row.day;
         return { ...row, day, month: value };
       }),
-    };
+    });
   }
   /** The other named rows, by key, kept while the draft is unchanged so the chooser keeps its choices. */
   private usersOf(key: string): readonly ColourUser[] {
@@ -209,7 +331,11 @@ export class SeasonsWindow extends LitElement {
   private readonly monthOptions = () =>
     MONTHS.map((month) => ({ value: month, label: formatMonthName(Number(month)) }));
 
-  private editableRow(row: SeasonRow, index: number) {
+  private editableRow(row: SeasonRow, index: number, own: Map<string, SeasonRowErrors>) {
+    const busy = this.busy;
+    const errors = this.errorsOf(row, own);
+    const startError = errors.startsOn ?? "";
+    const startErrorId = `start-error-${row.key}`;
     const on =
       (field: RowField) =>
       (event: CustomEvent<{ value: string }>): void => {
@@ -226,6 +352,8 @@ export class SeasonsWindow extends LitElement {
           .value=${row.colour}
           .choices=${this.choicesFor(row.key)}
           .usedByLabel=${this.usedByLabel}
+          .error=${errors.colour ?? ""}
+          ?disabled=${busy}
           @wt-change=${on("colour")}
         ></wt-colour-chooser>
       </td>
@@ -236,11 +364,18 @@ export class SeasonsWindow extends LitElement {
           required
           hide-label
           .value=${row.name}
+          .error=${errors.name ?? ""}
+          ?disabled=${busy}
           @wt-change=${on("name")}
         ></wt-input>
       </td>
       <td>
-        <div class="start">
+        <div
+          class="start"
+          role="group"
+          aria-label=${t("season.starts")}
+          aria-describedby=${startError ? startErrorId : nothing}
+        >
           <wt-combobox
             name=${`season-${index}-day`}
             label=${t("season.day")}
@@ -249,6 +384,8 @@ export class SeasonsWindow extends LitElement {
             search="never"
             .value=${row.day}
             .options=${this.dayOptions(row.month)}
+            ?invalid=${startError !== ""}
+            ?disabled=${busy}
             @wt-change=${on("day")}
           ></wt-combobox>
           <wt-combobox
@@ -259,9 +396,16 @@ export class SeasonsWindow extends LitElement {
             search="never"
             .value=${row.month}
             .options=${this.monthOptions()}
+            ?invalid=${startError !== ""}
+            ?disabled=${busy}
             @wt-change=${on("month")}
           ></wt-combobox>
         </div>
+        ${
+          startError
+            ? html`<p class="error" id=${startErrorId} data-error="startsOn">${startError}</p>`
+            : nothing
+        }
       </td>
       <td class="until" data-test="runs-until">${this.until(row.key)}</td>
       <td class="bin">
@@ -269,9 +413,9 @@ export class SeasonsWindow extends LitElement {
           variant="ghost"
           data-test="delete-season"
           aria-label=${name ? format("season.delete_named", { name }) : t("season.delete_new")}
-          ?disabled=${this.rows.length === 1}
+          ?disabled=${busy || this.rows.length === 1}
           @click=${() => {
-            this.draft = removeRow(this.draft!, row.key, this.seasons);
+            this.setDraft(removeRow(this.draft!, row.key, this.seasons));
           }}
           ><wt-icon name="bin"></wt-icon
         ></wt-button>
@@ -293,6 +437,7 @@ export class SeasonsWindow extends LitElement {
   }
   private table() {
     const editable = !this.readOnly;
+    const own = this.ownErrors();
     return html`<div
       class="table-wrap"
       tabindex="0"
@@ -327,7 +472,7 @@ export class SeasonsWindow extends LitElement {
           ${repeat(
             this.rows,
             (row) => row.key,
-            (row, index) => (editable ? this.editableRow(row, index) : this.readOnlyRow(row)),
+            (row, index) => (editable ? this.editableRow(row, index, own) : this.readOnlyRow(row)),
           )}
         </tbody>
       </table>
@@ -344,25 +489,44 @@ export class SeasonsWindow extends LitElement {
           >${t("calendar.window.close")}</wt-button
         >
       </wt-form-actions>`;
-    const unchanged = sameDraft(this.draft!, this.baseline!);
-    return html`<wt-form-actions slot="footer">
+    const action = saveActionState(this.scope);
+    const own = this.ownErrors();
+    const busy = this.busy;
+    const marked = this.refused() !== undefined || own.size > 0;
+    const refusal = this.refusal
+      ? seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays)
+      : "";
+    return html`<wt-form-actions
+      slot="footer"
+      .error=${[refusal, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
+    >
       <wt-button
         slot="cancel"
         variant="secondary"
         data-test="cancel-seasons"
+        ?disabled=${busy}
         @click=${() => this.close()}
         >${t("prep.cancel")}</wt-button
       >
       <wt-button
         data-test="save-seasons"
-        variant=${unchanged ? "secondary" : "primary"}
-        ?disabled=${unchanged}
+        variant=${action.variant}
+        ?disabled=${action.unchanged || busy || own.size > 0}
+        ?loading=${busy}
+        @click=${() => void this.save()}
         >${t("prep.save")}</wt-button
       >
     </wt-form-actions>`;
   }
   override render() {
-    return html`<wt-modal open heading=${t("season.seasons")} .beforeClose=${this.beforeClose}>
+    return html`<wt-modal
+      open
+      heading=${t("season.seasons")}
+      .dismissible=${!this.busy}
+      .beforeClose=${this.beforeClose}
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
+    >
       ${this.table()}
       ${
         this.readOnly
@@ -371,8 +535,9 @@ export class SeasonsWindow extends LitElement {
               <wt-button
                 variant="secondary"
                 data-test="add-season"
+                ?disabled=${this.busy}
                 @click=${() => {
-                  this.draft = addRow(this.draft!);
+                  this.setDraft(addRow(this.draft!));
                 }}
                 >${t("season.add")}</wt-button
               >

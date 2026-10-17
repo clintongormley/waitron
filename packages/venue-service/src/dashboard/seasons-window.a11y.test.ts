@@ -26,6 +26,30 @@ async function mount(state: string, theme: "light" | "dark") {
   el.readOnly = state === "read-only";
   wrapper.append(el);
   await el.updateComplete;
+  if (state === "refused") {
+    el.api = {
+      saveSeasons: async () => {
+        throw { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } };
+      },
+      readSeasonDeleteImpact: async () => ({ departments: [] }),
+    };
+    const name = el.shadowRoot!.querySelector<HTMLElement>("[name=season-1-name]")!;
+    name.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Early spring" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-seasons]")!
+      .shadowRoot!.querySelector("button")!
+      .click();
+    await expect
+      .poll(() => (name as HTMLElement & { error: string }).error)
+      .toBe("Another season has this name.");
+    await el.updateComplete;
+  }
   if (state === "added") {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!
       .shadowRoot!.querySelector("button")!
@@ -37,10 +61,13 @@ async function mount(state: string, theme: "light" | "dark") {
 }
 
 describe.each(["light", "dark"] as const)("Seasons window (%s)", (theme) => {
-  test.each(["editable", "read-only", "added"])("%s has no violations", async (state) => {
-    const el = await mount(state, theme);
-    await expectNoA11yViolations(el);
-  });
+  test.each(["editable", "read-only", "added", "refused"])(
+    "%s has no violations",
+    async (state) => {
+      const el = await mount(state, theme);
+      await expectNoA11yViolations(el);
+    },
+  );
 
   test("at 390 has no violations", async () => {
     const old = [window.innerWidth, window.innerHeight] as const;
