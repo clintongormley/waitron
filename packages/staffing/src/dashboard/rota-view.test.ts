@@ -2021,3 +2021,48 @@ describe.each(["light", "dark"] as const)("the Rota's card warnings (%s)", (them
     );
   });
 });
+
+describe("the sheets' foot", () => {
+  it("on a phone the picker's Show everyone and the open-slots menu's Another shift… are underlined links at the start of the foot, and Cancel sits at its end", async () => {
+    await useViewport(390, 844);
+    const el = await mount(rotaApi().api, "390px", { area: "station:kitchen" });
+    await userEvent.click(q(el, "[data-test=strip] [data-day='2026-12-04']")!);
+    const day = q<LitElement>(el, "rota-day")!;
+    await day.updateComplete;
+    await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!);
+    const sheet = () =>
+      q<LitElement>(el, "rota-popup")!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await vi.waitFor(() => expect(sheet().matches(":popover-open")).toBe(true));
+    const foot = async (menu: LitElement, link: string) => {
+      await menu.updateComplete;
+      const start = menu.shadowRoot!.querySelector<HTMLElement>(`[data-test=${link}]`)!;
+      const cancel = menu.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!;
+      const style = getComputedStyle(sheet());
+      const contentEnd =
+        box(sheet()).right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+      expect(box(start).left).toBeLessThan(box(cancel).left);
+      expect(Math.abs(centre(start) - centre(cancel))).toBeLessThanOrEqual(1);
+      expect(Math.abs(box(cancel).right - contentEnd)).toBeLessThanOrEqual(1);
+      const inner = getComputedStyle(start.shadowRoot!.querySelector("button")!);
+      expect(inner.textDecorationLine).toContain("underline");
+      expect(inner.color).toBe(tokenColour("--wt-color-primary-text"));
+      await userEvent.click(cancel);
+    };
+    await foot(q<LitElement>(el, "slot-picker")!, "show-everyone");
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    el.params = { area: "everyone" };
+    await vi.waitFor(() =>
+      expect(
+        q<LitElement>(el, "rota-day")!.shadowRoot!.querySelector("[data-test=person]"),
+      ).toBeTruthy(),
+    );
+    await userEvent.click(
+      q<LitElement>(el, "rota-day")!.shadowRoot!.querySelector<HTMLElement>(
+        "[data-person=marc] [data-test=person]",
+      )!,
+    );
+    await vi.waitFor(() => expect(sheet().matches(":popover-open")).toBe(true));
+    await foot(q<LitElement>(el, "rota-open-slots")!, "another-shift");
+    await vi.waitFor(() => expect(q(el, "rota-open-slots")).toBeNull());
+  });
+});

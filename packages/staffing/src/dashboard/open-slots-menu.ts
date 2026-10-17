@@ -21,10 +21,35 @@ export class OpenSlotsMenu extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* The two foot buttons share the last row; everything else takes a row of its own. */
       :host {
-        display: block;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 var(--wt-space-2);
         min-width: 0;
         max-width: calc(var(--wt-tap-min) * 8);
+      }
+      :host([sheet]) {
+        max-width: none;
+      }
+      .title,
+      section,
+      p {
+        flex: 0 0 100%;
+      }
+      [data-test="cancel"] {
+        margin-inline-start: auto;
+      }
+      /* A button drawn as a link: it changes the list, it does not navigate. */
+      wt-button.link::part(button) {
+        min-width: 0;
+        padding-inline: 0;
+        border-color: transparent;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
       }
       .title {
         margin: 0 0 var(--wt-space-2);
@@ -83,7 +108,7 @@ export class OpenSlotsMenu extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property() error = "";
   /** On a phone the menu is a sheet, which ends with Cancel. */
-  @property({ type: Boolean }) sheet = false;
+  @property({ type: Boolean, reflect: true }) sheet = false;
   #emit(name: string, detail: unknown) {
     if (!this.busy)
       this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -133,15 +158,16 @@ export class OpenSlotsMenu extends LitElement {
           : nothing
       }
       ${own.length + other.length === 0 ? html`<p>${t("staffing.rota.no_open")}</p>` : nothing}
+      ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       <wt-button
-        variant="secondary"
+        class="link"
+        variant="ghost"
         data-test="another-shift"
         ?disabled=${this.busy}
         @click=${() =>
           this.#emit("another-shift", { personId: this.personId, businessDay: this.businessDay })}
         >${t("staffing.rota.another_shift")}</wt-button
       >
-      ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       ${
         this.sheet
           ? html`<wt-button

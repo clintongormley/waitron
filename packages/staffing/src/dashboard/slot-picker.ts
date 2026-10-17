@@ -26,6 +26,27 @@ export class SlotPicker extends LitElement {
         min-width: 0;
         max-width: calc(var(--wt-tap-min) * 8);
       }
+      :host([sheet]) {
+        max-width: none;
+      }
+      .foot {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .foot [data-test="cancel"] {
+        margin-inline-start: auto;
+      }
+      /* A button drawn as a link: it changes the list, it does not navigate. */
+      wt-button.link::part(button) {
+        min-width: 0;
+        padding-inline: 0;
+        border-color: transparent;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
+      }
       .title {
         margin: 0;
         font-size: var(--wt-font-size-md);
@@ -84,7 +105,7 @@ export class SlotPicker extends LitElement {
   @property() error = "";
   /** On a phone the picker is a sheet, which ends with Cancel; beside a slot a click outside
    *  closes it. */
-  @property({ type: Boolean }) sheet = false;
+  @property({ type: Boolean, reflect: true }) sheet = false;
   @state() private everyone = false;
   /** Free, on leave, or working at that time ("working 18:00–00:00"). */
   #status(personId: string): { busy: boolean; words: string } {
@@ -169,31 +190,34 @@ export class SlotPicker extends LitElement {
           ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
         </button>`;
       })}
-      ${
-        this.everyone
-          ? nothing
-          : html`<wt-button
-              variant="ghost"
-              data-test="show-everyone"
-              ?disabled=${this.busy}
-              @click=${() => {
-                this.everyone = true;
-              }}
-              >${t("staffing.rota.show_everyone")}</wt-button
-            >`
-      }
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
-      ${
-        this.sheet
-          ? html`<wt-button
-              variant="secondary"
-              data-test="cancel"
-              ?disabled=${this.busy}
-              @click=${() => this.dispatchEvent(new CustomEvent("close-picker", { bubbles: true, composed: true }))}
-              >${t("staffing.role.cancel")}</wt-button
-            >`
-          : nothing
-      }
+      <div class="foot">
+        ${
+          this.everyone
+            ? nothing
+            : html`<wt-button
+                class="link"
+                variant="ghost"
+                data-test="show-everyone"
+                ?disabled=${this.busy}
+                @click=${() => {
+                  this.everyone = true;
+                }}
+                >${t("staffing.rota.show_everyone")}</wt-button
+              >`
+        }
+        ${
+          this.sheet
+            ? html`<wt-button
+                variant="secondary"
+                data-test="cancel"
+                ?disabled=${this.busy}
+                @click=${() => this.dispatchEvent(new CustomEvent("close-picker", { bubbles: true, composed: true }))}
+                >${t("staffing.role.cancel")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
     </div>`;
   }
 }
