@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { rotaApi, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
@@ -23,6 +24,7 @@ async function mount(
   published = false,
   width = "1280px",
   prepare: (week: RotaWeek) => RotaWeek = (r) => r,
+  live?: LiveData,
 ) {
   const frame = document.createElement("div");
   frame.style.width = width;
@@ -30,11 +32,12 @@ async function mount(
   document.body.append(frame);
   applyTokens(frame);
   const el = document.createElement("staffing-rota") as View;
-  el.api = rotaApi(async (w) => {
+  const client = rotaApi(async (w) => {
     const r = rotaWeek(w);
     if (published) r.version = { id: "pub", status: "published", changedSincePublished: false };
     return prepare(r);
-  }).api;
+  }, live);
+  el.api = client.api;
   el.week = "2026-11-30";
   el.params = { area: "everyone" };
   el.canWrite = true;
@@ -45,7 +48,34 @@ async function mount(
     LitElement & { week: RotaWeek; breaches: RosterBreach[] }
   >("rota-by-person")!;
   await grid.updateComplete;
-  return { el, grid, root: grid.shadowRoot! };
+  return { el, grid, root: grid.shadowRoot!, request: client.request };
+}
+type Menu = LitElement & { personId: string; businessDay: string };
+async function menu(el: LitElement) {
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("rota-popup > rota-open-slots")).toBeTruthy(),
+  );
+  const found = el.shadowRoot!.querySelector<Menu>("rota-open-slots")!;
+  await found.updateComplete;
+  await vi.waitFor(() =>
+    expect(
+      el
+        .shadowRoot!.querySelector("rota-popup")!
+        .shadowRoot!.querySelector("[popover]")!
+        .matches(":popover-open"),
+    ).toBe(true),
+  );
+  return found;
+}
+const dayAdd = (root: ShadowRoot, person: string, day: string) =>
+  root.querySelector<HTMLElement>(
+    `[data-person=${person}] [data-day="${day}"] [data-test=day-add]`,
+  )!;
+async function useViewport(width: number, height: number) {
+  const before = [innerWidth, innerHeight] as const;
+  await page.viewport(width, height);
+  await vi.waitFor(() => expect(innerWidth).toBe(width));
+  onTestFinished(() => page.viewport(...before));
 }
 describe("the Rota by person", () => {
   it("lists each person with staff roles, contract hours, shifts and business-day overflow", async () => {
@@ -118,10 +148,9 @@ describe("the Rota by person", () => {
   it("opens prefilled new shifts and existing shifts, preserving the view in week navigation", async () => {
     const { el, root } = await mount();
     root
-      .querySelector<HTMLElement>(
-        '[data-person=ana] [data-day="2026-12-04"] [data-test=add-shift]',
-      )!
+      .querySelector<HTMLElement>('[data-person=ana] [data-day="2026-12-04"] [data-test=day-add]')!
       .click();
+    (await menu(el)).shadowRoot!.querySelector<HTMLElement>("[data-test=another-shift]")!.click();
     await el.updateComplete;
     const editor = el.shadowRoot!.querySelector<
       LitElement & { businessDay: string; personId: string; shiftId?: string }
@@ -136,7 +165,7 @@ describe("the Rota by person", () => {
   it("offers no add or edit controls in a published week", async () => {
     const { root } = await mount(true);
     expect(root.querySelector("button[data-shift]")).toBeNull();
-    expect(root.querySelector("[data-test=add-shift]")).toBeNull();
+    expect(root.querySelector("[data-test=day-add]")).toBeNull();
   });
   it.each(["390px", "1280px"])("contains its scrolling grid at %s", async (width) => {
     const { grid, root } = await mount(false, width);
@@ -288,4 +317,205 @@ it("names its scrolling grid Everyone", async () => {
   expect(root.querySelector("[data-test=grid-scroll]")!.getAttribute("aria-label")).toBe(
     "Everyone",
   );
+});
+
+describe("filling the rota from Everyone", () => {
+  const normal = (s: string) => s.replace(/\s+/g, " ").trim();
+  it("the empty part of a day shows + Add shift on hover or focus, named with the person and day", async () => {
+    const { root } = await mount();
+    const add = dayAdd(root, "marc", "2026-12-04");
+    expect(normal(add.textContent!)).toBe("+ Add shift");
+    expect(add.getAttribute("aria-label")).toBe("Add shift: Marc, Fri 4 Dec");
+    expect(getComputedStyle(add).opacity).toBe("0");
+    await userEvent.hover(add);
+    expect(getComputedStyle(add).opacity).toBe("1");
+    const cell = root.querySelector('[data-person=ana] [data-day="2026-12-01"]')!;
+    const inCell = cell.querySelector("[data-test=day-add]")!.getBoundingClientRect();
+    expect(inCell.top).toBeGreaterThanOrEqual(
+      cell.querySelector("[data-shift=filled]")!.getBoundingClientRect().bottom,
+    );
+    expect(cell.getBoundingClientRect().bottom - inCell.bottom).toBeLessThanOrEqual(
+      parseFloat(getComputedStyle(cell).paddingBottom) + 1,
+    );
+    setLocale("es");
+    const es = await mount();
+    const spanish = dayAdd(es.root, "marc", "2026-12-04");
+    expect(normal(spanish.textContent!)).toBe("+ Añadir turno");
+    expect(spanish.getAttribute("aria-label")).toBe("Añadir turno: Marc, vie 4 dic");
+  });
+  it("clicking the empty part of a day opens that day's open slots beside it, and choosing one fills it for that person", async () => {
+    await useViewport(1280, 900);
+    const { el, root, request } = await mount();
+    const add = dayAdd(root, "marc", "2026-12-04");
+    await userEvent.click(add);
+    const found = await menu(el);
+    expect(found.personId).toBe("marc");
+    expect(found.businessDay).toBe("2026-12-04");
+    expect(el.shadowRoot!.querySelector("rota-popup")!.heading).toBe("Fri 4 Dec · Marc");
+    const popup = el
+      .shadowRoot!.querySelector("rota-popup")!
+      .shadowRoot!.querySelector("[popover]")!
+      .getBoundingClientRect();
+    const at = add.getBoundingClientRect();
+    expect(Math.abs(popup.top - at.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(popup.left - at.right) <= 1 || Math.abs(popup.right - at.left) <= 1).toBe(true);
+    found.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+    expect(request).toHaveBeenCalledWith("/management-api/staffing/rota/shifts", "POST", {
+      week: "2026-11-30",
+      businessDay: "2026-12-04",
+      area: { kind: "station", id: "kitchen" },
+      staffRoleId: "sous",
+      startsAt: "09:00",
+      endsAt: "17:00",
+      personId: "marc",
+    });
+    await vi.waitFor(() => expect(root.activeElement).toBe(dayAdd(root, "marc", "2026-12-04")));
+  });
+  it("a refused fill stays in the menu beside its day, and once the menu is dismissed shows under the bar", async () => {
+    await useViewport(1280, 900);
+    const { el, root, request } = await mount();
+    const original = request.getMockImplementation()!;
+    let refuse!: (e: unknown) => void;
+    request.mockImplementation((async (path: string, method: string, body: unknown) => {
+      if (method === "POST" && path.endsWith("/rota/shifts"))
+        return new Promise((_, reject) => (refuse = reject));
+      return original(path, method, body);
+    }) as unknown as typeof original);
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    let found = await menu(el);
+    found.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    // While the fill is in flight no day button is drawn; the menu follows the day's cell.
+    await vi.waitFor(() => expect(dayAdd(root, "marc", "2026-12-04")).toBeNull());
+    onTestFinished(() => scrollTo(0, 0));
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    frames[0]!.append(spacer);
+    const cell = root.querySelector<HTMLElement>('[data-person=marc] td[data-day="2026-12-04"]')!;
+    const before = cell.getBoundingClientRect().top;
+    scrollTo(0, 30);
+    await vi.waitFor(() => {
+      expect(cell.getBoundingClientRect().top).toBeLessThan(before - 1);
+      expect(
+        Math.abs(
+          el
+            .shadowRoot!.querySelector("rota-popup")!
+            .shadowRoot!.querySelector("[popover]")!
+            .getBoundingClientRect().top - cell.getBoundingClientRect().top,
+        ),
+      ).toBeLessThanOrEqual(1);
+    });
+    expect(el.shadowRoot!.querySelector("rota-open-slots")).toBe(found);
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(found.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        "Could not fill the slot",
+      ),
+    );
+    await vi.waitFor(() => expect(dayAdd(root, "marc", "2026-12-04")).toBeTruthy());
+    const popupBox = () =>
+      el
+        .shadowRoot!.querySelector("rota-popup")!
+        .shadowRoot!.querySelector("[popover]")!
+        .getBoundingClientRect();
+    await vi.waitFor(() =>
+      expect(
+        Math.abs(popupBox().top - dayAdd(root, "marc", "2026-12-04").getBoundingClientRect().top),
+      ).toBeLessThanOrEqual(1),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=fill-error]")).toBeNull();
+    refuse = undefined as unknown as typeof refuse;
+    found.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=fill-error]")?.textContent).toContain(
+        "Could not fill the slot",
+      ),
+    );
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    found = await menu(el);
+    expect(el.shadowRoot!.querySelector("[data-test=fill-error]")).toBeNull();
+  });
+  it("Another shift… opens the shift editor for that person and day", async () => {
+    const { el, root } = await mount();
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    (await menu(el)).shadowRoot!.querySelector<HTMLElement>("[data-test=another-shift]")!.click();
+    const editor = el.shadowRoot!.querySelector<
+      LitElement & { open: boolean; businessDay: string; personId: string; shiftId?: string }
+    >("rota-shift-dialog")!;
+    await vi.waitFor(() => expect(editor.open).toBe(true));
+    expect(editor.businessDay).toBe("2026-12-04");
+    expect(editor.personId).toBe("marc");
+    expect(editor.shiftId).toBeUndefined();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+  });
+  it("closes the open-slots menu when its week is published on another screen", async () => {
+    const live = new LiveData();
+    let published = false;
+    const { el, root } = await mount(
+      false,
+      "1280px",
+      (r) => {
+        if (published) r.version = { id: "pub", status: "published", changedSincePublished: false };
+        return r;
+      },
+      live,
+    );
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    await menu(el);
+    published = true;
+    live.invalidate([{ type: "roster_versions" }]);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+  });
+  it("closes the open-slots menu when its last offered slot is filled on another screen, and keeps a menu that offered none", async () => {
+    const live = new LiveData();
+    let filled = false;
+    const { el, root } = await mount(
+      false,
+      "1280px",
+      (r) => {
+        if (filled)
+          r.days[4]!.areas[0]!.match.slots[0]!.status = {
+            kind: "filled",
+            shiftId: "filled",
+            outsideRole: false,
+          };
+        return r;
+      },
+      live,
+    );
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    await menu(el);
+    filled = true;
+    live.invalidate([{ type: "shifts" }]);
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeNull());
+
+    await userEvent.click(dayAdd(root, "marc", "2026-12-02"));
+    const none = await menu(el);
+    expect(none.shadowRoot!.querySelector("[data-slot]")).toBeNull();
+    const before = (none as unknown as { week: RotaWeek }).week;
+    live.invalidate([{ type: "shifts" }]);
+    await vi.waitFor(() => expect((none as unknown as { week: RotaWeek }).week).not.toBe(before));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("rota-open-slots")).toBe(none);
+    expect(none.businessDay).toBe("2026-12-02");
+  });
+  it("clicking another day while a menu is open opens that day's menu", async () => {
+    await useViewport(1280, 900);
+    const { el, root } = await mount();
+    await userEvent.click(dayAdd(root, "marc", "2026-12-04"));
+    await menu(el);
+    await userEvent.click(dayAdd(root, "ana", "2026-12-03"));
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    const found = await menu(el);
+    expect([found.personId, found.businessDay]).toEqual(["ana", "2026-12-03"]);
+    expect(normal(found.shadowRoot!.querySelector("[data-test=open-title]")!.textContent!)).toBe(
+      "Thu 3 Dec · Ana",
+    );
+  });
 });

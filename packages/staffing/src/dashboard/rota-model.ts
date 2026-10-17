@@ -1,4 +1,4 @@
-import { areaKey, type AreaDayMatch, type AreaRef } from "../slots.js";
+import { areaKey, type AreaDayMatch, type AreaRef, type Slot } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 
 export const EVERYONE = "everyone";
@@ -148,4 +148,28 @@ export function summary(read: RotaWeek, show: Show): Summary {
   if (matchesFor(read, show).some((m) => m.slots.length > 0)) return "all_filled";
   if (show.kind === "everyone" && weekShiftCount(read) === 0) return "no_shifts";
   return "nothing_to_fill";
+}
+
+export type OpenSlot = { slot: Slot; areaName: string };
+
+/** A day's unfilled slots in every area, split by whether the person holds the slot's staff role. */
+export function openSlots(
+  read: RotaWeek,
+  personId: string,
+  businessDay: string,
+): { own: OpenSlot[]; other: OpenSlot[] } {
+  const held = read.people.find((p) => p.personId === personId)?.staffRoleIds ?? [];
+  const open = (read.days.find((d) => d.businessDay === businessDay)?.areas ?? []).flatMap(
+    ({ area, match }) =>
+      match.slots
+        .filter((s) => s.status.kind === "unfilled")
+        .map((s) => ({
+          slot: s.slot,
+          areaName: read.areas.find((a) => areaKey(a.area) === areaKey(area))!.name,
+        })),
+  );
+  return {
+    own: open.filter((o) => held.includes(o.slot.staffRoleId)),
+    other: open.filter((o) => !held.includes(o.slot.staffRoleId)),
+  };
 }

@@ -54,6 +54,7 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     "no-rules",
     "labour-count",
     "cell-add focused",
+    "open-slots",
   ])("%s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -99,7 +100,7 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     el.week = "2026-11-30";
     el.canWrite = true;
     el.open = () => undefined;
-    if (state === "everyone") el.params = { area: "everyone" };
+    if (state === "everyone" || state === "open-slots") el.params = { area: "everyone" };
     if (state === "draft") el.canOpenStaffing = true;
     host.append(el);
     if (state === "loading")
@@ -111,7 +112,7 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
         expect(el.shadowRoot?.textContent).toContain("No active areas");
         expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy();
       });
-    else if (state === "everyone")
+    else if (state === "everyone" || state === "open-slots")
       await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy());
     else await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
     if (state === "draft")
@@ -130,6 +131,24 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
             .matches(":popover-open"),
         ).toBe(true),
       );
+    }
+    if (state === "open-slots") {
+      const people = el.shadowRoot!.querySelector("rota-by-person")!;
+      await (people as import("lit").LitElement).updateComplete;
+      await userEvent.click(
+        people.shadowRoot!.querySelector<HTMLElement>(
+          '[data-person=marc] [data-day="2026-12-04"] [data-test=day-add]',
+        )!,
+      );
+      await vi.waitFor(() => {
+        expect(el.shadowRoot!.querySelector("rota-open-slots")).toBeTruthy();
+        expect(
+          el
+            .shadowRoot!.querySelector("rota-popup")!
+            .shadowRoot!.querySelector("[popover]")!
+            .matches(":popover-open"),
+        ).toBe(true);
+      });
     }
     if (state === "cell-add focused") {
       const area = el.shadowRoot!.querySelector("rota-by-area")!;

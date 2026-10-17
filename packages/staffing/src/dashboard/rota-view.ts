@@ -14,6 +14,7 @@ import {
   EVERYONE,
   attentionTargets,
   chosenShow,
+  openSlots,
   summary,
   weekCounts,
   weekShiftCount,
@@ -24,12 +25,15 @@ import { STAFFING_STRINGS, countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
 import "./rota-by-person.js";
 import "./rota-popup.js";
+import { openHeading } from "./open-slots-menu.js";
 import { slotHeading } from "./slot-picker.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
 const step = (day: string, n: number) =>
   new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+type PopupPick = { key: string; grid: string; selector: string; fallback: string };
 
 let widthCandidates: TemplateResult[] | undefined;
 /** The titles of every week whose Monday falls in 2026, in each interface language, its month
@@ -161,6 +165,8 @@ export class RotaView extends LitElement {
   @state() private loadError = "";
   @state() private actionError = "";
   @state() private picked?: Slot;
+  /** A person's day whose open slots are shown; `offered` is whether it had any when opened. */
+  @state() private openDay?: { personId: string; businessDay: string; offered: boolean };
   @state() private editor?: {
     shiftId?: string;
     businessDay?: string;
@@ -187,7 +193,7 @@ export class RotaView extends LitElement {
   #watching = "";
   #area = "";
   #anchor: HTMLElement | undefined;
-  /** The slot key the popup was last opened for. */
+  /** The pick the popup was last opened for: a slot key, or a person's day. */
   #shownFor: string | undefined;
   #generation = 0;
   /** The target each count button last focused, to step on from. */
@@ -215,6 +221,7 @@ export class RotaView extends LitElement {
     if ((this.params.area ?? "") !== this.#area) {
       this.#area = this.params.area ?? "";
       this.picked = undefined;
+      this.openDay = undefined;
       this.actionError = "";
     }
     if (this.week && this.week !== this.#watching) {
@@ -229,6 +236,7 @@ export class RotaView extends LitElement {
       this.publishError = "";
       this.#warningQueries.release("rota-warnings");
       this.picked = undefined;
+      this.openDay = undefined;
       this.actionError = "";
       this.busy = false;
       this.loadError = "";
@@ -262,65 +270,101 @@ export class RotaView extends LitElement {
               .some((s) => s.slot.key === this.picked!.key && s.status.kind === "unfilled"))
         )
           this.picked = undefined;
+        const day = this.openDay;
+        if (day && !this.busy) {
+          const left = openSlots(read, day.personId, day.businessDay);
+          if (
+            read.version?.status === "published" ||
+            (day.offered && left.own.length + left.other.length === 0)
+          )
+            this.openDay = undefined;
+        }
       })
       .catch(() => undefined);
   }
+  /** What the popup is open for, as a key, and where its anchor is drawn: `selector`, else
+   *  `fallback`. */
+  #pick(): PopupPick | undefined {
+    if (this.picked) {
+      const selector = `[data-slot="${this.picked.key}"]`;
+      return { key: this.picked.key, grid: "rota-by-area", selector, fallback: selector };
+    }
+    if (this.openDay) {
+      const cell = `[data-person="${this.openDay.personId}"] td[data-day="${this.openDay.businessDay}"]`;
+      return {
+        key: `${this.openDay.personId} ${this.openDay.businessDay}`,
+        grid: "rota-by-person",
+        selector: `${cell} [data-test=day-add]`,
+        fallback: cell,
+      };
+    }
+    return undefined;
+  }
   override updated() {
     const popup = this.renderRoot.querySelector("rota-popup");
-    const picked = this.picked;
-    if (!picked) {
+    const pick = this.#pick();
+    if (!pick) {
       if (this.#shownFor !== undefined) popup?.hide();
       this.#shownFor = undefined;
       return;
     }
-    if (this.#shownFor === picked.key) {
-      void this.#reanchor(picked);
+    if (this.#shownFor === pick.key) {
+      void this.#reanchor(pick);
       return;
     }
-    this.#shownFor = picked.key;
-    void this.renderRoot.querySelector<LitElement>("slot-picker")!.updateComplete.then(() => {
-      if (this.picked === picked) popup!.show(this.#anchor!);
+    this.#shownFor = pick.key;
+    void this.renderRoot.querySelector<LitElement>("rota-popup > *")!.updateComplete.then(() => {
+      if (this.#pick()?.key === pick.key) popup!.show(this.#anchor!);
     });
   }
-  /** A slot's card is a new element once the grid turns editable or read-only, as it does while a
-   *  fill is in flight, so an open popup follows the card carrying the picked slot's key. */
-  async #reanchor(picked: Slot) {
-    const grid = this.renderRoot.querySelector<LitElement>("rota-by-area");
+  /** The element a pick opened from is redrawn once the grid turns editable or read-only, as it
+   *  does while a fill is in flight, so an open popup follows the one now drawn for the pick. In
+   *  Everyone no day button is drawn while the fill is in flight, so the popup follows the day's
+   *  cell until it returns. */
+  async #reanchor(pick: PopupPick) {
+    const grid = this.renderRoot.querySelector<LitElement>(pick.grid);
     if (!grid) return;
     await grid.updateComplete;
-    const card = grid.shadowRoot!.querySelector<HTMLElement>(`[data-slot="${picked.key}"]`);
+    const root = grid.shadowRoot!;
+    const found =
+      root.querySelector<HTMLElement>(pick.selector) ??
+      root.querySelector<HTMLElement>(pick.fallback);
     const popup = this.renderRoot.querySelector("rota-popup");
-    if (this.picked !== picked || !card || card === this.#anchor) return;
-    this.#anchor = card;
-    if (popup?.shown) popup.show(card);
+    if (this.#pick()?.key !== pick.key || !found || found === this.#anchor) return;
+    this.#anchor = found;
+    if (popup?.shown) popup.show(found);
   }
   readonly #popupClosed = () => {
     // A close that arrives while the popup is open again belongs to an earlier showing: leave the
     // pick alone.
     if (this.renderRoot.querySelector("rota-popup")?.shown) return;
     this.picked = undefined;
+    this.openDay = undefined;
     this.actionError = "";
   };
-  /** A fill that settles once its picker is gone leaves focus on nothing: the card it started
-   *  from was redrawn while the fill was in flight. */
-  async #refocus(key: string) {
+  /** A fill that settles once its popup is gone leaves focus on nothing, or inside the closed
+   *  popup: the element it started from was redrawn while the fill was in flight. */
+  async #refocus(grid: string, selector: string) {
     await this.updateComplete;
-    const grid = this.renderRoot.querySelector<LitElement>("rota-by-area");
-    if (this.picked || !grid) return;
-    await grid.updateComplete;
-    if (document.activeElement === document.body)
-      grid.shadowRoot!.querySelector<HTMLElement>(`[data-slot="${key}"]`)?.focus();
+    const shown = this.renderRoot.querySelector<LitElement>(grid);
+    if (this.#pick() || !shown) return;
+    await shown.updateComplete;
+    if (
+      document.activeElement === document.body ||
+      this.shadowRoot!.activeElement?.localName === "rota-popup"
+    )
+      shown.shadowRoot!.querySelector<HTMLElement>(selector)?.focus();
   }
   #go(week: string, area = this.params.area) {
     this.open("rota", { week, ...(area ? { area } : {}) });
   }
-  async #fill(personId: string) {
-    const slot = this.picked,
+  async #fill(slot: Slot, personId: string) {
+    const pick = this.#pick(),
       read = this.read,
       generation = this.#generation;
     if (
       this.busy ||
-      !slot ||
+      !pick ||
       !read ||
       read.week !== this.week ||
       read.version?.status === "published" ||
@@ -341,6 +385,7 @@ export class RotaView extends LitElement {
       });
       if (generation !== this.#generation) return;
       this.picked = undefined;
+      this.openDay = undefined;
       this.#watch();
     } catch (e) {
       if (generation === this.#generation)
@@ -348,7 +393,7 @@ export class RotaView extends LitElement {
     } finally {
       if (generation === this.#generation) {
         this.busy = false;
-        void this.#refocus(slot.key);
+        void this.#refocus(pick.grid, pick.selector);
       }
     }
   }
@@ -539,7 +584,7 @@ export class RotaView extends LitElement {
       ${this.changingError ? html`<p role="alert">${this.changingError}</p>` : nothing}
       ${this.warningsError ? html`<p role="alert">${this.warningsError}</p>` : nothing}
       ${this.loadError ? html`<p class="error" role="alert" data-test="load-error">${this.loadError}</p>` : nothing}
-      ${this.actionError && !this.picked ? html`<p class="error" role="alert" data-test="fill-error">${this.actionError}</p>` : nothing}
+      ${this.actionError && !this.#pick() ? html`<p class="error" role="alert" data-test="fill-error">${this.actionError}</p>` : nothing}
       ${
         read
           ? html`${read.areas.length === 0 ? html`<p>${t("staffing.rota.empty")}</p>` : nothing}
@@ -553,8 +598,22 @@ export class RotaView extends LitElement {
                       @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
                         this.editor = e.detail;
                       }}
-                      @add-shift=${(e: CustomEvent<{ personId: string; businessDay: string }>) => {
-                        this.editor = e.detail;
+                      @open-day=${(
+                        e: CustomEvent<{
+                          personId: string;
+                          businessDay: string;
+                          anchor: HTMLElement;
+                        }>,
+                      ) => {
+                        const { personId, businessDay, anchor } = e.detail;
+                        const open = openSlots(read, personId, businessDay);
+                        this.openDay = {
+                          personId,
+                          businessDay,
+                          offered: open.own.length + open.other.length > 0,
+                        };
+                        this.#anchor = anchor;
+                        this.actionError = "";
                       }}
                     ></rota-by-person>`
                   : html`<rota-by-area
@@ -578,7 +637,7 @@ export class RotaView extends LitElement {
                     ></rota-by-area>`
               }
               <rota-popup
-                .heading=${this.picked ? slotHeading(read, this.picked) : ""}
+                .heading=${this.picked ? slotHeading(read, this.picked) : this.openDay ? openHeading(read, this.openDay.personId, this.openDay.businessDay) : ""}
                 @rota-popup-close=${this.#popupClosed}
               >
                 ${
@@ -589,13 +648,28 @@ export class RotaView extends LitElement {
                         .ruleset=${this.warnings?.ruleset ?? null}
                         .busy=${this.busy}
                         .error=${this.actionError}
-                        @choose=${(e: CustomEvent<{ personId: string }>) => void this.#fill(e.detail.personId)}
+                        @choose=${(e: CustomEvent<{ personId: string }>) => void this.#fill(this.picked!, e.detail.personId)}
                         @close-picker=${() => {
                           this.picked = undefined;
                           this.actionError = "";
                         }}
                       ></slot-picker>`
-                    : nothing
+                    : this.openDay
+                      ? html`<rota-open-slots
+                          .week=${read}
+                          .personId=${this.openDay.personId}
+                          .businessDay=${this.openDay.businessDay}
+                          .busy=${this.busy}
+                          .error=${this.actionError}
+                          @choose-slot=${(e: CustomEvent<{ slot: Slot }>) => void this.#fill(e.detail.slot, this.openDay!.personId)}
+                          @another-shift=${(
+                            e: CustomEvent<{ personId: string; businessDay: string }>,
+                          ) => {
+                            this.openDay = undefined;
+                            this.editor = e.detail;
+                          }}
+                        ></rota-open-slots>`
+                      : nothing
                 }
               </rota-popup>`
           : this.loadError

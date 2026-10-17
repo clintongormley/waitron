@@ -5,6 +5,7 @@ import { areaKey } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import { RotaByArea, dayHead, focusIn } from "./rota-by-area.js";
 import { peopleInOrder, type Target } from "./rota-model.js";
+import { dateLabel } from "./format.js";
 import { hours, minuteTime, shiftTime } from "./rota-format.js";
 import { breachText, shiftBreaches } from "./rota-warnings.js";
 import { t, tf } from "./strings.js";
@@ -102,9 +103,27 @@ export class RotaByPerson extends LitElement {
                         day.notInSlot.some((n) => n.shiftId === s.shiftId)),
                   );
                   return html`<td data-day=${day.businessDay}>
-                    ${shifts.map((s) => this.shift(s))}
-                    ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
-                    ${this.editable && this.canAdd ? html`<button class="card" data-test="add-shift" @click=${() => this.emit("add-shift", { personId: p.personId, businessDay: day.businessDay })}>${t("staffing.shift.add")}</button>` : nothing}
+                    <div class="cell">
+                      ${shifts.map((s) => this.shift(s))}
+                      ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
+                      ${
+                        this.editable && this.canAdd
+                          ? html`<button
+                              class="add"
+                              data-test="day-add"
+                              aria-label=${tf("staffing.rota.add_label_person", { name: p.name, day: dateLabel(day.businessDay) })}
+                              @click=${(e: Event) =>
+                                this.emit("open-day", {
+                                  personId: p.personId,
+                                  businessDay: day.businessDay,
+                                  anchor: e.currentTarget,
+                                })}
+                            >
+                              ${t("staffing.rota.add_here")}
+                            </button>`
+                          : nothing
+                      }
+                    </div>
                   </td>`;
                 })}
               </tr>`,

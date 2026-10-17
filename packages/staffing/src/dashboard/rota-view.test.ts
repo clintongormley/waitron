@@ -378,7 +378,7 @@ describe("the Rota's Show menu", () => {
       await grid.updateComplete;
       expect(grid.shadowRoot!.querySelectorAll("[data-person]")).toHaveLength(5);
       expect(el.shadowRoot!.textContent).toContain("No active areas.");
-      expect(grid.shadowRoot!.querySelector("[data-test=add-shift]")).toBeNull();
+      expect(grid.shadowRoot!.querySelector("[data-test=day-add]")).toBeNull();
     },
   );
 });

@@ -7,6 +7,7 @@ import {
   dayCounts,
   isClosed,
   matchesFor,
+  openSlots,
   peopleInOrder,
   rolesShown,
   summary,
@@ -357,5 +358,61 @@ describe("the people Everyone draws, in order", () => {
     read.people = read.people.filter((p) => p.personId === "marc" || p.personId === "laia");
     expect(peopleInOrder(read).map((p) => p.personId)).toEqual(["marc", "laia"]);
     expect(read.people.find((p) => p.personId === "marc")!.staffRoleIds[0]).toBe("sous");
+  });
+});
+
+describe("a day's open slots for a person", () => {
+  it("puts the person's staff-role slots first, the rest in other, from every area, only unfilled ones, only that day", () => {
+    const read = rotaWeek();
+    const friday = read.days[4]!;
+    const empty = friday.areas[0]!.match.slots[0]!;
+    friday.areas[0]!.match.slots.push(
+      {
+        slot: { ...empty.slot, key: "head-open", staffRoleId: "head" },
+        status: { kind: "unfilled" },
+      },
+      {
+        slot: { ...empty.slot, key: "taken" },
+        status: { kind: "filled", shiftId: "filled", outsideRole: false },
+      },
+    );
+    const restaurant = read.areas[1]!.area;
+    friday.areas.push({
+      area: restaurant,
+      match: {
+        slots: [
+          {
+            slot: { ...empty.slot, key: "bar-open", area: restaurant },
+            status: { kind: "unfilled" },
+          },
+        ],
+        over: [],
+      },
+    });
+    read.days[3]!.areas[0]!.match.slots.push({
+      slot: { ...empty.slot, key: "thursday", businessDay: read.days[3]!.businessDay },
+      status: { kind: "unfilled" },
+    });
+    const keys = (r: ReturnType<typeof openSlots>) => ({
+      own: r.own.map((o) => [o.slot.key, o.areaName]),
+      other: r.other.map((o) => [o.slot.key, o.areaName]),
+    });
+    expect(keys(openSlots(read, "laia", "2026-12-04"))).toEqual({
+      own: [
+        ["empty", "Kitchen"],
+        ["bar-open", "Restaurant"],
+      ],
+      other: [["head-open", "Kitchen"]],
+    });
+    expect(keys(openSlots(read, "ana", "2026-12-04"))).toEqual({
+      own: [["head-open", "Kitchen"]],
+      other: [
+        ["empty", "Kitchen"],
+        ["bar-open", "Restaurant"],
+      ],
+    });
+    expect(keys(openSlots(read, "ana", "2026-12-02"))).toEqual({ own: [], other: [] });
+    expect(keys(openSlots(read, "gone", "2026-12-04")).own).toEqual([]);
+    expect(keys(openSlots(read, "laia", "2027-01-01"))).toEqual({ own: [], other: [] });
   });
 });
