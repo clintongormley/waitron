@@ -1268,3 +1268,92 @@ it("a keyboard turn at the far corner that gives back scrolled-away margin moves
     top: scroll.top - 24,
   });
 });
+
+/** A 605 × 305 canvas, not a whole number of squares either way, holding `tables`, at the zoom a
+ *  Ctrl+wheel of `deltaY` reaches and scrolled back to its top left; the parent applies every move,
+ *  resize and turn. */
+async function oddCanvas(tables: PlanCanvasTable[], deltaY: number): Promise<WtFloorPlanCanvas> {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 605px; height: 305px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = tables;
+  el.selected = "T1";
+  await settled(el);
+  if (deltaY !== 0) {
+    wheel(el, deltaY);
+    await settled(el);
+    part(el, "viewport").scrollTo(0, 0);
+    await settled(el);
+  }
+  const apply = (event: Event) => {
+    const { key, ...change } = (event as CustomEvent<{ key: string }>).detail;
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, ...change } } : t,
+      );
+    });
+  };
+  for (const name of ["wt-table-move", "wt-table-resize", "wt-table-rotate"])
+    el.addEventListener(name, apply);
+  return el;
+}
+
+const extentOf = (el: WtFloorPlanCanvas) => {
+  const viewport = part(el, "viewport");
+  return {
+    scrollWidth: viewport.scrollWidth,
+    clientWidth: viewport.clientWidth,
+    scrollHeight: viewport.scrollHeight,
+    clientHeight: viewport.clientHeight,
+  };
+};
+
+it.each(
+  ZOOMS.flatMap(([zoom, deltaY]) =>
+    (
+      [
+        ["button", "{ArrowRight}"],
+        ["button", "{Shift>}{ArrowRight}{/Shift}"],
+        ["rotate-handle", "{ArrowRight}"],
+      ] as const
+    ).map(([target, keys]) => [zoom, target, keys, deltaY] as const),
+  ),
+)(
+  "at zoom %s, unscrolled in a box that is not whole squares, %s %s leaves the canvas as scrollable as the same layout drawn fresh",
+  async (zoom, target, keys, deltaY) => {
+    const el = await oddCanvas([table("T1", 2, 2)], deltaY);
+    const start = el.tables[0]!.placement;
+    (target === "button" ? button(el) : part(el, "rotate-handle")).focus({ preventScroll: true });
+    await userEvent.keyboard(keys);
+    await settled(el);
+    const { placement } = el.tables[0]!;
+    expect(placement).not.toEqual(start);
+    const after = extentOf(el);
+    cleanup();
+    const alone = extentOf(await oddCanvas([{ ...table("T1", 2, 2), placement }], deltaY));
+    expect(after).toEqual(alone);
+    // At zoom 1 the plan fits inside the box, so nothing scrolls.
+    if (zoom === 1) {
+      expect(alone.scrollWidth).toBe(alone.clientWidth);
+      expect(alone.scrollHeight).toBe(alone.clientHeight);
+    }
+  },
+);
+
+it("unscrolled at zoom 1, arrow keys that bring a table back inside a box that is not whole squares leave the canvas as scrollable as the same layout drawn fresh", async () => {
+  const el = await oddCanvas([table("T1", 40, 20)], 0);
+  expect(extentOf(el).scrollWidth).toBeGreaterThan(605);
+  button(el).focus({ preventScroll: true });
+  for (let i = 0; i < 20; i++) {
+    await userEvent.keyboard("{ArrowLeft}{ArrowUp}");
+    await settled(el);
+  }
+  const { placement } = el.tables[0]!;
+  expect({ x: placement.x, y: placement.y }).toEqual({ x: 20, y: 0 });
+  const after = extentOf(el);
+  cleanup();
+  const alone = extentOf(await oddCanvas([{ ...table("T1", 0, 0), placement }], 0));
+  expect(after).toEqual(alone);
+  expect(alone.scrollWidth).toBe(alone.clientWidth);
+  expect(alone.scrollHeight).toBe(alone.clientHeight);
+});

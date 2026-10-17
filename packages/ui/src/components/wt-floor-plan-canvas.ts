@@ -578,10 +578,15 @@ export class WtFloorPlanCanvas extends LitElement {
         x = Math.max(x, this.#origin.x - Math.floor(viewport.scrollLeft / square));
         y = Math.max(y, this.#origin.y - Math.floor(viewport.scrollTop / square));
         // The grid is drawn before `updated` scrolls by the change in `#origin`, so it reaches the
-        // view's far edge as it stands.
+        // view's far edge as it stands. Only along a scrolled axis: unscrolled, there is no scroll
+        // for the browser to pull back, and the edge rounded up to whole squares would overflow a
+        // box that is not whole squares.
         view = {
-          columns: Math.ceil((scroll.x + viewport.clientWidth) / square),
-          rows: Math.ceil((scroll.y + viewport.clientHeight - this.bottomInset) / square),
+          columns: scroll.x > 0 ? Math.ceil((scroll.x + viewport.clientWidth) / square) : 0,
+          rows:
+            scroll.y > 0
+              ? Math.ceil((scroll.y + viewport.clientHeight - this.bottomInset) / square)
+              : 0,
         };
       }
       columns = Math.max(
