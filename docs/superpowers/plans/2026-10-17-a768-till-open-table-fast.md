@@ -104,13 +104,16 @@ gets its speed from reading in parallel and not waiting. It asks the cheap read 
 one only where the till already holds the menu. The start read costs well under a millisecond, which
 is what Task 2 adds to each `menu-state` read.
 
-### 3. Not measured
+### 3. On a real till page: Task 0, before any product change
 
-Times on a real till over Wi-Fi. The dev stack running on this machine belonged to another worktree,
-and signing in to it would have written a session row into its venue. Task 9 states how to take them
-on the implementer's own stack (`wa-wt demo <worktree>`, server verbosity at debug, which logs
-`http.request` with `durationMs` per route from `apps/server/src/request-id.ts`). That step is
-optional, and only a receipt: the permanent regression tests below do not depend on it.
+The owner asked for each step to be timed on a till. That is Task 0, and it is mandatory, before and
+after (Task 8). It was not taken while writing the plan. The only stack running on this machine on
+2026-10-17 was `waitron-local-santet-data`, the owner's real-data venue; signing in to it would have
+written a session row there. A stack of this worktree's own can run beside it: `wa-wt` gives a new
+start the first slot nothing listens on and leaves a slot another running instance holds alone
+(`slot_for_instance` in `~/.local/bin/wa-wt`; `docs/developers/workflow-guide.md`, "The dev stack
+from a worktree"). Task 0 runs on this branch before Task 1 lands, while its product code is still
+base `ed0be7d89` (the branch holds only this plan).
 
 ---
 
@@ -143,11 +146,13 @@ These are the five inputs the item implies but no single task's happy path exerc
 names the test that pins it and the task that owns that test.
 
 1. **A second table opened while the first is still loading, across two zones** (one held, one
-   not). The first open's late answers must never show beside the second table. Pinned by Task 6's
+   not). The first open's late answers must never show beside the second table. Pinned by Task 6a's
    "a second open during the first's loading shows only the second table".
-2. **Signing out while the left draft's save is still out.** No edit may go out under the next
-   person's session, and the save must answer before the session's logout is sent. Pinned by Task
-   4's "signing out closes a draft still saving in the background".
+2. **Leaving a draft whose save is still out, then signing out, or coming back to its party.** No
+   edit may go out under the next person's session, and the save must answer before the session's
+   logout is sent. Pinned by Task 4's "signing out closes a draft still saving in the background".
+   Coming back (A, then B, then A again) must show A's saved edit, never the draft read before the
+   save landed. Pinned by Task 4's "A, B, then A again waits for A's own save".
 3. **A menu republished while the zone was off screen.** The held menu shows for one round trip; then
    the check reads the new version, and a dish already in the draft goes through the existing refresh
    dialog (D9). It must not stay silently at the old price. Pinned by Task 3b's "a menu published
@@ -155,9 +160,11 @@ names the test that pins it and the task that owns that test.
 4. **Courses changing under an open draft.** The new headings and pickers arrive; the draft's lines
    and their courses stay as the person left them. Pinned by Task 7's "new courses reach an open
    table without a reload".
-5. **An open that fails after the screen switched** (an unheld zone whose menu read fails, or a free
-   table whose seating is refused). The till goes back to where the waiter was and shows the error;
-   it is never stuck on "Loading…". Pinned by Task 6's two failure cases.
+5. **An open that fails or is left after the screen switched** (an unheld zone whose menu read
+   fails, a free table whose seating is refused, Back while seating). The till goes back to where
+   the waiter was and shows the error; it is never stuck on "Loading…"; and lines carried to a
+   table being seated are never lost. Pinned by Task 6a's failure cases and Task 6b's "Back during
+   seating keeps the carried lines".
 
 ---
 
@@ -200,12 +207,17 @@ names the test that pins it and the task that owns that test.
 2. **The till keeps each zone's menu across sign-outs.** It forgets them when the page reloads or
    the till moves to another server. Default: keep them, since a menu does not depend on who signed
    in.
-3. **Reopening a table of the same party still waits for the left draft's save**, so the draft read
-   for that party cannot answer before its own save. Default: wait in that case only.
+3. **Opening a table of a party whose draft is still saving waits for that save**, behind the
+   loading line, so the draft read for that party cannot answer before its own save. That happens
+   on reopening the same party, or coming back to it while its save is out. Default: wait in those
+   cases only.
 4. **Profile values stay as they are today:** form factor, capabilities, idle logout, starting
-   screen, and whether clocking is available. They are refreshed on a profile switch or when the
-   device's zone selection changes, and otherwise not until reload. So is the server list, which
-   the till's router follows on its own. Default: as today, recorded in the docs.
+   screen, and whether clocking is available. They change the till's layout and which screens it
+   offers. Applied mid-session, they could take away the screen the person is on, so they are
+   applied only at boot, on a profile switch, and when the device's zone selection changes. At
+   those points the till already lays itself out again and waits for requests out
+   (`#reconcileSavedDeviceZones`). The server list stays as it is too: the till's router follows the
+   primary on its own. Default: as today, recorded in the docs.
 5. **A kitchen screen in device mode does not refresh its bump mode or fire control until reload.**
    It runs no menu poll. Default: left as a new backlog entry.
 6. **The department name on a table's screen comes from the held menu**, so a rename shows when the
@@ -226,14 +238,52 @@ names the test that pins it and the task that owns that test.
 | `apps/server/src/till-setup.ts` (new) | `readTillSetup`, `setupRevisionOf` | 2 |
 | `apps/server/src/till-api.ts` | `/api/till` uses them; `/api/menu-state` adds `setupRevision` | 2 |
 | `apps/till/src/api/client.ts` | optional `liveFields` / `setupRevision` on the client types | 3a, 7 |
-| `apps/till/src/till-app.ts` | zone memory, live-field check, detached left draft, early switch, setup refresh | 3a–7 |
+| `apps/till/src/till-app.ts` | zone memory, live-field check, detached left draft, early switch, setup refresh | 3a–7 (3a, 3b, 3c, 4, 6a, 6b, 7) |
 | `apps/till/src/screens/till-table-order-screen.ts` | `loading` property | 5 |
 | `apps/till/src/i18n/strings.ts` | `table.loading` | 5 |
-| `apps/till/src/till-app-open-table.test.ts` (new) | open-path regression tests | 3a–6 |
+| `apps/till/src/till-app-open-table.test.ts` (new) | open-path regression tests | 3a–6b |
+| `/tmp/a768-real-till/measure.mjs` (outside every checkout, never committed) | real-till timings | 0, 8 |
 | `apps/till/src/till-app-setup-refresh.test.ts` (new) | settings refresh tests | 7 |
 | `docs/backlog.md`, `docs/backlog/till.md`, `docs/developers/conventions-ui.md`, `CLAUDE.md` | docs | 9 |
 
 ---
+
+### Task 0: Time table opens on a real till page, BEFORE any product change
+
+Run this task before Task 1 is committed. The branch then holds only this plan, so its product code
+is base `ed0be7d89`. If Task 1 has already landed, do it from a throwaway worktree instead:
+`git worktree add --detach /tmp/a768-base ed0be7d89`, then `pnpm install` in it, and
+`git worktree remove /tmp/a768-base` afterwards. Never swap files in a working checkout. The script
+lives outside every checkout (`/tmp/a768-real-till/measure.mjs`), so root lint never scans it.
+
+- [ ] **Step 1: Start your own stack.** Run `wa-wt ls`, then
+  `wa-wt demo waitron-feat-a768-till-open-table-fast`, which seeds the demo venue on the first free
+  slot. A slot held by another running instance is left alone. Note the till URL it prints (slot 1
+  is `http://localhost:5290`). Never `wa-wt down` or `reset` an instance you did not start.
+- [ ] **Step 2: Write the script.** Import Chromium from the workspace's own Playwright:
+  `import { chromium } from "<worktree>/apps/till/node_modules/playwright/index.mjs"`. The script
+  opens the till URL. It picks a till device in the dev chooser (a dev tab remembers its device in
+  `localStorage["waitron.devDeviceId"]`, `apps/till/src/api/dev-device.ts`). It signs in a waiter
+  with the demo PIN `5555` (`apps/server/scripts/demo-seed/staff.ts:6`) and goes to the floor. Then
+  it records every `/api/` request with `page.on("request")` / `page.on("requestfinished")`, and
+  times from the click on a seated table until the order screen's `[data-draft-pane]` is visible
+  (Playwright's CSS locators pierce shadow roots). Before this change, "screen shown" and "draft
+  ready" are the same moment. The script must time the scenarios of the BEFORE table above:
+  - the first seated table in a zone;
+  - Back, then a second seated table in the same zone;
+  - tap a dish, Back at once, then another party's table;
+  - if the demo floor has one, a seated table with no main bill.
+  Each scenario runs five times; report the median, and the requests the open sent.
+- [ ] **Step 3: Say what a failing probe would print, then run.** At base, every open must list one
+  `GET /api/service-zones/<zone>/offers`. If none appears, the script is not watching the open.
+- [ ] **Step 4: Record.** Add a "Real till page, BEFORE" table under the BEFORE section of this
+  plan. Give the date, the command, the slot, and the demo data set; then stop your stack
+  (`wa-wt down waitron-feat-a768-till-open-table-fast`). Keep the script for Task 8.
+- [ ] **Step 5: If it cannot run, say so plainly.** For example, every slot is held, the demo seed
+  fails, or the device chooser cannot be driven. Write in the plan what was tried and what failed,
+  report it in the handover, and carry on with Task 1. Never mark this task done without numbers or
+  that written reason.
+- [ ] **Step 6: Commit the plan change.** For example: `Record A768's table-open timings on a real till page before the change`.
 
 ### Task 1: The live-fields digest on both menu reads (server)
 
@@ -255,8 +305,15 @@ read, **sorted by id**: `[id, courseId, category]` for each row. Availability is
 `unavailable` already carries it. Both functions must digest the same id set for the same documents:
 `readLiveState` takes its offers the way `applyLiveFields` does (`documentOffers`), or both collect ids
 through one helper. The equality test below pins this. When `applyLiveFields` is given `menuItemIds`,
-the digest covers only those items. Say so in its doc comment; no route compares such a digest. A
-zone with no department returns `liveFields: ""` from `menuState`'s early return.
+the digest covers only those items. Say so in its doc comment; no route compares such a digest.
+
+**No documents gives one fixed value everywhere.** Export
+`NO_LIVE_FIELDS = liveFieldsDigest(<no rows>)` from catalogue. `applyLiveFields`'s early return for
+`documents.length === 0` (`menu-document.ts:522`) answers `{ offers: new Map(), liveFields: NO_LIVE_FIELDS }`;
+`readLiveState(tx, [])` answers the same digest; and `menuState`'s no-department early return
+(`operations.ts`, the `zone?.departmentId == null` branch) answers `liveFields: NO_LIVE_FIELDS`.
+Without this, a zone with no published menu could get two different digests from its two reads, and
+the till would re-read it on every tick.
 
 - [ ] **Step 1: Write the failing tests.** In `menu-document.test.ts`, add
   `describe("the live-fields digest")`, using `menusFixture`, `build`, `updateProduct`:
@@ -267,20 +324,25 @@ zone with no department returns `liveFields: ""` from `menuState`'s early return
   - `"moves when a dish changes reporting category"`: `updateProduct(tx, f.soup, { categoryId: f.coldDrinks })`; differs.
   - `"stays when only availability changes"`: `updateProduct(tx, f.lemonade, { available: false })`;
     `liveFields` equal, and `unavailable.products` now contains `f.lemonade`.
-  - Update the existing `applyLiveFields` cases to read `.offers` (preserve every assertion).
-  In `operations.test.ts`, add `"menuState and listZoneOffers name the same live fields, and both move when a dish changes course"`
-  beside the existing `menuState` cases (around line 2688). Update the unknown-zone `toEqual` at
-  about line 2760 to include `liveFields: ""`.
+  - `"names one fixed digest when there are no documents"`: `applyLiveFields(tx, []).liveFields`,
+    `readLiveState(tx, []).liveFields` and `NO_LIVE_FIELDS` are all equal.
+  - Update every existing `applyLiveFields(...).get(...)` to `.offers.get(...)`, preserving each
+    assertion. They are in `menu-document.test.ts`, `menu-publication.test.ts` (`:855`, `:990`,
+    `:1917`) and `operations.test.ts` (`:2139`) in `packages/catalogue`.
+  In `packages/venue-service/src/operations.test.ts`, add two cases beside the existing `menuState`
+  ones (around line 2688): `"menuState and listZoneOffers name the same live fields, and both move when a dish changes course"`,
+  and `"a zone with no published menu names NO_LIVE_FIELDS on both reads"`. Update the unknown-zone
+  `toEqual` at about line 2760 to include `liveFields: NO_LIVE_FIELDS`.
 - [ ] **Step 2: Run them and see them fail.**
-  `pnpm --filter @waitron/catalogue exec vitest run src/menu-document.test.ts` and
-  `pnpm --filter @waitron/venue-service exec vitest run src/operations.test.ts`. They should fail
-  because `readLiveState` is not exported and `liveFields` is undefined.
+  `pnpm --filter @waitron/catalogue exec vitest run src/menu-document.test.ts src/menu-publication.test.ts src/operations.test.ts`
+  and `pnpm --filter @waitron/venue-service exec vitest run src/operations.test.ts`. They should
+  fail because `readLiveState` is not exported and `liveFields` is undefined.
 - [ ] **Step 3: Implement.** Add `liveFields` to `ZoneMenuState` and `ZoneOffers` in `module.ts`, with
   one doc line: "Digest of the course and reporting category behind every offer; moves when either
   changes on any dish, which no menu version records." In `operations.ts`, `listZoneOffers` takes
   `{ offers, liveFields }` from `applyLiveFields` and returns `liveFields`; `menuState` returns
   `liveFields` from `readLiveState`. Delete `readUnavailable` once nothing calls it.
-- [ ] **Step 4: Run the two files and every type check.** The same two test commands, then
+- [ ] **Step 4: Run the files and every type check.** The same test commands, then
   `pnpm --filter @waitron/catalogue --filter @waitron/module --filter @waitron/venue-service --filter @waitron/server typecheck`.
   Fix any fake `ZoneOffers` or `ZoneMenuState` the type check names (test seats implement the
   contract).
@@ -321,7 +383,8 @@ inside the course map of this handler; on rebase, that line moves into `till-set
   `pnpm --filter @waitron/server exec vitest run src/till-api.setup-revision.test.ts`.
 - [ ] **Step 3: Implement** as described above.
 - [ ] **Step 4: Run the new file and the suites that pin `/api/till`:**
-  `pnpm --filter @waitron/server exec vitest run src/till-api.setup-revision.test.ts src/till-api.test.ts src/till-api.courses.test.ts src/receipt-language.test.ts src/simplified-limit.test.ts src/till-api.service-periods.test.ts src/boot.till-clock.test.ts`.
+  `pnpm --filter @waitron/server exec vitest run src/till-api.setup-revision.test.ts src/till-api.test.ts src/till-api.courses.test.ts src/receipt-language.test.ts src/simplified-limit.test.ts src/till-api.service-periods.test.ts src/boot.till-clock.test.ts src/till-api.fiscal-sale-paths.test.ts`.
+  The last one pins `body.activeReaders` from `/api/till`.
   Then `pnpm --filter @waitron/server typecheck`.
 - [ ] **Step 5: Measure the added cost.** Recreate Appendix B at
   `apps/server/src/a768-route-cost.probe.test.ts`, run it with `A768_DISHES=80`, and compare the
@@ -377,7 +440,7 @@ In `#onMenuState`, a moved digest counts as a moved menu: the table branch takes
 **Files:**
 - Modify: `apps/till/src/till-app.ts`: new fields beside `#tableOffers` (`:2054`); the five
   `listZoneOffers` / `listDefaultZoneOffers` call sites (`:3914-3915`, `:4323`, `:4723`, `:4753`,
-  `:8471`); `#openTable` `:8467-8523`; `willUpdate` `:2819`; `#boot` `:2893`
+  `:8471`); `#openTable` `:8467-8523`
 - Test: `apps/till/src/till-app-open-table.test.ts`
 
 **Interfaces:**
@@ -389,7 +452,7 @@ In `#onMenuState`, a moved digest counts as a moved menu: the table branch takes
   `#rememberZoneCatalogue(read, catalogue)` for the default-zone read, keyed by `catalogue.context.zoneId`.
 
 All five sites go through `#readZoneOffers` or `#rememberZoneCatalogue`; `#refreshBasket` passes its
-captured `api`. Clear the map at the top of `#boot` and in `willUpdate` when `changed.has("api")`.
+captured `api`. Clearing the map on a server switch is Task 3c.
 
 In `#openTable`, when the table has a zone and `this.#zoneCatalogues.has(zoneId) && this.#menuPoll.running`:
 `#loadTableOffers(zoneId, held)` and `tableSelectedCatalogueId = #resolveZoneMenu(...)` run
@@ -413,9 +476,6 @@ drops an answer once a later table open has started (`action !== this.#tableOffe
     `catalogue("v2", { Beer: "6.00" })` and `menuState` → `state("v2")`. Open t7.
     `listZoneOffers` is called once, and Beer's `unitPrice` on the grid is `"6.00"`.
   - `"a table in a zone not yet read reads its offers"`: open t9 (z2); `listZoneOffers` is called with `"z2"`.
-  - `"a server switch forgets every held menu"`: open t4, `back`, replace `el.api` with a fresh stub
-    (as the server-switch cases in `till-app.test.ts` do), sign in again, and open t7:
-    `listZoneOffers` is called with `"z1"`.
 - [ ] **Step 2: Run and see the first two fail.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the table-opening suites.** Tests that change `listZoneOffers` and then reopen a
@@ -431,23 +491,43 @@ drops an answer once a later table open has started (`action !== this.#tableOffe
   Then `pnpm --filter @waitron/till typecheck`.
 - [ ] **Step 5: Commit.** For example: `The till keeps each zone's menu and only checks it when a table opens (A768)`.
 
+### Task 3c: A server switch or a new boot forgets every held menu
+
+**Files:** `apps/till/src/till-app.ts`: the top of `#boot` (`:2893`), and `willUpdate`'s
+`changed.has("api")` block (`:2820`). Test: `apps/till/src/till-app-open-table.test.ts`.
+
+Clear `#zoneCatalogues` in both places. A menu read from one server is never shown as the check's
+baseline on another, and an answer from the old `api` is already refused by `#readZoneOffers`.
+
+- [ ] **Step 1: Write the failing test** `"a server switch forgets every held menu"`. Open t4 and
+  `back`. Switch servers the way the server-switch cases in `till-app.test.ts` do (the router's
+  server-changed event, which re-runs `#boot`). Sign in again and open t7: `listZoneOffers` is
+  called with `"z1"`.
+- [ ] **Step 2: Run it and see it fail.** Implement. Run the new file and `src/till-app.test.ts`.
+- [ ] **Step 3: Commit.** For example: `A till that moves to another server reads each zone's menu afresh (A768)`.
+
 ### Task 4: Stop waiting for the left draft's save
 
 **Files:**
-- Modify: `apps/till/src/till-app.ts`: `#openTableFromEvent` `:8440-8442`; a new method placed just
-  above `#openTableFromEvent` (lane G edits `#flushDraft` and below); `#onLogout` `:12230-12238`;
+- Modify: `apps/till/src/till-app.ts`: `#openTableFromEvent` `:8440-8442`; `#openTable`'s seated
+  branch just before its `Promise.all` (`:8542`); two new methods placed just above
+  `#openTableFromEvent` (lane G edits `#flushDraft` and below); `#onLogout` `:12230-12238`;
   `#onServerChanged` `:1641`
 - Test: `apps/till/src/till-app-open-table.test.ts`
 
 **Interfaces:**
-- Produces: `#leavingDrafts = new Set<DraftSync>()`; `#releaseDraft(sync: DraftSync): void`.
+- Produces: `#leavingDrafts = new Map<DraftSync, Promise<void>>()`, each value settling once that
+  sync's background save has answered and the sync is dropped; `#releaseDraft(sync: DraftSync): void`;
+  `#savesOutFor(partyId: string | undefined): Promise<void>`, which awaits every entry whose
+  `sync.partyId === partyId` and resolves at once when there is none.
 
 `#releaseDraft` takes the sync off the screen (`#draftSync = undefined`, `#draftReady = false`,
-`requestUpdate()`) without dropping it, adds it to `#leavingDrafts`, and calls `sync.flush()`. When
-that settles, it removes the sync from the set and calls `sync.drop()`. If the session is unchanged,
-it says the outcome: `"failed"` → `errorKey = "table.draft_save_failed"`; a refusal object →
-`errorKey = draftRefusalError(refusal)`, because the sync's own `onRefused` is ignored once it is no
-longer `#draftSync`. `"saved"` says nothing.
+`requestUpdate()`) without dropping it. It stores `sync.flush().then(...)` in `#leavingDrafts`.
+That continuation removes the entry, calls `sync.drop()`, and, when the session is unchanged, says
+the outcome: `"failed"` → `errorKey = "table.draft_save_failed"`; a refusal other than
+`session.required` → `errorKey = draftRefusalError(refusal)`. `session.required` is skipped, as
+`#onDraftRefused` skips it (`:8916`). The sync's own `onRefused` is ignored once it is no longer
+`#draftSync`, which is why `#releaseDraft` says the outcome itself. `"saved"` says nothing.
 
 In `#openTableFromEvent`, replace `await this.#flushDraft()` with: if `#draftSync` is set and its
 `partyId` differs from the party of the table being opened (`this.tables.find(t => t.id === tableId)?.party?.id`;
@@ -455,15 +535,30 @@ a free table has none, so it always differs), call `#releaseDraft(this.#draftSyn
 once. Otherwise keep `await this.#flushDraft()` (owner decision 3). The `left()` / session check
 after it stays.
 
+**Coming back to a party whose save is still out.** Opening A, then B, then A again releases A's
+sync while its save is out, then B's. Reopening A compares only against `#draftSync`, which is now
+B's, so without more it would not wait. A's `listDrafts` could answer before A's save lands; the next
+edit would be refused `draft.out_of_date`, and `#refused` reloads and `#show` replaces the store
+(`apps/till/src/state/draft-sync.ts:396-406`). So `#openTable`'s seated branch does
+`await this.#savesOutFor(this.orderParty?.id)` just before its `Promise.all` of lines and
+`#openDraft`, then repeats the guard the branch already uses after an await:
+`if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;`.
+A seat makes a new party, so that branch has nothing to wait for.
+
 `#onLogout` closes every sync in `#leavingDrafts` beside the shown one, before `api.logout()`:
-`await this.#holdingReload(() => Promise.all([sync?.close(), ...[...this.#leavingDrafts].map((s) => s.close())]))`.
+`await this.#holdingReload(() => Promise.all([sync?.close(), ...[...this.#leavingDrafts.keys()].map((s) => s.close())]))`.
 `close()` waits for a save that is out and starts none afterwards (`apps/till/src/state/draft-sync.ts:251-266`).
 `#onServerChanged` drops them, as it drops the shown one.
 
+After the rebase on lane G: lane G's `#dropDraft` also closes an open adjustment that came from the
+draft (`if (this.adjusting?.source !== undefined) this.#closeAdjust();`). `#releaseDraft` does the
+same when it takes the sync off the screen.
+
 Guards: `offerRequest` is taken before the release, as now. With no await, nothing can start a newer
-open between the release and `#openTable`. A sync that answers after it was released can neither show
-its draft nor change the screen: `onReplaced`, `onRefused` and the store subscription each compare
-against `#draftSync` already (`till-app.ts:8846`, `8916`, `8860`).
+open between the release and `#openTable`. The new await in the seated branch is followed by the same
+three-part check as the bills read before it. A sync that answers after it was released can neither
+show its draft nor change the screen: `onReplaced`, `onRefused` and the store subscription each
+compare against `#draftSync` already (`till-app.ts:8846`, `8916`, `8860`).
 
 - [ ] **Step 1: Write the failing tests** under `describe("A768 the left draft saves in the background")`.
   Hold the save with a deferred `saveDraft` wrapper over `server.saveDraft` (see `holdNextSave` in
@@ -479,7 +574,11 @@ against `#draftSync` already (`till-app.ts:8846`, `8916`, `8860`).
     time).
   - `"the same party's table still waits for its own save"`: open t4, tap, `back`, hold the save,
     reopen t4. The draft is not shown until the save is released, then shows the beer.
-- [ ] **Step 2: Run and see the first and third fail.**
+  - `"A, B, then A again waits for A's own save"` (Review Focus 2): open t4, tap Beer, `back`, hold
+    the save, open t7, `back`, open t4. While the save is held, t4's draft is not shown and
+    `listDrafts` has not been called for `"v1"` since the hold. Release it: the draft shows the beer.
+    Then tap Steak and let it save: no `draft.out_of_date` refusal, and the beer is still there.
+- [ ] **Step 2: Run and see the first, third and fifth fail.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the new file and `src/till-app-drafts.test.ts`, `src/till-app.unsaved-changes.test.ts`,
   `src/till-app-parties.test.ts`; then `pnpm --filter @waitron/till typecheck`.
@@ -516,61 +615,78 @@ layout and the dialogs. The section gets `aria-busy="true"`.
 - [ ] **Step 4: Run** the two files and `src/i18n/strings.test.ts`.
 - [ ] **Step 5: Commit.** For example: `The table screen can say it is loading (A768)`.
 
-### Task 6: Switch to the order screen at once
+### Task 6a: Switch to the order screen at once, and undo the switch on failure
 
 **Files:**
-- Modify: `apps/till/src/till-app.ts`: `#tableCatalogueActive` `:4282`; `#onTabSelect` `:8295-8302`;
-  `#openTableFromEvent` `:8430-8450`; `#openTable` start `:8467` and end `:8598-8606`; both render
-  sites of `<till-table-order-screen>` (`#embeddedOrderBody` `:12400`, `#drillBody` `:12525`); `#onLogout` `:12199-12203`
+- Modify: `apps/till/src/till-app.ts`: `#tableCatalogueActive` `:4282`; `#openTableFromEvent`
+  `:8430-8455`; the landing path's resume `:3992-3999`; `#openTable`'s two failure `catch` branches
+  (`:8481-8503`, `:8590-8594`) and its end `:8598-8606`; both render sites of
+  `<till-table-order-screen>` (`#embeddedOrderBody` `:12400`, `#drillBody` `:12525`); `errorText` in
+  `render()` `:12735`; `#onLogout` `:12186-12203`
 - Test: `apps/till/src/till-app-open-table.test.ts`
 
 **Interfaces:**
 - Consumes: Task 5's `loading`.
-- Produces: `@state() private tableOpening = false`; `#orderScreenShown(): boolean`, which is
-  today's body of `#tableCatalogueActive`; `#tableCatalogueActive()` becomes
-  `!this.tableOpening && this.#orderScreenShown()`; `#showOrderScreen(): void`, which is the code now
-  at `:8599-8603` without the `#shownOnVisit` line, plus `this.tableOpening = true`.
+- Produces:
+  - `@state() private tableOpening = false`.
+  - `#openedFrom?: string`.
+  - `#orderScreenShown(): boolean`, which is today's body of `#tableCatalogueActive`;
+    `#tableCatalogueActive()` becomes `!this.tableOpening && this.#orderScreenShown()`.
+  - `#showOrderScreen(): void`. It records `#openedFrom = this.activeTabKey`. On a drill mount it
+    calls `#pushDrill({ kind: "table-order" })`, which writes no URL for this kind. On a card mount
+    it sets `this.activeTabKey = this.#resolveScreen("order")` **without writing the URL**. Then it
+    sets `this.tableOpening = true`.
+  - `#leaveFailedOpen(): void`.
 
 Changes:
-- `#openTable` calls `#showOrderScreen()` first (inside `if (this.#inShell())`), after recording
-  `const from = this.activeTabKey`. It wraps its body in `try … finally { if (offerRequest === this.#tableOfferRequest) this.tableOpening = false; }`.
-  At the old switch site it only sets `#shownOnVisit = this.#orderVisit` (still after `if (left()) return`)
-  and calls `void this.#loadStations()`. The second `#setActiveTab` there goes, because it would push
-  a second history entry.
-- Two failure branches undo the switch before setting the error they set today. One is the awaited
-  menu read's `catch` (an unheld zone); the other is the seating `catch`. The undo is `#leaveFailedOpen(from)`,
-  which acts only when `!left() && offerRequest === this.#tableOfferRequest && session === this.#operatorSession && this.#orderScreenShown()`.
-  It does `this.#orderVisit++`, then `#popDrill()` on a drill mount or `#setActiveTab(from, true)` on
-  a card mount.
-- `#openTableFromEvent` passes `() => left() || this.#orderVisit !== visit` to `#openTable`, where
-  `visit` is the `#orderVisit` after its own `++`. This is the landing path's shape (`:3998`).
-- `#onTabSelect`: when `this.tableOpening` and the tab change leaves the order screen
-  (`#orderScreenShown()` before and not after), bump `#orderVisit`.
-- Both renders pass `.loading=${this.tableOpening}`.
-- `#onLogout`'s `#tableToResume` already reads `#tableCatalogueActive()`, so during loading it records
+- `#openTableFromEvent` calls `#showOrderScreen()` (inside `if (this.#inShell())`) right after
+  `this.#tableOpensPending++` and `const session = …`. That is before the left draft is handled, so
+  a same-party open that still awaits `#flushDraft()` (Task 4) waits behind the loading line, not on
+  the floor. The landing path calls it just before its `#openTable(...)` (`:3993`), after its
+  `++this.#tableOfferRequest`. `#openTable` itself no longer switches.
+- At the old switch site (`:8599-8605`), after `if (left()) return`, only when `#orderScreenShown()`
+  is still true: set `#shownOnVisit = this.#orderVisit`. On a card mount, also write the URL now as
+  `#setActiveTab` would: `this.#writeUrl({ "till-tab": "order", "till-view": null, "till-station": null })`.
+  The check is needed because a destination drill pushed meanwhile may have replaced the loading
+  screen without moving `#orderVisit`. So a successful open adds one history entry, as today, and a
+  failed or abandoned one adds none. `void this.#loadStations()` stays.
+- `tableOpening` goes false at every exit of an open that is still the latest. That is `#openTable`'s
+  `finally`, and `#openTableFromEvent`'s `finally`, which covers an open that returns before reaching
+  `#openTable`, for example signed out during the awaited same-party flush. Each one runs
+  `if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;`. `#onLogout` sets it
+  false unconditionally.
+- The two failure branches call `#leaveFailedOpen()` before setting the error they set today. One is
+  the awaited menu read's `catch` (an unheld zone); the other is the seating `catch`.
+  `#leaveFailedOpen` acts only when
+  `!left() && offerRequest === this.#tableOfferRequest && session === this.#operatorSession && this.#orderScreenShown()`.
+  It does `this.#orderVisit++`, then `#popDrill()` on a drill mount, or
+  `this.activeTabKey = this.#openedFrom` on a card mount (no URL was written, so there is no history
+  entry to undo). Pass it what it needs as parameters.
+- Both renders pass `.loading=${this.tableOpening}`. `errorText` (`:12735`) picks `tableMenus` by
+  `#orderScreenShown()`: it only chooses which menus name the error, for the screen showing.
+- `#onLogout`'s `#tableToResume` reads `#tableCatalogueActive()`, so during loading it records
   nothing. Keep that reading, and add the test below.
 
 Guards, one by one:
 - **`offerRequest`**: unchanged. The switch moves no counter.
 - **`#openClaimed`**: unchanged. The table is claimed at the same point, after the menu step.
-- **`#operatorSession`**: unchanged checks. Logout during loading clears the drill, and the `finally` clears `tableOpening`.
-- **`left()`**: the switch bumps no visit, so `left()` stays false for the open's own work.
-  Leaving the loading screen (Back, a tab, logout, find-bill) now makes it true. Before this change,
-  the floor's open ignored those and pushed the order over wherever the waiter had gone.
+- **`#operatorSession`**: unchanged checks. Logout during loading clears the drill and `tableOpening`.
+- **`left()`**: unchanged in this task (6b changes it). The switch bumps no visit.
 - **`#tableOpensPending`**: unchanged.
-- **`#orderVisit` / `#shownOnVisit`**: `#shownOnVisit` is still set only when the open completes. So
-  `#leftSince` answers as before during the whole open, including on the landing path, which holds
-  no pending count.
+- **`#orderVisit` / `#shownOnVisit`**: `#shownOnVisit` is still set only when the open completes, and
+  now only if the order screen is still the one showing. So `#leftSince` answers as before during the
+  whole open, including on the landing path, which holds no pending count.
 - **Every other reader of `#tableCatalogueActive()`** (`:1566`, `:1600`, `:2210`, `:4273`,
-  `:9050-9055`, `:12201`, `:12733`, `:13291`) sees false while loading, as it did while the waiter was
-  on the floor during an open.
+  `:9050-9055`, `:12201`, `:13291`) sees false while loading, as it did while the waiter was on the
+  floor during an open. One case is worth stating. A department transfer accepted during loading for
+  the bill in `activeTabId` (`:1566`) forgets the party but does not return to the floor. The open
+  then completes and shows what it read, which is today's outcome at the same moment.
 
 - [ ] **Step 1: Write the failing tests** under `describe("A768 the order screen shows at once")`.
   Hold `getTabLines` and `listDrafts` with deferreds.
   - `"the order screen shows with its loading line before the table's reads answer"`: after open t4
     and one `flush`, `tableOrder(el)!.loading` is true and `[data-loading]` shows. Release both
     reads; `loading` is false and the draft is ready.
-  - `"Back while loading returns to the floor and the late answers do not bring the order back"`.
   - `"a second open during the first's loading shows only the second table"` (Review Focus 1): hold
     t4's reads (z1 held), open t9 (z2, `listZoneOffers` held), release in the order t9 then t4. The
     screen shows party `"v9"` and the z2 offers.
@@ -578,13 +694,63 @@ Guards, one by one:
     zone not held, `listZoneOffers` rejects; the floor screen is shown, the banner reads
     `t("table.error")`, and `[data-loading]` is gone.
   - `"a free table whose seating is refused goes back to the floor with the error"` (Review Focus 5).
+  - `"a same-party open shows its loading line while the left save is out"`: tap on t4, `back`, hold
+    the save, reopen t4. `[data-loading]` shows while the save is held.
+  - `"an open abandoned during its flush leaves no loading line"`: as above, then log out while the
+    save is held, release it, and sign in. The next table open starts from `tableOpening` false; no
+    `[data-loading]` is left over.
   - `"signing out while a table loads does not resume it at the next sign-in"`.
-  - On the card mount (`orderTabFormFactor`), `"the order tab shows at once, and a failure returns to the floor tab"`.
+  - On the card mount (`orderTabFormFactor`): `"the order tab shows at once and is written to history once it has loaded"`.
+    Spy on `history.pushState` and `replaceState`, never `history.length`
+    (`docs/developers/testing-guide.md`, "A browser test sees a push through `pushState`"). There is
+    no push while loading and one push on success. Also `"a failed open on the card mount returns to the floor tab with no history entry"`.
 - [ ] **Step 2: Run and see them fail.**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the same set of suites as Task 3b Step 4, plus `src/till-app.a11y.test.ts`;
   then `pnpm --filter @waitron/till typecheck`.
 - [ ] **Step 5: Commit.** For example: `The till shows a table's screen as soon as it is tapped, saying it is loading (A768)`.
+
+### Task 6b: Leaving the loading screen abandons the open, except a seat already sent
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts`: `#openTableFromEvent` `:8443-8450`; `#onTabSelect`
+  `:8295-8302`; `#openTable`'s seating branch `:8549-8597`
+- Test: `apps/till/src/till-app-open-table.test.ts`
+
+Today the floor's `left` is always false (`@open-table` at `:12837` passes none, so the default
+`() => false` applies), so an open finishes and pushes the order over wherever the waiter went. With
+the screen shown at once, Back must abandon the open:
+
+- `#openTableFromEvent` passes `() => left() || this.#orderVisit !== visit` to `#openTable`, where
+  `visit` is the `#orderVisit` after its own `++`. This is the landing path's shape (`:3998`).
+- `#onTabSelect`: when `this.tableOpening` and the change leaves the order screen
+  (`#orderScreenShown()` before and not after), bump `#orderVisit`.
+- **Once `seatTable` / `seatAtTables` has answered, the seating branch ignores `left()`.** A
+  successful seat has made the party on the server. The lines carried from the unassigned draft
+  exist only in memory, and the next open of that (now seated) table runs `#resetPartylessDraft()`.
+  So after a successful seat the branch checks only `session !== this.#operatorSession || this.#openClaimed > offerRequest`.
+  It then claims the table, opens the draft, puts the carried lines in (`loadFrom` today; lane G's
+  `appendLines(this.#placeFirstOrder(...))` after the rebase), calls `#showDraft`, and runs
+  `#reloadOrder()`. Only the completion bookkeeping (Task 6a's `#shownOnVisit` and the card-mount URL)
+  is skipped when `left()` is true. The edits then save like any draft; a later open of another
+  party releases them through Task 4's background save.
+
+Guards: `left()` now also turns true once `#orderVisit` moves on from the open's own visit: Back, a
+tab leaving the loading screen, logout, find-bill. Nothing on the open path bumps `#orderVisit`
+itself. The seating branch is the one place where `left()` is not checked after an await, for the
+reason above. The session and `#openClaimed` checks there stay.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"Back while loading returns to the floor and the late answers do not bring the order back"`.
+  - On the card mount: `"leaving the loading order tab for another tab abandons the open"`. The
+    open's later answers do not switch the tab back, and `tableOpening` is false.
+  - `"Back during seating keeps the carried lines"` (Review Focus 5): put Beer on a free table's
+    unassigned draft, open it with a guest count, and hold `seatTable`. Press Back, release the
+    seat, and reopen the table. Its draft holds the beer.
+- [ ] **Step 2: Run and see the first and third fail.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same suites as Task 6a Step 4; then `pnpm --filter @waitron/till typecheck`.
+- [ ] **Step 5: Commit.** For example: `Going back from a loading table abandons the open, and keeps lines already carried to a new seat (A768)`.
 
 ### Task 7: The till refreshes its venue settings when the setup revision moves
 
@@ -603,7 +769,10 @@ Guards, one by one:
 `#applyVenueSetup` assigns exactly these fields, then sets `#setupRevision = till.setupRevision`:
 `invoiceLocale`, `receiptLanguages`, `onboardingIntent`, `issuer`, `bumpMode`, `fireControl`,
 `courses`, `cardProvider`, `tipsEnabled`, `#simplifiedInvoiceLimit` (and `#store.simplifiedInvoiceLimit`),
-`fullInvoices`, `activeReaders`, `defaultReaderId`. `#boot` calls it in place of those lines.
+`fullInvoices`, `activeReaders`, `defaultReaderId`. `#boot` calls it in place of those lines. The
+two places that already re-read `getTill()` mid-session call it beside `#applyProfileSetup`, so their
+answer moves the revision too: `#enterSwitchedProfile` (`:7961`), and `#reconcileSavedDeviceZones`
+where it applies `#pendingDeviceZoneSetup` (`:7699`).
 `orderFlow`, `receiptPrintMode`, the locale lines and `#applyProfileSetup` stay where they are.
 
 `#noteSetupRevision` (first line of `#onMenuState`) does nothing when the revision is undefined,
@@ -622,6 +791,9 @@ every value, and the next answer that names another revision asks again.
   - `"bump mode and fire control reach the station screen"`: open the station drill, move the
     revision with `bumpMode: "ticket"`; the `till-station-screen`'s `bumpMode` is `"ticket"`.
   - `"a settings read that answers after a server switch applies nothing"`.
+  - `"a profile switch takes the venue's new courses too"`: `#enterSwitchedProfile`'s `getTill`
+    answers new courses with `"s2"`. After the switch, `courses` holds them, and the next poll
+    naming `"s2"` reads nothing more.
 - [ ] **Step 2: Run and see them fail:** `pnpm --filter @waitron/till exec vitest run src/till-app-setup-refresh.test.ts`.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the new file with `src/till-app.test.ts`, `src/till-app-boot-and-counter.test.ts`
@@ -635,16 +807,22 @@ every value, and the next answer that names another revision asks again.
   `screen` exists. Run it three times with the command in the BEFORE section.
 - [ ] **Step 2:** What a failing (unchanged) build would print, so that this run can disprove the
   work: the second open with `listZoneOffers: 1` and ready at about 200 ms or more. Expected after:
-  the second open with no `listZoneOffers`, one `menuState`, the loading screen at about 0–20 ms and
-  ready at about 100–140 ms. The left-unsaved open ready at about 100–140 ms. The first open shown at
-  once and ready at about 200–250 ms (its zone was not held). The no-main-bill open ready at about
-  200–240 ms; its bills read stays ahead of its lines read (see Task 9).
-- [ ] **Step 3:** Delete the probe. Write the AFTER table under the BEFORE one in this plan, with the
-  command and date, and commit the plan change. For example: `Record A768's table-open timings after the change`.
-- [ ] **Step 4 (optional receipt):** on your own stack (`wa-wt demo <worktree>`), set the server's
-  verbosity to debug from the dashboard's Diagnostics screen. Open the same table twice from the till
-  page. Copy the `http.request` lines for `/api/service-zones/:zoneId/offers` and `/api/menu-state`
-  with their `durationMs`. Add them to the plan if taken.
+  - the second open: no `listZoneOffers`, one `menuState`, the loading screen at about 0–20 ms, and
+    ready at about 100–140 ms;
+  - the left-unsaved open: ready at about 100–140 ms;
+  - the first open: shown at once and ready at about 200–250 ms (its zone was not held);
+  - the no-main-bill open: ready at about 200–240 ms. Its bills read stays ahead of its lines read
+    (see Task 9).
+- [ ] **Step 3: Real till page, AFTER (mandatory).** Restart your own stack from this branch's tip
+  (`wa-wt demo waitron-feat-a768-till-open-table-fast`). Rerun Task 0's script, which now also times
+  the loading line's first appearance, over the same scenarios, five runs each. Before running it,
+  say what an unchanged build would print: an offers request on every open. Stop your stack after.
+  If Task 0 recorded that it could not run, try again here and record the outcome either way. A
+  missing real-till measurement is reported plainly in the handover and the PR, never skipped
+  silently.
+- [ ] **Step 4:** Delete the in-repo probe. Write both AFTER tables (probe and real till page) under
+  the BEFORE ones in this plan, with commands and date, and commit the plan change. For example:
+  `Record A768's table-open timings after the change`.
 
 ### Task 9: Docs
 
@@ -669,11 +847,17 @@ every value, and the next answer that names another revision asks again.
   `#applyVenueSetup` applies, and the ones fixed until reload, each with its why:
   - `locale`: the server's start-up value; it only picks the language before sign-in, and a
     signed-in person's own choice wins.
+  - Refreshed, but changing only when the server restarts: `tipsEnabled` comes from
+    `WAITRON_TILL_TIPS` (`apps/server/src/till-config.ts:46-47`), and the simplified-invoice limit
+    from the fiscal backend at boot (`apps/server/src/boot.ts:1520`). The revision covers them, so an
+    open till takes the new values after a restart without its own reload.
   - `servers` and `nodeId`: the router follows the primary among the servers it was given at boot
     (`ServerRouter.setServers`).
   - The profile values (form factor, capabilities, idle logout, starting screen, clocking
     available): applied by `#applyProfileSetup` at boot, on a profile switch and when the zone
-    selection changes.
+    selection changes, and at no other time. They change the layout and which screens the till
+    offers, and applied mid-session they could remove the screen the person is on; at those three
+    points the till already lays itself out again (owner decision 4).
   - A kitchen screen in device mode: nothing refreshes.
   Cite the tests that pin each refreshed value. Say what nothing guards: a new `/api/till` field
   moves the revision but reaches an open till only once someone adds it to `#applyVenueSetup`.
@@ -690,7 +874,7 @@ every value, and the next answer that names another revision asks again.
 
 Checked with `git diff ed0be7d89...feat/a773-1-unsent-list` on 2026-10-17:
 
-- **`apps/till/src/till-app.ts`, the end of `#openTable`.** Task 6 removes the switch at `:8599-8605`.
+- **`apps/till/src/till-app.ts`, the end of `#openTable`.** Task 6a replaces the switch at `:8599-8605`, and Task 6b changes the seating branch's checks at `:8562-8596`.
   Lane G's hunks `@@ -8585` (the seating branch: `loadFrom` → `appendLines(this.#placeFirstOrder(...))`)
   and `@@ -8606` (`#placeFirstOrder`, added right after `#openTable`'s closing brace) sit on both
   sides of it, so expect a textual conflict. Keep both of lane G's changes and this plan's removal.
@@ -704,6 +888,14 @@ Checked with `git diff ed0be7d89...feat/a773-1-unsent-list` on 2026-10-17:
 - **`apps/till/src/api/client.ts`.** Task 7 adds `setupRevision` at the end of `TillInfo` (about
   `:196`), close to lane G's `TillCourse` hunk at `:210`; it may need a manual merge.
 - **`docs/backlog.md` and `docs/backlog/till.md`.** Lane G edits both; docs-only conflicts.
+- **Lane G's other hunks, checked, with no text in common:**
+  - `packages/module/src/module.ts` `@@ -1256` adds `moveBillAllergies` to
+    `VenueServiceContribution`; Task 1 edits `:308-352`.
+  - `till-app.ts` `@@ -11366` makes `#onTakePayment` await `#flushDraft()` and re-check the bill.
+    It acts on the bill on screen, not on a released draft, so Task 4 does not change it.
+  - `till-app.ts` `@@ -12842` adds two event bindings beside `@open-table` (`:12837`); Task 6a
+    edits the order screen's two render sites (`:12400`, `:12525`), not that list.
+- **Lane G's `#dropDraft` adds `#closeAdjust()`**: carry it into `#releaseDraft` (Task 4).
 - **No meeting:** `till-table-order-screen.ts` `render()` (lane G's hunks are at `:2037-2292` and
   `:3003+`), `i18n/strings.ts` (lane G removes `table.bill_main`, far from `table.back`),
   `#onMenuState`, `ZoneOfferIndex`, `#boot`, `#onLogout`'s draft close. Lane F's branch touches no
