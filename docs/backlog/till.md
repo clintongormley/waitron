@@ -2201,6 +2201,14 @@ the server cheaply whether it changed.
   turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to (2, 2).
   Part of the owner question in "A turned floor plan table narrower than its unturned box stops
   short of the plan's left or top edge". Left open by A672.
+- **Two floor plan keyboard tests do not see the far-edge protection.** An arrow key or Shift+arrow
+  change while the canvas is scrolled to its far right or bottom keeps the other tables still on
+  screen; with that protection switched off, the zoom-out test and the half-zoom Shift+ArrowLeft
+  case in the canvas suite still pass. Make each fail without it. Found by the A672 review. Left
+  open by A672.
+- **Possibly: zooming out during a keyboard change grows the blank margin above and left of the
+  plan.** Not established: the one probe looked the same with and without A672's change, so it
+  proves nothing either way. Reproduce first. Left open by A672.
 
 ## Loose ends left by A718
 

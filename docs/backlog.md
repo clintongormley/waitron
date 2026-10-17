@@ -2214,6 +2214,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     turning back never steps it out again: one full turn by key takes an 8 × 8 from (0, 0) to
     (2, 2). Part of the owner question in "A turned floor plan table narrower than its unturned box
     stops short of the plan's left or top edge".
+  - Two floor plan keyboard tests (zoom-out, half-zoom Shift+ArrowLeft) still pass with the
+    far-edge protection switched off.
+  - Possibly, not established: zooming out during a keyboard change grows the blank margin above
+    and left of the plan.
 
   [Detail](backlog/till.md#loose-ends-left-by-a672)
 
