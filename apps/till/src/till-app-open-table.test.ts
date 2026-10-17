@@ -927,11 +927,14 @@ describe("A768 the left draft saves in the background", () => {
 
   it("signing out sends a left draft whose background save got no answer, and the next person never saves it", async () => {
     const savedBy: string[] = [];
+    const calls: string[] = [];
     const { el } = await mountApp({
       saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
         savedBy.push(server.personId);
+        calls.push("save");
         return server.saveDraft(...args);
       }),
+      logout: vi.fn(async () => void calls.push("logout")),
     });
     await openMesa(el);
     await tap(el, "Beer");
@@ -939,9 +942,10 @@ describe("A768 the left draft saves in the background", () => {
     await moveToMesa7(el);
     release(new TypeError("Failed to fetch"));
     await flush(el, 6);
+    calls.length = 0;
     emit(shell(el), "logout");
     await flush(el, 6);
-    expect(api.logout).toHaveBeenCalledOnce();
+    expect(calls).toEqual(["save", "logout"]);
     expect(savedLines()).toEqual(["offer-beer ×1"]);
     await signIn(el, "p2", "Bea");
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -950,6 +954,102 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el, 6);
     expect(rows(el)).toEqual([]);
     expect(savedBy).not.toContain("p2");
+  });
+
+  /** Records who each save was sent as, the held one included. */
+  function mountRecordingSaves(): { savedBy: string[]; mounted: ReturnType<typeof mountApp> } {
+    const savedBy: string[] = [];
+    const mounted = mountApp({
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        savedBy.push(server.personId);
+        return server.saveDraft(...args);
+      }),
+    });
+    return { savedBy, mounted };
+  }
+
+  /** The device is refused and the till starts again on the lock screen, with no sign-out. */
+  async function restartWithoutSignOut(el: TillApp): Promise<void> {
+    emit(shell(el), "device-unauthorized");
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+  }
+
+  it("after a restart with no sign-out, the next person never sees or saves the order kept for the one before", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(savedBy).toEqual(["p1"]);
+  });
+
+  it("after a restart with no sign-out, the next person's sign-out does not send the order kept for the one before", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(savedBy).toEqual(["p1"]);
+  });
+
+  it("after a restart with no sign-out, a left order whose save fails once the next person is in is not theirs", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+  });
+
+  it("after a restart with no sign-out, the person who made a kept order sees and saves it again", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p1", "Ana");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(savedBy).toEqual(["p1", "p1"]);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
   });
 
   it("a server switch lets go of a left draft whose background save got no answer", async () => {

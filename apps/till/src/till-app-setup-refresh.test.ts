@@ -748,7 +748,7 @@ describe("A768 a settings read that gets no answer", () => {
     expect(api.getTill.mock.calls.length).toBe(reads + 1);
     const [options] = api.getTill.mock.lastCall as [{ signal?: AbortSignal }?];
     api.getTill.mockResolvedValue(moved);
-    // TABLE_REQUEST_LIMIT_MS in till-app.ts.
+    // TABLE_REQUEST_LIMIT_MS in state/draft-sync.ts.
     await vi.advanceTimersByTimeAsync(sentAt + 149_999 - Date.now());
     expect(options?.signal?.aborted).toBe(false);
     expect(api.getTill.mock.calls.length).toBe(reads + 1);

@@ -2100,8 +2100,8 @@ export class TillApp extends LitElement {
   #draftSync?: DraftSync;
   /** Drafts left for another party's table, each settling once its save has answered. */
   #leavingDrafts = new Map<DraftSync, Promise<void>>();
-  /** Left drafts whose save got no answer, by party. Each belongs to the current operator session
-   * and is shown again, and saved, when its party opens; a session's end takes them all. */
+  /** Left drafts whose save got no answer, by party. Each is shown again, and saved, only when its
+   * party opens for the person who made it; a sign-out or a server switch takes them all. */
   #unsavedDrafts = new Map<string, DraftSync>();
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
@@ -9070,7 +9070,8 @@ export class TillApp extends LitElement {
       : null;
   }
 
-  /** Starts the person's draft on the order's party, read from the server unless `read` is false.
+  /** Starts the person's draft on the order's party: the one kept for them when its save got no
+   * answer, or else one read from the server unless `read` is false.
    * The screen shows it only once {@link #showDraft} says so. Nothing is started for a table opened
    * in an operator session that has since ended. */
   async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
@@ -9079,13 +9080,14 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
     if (party === null) return { sync: undefined, read: true };
-    const unsaved = this.#unsavedDrafts.get(party.id);
-    if (unsaved !== undefined) {
-      this.#unsavedDrafts.delete(party.id);
-      this.#draftSync = unsaved;
+    const kept = this.#unsavedDrafts.get(party.id);
+    this.#unsavedDrafts.delete(party.id);
+    if (kept?.personId === this.operatorPersonId) {
+      this.#draftSync = kept;
       void this.#flushDraft();
-      return { sync: unsaved, read: true };
+      return { sync: kept, read: true };
     }
+    kept?.drop();
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
@@ -12508,7 +12510,9 @@ export class TillApp extends LitElement {
     const sync = this.#draftSync;
     const unsaved = [...this.#unsavedDrafts.values()];
     this.#unsavedDrafts.clear();
-    const leaving = [...this.#leavingDrafts.keys(), ...unsaved];
+    const own = unsaved.filter((each) => each.personId === this.operatorPersonId);
+    for (const each of unsaved) if (!own.includes(each)) each.drop();
+    const leaving = [...this.#leavingDrafts.keys(), ...own];
     if (sync !== undefined || leaving.length > 0) {
       this.#draftSync = undefined;
       this.#draftReady = false;
@@ -12516,7 +12520,7 @@ export class TillApp extends LitElement {
         Promise.all([sync?.close(), ...leaving.map((each) => each.close())]),
       );
       sync?.drop();
-      for (const each of unsaved) each.drop();
+      for (const each of own) each.drop();
     }
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     try {
