@@ -386,6 +386,7 @@ describe("the season routes", () => {
     const r = await routed();
     const response = await put(r, r.manager, change({ delete: [r.seasons.Autumn] }));
     expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(await stored(r));
     expect((await stored(r)).map(({ name }) => name)).toEqual(["Spring", "Summer", "Winter"]);
   });
 
@@ -511,14 +512,24 @@ describe("the season routes", () => {
   it("refuses a call with no clock revision, a rename included, writing nothing", async () => {
     const r = await routed();
     const before = await stored(r);
+    const error = { error: { code: "hours.clock_changed", params: {} } };
     await answers(
       await put(r, r.manager, {
         save: [{ id: r.seasons.Summer, name: "Verano", startsOn: "06-01", colour: "amber" }],
         delete: [],
       }),
       409,
-      { error: { code: "hours.clock_changed", params: {} } },
+      error,
     );
+    await answers(
+      await put(r, r.manager, {
+        save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }],
+        delete: [],
+      }),
+      409,
+      error,
+    );
+    await answers(await put(r, r.manager, { save: [], delete: [r.seasons.Summer] }), 409, error);
     expect(await stored(r)).toEqual(before);
   });
 
