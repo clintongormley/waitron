@@ -156,7 +156,7 @@ describe("the Rota by area", () => {
     const cell = row.querySelectorAll("td")[4]!;
     const add = cell.querySelector<HTMLElement>("[data-test=cell-add]")!;
     expect(normal(add.textContent!)).toBe("+ Add shift");
-    expect(add.getAttribute("aria-label")).toBe("Add a Sous chef shift on Fri 4 Dec");
+    expect(add.getAttribute("aria-label")).toBe("Add shift: Sous chef, Fri 4 Dec");
     expect(getComputedStyle(add).opacity).toBe("0");
     const box = add.getBoundingClientRect(),
       td = cell.getBoundingClientRect(),
