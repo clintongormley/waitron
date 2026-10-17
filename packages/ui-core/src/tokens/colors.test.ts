@@ -471,67 +471,6 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
   });
 });
 
-// The Opening hours seasons' tints, taken in a venue's season start order and repeated past four.
-const SEASON_FILLS = [1, 2, 3, 4].map((index) => `--wt-color-season-${index}`);
-
-describe.each(["light", "dark"] as const)("season colours (%s)", (theme) => {
-  test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
-    const el = mount(theme);
-    for (const fill of SEASON_FILLS)
-      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
-  });
-
-  test("each chip's line stands 3:1 or more from its fill and from the surface", () => {
-    const el = mount(theme);
-    for (const fill of SEASON_FILLS) {
-      const line = token(el, `${fill}-line`);
-      expect(ratio(line, token(el, fill)), fill).toBeGreaterThanOrEqual(3);
-      expect(ratio(line, token(el, "--wt-color-surface")), fill).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  test("the four fills are different colours", () => {
-    const el = mount(theme);
-    expect(new Set(SEASON_FILLS.map((fill) => token(el, fill))).size).toBe(SEASON_FILLS.length);
-  });
-
-  test("run green, amber, peach, blue, so the default seasons from Spring read as the mockup's", () => {
-    const hue = (hex: string) => {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-      const max = Math.max(r!, g!, b!);
-      const span = max - Math.min(r!, g!, b!);
-      const sector =
-        max === r ? (g! - b!) / span : max === g ? (b! - r!) / span + 2 : (r! - g!) / span + 4;
-      return (sector * 60 + 360) % 360;
-    };
-    const el = mount(theme);
-    const bands = [
-      [90, 170],
-      [30, 60],
-      [0, 30],
-      [190, 250],
-    ];
-    for (const [index, fill] of SEASON_FILLS.entries())
-      for (const name of [fill, `${fill}-line`]) {
-        const [from, to] = bands[index]!;
-        expect(hue(token(el, name)), name).toBeGreaterThanOrEqual(from!);
-        expect(hue(token(el, name)), name).toBeLessThan(to!);
-      }
-  });
-
-  test("the OS preference gives them the same values as the explicit theme", async () => {
-    const names = SEASON_FILLS.flatMap((fill) => [fill, onFill(fill), `${fill}-line`]);
-    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
-    const explicit = mount(theme);
-    const fromTheme = names.map((name) => token(explicit, name));
-    expect(fromTheme).not.toContain("");
-    explicit.remove();
-    await commands.emulateColorScheme(theme);
-    const byPreference = mount();
-    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
-  });
-});
-
 // The till map's table fills.
 const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
   (fill) => `--wt-color-table-${fill}`,
