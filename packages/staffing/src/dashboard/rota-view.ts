@@ -285,10 +285,9 @@ export class RotaView extends LitElement {
     if (popup?.shown) popup.show(card);
   }
   readonly #popupClosed = () => {
-    // A close from an earlier popup can arrive after a new pick: before the view has updated for
-    // it, or once the popup has opened again for it.
-    if (this.picked?.key !== this.#shownFor || this.renderRoot.querySelector("rota-popup")?.shown)
-      return;
+    // A close that arrives while the popup is open again belongs to an earlier showing: leave the
+    // pick alone.
+    if (this.renderRoot.querySelector("rota-popup")?.shown) return;
     this.picked = undefined;
     this.actionError = "";
   };
