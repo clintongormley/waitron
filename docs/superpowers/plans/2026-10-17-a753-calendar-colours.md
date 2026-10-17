@@ -11,10 +11,11 @@ colours other roles use, and a new role starts on the first colour no role uses.
 list names the people holding each role, then "plus N more" past a cut-off.
 
 **Not in this plan:** A753 point 1 (more colours). It waits for the owner's answer to the swatch
-board (`~/waitron-campaign-b/a753-owner-question.md`) and needs a migration, because three CHECK
-constraints list the six colours (`staff_roles_colour_ck`, `special_dates_colour_ck`,
-`menu_periods_colour_ck` — measured in `~/waitron-campaign-b/item-a753-ledger.md`). Nothing here
-assumes six: every list of colours below is built from `CALENDAR_COLOURS`.
+board (`~/waitron-campaign-b/a753-owner-question.md`) and needs a migration, because two CHECK
+constraints list the six colours: `menu_periods_colour_ck` (venue-service; the latest snapshot,
+`0055_snapshot.json`, lists no other colour check) and `staff_roles_colour_ck` (staffing). Special
+dates store no colour since venue-service migration `0038_clammy_klaw.sql`. Nothing here assumes
+six: every list of colours below is built from `CALENDAR_COLOURS`.
 
 **Architecture:** A new field primitive, `wt-colour-chooser`, in `packages/ui`. It knows nothing
 about calendars or stations: the host hands it a list of choices, each with its name, a CSS colour
@@ -133,7 +134,11 @@ twice side by side, the second told to set this plan aside and test what it does
    cut-off: "{names} plus {count} more" ("{names} y {count} más"). Nobody: "No people", as today.
    The cut-off is one constant, `HOLDER_NAMES_SHOWN`; Task 6 picks 5 or 10 by eye.
 8. **The list reads names again when a person changes** (renamed, suspended): `persons` joins the
-   `staff-roles` live query's tables.
+   `staff-roles` live query's tables. Both staffing painters share that query through
+   `watchStaffRoles` (`staffing-season-painter.ts:164`, `staffing-special-day-painter.ts:136`), so
+   they too re-read the roles whenever a person changes. That is accepted: the read is one cheap
+   list, and one shared query keeps one source for the roles rather than a second, list-only query
+   that could drift from it.
 
 ---
 
@@ -203,17 +208,17 @@ Inputs the spec implies but no point names; each has its test in the task named.
 
 1. **A stored colour outside the palette** (a period whose colour is `pink`): the field shows no
    colour, the panel's tab stop is its first tile, and the dialog's own check still says "Choose a
-   colour." Tasks 1 and 3a.
+   colour." Tasks 1a and 3a.
 2. **Every colour taken:** a new staff role starts on red; two roles sharing a colour are both named
    on its tile. Task 4a.
 3. **The dialog left open on a role it has just created** (people failed to save) while the live list
    now includes that role: its own colour is not marked as used by itself. Task 4a.
 4. **Escape with the panel open inside a dialog that guards unsaved changes:** only the panel closes;
-   the dialog stays, focus returns to the field. Tasks 1 and 3a.
+   the dialog stays, focus returns to the field. Tasks 1b and 3a.
 5. **The panel near the bottom or right edge of a 390 px window:** it stays wholly on screen.
-   Task 1.
+   Task 1b.
 6. **The field disabled while its panel is open** (the dialog starts saving): the panel closes.
-   Task 1.
+   Task 1a.
 7. **Holder names:** two people with the same display name, a suspended holder, accented names
    sorted by the label comparator, a person holding two roles, another location's roles. Task 5a.
 8. **Exactly the cut-off number of holders** shows them all with no "plus"; one more shows "plus 1
@@ -221,7 +226,12 @@ Inputs the spec implies but no point names; each has its test in the task named.
 
 ---
 
-### Task 1: `wt-colour-chooser` — the field, the panel, the keys
+### Task 1a: `wt-colour-chooser` — the field and the panel
+
+Task 1 is split in two so each half fits one implementer: 1a draws the field and the panel and
+handles clicks, marks, `disabled`, the error and changing choices; 1b adds the keys, Escape, Tab,
+outside clicks and positioning. 1a may open the panel with `showPopover()` at a provisional
+position; 1b replaces that with the positioning rule below.
 
 **Files:**
 - Create: `packages/ui/src/components/wt-colour-chooser.ts`,
@@ -271,11 +281,15 @@ export class WtColourChooser extends LitElement {
 - `:host { display: block; max-width: var(--wt-field-max-width) }`.
 - The field box as `wt-combobox` draws it: `.field` with `part="field"`, `data-label` from
   `fieldLabelState({ value: chosenLabel })` (it floats whenever a choice matches `value`),
-  `data-invalid`, `data-disabled`; a real `<label class="field-label" for=…>` with the label text in
+  `data-invalid`, `data-disabled`; a `<label class="field-label">` with an `id`, the label text in
   `.field-label-text` and the `*` (`data-required`, `aria-hidden`) when `required`; the control is a
-  `<button type="button" class="field-control trigger">` carrying `name`, `aria-expanded`,
-  `aria-controls` (the panel), `aria-invalid` when `error` is set, and `aria-describedby` (the error
-  paragraph). Inside it: the chosen colour's square (`part="swatch"`, painted from its `fill`
+  `<button type="button" class="field-control trigger">` with its own `id`, carrying `name`,
+  `aria-expanded`, `aria-controls` (the panel), `aria-labelledby="${labelId} ${triggerId}"`,
+  `aria-invalid` when `error` is set, and `aria-describedby` (the error paragraph). The trigger is
+  named by `aria-labelledby`, not by `<label for>`, so its accessible name is the label and then
+  its own text ("Colour Blue"); a `<label for>` would make it announce only "Colour". This is
+  `wt-combobox`'s pattern (`packages/ui/src/components/wt-combobox.ts:1018-1024`). Inside it: the
+  chosen colour's square (`part="swatch"`, painted from its `fill`
   through a custom property set inline, e.g. `style="--swatch-fill: …"`), the colour's name, and a
   `wt-icon name="chevron-down"`. With no matching choice it shows no square and no name.
 - The error is a paragraph under the box, as `wt-combobox`'s is (`class="error"`, `data-error`).
@@ -287,18 +301,17 @@ export class WtColourChooser extends LitElement {
   `label` when nobody uses it. Tiles sit in two columns (`repeat(2, minmax(0, 1fr))`), each at least
   `--wt-tap-min` tall. The checked tile has the station picker's ring
   (`outline: var(--wt-field-line-width-active) solid var(--wt-color-primary)`, bold name).
-- Positioning, in the same call that shows it: width `max-content`, at least the trigger's width
-  and at most `innerWidth - 16px`; left aligned with the trigger and pulled in to keep an 8 px
-  gutter; top at the trigger's bottom, clamped between 8 px and `innerHeight - height - 8px` — the
-  rule `wt-combobox.positionPopup` uses.
 
 - [ ] **Step 1: Failing tests** in `wt-colour-chooser.test.ts` (`mount`, `host`, `cleanup` from
   `../test-helpers.js`; `userEvent` and `page` from `vitest/browser`). Fixture: six choices
   red…purple with `fill: "var(--wt-color-palette-<colour>)"`, blue `usedBy: ["Runner", "Cook"]`,
   red `usedBy: ["Waiter"]`.
-  1. The field: label "Colour" in a `<label for>` that names the trigger; the trigger carries
-     `name="colour"`, shows "Blue" and a square for `value="blue"`; `required` draws the `*`; no
-     `required`, no `*`.
+  1. The field: the label "Colour" shows, with its own `id`; the trigger carries `name="colour"`,
+     shows "Blue" and a square for `value="blue"`, and its `aria-labelledby` names the label's id
+     and then its own; its accessible name (computed with `page.getByRole("button", …)` or by
+     reading the elements its `aria-labelledby` names) includes both "Colour" and "Blue". axe does not
+     catch a trigger that announces only "Colour", so this case is the one that does. `required`
+     draws the `*`; no `required`, no `*`.
   2. `value="pink"` (in no choice): the trigger shows no name and no square, the label rests
      (`data-label` as `fieldLabelState` gives for an empty value), and once open, the first tile is
      the only one with `tabindex="0"` and none is `aria-checked="true"`.
@@ -309,42 +322,65 @@ export class WtColourChooser extends LitElement {
      "Blue, Runner, Cook" by default and "Blue, used by Runner, Cook" with
      a `usedByLabel` that returns "{colour}, used by {names}"; the grey tile has no names line and is named
      "Grey".
-  5. Arrow keys with the panel open (native keypresses): from blue, ArrowRight sends one
+  5. A real click on the green tile sends one `wt-change` `{ value: "green" }`, closes the panel
+     and returns focus to the trigger. A click on the already-checked tile sends nothing and closes.
+     Enter and Space on a tile do the same as a click. The native `click` that caused the event does
+     not reach a listener on the host's parent (stopped first).
+  6. `disabled`: the trigger is disabled and a click opens nothing; setting `disabled` while open
+     closes the panel. `show()` before the first render and after removal does nothing.
+  7. `error="Choose a colour."`: the paragraph shows it, the trigger has `aria-invalid="true"` and
+     names the paragraph in `aria-describedby`; `focusFirstInvalid(host)` focuses the trigger.
+     With no error, no `aria-invalid="true"` and no paragraph.
+  8. Changing `choices` while open re-renders the tiles; the checked tile follows `value`.
+  Fails today: the element does not exist.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/ui exec vitest run src/components/wt-colour-chooser.test.ts`;
+  see the import fail.
+- [ ] **Step 3: Implement** the interface above, except the keys and positioning (Task 1b).
+- [ ] **Step 4: Run** the file until green (read the `Tests` count), then `wt-combobox.test.ts` and
+  `wt-row-actions.test.ts` (untouched, must stay green). **No existing check changes.** Commit
+  `"A753: wt-colour-chooser, a field that opens a panel of colours"`.
+
+### Task 1b: `wt-colour-chooser` — the keys, Escape, Tab, outside clicks and positioning
+
+**Files:** Modify `packages/ui/src/components/wt-colour-chooser.ts` and
+`wt-colour-chooser.test.ts`. Read first: the same files as Task 1a, especially `wt-combobox.ts`
+(`openList` and `positionPopup`, `:730-773`) and `wt-row-actions.ts` (show, hide, Escape,
+`:99-192`).
+
+**What it adds:**
+- The keys of Decision 3.
+- Positioning, in the same call that shows it: width `max-content`, at least the trigger's width
+  and at most `innerWidth - 16px`; left aligned with the trigger and pulled in to keep an 8 px
+  gutter; top at the trigger's bottom, clamped between 8 px and `innerHeight - height - 8px` — the
+  rule `wt-combobox.positionPopup` uses.
+
+- [ ] **Step 1: Failing tests** in `wt-colour-chooser.test.ts`, with Task 1a's fixture.
+  1. Arrow keys with the panel open (native keypresses): from blue, ArrowRight sends one
      `wt-change` with `{ value: "green" }` and focuses the green tile once the host sets `value`;
      ArrowDown → next, ArrowLeft and ArrowUp → previous, wrapping at both ends; Home → red, End →
      purple. Each press sends exactly one event, `bubbles` and `composed` true. The panel stays
      open.
-  6. Controlled: with a listener that does NOT set `value`, an arrow press sends the event and the
+  2. Controlled: with a listener that does NOT set `value`, an arrow press sends the event and the
      field still shows the old colour.
-  7. A real click on the green tile sends one `wt-change` `{ value: "green" }`, closes the panel
-     and returns focus to the trigger. A click on the already-checked tile sends nothing and closes.
-     Enter and Space on a tile do the same as a click. The native `click` that caused the event does
-     not reach a listener on the host's parent (stopped first).
-  8. Escape with the panel open (native keypress): closes it, focus on the trigger, and the keydown
+  3. Escape with the panel open (native keypress): closes it, focus on the trigger, and the keydown
      reaches no listener above the chooser and is `defaultPrevented`. Inside a
      `<wt-modal open .beforeClose=${() => Promise.resolve(true)}>` the modal stays open after that
      Escape; a second Escape (panel closed) does reach the modal.
-  9. A real click outside closes the panel and does not take focus from where it was clicked.
+  4. A real click outside closes the panel and does not take focus from where it was clicked.
      Tab from the checked tile moves focus out of the chooser and closes the panel.
-  10. ArrowDown, ArrowUp, Enter and Space on the closed trigger open it.
-  11. Before the first painted frame the panel's top is at the trigger's bottom and its left at the
-      trigger's left (measure in a `requestAnimationFrame` registered in the trigger's `click`
-      listener, as `wt-row-actions.test.ts:104-145` does).
-  12. At `page.viewport(390, 700)` (assert `window.innerWidth` is 390), with the chooser near the
-      bottom right of the page, the open panel's rectangle is inside the window with an 8 px margin.
-  13. `disabled`: the trigger is disabled and a click opens nothing; setting `disabled` while open
-      closes the panel. `show()` before the first render and after removal does nothing.
-  14. `error="Choose a colour."`: the paragraph shows it, the trigger has `aria-invalid="true"` and
-      names the paragraph in `aria-describedby`; `focusFirstInvalid(host)` focuses the trigger.
-      With no error, no `aria-invalid="true"` and no paragraph.
-  15. Changing `choices` while open re-renders the tiles; the checked tile follows `value`.
-  Fails today: the element does not exist.
+  5. ArrowDown, ArrowUp, Enter and Space on the closed trigger open it.
+  6. Before the first painted frame the panel's top is at the trigger's bottom and its left at the
+     trigger's left (measure in a `requestAnimationFrame` registered in the trigger's `click`
+     listener, as `wt-row-actions.test.ts:104-145` does).
+  7. At `page.viewport(390, 700)` (assert `window.innerWidth` is 390), with the chooser near the
+     bottom right of the page, the open panel's rectangle is inside the window with an 8 px margin.
+  Fails today: Task 1a handles no keys and does not position the panel.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/ui exec vitest run src/components/wt-colour-chooser.test.ts`;
-  see the import fail.
-- [ ] **Step 3: Implement** the interface above.
+  see the new cases fail and Task 1a's still pass.
+- [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the file until green (read the `Tests` count), then `wt-combobox.test.ts` and
   `wt-row-actions.test.ts` (untouched, must stay green). **No existing check changes.** Commit
-  `"A753: wt-colour-chooser, a field that opens a panel of colours"`.
+  `"A753: the colour chooser's keys and panel position"`.
 
 ### Task 2: The chooser's token, accessibility and mutation checks; workbench and export
 
@@ -367,15 +403,19 @@ export class WtColourChooser extends LitElement {
 - [ ] **Step 2: Axe tests**, `describe.each(["light", "dark"])`, with `mountThemed` and
   `expectNoA11yViolations` from `../a11y-helpers.js`: closed with a chosen colour; closed with no
   matching value; required; with an error; disabled; open with marks (wait for `:popover-open`).
-  Then break it on purpose — remove the radio group's label, then the trigger's `for` — confirm the
-  run goes red for that reason, and restore.
+  Then break it on purpose — remove the radio group's label — confirm the run goes red for that
+  reason, and restore. Also remove the trigger's `aria-labelledby`: axe does not catch that (the
+  trigger is still named by its own text), so confirm it is Task 1a case 1 that goes red, and
+  restore.
 - [ ] **Step 3: Run** both files and `src/no-hardcoded-chrome.test.ts`; green. Commit.
 - [ ] **Step 4: Mutation.**
   `gtimeout 2700 pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-colour-chooser.ts`.
   Kill survivors with tests that assert behaviour, or name each one left and why it is equivalent.
   The bar is 90 for this file. Record the score in the ledger and the PR.
-- [ ] **Step 5:** `pnpm --filter @waitron/ui test:coverage` (check free memory first; this package
-  runs in the browser) and read the new file's row in the table: 98/98/98/95. Commit
+- [ ] **Step 5:** If the new file's coverage row is needed, run coverage narrowed to it (check free
+  memory first; this package runs in the browser):
+  `pnpm --filter @waitron/ui exec vitest run --coverage --coverage.include=src/components/wt-colour-chooser.ts src/components/wt-colour-chooser.test.ts src/components/wt-colour-chooser.a11y.test.ts`,
+  and read its row: 98/98/98/95. Package-wide coverage is left to CI. Commit
   `"A753: the colour chooser's token, accessibility and mutation checks"`.
 
 ### Task 3a: The calendar palette as choices; the period dialog takes the chooser
@@ -386,7 +426,9 @@ export class WtColourChooser extends LitElement {
 - Modify: `packages/venue-service/package.json` (exports: add
   `"./dashboard/calendar-colours": "./src/dashboard/calendar-colours.ts"`), `period-dialog.ts`,
   `strings.ts`, `period-dialog.test.ts`, `period-dialog.a11y.test.ts`,
-  `periods-screen.editing.test.ts`
+  `periods-screen.editing.test.ts`, `scripts/dashboard-browser-purity.test.ts` (add
+  `"packages/venue-service/src/dashboard/calendar-colours.ts"` to `SUBPATHS`: that guard does not
+  follow imports from one package into another, and staffing's dashboard will import this file)
 
 **Interfaces — produces:**
 
@@ -408,10 +450,16 @@ export function firstUnusedCalendarColour(used: readonly string[]): CalendarColo
 The period dialog: the `<fieldset name="colour">` and its radio group (`period-dialog.ts:500-544`),
 `COLOUR_STEPS` (`:38-43`), the `tabStop` line (`:446`) and the swatch, radiogroup, fieldset, legend
 and `colour-error` styles (`:79-111`) go. In their place:
-`<wt-colour-chooser name="colour" label=${t("hours.colour")} .value=${this.draft.colour}
-.choices=${calendarColourChoices((c) => t("hours.colour." + c))} .usedByLabel=${…}
+`<wt-colour-chooser name="colour" label=${t("hours.colour")} required .value=${this.draft.colour}
+.choices=${calendarColourChoices((colour) => t(`hours.colour.${colour}`))} .usedByLabel=${…}
 .error=${this.error("colour")} ?disabled=${this.busy} @wt-change=…>`, whose listener stops the event
-and calls `this.changed("colour", event.detail.value)` when `current()`. `unused` (`:45-46`) becomes
+and calls `this.changed("colour", event.detail.value)` when `current()`. The label is built with the
+template-literal form the dialog uses today (`period-dialog.ts:514`); `"hours.colour." + colour`
+does not typecheck. The chooser is `required` because the dialog refuses an empty colour, and Forms
+requires a required field to be visibly marked. `period-dialog.ts` imports
+`@waitron/ui/src/components/wt-colour-chooser.js` so the element registers (the package index
+exports only its type, Task 2). If `periodColourStyles` is no longer used once the swatch styles
+go, remove it from the dialog's `styles` and its import. `unused` (`:45-46`) becomes
 `firstUnusedCalendarColour`. This task passes no users yet (Task 3b does). New string
 `hours.colour_used_by`: "{colour}, used by {names}" / "{colour}, en uso por {names}" (the station
 picker's wording, `strings.ts:252`, `:1089`).
@@ -426,7 +474,8 @@ picker's wording, `strings.ts:252`, `:1089`).
   - `period-dialog.test.ts`, new: a real pointer path — `userEvent.click` the chooser's trigger,
     then the green tile; the chooser shows green, Save is primary and enabled, and Save sends
     `colour: "green"`. And: with the panel open, a native Escape closes the panel and leaves the
-    dialog open (Review Focus 4).
+    dialog open (Review Focus 4). And: the chooser is `required` and draws its `*`
+    (`[data-required]` in its shadow root).
   Fails today: the module does not exist; the dialog has no `wt-colour-chooser`.
 - [ ] **Step 2: Run** both files; see them fail for those reasons.
 - [ ] **Step 3: Implement.**
@@ -443,14 +492,14 @@ picker's wording, `strings.ts:252`, `:1089`).
     order with the same English names, its `value` is "blue", Save disabled; after choosing green,
     `value` is "green", Save primary and enabled.
   - "the colour group is one tab stop, and the arrow keys move focus and the choice round it"
-    (`:438-466`) → moves to the primitive (Task 1, cases 5 and 7). In the dialog it becomes: focus
-    the chooser's trigger, ArrowDown opens the panel, ArrowRight chooses green, Escape closes it,
+    (`:438-466`) → moves to the primitive (Task 1b case 1 and Task 1a case 5). In
+    the dialog it becomes: focus the chooser's trigger, ArrowDown opens the panel, ArrowRight chooses green, Escape closes it,
     the chooser shows green and Save is enabled.
   - "with no colour chosen, the first swatch is the group's tab stop" (`:468-484`) → the chooser
     shows no colour for `pink`, and once opened its first tile is the tab stop (the tile assertion
     reads inside the chooser's shadow root).
   - "draws the chosen swatch's ring outside the swatch, clear of its fill" (`:486-492`) → deleted
-    here; the ring is the chooser's, checked by Task 2 step 1 case 3 and Task 1's tile tests. Name
+    here; the ring is the chooser's, checked by Task 2 step 1 case 3 and Task 1a's tile tests. Name
     the replacement in the PR.
   - "LOOK L1, L2, L9…" (`:494-510`) → L1 and L2 (the legend's gap and the ring colour) go with the
     legend and the ring; L9's three assertions on the end-offset explanation stay word for word,
@@ -468,7 +517,9 @@ picker's wording, `strings.ts:252`, `:1089`).
     (`:149-150`): setup, as above.
 - [ ] **Step 5: Run** `calendar-colours.test.ts`, `period-dialog.test.ts`,
   `period-dialog.a11y.test.ts`, `period-dialog.unsaved.test.ts`, `periods-screen.editing.test.ts`,
-  `periods-screen.test.ts`, `season-painter.test.ts`; all green. Commit
+  `periods-screen.test.ts`, `season-painter.test.ts`; all green. From the repository root run
+  `pnpm exec vitest run scripts/dashboard-browser-purity.test.ts`; green, and its output names
+  `calendar-colours.ts`. Commit
   `"A753: the period dialog picks its colour with the shared chooser"`.
 
 ### Task 3b: The period dialog marks the colours its department's other periods use
@@ -522,8 +573,9 @@ the dialog's own `savedId`. `draftOf` takes the others' colours: a new role's co
 .value=${this.draft.colour} .choices=${calendarColourChoices(colourName, others)}
 .usedByLabel=${…} .error=${this.fieldError("colour")} ?disabled=${this.busy} @wt-change=…>`; the
 listener stops the event and calls `this.change({ ...this.draft, colour: event.detail.value },
-"colour")`. New string `staffing.role.colour_used_by`: "{colour}, used by {names}" /
-"{colour}, en uso por {names}".
+"colour")`. `staff-role-dialog.ts` imports `@waitron/ui/src/components/wt-colour-chooser.js` so
+the element registers, beside its other `@waitron/ui/src/components/*.js` imports. New string
+`staffing.role.colour_used_by`: "{colour}, used by {names}" / "{colour}, en uso por {names}".
 
 - [ ] **Step 1: Failing tests** (`staff-role-dialog.test.ts`):
   1. New, with `staffRoles` Waiter red, Runner blue, Cook blue: the chooser's value is amber; red's
@@ -551,8 +603,15 @@ listener stops the event and calls `this.change({ ...this.draft, colour: event.d
     `updateStaffRole` with `colour: "blue"` → `"red"` (the draft's starting colour, carried).
   - `staff-role-dialog.save-state.test.ts:74-77`: `opened` for a new role "blue" → "red"; the two
     `chooseOption(box("colour"), …)` calls become `wt-change` dispatches on the chooser.
-  - `staff-role-dialog.a11y.test.ts:53`: dispatches on `[name=colour]`, which is now the chooser
-    host — check it still finds it; no change expected.
+  - `staff-role-dialog.test.ts:142`: the case picks "red" so that Save becomes ready. Red is now
+    the starting colour, so the draft does not change and the check at `:143` fails
+    (`expected true to be false`). Setup: pick "purple" instead. The assertions stay word for word.
+  - `staff-role-dialog.a11y.test.ts:53`, the "a blank name refused" case: it also sends "red" to
+    make the draft change, and fails in both themes (`expected '' not to be ''`). Setup: send
+    "purple" instead, dispatched on the chooser host (`[name=colour]`). The assertions stay word
+    for word.
+  Both setup changes follow from spec point 2's "a new role starts on the first colour no role
+  uses".
 - [ ] **Step 5: Run** the dialog's four files (`staff-role-dialog*.test.ts`) and
   `staff-role-delete-copy.test.ts`; green. Commit
   `"A753: the staff role dialog marks colours other roles use and starts on an unused one"`.
@@ -588,8 +647,9 @@ and their tests.
 **Files:** Modify `packages/staffing/src/staffing-types.ts`, `staff-roles.ts`, `routes.ts`
 (`GET BASE`, `:305-313`), `dashboard/client.ts` (`watchStaffRoles`), `staff-roles.test.ts`,
 `routes.test.ts`; fixtures that answer the
-list read (`src/testing/season-staffing-fixture.ts:91`, `special-day-staffing-fixture.ts:53`,
-`dashboard/index.test.ts:49`, and any the typecheck names) gain `holderNames`.
+list read (`src/testing/season-staffing-fixture.ts:91`, `special-day-staffing-fixture.ts:53`, and
+any the typecheck names) gain `holderNames`. `dashboard/index.test.ts:49` needs no change: it
+asserts a call, and its fake answers `{ staffRoles: [] }` (`:20`), which has no role to name.
 
 **Interfaces — produces:**
 
@@ -627,7 +687,7 @@ answer keep their shape.
   see them fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Existing checks that change** (spec point 3: the list names who holds each role):
-  - `routes.test.ts:144` — `{ staffRoles: [staffRole] }` → each listed role gains `holderNames: []`;
+  - `routes.test.ts:134` — `{ staffRoles: [staffRole] }` → each listed role gains `holderNames: []`;
     `:416-418` → the listed role gains `holderNames` with `r.ana`'s display name. Whole-shape pins
     gaining the new key; every existing value unchanged.
 - [ ] **Step 5:** The permission receipt. Re-run
@@ -639,7 +699,8 @@ answer keep their shape.
 
 **Files:** Modify `packages/staffing/src/dashboard/staff-roles-screen.ts` (`#columns`, `:265-292`),
 `strings.ts` (`holderCount`, `:430-435`), `live-queries.ts`, `strings.test.ts`,
-`live-queries.test.ts`, `staff-roles-screen.test.ts`, `staff-roles-screen.a11y.test.ts`.
+`live-queries.test.ts`, `client.test.ts`, `staff-roles-screen.test.ts`,
+`staff-roles-screen.a11y.test.ts`.
 
 **Interfaces:**
 
@@ -682,7 +743,8 @@ screen's list state becomes `ListedStaffRole[]`.
   - The test's name at `:201` changes "its holder count" to "who holds it".
   - "refreshes a renamed holder in the delete warning without re-reading the list, and refreshes
     holder counts" (`:332-370`): the list now shows names, so a person's rename must re-read it
-    (Decision 8). After `invalidate([{ type: "persons" }])` the list read count goes from 1 to 2
+    (Decision 8). Before the rename, `:357`'s `cells("role-r")[1]` `"1 person"` → `"Ana"`. After
+    `invalidate([{ type: "persons" }])` the list read count goes from 1 to 2
     and the People cell shows "Ana Ruiz" (the fixture's list answer takes `holderName`); after the
     `person_staff_roles` invalidation it is 3 and the cell shows both names. The delete warning's
     assertions stay word for word; the name becomes "refreshes a renamed holder in the delete
@@ -690,6 +752,11 @@ screen's list state becomes `ListedStaffRole[]`.
   - `live-queries.test.ts:5-7` — `["staff_roles", "person_staff_roles"]` →
     `["staff_roles", "person_staff_roles", "persons"]`, and the case's name says a person's change
     too.
+  - `client.test.ts:43-58` ("watches staff roles passively and re-reads after %s changes") pins
+    the exact list of tables the staff roles list watches, so adding `persons` fails both of its
+    cases. `liveData.interests` → the three tables, `{ type: "staff_roles" }`,
+    `{ type: "person_staff_roles" }`, `{ type: "persons" }`, and `"persons"` joins its `it.each`, so
+    a person's change is checked to re-read the list too (stricter than before).
 - [ ] **Step 5: Run** `staff-roles-screen.test.ts`, `staff-roles-screen.a11y.test.ts`,
   `strings.test.ts`, `live-queries.test.ts`, `client.test.ts`; green. Commit
   `"A753: the Staff roles list names who holds each role"`.
@@ -740,7 +807,11 @@ This is a judgement by eye, so the session driving the plan does it.
     false (CLAUDE.md §1, "A behaviour change retires every receipt").
 - [ ] `docs/backlog.md`, A753 (`:1329-1335`): rewrite so it says only point 1 is left — the palette
   grows after the owner's swatch board, with its migration — and that points 2 and 3 landed in
-  #NNNN. Do NOT delete the entry.
+  #NNNN. Point 1 now concerns periods (which set the menus' times) and staff roles; special dates
+  store no colour. Say that every calendar-colour picker in dashboard code now uses the shared
+  chooser: a grep of `CALENDAR_COLOURS` finds only the period and staff role dialogs choosing a
+  colour; prep stations use their own palette (A725), and seasons store no colour yet (A721). Do
+  NOT delete the entry.
 - [ ] `docs/backlog/service-periods.md`:
   - A753 section: delete points 2 and 3; point 1 keeps its number.
   - A719 (`:212-213`): delete point 6 — the period dialog now uses the shared chooser. The other
@@ -754,8 +825,10 @@ This is a judgement by eye, so the session driving the plan does it.
   `wt-colour-chooser` (A753, #NNNN); A725 hands it the twelve station colours from
   `STATION_COLOUR_TOKENS` with `usedBy`, and `station-colour-picker.ts` goes. Keep the rest of the
   entry.
-- [ ] Coverage, after checking free memory: `pnpm --filter @waitron/venue-service test:coverage` and
-  `pnpm --filter @waitron/staffing test:coverage`; read the new and changed files' rows.
+- [ ] Coverage: if a new or changed file's row is needed, run coverage narrowed to that file, after
+  checking free memory —
+  `pnpm --filter <pkg> exec vitest run --coverage --coverage.include=<file> <test files>` — and
+  read its row. Package-wide coverage is left to CI; read its result on the current head.
 - [ ] Ledger to `Status: done` for points 2 and 3, naming point 1 as what is left. Then
   `/finish-branch /Users/clintongormley/workspace/worktrees/waitron-feat-a753-calendar-colours
   (plan docs/superpowers/plans/2026-10-17-a753-calendar-colours.md)`.
