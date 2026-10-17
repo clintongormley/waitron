@@ -143,10 +143,12 @@ export class SeasonsWindow extends LitElement {
       .notes {
         display: grid;
         gap: var(--wt-space-1);
-        margin-block-start: var(--wt-space-3);
       }
       .notes p {
         margin: 0;
+      }
+      .notes p:first-child {
+        margin-block-start: var(--wt-space-3);
       }
       .hint {
         margin: 0;
@@ -244,6 +246,10 @@ export class SeasonsWindow extends LitElement {
     this.baseline = merged.baseline;
     this.scope?.commit(this.baseline);
   }
+  private readonly guardClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (!this.isConnected || this.busy) return false;
+    return this.beforeClose ? this.beforeClose(reason) : true;
+  };
   private get busy(): boolean {
     return this.saving !== undefined && this.saving === this.generation;
   }
@@ -307,7 +313,7 @@ export class SeasonsWindow extends LitElement {
     );
     starts.sort((a, b) => a.start.localeCompare(b.start));
     const before = starts.filter((each) => each.start < start);
-    return (before.at(-1) ?? starts.at(-1))?.row.name.trim();
+    return (before.at(-1) ?? starts.at(-1))?.row.name.trim() || undefined;
   }
   private deleteNotes() {
     const notes = this.draft!.deleted.map((id) => {
@@ -329,14 +335,13 @@ export class SeasonsWindow extends LitElement {
                 })
               : t("season.delete_loses_none");
       const previous = this.joins(start);
-      // No row holds a start, so there is no season to name.
       const deletes =
         previous === undefined
-          ? `${format("season.delete_named", { name: season.name })}.`
+          ? format("season.delete_pending_alone", { name: season.name })
           : format("season.delete_pending", { name: season.name, previous });
       return html`<p data-test="delete-note">${deletes} ${loses}</p>`;
     });
-    return notes.length ? html`<div class="notes" role="status">${notes}</div>` : nothing;
+    return html`<div class="notes" role="status">${notes}</div>`;
   }
   private ownErrors(): Map<string, SeasonRowErrors> {
     return this.attempted ? rowErrors(this.rows) : new Map();
@@ -350,16 +355,16 @@ export class SeasonsWindow extends LitElement {
       return;
     }
     const generation = this.generation;
+    const listed = this.seasons;
     const submitted = this.draft!;
     const { change, keys } = seasonChange(submitted, this.baseline!);
     this.saving = generation;
-    // Before the next draw, so a close asked in this same turn is refused rather than asked about.
-    this.shadowRoot!.querySelector("wt-modal")!.dismissible = false;
     try {
       const saved = await this.api.saveSeasons(change, this.revision);
       if (generation !== this.generation) return;
-      // The saved list is the new baseline, so the snapshot that follows finds nothing changed.
-      this.baseline = draftOf(saved);
+      // The saved list is the new baseline, so the snapshot that follows finds nothing changed; a
+      // list delivered while the Save was in flight is kept over the answer.
+      this.baseline = draftOf(this.seasons === listed ? saved : this.seasons);
       this.draft = { ...this.baseline, next: submitted.next };
       this.scope?.commit(this.baseline);
       this.dispatchEvent(
@@ -639,7 +644,7 @@ export class SeasonsWindow extends LitElement {
       open
       heading=${t("season.seasons")}
       .dismissible=${!this.busy}
-      .beforeClose=${this.beforeClose}
+      .beforeClose=${this.guardClose}
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
     >

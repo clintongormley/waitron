@@ -87,10 +87,11 @@ it("draws a wide modal headed Seasons, marked as the seasons calendar window", a
   const modal = root(el).querySelector("wt-modal")!;
   expect(modal.heading).toBe("Seasons");
   expect(modal.size).toBeUndefined();
-  const guard = async () => true;
+  const guard = vi.fn(async () => true);
   el.beforeClose = guard;
   await el.updateComplete;
-  expect(modal.beforeClose).toBe(guard);
+  expect(await modal.beforeClose!("cancel")).toBe(true);
+  expect(guard).toHaveBeenCalledWith("cancel");
 });
 
 it("lists every season from the one in force on 1 January, with colour, name, start and Runs until", async () => {
@@ -952,6 +953,9 @@ it("Spanish: the bin and the delete note", async () => {
     expect(bins(el)[3]!.getAttribute("aria-label")).toBe("Eliminar Otoño");
     await press(el, bins(el)[3]!);
     expect(notes(el)).toEqual(["Al guardar se elimina Otoño; sus días pasan a Verano."]);
+    await press(el, button(el, "add-season")!);
+    for (let count = 0; count < 3; count += 1) await press(el, bins(el)[0]!);
+    expect(notes(el)[0]).toBe("Al guardar se elimina Otoño.");
   } finally {
     setLocale("en");
   }
@@ -1118,13 +1122,27 @@ it("a bin with no client to read the impact still says where the days go", async
 
 it("with no other row holding a start, the note still names the binned season", async () => {
   const el = await mount(false, {
-    readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+    readSeasonDeleteImpact: vi.fn(async () => ({ departments: [] })),
   });
   await press(el, button(el, "add-season")!);
   for (let count = 0; count < 4; count += 1) await press(el, bins(el)[0]!);
   expect(rowKeys(el)).toEqual(["new-1"]);
   expect(notes(el)).toHaveLength(4);
-  expect(notes(el)[0]).toBe("Delete Winter.");
+  await expect
+    .poll(() => notes(el)[0])
+    .toBe("Saving deletes Winter. No department has hours in it.");
+});
+
+it("a row before the binned season with a start but no name is not named", async () => {
+  const el = await mount(false, {
+    readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+  });
+  await press(el, button(el, "add-season")!);
+  await change(el, "season-4-name", "  ");
+  await change(el, "season-4-month", "10");
+  await change(el, "season-4-day", "1");
+  await press(el, bins(el)[0]!);
+  expect(notes(el)).toEqual(["Saving deletes Winter."]);
 });
 
 it("a Save refused because a changed season is gone marks that row until it is binned", async () => {
@@ -1173,4 +1191,34 @@ it("a Save refused because a binned season is gone drops its delete and its note
     save: [{ id: "winter", name: "Deep winter", startsOn: "12-01", colour: "blue" }],
     delete: [],
   });
+});
+
+it("draws the notes' live region empty before the first bin, and fills that same region", async () => {
+  const el = await mount(false, {
+    readSeasonDeleteImpact: vi.fn(() => new Promise<never>(() => {})),
+  });
+  const region = root(el).querySelector("[role=status]");
+  expect(region).not.toBeNull();
+  expect(region!.textContent!.trim()).toBe("");
+  await press(el, bins(el)[3]!);
+  expect(root(el).querySelector("[role=status]")).toBe(region);
+  expect(region!.querySelectorAll("[data-test=delete-note]")).toHaveLength(1);
+});
+
+it("a Save's answer does not undo a newer list delivered while it was in flight", async () => {
+  const { answer, resolve } = held();
+  const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
+  await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  const renamed = seasons.map((season) =>
+    season.id === "winter" ? { ...season, name: "Deep winter" } : season,
+  );
+  el.seasons = [...renamed, feria];
+  await el.updateComplete;
+  resolve(renamed);
+  await answer;
+  await expect.poll(() => save(el).loading).toBe(false);
+  expect(rowKeys(el)).toEqual(["winter", "spring", "feria", "summer", "autumn"]);
+  expect(rowNames(el)[0]).toBe("Deep winter");
+  expect(save(el).disabled).toBe(true);
 });
