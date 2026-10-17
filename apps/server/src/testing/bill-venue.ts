@@ -21,7 +21,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { loginWithPin, persons } from "@waitron/identity";
 import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
@@ -48,6 +48,7 @@ import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import { parkOrder, placeOrder } from "../working-order.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
@@ -135,8 +136,8 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -181,7 +182,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     const [profile, cashOnly] = await tx
       .insert(deviceProfiles)

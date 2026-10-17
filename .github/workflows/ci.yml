@@ -750,7 +750,7 @@ jobs:
       - name: Merge the db coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/db" test:merge
 
-  # apps/server, SHARDED EIGHT WAYS — the same mechanism as test-heavy above (see it for the full
+  # apps/server, SHARDED ELEVEN WAYS — the same mechanism as test-heavy above (see it for the full
   # rationale: why one package can only be split by test file, why the shards suppress thresholds and
   # emit blobs, and why the merge job needs no Docker). apps/server was the workspace's SECOND
   # critical-path job — 341s on the unfiltered `main` run 33890775789 — and, like packages/db, it is a
@@ -758,8 +758,9 @@ jobs:
   # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
   # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
-  # Eight shards: see docs/developers/ci-and-gates.md, "Every CI test job should finish in about
-  # 4 minutes" (A528).
+  # Eleven shards: see docs/developers/ci-and-gates.md, "Every CI test job should finish in about
+  # 4 minutes" (A528) and "Runners come in two speeds, and the busiest shard is the one that crosses
+  # 4 minutes" (A801).
   #
   # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
@@ -774,7 +775,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -801,7 +802,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
-            --shard=${{ matrix.shard }}/8 \
+            --shard=${{ matrix.shard }}/11 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
             --exclude src/s3-rehearsal-scenarios.e2e.test.ts \
@@ -888,7 +889,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The coverage GATE for apps/server — the mirror of test-heavy-merge. The eight test-server shards
+  # The coverage GATE for apps/server — the mirror of test-heavy-merge. The test-server shards
   # and test-server-stream each emit a PARTIAL-coverage blob; this job merges them and enforces the
   # package's real thresholds on the TOTAL. No tests, no container — `vitest --merge-reports` replays
   # from the blobs. It gates on the SAME `server` output as its shards.

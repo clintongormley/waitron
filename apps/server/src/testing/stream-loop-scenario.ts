@@ -25,7 +25,6 @@ import {
   registroSif,
   registrosFacturacion,
 } from "@waitron/fiscal-verifactu";
-import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -61,6 +60,7 @@ import { unsealNodeState } from "../sealed-state.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -299,8 +299,8 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
               displayName: "Administradora",
               firstNames: "Test",
               lastNames: "Operator",
-              pinHash: hashPin("1234"),
-              passwordHash: hashPassword("dashPass123"),
+              pinHash: fixturePinHash("1234"),
+              passwordHash: fixturePasswordHash("dashPass123"),
               email: "owner@example.test",
             },
           },

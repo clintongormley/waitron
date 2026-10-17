@@ -1845,7 +1845,7 @@ describe("the sharded jobs", () => {
     expect(counts).toEqual({
       "@waitron/dashboard": 4,
       "@waitron/db": 3,
-      "@waitron/server": 8,
+      "@waitron/server": 11,
       "@waitron/venue-service": 4,
       "@waitron/till": 2,
     });

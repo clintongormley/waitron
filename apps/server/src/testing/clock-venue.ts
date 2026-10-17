@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database } from "@waitron/db";
-import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { createDeviceProfile } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
@@ -13,6 +13,7 @@ import { SESSION_COOKIE } from "../till-session.js";
 import type { TillConfig } from "../till-config.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { mountTillClockApi } from "../till-clock-api.js";
+import { fixturePinHash } from "./known-secret-hashes.js";
 
 export interface ClockVenue {
   app: Hono;
@@ -52,7 +53,7 @@ export async function createClockVenue(
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Owner",
-          pinHash: hashPin("1234"),
+          pinHash: fixturePinHash("1234"),
           passwordHash: "scrypt$00$00",
           email: "owner@example.test",
         },
@@ -83,7 +84,7 @@ export async function createClockVenue(
     });
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Ana", pinHash: fixturePinHash("5555"), role: "staff" })
       .returning({ id: persons.id });
     return { profile, person: person! };
   });

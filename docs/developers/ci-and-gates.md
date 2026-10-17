@@ -503,7 +503,7 @@ list.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and eight-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and eleven-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
@@ -925,7 +925,7 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   shard is luck. A simulation of that split over the three runs' per-file times, with the two fixes
   above applied, left the busiest of six shards with about 870 s of file time (the old shard 5 held
   about 1,080 s, the old shard 2 about 740 s at a 3.7-minute median) and the busiest of eight with
-  about 690 s.
+  about 690 s. (Eleven since A801: see "Runners come in two speeds…" below.)
 
 Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
@@ -963,6 +963,50 @@ centralus served both the slow and the fast `test-server (4)`.
 What is kept when it happens: the job log always carries the two setup times. A `test-venue-service`
 shard cancelled at its limit also keeps its sampled load and memory (`resources.log`, "A failed
 venue-service shard keeps its browser start-up record" below); no other test job samples the runner.
+
+### Runners come in two speeds, and the busiest shard is the one that crosses 4 minutes
+
+A801 (2026-10-18). `test-server (7)` ran 3.9, 3.6 and 4.0 minutes on the three `main` runs before
+30498070b, then 5.8 to 6.1 on the five from 30498070b to 585719547, though 30498070b changed no file
+under `apps/server`. Earlier `main` runs the same day had already taken 6.0 and 5.6 (4ce6c6523,
+45ce9e66d).
+
+- **Nothing in the shard changed.** Its `[file-progress]` lines on run 39051766762 (8fa9669ff, 4.0
+  min) and run 39068745456 (bb69ea3ea, 6.1 min) name the same 92 files; every file was slower on the
+  second, about 1.5 times, and Vitest's import time rose with it (130 s against 221 s). The two jobs'
+  pnpm set-up and install steps were within a second of each other, so this is not the stalled
+  runner of the section above.
+- **The shards show two speeds.** Vitest's `Duration` for each server shard over seven `main` runs
+  (39047556649 to 39071289190): shard 2 took 135–143 s or 202–221 s, shard 7 187–203 s or 316–326 s,
+  1.5 to 1.65 times apart; most other shards split the same way, with a few runs in between. About
+  four in five of the 56 shard jobs ran at the slower speed. Region does not decide it: centralus
+  ran shard 4 at 149 s on one run and at 235 s on another. On pull-request runs the same day shard 7 took either 3.7–4.0 or
+  5.6–6.1 minutes, which reads as five slower draws in a row on `main`, not a change.
+- **Shard 7 holds the most work.** Vitest 4.1.11 sorts the files by the sha1 of each one's path
+  under the package root (`/src/…`) and cuts the list into equal counts (`BaseSequencer.shard`). A
+  replay of that split over run 39068745456's per-file times put the same 92 files in each shard as
+  the run did, and shard 7 at 1,257 file-seconds against 818–969 for the others. On that run the
+  other seven server shard jobs took 4.3–4.8 minutes.
+- **About a third of that shard's work was scrypt, much of it test set-up.** A CPU profile of shard
+  7's files run locally put `scryptSync` at about 30% of the busy time. Counting the calls (a
+  temporary log in `hashSecret` and `verifySecretAsync`, locally without coverage): 3,516 hashes and
+  1,210 checks, at about 32 ms each. The shared fixtures under `apps/server/src/testing/` hashed the
+  same literal PINs and passwords for every test (`venue-fixtures.ts` alone 620 hashes, 20 s), and
+  `restore.test.ts` encrypted the same backup artifact, with its N=2^17 key, for nearly every case.
+  The largest single caller, `createJoinRequest` through `testing/enrol.ts` (691 hashes, 22.5 s), is
+  the product minting a device token and stays.
+
+The fix: `fixturePinHash` and `fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
+hash each distinct secret once per test file, the fixtures and the heaviest set-up functions use
+them, and `restore.test.ts` encrypts each distinct archive once. On shard 7's 92 files locally, with
+coverage and four workers, alternating old and new code twice on a busy machine (load average
+14–22): 670 and 747 s of CPU before, 650 and 554 s after. `test-server` went from eight shards to eleven: the same
+replay put the busiest of eleven at 864 file-seconds before the fixture change (nine: 1,136; ten:
+953; twelve: 945, because a cluster of heavy files then falls together).
+
+What this does not fix: `src/invoice-pdf.test.ts` took 162 s on run 39068745456, a floor under
+whichever shard holds it. Local wall times were no guide here: the same old code took 138.7 s and
+197.2 s on consecutive runs beside other sessions' tests.
 
 ### A cheap job can still be the critical path
 
@@ -1485,7 +1529,7 @@ every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for
 request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
 installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
 that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight since A528),
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven since A801),
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless

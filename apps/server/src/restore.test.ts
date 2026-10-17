@@ -172,6 +172,9 @@ const VENUE_BYTES = Buffer.from("SQLite format 3\u0000 — placed, never opened 
 const MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); // jpeg-ish binary
 const SECRET = "WAITRON_VAULT_MASTER_KEY=deadbeef\n";
 
+// Encrypting derives a slow key, and no case here compares two artifacts' bytes; each call gets its own copy.
+const encryptedByContent = new Map<string, Buffer>();
+
 function buildArtifact(
   entries: ArchiveEntry[],
   manifest: BackupManifest | "omit" = MANIFEST,
@@ -181,7 +184,14 @@ function buildArtifact(
     all.push({ name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) });
   }
   all.push(...entries);
-  return encryptArtifact(packArchive(all), KEY);
+  const packed = packArchive(all);
+  const key = packed.toString("base64");
+  let encrypted = encryptedByContent.get(key);
+  if (encrypted === undefined) {
+    encrypted = encryptArtifact(packed, KEY);
+    encryptedByContent.set(key, encrypted);
+  }
+  return Buffer.from(encrypted);
 }
 
 const FULL_ENTRIES: ArchiveEntry[] = [

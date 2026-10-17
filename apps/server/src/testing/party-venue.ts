@@ -22,7 +22,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
@@ -42,6 +41,7 @@ import { addTabRound, listTablesWithState, parkOrder } from "../working-order.js
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 import { deviceRequestCfg, openTillSession } from "./session-device.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 /**
  * A provisioned venue for the party suites: real Veri*Factu filing that never contacts AEAT, one
@@ -118,8 +118,8 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         rectificativeSeriesCode: "R",
         admin: {
           displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },

@@ -7,7 +7,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -20,6 +20,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { OriginConfig } from "../till-config.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 // Shared venue provisioning, extracted so the suites that need it stand up one fixture rather than
 // each keeping a copy.
@@ -92,8 +93,8 @@ export async function setupVenue(db: Database): Promise<Venue> {
           displayName: "Administradora",
           firstNames: "Test",
           lastNames: "Operator",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
+          pinHash: fixturePinHash("1234"),
+          passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
         },
       },
@@ -127,11 +128,11 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
     const [mgr] = await tx
       .insert(persons)
-      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .values({ displayName: "The Manager", pinHash: fixturePinHash("1234"), role: "manager" })
       .returning({ id: persons.id });
     const [stf] = await tx
       .insert(persons)
-      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .values({ displayName: "The Clerk", pinHash: fixturePinHash("1234"), role: "staff" })
       .returning({ id: persons.id });
     const managerSession = await startManagementSession(tx, { personId: mgr!.id });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
