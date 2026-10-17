@@ -1040,6 +1040,34 @@ describe("the Rota's slot picker beside its slot", () => {
     );
     expect(document.activeElement).not.toBe(document.body);
   });
+  it("a fill refused while a click outside is dismissing the picker still shows under the bar, until the next pick", async () => {
+    await useViewport(1280, 900);
+    const client = rotaApi();
+    let refuse!: (e: unknown) => void;
+    client.api.addRotaShift = vi.fn(() => new Promise<never>((_, reject) => (refuse = reject)));
+    const el = await mount(client.api);
+    await userEvent.click(slotIn(el, "empty"));
+    const picker = await opened(el);
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-person=marc]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    // The refusal settles after the dismissal has begun and before its close event is delivered.
+    popupBox(el).addEventListener("beforetoggle", (event) => {
+      if ((event as ToggleEvent).newState === "closed") refuse({ code: "connection.failed" });
+    });
+    const outside = document.createElement("button");
+    outside.textContent = "Outside";
+    outside.style.cssText = "position: fixed; top: 0; left: 0";
+    frames[0]!.append(outside);
+    await userEvent.click(outside);
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    await el.updateComplete;
+    await new Promise(requestAnimationFrame);
+    expect(q(el, "[data-test=fill-error]")?.textContent).toContain("Could not fill the slot");
+    await userEvent.click(slotIn(el, "empty"));
+    await opened(el);
+    expect(q(el, "[data-test=fill-error]")).toBeNull();
+    expect(q<Picker>(el, "slot-picker")!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
   it("a picker stays beside its slot through a fill and its refusal, and Escape then returns to the slot", async () => {
     await useViewport(1280, 900);
     onTestFinished(() => scrollTo(0, 0));

@@ -521,7 +521,6 @@ export class RotaView extends LitElement {
     if (this.renderRoot.querySelector("rota-popup")?.shown) return;
     this.picked = undefined;
     this.openDay = undefined;
-    this.actionError = "";
   };
   /** A fill that settles once its popup is gone leaves focus on nothing, or inside the closed
    *  popup: the element it started from was redrawn while the fill was in flight. */
