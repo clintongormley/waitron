@@ -10,9 +10,9 @@ import type { CalendarColour } from "../staffing-types.js";
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "staffing.rota.by_area": "By area",
   "staffing.rota.by_person": "By person",
-  "staffing.rota.view": "Rota view",
+  "staffing.rota.everyone": "Everyone",
+  "staffing.rota.everyone_search": "Everyone's rota",
   "staffing.shift.edit": "Edit shift",
   "staffing.shift.add": "Add shift",
   "staffing.shift.personId": "Person",
@@ -67,7 +67,6 @@ const en = {
   "staffing.rota.loading": "Loading rota…",
   "staffing.rota.load_error": "Could not load the rota: {reason}",
   "staffing.rota.save_error": "Could not fill the slot: {reason}",
-  "staffing.rota.area": "Area",
   "staffing.rota.staff_role": "Staff role",
   "staffing.rota.people": "People this week (all areas)",
   "staffing.rota.hours": "{planned} / {contract} h",
@@ -201,9 +200,9 @@ const en = {
 };
 
 const es: Record<keyof typeof en, string> = {
-  "staffing.rota.by_area": "Por área",
   "staffing.rota.by_person": "Por persona",
-  "staffing.rota.view": "Vista del cuadrante",
+  "staffing.rota.everyone": "Todo el equipo",
+  "staffing.rota.everyone_search": "Turnos de todo el equipo",
   "staffing.shift.edit": "Editar turno",
   "staffing.shift.add": "Añadir turno",
   "staffing.shift.personId": "Persona",
@@ -259,7 +258,6 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.loading": "Cargando turnos…",
   "staffing.rota.load_error": "No se han podido cargar los turnos: {reason}",
   "staffing.rota.save_error": "No se ha podido cubrir el puesto: {reason}",
-  "staffing.rota.area": "Área",
   "staffing.rota.staff_role": "Rol de personal",
   "staffing.rota.people": "Personas esta semana (todas las áreas)",
   "staffing.rota.hours": "{planned} / {contract} h",

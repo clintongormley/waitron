@@ -20,7 +20,12 @@ type View = LitElement & {
   canWrite: boolean;
   open: ReturnType<typeof vi.fn>;
 };
-async function mount(client = rotaApi().api, width = "1280px") {
+async function mount(
+  client = rotaApi().api,
+  width = "1280px",
+  params: Record<string, string> = {},
+  grid = "rota-by-area",
+) {
   const f = document.createElement("div");
   f.style.width = width;
   document.body.append(f);
@@ -29,13 +34,19 @@ async function mount(client = rotaApi().api, width = "1280px") {
   const el = document.createElement("staffing-rota") as View;
   el.api = client;
   el.week = "2026-11-30";
-  el.params = {};
+  el.params = params;
   el.canWrite = true;
   el.open = vi.fn();
   f.append(el);
-  await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
+  await vi.waitFor(() => expect(el.shadowRoot?.querySelector(grid)).toBeTruthy());
   return el;
 }
+type Combobox = HTMLElementTagNameMap["wt-combobox"];
+const show = (el: View) => {
+  const boxes = el.shadowRoot!.querySelectorAll<Combobox>("wt-combobox");
+  expect(boxes).toHaveLength(1);
+  return boxes[0]!;
+};
 const area = (el: View) => el.shadowRoot!.querySelector<LitElement>("rota-by-area")!;
 const text = (el: View) => area(el).shadowRoot!.textContent!;
 
@@ -211,6 +222,53 @@ describe("the Rota by area", () => {
       expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(parseInt(width));
       expect(scroller.scrollWidth).toBeGreaterThanOrEqual(scroller.clientWidth);
       if (parseInt(width) >= 900) expect(scroller.scrollWidth).toBe(scroller.clientWidth);
+    },
+  );
+});
+
+describe("the Rota's Show menu", () => {
+  it("one Show menu offers Everyone then each area, and sends the choice as the area word", async () => {
+    const el = await mount();
+    const menu = show(el);
+    expect(menu.getAttribute("name")).toBe("area");
+    expect(menu.label).toBe("Show");
+    expect(menu.options.map((o) => o.value)).toEqual([
+      "everyone",
+      "station:kitchen",
+      "department:restaurant",
+    ]);
+    expect(menu.options.map((o) => o.label)).toEqual(["Everyone", "Kitchen", "Restaurant"]);
+    menu.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "everyone" } }));
+    expect(el.open).toHaveBeenCalledWith("rota", { week: "2026-11-30", area: "everyone" });
+    expect(el.shadowRoot!.querySelector("[data-test=by-area]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=by-person]")).toBeNull();
+    el.params = { area: "everyone" };
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+    expect(el.shadowRoot!.querySelector("rota-by-area")).toBeNull();
+    expect(show(el).value).toBe("everyone");
+  });
+  it("a week step keeps Everyone", async () => {
+    const el = await mount(undefined, "1280px", { area: "everyone" }, "rota-by-person");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+    expect(el.open).toHaveBeenCalledWith("rota", { week: "2026-12-07", area: "everyone" });
+  });
+  it.each<Record<string, string>>([{}, { area: "station:kitchen" }])(
+    "with no active area it shows Everyone: Show offers only Everyone, the grid lists people, and no day offers to add (%o)",
+    async (params) => {
+      const client = rotaApi(async (week) => {
+        const read = rotaWeek(week);
+        read.areas = [];
+        return read;
+      }).api;
+      const el = await mount(client, "1280px", params, "rota-by-person");
+      const menu = show(el);
+      expect(menu.options.map((o) => o.value)).toEqual(["everyone"]);
+      expect(menu.value).toBe("everyone");
+      const grid = el.shadowRoot!.querySelector<LitElement>("rota-by-person")!;
+      await grid.updateComplete;
+      expect(grid.shadowRoot!.querySelectorAll("[data-person]")).toHaveLength(5);
+      expect(el.shadowRoot!.textContent).toContain("No active areas.");
+      expect(grid.shadowRoot!.querySelector("[data-test=add-shift]")).toBeNull();
     },
   );
 });

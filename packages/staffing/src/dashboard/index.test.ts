@@ -305,12 +305,9 @@ describe("the Rota contribution", () => {
   });
 });
 
-it("opens the Rota modes declared for search on the real view", async () => {
+it("opens the Rota's Everyone destination declared for search on the real view", async () => {
   const rota = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "rota")!;
-  expect(rota.searchDestinations?.map((x) => x.params)).toEqual([
-    { mode: "area" },
-    { mode: "person" },
-  ]);
+  expect(rota.searchDestinations?.map((x) => x.params)).toEqual([{ area: "everyone" }]);
   for (const destination of rota.searchDestinations!) {
     const container = document.createElement("div");
     document.body.append(container);
@@ -326,13 +323,11 @@ it("opens the Rota modes declared for search on the real view", async () => {
     render(handle.render(), container);
     const view = container.querySelector<LitElement>("staffing-rota")!;
     await view.updateComplete;
-    await vi.waitFor(() =>
-      expect(
-        view
-          .shadowRoot!.querySelector(`[data-test="by-${destination.params.mode}"]`)
-          ?.getAttribute("aria-pressed"),
-      ).toBe("true"),
-    );
+    await vi.waitFor(() => expect(view.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+    expect(view.shadowRoot!.querySelector("rota-by-area")).toBeNull();
+    expect(
+      view.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.value,
+    ).toBe("everyone");
     container.remove();
   }
 });

@@ -10,42 +10,48 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => {
-  test.each(["draft", "published", "empty", "loading", "error", "picker"])("%s", async (state) => {
-    setLocale("en");
-    await mountThemed("<div></div>", theme);
-    const client = rotaApi(async (week) => {
-      if (state === "loading") return new Promise(() => undefined);
-      if (state === "error") throw { code: "connection.failed" };
-      const read = rotaWeek(week);
-      if (state === "empty") {
-        read.areas = [];
-        read.people = [];
-        read.staffRoles = [];
+  test.each(["draft", "published", "empty", "everyone", "loading", "error", "picker"])(
+    "%s",
+    async (state) => {
+      setLocale("en");
+      await mountThemed("<div></div>", theme);
+      const client = rotaApi(async (week) => {
+        if (state === "loading") return new Promise(() => undefined);
+        if (state === "error") throw { code: "connection.failed" };
+        const read = rotaWeek(week);
+        if (state === "empty") read.areas = [];
+        if (state === "published")
+          read.version = { id: "published", status: "published", changedSincePublished: false };
+        return read;
+      });
+      const el = new RotaView();
+      el.api = client.api;
+      el.week = "2026-11-30";
+      el.canWrite = true;
+      el.open = () => undefined;
+      if (state === "everyone") el.params = { area: "everyone" };
+      host.append(el);
+      if (state === "loading")
+        await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
+      else if (state === "error")
+        await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[role=alert]")).toBeTruthy());
+      else if (state === "empty")
+        await vi.waitFor(() => {
+          expect(el.shadowRoot?.textContent).toContain("No active areas");
+          expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy();
+        });
+      else if (state === "everyone")
+        await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-person")).toBeTruthy());
+      else
+        await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
+      if (state === "picker") {
+        const area = el.shadowRoot!.querySelector("rota-by-area")!;
+        await (area as import("lit").LitElement).updateComplete;
+        area.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("slot-picker")).toBeTruthy();
       }
-      if (state === "published")
-        read.version = { id: "published", status: "published", changedSincePublished: false };
-      return read;
-    });
-    const el = new RotaView();
-    el.api = client.api;
-    el.week = "2026-11-30";
-    el.canWrite = true;
-    el.open = () => undefined;
-    host.append(el);
-    if (state === "loading")
-      await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
-    else if (state === "error")
-      await vi.waitFor(() => expect(el.shadowRoot?.querySelector("[role=alert]")).toBeTruthy());
-    else if (state === "empty")
-      await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("No active areas"));
-    else await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-by-area")).toBeTruthy());
-    if (state === "picker") {
-      const area = el.shadowRoot!.querySelector("rota-by-area")!;
-      await (area as import("lit").LitElement).updateComplete;
-      area.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("slot-picker")).toBeTruthy();
-    }
-    await expectNoA11yViolations(host);
-  });
+      await expectNoA11yViolations(host);
+    },
+  );
 });

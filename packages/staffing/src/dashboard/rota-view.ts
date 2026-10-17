@@ -10,6 +10,7 @@ import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { dateLabel } from "./format.js";
 import { hours } from "./rota-format.js";
+import { EVERYONE, chosenShow, matchesFor } from "./rota-model.js";
 import { breachText } from "./rota-warnings.js";
 import { t, tf } from "./strings.js";
 import "./rota-by-area.js";
@@ -128,7 +129,6 @@ export class RotaView extends LitElement {
   );
   #watching = "";
   #area = "";
-  #mode = "";
   #generation = 0;
   readonly #queries = new QueryController(
     this,
@@ -150,8 +150,7 @@ export class RotaView extends LitElement {
     this.#generation++;
   }
   override willUpdate() {
-    if ((this.params.area ?? "") !== this.#area || (this.params.mode ?? "") !== this.#mode) {
-      this.#mode = this.params.mode ?? "";
+    if ((this.params.area ?? "") !== this.#area) {
       this.#area = this.params.area ?? "";
       this.picked = undefined;
       this.actionError = "";
@@ -205,11 +204,7 @@ export class RotaView extends LitElement {
       .catch(() => undefined);
   }
   #go(week: string, area = this.params.area) {
-    this.open("rota", {
-      week,
-      ...(area ? { area } : {}),
-      ...(this.params.mode === "person" ? { mode: "person" } : {}),
-    });
+    this.open("rota", { week, ...(area ? { area } : {}) });
   }
   async #fill(personId: string) {
     const slot = this.picked,
@@ -290,15 +285,8 @@ export class RotaView extends LitElement {
   }
   override render() {
     const read = this.read?.week === this.week ? this.read : undefined;
-    const chosen = read?.areas.find((a) => areaKey(a.area) === this.params.area) ?? read?.areas[0];
-    const matches =
-      this.params.mode === "person"
-        ? (read?.days.flatMap((d) => d.areas.map((a) => a.match)) ?? [])
-        : chosen
-          ? read!.days.flatMap((d) =>
-              d.areas.filter((a) => areaKey(a.area) === areaKey(chosen.area)).map((a) => a.match),
-            )
-          : [];
+    const show = read ? chosenShow(read, this.params.area) : undefined;
+    const matches = read && show ? matchesFor(read, show) : [];
     const slots = matches.flatMap((m) => m.slots);
     return html`<div class="head">
         <wt-button
@@ -318,9 +306,8 @@ export class RotaView extends LitElement {
           @click=${() => this.#go(step(this.week, 7))}
           >›</wt-button
         >
-        ${read ? html`${this.params.mode === "person" ? nothing : html`<wt-combobox name="area" label=${t("staffing.rota.area")} .value=${chosen ? areaKey(chosen.area) : ""} .options=${read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))} @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}></wt-combobox>`}<span data-test="attention" role="status">${tf("staffing.rota.attention", { unfilled: String(slots.filter((s) => s.status.kind === "unfilled").length), partly: String(slots.filter((s) => s.status.kind === "partly_uncovered").length), over: String(matches.reduce((n, m) => n + m.over.length, 0)) })}</span><span class="status">${t(read.version?.status === "published" ? "staffing.rota.published" : "staffing.rota.draft")}${read.version?.changedSincePublished ? ` · ${t("staffing.rota.changed")}` : ""}</span>` : nothing}
+        ${read ? html`<wt-combobox name="area" label=${t("staffing.month.area")} search="never" .value=${show!.kind === "area" ? show!.key : EVERYONE} .options=${[{ value: EVERYONE, label: t("staffing.rota.everyone") }, ...read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))]} @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}></wt-combobox><span data-test="attention" role="status">${tf("staffing.rota.attention", { unfilled: String(slots.filter((s) => s.status.kind === "unfilled").length), partly: String(slots.filter((s) => s.status.kind === "partly_uncovered").length), over: String(matches.reduce((n, m) => n + m.over.length, 0)) })}</span><span class="status">${t(read.version?.status === "published" ? "staffing.rota.published" : "staffing.rota.draft")}${read.version?.changedSincePublished ? ` · ${t("staffing.rota.changed")}` : ""}</span>` : nothing}
       </div>
-      ${read ? html`<div class="head" aria-label=${t("staffing.rota.view")}><wt-button variant=${this.params.mode === "person" ? "secondary" : "primary"} data-test="by-area" aria-pressed=${this.params.mode !== "person"} @click=${() => this.open("rota", { week: this.week, ...(this.params.area ? { area: this.params.area } : {}) })}>${t("staffing.rota.by_area")}</wt-button><wt-button variant=${this.params.mode === "person" ? "primary" : "secondary"} data-test="by-person" aria-pressed=${this.params.mode === "person"} @click=${() => this.open("rota", { week: this.week, mode: "person", ...(this.params.area ? { area: this.params.area } : {}) })}>${t("staffing.rota.by_person")}</wt-button></div>` : nothing}
       ${
         read && this.warnings
           ? this.warnings.ruleset === null
@@ -353,10 +340,12 @@ export class RotaView extends LitElement {
         read
           ? html`<div class="layout">
               <div class="grid">
+                ${read.areas.length === 0 ? html`<p>${t("staffing.rota.empty")}</p>` : nothing}
                 ${
-                  this.params.mode === "person"
+                  show!.kind === "everyone"
                     ? html`<rota-by-person
                         .week=${read}
+                        .canAdd=${read.areas.length > 0}
                         .breaches=${this.warnings?.breaches ?? []}
                         .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
                         @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
@@ -368,21 +357,19 @@ export class RotaView extends LitElement {
                           this.editor = e.detail;
                         }}
                       ></rota-by-person>`
-                    : chosen
-                      ? html`<rota-by-area
-                          .week=${read}
-                          .breaches=${this.warnings?.breaches ?? []}
-                          .area=${chosen.area}
-                          .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                          @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                            this.editor = e.detail;
-                          }}
-                          @pick-slot=${(e: CustomEvent<{ slot: Slot }>) => {
-                            this.picked = e.detail.slot;
-                            this.actionError = "";
-                          }}
-                        ></rota-by-area>`
-                      : html`<p>${t("staffing.rota.empty")}</p>`
+                    : html`<rota-by-area
+                        .week=${read}
+                        .breaches=${this.warnings?.breaches ?? []}
+                        .area=${show!.area}
+                        .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
+                        @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
+                          this.editor = e.detail;
+                        }}
+                        @pick-slot=${(e: CustomEvent<{ slot: Slot }>) => {
+                          this.picked = e.detail.slot;
+                          this.actionError = "";
+                        }}
+                      ></rota-by-area>`
                 }
               </div>
               <aside>

@@ -186,7 +186,7 @@ const result = (el: DashboardApp, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-search-destination="${id}"]`);
 const calendar = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-it("opens the shipped Staffing, Rota person view and Routes tab from search", async () => {
+it("opens the shipped Staffing, Rota for everyone and Routes tab from search", async () => {
   const { el } = await mount();
   await search(el, "staffing");
   await userEvent.click(result(el, "calendar:staffing")!);
@@ -198,17 +198,17 @@ it("opens the shipped Staffing, Rota person view and Routes tab from search", as
     ).toContain("2026"),
   );
   expect(location.pathname).toBe("/manage/opening-hours/view/staffing");
-  await search(el, "by person");
-  await userEvent.click(result(el, "calendar:rota:by-person")!);
+  await search(el, "everyone");
+  await userEvent.click(result(el, "calendar:rota:everyone")!);
   await vi.waitFor(() =>
     expect(
       calendar(el)
         .shadowRoot!.querySelector("staffing-rota")
-        ?.shadowRoot?.querySelector("[data-test=by-person]")
-        ?.getAttribute("aria-pressed"),
-    ).toBe("true"),
+        ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=area]")
+        ?.value,
+    ).toBe("everyone"),
   );
-  expect(location.pathname).toBe("/manage/opening-hours/view/rota/mode/person");
+  expect(location.pathname).toBe("/manage/opening-hours/view/rota/area/everyone");
   await search(el, "routes");
   await userEvent.click(result(el, "venue-service:prep:routing")!);
   await vi.waitFor(() =>
@@ -221,12 +221,12 @@ it("opens the shipped Staffing, Rota person view and Routes tab from search", as
 });
 it("rebuilds destinations when modules and permissions change at the next session probe", async () => {
   const { el, session, getMe } = await mount();
-  await search(el, "by person");
-  expect(result(el, "calendar:rota:by-person")).not.toBeNull();
+  await search(el, "everyone");
+  expect(result(el, "calendar:rota:everyone")).not.toBeNull();
   session.permissions = ["venue.view"];
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.waitFor(() => expect(getMe.mock.calls.length).toBeGreaterThan(1));
-  await vi.waitFor(() => expect(result(el, "calendar:rota:by-person")).toBeNull());
+  await vi.waitFor(() => expect(result(el, "calendar:rota:everyone")).toBeNull());
   await search(el, "staffing");
   expect(result(el, "calendar:staffing")).not.toBeNull();
   session.modules = ["venue-service"];

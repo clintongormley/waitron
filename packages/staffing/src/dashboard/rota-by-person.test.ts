@@ -36,7 +36,7 @@ async function mount(
     return prepare(r);
   }).api;
   el.week = "2026-11-30";
-  el.params = { mode: "person", area: "station:kitchen" };
+  el.params = { area: "everyone" };
   el.canWrite = true;
   el.open = vi.fn();
   frame.append(el);
@@ -131,11 +131,7 @@ describe("the Rota by person", () => {
     expect(editor.personId).toBe("ana");
     expect(editor.shiftId).toBeUndefined();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
-    expect(el.open).toHaveBeenCalledWith("rota", {
-      week: "2026-12-07",
-      area: "station:kitchen",
-      mode: "person",
-    });
+    expect(el.open).toHaveBeenCalledWith("rota", { week: "2026-12-07", area: "everyone" });
   });
   it("offers no add or edit controls in a published week", async () => {
     const { root } = await mount(true);
@@ -151,9 +147,15 @@ describe("the Rota by person", () => {
   });
 });
 
-it("keeps the area filter out of the all-areas person view", async () => {
+it("offers only the Show menu, set to Everyone, in the all-areas person view", async () => {
   const { el } = await mount();
-  expect(el.shadowRoot!.querySelector('[name="area"]')).toBeNull();
+  const boxes =
+    el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox");
+  expect(boxes).toHaveLength(1);
+  expect(boxes[0]!.getAttribute("name")).toBe("area");
+  expect(boxes[0]!.value).toBe("everyone");
+  expect(el.shadowRoot!.querySelector("[data-test=by-area]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=by-person]")).toBeNull();
 });
 
 it("counts every area's open slots in the person view", async () => {

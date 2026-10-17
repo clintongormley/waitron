@@ -14,6 +14,8 @@ export class RotaByPerson extends LitElement {
   @property({ attribute: false }) week!: RotaWeek;
   @property({ attribute: false }) breaches: RosterBreach[] = [];
   @property({ type: Boolean }) editable = false;
+  /** False when the venue has no active area, since a shift needs one. */
+  @property({ attribute: false }) canAdd = true;
   private emit(name: string, detail: unknown) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -83,7 +85,7 @@ export class RotaByPerson extends LitElement {
                   return html`<td data-day=${day.businessDay}>
                     ${day.closedAllDay ? html`<small>${t("staffing.rota.closed")}</small>` : nothing}${shifts.map((s) => this.shift(s))}
                     ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
-                    ${this.editable ? html`<button class="card" data-test="add-shift" @click=${() => this.emit("add-shift", { personId: p.personId, businessDay: day.businessDay })}>${t("staffing.shift.add")}</button>` : nothing}
+                    ${this.editable && this.canAdd ? html`<button class="card" data-test="add-shift" @click=${() => this.emit("add-shift", { personId: p.personId, businessDay: day.businessDay })}>${t("staffing.shift.add")}</button>` : nothing}
                   </td>`;
                 })}
               </tr>`,
