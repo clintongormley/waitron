@@ -9,8 +9,10 @@ import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
   iconButtonStyles,
+  ThemeChoiceController,
   trackIconTooltip,
   UrlStateController,
+  type ThemeChoice,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -173,6 +175,12 @@ const WAITRON_LOGO_DARK_URL = new URL(
   "../../../packages/ui/brand/waitron-lockup-dark.svg",
   import.meta.url,
 ).href;
+
+function darkLogoMedia(choice: ThemeChoice): string {
+  if (choice === "dark") return "all";
+  if (choice === "light") return "not all";
+  return "(prefers-color-scheme: dark)";
+}
 
 type AccessRule = {
   requiresManager?: boolean;
@@ -980,6 +988,7 @@ export class DashboardApp extends LitElement {
    * session probe whose answer was decided BEFORE the pick took effect carries the language from
    * before it, so that answer must not repaint over the person's choice. */
   #sessionLocaleChoice = 0;
+  readonly #theme = new ThemeChoiceController(this);
 
   constructor() {
     super();
@@ -1699,7 +1708,7 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <picture class="brand-logo-picture">
-          <source media="(prefers-color-scheme: dark)" srcset=${WAITRON_LOGO_DARK_URL} />
+          <source media=${darkLogoMedia(this.#theme.choice)} srcset=${WAITRON_LOGO_DARK_URL} />
           <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
         </picture>
         <span class="venue-row"

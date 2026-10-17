@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import { applyTokens, registerIcons } from "@waitron/ui";
+import { applyTokens, registerIcons, startThemeChoice } from "@waitron/ui";
 import {
   BUILD_CHANGED_EVENT,
   createInstrumentedFetch,
@@ -15,6 +15,7 @@ import "./dashboard-app.js";
 import "./screens/attendance-corrections-screen.js";
 
 applyTokens(document.documentElement);
+startThemeChoice(document.documentElement);
 registerIcons(DASHBOARD_ICONS);
 
 installErrorCapture(window, diag);

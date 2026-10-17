@@ -25,9 +25,13 @@ export function renderNodeRecoveryPack(pack: NodeRecoveryPack, source: HTMLEleme
   ]) {
     page.documentElement.style.setProperty(name, tokens.getPropertyValue(name));
   }
+  const scheme =
+    tokens.colorScheme === "light" || tokens.colorScheme === "dark"
+      ? tokens.colorScheme
+      : "light dark";
   const css = page.createElement("style");
   css.textContent = `
-    :root { color-scheme: light dark; font-family: var(--wt-font-family); font-size: var(--wt-font-size-md); color: var(--wt-color-text); background: var(--wt-color-bg); }
+    :root { color-scheme: ${scheme}; font-family: var(--wt-font-family); font-size: var(--wt-font-size-md); color: var(--wt-color-text); background: var(--wt-color-bg); }
     body { margin: 0; padding: var(--wt-space-5); }
     main { max-width: 900px; margin-inline: auto; }
     h1 { font-size: var(--wt-font-size-xl); }
