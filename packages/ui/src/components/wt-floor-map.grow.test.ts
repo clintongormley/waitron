@@ -384,3 +384,48 @@ it("tables replaced mid-drag restart the drag's crop from the new tables", async
   await settled(el);
   expect(Number(ratioOf(el))).toBe(14 / 8);
 });
+
+it("a map removed while an L-shaped drag's refit waits does not update when the frame comes", async () => {
+  const el = await growingMap([t1]);
+  const end = await dragAnL(el);
+  up(el, end.x, end.y);
+  el.remove();
+  const update = vi.spyOn(el, "requestUpdate");
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  expect(update).not.toHaveBeenCalled();
+});
+
+it("a map left in place while an L-shaped drag's refit waits updates when the frame comes", async () => {
+  const el = await growingMap([t1]);
+  const end = await dragAnL(el);
+  up(el, end.x, end.y);
+  const update = vi.spyOn(el, "requestUpdate");
+  await new Promise(requestAnimationFrame);
+  await new Promise(requestAnimationFrame);
+  expect(update).toHaveBeenCalled();
+});
+
+it("a diagonal drag keeps the travel it made on both axes across two scale changes", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 375, 225);
+  zoom(el, 300, 150, -100);
+  move(el, 525, 375);
+  zoom(el, 300, 150, -100);
+  move(el, 675, 525);
+  up(el, 675, 525);
+  // 2 squares at 37.5 px, 2 more at 75 px, 1 more at 150 px, on each axis.
+  expect(drops).toEqual([{ tableId: "t1", x: 15, y: 10, targetId: null }]);
+});
+
+it("a hold released on a view kept over new tables keeps that view", async () => {
+  const el = await map([t1]);
+  el.tables = [t1, t("t2", "T2", { x: 30, y: 5, width: 4, height: 4 })];
+  await settled(el);
+  const kept = await leftOf(el, "t1");
+  hold(el, 300, 150);
+  up(el, 300, 150);
+  await settled(el);
+  expect(await leftOf(el, "t1")).toBe(kept);
+});
