@@ -607,8 +607,39 @@ export interface BusinessDayClockConflict {
   reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
 }
 
+export interface FloorPlanSetSummary {
+  setId: string;
+  departmentId: string;
+  name: string;
+  isDefault: boolean;
+  /** The department's zones, in display order. */
+  zoneIds: readonly string[];
+}
+
+export interface DueFloorLayout {
+  /** Null: the zone is in no active department, or its department has no set. */
+  setId: string | null;
+  setName: string | null;
+  /** The due run's occurrence key; null on a day with no period, or when the clock names no day. */
+  occurrence: string | null;
+  /** The due run's period name; null with no occurrence. */
+  periodName: string | null;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  /** One entry per zone named; each department's day is read once. */
+  dueFloorLayouts(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zones: readonly { zoneId: string; recordedOccurrence: string | null }[],
+    at: Date,
+  ): Promise<ReadonlyMap<string, DueFloorLayout>>;
+  readFloorPlanSets(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    filter?: { setIds?: readonly string[]; departmentId?: string },
+  ): Promise<readonly FloorPlanSetSummary[]>;
   assertBusinessDayClockChange(
     tx: Transaction,
     cfg: { locationId: LocationId },

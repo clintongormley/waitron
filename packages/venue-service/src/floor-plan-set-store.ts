@@ -1,19 +1,11 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
+import type { FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
-
-export interface FloorPlanSetSummary {
-  setId: string;
-  departmentId: string;
-  name: string;
-  isDefault: boolean;
-  /** The department's zones, in display order. */
-  zoneIds: readonly string[];
-}
 
 /** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
 export async function linkFloorPlanSet(

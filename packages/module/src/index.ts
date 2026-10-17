@@ -37,6 +37,8 @@ export type {
   KeepOpenSubject,
   ServiceMode,
   VenueServiceContribution,
+  DueFloorLayout,
+  FloorPlanSetSummary,
   DepartmentTransfer,
   DepartmentTransferActor,
   DepartmentTransferReceiver,
