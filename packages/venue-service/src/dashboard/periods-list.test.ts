@@ -281,17 +281,22 @@ it("an unused period shows its colour and a plain name, and says Not painted any
   expect(getComputedStyle(swatch("period:p2")).backgroundColor).toBe(
     getComputedStyle(swatch("period:p1")).backgroundColor,
   );
-  expect(swatch("period:p2").part.contains("swatch-unpainted")).toBe(false);
+  expect(getComputedStyle(swatch("period:p1")).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   expect(getComputedStyle(name("period:p2")).color).toBe(getComputedStyle(name("period:p1")).color);
   expect(cell(grid, "period:p3", "paintedIn")!.textContent!.trim()).toBe("");
-  expect(cell(grid, "period:p3", "period")!.querySelector("[part~=unpainted]")).toBeNull();
+  expect(getComputedStyle(name("period:p3")).color).toBe(getComputedStyle(name("period:p1")).color);
 });
 
 it("shows nothing in Painted in while the painted-in read has not answered", async () => {
   const el = await mount(answering(model, () => new Promise<PaintedInRow[]>(() => {})));
   const grid = await loaded(el);
   expect(cell(grid, "period:p2", "paintedIn")!.textContent!.trim()).toBe("");
-  expect(cell(grid, "period:p2", "period")!.querySelector("[part~=unpainted]")).toBeNull();
+  const swatch = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=swatch]")!;
+  const name = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=name]")!;
+  expect(getComputedStyle(swatch("period:p2")).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(name("period:p2")).color).toBe(getComputedStyle(name("period:p1")).color);
 });
 
 it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (locale) => {
