@@ -100,9 +100,18 @@ describe("the Rota by area", () => {
     expect(area(el).shadowRoot!.querySelector("[data-person]")).toBeNull();
     el.params = { area: "everyone" };
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
-    const joan = (await everyone(el)).querySelector("[data-person=joan] th")!;
+    const people = await everyone(el);
+    const joan = people.querySelector("[data-person=joan] th")!;
     expect(joan.textContent).toContain("41 / 40 h");
     expect(joan.hasAttribute("data-over-contract")).toBe(true);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-warning)";
+    frames[0]!.append(probe);
+    const warning = getComputedStyle(probe).color;
+    expect(getComputedStyle(joan.querySelector(".hours")!).color).toBe(warning);
+    const marc = people.querySelector("[data-person=marc] th")!;
+    expect(marc.hasAttribute("data-over-contract")).toBe(false);
+    expect(getComputedStyle(marc.querySelector(".hours")!).color).not.toBe(warning);
   });
   it("paints a staff role's swatch in a calendar colour beyond the first six", async () => {
     const el = await mount(
@@ -845,10 +854,16 @@ describe("the Rota's slot picker beside its slot", () => {
     );
     await userEvent.click(slotIn(el, "empty"));
     await opened(el);
+    const lateClose = () =>
+      q(el, "rota-popup")!.dispatchEvent(
+        new CustomEvent("rota-popup-close", { detail: {}, bubbles: true, composed: true }),
+      );
     slotIn(el, "empty2").click();
-    q(el, "rota-popup")!.dispatchEvent(
-      new CustomEvent("rota-popup-close", { detail: {}, bubbles: true, composed: true }),
-    );
+    lateClose();
+    // A popup's close is delivered in a later task than the click that made the new pick.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(popupBox(el).matches(":popover-open")).toBe(true);
+    lateClose();
     await el.updateComplete;
     await new Promise(requestAnimationFrame);
     expect(q<Picker>(el, "slot-picker")?.pickedSlot.key).toBe("empty2");
@@ -881,5 +896,71 @@ describe("the Rota's slot picker beside its slot", () => {
       expect(area(el).shadowRoot!.activeElement?.getAttribute("data-slot")).toBe("empty"),
     );
     expect(document.activeElement).not.toBe(document.body);
+  });
+  it("a picker stays beside its slot through a fill and its refusal, and Escape then returns to the slot", async () => {
+    await useViewport(1280, 900);
+    onTestFinished(() => scrollTo(0, 0));
+    const client = rotaApi();
+    const original = client.request.getMockImplementation()!;
+    let refuse!: (e: unknown) => void;
+    client.request.mockImplementation((async (path: string, method: string, body: unknown) => {
+      if (method === "POST" && path.endsWith("/rota/shifts"))
+        return new Promise((_, reject) => (refuse = reject));
+      return original(path, method, body);
+    }) as unknown as typeof original);
+    const el = await mount(client.api, "700px");
+    const scroller = area(el).shadowRoot!.querySelector<HTMLElement>("[data-test=grid-scroll]")!;
+    expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth);
+    const first = slotIn(el, "empty");
+    await userEvent.click(first);
+    const picker = await opened(el);
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-person=marc]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    await vi.waitFor(() => expect(slotIn(el, "empty")).not.toBe(first));
+    const during = box(slotIn(el, "empty")).left;
+    scroller.scrollLeft = 40;
+    await vi.waitFor(() => {
+      expect(box(slotIn(el, "empty")).left).toBeLessThan(during - 1);
+      beside(el, slotIn(el, "empty"));
+    });
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        "Could not fill the slot",
+      ),
+    );
+    await vi.waitFor(() => expect(slotIn(el, "empty").localName).toBe("button"));
+    const after = box(slotIn(el, "empty")).left;
+    scroller.scrollLeft = 80;
+    await vi.waitFor(() => {
+      expect(box(slotIn(el, "empty")).left).toBeLessThan(after - 1);
+      beside(el, slotIn(el, "empty"));
+    });
+    expect(q(el, "slot-picker")).toBe(picker);
+    expect(picker.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      "Could not fill the slot",
+    );
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    expect(area(el).shadowRoot!.activeElement).toBe(slotIn(el, "empty"));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+  it("a screen reader hears the slot's heading once: the picker repeats it for the eye only", async () => {
+    await useViewport(1280, 900);
+    const el = await mount();
+    await userEvent.click(slotIn(el, "empty"));
+    const picker = await opened(el);
+    const headings = "h1, h2, h3, h4, h5, h6, [role=heading]";
+    const popup = q(el, "rota-popup")!;
+    expect(
+      [...popup.shadowRoot!.querySelectorAll(headings)].map((h) => normal(h.textContent!)),
+    ).toEqual(["Fri 4 Dec · Sous chef · 09:00–17:00"]);
+    expect(picker.shadowRoot!.querySelector(headings)).toBeNull();
+    expect(picker.shadowRoot!.querySelector("[aria-labelledby]")).toBeNull();
+    const title = picker.shadowRoot!.querySelector<HTMLElement>("[data-test=picker-title]")!;
+    expect(normal(title.textContent!)).toBe("Fri 4 Dec · Sous chef · 09:00–17:00");
+    expect(title.getAttribute("aria-hidden")).toBe("true");
+    expect(box(title).width).toBeGreaterThan(0);
+    expect(box(title).height).toBeGreaterThan(0);
   });
 });

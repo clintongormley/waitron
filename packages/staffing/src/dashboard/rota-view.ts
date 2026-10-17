@@ -179,8 +179,7 @@ export class RotaView extends LitElement {
   #watching = "";
   #area = "";
   #anchor: HTMLElement | undefined;
-  /** The slot key the popup was last shown for: a close queued from an earlier popup must not
-   *  clear a pick made since. */
+  /** The slot key the popup was last opened for. */
   #shownFor: string | undefined;
   #generation = 0;
   readonly #queries = new QueryController(
@@ -264,15 +263,32 @@ export class RotaView extends LitElement {
       this.#shownFor = undefined;
       return;
     }
-    if (this.#shownFor === picked.key) return;
+    if (this.#shownFor === picked.key) {
+      void this.#reanchor(picked);
+      return;
+    }
     this.#shownFor = picked.key;
-    const anchor = this.#anchor!;
     void this.renderRoot.querySelector<LitElement>("slot-picker")!.updateComplete.then(() => {
-      if (this.picked === picked) popup!.show(anchor);
+      if (this.picked === picked) popup!.show(this.#anchor!);
     });
   }
+  /** A slot's card is a new element once the grid turns editable or read-only, as it does while a
+   *  fill is in flight, so an open popup follows the card carrying the picked slot's key. */
+  async #reanchor(picked: Slot) {
+    const grid = this.renderRoot.querySelector<LitElement>("rota-by-area");
+    if (!grid) return;
+    await grid.updateComplete;
+    const card = grid.shadowRoot!.querySelector<HTMLElement>(`[data-slot="${picked.key}"]`);
+    const popup = this.renderRoot.querySelector("rota-popup");
+    if (this.picked !== picked || !card || card === this.#anchor) return;
+    this.#anchor = card;
+    if (popup?.shown) popup.show(card);
+  }
   readonly #popupClosed = () => {
-    if (this.picked?.key !== this.#shownFor) return;
+    // A close from an earlier popup can arrive after a new pick: before the view has updated for
+    // it, or once the popup has opened again for it.
+    if (this.picked?.key !== this.#shownFor || this.renderRoot.querySelector("rota-popup")?.shown)
+      return;
     this.picked = undefined;
     this.actionError = "";
   };

@@ -26,9 +26,10 @@ export class SlotPicker extends LitElement {
         min-width: 0;
         max-width: calc(var(--wt-tap-min) * 8);
       }
-      h3 {
-        font-size: var(--wt-font-size-md);
+      .title {
         margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
       }
       .sub {
         margin: 0 0 var(--wt-space-2);
@@ -121,8 +122,11 @@ export class SlotPicker extends LitElement {
       : holders;
     const area = this.week.areas.find((a) => areaKey(a.area) === areaKey(this.pickedSlot.area))!;
     const length = this.pickedSlot.end - this.pickedSlot.start;
-    return html`<section aria-labelledby="heading">
-      <h3 id="heading">${slotHeading(this.week, this.pickedSlot)}</h3>
+    // The popup it sits in carries this text as its heading, which is what a screen reader hears.
+    return html`<div>
+      <p class="title" data-test="picker-title" aria-hidden="true">
+        ${slotHeading(this.week, this.pickedSlot)}
+      </p>
       <p class="sub" data-test="picker-sub">
         ${tf("staffing.rota.picker_sub", { area: area.name })}
       </p>
@@ -181,6 +185,6 @@ export class SlotPicker extends LitElement {
             >`
           : nothing
       }
-    </section>`;
+    </div>`;
   }
 }
