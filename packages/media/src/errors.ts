@@ -9,6 +9,7 @@ declare module "@waitron/shared" {
     "image.invalid_query": Record<string, never>;
     "image.invalid_file": Record<string, never>;
     "image.invalid_framing": { field: "framing" };
+    "image.busy": Record<string, never>;
     "image.changed": { imageId: string };
     "image.reference_conflict": { imageId: string };
     "image.hash_conflict": { filename: string };

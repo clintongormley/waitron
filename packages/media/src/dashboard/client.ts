@@ -1,3 +1,5 @@
+import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
+import type { ImageEditInput, ImageFraming } from "../framing.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 
 export interface ImageMetadata {
@@ -9,6 +11,10 @@ export interface LibraryImage extends ImageMetadata {
   createdAt: string;
   updatedAt: string;
   usageCount: number;
+  framing: ImageFraming;
+  revision: number;
+  sourceFilename: string;
+  originalFilename: string | null;
 }
 export type ImageUsage =
   | { kind: "section"; id: string; internalName: string; ownerMenuId: string }
@@ -77,8 +83,32 @@ export class ImageApi {
     form.set("names", JSON.stringify(metadata.names));
     return this.request("/management-api/images", "POST", form);
   }
-  updateImage(id: string, metadata: ImageMetadata): Promise<{ image: LibraryImage }> {
-    return this.request(`/management-api/images/${encodeURIComponent(id)}`, "PATCH", metadata);
+  async updateImage(
+    id: string,
+    edit: ImageEditInput,
+    file?: File,
+  ): Promise<{ image: LibraryImage }> {
+    if (!file) {
+      const result = await this.request<{ image: LibraryImage }>(
+        `/management-api/images/${encodeURIComponent(id)}`,
+        "PATCH",
+        edit,
+      );
+      invalidateMediaImages();
+      return result;
+    }
+    const form = new FormData();
+    form.set("file", file);
+    form.set("names", JSON.stringify(edit.names));
+    form.set("framing", JSON.stringify(edit.framing));
+    form.set("expectedRevision", JSON.stringify(edit.expectedRevision));
+    const result = await this.request<{ image: LibraryImage }>(
+      `/management-api/images/${encodeURIComponent(id)}`,
+      "PATCH",
+      form,
+    );
+    invalidateMediaImages();
+    return result;
   }
   deleteImage(id: string): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
     return this.request(`/management-api/images/${encodeURIComponent(id)}`, "DELETE");

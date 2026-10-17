@@ -12,6 +12,10 @@ const image: LibraryImage = {
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: "one.jpg",
+  originalFilename: null,
   usageCount: 0,
 };
 class ImageLeaveApp extends LitElement {
@@ -168,6 +172,8 @@ it("a refused Image update retains the exact submitted metadata and remains prot
   );
   expect(app.client.updateImage).toHaveBeenCalledWith("one", {
     names: { es: "Pan editado", en: "Bread" },
+    framing: { x: 5000, y: 5000, zoom: 100 },
+    expectedRevision: 1,
   });
   cancel(library);
   expect((await question()).open).toBe(true);

@@ -10,6 +10,10 @@ const image = (id: string, name: string): LibraryImage => ({
   names: { es: name, en: name },
   createdAt: "2026-10-17T00:00:00Z",
   updatedAt: "2026-10-17T00:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: `${id}.png`,
+  originalFilename: null,
   usageCount: 0,
 });
 const file = (name: string) => new File(["photo"], name, { type: "image/png" });

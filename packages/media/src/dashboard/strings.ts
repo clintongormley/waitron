@@ -161,6 +161,10 @@ registerCodeMessages({
     en: "Adjust the photo framing again.",
     es: "Vuelve a ajustar el encuadre de la foto.",
   },
+  "image.busy": {
+    en: "The photo service is busy. Try again shortly.",
+    es: "El servicio de fotos está ocupado. Vuelve a intentarlo en breve.",
+  },
   "image.changed": {
     en: "This photo has changed. Reload it before saving again.",
     es: "Esta foto ha cambiado. Vuelve a cargarla antes de guardar de nuevo.",

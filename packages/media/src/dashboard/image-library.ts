@@ -774,7 +774,11 @@ export class ImageLibrary extends LitElement {
         this.duplicateImage = result.created ? null : result.image;
         this.#rememberImage(result.image);
       } else {
-        const result = await this.api.updateImage(editor.image.id, metadata);
+        const result = await this.api.updateImage(editor.image.id, {
+          ...metadata,
+          framing: editor.image.framing,
+          expectedRevision: editor.image.revision,
+        });
         if (generation !== this.#editorGeneration) return;
         this.#rememberImage(result.image);
       }

@@ -85,8 +85,14 @@ const clickForNewPage: BrowserCommand<
 };
 
 export default defineConfig({
-  // Prebundle the table directives so discovering one cannot reload an in-flight browser test.
-  optimizeDeps: { include: ["lit/directives/repeat.js", "lit/directives/class-map.js"] },
+  optimizeDeps: {
+    include: [
+      "lit/directives/repeat.js",
+      "lit/directives/class-map.js",
+      "lit/async-directive.js",
+      "lit/directive.js",
+    ],
+  },
   test: {
     globals: true,
     clearMocks: false,

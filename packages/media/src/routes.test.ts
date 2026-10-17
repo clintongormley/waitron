@@ -137,7 +137,11 @@ describe("image routes", () => {
     const edited = await app.request(`/management-api/images/${image.id}`, {
       method: "PATCH",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ names: { fr: "Baguette" } }),
+      body: JSON.stringify({
+        names: { fr: "Baguette" },
+        framing: { x: 5000, y: 5000, zoom: 100 },
+        expectedRevision: 1,
+      }),
     });
     expect(edited.status).toBe(200);
     const removed = await app.request(`/management-api/images/${image.id}`, {
@@ -389,6 +393,8 @@ it("stores a photo's name alone, and ignores alt text and labels a caller still 
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
       names: { fr: "Baguette" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
       altText: { fr: "Une baguette" },
       labels: ["Food"],
       extra: "ignored",

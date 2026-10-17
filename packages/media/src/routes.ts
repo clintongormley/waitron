@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
-import { AppError, FALLBACK_LOCALE, MEDIA_FILENAME } from "@waitron/shared";
+import {
+  AppError,
+  FALLBACK_LOCALE,
+  MEDIA_FILENAME,
+  type ReceiptLogoRasters,
+} from "@waitron/shared";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -16,12 +22,22 @@ import {
   readImageBytes,
   listImages,
   listImageUsages,
-  updateImage,
+  validateImageMetadata,
   deleteImage,
   type ImageMetadataInput,
   type ListImagesOptions,
 } from "./images.js";
+import { saveImage } from "./image-edits.js";
+import { validateFraming, type ImageEditInput } from "./framing.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage } from "./prepare.js";
+import {
+  parsePresentationQuery,
+  parseRendition,
+  readPresentations,
+  renditionUrl,
+} from "./presentation.js";
+import { RenditionCache } from "./rendition-cache.js";
+import { renderRendition } from "./renditions.js";
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -31,6 +47,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
+  "image.busy": 503,
+  "image.changed": 409,
+  "image.reference_conflict": 409,
+  "image.hash_conflict": 409,
+  "image.invalid_framing": 400,
   "image.not_found": 404,
   "image.invalid_metadata": 400,
   "image.translation_required": 400,
@@ -129,7 +150,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
             maxUploadBytes,
           });
           const result = await gated(session, (tx) =>
-            uploadImage(tx, { ...input, image }, { fallbackLanguage }),
+            uploadImage(tx, { ...input, image, originalFilename: file.name }, { fallbackLanguage }),
           );
           return c.json(
             { image: result.image, created: result.created },
@@ -137,21 +158,124 @@ export const MEDIA_ROUTES: ModuleRoutes = {
           );
         }),
     );
-    app.patch("/management-api/images/:id", (c) =>
-      run(c, log, async () => {
-        const session = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "ImageId");
-        const input = metadata(await readJsonBody(c));
-        return c.json({
-          image: await gated(session, (tx) => updateImage(tx, id, input, fallbackLanguage)),
-        });
+    app.patch(
+      "/management-api/images/:id",
+      bodyLimit({
+        maxSize: maxUploadBytes + 64 * 1024,
+        onError: (c) =>
+          c.json({ error: { code: "image.too_large", params: { maxBytes: maxUploadBytes } } }, 413),
       }),
+      (c) =>
+        run(c, log, async () => {
+          const session = requireManagementSession(c);
+          await authorizeManager(ctx.db, {
+            managementSessionId: session,
+            permission: "image.manage",
+            touch: false,
+          });
+          const id = requireUuidParam(c.req.param("id"), "ImageId");
+          let input: Record<string, unknown>;
+          let file: File | undefined;
+          if (c.req.header("Content-Type")?.startsWith("multipart/form-data")) {
+            let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+            try {
+              form = await c.req.parseBody({ all: true });
+            } catch {
+              throw new AppError("image.invalid_metadata", {});
+            }
+            if (!(form.file instanceof File)) throw new AppError("image.invalid_metadata", {});
+            file = form.file;
+            input = {
+              names: parseField(form.names),
+              framing: parseField(form.framing),
+              expectedRevision: parseField(form.expectedRevision),
+            };
+          } else {
+            input = metadata(await readJsonBody(c)) as unknown as Record<string, unknown>;
+          }
+          if (
+            !Number.isSafeInteger(input.expectedRevision) ||
+            (input.expectedRevision as number) < 0 ||
+            (input.expectedRevision as number) >= Number.MAX_SAFE_INTEGER
+          )
+            throw new AppError("image.invalid_metadata", {});
+          const framing = validateFraming(input.framing);
+          const names = await validateImageMetadata(ctx.db, metadata(input), fallbackLanguage);
+          const current = await readImage(ctx.db, id);
+          if (input.expectedRevision !== current.revision)
+            throw new AppError("image.changed", { imageId: id });
+          const edit: ImageEditInput = {
+            ...names,
+            framing,
+            expectedRevision: input.expectedRevision as number,
+            ...(file ? { originalFilename: file.name } : {}),
+          };
+          const pixelsChanged =
+            !!file ||
+            framing.x !== current.framing.x ||
+            framing.y !== current.framing.y ||
+            framing.zoom !== current.framing.zoom;
+          if (pixelsChanged && !ctx.renderReceiptLogo) throw new AppError("image.busy", {});
+          const prepared = file
+            ? await prepareImage(new Uint8Array(await file.arrayBuffer()), { maxUploadBytes })
+            : null;
+          let rasters: ReceiptLogoRasters | undefined;
+          if (pixelsChanged) {
+            const source = prepared ?? (await readImageBytes(ctx.db, current.sourceFilename));
+            if (!source) throw new AppError("image.not_found", { imageId: id });
+            const display = await renditions.get(
+              renditionUrl(prepared?.filename ?? current.sourceFilename, "display", framing),
+              () => renderRendition(source.bytes, "display", framing),
+            );
+            rasters = await ctx.renderReceiptLogo!(display);
+          }
+          return c.json({
+            image: await gated(session, (tx) =>
+              saveImage(tx, id, edit, prepared, rasters, fallbackLanguage),
+            ),
+          });
+        }),
     );
     app.delete("/management-api/images/:id", (c) =>
       run(c, log, async () => {
         const session = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "ImageId");
         return c.json(await gated(session, (tx) => deleteImage(tx, id)));
+      }),
+    );
+    const renditions = new RenditionCache();
+    app.get("/media/presentations", (c) =>
+      run(c, log, async () => {
+        const references = parsePresentationQuery(c.req.queries());
+        const images = await readPresentations(ctx.db, references);
+        c.header("Cache-Control", "no-store");
+        return c.json({ images });
+      }),
+    );
+    app.get("/media/renditions/:version/:source/:shape/:frame", (c) =>
+      run(c, log, async () => {
+        const recipe = parseRendition(
+          c.req.param("version"),
+          c.req.param("source"),
+          c.req.param("shape"),
+          c.req.param("frame"),
+        );
+        if (!recipe) return c.body(null, 404);
+        const source = await readImageBytes(ctx.db, recipe.source);
+        if (!source) return c.body(null, 404);
+        const bytes = await renditions.get(
+          renditionUrl(recipe.source, recipe.shape, recipe.framing),
+          () => renderRendition(source.bytes, recipe.shape, recipe.framing),
+        );
+        const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`;
+        const headers = {
+          "Content-Type": "image/webp",
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "X-Content-Type-Options": "nosniff",
+          ETag: etag,
+        };
+        if (c.req.header("If-None-Match") === etag) return c.body(null, 304, headers);
+        return c.body(new Uint8Array(bytes), 200, headers);
       }),
     );
     app.get("/media/:filename", (c) =>

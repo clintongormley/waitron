@@ -14,6 +14,10 @@ const image: LibraryImage = {
   names: { es: "Pan", en: "Bread" },
   createdAt: "2026-09-12T12:00:00Z",
   updatedAt: "2026-09-12T12:00:00Z",
+  framing: { x: 5000, y: 5000, zoom: 100 },
+  revision: 1,
+  sourceFilename: "one.jpg",
+  originalFilename: null,
   usageCount: 0,
 };
 let el: ImageLibrary;
@@ -698,6 +702,8 @@ it("retains every translation while editing enabled languages and keeps a draft 
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Nuevo pan", en: "Bread" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });
@@ -893,6 +899,8 @@ it("keeps draft translations under their languages when the default changes live
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Pan editado", en: "Bread", fr: "Pain" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });
@@ -1100,6 +1108,8 @@ it("saves the image when Enter is pressed in a name field", async () => {
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
       names: { es: "Pan editado", en: "Bread" },
+      framing: { x: 5000, y: 5000, zoom: 100 },
+      expectedRevision: 1,
     }),
   );
 });

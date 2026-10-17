@@ -55,6 +55,7 @@ export interface ModuleRouteContext {
     operationDescriptionDefault?: string;
   };
   maxUploadBytes?: number;
+  renderReceiptLogo?: (bytes: Uint8Array) => Promise<ReceiptLogoRasters>;
   core: CoreServices;
 }
 
