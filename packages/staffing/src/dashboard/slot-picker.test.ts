@@ -146,3 +146,51 @@ describe("the slot picker", () => {
     expect(el.shadowRoot!.textContent).toContain(STAFFING_STRINGS.es["staffing.rota.leave"]);
   });
 });
+
+describe.each(["light", "dark"] as const)("the slot picker's busy people (%s)", (theme) => {
+  it("draws a person working at that time or on leave muted on a sunken fill, still choosable; a free person is not", async () => {
+    const el = await mount();
+    frames[0]!.setAttribute("data-theme", theme);
+    el.week = {
+      ...el.week,
+      shifts: [
+        ...el.week.shifts,
+        {
+          ...el.week.shifts[0]!,
+          shiftId: "joan-friday",
+          personId: "joan",
+          businessDay: "2026-12-04",
+          startsAt: "2026-12-04T08:00:00Z",
+          endsAt: "2026-12-04T12:00:00Z",
+        },
+      ],
+    };
+    await el.updateComplete;
+    const token = (name: string, property: "color" | "background-color") => {
+      const probe = document.createElement("span");
+      probe.style.setProperty(property, `var(${name})`);
+      frames[0]!.append(probe);
+      return getComputedStyle(probe).getPropertyValue(property);
+    };
+    const person = (id: string) =>
+      el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-person=${id}]`)!;
+    const style = (id: string) => getComputedStyle(person(id));
+    const nameColour = (id: string) => getComputedStyle(person(id).querySelector("strong")!).color;
+    expect(person("joan").textContent).toContain("working");
+    expect(person("laia").textContent).toContain("on leave");
+    expect(person("marc").textContent).toContain("free");
+    const muted = token("--wt-color-text-muted", "color");
+    for (const id of ["joan", "laia"]) {
+      expect(nameColour(id)).toBe(muted);
+      expect(style(id).backgroundColor).toBe(token("--wt-color-bg", "background-color"));
+      expect(person(id).disabled).toBe(false);
+    }
+    expect(nameColour("marc")).toBe(token("--wt-color-text", "color"));
+    expect(style("marc").backgroundColor).toBe(token("--wt-color-surface", "background-color"));
+    expect(style("marc").backgroundColor).not.toBe(style("joan").backgroundColor);
+    const choose = vi.fn();
+    el.addEventListener("choose", choose);
+    person("joan").click();
+    expect(choose.mock.calls[0]![0].detail).toEqual({ personId: "joan" });
+  });
+});

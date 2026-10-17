@@ -50,6 +50,10 @@ export class SlotPicker extends LitElement {
         cursor: pointer;
         overflow-wrap: anywhere;
       }
+      button[data-busy] {
+        background: var(--wt-color-bg);
+        color: var(--wt-color-text-muted);
+      }
       button:hover {
         border-color: var(--wt-color-primary);
       }
@@ -82,7 +86,8 @@ export class SlotPicker extends LitElement {
    *  closes it. */
   @property({ type: Boolean }) sheet = false;
   @state() private everyone = false;
-  #status(personId: string) {
+  /** Free, on leave, or working at that time ("working 18:00–00:00"). */
+  #status(personId: string): { busy: boolean; words: string } {
     if (
       this.week.absences.some(
         (a) =>
@@ -91,7 +96,7 @@ export class SlotPicker extends LitElement {
           a.endsOn >= this.pickedSlot.businessDay,
       )
     )
-      return t("staffing.rota.leave");
+      return { busy: true, words: t("staffing.rota.leave") };
     const cutover = this.week.days.find(
       (d) => d.businessDay === this.pickedSlot.businessDay,
     )!.cutover;
@@ -106,8 +111,11 @@ export class SlotPicker extends LitElement {
         Date.parse(s.endsAt) + s.endsOffsetMinutes * 60000 > start,
     );
     return overlapping.length
-      ? tf("staffing.rota.working", { times: overlapping.map(shiftTime).join(", ") })
-      : t("staffing.rota.free");
+      ? {
+          busy: true,
+          words: tf("staffing.rota.working", { times: overlapping.map(shiftTime).join(", ") }),
+        }
+      : { busy: false, words: t("staffing.rota.free") };
   }
   override render() {
     if (!this.week || !this.pickedSlot) return nothing;
@@ -131,35 +139,36 @@ export class SlotPicker extends LitElement {
         ${tf("staffing.rota.picker_sub", { area: area.name })}
       </p>
       ${!holders.length ? html`<p>${t("staffing.rota.no_holders")}</p>` : nothing}
-      ${people.map(
-        (p) =>
-          html`<button
-            data-person=${p.personId}
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (!this.busy)
-                this.dispatchEvent(
-                  new CustomEvent("choose", {
-                    detail: { personId: p.personId },
-                    bubbles: true,
-                    composed: true,
-                  }),
-                );
-            }}
-          >
-            <strong>${p.name}</strong> ·
-            ${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}<small
-              >${this.#status(p.personId)} · ${hours(p)}</small
-            >${
-              p.contractedMinutes !== null && p.plannedMinutes + length > p.contractedMinutes
-                ? html`<small class="over" data-test="would-go-over"
-                    >${tf("staffing.rota.would_go_over", { contract: String(p.contractedMinutes / 60) })}</small
-                  >`
-                : nothing
-            }
-            ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
-          </button>`,
-      )}
+      ${people.map((p) => {
+        const status = this.#status(p.personId);
+        return html`<button
+          data-person=${p.personId}
+          ?data-busy=${status.busy}
+          ?disabled=${this.busy}
+          @click=${() => {
+            if (!this.busy)
+              this.dispatchEvent(
+                new CustomEvent("choose", {
+                  detail: { personId: p.personId },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+          }}
+        >
+          <strong>${p.name}</strong> ·
+          ${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}<small
+            >${status.words} · ${hours(p)}</small
+          >${
+            p.contractedMinutes !== null && p.plannedMinutes + length > p.contractedMinutes
+              ? html`<small class="over" data-test="would-go-over"
+                  >${tf("staffing.rota.would_go_over", { contract: String(p.contractedMinutes / 60) })}</small
+                >`
+              : nothing
+          }
+          ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
+        </button>`;
+      })}
       ${
         this.everyone
           ? nothing
