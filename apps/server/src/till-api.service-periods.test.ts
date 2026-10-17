@@ -1,3 +1,5 @@
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
+import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
@@ -51,7 +53,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   createBareDepartment,
   provisionSignedInTill,
-  sendAsTill,
+  sendAsTill as rawSendAsTill,
   SIGNED_IN_TILL_LOCALE,
 } from "./testing/signed-in-till.js";
 
@@ -519,7 +521,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       ],
     });
     expect(saved.status).toBe(200);
-    const draft = saved.body as { id: string; revision: number; lines: { id: string }[] };
+    const { draft } = saved.body as {
+      draft: { id: string; revision: number; lines: { id: string }[] };
+    };
     const [party] = await suite.db
       .select({ revision: parties.revision })
       .from(parties)
@@ -920,7 +924,9 @@ describe("service periods gate only added dishes and added stored quantities", (
           lines: [{ menuItemId: v.tostada.almuerzo, quantity: "1" }],
         });
         expect(saved.status).toBe(200);
-        const draft = saved.body as { id: string; revision: number; lines: { id: string }[] };
+        const { draft } = saved.body as {
+          draft: { id: string; revision: number; lines: { id: string }[] };
+        };
         const sent = await sendAsTill(
           v,
           "POST",
@@ -995,12 +1001,14 @@ describe("service periods gate only added dishes and added stored quantities", (
         lines: [{ menuItemId, quantity: "1" }],
       });
       expect(saved.status).toBe(200);
-      const draft = saved.body as { id: string; revision: number; lines: { id: string }[] };
+      const { draft } = saved.body as {
+        draft: { id: string; revision: number; lines: { id: string }[] };
+      };
       at(mondayAt("17:00"));
       const read = await sendAsTill(v, "GET", `/api/parties/${partyId}/drafts`);
       expect(read.status).toBe(200);
-      expect(read.body).toEqual({ drafts: [saved.body] });
-      expect(saved.body).toMatchObject({
+      expect(read.body).toEqual({ drafts: [draft], billEdits: [saved.body.edit] });
+      expect(draft).toMatchObject({
         lines: [{ menuItemId, quantity: "1.000", unavailable: false }],
       });
       const [party] = await suite.db
@@ -1500,3 +1508,16 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     expect(await printed(c.upstairs.printerId)).toEqual([]);
   });
 });
+
+const sendAsTill: typeof rawSendAsTill = async (till, method, path, body) =>
+  rawSendAsTill(
+    till,
+    method,
+    path,
+    (await observedDraftCommandBody(
+      suite.db,
+      method,
+      path,
+      await observedOrderWriteBody(suite.db, method, path, body),
+    )) as object | undefined,
+  );

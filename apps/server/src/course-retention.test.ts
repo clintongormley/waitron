@@ -1,3 +1,5 @@
+import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -154,7 +156,21 @@ async function setup() {
       headers: { cookie: chosenCookie, "content-type": "application/json" },
       ...(body === undefined
         ? {}
-        : { body: JSON.stringify(await observedGroupSubmitBody(db, path, body)) }),
+        : {
+            body: JSON.stringify(
+              await observedDraftCommandBody(
+                db,
+                method,
+                path,
+                await observedOrderWriteBody(
+                  db,
+                  method,
+                  path,
+                  await observedGroupSubmitBody(db, path, body),
+                ),
+              ),
+            ),
+          }),
     });
   }
   async function seat() {
@@ -191,7 +207,7 @@ async function setup() {
   async function saved(lines: unknown[]) {
     const res = await save(lines);
     expect(res.status).toBe(200);
-    return (await res.json()) as Draft;
+    return ((await res.json()) as { draft: Draft }).draft;
   }
   async function remove(id = stocked.late.id) {
     await withTransaction(db, (tx) => deleteCourse(tx, cfg, id));
@@ -287,7 +303,7 @@ it("saved draft keeps and submits its deleted course", async () => {
     draft,
   );
   expect(res.status).toBe(200);
-  draft = (await res.json()) as Draft;
+  draft = ((await res.json()) as { draft: Draft }).draft;
   expect(draft.lines[0]!.courseId).toBe(v.late.id);
   expect(draft.lines[0]!.quantity).toBe("2.000");
   const send = await v.submit(draft);

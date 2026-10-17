@@ -1,3 +1,4 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -23,7 +24,12 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { groupArrivingDishes } from "./order-groups.js";
 import { mountTillApi } from "./till-api.js";
 import { createTable } from "./testing/live-table.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  send as rawSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -265,3 +271,5 @@ describe("attendance for dishes arriving in a party", () => {
     expect((await factsAt(other!.id)).filter((f) => f.key === saved.facts[0]!.key)).toEqual([]);
   });
 });
+
+const send = observedRelocationSender(() => suite.db, rawSend);

@@ -1,3 +1,5 @@
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -15,7 +17,12 @@ import { createStation } from "./kitchen.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { provisionBillVenue, send, seatedWith, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  send as rawSend,
+  seatedWith,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import "./errors.js";
 
 // A receipt-language change is refused while an open order at the location holds a line: the till
@@ -591,3 +598,8 @@ describe("PUT /management-api/venue-defaults while orders are open", () => {
     expect(vatClass()).toBe(before);
   });
 });
+
+const send = observedRelocationSender(
+  () => venue.db,
+  observedOrderSender(() => venue.db, rawSend),
+);

@@ -507,6 +507,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       floor_plan_placements: [],
       order_draft_recalled_lines: [],
       line_service_cancellations: [],
+      bill_edit_states: [],
     };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>

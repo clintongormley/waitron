@@ -1,3 +1,4 @@
+import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
@@ -170,11 +171,16 @@ beforeAll(async () => {
 });
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  if (/^\/api\/parties\/[^/]+\/groups$/.test(path) && typeof init.body === "string")
+  if (typeof init.body === "string")
     init = {
       ...init,
       body: JSON.stringify(
-        await observedGroupSubmitBody(suite.db, path, JSON.parse(init.body) as unknown),
+        await observedOrderWriteBody(
+          suite.db,
+          init.method ?? "GET",
+          path,
+          await observedGroupSubmitBody(suite.db, path, JSON.parse(init.body) as unknown),
+        ),
       ),
     };
   return app.request(path, {

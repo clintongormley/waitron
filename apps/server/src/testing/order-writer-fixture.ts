@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { withTransaction, workingOrders, type Transaction } from "@waitron/db";
+import { withTransaction, workingOrders, type Transaction, type Database } from "@waitron/db";
 import { readBillEditState } from "../bill-editing.js";
 import {
   sendLines as send,
@@ -211,4 +211,34 @@ export async function moveDishesToStation(
     },
     options,
   );
+}
+
+export async function observedOrderWriteBody(
+  db: Database,
+  method: string,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  const match =
+    /^\/api\/working-orders\/([^/]+)(?:\/(?:place|label|receipt-language|invoice-choice|rounds|adjustments(?:\/preview)?|lines(?:\/(?:\d+|send|recall|move-station))?))?$/.exec(
+      path,
+    );
+  if (match === null || !["PUT", "POST", "DELETE"].includes(method)) return body;
+  if (body !== undefined && (body === null || typeof body !== "object" || Array.isArray(body)))
+    return body;
+  if (body !== undefined && Object.hasOwn(body, "expectedEdit")) return body;
+  const [row] = await db
+    .select({ partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, match[1]!.toLowerCase()));
+  if (row?.partyId == null) return body;
+  return { expectedEdit: await readBillEditState(db, match[1]!.toLowerCase()), ...body };
+}
+
+export function observedOrderSender(
+  database: () => Database,
+  send: typeof import("./bill-venue.js").send,
+): typeof send {
+  return async (app, cookie, method, path, body) =>
+    send(app, cookie, method, path, await observedOrderWriteBody(database(), method, path, body));
 }

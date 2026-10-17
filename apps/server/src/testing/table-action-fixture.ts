@@ -1,3 +1,4 @@
+import { observedMoveBillBody } from "./move-bill-fixture.js";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import type { BillEditExpected } from "../order-drafts.js";
@@ -155,4 +156,22 @@ export async function observedTableActionBody(
       ...ask,
     };
   });
+}
+
+export function observedRelocationSender(
+  database: () => Database,
+  send: typeof import("./bill-venue.js").send,
+): typeof send {
+  return async (app, cookie, method, path, body) =>
+    send(
+      app,
+      cookie,
+      method,
+      path,
+      await observedTableActionBody(
+        database(),
+        path,
+        await observedMoveBillBody(database(), path, body),
+      ),
+    );
 }

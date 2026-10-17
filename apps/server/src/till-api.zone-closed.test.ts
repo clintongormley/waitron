@@ -1,3 +1,4 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -376,6 +377,7 @@ describe("existing service in a closed zone", () => {
       if (draft !== undefined)
         expect((await request(v, "GET", `/api/parties/${seated.partyId}/drafts`)).json).toEqual({
           drafts: [draft],
+          billEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, seated.tabId))],
         });
     },
   );
@@ -545,4 +547,7 @@ describe("moving into closed zones", () => {
   });
 });
 
-const send = observedGroupSender(() => suite.db, rawGroupSend);
+const send = observedGroupSender(
+  () => suite.db,
+  observedRelocationSender(() => suite.db, rawGroupSend),
+);

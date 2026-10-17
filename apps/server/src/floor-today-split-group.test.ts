@@ -1,3 +1,5 @@
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
+import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { Hono } from "hono";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -152,7 +154,12 @@ async function post(path: string, revisionAt: string, body: Record<string, unkno
   return app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ zoneRevision: await readRevision(revisionAt), ...body }),
+    body: JSON.stringify(
+      await observedTableActionBody(v.db, path, {
+        zoneRevision: await readRevision(revisionAt),
+        ...body,
+      }),
+    ),
   });
 }
 
@@ -966,7 +973,12 @@ async function partyAloneAt(tableId: string): Promise<string> {
       app.request(`/api/bills/${billId}/move`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to: { tableId }, otherPartyId: null }),
+        body: JSON.stringify(
+          await observedMoveBillBody(v.db, `/api/bills/${billId}/move`, {
+            to: { tableId },
+            otherPartyId: null,
+          }),
+        ),
       }),
     ),
   );

@@ -3948,24 +3948,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
+        let attendance: OrderAttendance | undefined;
+        if (deps.attendance !== undefined) {
+          const reading = deps.clock.now();
+          attendance = {
+            recorder: deps.attendance,
+            clock: {
+              now: () => reading,
+              anchor: (trusted) => deps.clock.anchor(trusted),
+              currentAnchor: () => deps.clock.currentAnchor(),
+            },
+          };
+        }
         await mergeBills(
           tx,
           cfg,
           intoBillId,
           fromBillId,
           { ...command, expectedEdits: parseBillEditExpecteds(body.expectedEdits) },
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
+          attendance,
         );
-        await captureKitchenActivity(
-          tx,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-          personId,
-          [intoBillId, fromBillId],
-        );
+        await captureKitchenActivity(tx, attendance, personId, [intoBillId, fromBillId]);
       });
       return c.body(null, 204);
     }),

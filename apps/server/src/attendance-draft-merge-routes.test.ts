@@ -1,3 +1,4 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +25,12 @@ import { readAttendanceFacts } from "./attendance-facts.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  send as rawSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -67,11 +73,11 @@ async function prepare() {
   const target = await seatedWith(v);
   for (const party of [source, target]) {
     await run((tx) =>
-      saveDraft(tx, v.cfg, party.partyId, v.adminId, {
+      saveDraft(tx, v.cfg, party.partyId, v.operatorId, {
         billId: party.tabId,
         draftId: null,
         revision: 0,
-        lines: [],
+        lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
       }),
     );
   }
@@ -292,3 +298,5 @@ describe("draft-event attendance in table combines", () => {
     expect(saved.days).toEqual([]);
   });
 });
+
+const send = observedRelocationSender(() => suite.db, rawSend);

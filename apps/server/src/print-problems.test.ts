@@ -1045,7 +1045,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       table,
       expect.any(String),
       TIME,
-      "GROUP 1",
+      expect.stringMatching(/^GROUP 1 · Mesa (4, 5|5, 4)$/),
       `1.000 x ${DISHES.fish.kitchen}`,
       "*** REPRINT ***",
       "*** HOLD ***",
@@ -1053,7 +1053,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       table,
       expect.any(String),
       TIME,
-      "GROUP 2",
+      "GROUP 1 · Mesa 4",
       `1.000 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });

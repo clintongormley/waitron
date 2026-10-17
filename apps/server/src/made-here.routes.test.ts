@@ -1,3 +1,6 @@
+import { observedRelocationSender } from "./testing/table-action-fixture.js";
+import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -1310,7 +1313,9 @@ describe("made-here route wiring", () => {
       },
     );
     expect(saved.status).toBe(200);
-    const draft = saved.json as { id: string; revision: number; lines: { id: string }[] };
+    const { draft } = saved.json as {
+      draft: { id: string; revision: number; lines: { id: string }[] };
+    };
     const check = await assertMadeHere(party.tabId);
     const answer = await send(
       venue.app,
@@ -1738,4 +1743,20 @@ describe("made-here route wiring", () => {
   });
 });
 
-const send = observedGroupSender(() => venue.db, rawGroupSend);
+const send = observedGroupSender(
+  () => venue.db,
+  observedRelocationSender(
+    () => venue.db,
+    observedOrderSender(
+      () => venue.db,
+      async (app, cookie, method, path, body) =>
+        rawGroupSend(
+          app,
+          cookie,
+          method,
+          path,
+          await observedDraftCommandBody(venue.db, method, path, body),
+        ),
+    ),
+  ),
+);

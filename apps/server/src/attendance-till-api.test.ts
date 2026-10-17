@@ -1,3 +1,4 @@
+import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,7 +89,7 @@ function login(app: Hono, pin = "1234", personId = OPERATOR) {
 }
 describe("till attendance recorder admission", () => {
   it.each(["finish", "unpaid-departure"] as const)(
-    "passes the admitted %s actor to discarded draft capture",
+    "explicit disposal before %s retains the admitted draft actor",
     async (path) => {
       const { partyId, tabId } = await seat(v, await v.table("Closing attendance"));
       const draft = await withTransaction(suite.db, (tx) =>
@@ -111,6 +112,27 @@ describe("till attendance recorder admission", () => {
           ],
         }),
       );
+
+      const api = app();
+      const opened = await login(api);
+      expect(opened.status).toBe(200);
+      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
+      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
+      const discarded = await api.request(`/api/parties/${partyId}/drafts`, {
+        method: "PUT",
+        headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          billId: tabId,
+          draftId: draft.id,
+          revision: draft.revision,
+          expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+          lines: [],
+          personId: "untrusted person",
+          at: "2026-10-15T20:00:00Z",
+        }),
+      });
+      expect(discarded.status).toBe(200);
+      expect(await discarded.json()).toMatchObject({ draft: null });
       if (path === "unpaid-departure") {
         await order(v, tabId, "Burger");
         await placeByHand(v, tabId);
@@ -121,16 +143,12 @@ describe("till attendance recorder admission", () => {
           OPERATOR,
         );
       }
-      const api = app();
-      const opened = await login(api);
-      expect(opened.status).toBe(200);
-      const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
-      vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
       const response = await api.request(`/api/parties/${partyId}/${path}`, {
         method: "POST",
         headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
         body: JSON.stringify({
           expectedPartyRevision: 0,
+          expectedEdits: await withTransaction(suite.db, (tx) => closingEditsForTest(tx, partyId)),
           reason: "Guests left",
           personId: "untrusted person",
           at: "2026-10-15T20:00:00Z",
@@ -188,6 +206,9 @@ describe("till attendance recorder admission", () => {
                   zoneId: v.counter.zoneId,
                   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
                 }
+              : {}),
+            ...(path === "collection"
+              ? { expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)) }
               : {}),
             tender: { method: "cash", amount: "20.00" },
             personId: "untrusted person",

@@ -1,3 +1,4 @@
+import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -34,7 +35,7 @@ import {
   inTx,
   provisionBillVenue,
   registroCount,
-  send,
+  send as rawSend,
   statusOf,
   tabWith,
   tendersOfBill,
@@ -1988,3 +1989,5 @@ describe("the refund attestation checks the manager's PIN before the write lock 
     }
   });
 });
+
+const send = observedOrderSender(() => venue.db, rawSend);
