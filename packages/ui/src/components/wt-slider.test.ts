@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { WtSlider } from "./wt-slider.js";
@@ -270,4 +270,133 @@ test("focusing the host focuses the input", async () => {
   expect(input).toBeInstanceOf(HTMLInputElement);
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(input);
+});
+
+test("continuous input changes the public value before release and emits no matching release", async () => {
+  const el = await mountSlider("continuous");
+  const heard = hostHears(el);
+  const input = inputOf(el);
+  for (const value of [7, 8, 9]) {
+    input.value = String(value);
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.value).toBe(value);
+    expect(shownOf(el)).toBe(String(value));
+  }
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  expect(heard.map((event) => event.type)).toEqual(["wt-change", "wt-change", "wt-change"]);
+  expect(heard.map((event) => (event as CustomEvent<{ value: number }>).detail)).toEqual([
+    { value: 7 },
+    { value: 8 },
+    { value: 9 },
+  ]);
+  expect(heard.every((event) => event.bubbles && event.composed)).toBe(true);
+});
+
+test("continuous keyboard steps each send one integer value including the limits", async () => {
+  const el = await mountSlider("continuous");
+  const heard = hostHears(el);
+  el.focus();
+  await userEvent.keyboard("{ArrowRight}{End}{ArrowRight}{Home}{ArrowLeft}");
+  await el.updateComplete;
+  expect(heard.map((event) => event.type)).toEqual(["wt-change", "wt-change", "wt-change"]);
+  expect(heard.map((event) => (event as CustomEvent<{ value: number }>).detail)).toEqual([
+    { value: 7 },
+    { value: 10 },
+    { value: 2 },
+  ]);
+  expect([el.value, shownOf(el), inputOf(el).value]).toEqual([2, "2", "2"]);
+});
+
+test("continuous track clicks send one event", async () => {
+  const el = await mountSlider("continuous");
+  const heard = hostHears(el);
+  const box = inputOf(el).getBoundingClientRect();
+  const hostBox = el.getBoundingClientRect();
+  await userEvent.click(el, {
+    position: { x: box.right - 2 - hostBox.left, y: box.top + box.height / 2 - hostBox.top },
+  });
+  await el.updateComplete;
+  expect(heard.map((event) => event.type)).toEqual(["wt-change"]);
+  expect((heard[0] as CustomEvent<{ value: number }>).detail).toEqual({ value: 10 });
+  expect(el.value).toBe(10);
+});
+
+test("continuous mode accepts a change without an input and clears its prior release marker", async () => {
+  const el = await mountSlider("continuous");
+  const heard = hostHears(el);
+  const input = inputOf(el);
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  el.value = 6;
+  await el.updateComplete;
+  input.value = "8";
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(heard.map((event) => event.type)).toEqual(["wt-change", "wt-change"]);
+  expect(heard.map((event) => (event as CustomEvent<{ value: number }>).detail)).toEqual([
+    { value: 8 },
+    { value: 8 },
+  ]);
+  expect(el.value).toBe(8);
+});
+
+test("continuous input still lets its consumer replace a value synchronously", async () => {
+  const el = await mountSlider("continuous");
+  el.addEventListener("wt-change", () => (el.value = 6));
+  const input = inputOf(el);
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect([el.value, shownOf(el), input.value]).toEqual([6, "6", "6"]);
+});
+
+test("turning continuous mode off restores release-only changes", async () => {
+  const el = await mountSlider("continuous");
+  const heard = hostHears(el);
+  el.continuous = false;
+  await el.updateComplete;
+  const input = inputOf(el);
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(el.value).toBe(6);
+  expect(heard).toEqual([]);
+  input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  expect(heard.map((event) => event.type)).toEqual(["wt-change"]);
+});
+
+test("disabled continuous sliders refuse keyboard and track changes", async () => {
+  const el = await mountSlider("continuous disabled");
+  const heard = hostHears(el);
+  const input = inputOf(el);
+  expect(input.disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector(".row")!.getAttribute("aria-disabled")).toBe("true");
+  el.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  const box = input.getBoundingClientRect();
+  const hostBox = el.getBoundingClientRect();
+  await userEvent.click(el, {
+    position: { x: box.right - 2 - hostBox.left, y: box.top + box.height / 2 - hostBox.top },
+    force: true,
+  });
+  await el.updateComplete;
+  expect(heard.filter((event) => event.type === "wt-change")).toEqual([]);
+  expect([el.value, shownOf(el), input.value]).toEqual([6, "6", "6"]);
+});
+
+describe.each(["light", "dark"] as const)("continuous slider tokens (%s)", (theme) => {
+  test("keeps its accent and focus styles during input", async () => {
+    const el = await mountSlider("continuous");
+    host.setAttribute("data-theme", theme);
+    host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
+    const input = inputOf(el);
+    el.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(getComputedStyle(input).accentColor).toBe("rgb(16, 17, 18)");
+    expect(getComputedStyle(input).outlineStyle).toBe("solid");
+    expect(parseFloat(getComputedStyle(input).outlineWidth)).toBeGreaterThan(0);
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  });
 });

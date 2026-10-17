@@ -157,6 +157,10 @@ registerCodeMessages({
     en: "The photo could not be read. It may be damaged, so try exporting it again.",
     es: "No se pudo leer la foto. Puede que esté dañada, así que prueba a exportarla de nuevo.",
   },
+  "image.invalid_framing": {
+    en: "Adjust the photo framing again.",
+    es: "Vuelve a ajustar el encuadre de la foto.",
+  },
   "image.too_many_pixels": {
     en: "The photo has too many pixels. Export a smaller copy and try again.",
     es: "La foto tiene demasiados píxeles. Exporta una copia más pequeña e inténtalo de nuevo.",

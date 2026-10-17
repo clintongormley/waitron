@@ -684,7 +684,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   and keeps its names and every use.
   [Detail](backlog/catalogue.md#a652--frame-a-photo-for-its-thumbnails),
   [mockups](backlog/mockups/a652-photo-framing/),
-  [implementation plan](superpowers/plans/2026-10-17-a652-photo-framing.md). The plan is written; the feature remains unbuilt.
+  [implementation plan](superpowers/plans/2026-10-17-a652-photo-framing.md). Crop geometry, image rendering and the opt-in live slider are implemented on the feature branch; storage, APIs and the photo editor remain unbuilt.
 
 - **A655 — fewer and slimmer columns on Products (owner, 2026-10-14; open).** In
   `apps/dashboard/src/widgets/product-list.ts`: "Standalone ordering" gets a shorter heading,
