@@ -15,9 +15,12 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  MAX_GUEST_COUNT,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-number-stepper.js";
+import { parseGuestCount } from "./guest-count.js";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -40,14 +43,21 @@ import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
  * bank-terminal (datáfono) charge: `amount` is the sale total, and `externalRef` is the terminal's
  * optional operation number.
  */
-export type ConfirmPaymentDetail =
-  { method: "cash"; amount: string } | { method: "card"; amount: string; externalRef?: string };
+export type ConfirmPaymentDetail = (
+  { method: "cash"; amount: string } | { method: "card"; amount: string; externalRef?: string }
+) &
+  ReceiptGuestsDetail;
+
+/** `guests` is absent unless the screen asks for it; null prints no guests line. */
+export interface ReceiptGuestsDetail {
+  guests?: number | null;
+}
 
 export interface ParkOrderDetail {
   label?: string;
 }
 
-export interface CollectCardDetail {
+export interface CollectCardDetail extends ReceiptGuestsDetail {
   tip?: string;
   allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined";
@@ -273,6 +283,9 @@ export class TillTenderPay extends LitElement {
   @property({ type: Boolean }) fullInvoices = false;
   /** The language this order's receipt prints in. */
   @property() receiptLanguage = "";
+  @property({ type: Boolean }) asksGuests = false;
+  /** The count the guests field starts on; null starts it empty. */
+  @property({ attribute: false }) receiptGuests: number | null = null;
 
   @state() private view: View = "idle";
   @state() private entry = "";
@@ -281,6 +294,10 @@ export class TillTenderPay extends LitElement {
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
   @state() private tipAttempted = false;
+  /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
+  @state() private guestsEntry?: string;
+  @state() private guestsAttempted = false;
+  #guestsOrderId?: string;
   @state() private allowOffline = false;
   @state() private simulationOutcome: "captured" | "declined" = "captured";
   /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
@@ -462,6 +479,10 @@ export class TillTenderPay extends LitElement {
     if (changed.has("cardAttemptsOver") && this.view === "collecting") {
       this.view = "idle";
     }
+    if (this.#guestsOrderId !== this.store.id) {
+      this.#guestsOrderId = this.store.id;
+      this.#resetGuests();
+    }
     this.#syncScopes();
   }
 
@@ -496,7 +517,40 @@ export class TillTenderPay extends LitElement {
     if (!event.defaultPrevented) resolve(true);
   }
 
+  #guestsText(): string {
+    return this.guestsEntry ?? (this.receiptGuests === null ? "" : String(this.receiptGuests));
+  }
+
+  #guestsInvalid(): boolean {
+    return this.asksGuests && parseGuestCount(this.#guestsText()) === undefined;
+  }
+
+  #guestsDetail(): ReceiptGuestsDetail {
+    if (!this.asksGuests) return {};
+    return { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null };
+  }
+
+  #resetGuests(): void {
+    this.guestsEntry = undefined;
+    this.guestsAttempted = false;
+  }
+
+  #onGuestsChange(event: Event): void {
+    event.stopPropagation();
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
+    this.guestsEntry = (event as CustomEvent<{ value: string }>).detail.value;
+  }
+
+  #focusGuests(): void {
+    this.shadowRoot!.querySelector<HTMLElement>('[name="guests"]')?.focus();
+  }
+
   #startPaying(): void {
+    this.guestsAttempted = true;
+    if (this.#guestsInvalid()) {
+      this.#focusGuests();
+      return;
+    }
     this.#checkBeforeTender(() => {
       this.entry = "";
       this.view = "paying";
@@ -524,8 +578,13 @@ export class TillTenderPay extends LitElement {
 
   #onCardTap(): void {
     this.tipAttempted = true;
+    this.guestsAttempted = true;
     if (this.#tipInvalid()) {
       this.shadowRoot!.querySelector<HTMLElement>(".tip-input")?.focus();
+      return;
+    }
+    if (this.#guestsInvalid()) {
+      this.#focusGuests();
       return;
     }
     this.#checkBeforeTender(() => {
@@ -543,6 +602,7 @@ export class TillTenderPay extends LitElement {
           ? { simulationOutcome: this.simulationOutcome }
           : {}),
         ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
+        ...this.#guestsDetail(),
       });
     });
   }
@@ -679,9 +739,15 @@ export class TillTenderPay extends LitElement {
     if (!this.isConnected || this.busy || this.view !== "paying") return;
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
     this.#finishEntry();
+    const detail: ConfirmPaymentDetail = {
+      method: "cash",
+      amount: this.#enteredDecimal(),
+      ...this.#guestsDetail(),
+    };
+    this.#resetGuests();
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
-        detail: { method: "cash", amount: this.#enteredDecimal() },
+        detail,
         bubbles: true,
         composed: true,
       }),
@@ -699,7 +765,9 @@ export class TillTenderPay extends LitElement {
       method: "card",
       amount: this.store.total,
       ...(ref === "" ? {} : { externalRef: ref }),
+      ...this.#guestsDetail(),
     };
+    this.#resetGuests();
     this.view = "idle";
     this.refEntry = "";
     this.dispatchEvent(
@@ -805,7 +873,7 @@ export class TillTenderPay extends LitElement {
         class="pay-card"
         variant=${this.#tenderVariant()}
         size="md"
-        ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid())}
+        ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
         @click=${() => this.#onCardTap()}
       >
         ${t("tender.card")}
@@ -825,7 +893,7 @@ export class TillTenderPay extends LitElement {
           class="pay"
           variant=${this.#tenderVariant()}
           size="md"
-          ?disabled=${disabled}
+          ?disabled=${disabled || this.#guestsHeld()}
           @click=${() => this.#startPaying()}
         >
           ${t("tender.cash")}
@@ -866,11 +934,40 @@ export class TillTenderPay extends LitElement {
     >`;
   }
 
+  #guestsHeld(): boolean {
+    return this.guestsAttempted && this.#guestsInvalid();
+  }
+
+  #renderFormMessage() {
+    return formMessage(
+      (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld() ? t("form.fix_fields") : "",
+    );
+  }
+
+  /** It saves nothing, so it joins no draft scope. */
+  #renderGuests() {
+    if (!this.asksGuests) return nothing;
+    return html`<wt-number-stepper
+      name="guests"
+      class="guests"
+      clearable
+      .min=${1}
+      .max=${MAX_GUEST_COUNT}
+      .label=${t("seat.guest_count")}
+      .placeholder=${t("receipt.guests_none")}
+      .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
+      .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
+      .value=${live(this.#guestsText())}
+      .disabled=${this.busy}
+      .error=${this.#guestsHeld() ? t("seat.guest_count_invalid") : ""}
+      @wt-change=${(event: Event) => this.#onGuestsChange(event)}
+    ></wt-number-stepper>`;
+  }
+
   /** No Hold: a placed order is not parked again. */
   #renderIdleCollect(disabled: boolean) {
     return html`
-      ${this.#renderCardExtras()}
-      ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
+      ${this.#renderCardExtras()} ${this.#renderGuests()} ${this.#renderFormMessage()}
       <div class="actions">
         ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
       </div>
@@ -880,8 +977,7 @@ export class TillTenderPay extends LitElement {
   /** `withPlace`: a zone that sends to the kitchen without payment can still send it unpaid. */
   #renderIdlePay(disabled: boolean, withPlace: boolean) {
     return html`
-      ${this.#renderCardExtras()}
-      ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
+      ${this.#renderCardExtras()} ${this.#renderGuests()} ${this.#renderFormMessage()}
       <div class="actions idle-actions">
         ${this.#renderTenderButtons(disabled)}
         ${

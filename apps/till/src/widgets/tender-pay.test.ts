@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -1903,4 +1903,201 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
       expect(buttonFill(card)).not.toBe(buttonFill(hold));
     },
   );
+});
+
+describe("the receipt's guests field", () => {
+  type Stepper = HTMLElementTagNameMap["wt-number-stepper"];
+  const guests = (el: TillTenderPay) => query(el, '[name="guests"]') as Stepper | null;
+  const typeGuests = (el: TillTenderPay, text: string) => typeInput(el, '[name="guests"]', text);
+  async function step(el: TillTenderPay, delta: "1" | "-1"): Promise<void> {
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    stepper.shadowRoot!.querySelector<HTMLElement>(`button[data-step="${delta}"]`)!.click();
+    await el.updateComplete;
+  }
+  const disabled = (el: TillTenderPay, selector: string) =>
+    (query(el, selector) as HTMLElement & { disabled: boolean }).disabled;
+
+  async function mount(props: Record<string, unknown> = {}) {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // total 1.50
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      asksGuests: true,
+      receiptGuests: 4,
+      ...props,
+    });
+    return { el, store };
+  }
+
+  function listen(el: TillTenderPay, name: string) {
+    const spy = vi.fn();
+    el.addEventListener(name, (e) => spy((e as CustomEvent).detail));
+    return spy;
+  }
+
+  async function payCash(el: TillTenderPay): Promise<void> {
+    click(el, ".pay");
+    await el.updateComplete;
+    await type(el, "5");
+    click(el, ".confirm");
+    await el.updateComplete;
+  }
+
+  it("shows the party's count in a stepper above Cash and carries it on the cash payment", async () => {
+    const { el } = await mount();
+    const stepper = guests(el)!;
+    expect(stepper.tagName).toBe("WT-NUMBER-STEPPER");
+    expect(stepper.value).toBe("4");
+    expect(stepper.label).toBe(t("seat.guest_count"));
+    expect(
+      stepper.compareDocumentPosition(query(el, ".pay")!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const spy = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+  });
+
+  it("carries a stepped-up count, then starts again on the default after the payment", async () => {
+    const { el } = await mount();
+    await step(el, "1");
+    expect(guests(el)!.value).toBe("5");
+    const spy = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 5 });
+    expect(guests(el)!.value).toBe("4");
+  });
+
+  it.each([
+    ["en-GB", "No line"],
+    ["es-ES", "Sin línea"],
+  ])("emptied by − at 1 in %s, it reads «%s» and carries null", async (locale, placeholder) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(previous));
+    const { el } = await mount({ receiptGuests: 1 });
+    await step(el, "-1");
+    const stepper = guests(el)!;
+    expect(stepper.value).toBe("");
+    await stepper.updateComplete;
+    expect(stepper.shadowRoot!.querySelector("input")!.placeholder).toBe(placeholder);
+    const spy = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: null });
+  });
+
+  it("opens empty when there is no default and carries null", async () => {
+    const { el } = await mount({ receiptGuests: null });
+    expect(guests(el)!.value).toBe("");
+    const spy = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: null });
+  });
+
+  it("follows a new default until the waiter changes it", async () => {
+    const { el } = await mount();
+    el.receiptGuests = 6;
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("6");
+    await step(el, "1");
+    el.receiptGuests = 2;
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("7");
+  });
+
+  it("carries the count on a manual card payment", async () => {
+    const { el } = await mount();
+    const spy = listen(el, "confirm-payment");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guests: 4 });
+  });
+
+  it("carries the count on a reader's collect, and again on a retry after a decline", async () => {
+    const { el } = await mount({ cardProvider: "stripe_terminal" });
+    await step(el, "1");
+    const spy = listen(el, "collect-card");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(spy).toHaveBeenLastCalledWith({ guests: 5 });
+    el.cardOutcome = { outcome: "declined" };
+    await el.updateComplete;
+    click(el, ".retry");
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenLastCalledWith({ guests: 5 });
+  });
+
+  it("carries the count on collect-order at the collect stage", async () => {
+    const { el } = await mount({ mode: "ticket_then_pay", stage: "collect" });
+    const spy = listen(el, "collect-order");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+  });
+
+  it("says nothing about a bad count until Cash or Card is pressed", async () => {
+    const { el } = await mount();
+    await typeGuests(el, "0");
+    expect(guests(el)!.error).toBe("");
+    expect(el.shadowRoot!.textContent).not.toContain(t("form.fix_fields"));
+    expect(disabled(el, ".pay")).toBe(false);
+    expect(disabled(el, ".pay-card")).toBe(false);
+  });
+
+  it("a bad count stops Cash, marks the field and holds both tenders until it is fixed", async () => {
+    const { el } = await mount();
+    const spy = listen(el, "confirm-payment");
+    await typeGuests(el, "0");
+    click(el, ".pay");
+    await el.updateComplete;
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+    expect(el.shadowRoot!.textContent).toContain(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(guests(el));
+    expect(disabled(el, ".pay")).toBe(true);
+    expect(disabled(el, ".pay-card")).toBe(true);
+    await typeGuests(el, "3");
+    expect(guests(el)!.error).toBe("");
+    expect(el.shadowRoot!.textContent).not.toContain(t("form.fix_fields"));
+    expect(disabled(el, ".pay")).toBe(false);
+    expect(disabled(el, ".pay-card")).toBe(false);
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 3 });
+  });
+
+  it.each(["1000", "2.5", "abc"])("a Card press with %s opens nothing", async (value) => {
+    const { el } = await mount({ cardProvider: "stripe_terminal" });
+    const spy = listen(el, "collect-card");
+    await typeGuests(el, value);
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(spy).not.toHaveBeenCalled();
+    expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+  });
+
+  it("a new order puts the field back on the default and clears the messages", async () => {
+    const { el, store } = await mount();
+    await typeGuests(el, "0");
+    click(el, ".pay");
+    await el.updateComplete;
+    store.clear();
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("4");
+    expect(guests(el)!.error).toBe("");
+    expect(el.shadowRoot!.textContent).not.toContain(t("form.fix_fields"));
+    expect(disabled(el, ".pay")).toBe(false);
+  });
+
+  it("draws no field and sends no guests key when the screen does not ask", async () => {
+    const { el } = await mount({ asksGuests: false, cardProvider: "stripe_terminal" });
+    expect(guests(el)).toBeNull();
+    const cash = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(cash.mock.calls[0]![0]).not.toHaveProperty("guests");
+    const card = listen(el, "collect-card");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(card.mock.calls[0]![0]).not.toHaveProperty("guests");
+  });
 });
