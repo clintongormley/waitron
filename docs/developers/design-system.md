@@ -4887,7 +4887,9 @@ modal's `wt-close` reaches the screen, which takes the window pair out of the ad
 
 The body is a table in a scrolling region named "Seasons", with the columns Colour, Season, Starts
 on, Runs until and a bin. The bin column stays at the region's trailing edge while the others scroll
-sideways under it, as a `wt-data-table` column with `pinned: "end"` does. Rows run from the season in force on 1 January, then by start (`draftOf`,
+sideways under it, as a `wt-data-table` column with `pinned: "end"` does. While that region is
+narrower than 480 px, each row's colour chooser is at most 120 px wide, so a longer colour name is
+cut with an ellipsis rather than pushing the Day box under the bin. Rows run from the season in force on 1 January, then by start (`draftOf`,
 `season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
 Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other named rows
 that use each colour; two seasons may share one), its name, and its start as a Day and a Month

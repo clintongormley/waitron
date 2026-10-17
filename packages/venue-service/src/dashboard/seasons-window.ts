@@ -79,6 +79,13 @@ export class SeasonsWindow extends LitElement {
       }
       .table-wrap {
         overflow-x: auto;
+        container-type: inline-size;
+      }
+      /* Caps the chooser, so a long colour name does not push the Day box under the bin. */
+      @container (width < 480px) {
+        wt-colour-chooser {
+          max-width: calc(var(--wt-space-6) * 3.75);
+        }
       }
       .table-wrap:focus-visible {
         outline: var(--wt-focus-ring);

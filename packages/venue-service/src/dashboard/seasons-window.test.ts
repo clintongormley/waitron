@@ -401,6 +401,8 @@ it.each(["en", "es"] as const)(
       expect(window.innerWidth).toBe(390);
       const el = await mount();
       await change(el, "season-1-day", "31");
+      // The longest colour name: Turquesa in Spanish; in English, Orange is already on row 3.
+      await change(el, "season-0-colour", "teal");
       await frames();
       expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
       const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
