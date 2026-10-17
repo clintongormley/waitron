@@ -66,6 +66,8 @@ export interface LineSelection {
 
 export interface OrderLine {
   source?: RecalledDraftLine["source"];
+  /** Explicit picker intent; frozen source snapshots never imply a new selection. */
+  sourceSelection?: LineSelection;
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
@@ -430,13 +432,12 @@ export class WorkingOrderStore {
     this.#total = null;
   }
 
-  /** Recalled families retain their stored extras; their draft writes send no picks. */
   #markDirty(): void {
     this.#dirty = true;
     for (const line of this.#lines) if (line.source === undefined) delete line.notOfferedExtras;
   }
 
-  refreshRecalledLine(line: OrderLine, snapshot: OrderLine): void {
+  refreshRecalledLine(line: OrderLine, snapshot: OrderLine, savedSelection?: LineSelection): void {
     if (
       !this.#lines.includes(line) ||
       snapshot.source === undefined ||
@@ -445,10 +446,15 @@ export class WorkingOrderStore {
       return;
     line.source = snapshot.source;
     line.product = snapshot.product;
-    if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
-    else line.optionSnapshots = snapshot.optionSnapshots;
-    if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
-    else line.notOfferedExtras = snapshot.notOfferedExtras;
+    if (line.sourceSelection === savedSelection) {
+      delete line.sourceSelection;
+      delete line.options;
+      delete line.extras;
+      if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
+      else line.optionSnapshots = snapshot.optionSnapshots;
+      if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
+      else line.notOfferedExtras = snapshot.notOfferedExtras;
+    }
     this.#invalidatePricing();
     this.emit("changed");
   }
@@ -515,6 +521,10 @@ export class WorkingOrderStore {
     delete line.options;
     delete line.optionSnapshots;
     applySelection(line, selection);
+    if (line.source !== undefined) {
+      line.sourceSelection = selection;
+      delete line.notOfferedExtras;
+    }
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");

@@ -454,6 +454,7 @@ export class DraftSync {
     const read = this.#reads;
     const pending = [...this.store.lines];
     const lines = pending.map((line) => toDraftLineInput(line));
+    const selections = pending.map((line) => line.sourceSelection);
     this.#unsaved = false;
     const limit = limited(this.#options.requestLimitMs, signal);
     let saved: Draft;
@@ -474,7 +475,7 @@ export class DraftSync {
     if (this.#dropped || read !== this.#reads) return "failed";
     if (this.#unsaved) {
       this.#take(saved);
-      this.#attachSavedIds(saved, pending, lines);
+      this.#attachSavedIds(saved, pending, lines, selections);
     } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     return "saved";
@@ -506,6 +507,7 @@ export class DraftSync {
     draft: Draft,
     pending: readonly OrderLine[],
     inputs: readonly DraftLineInput[],
+    selections: readonly OrderLine["sourceSelection"][],
   ): void {
     const retained = new Set(inputs.flatMap((line) => (line.id === undefined ? [] : [line.id])));
     const available = new Map(draft.lines.map((line) => [line.id, line]));
@@ -524,7 +526,7 @@ export class DraftSync {
       if (saved === undefined) delete line.draftLineId;
       else {
         line.draftLineId = saved.id;
-        this.#refreshSource(line, saved);
+        this.#refreshSource(line, saved, selections[index]);
       }
     }
   }
@@ -534,17 +536,22 @@ export class DraftSync {
     this.#take(draft);
     this.store.lines.forEach((line, index) => {
       line.draftLineId = draft.lines[index]!.id;
-      this.#refreshSource(line, draft.lines[index]!);
+      this.#refreshSource(line, draft.lines[index]!, line.sourceSelection);
     });
     this.#quietly(() =>
       this.store.setUnavailableOnServer(draft.lines.map((line) => line.unavailable)),
     );
   }
 
-  #refreshSource(line: OrderLine, saved: DraftLine): void {
+  #refreshSource(
+    line: OrderLine,
+    saved: DraftLine,
+    selection?: OrderLine["sourceSelection"],
+  ): void {
     if (saved.sourceLineId == null) return;
     const rebuilt = this.#options.rebuild([saved])[0];
-    if (rebuilt !== undefined) this.#quietly(() => this.store.refreshRecalledLine(line, rebuilt));
+    if (rebuilt !== undefined)
+      this.#quietly(() => this.store.refreshRecalledLine(line, rebuilt, selection));
   }
 
   /** The server's draft replaces what the store holds. */

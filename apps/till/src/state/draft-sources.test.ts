@@ -401,4 +401,206 @@ describe("recalled draft sources", () => {
     expect(taken.lines[0]).toMatchObject({ ...recalled(), slot: 2, joinGroupId: null });
     expect(taken.ownerId).toBe("person-2");
   });
+
+  it("sends explicitly edited recalled choices, without frozen names or prices", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [fromDraftLine(recalled(), new Map())]);
+    store.setLineModifiers(0, {
+      options: [{ listId: "doneness", labelId: "medium" }],
+      optionSnapshots: [{ ...parent().optionSnapshots![0]!, labelKitchenName: "Medium" }],
+      extras: [
+        {
+          listId: "toppings",
+          productId: "bacon",
+          name: "Fresh bacon",
+          price: "99.00",
+          quantity: 2,
+        },
+      ],
+    });
+    expect(toDraftLineInput(store.lines[0]!)).toEqual({
+      id: "reference-1",
+      sourceLineId: "sent-dish",
+      quantity: "2",
+      note: "Recorded note",
+      courseId: "course-old",
+      makeAt: "grill",
+      slot: 0,
+      joinGroupId: "g1",
+      afterGroupId: null,
+      options: [{ listId: "doneness", labelId: "medium" }],
+      extras: [{ listId: "toppings", picks: [{ productId: "bacon", quantity: 2 }] }],
+    });
+    expect(store.lines[0]?.optionSnapshots?.[0]?.labelKitchenName).toBe("Medium");
+    expect(store.lines[0]?.notOfferedExtras).toBeUndefined();
+    expect(store.total).toBe("17.25");
+  });
+
+  it("sends explicit empty recalled choices when the picker removes them all", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [fromDraftLine(recalled(), new Map())]);
+    store.setLineModifiers(0, {});
+    expect(toDraftLineInput(store.lines[0]!)).toMatchObject({ options: [], extras: [] });
+    store.setLineExtras(0, { note: "New note" });
+    expect(toDraftLineInput(store.lines[0]!)).toMatchObject({
+      options: [],
+      extras: [],
+      note: "New note",
+    });
+  });
+
+  it.each(["none", "note", "choices"])(
+    "acknowledges source choices while preserving a later %s edit",
+    async (later) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      let answer!: (draft: Draft) => void;
+      const api = {
+        listDrafts: vi.fn(async () => [own([recalled()])]),
+        saveDraft: vi.fn(
+          () =>
+            new Promise<Draft>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+        takeOverDraft: vi.fn(),
+      };
+      const sync = new DraftSync({
+        api,
+        partyId: "party-1",
+        billId: "bill-1",
+        personId: "person-1",
+        rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
+        onRefused: vi.fn(),
+        requestLimitMs: 5000,
+      });
+      try {
+        await sync.load();
+        sync.store.setLineModifiers(0, {
+          options: [{ listId: "doneness", labelId: "medium" }],
+          optionSnapshots: [{ ...parent().optionSnapshots![0]!, labelKitchenName: "Medium" }],
+        });
+        const saving = sync.flush();
+        await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
+        if (later === "note") sync.store.setLineExtras(0, { note: "Later note" });
+        if (later === "choices")
+          sync.store.setLineModifiers(0, {
+            options: [{ listId: "doneness", labelId: "well" }],
+            optionSnapshots: [{ ...parent().optionSnapshots![0]!, labelKitchenName: "Well done" }],
+            extras: [
+              { listId: "toppings", productId: "bacon", name: "Bacon", price: "3.00", quantity: 1 },
+            ],
+          });
+        const changed = recalled();
+        changed.source.line.optionSnapshots = [
+          { ...parent().optionSnapshots![0]!, labelKitchenName: "Saved medium" },
+        ];
+        changed.source.extras = [];
+        changed.source.netAmount = "15.00";
+        answer({ ...own([changed]), revision: 2 });
+        expect(await saving).toBe("saved");
+        const line = sync.store.lines[0]!;
+        expect(line.source?.line.optionSnapshots?.[0]?.labelKitchenName).toBe("Saved medium");
+        expect(line.optionSnapshots?.[0]?.labelKitchenName).toBe(
+          later === "choices" ? "Well done" : "Saved medium",
+        );
+        expect(toDraftLineInput(line)).toMatchObject({
+          sourceLineId: "sent-dish",
+          note: later === "note" ? "Later note" : "Recorded note",
+        });
+        if (later === "choices") {
+          expect(toDraftLineInput(line)).toMatchObject({
+            options: [{ listId: "doneness", labelId: "well" }],
+            extras: [{ listId: "toppings", picks: [{ productId: "bacon", quantity: 1 }] }],
+          });
+        } else {
+          expect(toDraftLineInput(line)).not.toHaveProperty("options");
+          expect(toDraftLineInput(line)).not.toHaveProperty("extras");
+          expect(line.extras).toBeUndefined();
+          expect(line.options).toBeUndefined();
+        }
+        expect(sync.store.total).toBe("15.00");
+      } finally {
+        sync.drop();
+      }
+    },
+  );
+
+  it("consumes an acknowledged empty picker edit before another note save", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const changed = recalled();
+    changed.source.line.optionSnapshots = [];
+    changed.source.extras = [];
+    const api = {
+      listDrafts: vi.fn(async () => [own([recalled()])]),
+      saveDraft: vi.fn(async () => ({ ...own([changed]), revision: 2 })),
+      takeOverDraft: vi.fn(),
+    };
+    const sync = new DraftSync({
+      api,
+      partyId: "party-1",
+      billId: "bill-1",
+      personId: "person-1",
+      rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
+      onRefused: vi.fn(),
+      requestLimitMs: 5000,
+    });
+    try {
+      await sync.load();
+      sync.store.setLineModifiers(0, {});
+      expect(await sync.flush()).toBe("saved");
+      sync.store.setLineExtras(0, { note: "Later note" });
+      expect(toDraftLineInput(sync.store.lines[0]!)).not.toHaveProperty("options");
+      expect(toDraftLineInput(sync.store.lines[0]!)).not.toHaveProperty("extras");
+      expect(sync.store.lines[0]?.optionSnapshots).toBeUndefined();
+      expect(sync.store.lines[0]?.notOfferedExtras).toBeUndefined();
+    } finally {
+      sync.drop();
+    }
+  });
+
+  it("does not restore frozen extras over a picker edit made during a note save", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let answer!: (draft: Draft) => void;
+    const api = {
+      listDrafts: vi.fn(async () => [own([recalled()])]),
+      saveDraft: vi.fn(
+        () =>
+          new Promise<Draft>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+      takeOverDraft: vi.fn(),
+    };
+    const sync = new DraftSync({
+      api,
+      partyId: "party-1",
+      billId: "bill-1",
+      personId: "person-1",
+      rebuild: (lines) => lines.map((line) => fromDraftLine(line, new Map())),
+      onRefused: vi.fn(),
+      requestLimitMs: 5000,
+    });
+    try {
+      await sync.load();
+      sync.store.setLineExtras(0, { note: "New note" });
+      const saving = sync.flush();
+      await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
+      sync.store.setLineModifiers(0, {
+        extras: [
+          { listId: "toppings", productId: "bacon", name: "Bacon", price: "3.00", quantity: 1 },
+        ],
+      });
+      answer({ ...own([{ ...recalled(), note: "New note" }]), revision: 2 });
+      expect(await saving).toBe("saved");
+      expect(sync.store.lines[0]?.notOfferedExtras).toBeUndefined();
+      expect(sync.store.lines[0]?.extras?.map((extra) => extra.productId)).toEqual(["bacon"]);
+      expect(toDraftLineInput(sync.store.lines[0]!)).toMatchObject({
+        options: [],
+        extras: [{ listId: "toppings", picks: [{ productId: "bacon", quantity: 1 }] }],
+      });
+      expect(sync.store.total).toBe("17.25");
+    } finally {
+      sync.drop();
+    }
+  });
 });

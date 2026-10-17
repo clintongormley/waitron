@@ -38,6 +38,12 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
       id: line.draftLineId,
       sourceLineId: line.source.line.id,
       makeAt: line.makeAt ?? null,
+      ...(line.sourceSelection === undefined
+        ? {}
+        : {
+            options: line.sourceSelection.options ?? [],
+            extras: toWireModifiers(line.sourceSelection).extras ?? [],
+          }),
     };
   }
   const { product } = line;
