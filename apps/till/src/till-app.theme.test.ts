@@ -1,10 +1,19 @@
 import { commands } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { chooseTheme, startThemeChoice, THEME_STORAGE_KEY, type WtThemeChooser } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import {
+  chooseTheme,
+  leaveCoordinatorFor,
+  startThemeChoice,
+  THEME_STORAGE_KEY,
+  type WtThemeChooser,
+} from "@waitron/ui";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import { deviceZonesFixture } from "../test/device-zones.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi } from "./api/client.js";
+import type { TillApi, TillProduct, ZoneOfferCatalogue } from "./api/client.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
+import type { TillShell } from "./widgets/till-shell.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -88,4 +97,137 @@ it("a pick on the join screen does the same", async () => {
   await pickDarkOn("till-enrol-screen", {
     getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
   });
+});
+
+const counterTill = {
+  locale: "en",
+  invoiceLocale: "es-ES",
+  venueName: "Bar Pepe",
+  nif: "B12345678",
+  orderFlow: "prepay" as const,
+  receiptPrintMode: "auto" as const,
+  bumpMode: "line" as const,
+  fireControl: "waiter" as const,
+  courses: [],
+  cardProvider: "none" as const,
+  tipsEnabled: false,
+  formFactor: "till" as const,
+  capabilities: [],
+  inactivityTimeoutSeconds: null,
+  nodeId: "n1",
+  servers: [],
+};
+
+const counterOffers: ZoneOfferCatalogue = {
+  service: {
+    open: true,
+    zoneOpen: true,
+    periodName: null,
+    periodOccurrenceKey: null,
+    keepOpen: null,
+    zoneKeepOpen: null,
+  },
+  context: {
+    departmentName: "Restaurant",
+    zoneId: "zone-counter",
+    departmentId: "department-default",
+    serviceMode: "prepay",
+  },
+  defaultMenuId: null,
+  menus: servedMenus([{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }], []),
+  offers: [],
+};
+
+const cafe: TillProduct = {
+  id: "cafe",
+  menuItemId: "mi-cafe",
+  catalogueId: "cat-default",
+  name: "Café",
+  pricingUnit: "each",
+  unitPrice: "1.50",
+  vatClass: "general",
+  category: null,
+  allergens: null,
+};
+
+it("picking a theme with an unsent order open asks nothing and keeps the order", async () => {
+  await commands.emulateColorScheme("light");
+  const { el, host } = await mountWidget<TillApp>("till-app", {
+    api: stubApi({
+      getTill: vi.fn().mockResolvedValue(counterTill),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, [])),
+      getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      listStaff: vi.fn().mockResolvedValue([]),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOffers),
+      listZoneOffers: vi.fn().mockResolvedValue(counterOffers),
+      setServiceZone: vi.fn(),
+      listWorkingOrders: vi.fn().mockResolvedValue([]),
+      listCounterWaiting: vi.fn().mockResolvedValue([]),
+      getTablesState: vi.fn().mockResolvedValue([]),
+      listZones: vi.fn().mockResolvedValue([]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+      listStations: vi.fn().mockResolvedValue([]),
+      getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
+    }),
+  });
+  startThemeChoice(host);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
+  await flush(el);
+  el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
+    new CustomEvent("logged-in", {
+      detail: { personId: "p1", displayName: "Ana", permissions: [] },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull(),
+  );
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(cafe, "1");
+  // The counter basket is not a scope the language change asks about, so a staged edit stands
+  // in for the unsaved work it does ask about.
+  const coordinator = leaveCoordinatorFor(counter)!;
+  let staged = "Original";
+  const scope = coordinator.register({
+    id: counter,
+    current: () => staged,
+    snapshot: (v) => v,
+    equal: (a, b) => a === b,
+    restore: (v) => {
+      staged = v;
+    },
+  });
+  staged = "Typed";
+  scope.changed();
+  await flush(el);
+  const shell = el.shadowRoot!.querySelector<TillShell>("till-shell")!;
+  await shell.updateComplete;
+  const chooser = () =>
+    shell.shadowRoot!.querySelector<WtThemeChooser>("[data-test=theme-chooser]")!;
+  chooser().shadowRoot!.querySelector<HTMLElement>("[data-test=theme-trigger]")!.click();
+  await chooser().updateComplete;
+  chooser().shadowRoot!.querySelector<HTMLElement>("[data-test=theme-dark]")!.click();
+  await vi.waitFor(() => expect(bg(host)).toBe(DARK_BG));
+  await flush(el);
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await question.updateComplete;
+  expect(question.open).toBe(false);
+  expect(el.shadowRoot!.querySelector("till-counter-screen")).toBe(counter);
+  expect(counter.store.lines.map((line) => line.product.id)).toEqual(["cafe"]);
+  expect(staged).toBe("Typed");
+  expect(coordinator.isDirty()).toBe(true);
+  expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+
+  shell.shadowRoot!.querySelector("wt-language-chooser")!.dispatchEvent(
+    new CustomEvent("wt-locale-selected", {
+      detail: { code: "es-ES" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => question.open).toBe(true);
+  expect(counter.store.lines.map((line) => line.product.id)).toEqual(["cafe"]);
+  expect(staged).toBe("Typed");
 });

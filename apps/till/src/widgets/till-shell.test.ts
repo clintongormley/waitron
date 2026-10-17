@@ -5,6 +5,7 @@ import { expectChooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { chooseTheme, THEME_STORAGE_KEY, type WtThemeChooser } from "@waitron/ui";
 
 afterEach(cleanupWidgets);
 
@@ -337,6 +338,44 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector("wt-language-chooser")).toBeNull();
   });
 
+  it("omits the theme chooser with the language chooser when loadLocales is not supplied", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
+    });
+    expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
+  });
+
+  it("places the theme chooser in the bar, just before the language chooser", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const theme = el.shadowRoot!.querySelector("header .session > wt-theme-chooser")!;
+    expect(theme).not.toBeNull();
+    expect(theme.getAttribute("data-test")).toBe("theme-chooser");
+    expect(theme.nextElementSibling?.localName).toBe("wt-language-chooser");
+  });
+
+  it("redraws its theme chooser when the theme choice changes", async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "counter",
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    try {
+      chooseTheme("dark");
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<WtThemeChooser>("[data-test=theme-chooser]")!.active,
+      ).toBe("dark");
+    } finally {
+      chooseTheme("device");
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    }
+  });
+
   it("makes the body inert while a drill-in is slotted", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "till",
@@ -431,10 +470,10 @@ describe("till-shell", () => {
         );
         const controls = [
           ...header.querySelectorAll<HTMLElement>(
-            "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator",
+            "wt-row-actions, .tab, wt-button, wt-language-chooser, .operator, wt-theme-chooser",
           ),
         ];
-        expect(controls.length).toBe(formFactor === "till" ? 12 : 11);
+        expect(controls.length).toBe(formFactor === "till" ? 13 : 12);
         // A tab past the bar's edge scrolls into view rather than wrapping.
         const offScreen = controls
           .map((c) => {
@@ -470,7 +509,7 @@ describe("till-shell", () => {
   });
 });
 
-it("keeps the language chooser on a kitchen display, at the top right on its own, above the body", async () => {
+it("keeps the language chooser on a kitchen display, at the top right after the theme chooser, above the body", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
     kiosk: true,
     loadLocales: async () => [{ code: "en-GB", label: "English" }],
@@ -484,6 +523,27 @@ it("keeps the language chooser on a kitchen display, at the top right on its own
   expect(own.bottom).toBeLessThanOrEqual(region.top);
   expect(own.top - shell.top).toBeLessThanOrEqual(32);
   expect(shell.right - own.right).toBeLessThanOrEqual(32);
+  expect(own.left).toBeGreaterThan(shell.left + shell.width / 2);
+});
+
+it("keeps the theme chooser beside the language chooser on a kitchen display, at the top right", async () => {
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    kiosk: true,
+    loadLocales: async () => [{ code: "en-GB", label: "English" }],
+  });
+  expect(el.shadowRoot!.querySelector("header")).toBeNull();
+  const theme = el.shadowRoot!.querySelector(".language-corner > wt-theme-chooser")!;
+  expect(theme).not.toBeNull();
+  expect(theme.nextElementSibling?.localName).toBe("wt-language-chooser");
+  await (theme as LitElement).updateComplete;
+  const own = theme.getBoundingClientRect();
+  const language = theme.nextElementSibling!.getBoundingClientRect();
+  const shell = el.getBoundingClientRect();
+  const region = el.shadowRoot!.querySelector(".region")!.getBoundingClientRect();
+  expect(own.width).toBeGreaterThan(0);
+  expect(own.bottom).toBeLessThanOrEqual(region.top);
+  expect(own.top - shell.top).toBeLessThanOrEqual(32);
+  expect(own.right).toBeLessThanOrEqual(language.left);
   expect(own.left).toBeGreaterThan(shell.left + shell.width / 2);
 });
 
@@ -579,7 +639,7 @@ describe("till-shell at phone width", () => {
           ]
             .map((c) => c.getBoundingClientRect())
             .filter((r) => r.width > 0 && r.height > 0);
-          expect(visible.length).toBe(4);
+          expect(visible.length).toBe(5);
           for (const r of visible) {
             expect(r.top).toBeGreaterThanOrEqual(header.top);
             expect(r.bottom).toBeLessThanOrEqual(header.bottom);
@@ -659,6 +719,7 @@ describe("till-shell at phone width", () => {
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
       for (const [index, [selector]] of menuActions.entries()) {
         tabsEls[tabsEls.length - 1]!.focus();
+        await userEvent.tab(); // the theme chooser
         await userEvent.tab(); // the language chooser
         await userEvent.tab();
         expect(deepActive()).toBe(triggerOf(el));
@@ -822,6 +883,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "department-transfers",
         "data-open-transfers",
+        "theme-chooser",
         "wt-language-chooser",
         "operator-menu",
         "more-menu",
