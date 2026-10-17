@@ -816,7 +816,7 @@ it("an altered signed membership cannot finish interrupted command publication",
   });
 });
 
-it("the command refuses a retained configuration import while its import adapter is unavailable", async () => {
+it("the command refuses a retained configuration import when its staged material is unavailable", async () => {
   const f = await realActivationFixture();
   const runtime = createFirstSetupRuntime({
     stateDir: join(f.root, "state"),

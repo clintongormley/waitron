@@ -102,6 +102,8 @@ export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";
 
 export { createModuleOperationHost, createFirstSetupRuntime } from "./first-setup-runtime.js";
 export { prepareFirstSetupCommand } from "./first-setup-command.js";
+export { completeFirstSetupCommand } from "./first-setup-command-activation.js";
+export { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 export { firstSetupModuleContext } from "./first-setup-module-context.js";
 
 export {
@@ -152,3 +154,10 @@ export type {
 } from "./fiscal-readiness.js";
 
 export { submitFiscalReadiness, fiscalReadinessDatabaseKey } from "./fiscal-readiness-runner.js";
+
+export * from "./configuration-import.js";
+export * from "./configuration-transfer.js";
+export * from "./artifact-cipher.js";
+export * from "./backup-archive.js";
+export * from "./scrypt-kdf.js";
+export * from "./kitchen-timing.js";

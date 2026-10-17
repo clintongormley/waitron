@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
@@ -41,6 +41,14 @@ import type { KeyRing } from "@waitron/credentials";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { FirstSetupState } from "./first-setup-state.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
+import {
+  clearStagedConfigurationImport,
+  readStagedConfigurationImport,
+} from "./configuration-import.js";
+import {
+  importConfigurationTables,
+  validateConfigurationBundle,
+} from "./configuration-transfer.js";
 import "./errors.js";
 
 const keyPurpose = "membership.node_key";
@@ -62,6 +70,30 @@ export function createFirstSetupCommandDeployment(options: {
         ring: KeyRing;
       }
     | undefined;
+  async function configuration(state: FirstSetupState, ring: KeyRing) {
+    const frozen = state.frozen.configurationImport;
+    if (frozen === undefined) return undefined;
+    const staged = await readStagedConfigurationImport(state.stateDir, ring);
+    if (staged === null) throw new AppError("setup.not_ready", {});
+    if (createHash("sha256").update(staged.artifact).digest("hex") !== frozen.digest)
+      throw new AppError("setup.attempt_conflict", {});
+    if (
+      staged.bundle.venue.country !== state.frozen.request.country ||
+      (!frozen.newTaxpayer && staged.bundle.venue.taxId !== state.frozen.request.taxId)
+    )
+      throw new AppError("setup.request_invalid", { field: "configurationImport" });
+    if (frozen.newTaxpayer && staged.bundle.venue.taxId === state.frozen.request.taxId)
+      throw new AppError("setup.request_invalid", { field: "taxId" });
+    const modules = enabledModules(
+      runtime.modules,
+      venueFiscalSelection(runtime.modules, state.frozen.request.location.fiscalTerritory).config,
+    );
+    const versions: Record<string, number> = {};
+    for (const module of modules)
+      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+    validateConfigurationBundle(staged.bundle, modules, versions);
+    return { bundle: staged.bundle, versions };
+  }
   async function readiness(state: FirstSetupState) {
     if (
       publication === undefined ||
@@ -111,7 +143,6 @@ export function createFirstSetupCommandDeployment(options: {
       return store.run(input);
     },
     async publication(state) {
-      if (state.frozen.configurationImport !== undefined) throw new AppError("setup.not_ready", {});
       const path = environment.WAITRON_SETUP_SETTINGS_FILE;
       if (!path && state.frozen.environment === "production")
         throw new AppError("setup.not_ready", {});
@@ -132,6 +163,8 @@ export function createFirstSetupCommandDeployment(options: {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       const ring = loadKeyRing({ ...storedEnvironment, ...environment });
+      if (["claimed", "consumption-intent"].includes(state.status))
+        await configuration(state, ring);
       let contactUrl: string;
       try {
         const parsed = new URL(environment.WAITRON_ADVERTISED_ORIGIN ?? "");
@@ -160,6 +193,7 @@ export function createFirstSetupCommandDeployment(options: {
       return {
         digest,
         deps: {
+          clearConfiguration: () => clearStagedConfigurationImport(state.stateDir),
           publishSelection: async () => {
             await writeFileAtomic(
               join(state.stateDir, "modules.json"),
@@ -252,6 +286,8 @@ export function createFirstSetupCommandDeployment(options: {
       const state = await runtime.store.read();
       if (state === null || !isDeepStrictEqual(request.venue, state.frozen.request)) conflict();
       if ((await readTenantIdentities(db)).length !== 0) conflict();
+      if (publication === undefined) throw new AppError("setup.not_ready", {});
+      const imported = await configuration(state, publication.ring);
       const config = venueFiscalSelection(
         runtime.modules,
         request.venue.location.fiscalTerritory,
@@ -285,6 +321,18 @@ export function createFirstSetupCommandDeployment(options: {
         db,
         modules,
         ...initialVenueApplyInput(request.initialOperations),
+        ...(imported === undefined
+          ? {}
+          : {
+              beforeCommit: (tx, result) =>
+                importConfigurationTables(
+                  tx,
+                  imported.bundle,
+                  { locationId: result.locationId },
+                  modules,
+                  imported.versions,
+                ),
+            }),
       });
     },
     recoverProvision: (request) => recoverProvisionedVenue(db, request, runtime.modules),

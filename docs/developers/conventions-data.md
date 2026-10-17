@@ -1605,6 +1605,13 @@ tables, caught by hand in review.
 
 ### Retiring configuration tables also retires their export format
 
+Implementation pointer, 2026-10-17: the configuration staging and transfer services now live in
+`packages/provisioning/src/configuration-import.ts` and `configuration-transfer.ts`. Their server
+entry points forward to those implementations. The owned setup command uses the same allowlisted
+transfer inside its venue transaction; a retained artifact must match the frozen digest and target
+module versions before activation. Its command checks are in
+`packages/provisioning/src/first-setup-command-import.test.ts`.
+
 A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
 includes that table key, even when it has no rows. With the format left unchanged, the real setup
 route refused both empty and populated canvas lists as `setup.request_invalid` on `tables`.

@@ -10,6 +10,11 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "setup.configuration_outdated": Record<string, never>;
+    "recovery.passphrase_invalid": Record<string, never>;
+    "backup.artifact_invalid": { reason: string };
+    "backup.archive_invalid": { reason: string };
+    "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     "email.settings_invalid": { field: string };
     "setup.provisioning_secret_required": { module: string };
     "setup.fiscal_test_required": { module: string };

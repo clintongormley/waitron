@@ -768,3 +768,41 @@ Its one-sample, rejected-status and exact authority-refusal checks remain.
 Task 4, package coverage, retained provision qualification, recovery/wizard work, owner PDF
 acceptance and final review/publication gates remain open. Receipts: the lane's
 `a679-command-readiness-20261017` directory.
+
+## Retained configuration imports in the command (2026-10-17)
+
+You can finish a claimed configuration-import setup through the owned venue command. It reads
+the retained encrypted export with the setup key ring and checks the frozen artifact digest,
+country, taxpayer choice and target module versions before activation. The existing transfer
+service copies configuration inside the venue transaction. Imported counters and activation
+identities stay out of that transfer. Exact Finish can complete after the staged export has
+already been cleared.
+
+Existing assertions and fixtures changed: **none**. The old command refusal case's title now names
+missing staged material, rather than an unavailable adapter; its body is unchanged.
+The artifact cipher, archive and key-derivation
+suites move unchanged to provisioning. The existing server import, transfer and kitchen timing
+suites retain their bodies and exercise the shared implementations through forwarding exports.
+The transfer, staging, cipher, archive, derivation and kitchen timing function bodies and SQL
+move unchanged; the kitchen timing parameter type now names only the location ID it uses.
+Their error codes have one declaring home in provisioning, with the same names and parameter types.
+
+The new command-import suite checks both taxpayer choices, fresh hour names and counters, changed
+artifacts, target schema and taxpayer refusals, a replacement during readiness, rollback and
+password-recovered Finish after staged cleanup. Its compiled-command case runs a relocated Node
+bundle against a copied migrated synthetic database, with external clock transport blocked. It
+checks imported dishes, the original selected hour, the same PDF and initial counters. This is
+local qualification, not a real venue or authority submission.
+
+New fixture corrections are retained in the lane receipts: product fields and source operator,
+the staging directory, coherent wall/elapsed clocks, the publication metadata added to inputs,
+the owner handle's type, and the command's optional address prompt. They changed no existing
+assertion or product guard. Task 4, retained provision qualification, package coverage, later hour
+tasks, owner PDF acceptance and final branch gates remain open.
+
+Final installed focused checks pass 98 cases; the retained server group passes 172. The full
+provisioning run passes 1,132 cases, but its unchanged coverage gate fails at 92.36% statements,
+90% branches, 96.05% functions and 94.72% lines. That full run precedes the new suite's added
+node-row and preserved-product-row assertions; the final focused group includes them.
+Ten installed omission controls fail at the intended boundaries and pass after restoration.
+The protected fiscal pair passes its 20 unedited cases. This is a local checkpoint, not branch readiness.

@@ -793,8 +793,6 @@ declare module "@waitron/shared" {
     "station.is_default": { stationId: string };
     "station.screen_in_use": { stationId: string; count: number };
     "station.work_in_progress": { stationId: string; count: number };
-    /** The effective late thresholds would be unordered for this station. */
-    "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).
@@ -994,7 +992,6 @@ declare module "@waitron/shared" {
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
-    "setup.configuration_outdated": Record<string, never>;
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
      * this node. Adopt has no resume path, and running it again mints a second standby identity, so
@@ -1140,9 +1137,6 @@ declare module "@waitron/shared" {
     "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
     "recovery.passphrase_too_short": { min: number };
-    /** Recovery-bundle decryption failed its GCM auth tag — a wrong passphrase OR a tampered
-     * bundle, deliberately indistinguishable (revealing which would help an attacker). */
-    "recovery.passphrase_invalid": Record<string, never>;
     /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
      * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
     "recovery.bundle_invalid": { reason: string };
@@ -1155,13 +1149,6 @@ declare module "@waitron/shared" {
      * same object was still in flight; the second is refused rather than allowed to interleave its
      * teardown with the first. */
     "backup.reload_in_progress": Record<string, never>;
-    /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
-     * before decryption is even attempted. `reason` is a short machine tag. */
-    "backup.artifact_invalid": { reason: string };
-    /** The backup ARCHIVE container — the inner pack of named entries the encrypted frame decrypts
-     * to — is malformed: bad magic, unsupported version, or a declared length that would read past
-     * the buffer. `reason` is a short machine tag, never the offending bytes. */
-    "backup.archive_invalid": { reason: string };
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
      * artifact), or a recovery kit or archive recovery pack is asked for

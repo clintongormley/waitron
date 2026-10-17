@@ -1,5 +1,10 @@
 # A516 file restore implementation plan
 
+Implementation pointer, 2026-10-17: `artifact-cipher.test.ts` and `backup-archive.test.ts` now
+live in `packages/provisioning/src/`, alongside the shared services. Run those two suites with
+`pnpm --filter @waitron/provisioning exec vitest run src/artifact-cipher.test.ts src/backup-archive.test.ts`.
+The completed steps below retain their original paths as historical receipts.
+
 > **For agentic workers:** use `superpowers:executing-plans` for owner-authorized inline execution.
 > Parent handles the fresh-context design check; this planner writes documentation only.
 

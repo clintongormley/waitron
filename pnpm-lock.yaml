@@ -1639,6 +1639,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/reporting':
+        specifier: workspace:*
+        version: link:../reporting
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1652,6 +1655,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../catalogue
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
