@@ -139,6 +139,28 @@ describe("the slot picker", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
     expect(close).toHaveBeenCalledTimes(1);
   });
+  it("in Spanish, the sentence for a staff role nobody holds names the team as its Show everyone button does", async () => {
+    setLocale("es");
+    const f = document.createElement("div");
+    document.body.append(f);
+    applyTokens(f);
+    frames.push(f);
+    const el = document.createElement("slot-picker") as Picker;
+    el.week = rotaWeek();
+    el.pickedSlot = el.week.days[4]!.areas[0]!.match.slots[0]!.slot;
+    const role = el.week.staffRoles.find((r) => r.id === el.pickedSlot!.staffRoleId)!;
+    role.holderIds = [];
+    for (const p of el.week.people) p.staffRoleIds = p.staffRoleIds.filter((id) => id !== role.id);
+    f.append(el);
+    const nobody = () =>
+      [...(el.shadowRoot?.querySelectorAll("p") ?? [])].find((p) =>
+        p.textContent!.includes("Nadie tiene este rol de personal."),
+      );
+    await vi.waitFor(() => expect(nobody()).toBeTruthy());
+    const sentence = nobody()!.textContent!;
+    expect(sentence).toContain("todo el equipo");
+    expect(sentence).not.toContain("todo el mundo");
+  });
   it("shows the same chooser in Spanish", async () => {
     setLocale("es");
     const el = await mount();

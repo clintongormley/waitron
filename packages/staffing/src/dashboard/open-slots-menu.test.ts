@@ -85,6 +85,23 @@ describe("a day's open slots", () => {
     expect(sections[0]!.contains(own)).toBe(true);
     expect(sections[1]!.contains(other)).toBe(true);
   });
+  it.each(["light", "dark"] as const)(
+    "marks a slot outside the person's staff roles in the warning colour, as the cards do (%s)",
+    async (theme) => {
+      const { root } = await mount("marc", "2026-12-04", withOther());
+      frames[0]!.setAttribute("data-theme", theme);
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-warning)";
+      frames[0]!.append(probe);
+      const outside = [...root.querySelectorAll("[data-slot=floor] small")].find(
+        (s) => normal(s.textContent!) === "outside staff role",
+      )!;
+      expect(getComputedStyle(outside).color).toBe(getComputedStyle(probe).color);
+      expect(getComputedStyle(outside).color).not.toBe(
+        getComputedStyle(root.querySelector("[data-slot=floor] strong")!).color,
+      );
+    },
+  );
   it("says what a slot would make of the person's hours when it would take them over their contract, in the danger colour", async () => {
     const { root, el } = await mount("marc", "2026-12-04", withOther());
     const over = root.querySelector<HTMLElement>("[data-slot=empty] [data-test=would-make]")!;

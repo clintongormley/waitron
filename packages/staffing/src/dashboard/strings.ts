@@ -339,7 +339,7 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.needs_attention": "requiere atención",
   "staffing.rota.choose": "Elige una persona",
   "staffing.rota.no_holders":
-    "Nadie tiene este rol de personal. Muestra a todo el mundo para elegir a otra persona.",
+    "Nadie tiene este rol de personal. Muestra a todo el equipo para elegir a otra persona.",
 
   "nav.staff_roles": "Roles de personal",
   "staffing.role.title": "Roles de personal",

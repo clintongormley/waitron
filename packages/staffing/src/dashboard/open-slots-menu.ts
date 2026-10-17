@@ -100,6 +100,9 @@ export class OpenSlotsMenu extends LitElement {
       small.over {
         color: var(--wt-color-danger);
       }
+      small.outside {
+        color: var(--wt-color-warning);
+      }
     `,
   ];
   @property({ attribute: false }) week!: RotaWeek;
@@ -123,7 +126,7 @@ export class OpenSlotsMenu extends LitElement {
       @click=${() => this.#emit("choose-slot", { slot })}
     >
       <strong>${slot.startsAt}–${slot.endsAt} · ${areaName} · ${role.name}</strong>${
-        outside ? html`<small>${t("staffing.rota.outside_role")}</small>` : nothing
+        outside ? html`<small class="outside">${t("staffing.rota.outside_role")}</small>` : nothing
       }${
         person.contractedMinutes !== null && planned > person.contractedMinutes
           ? html`<small class="over" data-test="would-make"
