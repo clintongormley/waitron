@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -18,7 +19,7 @@ import { AppError } from "@waitron/shared";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import { attendanceOperationFacts } from "@waitron/workforce";
-import { saveDraft } from "./order-drafts.js";
+
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";

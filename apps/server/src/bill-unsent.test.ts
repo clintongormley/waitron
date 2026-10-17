@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -13,11 +15,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import { saveDraft } from "./order-drafts.js";
+
 import type { Draft } from "./order-drafts.js";
 import { issueIfFullyPaid, previewBillPayment, type BillPaymentAsk } from "./bill-payments.js";
 import { payWorkingOrder, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
-import { placeOrder } from "./working-order.js";
+import { createOpenOrder, placeOrder } from "./working-order.js";
 import {
   inTx,
   paymentRows,
@@ -161,6 +163,7 @@ describe("payment reservations and previously received money", () => {
           {
             submissionId: randomUUID(),
             expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
+            expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
           },
         );
         expect(recalled.status).toBe(409);
@@ -234,6 +237,7 @@ describe("payment reservations and previously received money", () => {
       {
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevisionOf(venue, p.tabId),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, p.tabId)),
       },
     );
     expect(recalled.status).toBe(200);
@@ -298,6 +302,7 @@ describe("payment reservations and previously received money", () => {
               draftId: draft.id,
               revision: draft.revision,
               lines: [],
+              expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
             })
           : await send(
               venue.app,
@@ -392,11 +397,20 @@ function ask(kind: BillPaymentAsk["kind"], method: "cash" | "card"): BillPayment
 }
 
 describe("unsent dishes block new payments on their own bill", () => {
-  it("names each owner and counts fresh plus recalled dishes, excluding extras", async () => {
+  it("counts each bill's own editor and fresh plus recalled dishes, excluding extras", async () => {
     const billId = await tabWith(venue, "Tarta");
     const ana = await unsent(billId, venue.operatorId, "1.25");
     const [colleague] = await venue.db.insert(persons).values({ displayName: "Zoë" }).returning();
-    await unsent(billId, colleague!.id, "2.5");
+    const otherBillId = randomUUID();
+    await inTx(venue, async (tx) => {
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+      await createOpenOrder(tx, venue.cfg, otherBillId, [], "Other bill", {
+        partyId: bill!.partyId!,
+        existingService: true,
+        copyServiceContextFrom: billId,
+      });
+    });
+    await unsent(otherBillId, colleague!.id, "2.5");
     const [source] = await venue.db
       .select()
       .from(workingOrderLines)
@@ -419,10 +433,16 @@ describe("unsent dishes block new payments on their own bill", () => {
       code: "bill.unsent_dishes",
       params: {
         billId,
-        owners: [
-          { personId: venue.operatorId, name: "Ana", quantity: "2.250" },
-          { personId: colleague!.id, name: "Zoë", quantity: "2.500" },
-        ],
+        owners: [{ personId: venue.operatorId, name: "Ana", quantity: "2.250" }],
+      },
+    });
+    await expect(
+      previewBillPayment(deps(), venue.cfg, otherBillId, ask("contribution", "cash")),
+    ).rejects.toMatchObject({
+      code: "bill.unsent_dishes",
+      params: {
+        billId: otherBillId,
+        owners: [{ personId: colleague!.id, name: "Zoë", quantity: "2.500" }],
       },
     });
   });

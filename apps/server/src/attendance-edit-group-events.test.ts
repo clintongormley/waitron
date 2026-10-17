@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -21,7 +22,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { saveDraft, submitDraft } from "./order-drafts.js";
+import { submitDraft } from "./order-drafts.js";
 import { submitGroups } from "./order-groups.js";
 import { updateHeldOrder, updateOrderLine, type UpdateHeldOrderRequest } from "./working-order.js";
 import { provisionBillVenue, seatedWith, type BillVenue } from "./testing/bill-venue.js";

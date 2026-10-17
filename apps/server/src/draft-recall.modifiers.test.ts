@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -24,7 +25,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { workingLineContexts } from "@waitron/venue-service";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { saveDraft, type Draft } from "./order-drafts.js";
+import { type Draft } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";

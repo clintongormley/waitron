@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -102,7 +103,12 @@ describe("serving with charged cancellations", () => {
       const before = await rows(order.billId);
       const command = await args(order.partyId);
       await expect(
-        inTx(venue, (tx) => recallToDraft(tx, venue.cfg, order.partyId, order.parent.id, command)),
+        inTx(venue, async (tx) =>
+          recallToDraft(tx, venue.cfg, order.partyId, order.parent.id, {
+            ...command,
+            expectedEdit: await readBillEditState(tx, order.billId),
+          }),
+        ),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineId" } });
       expect(await rows(order.billId)).toEqual(before);
       expect((await args(order.partyId)).expectedPartyRevision).toBe(command.expectedPartyRevision);

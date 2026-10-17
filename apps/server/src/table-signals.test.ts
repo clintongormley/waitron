@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
@@ -29,7 +30,7 @@ import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { moveBill } from "./move-bill.js";
-import { saveDraft } from "./order-drafts.js";
+
 import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
 import { finishTable } from "./parties.js";
 import { joinTables } from "./table-actions.js";
@@ -214,7 +215,7 @@ describe("the floor's attention signals", () => {
     );
     expect((await floorRow(v, mesa2)).signals).toEqual([]);
   });
-  it("asks a just-seated party for its order, until a draft exists", async () => {
+  it("asks a just-seated party for its order until dishes are saved", async () => {
     const v = await setupPartyVenue(suite.db);
     const lucia = await person(v, "Lucía");
     const quiet = await seat(v, await v.table("Mesa 1"));
@@ -224,7 +225,6 @@ describe("the floor's attention signals", () => {
       { kind: "take_order" },
     ]);
 
-    // A draft holding no line yet is enough to say someone is taking the order.
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, quiet.partyId, lucia, {
         billId: quiet.tabId,
@@ -242,7 +242,9 @@ describe("the floor's attention signals", () => {
       }),
     );
 
-    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([]);
+    expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([
+      { kind: "take_order" },
+    ]);
     expect((await floorRow(v, await tableOf(v, drafting.partyId))).signals).toEqual([
       { kind: "unsent_draft", ownerNames: ["Lucía"] },
     ]);

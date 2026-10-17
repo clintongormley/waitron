@@ -172,7 +172,7 @@ import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./or
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState } from "./order-drafts.js";
-import { readBillEditState } from "./bill-editing.js";
+import { parseBillEditExpected, readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
@@ -3314,7 +3314,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const lineId = c.req.param("lineId");
       if (!isUuid(lineId)) throw new AppError("group.not_found", { lineId });
-      const args = groupCommand(session.personId, asObject(await readRawJsonBody<unknown>(c)));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const args = {
+        ...groupCommand(session.personId, body),
+        expectedEdit: parseBillEditExpected(body.expectedEdit),
+      };
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return recallToDraft(
@@ -3372,14 +3376,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           partyId,
           personId,
-          { billId: body.billId, draftId, revision, lines: body.lines },
+          {
+            billId: body.billId,
+            draftId,
+            revision,
+            lines: body.lines,
+            expectedEdit: parseBillEditExpected(body.expectedEdit),
+          },
           deps.attendance,
         );
         await issueIfFullyPaid(
           tx,
           fiscal,
           sendingCfg(cfg, c, session.device),
-          result.billId,
+          result.edit.billId,
           personId,
         );
         return result;
@@ -3399,7 +3409,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const revision = requireRevision(body.revision);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return takeOverDraft(tx, cfg, partyId, draftId, personId, revision, deps.attendance);
+        return takeOverDraft(
+          tx,
+          cfg,
+          partyId,
+          draftId,
+          personId,
+          {
+            revision,
+            expectedEdit: parseBillEditExpected(body.expectedEdit),
+            submissionId: submissionIdOf(body),
+          },
+          deps.attendance,
+        );
       });
       return c.json(draft);
     }),

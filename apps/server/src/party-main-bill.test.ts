@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -8,7 +9,7 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
 import { placeGroups, submitGroups } from "./order-groups.js";
 import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
-import { readDrafts, saveDraft, submitDraft } from "./order-drafts.js";
+import { readDrafts, submitDraft } from "./order-drafts.js";
 import {
   OPERATOR,
   activeTablesOf,

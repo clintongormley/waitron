@@ -53,6 +53,14 @@ import { saveRecalledLine } from "./draft-recall.js";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import {
+  acquireBillEditor,
+  closeBillDraft,
+  parseBillEditExpected,
+  readBillEditState,
+  requireBillEditor,
+  transferBillEditor,
+} from "./bill-editing.js";
 import "./errors.js";
 
 export interface FreshDraftLine {
@@ -153,8 +161,9 @@ export type RecalledDraftLineInput = Pick<
 export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
 
 export interface SaveDraftInput {
+  expectedEdit: BillEditExpected;
   billId: unknown;
-  /** Null asks for the operator's new draft on the bill. */
+  /** Null compares an unallocated outbox on this bill. */
   draftId: string | null;
   revision: number;
   /** Screened by the save before it reads or writes anything. */
@@ -290,19 +299,29 @@ export async function saveDraft(
   operatorId: string,
   input: SaveDraftInput,
   attendance?: AttendanceRecorder,
-): Promise<Draft> {
+): Promise<BillDraftSnapshot> {
   const at = nowIso();
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
   const billId = uuid(input.billId, "billId");
-  let previous: DraftLine[] = [];
-  const draft =
-    input.draftId === null ? null : await requireDraft(tx, foldIfUuid(input.draftId), partyId);
-  if (draft !== null) {
-    await requireOwnDraftAt(tx, draft, operatorId, input.revision);
-    if (draft.billId !== billId) throw invalid("billId");
-    previous = (await storedLines(tx, cfg, [draft.id])).map(({ line }) => line);
+  const expected = parseBillEditExpected(input.expectedEdit);
+  if (expected.billId !== billId) throw invalid("expectedEdit.billId");
+  if (expected.draftId !== (input.draftId === null ? null : foldIfUuid(input.draftId)))
+    throw invalid("expectedEdit.draftId");
+  if (input.revision !== (expected.draftRevision ?? 0)) throw invalid("revision");
+  if (expected.draftId !== null) {
+    const [named] = await tx.select().from(orderDrafts).where(eq(orderDrafts.id, expected.draftId));
+    if (named === undefined || named.partyId !== partyId || named.state === "submitted")
+      await requireDraft(tx, expected.draftId, partyId);
+    if (named?.billId !== undefined && named.billId !== billId) throw invalid("billId");
   }
+  await requireBillOfParty(tx, partyId, billId);
+  await refusePaymentInFlight(tx, [billId]);
+  const edit = await requireBillEditor(tx, billId, operatorId, expected);
+  if (lines.length === 0 && edit.draftId === null) return { draft: null, edit };
+  let previous: DraftLine[] = [];
+  const draft = edit.draftId === null ? null : await requireDraft(tx, edit.draftId, partyId);
+  if (draft !== null) previous = (await storedLines(tx, cfg, [draft.id])).map(({ line }) => line);
   const owned = new Map(previous.map((line) => [line.id, line]));
   const named = new Set<string>();
   for (const [index, line] of lines.entries()) {
@@ -330,8 +349,6 @@ export async function saveDraft(
   }
   if (retainedSources.size > 0) throw invalid("lines");
   const freshLines = lines.filter(isFresh);
-  await requireBillOfParty(tx, partyId, billId);
-  await refusePaymentInFlight(tx, [billId]);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
   const choiceOffers = lines.flatMap((line) =>
@@ -365,10 +382,7 @@ export async function saveDraft(
   }
   let draftId: string;
   if (draft === null) {
-    const [held] = await openDraftsOn(tx, partyId, operatorId, billId);
-    if (held !== undefined) {
-      throw new AppError("draft.out_of_date", { draftId: held.id, revision: held.revision });
-    }
+    await acquireBillEditor(tx, billId, operatorId, expected);
     draftId = newId();
     await tx.insert(orderDrafts).values({ id: draftId, partyId, billId, ownerId: operatorId });
     await recordDraftEvents(
@@ -385,10 +399,11 @@ export async function saveDraft(
     );
   } else {
     draftId = draft.id;
-    await tx
-      .update(orderDrafts)
-      .set({ revision: draft.revision + 1, updatedAt: nowIso() })
-      .where(eq(orderDrafts.id, draftId));
+    if (lines.length > 0)
+      await tx
+        .update(orderDrafts)
+        .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+        .where(eq(orderDrafts.id, draftId));
   }
   const priorChoices = new Map<string, number>();
   for (const line of previous.filter(isFresh)) {
@@ -465,6 +480,32 @@ export async function saveDraft(
       ),
     ),
   );
+  if (lines.length === 0) {
+    const released = await closeBillDraft(tx, billId, operatorId, expected, "discarded");
+    await recordDraftEvents(
+      tx,
+      attendance === undefined ? undefined : { recorder: attendance, at },
+      {
+        draftId,
+        kind: "discarded",
+        fromPerson: operatorId,
+        toPerson: operatorId,
+        actorId: operatorId,
+        detail: {},
+      },
+    );
+    await captureDraft(
+      tx,
+      attendance,
+      cfg.locationId,
+      operatorId,
+      draftId,
+      draft!.revision + 1,
+      "discard",
+      at,
+    );
+    return { draft: null, edit: released };
+  }
   const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
   await captureDraft(
     tx,
@@ -476,71 +517,63 @@ export async function saveDraft(
     "save",
     at,
   );
-  return saved;
+  return { draft: saved, edit: await readBillEditState(tx, billId) };
 }
 
-/**
- * Make the operator the owner of another person's open draft. Where the operator already has an
- * open draft on the same bill, the taken lines are added to it and the taken
- * draft is discarded; the operator's draft is returned. Taking over one's own
- * draft changes nothing and returns it as it is. A draft of another party is not found.
- */
 export async function takeOverDraft(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
   draftId: string,
   operatorId: string,
-  revision: number,
+  ask: { revision: number; expectedEdit: BillEditExpected; submissionId: string },
   attendance?: AttendanceRecorder,
-): Promise<Draft> {
-  const at = nowIso();
-  const draft = await requireDraft(tx, foldIfUuid(draftId), partyId);
-  await requireOpenParty(tx, partyId);
-  const billId = uuid(draft.billId, "billId");
-  await requireBillOfParty(tx, partyId, billId);
-  await refusePaymentInFlight(tx, [billId]);
-  if (draft.ownerId === operatorId) return readOpenDraft(tx, cfg, partyId, draft.id);
-  requireDraftRevision(draft, revision);
-  const [own] = await openDraftsOn(tx, partyId, operatorId, billId);
-  await tx
-    .update(orderDrafts)
-    .set({
-      ownerId: operatorId,
-      revision: draft.revision + 1,
-      updatedAt: nowIso(),
-      ...(own === undefined ? {} : { state: "discarded" as const }),
-    })
-    .where(eq(orderDrafts.id, draft.id));
-  await recordDraftEvents(tx, attendance === undefined ? undefined : { recorder: attendance, at }, {
-    draftId: draft.id,
-    kind: "taken_over",
-    fromPerson: draft.ownerId,
-    toPerson: operatorId,
-    actorId: operatorId,
-    detail: {},
-  });
-  await captureDraft(
+): Promise<BillDraftSnapshot> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(ask.expectedEdit);
+  const submissionId = uuid(ask.submissionId, "submissionId");
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (ask.revision !== expectedEdit.draftRevision) throw invalid("revision");
+  return runServiceCommand(
     tx,
-    attendance,
-    cfg.locationId,
-    operatorId,
-    draft.id,
-    draft.revision + 1,
-    "take-over",
-    at,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.take-over",
+    { partyId, draftId: id, operatorId, revision: ask.revision, expectedEdit },
+    async () => {
+      const draft = await requireDraft(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      const edit = await transferBillEditor(tx, billId, operatorId, expectedEdit);
+      if (draft.ownerId !== operatorId) {
+        const at = nowIso();
+        await recordDraftEvents(
+          tx,
+          attendance === undefined ? undefined : { recorder: attendance, at },
+          {
+            draftId: draft.id,
+            kind: "taken_over",
+            fromPerson: draft.ownerId,
+            toPerson: operatorId,
+            actorId: operatorId,
+            detail: {},
+          },
+        );
+        await captureDraft(
+          tx,
+          attendance,
+          cfg.locationId,
+          operatorId,
+          draft.id,
+          edit.draftRevision!,
+          "take-over",
+          at,
+        );
+      }
+      return { draft: await readOpenDraft(tx, cfg, partyId, draft.id), edit };
+    },
   );
-  if (own === undefined) return readOpenDraft(tx, cfg, partyId, draft.id);
-  await addDiscardedDraft(
-    tx,
-    cfg,
-    draft.id,
-    own,
-    operatorId,
-    operatorId,
-    attendance === undefined ? undefined : { recorder: attendance, at },
-  );
-  return readOpenDraft(tx, cfg, partyId, own.id);
 }
 
 export async function moveDraftsToBill(
@@ -815,7 +848,7 @@ export interface SubmitDraftInput extends PartyCommandArgs {
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
-export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+export type SubmittedDraft = SubmittedGroups & { draft: Draft | null; edit: BillEditState };
 
 export async function submitDraft(
   tx: Transaction,
@@ -908,14 +941,19 @@ export async function submitDraft(
       );
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
-      await tx
-        .update(orderDrafts)
-        .set({
-          revision: draft.revision + 1,
-          updatedAt: nowIso(),
-          ...(emptied ? { state: "submitted" as const } : {}),
-        })
-        .where(eq(orderDrafts.id, id));
+      if (emptied)
+        await closeBillDraft(
+          tx,
+          billId,
+          operatorId,
+          await readBillEditState(tx, billId),
+          "submitted",
+        );
+      else
+        await tx
+          .update(orderDrafts)
+          .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, id));
       await recordDraftEvents(
         tx,
         attendance === undefined ? undefined : { recorder: attendance, at },
@@ -938,7 +976,11 @@ export async function submitDraft(
         "submit",
         at,
       );
-      return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
+      return {
+        ...placed,
+        draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id),
+        edit: await readBillEditState(tx, billId),
+      };
     },
     cfg.madeHereSink,
   );

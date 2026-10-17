@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -357,8 +358,9 @@ describe("Cancel item service command", () => {
   it("refuses a recalled source rather than cancelling behind another owner's New order", async () => {
     const order = await fixture("hold");
     const ask = await askFor(order);
-    await inTx(venue, (tx) =>
+    await inTx(venue, async (tx) =>
       recallToDraft(tx, venue.cfg, order.partyId, order.parent.id, {
+        expectedEdit: await readBillEditState(tx, order.parent.workingOrderId),
         expectedPartyRevision: ask.expectedPartyRevision,
         submissionId: randomUUID(),
         operatorId: venue.staffId,

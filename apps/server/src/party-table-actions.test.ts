@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -16,7 +17,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { splitBill } from "./bill-actions.js";
-import { readDrafts, saveDraft } from "./order-drafts.js";
+import { readDrafts } from "./order-drafts.js";
 import { placeGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./parties.js";

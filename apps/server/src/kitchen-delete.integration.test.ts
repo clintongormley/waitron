@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
@@ -33,7 +34,7 @@ import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { eq } from "drizzle-orm";
 import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
-import { saveDraft, readDrafts, submitDraft } from "./order-drafts.js";
+import { readDrafts, submitDraft } from "./order-drafts.js";
 import { listOrderGroups } from "./order-groups.js";
 import {
   fireCourse,

@@ -1,3 +1,7 @@
+import {
+  saveDraftForTest as saveDraft,
+  takeOverDraftForTest as takeOverDraft,
+} from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   orderDraftEvents,
@@ -16,13 +20,7 @@ import { persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import {
-  saveDraft,
-  takeOverDraft,
-  submitDraft,
-  discardPartyDrafts,
-  type Draft,
-} from "./order-drafts.js";
+import { submitDraft, discardPartyDrafts, type Draft } from "./order-drafts.js";
 import { setupPartyVenue, seat, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({

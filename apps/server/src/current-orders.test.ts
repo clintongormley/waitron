@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { sql } from "drizzle-orm";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
@@ -39,7 +40,7 @@ import {
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import { saveDraft, submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
+import { submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
 import {
   bumpGroupReady,
   fireGroup,

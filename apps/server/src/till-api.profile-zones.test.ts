@@ -1042,7 +1042,11 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/lines/:lineId/recall",
     "POST",
     (x) => `/api/parties/${x.deliParty}/lines/${id}/recall`,
-    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0 }),
+    (x) => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
     deliTableZone,
   ],
   [

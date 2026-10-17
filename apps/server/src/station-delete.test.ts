@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -36,7 +37,6 @@ import {
 } from "./testing/party-venue.js";
 import { listStationQueue, updateHeldOrder } from "./working-order.js";
 import { readRestOfOrder } from "./rest-of-order.js";
-import { saveDraft } from "./order-drafts.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const at = "2026-10-10T12:00:00.000Z";

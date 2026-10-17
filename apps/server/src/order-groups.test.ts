@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
@@ -5319,7 +5320,12 @@ describe("Fire now on one held dish", () => {
 
   it("refuses a recalled dish without changing its outbox or its held companions", async () => {
     const { v, s, steak } = await fixture(false);
-    await inTx(async (tx) => recallToDraft(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
+    await inTx(async (tx) =>
+      recallToDraft(tx, v.cfg, s.partyId, steak.id, {
+        ...(await args(s.partyId)),
+        expectedEdit: await readBillEditState(tx, steak.workingOrderId),
+      }),
+    );
     const command = await args(s.partyId);
     await expectRefusedWithNothingWritten(
       v,

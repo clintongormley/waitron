@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { eq, getTableName, sql } from "drizzle-orm";
@@ -22,7 +23,7 @@ import {
   setProductCourse,
   updateCourse,
 } from "./kitchen.js";
-import { saveDraft } from "./order-drafts.js";
+
 import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { addTabRound } from "./working-order.js";
 

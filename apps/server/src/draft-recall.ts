@@ -45,6 +45,13 @@ import {
   type RecalledModifierPlan,
   type OrderAttendance,
 } from "./working-order.js";
+import {
+  acquireBillEditor,
+  parseBillEditExpected,
+  readBillEditState,
+  requireBillEditor,
+} from "./bill-editing.js";
+import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import "./errors.js";
 
 export async function saveRecalledLine(
@@ -202,15 +209,16 @@ export async function recallToDraft(
   cfg: TillConfig,
   partyId: string,
   lineId: string,
-  args: PartyCommandArgs,
+  args: PartyCommandArgs & { expectedEdit: BillEditExpected },
   attendance?: OrderAttendance,
-): Promise<{ revision: number; draft: Draft }> {
+): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
+  const expectedEdit = parseBillEditExpected(args.expectedEdit);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     args.submissionId,
     "line.recall-draft",
-    { partyId, lineId, operatorId: args.operatorId },
+    { partyId, lineId, operatorId: args.operatorId, expectedEdit },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
       const [line] = await tx
@@ -220,6 +228,7 @@ export async function recallToDraft(
       if (line === undefined) throw new AppError("group.not_found", { lineId });
       await requireBillOfParty(tx, partyId, line.workingOrderId);
       await refusePaymentInFlight(tx, [line.workingOrderId]);
+      await requireBillEditor(tx, line.workingOrderId, args.operatorId, expectedEdit);
       if (line.parentLineId !== null) throw invalid("lineId");
       if (!(await VENUE_SERVICE.readEditSentLines(tx)))
         throw new AppError("ticket.already_fired", { workingOrderId: line.workingOrderId });
@@ -245,6 +254,7 @@ export async function recallToDraft(
               .where(and(eq(orderGroups.id, line.groupId), eq(orderGroups.partyId, partyId)));
       if (group === undefined && line.sentAt === null && items.length === 0)
         throw new AppError("ticket.not_sent", { workingOrderId: line.workingOrderId, lineId });
+      await acquireBillEditor(tx, line.workingOrderId, args.operatorId, expectedEdit);
       const fired = items
         .filter((item) => item.firedAt !== null)
         .map((item) => ({
@@ -295,7 +305,7 @@ export async function recallToDraft(
         [line.workingOrderId],
         args.submissionId,
       );
-      return { revision, draft };
+      return { revision, draft, edit: await readBillEditState(tx, line.workingOrderId) };
     },
   );
 }

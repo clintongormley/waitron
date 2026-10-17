@@ -1,3 +1,4 @@
+import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -16,7 +17,6 @@ import { createCourse, listCourses, requireCourse, updateCourse } from "./kitche
 import { inTx, setupPartyVenue, seat, OPERATOR } from "./testing/party-venue.js";
 
 import { addTabRound } from "./working-order.js";
-import { saveDraft } from "./order-drafts.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
