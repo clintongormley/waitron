@@ -25,6 +25,11 @@ interface Options {
   store: FirstSetupStore;
   coordinator: FirstSetupCoordinator;
   readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
+  resumeBinding?(
+    owner: FirstSetupOwnerAttempt,
+    module: string,
+    hold: FirstSetupHold,
+  ): Promise<string>;
   withPreparationAuthorization<T>(
     authorize: () => Promise<void>,
     run: () => Promise<T>,
@@ -129,6 +134,36 @@ export function createFirstSetupPreparation(options: Options) {
     assertSelection,
     assertFreshAssignment,
     preparation: {
+      resume(
+        owner: FirstSetupOwnerAttempt,
+        module: string,
+        reconfirmation: string,
+        hold?: FirstSetupHold,
+      ) {
+        return inside(hold, async (held) => {
+          const state = await options.owner.authorize(owner);
+          const ownership = [...state.history]
+            .reverse()
+            .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+          if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
+            throw new AppError("setup.owner_required", {});
+          if (state.status !== "consumption-intent" || !Object.hasOwn(state.inputs, module))
+            conflict();
+          const { seat, context } = selected(state, module);
+          if (seat.resume === undefined || options.resumeBinding === undefined)
+            throw new AppError("setup.not_ready", {});
+          const binding = await options.resumeBinding(owner, module, held);
+          await options.owner.consumeReconfirmation(owner, reconfirmation, "block-use", held);
+          await options.withPreparationAuthorization(
+            async () => {
+              await options.owner.authorize(owner);
+              if ((await options.resumeBinding!(owner, module, held)) !== binding) conflict();
+            },
+            () => seat.resume!(context, structuredClone(state.inputs[module]), binding),
+          );
+          await options.owner.authorize(owner);
+        });
+      },
       prepare(
         owner: FirstSetupOwnerAttempt,
         module: string,

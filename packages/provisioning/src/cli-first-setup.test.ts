@@ -1118,3 +1118,38 @@ it.each([
     expect(f.output.join("\n")).not.toContain(productionEmail.password);
   },
 );
+
+it("a refusal after stamping retains that environment and can retry the original kept hour", async () => {
+  const f = await realActivationFixture();
+  const factory = f.deps.firstSetupDeployment!;
+  let refused = true;
+  f.deps.firstSetupDeployment = (context) => {
+    const deployment = factory(context);
+    const provision = deployment.provision;
+    return {
+      ...deployment,
+      provision: (request, beforeTransaction) =>
+        provision(request, async () => {
+          if (refused) throw new AppError("setup.not_ready", {});
+          await beforeTransaction();
+        }),
+    };
+  };
+  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(f.output).toContain("setup.not_ready {}");
+  expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  const before = (await f.runtime.store.read())!;
+  expect(before.status).toBe("consumption-intent");
+  refused = false;
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const after = (await f.runtime.store.read())!;
+  expect(after.status).toBe("complete");
+  expect(after.frozen).toEqual(before.frozen);
+  expect(after.inputs[MODULE]).toEqual(before.inputs[MODULE]);
+  expect(
+    (await venue.db.select({ code: invoiceSeries.code }).from(invoiceSeries))
+      .map((row) => row.code)
+      .sort(),
+  ).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
+});

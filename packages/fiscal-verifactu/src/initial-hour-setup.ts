@@ -3,6 +3,7 @@ import {
   withOperationAuthority,
   type InitialSetupContext,
   type InitialSetupContribution,
+  type InitialSetupCommandActions,
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -77,6 +78,36 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   return structuredClone(expected);
 }
 
+async function reviewCommandClock(
+  actions: InitialSetupCommandActions,
+): Promise<{ status: "ready" } | { status: "waiting" } | { status: "cancelled" }> {
+  const comparison = (await actions.prepare({
+    action: "compare-clocks",
+    browser: null,
+  })) as Awaited<ReturnType<ReturnType<typeof hostedHourPreparation>["compareClocks"]>>;
+  for (const sample of comparison.clock.usable)
+    actions.output(
+      `${sample.source}: ${new Date(sample.lowerMs).toISOString()} – ${new Date(sample.upperMs).toISOString()}`,
+    );
+  for (const sample of comparison.clock.unavailable)
+    actions.output(`${sample.source}: unavailable`);
+  if (comparison.clock.boundaryWait) {
+    actions.output("Clocks span a UTC-hour boundary. Check again before choosing an hour.");
+    return { status: "waiting" };
+  }
+  if (comparison.clock.requiresConfirmation) {
+    actions.output("Accepting a wrong time can reuse invoice names or date invoices incorrectly.");
+    const confirmed = (
+      await actions.prompt("The box's displayed date and time are correct? [y/N]: ")
+    )
+      .trim()
+      .toLowerCase();
+    if (confirmed !== "y" && confirmed !== "yes") return { status: "cancelled" };
+    await actions.prepare({ action: "confirm-clock", comparisonId: comparison.id });
+  }
+  return { status: "ready" as const };
+}
+
 export function createHourInitialSetup(
   host: ModuleOperationHost,
   base: InitialSetupContribution,
@@ -106,35 +137,26 @@ export function createHourInitialSetup(
       const bytes = await renderRecoveryPdf(recovery, document.locale);
       return { bytes, statement: recoveryDocumentPublic(recovery) };
     },
+    async commandResume(context, actions) {
+      readHourSetupInput(context, (context.request as { input: unknown })?.input);
+      const reviewed = await reviewCommandClock(actions);
+      if (reviewed.status !== "ready") return reviewed;
+      return { status: "ready", input: (context.request as { input: unknown }).input };
+    },
+    async resume(context, input, documentBinding) {
+      const checked = readHourSetupInput(context, input);
+      await withOperationAuthority(context.binding, context.administratorId, (authority) =>
+        hostedHourPreparation(host).resume(
+          { binding: context.binding, authority, input: checked },
+          documentBinding,
+        ),
+      );
+    },
     async command(context, actions) {
       if (record(context.request) && context.request.status === "selected")
         return { status: "ready", input: readHourSetupInput(context, context.request.input) };
-      const comparison = (await actions.prepare({
-        action: "compare-clocks",
-        browser: null,
-      })) as Awaited<ReturnType<ReturnType<typeof hostedHourPreparation>["compareClocks"]>>;
-      for (const sample of comparison.clock.usable)
-        actions.output(
-          `${sample.source}: ${new Date(sample.lowerMs).toISOString()} – ${new Date(sample.upperMs).toISOString()}`,
-        );
-      for (const sample of comparison.clock.unavailable)
-        actions.output(`${sample.source}: unavailable`);
-      if (comparison.clock.boundaryWait) {
-        actions.output("Clocks span a UTC-hour boundary. Check again before choosing an hour.");
-        return { status: "waiting" };
-      }
-      if (comparison.clock.requiresConfirmation) {
-        actions.output(
-          "Accepting a wrong time can reuse invoice names or date invoices incorrectly.",
-        );
-        const confirmed = (
-          await actions.prompt("The box's displayed date and time are correct? [y/N]: ")
-        )
-          .trim()
-          .toLowerCase();
-        if (confirmed !== "y" && confirmed !== "yes") return { status: "cancelled" };
-        await actions.prepare({ action: "confirm-clock", comparisonId: comparison.id });
-      }
+      const reviewed = await reviewCommandClock(actions);
+      if (reviewed.status !== "ready") return reviewed;
       const waiting = (targetMs: unknown) => {
         actions.output(`Wait until ${new Date(targetMs as number).toISOString()}.`);
         actions.output(

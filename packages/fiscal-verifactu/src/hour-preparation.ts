@@ -114,6 +114,19 @@ export function createHourPreparation(
   };
   return {
     ...operations,
+    async resume(operation: ModuleOperationInput, documentBinding: string) {
+      const operator = initialOperator(operation);
+      const input = structuredClone(operation.input);
+      return engine.resume({
+        binding: operation.binding,
+        authority: operation.authority,
+        documentBinding,
+        validate(selected) {
+          if (!isDeepStrictEqual(hourSetupInput(selected, operator), input))
+            return refuse("event_mismatch");
+        },
+      });
+    },
     preview(request: Omit<SelectionRequest, "answer">) {
       initialOperator(request);
       return engine.preview(request);

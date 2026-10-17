@@ -265,6 +265,7 @@ export function createFirstSetupRuntime(options: {
     owner,
     store,
     coordinator,
+    resumeBinding: (owner, module, hold) => recoveryDelivery.checkKept(owner, module, hold),
   });
   return {
     ...authorization,

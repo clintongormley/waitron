@@ -33,6 +33,11 @@ export type InitialSetupCommandResult =
   | { readonly status: "cancelled" };
 
 export interface InitialSetupContribution {
+  commandResume?(
+    context: InitialSetupContext,
+    actions: InitialSetupCommandActions,
+  ): Promise<InitialSetupCommandResult>;
+  resume?(context: InitialSetupContext, input: unknown, documentBinding: string): Promise<void>;
   commandRecoveryDocument?(
     context: InitialSetupContext,
     imported: InitialSetupImport,

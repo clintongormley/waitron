@@ -26,7 +26,7 @@ import {
 } from "@waitron/module";
 import { randomBytes } from "node:crypto";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
-import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import { prepareFirstSetupCommand, resumeFirstSetupCommand } from "./first-setup-command.js";
 import {
   completeFirstSetupCommand,
   type FirstSetupCommandDeployment,
@@ -417,6 +417,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
                 invoiceLocales[0]?.startsWith("es") ? "es" : "en",
               );
               if (delivered.status !== "ready") return 1;
+            }
+            const ownership = [...state.history]
+              .reverse()
+              .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+            if (ownership?.kind === "recover") {
+              const resumed = await resumeFirstSetupCommand(runtime, owner, deps.io);
+              if (resumed.status !== "ready") return 1;
             }
           }
           if (deps.firstSetupDeployment === undefined) throw new AppError("setup.not_ready", {});

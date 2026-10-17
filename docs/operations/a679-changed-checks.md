@@ -707,3 +707,22 @@ Receipts: the lane's `receipts/a679-production-command-20261017` directory. Task
 A679 branch remain incomplete. The owner approved explicit same-hour resume before activation;
 that separate operation, command readiness submission, retained imports, recovery/wizard work,
 coverage repair, generated-PDF acceptance and final branch gates remain.
+
+**Later update, 2026-10-17:** the [same-hour resumption checkpoint](#same-hour-command-resumption-2026-10-17) below implements that separate operation. The other listed work remains.
+
+
+## Same-hour command resumption (2026-10-17)
+
+Authority: the owner's 2026-10-17 15:00 answer permits a separate authenticated resume of the same selected hour and kept PDF. Ordinary changed-context refusals remain.
+
+Existing assertions and fixtures changed: **none**. The retained command suites remain unchanged prefixes; the preparation-command suite adds one import for the new entry and new cases. No existing fiscal test or root guard changes.
+
+New cases cover the stamped-but-unactivated retry, current recovered ownership and password confirmation, clock comparison and old-confirmation refusal, kept consent expiry, the staged-key binding, retained input/PDF, repeated resume and the owner-transition journal. A new fiscal suite covers exact scope/base/input binding, clock/history floors, continuous owner records and malformed journal entries.
+
+A new built-command test first refuses an unset advertised origin before activation, then completes in a second process while retaining the selected input and identical PDF. It controls clock and network observations with a synthetic preload.
+
+An additional audit case refused an orphan resumption belonging to another event only after journal validation was extended to every retained event. Its failing assertion and the omission control are retained with this checkpoint's receipts.
+
+The new resumption fixture freezes wall and elapsed time together. Its earlier wall-only fake triggered the real clock-correction refusal when password verification took over a second. No product guard was changed for that fixture correction. The new journal-persistence assertion uses an awaited promise matcher so an omitted journal write fails an explicit admission assertion.
+
+This checkpoint does not complete Task 4 or qualify the remaining recovery/promotion/wizard paths. The generated-PDF owner acceptance, package coverage and final branch gates remain.

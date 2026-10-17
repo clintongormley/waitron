@@ -11,6 +11,41 @@ type Runtime = Pick<
   "modules" | "owner" | "preparation" | "assertSelection"
 >;
 
+export async function resumeFirstSetupCommand(
+  runtime: Runtime,
+  owner: FirstSetupOwnerAttempt,
+  io: ProvisioningIo,
+) {
+  const state = await runtime.owner.authorize(owner);
+  const ownership = [...state.history]
+    .reverse()
+    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
+  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
+    throw new AppError("setup.owner_required", {});
+  runtime.assertSelection(state);
+  for (const { module } of state.frozen.modules) {
+    const seat = initialSetupFor(runtime.modules, module);
+    if (seat?.resume === undefined) continue;
+    if (seat.commandResume === undefined) throw new AppError("setup.not_ready", {});
+    const reviewed = await seat.commandResume(firstSetupModuleContext(state, module), {
+      output: (line) => io.stdout(line),
+      prompt: (question) => io.prompt(question),
+      prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal),
+      select: async () => {
+        throw new AppError("setup.attempt_conflict", {});
+      },
+    });
+    if (reviewed.status !== "ready") return { status: reviewed.status };
+    const proof = await runtime.owner.reconfirm(
+      owner,
+      await io.promptSecret("Confirm setup password: "),
+      "block-use",
+    );
+    await runtime.preparation.resume(owner, module, proof);
+  }
+  return { status: "ready" as const };
+}
+
 export async function prepareFirstSetupCommand(
   runtime: Runtime,
   suppliedOwner: FirstSetupOwnerAttempt,

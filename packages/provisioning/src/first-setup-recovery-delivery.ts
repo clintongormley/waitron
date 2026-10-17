@@ -326,6 +326,30 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
           refuse();
       });
     },
+    checkKept(owner: FirstSetupOwnerAttempt, module: string, hold?: FirstSetupHold) {
+      return inside(hold, async (held) => {
+        const state = await options.owner.authorize(owner);
+        const grant = grants.get(module);
+        const manifest = await read(state, module);
+        if (
+          grant === undefined ||
+          performance.now() >= grant.expires ||
+          manifest === null ||
+          !equal(grant.manifest, manifest) ||
+          manifest.revision !== state.revision ||
+          manifest.ownerGeneration !== state.ownerGeneration ||
+          !equal(manifest.stage, await options.keys.readStage(owner, held))
+        )
+          refuse();
+        return firstFiscalPublicDigest({
+          inputDigest: manifest.inputDigest,
+          bindingDigest: manifest.bindingDigest,
+          documentDigest: manifest.documentDigest,
+          frozenDigest: manifest.frozenDigest,
+          stage: manifest.stage,
+        });
+      });
+    },
     install(
       db: import("@waitron/db").Database,
       state: FirstSetupState,

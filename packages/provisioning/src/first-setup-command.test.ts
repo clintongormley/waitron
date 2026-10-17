@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
-import { prepareFirstSetupCommand } from "./first-setup-command.js";
+import { prepareFirstSetupCommand, resumeFirstSetupCommand } from "./first-setup-command.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
@@ -602,4 +602,162 @@ it("a restarted command runtime reads the staged verifier but has no delivery gr
   expect(await readFile(join(f.root, "state/first-setup-node-key.json"), "utf8")).not.toContain(
     f.staged.key.secret,
   );
+});
+
+async function resumptionFixture(kept = true) {
+  vi.useRealTimers();
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(NOW);
+  const f = await fixture();
+  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  const io = { ...f.io, prompt: async () => "yes" };
+  const path = join(f.root, "recovery.pdf");
+  await f.runtime.commandDelivery.deliver(prepared.owner, io, path, "en");
+  const oldComparison = (await f.runtime.preparation.prepare(prepared.owner, MODULE, {
+    action: "compare-clocks",
+    browser: null,
+  })) as { id: string };
+  const inspection = await f.runtime.resolution.inspectFirstSetupResolution();
+  const recovered = await f.runtime.owner.recoverFirstSetupOwner({
+    inspectionId: inspection.inspectionId,
+    revision: prepared.state.revision,
+    ownerGeneration: prepared.state.ownerGeneration,
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    password: PASSWORD,
+  });
+  const owner = { ...recovered.state, capability: recovered.capability };
+  if (kept) await f.runtime.commandDelivery.deliver(owner, io, path, "en");
+  return { ...f, prepared, owner, io, path, oldComparison };
+}
+
+it("an explicit command resume refreshes clocks and records the recovered owner without replacing input or PDF", async () => {
+  const f = await resumptionFixture();
+  const pdf = await readFile(f.path);
+  const before = (await f.runtime.store.read())!;
+  external.internet.mockClear();
+  expect(await resumeFirstSetupCommand(f.runtime, f.owner, f.io)).toEqual({ status: "ready" });
+  expect(external.internet).toHaveBeenCalledTimes(1);
+  expect(await readFile(f.path)).toEqual(pdf);
+  expect(await f.runtime.store.read()).toEqual(before);
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions.at(-1).value.entries.at(-1)).toMatchObject({
+    kind: "resume",
+    identity: "06RB",
+  });
+  await expect(f.runtime.owner.authorize(f.prepared.owner)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+});
+
+it("a claimed owner cannot use the explicit recovered-owner resume", async () => {
+  const f = await fixture();
+  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  await expect(resumeFirstSetupCommand(f.runtime, prepared.owner, f.io)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+});
+
+it("recovered ownership without a newly confirmed kept PDF cannot resume", async () => {
+  const f = await resumptionFixture(false);
+  await expect(resumeFirstSetupCommand(f.runtime, f.owner, f.io)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions).toHaveLength(1);
+});
+
+it("a wrong resume confirmation password cannot record the owner transition", async () => {
+  const f = await resumptionFixture();
+  await expect(
+    resumeFirstSetupCommand(f.runtime, f.owner, { ...f.io, promptSecret: async () => "wrong" }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions).toHaveLength(1);
+});
+
+it("repeating an explicit resume keeps one owner transition and one PDF", async () => {
+  const f = await resumptionFixture();
+  const pdf = await readFile(f.path);
+  await resumeFirstSetupCommand(f.runtime, f.owner, f.io);
+  await resumeFirstSetupCommand(f.runtime, f.owner, f.io);
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions).toHaveLength(2);
+  expect(
+    journal.revisions
+      .at(-1)
+      .value.entries.filter((entry: { kind: string }) => entry.kind === "resume"),
+  ).toHaveLength(1);
+  expect(await readFile(f.path)).toEqual(pdf);
+});
+
+it("the module cannot write a resume outside the host's password authorization scope", async () => {
+  const f = await resumptionFixture();
+  const state = (await f.runtime.store.read())!;
+  const seat = f.runtime.modules.find((module) => module.name === MODULE)!.provisioning!
+    .initialSetup!;
+  await f.runtime.preparation.prepare(f.owner, MODULE, { action: "compare-clocks", browser: null });
+  await expect(
+    seat.resume!(firstSetupModuleContext(state, MODULE), state.inputs[MODULE], "a".repeat(64)),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  const journal = JSON.parse(
+    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+  );
+  expect(journal.revisions).toHaveLength(1);
+});
+
+it("an old clock confirmation cannot be replayed after recovered-owner resumption", async () => {
+  const f = await resumptionFixture();
+  await resumeFirstSetupCommand(f.runtime, f.owner, f.io);
+  await expect(
+    f.runtime.preparation.prepare(f.owner, MODULE, {
+      action: "confirm-clock",
+      comparisonId: f.oldComparison.id,
+    }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "clock_confirmation_required" },
+  });
+});
+
+it("an expired kept grant cannot authorize resumption", async () => {
+  const f = await resumptionFixture();
+  vi.advanceTimersByTime(300001);
+  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
+
+it("a changed staged key cannot authorize resumption with the original kept document", async () => {
+  const f = await resumptionFixture();
+  const { writeFile } = await import("node:fs/promises");
+  const path = join(f.root, "state/first-setup-node-key.json");
+  const stage = JSON.parse(await readFile(path, "utf8"));
+  stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
+  await writeFile(path, JSON.stringify(stage));
+  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
+
+it("the shared host refuses direct resumption by an owner who has not recovered ownership", async () => {
+  const f = await fixture();
+  const prepared = await prepareFirstSetupCommand(f.runtime, f.owner, f.io);
+  await f.runtime.commandDelivery.deliver(
+    prepared.owner,
+    { ...f.io, prompt: async () => "yes" },
+    join(f.root, "recovery.pdf"),
+    "en",
+  );
+  const proof = await f.runtime.owner.reconfirm(prepared.owner, PASSWORD, "block-use");
+  await expect(f.runtime.preparation.resume(prepared.owner, MODULE, proof)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
 });

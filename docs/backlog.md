@@ -382,8 +382,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Twelve retained provision cases
   still fail at unowned legacy preparation; the same failures were measured at the preceding checkpoint.
   Package coverage also remains below its gate. Password recovery after selection but before activation
-  still refuses the changed clock/owner context; the owner approved a separate authenticated
-  same-hour resume on 2026-10-17. That operation is not built yet.
+  now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
+  Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,
+  require current kept consent and record the owner transition. Ordinary changed-context admission
+  still refuses. The remaining hour-plan tasks and command-owned readiness/import work stay open.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
   Key-only recovery PDF components now have generated-document and transient-delivery checks.

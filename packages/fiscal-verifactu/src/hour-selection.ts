@@ -41,6 +41,7 @@ interface EntryBase {
   scope: HourScope;
   bases: HourSelectionFacts["bases"];
   contextKey: string;
+  continuationKey?: string;
   answer: Answer;
 }
 interface Intent extends EntryBase {
@@ -53,7 +54,16 @@ interface Wait extends EntryBase {
   kind: "wait";
   targetMs: number;
 }
-type Entry = Intent | Wait;
+interface Resumption extends Omit<Intent, "kind"> {
+  kind: "resume";
+  fromContextKey: string;
+  documentBinding: string;
+}
+type Entry = Intent | Wait | Resumption;
+type ResumeRequest = Omit<SelectionRequest, "answer"> & {
+  documentBinding: string;
+  validate(selected: ReturnType<typeof material>): void;
+};
 const HOUR_MS = 3_600_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
 const END_MS = EPOCH_MS + 32 ** 4 * HOUR_MS;
@@ -117,11 +127,12 @@ function parseState(value: unknown): Entry[] {
       !validScope(entry.scope) ||
       !validBases(entry.bases) ||
       !text(entry.contextKey) ||
+      (entry.continuationKey !== undefined && !text(entry.continuationKey)) ||
       !text(entry.softwareId) ||
       !["no", "yes", "unknown"].includes(entry.answer as string)
     )
       return refuse("history_invalid");
-    if (entry.kind === "intent") {
+    if (entry.kind === "intent" || entry.kind === "resume") {
       if (
         !Array.isArray(entry.references) ||
         !entry.references.every(text) ||
@@ -131,6 +142,15 @@ function parseState(value: unknown): Entry[] {
         Date.parse(entry.issuedAt) < EPOCH_MS ||
         Date.parse(entry.issuedAt) >= END_MS ||
         encodeHourIdentity(Date.parse(entry.issuedAt)) !== entry.identity
+      )
+        return refuse("history_invalid");
+      if (
+        entry.kind === "resume" &&
+        (!text(entry.fromContextKey) ||
+          entry.fromContextKey === entry.contextKey ||
+          !text(entry.continuationKey) ||
+          typeof entry.documentBinding !== "string" ||
+          !/^[a-f0-9]{64}$/.test(entry.documentBinding))
       )
         return refuse("history_invalid");
     } else if (entry.kind === "wait") {
@@ -143,11 +163,19 @@ function parseState(value: unknown): Entry[] {
       )
         return refuse("history_invalid");
     } else return refuse("history_invalid");
-    const key = JSON.stringify([entry.binding.module, entry.binding.eventId, entry.kind]);
+    const key = entryKey(entry as unknown as Entry);
     if (keys.has(key)) return refuse("history_invalid");
     keys.add(key);
   }
   return structuredClone(value.entries) as Entry[];
+}
+function entryKey(entry: Entry) {
+  return JSON.stringify([
+    entry.binding.module,
+    entry.binding.eventId,
+    entry.kind,
+    ...(entry.kind === "resume" ? [entry.contextKey] : []),
+  ]);
 }
 function fingerprint(entry: EntryBase): string {
   return JSON.stringify([
@@ -160,6 +188,7 @@ function fingerprint(entry: EntryBase): string {
     entry.scope.environment,
     ordered(entry.bases),
     entry.contextKey,
+    entry.continuationKey ?? null,
     entry.softwareId,
     typeof entry.operatorId === "string"
       ? entry.operatorId
@@ -171,6 +200,27 @@ function material(intent: Intent) {
   return { status: "selected" as const, ...structuredClone(intent) };
 }
 
+function resumedIntent(entries: readonly Entry[]) {
+  const original = entries.find((entry): entry is Intent => entry.kind === "intent");
+  const resumptions = entries.filter((entry): entry is Resumption => entry.kind === "resume");
+  let intent = original;
+  for (const resumed of resumptions) {
+    if (
+      intent === undefined ||
+      resumed.fromContextKey !== intent.contextKey ||
+      fingerprint({ ...resumed, contextKey: intent.contextKey }) !== fingerprint(intent) ||
+      resumed.documentBinding !== resumptions[0]!.documentBinding ||
+      resumed.identity !== intent.identity ||
+      resumed.issuedAt !== intent.issuedAt ||
+      JSON.stringify([...resumed.references].sort()) !==
+        JSON.stringify([...intent.references].sort())
+    )
+      return refuse("history_invalid");
+    intent = { ...intent, contextKey: resumed.contextKey };
+  }
+  return intent;
+}
+
 export function createHourSelection(options: {
   withState: HourSelectionStore;
   read(binding: OperationBinding): Promise<HourSelectionFacts>;
@@ -179,8 +229,8 @@ export function createHourSelection(options: {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
-    supplied: Omit<SelectionRequest, "answer"> & { answer?: Answer },
-    mode: "select" | "preview" | "selected",
+    supplied: Omit<SelectionRequest, "answer"> & { answer?: Answer } & Partial<ResumeRequest>,
+    mode: "select" | "preview" | "selected" | "resume",
   ) => {
     const persist = mode === "select";
     const request = { ...supplied, binding: { ...supplied.binding } };
@@ -195,7 +245,10 @@ export function createHourSelection(options: {
       return operator!.operatorId;
     };
     const operatorId = authorize();
-    if (mode !== "selected" && !["no", "yes", "unknown"].includes(request.answer!))
+    if (
+      !["selected", "resume"].includes(mode) &&
+      !["no", "yes", "unknown"].includes(request.answer!)
+    )
       refuse("event_mismatch");
     return options.withState(request.binding, async (state) => {
       authorize();
@@ -219,14 +272,15 @@ export function createHourSelection(options: {
       const retained = new Map<string, Entry>();
       for (const value of [state.value, ...state.history]) {
         for (const entry of parseState(value)) {
-          const key = JSON.stringify([entry.binding.module, entry.binding.eventId, entry.kind]);
+          const key = entryKey(entry);
           const prior = retained.get(key);
           const detail = (value: Entry) =>
             JSON.stringify([
               fingerprint(value),
-              value.kind === "intent"
+              value.kind !== "wait"
                 ? [value.identity, value.issuedAt, [...value.references].sort()]
                 : value.targetMs,
+              ...(value.kind === "resume" ? [value.fromContextKey, value.documentBinding] : []),
             ]);
           if (prior !== undefined && detail(prior) !== detail(entry))
             return refuse("history_invalid");
@@ -234,15 +288,35 @@ export function createHourSelection(options: {
         }
       }
       const entries = [...retained.values()];
+      const events = new Map<string, Entry[]>();
+      for (const entry of entries) {
+        const key = JSON.stringify([entry.binding.module, entry.binding.eventId]);
+        const group = events.get(key) ?? [];
+        group.push(entry);
+        events.set(key, group);
+      }
+      for (const group of events.values()) resumedIntent(group);
       const sameEvent = entries.filter(
         (entry) =>
           entry.binding.module === request.binding.module &&
           entry.binding.eventId === request.binding.eventId,
       );
-      const intent = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
-      if (mode === "selected" && intent === undefined) return refuse("reservation_missing");
+      const original = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
+      const resumptions = sameEvent.filter((entry): entry is Resumption => entry.kind === "resume");
+      const intent = resumedIntent(sameEvent);
+      if (["selected", "resume"].includes(mode) && intent === undefined)
+        return refuse("reservation_missing");
+      if (
+        mode === "resume" &&
+        (request.binding.action !== "setup" ||
+          intent!.continuationKey === undefined ||
+          typeof request.documentBinding !== "string" ||
+          resumptions.some((entry) => entry.documentBinding !== request.documentBinding) ||
+          !/^[a-f0-9]{64}$/.test(request.documentBinding))
+      )
+        return refuse("event_mismatch");
       const answer =
-        mode === "selected"
+        mode === "selected" || mode === "resume"
           ? intent!.answer
           : mode === "preview" && sameEvent.length > 0
             ? sameEvent[0]!.answer
@@ -254,18 +328,28 @@ export function createHourSelection(options: {
         scope: facts.scope,
         bases: facts.bases,
         contextKey: facts.contextKey,
+        ...(facts.waitKey === undefined ? {} : { continuationKey: facts.waitKey }),
         answer,
       };
       if (
-        sameEvent.some(
-          (entry) =>
-            fingerprint(entry) !==
-            fingerprint({
-              ...base,
-              contextKey:
-                entry.kind === "wait" ? (facts.waitKey ?? facts.contextKey) : facts.contextKey,
-            }),
-        )
+        sameEvent
+          .filter((entry) => entry.kind !== "resume")
+          .some(
+            (entry) =>
+              fingerprint(
+                entry.kind === "intent"
+                  ? {
+                      ...entry,
+                      contextKey: mode === "resume" ? facts.contextKey : intent!.contextKey,
+                    }
+                  : entry,
+              ) !==
+              fingerprint({
+                ...base,
+                contextKey:
+                  entry.kind === "wait" ? (facts.waitKey ?? facts.contextKey) : facts.contextKey,
+              }),
+          )
       )
         return refuse("event_mismatch");
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
@@ -289,7 +373,7 @@ export function createHourSelection(options: {
             reference: "retained-intents",
             complete: true,
             records: entries
-              .filter((entry): entry is Intent => entry.kind === "intent" && entry !== intent)
+              .filter((entry): entry is Intent => entry.kind === "intent" && entry !== original)
               .map((entry) => ({
                 ...entry.scope,
                 reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
@@ -311,13 +395,26 @@ export function createHourSelection(options: {
         (intent !== undefined && now < Date.parse(intent.issuedAt))
       )
         return refuse("hour_not_later");
-      if (intent !== undefined) return material(intent);
       const write = async (entry: Entry) => {
         authorize();
         await state.replace({ version: 1, entries: structuredClone([...entries, entry]) });
         authorize();
         entries.push(entry);
       };
+      if (intent !== undefined) {
+        if (mode === "resume") {
+          request.validate!(material(intent));
+          if (intent.contextKey !== facts.contextKey)
+            await write({
+              ...intent,
+              kind: "resume",
+              fromContextKey: intent.contextKey,
+              contextKey: facts.contextKey,
+              documentBinding: request.documentBinding!,
+            });
+        }
+        return material(intent);
+      }
       if (answer !== "no") {
         if (wait === undefined) {
           wait = {
@@ -363,6 +460,11 @@ export function createHourSelection(options: {
     });
   };
   return {
+    async resume(request: ResumeRequest) {
+      const result = await perform(request, "resume");
+      if (result.status !== "selected") return refuse("clock_unconfirmed");
+      return result;
+    },
     select: (request: SelectionRequest) => perform(request, "select"),
     preview: (request: Omit<SelectionRequest, "answer">) =>
       perform({ ...request, answer: "no" }, "preview"),
