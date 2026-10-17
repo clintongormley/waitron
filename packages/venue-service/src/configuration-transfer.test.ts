@@ -955,11 +955,16 @@ describe("service-period configuration", () => {
   it("accepts customer and staff menus without a retired department menu list", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(), context)).not.toThrow();
   });
+  it("accepts a period in a newer calendar colour", () => {
+    const t = tables();
+    t.menu_periods![0]!.colour = "cyan";
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
+  });
   it.each([
     [
       "a colour outside the palette",
       (t: Tables) => {
-        t.menu_periods![0]!.colour = "orange";
+        t.menu_periods![0]!.colour = "magenta";
       },
       "menu_periods.colour",
     ],

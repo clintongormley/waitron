@@ -51,6 +51,8 @@ describe("staffing strings", () => {
   it("names each calendar colour", () => {
     expect(colourName("purple", "en")).toBe("Purple");
     expect(colourName("amber", "es")).toBe("Ámbar");
+    expect(colourName("teal", "en")).toBe("Teal");
+    expect(colourName("teal", "es")).toBe("Turquesa");
   });
 
   it("registers a message for each code the page can meet", () => {

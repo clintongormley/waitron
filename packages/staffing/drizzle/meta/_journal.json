@@ -15,6 +15,13 @@
       "when": 1791954041439,
       "tag": "0001_staffing_days_blocks_assignments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792229429028,
+      "tag": "0002_charming_black_widow",
+      "breakpoints": true
     }
   ]
 }

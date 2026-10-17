@@ -81,6 +81,18 @@ async function count(table: typeof staffingDays | typeof staffingBlocks) {
   return (await suite.db.select().from(table)).length;
 }
 
+it("lets the colour CHECK take a newer calendar colour and refuses an unknown one", async () => {
+  const v = await venue();
+  const insert = (colour: string) =>
+    withTransaction(suite.db, (tx) =>
+      tx
+        .insert(staffRoles)
+        .values({ locationId: v.locationId, name: `Role ${colour}`, colour: colour as never }),
+    );
+  await insert("teal");
+  await expect(insert("magenta")).rejects.toThrow("CHECK constraint failed: staff_roles_colour_ck");
+});
+
 it("refuses a staffing day for both a department and a station", async () => {
   const v = await venue();
   await expect(

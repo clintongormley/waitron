@@ -606,14 +606,33 @@ describe("the opening-hours period API", () => {
       model.departments
         .find((department) => department.id === r.restaurant)!
         .periods.find((value) => value.id === id)!.colour,
-    ).toBe("amber");
+    ).toBe("orange");
+  });
+
+  it("creates and updates a period in a newer calendar colour", async () => {
+    const r = await routed();
+    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Lunch",
+      colour: "indigo",
+      menuId: r.almuerzo,
+      staffMenuIds: [],
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const colour = async () =>
+      (await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))).departments
+        .find((department) => department.id === r.restaurant)!
+        .periods.find((value) => value.id === id)!.colour;
+    expect(await colour()).toBe("indigo");
+    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { colour: "teal" }), 204);
+    expect(await colour()).toBe("teal");
   });
 
   for (const method of ["POST", "PATCH"] as const) {
     for (const [field, value] of [
       ["colour", null],
       ["colour", ["blue"]],
-      ["colour", "orange"],
+      ["colour", "magenta"],
       ["colour", 1],
       ["staffMenuIds", null],
       ["staffMenuIds", "x"],

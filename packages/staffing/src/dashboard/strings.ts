@@ -449,11 +449,18 @@ export function peopleNeeded(count: number, locale?: string): string {
 
 const COLOUR_NAMES: NameTable = {
   red: { en: "Red", es: "Rojo" },
+  orange: { en: "Orange", es: "Naranja" },
   amber: { en: "Amber", es: "Ámbar" },
-  grey: { en: "Grey", es: "Gris" },
-  blue: { en: "Blue", es: "Azul" },
+  lime: { en: "Lime", es: "Lima" },
   green: { en: "Green", es: "Verde" },
+  teal: { en: "Teal", es: "Turquesa" },
+  cyan: { en: "Cyan", es: "Cian" },
+  blue: { en: "Blue", es: "Azul" },
+  indigo: { en: "Indigo", es: "Índigo" },
   purple: { en: "Purple", es: "Morado" },
+  pink: { en: "Pink", es: "Rosa" },
+  brown: { en: "Brown", es: "Marrón" },
+  grey: { en: "Grey", es: "Gris" },
 };
 
 export function colourName(colour: CalendarColour, locale?: string): string {
