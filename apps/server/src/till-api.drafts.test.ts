@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billEditStates,
+  devices,
   kitchenStations,
   orderDraftLines,
   orderDraftRecalledLines,
@@ -11,6 +13,7 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import { clearRoutingCell, setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { loginWithPin } from "@waitron/identity";
@@ -147,6 +150,152 @@ function refusal(code: string, params?: Record<string, unknown>) {
 }
 
 describe("GET /api/parties/:id/drafts", () => {
+  it("returns the empty bill's editing state without acquiring it or recording activity", async () => {
+    const party = await seated();
+    await inTx(venue, (tx) =>
+      tx
+        .update(devices)
+        .set({ lastSeenAt: "2020-01-01T00:00:00.000Z" })
+        .where(eq(devices.id, venue.deviceId)),
+    );
+    const before = await snapshot();
+    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    expect(read.status).toBe(200);
+    expect(await snapshot()).toEqual(before);
+    expect(read.json).toEqual({
+      drafts: [],
+      billEdits: [
+        {
+          billId: party.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        },
+      ],
+    });
+    expect((await ana("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`)).json).toEqual(
+      read.json,
+    );
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("returns separate editors and empty bills in bill order, excluding another party", async () => {
+    const party = await seated();
+    const foreign = await seated();
+    const [main] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
+    );
+    const secondId = "eeeeeeee-0000-4000-8000-000000000002";
+    const emptyId = "dddddddd-0000-4000-8000-000000000003";
+    await inTx(venue, (tx) =>
+      tx.insert(workingOrders).values([
+        {
+          id: emptyId,
+          source: "dashboard",
+          locationId: venue.cfg.locationId,
+          partyId: party.partyId,
+          orderNumber: main!.orderNumber + 2,
+          openedAt: main!.openedAt,
+        },
+        {
+          id: secondId,
+          source: "dashboard",
+          locationId: venue.cfg.locationId,
+          partyId: party.partyId,
+          orderNumber: main!.orderNumber + 1,
+          openedAt: main!.openedAt,
+        },
+      ]),
+    );
+    const first = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
+      billId: secondId,
+      draftId: null,
+      revision: 0,
+      lines: [dish("Pulpo")],
+    });
+    expect(saved.status).toBe(200);
+    const second = saved.json as unknown as DraftAnswer;
+    await newDraft(admin, foreign.partyId, [dish("Caña")]);
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values([
+        { billId: secondId, editorId: venue.adminId, editorVersion: 8 },
+        { billId: party.tabId, editorId: venue.operatorId, editorVersion: 3 },
+        { billId: foreign.tabId, editorId: venue.adminId, editorVersion: 12 },
+      ]),
+    );
+    const before = await snapshot();
+    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    expect(read.status).toBe(200);
+    const { drafts, billEdits } = read.json as unknown as {
+      drafts: DraftAnswer[];
+      billEdits: unknown[];
+    };
+    expect([...drafts].sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [first, second].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+    expect(billEdits).toEqual([
+      {
+        billId: party.tabId,
+        editorId: venue.operatorId,
+        editorName: "Ana",
+        editorVersion: 3,
+        draftId: first.id,
+        draftRevision: first.revision,
+      },
+      {
+        billId: secondId,
+        editorId: venue.adminId,
+        editorName: "Administradora",
+        editorVersion: 8,
+        draftId: second.id,
+        draftRevision: second.revision,
+      },
+      {
+        billId: emptyId,
+        editorId: null,
+        editorName: null,
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      },
+    ]);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("retains a released version without creating rows", async () => {
+    const party = await seated();
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values({ billId: party.tabId, editorVersion: 9 }),
+    );
+    const before = await snapshot();
+    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    expect(read.status).toBe(200);
+    expect(read.json).toEqual({
+      drafts: [],
+      billEdits: [
+        {
+          billId: party.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 9,
+          draftId: null,
+          draftRevision: null,
+        },
+      ],
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("requires the current session before revealing bill editor facts", async () => {
+    const party = await seated();
+    const read = await send(venue.app, "", "GET", `/api/parties/${party.partyId}/drafts`);
+    expect(read.status).toBe(401);
+    expect(read.json).toEqual({ code: "session.required", params: {} });
+  });
+
   it("answers every open draft on the party, each person's, with the owner's name", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Caña", "2")]);
@@ -195,7 +344,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(foreign.status).toBe(409);
     expect(foreign.json).toEqual(refusal("bill.other_party", { workingOrderId: other.tabId }));
     const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
-    expect(read.json).toEqual({ drafts: [first.json] });
+    expect(read.json).toEqual({ drafts: [first.json], billEdits: expect.any(Array) });
   });
 
   describe.each(["joinGroupId", "afterGroupId"] as const)("stored %s target", (field) => {
@@ -274,7 +423,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(again.status).toBe(200);
     const reread = await ana("GET", `/api/parties/${party.partyId}/drafts`);
     expect(reread.status).toBe(200);
-    expect(reread.json).toEqual({ drafts: [again.json] });
+    expect(reread.json).toEqual({ drafts: [again.json], billEdits: expect.any(Array) });
     expect((again.json as unknown as DraftAnswer).lines).toMatchObject(places);
     const taken = await admin(
       "POST",

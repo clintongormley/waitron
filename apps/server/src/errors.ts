@@ -473,6 +473,7 @@ declare module "@waitron/shared" {
           ownerId: string;
           ownerName: string | null;
           edit: BillEditState;
+          conflicts?: BillEditState[];
         };
     /** The draft has been submitted, so no command can act on it. */
     "draft.already_submitted": { draftId: string };

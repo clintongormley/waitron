@@ -3,7 +3,7 @@ import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   AppError,
   deviceOrigin,
@@ -171,6 +171,8 @@ import {
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import type { BillEditState } from "./order-drafts.js";
+import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
@@ -3332,13 +3334,25 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
-      const session = await requireSession(deps, c);
+      const session = await requireSession(deps, c, { passive: true });
       const partyId = requireDraftPartyParam(c.req.param("id"));
-      const drafts = await withTransaction(deps.db, async (tx) => {
+      const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return readDrafts(tx, deps.cfg, partyId);
+        const drafts = await readDrafts(tx, deps.cfg, partyId);
+        const bills = await tx
+          .select({ id: workingOrders.id })
+          .from(workingOrders)
+          .where(eq(workingOrders.partyId, partyId))
+          .orderBy(
+            asc(workingOrders.openedAt),
+            asc(workingOrders.orderNumber),
+            asc(workingOrders.id),
+          );
+        const billEdits: BillEditState[] = [];
+        for (const bill of bills) billEdits.push(await readBillEditState(tx, bill.id));
+        return { drafts, billEdits };
       });
-      return c.json({ drafts });
+      return c.json(answer);
     }),
   );
 

@@ -175,7 +175,7 @@ describe("party Recall to draft", () => {
         expect(after.revision).toBe(before.revision + 1);
         const loaded = await call("GET", `/api/parties/${p.partyId}/drafts`);
         expect(loaded.status).toBe(200);
-        expect(loaded.json).toEqual({ drafts: [saved.json] });
+        expect(loaded.json).toEqual({ drafts: [saved.json], billEdits: expect.any(Array) });
       } finally {
         read.mockRestore();
       }
@@ -964,7 +964,7 @@ describe("party Recall to draft", () => {
         await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, p.tabId)),
       ).toEqual([]);
       const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
-      expect(read.json).toEqual({ drafts: [result.draft] });
+      expect(read.json).toEqual({ drafts: [result.draft], billEdits: expect.any(Array) });
       const current = await call("GET", `/api/parties/${p.partyId}/current-orders`);
       expect(
         (current.json as unknown as { groups: { rows: unknown[] }[] }).groups.flatMap(

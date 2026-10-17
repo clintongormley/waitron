@@ -297,7 +297,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     );
     expect(after.fresh).toEqual(before.fresh);
     const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
-    expect(read.json).toEqual({ drafts: [otherDraft] });
+    expect(read.json).toEqual({ drafts: [otherDraft], billEdits: expect.any(Array) });
   });
 
   it("allows the new owner after takeover while retaining the adjustment actor", async () => {
@@ -515,7 +515,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     });
     expect(await frozen()).toEqual(after);
     const loaded = await call("GET", `/api/parties/${p.partyId}/drafts`);
-    expect(loaded.json).toEqual({ drafts: [] });
+    expect(loaded.json).toEqual({ drafts: [], billEdits: expect.any(Array) });
   });
 
   it("uses the existing settlement when cancelling sources leaves the remaining bill fully paid", async () => {
