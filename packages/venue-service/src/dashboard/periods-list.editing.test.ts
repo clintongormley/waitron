@@ -3,7 +3,6 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
@@ -18,6 +17,25 @@ afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
 });
+
+/** Each bin lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
+function expectBinsOnScreen(table: Element, rows: number) {
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  expect(scroll.scrollLeft).toBe(0);
+  const box = scroll.getBoundingClientRect();
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  expect(bins).toHaveLength(rows);
+  for (const [index, bin] of bins.entries()) {
+    const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(at.width, `row ${index}`).toBeGreaterThan(0);
+    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+    const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && bin.contains(hit), `row ${index} is covered`).toBe(true);
+  }
+}
 
 type Period = OpeningHoursModel["departments"][number]["periods"][number];
 const lunch = (): Period => ({
@@ -113,8 +131,9 @@ const periodRow = (el: PeriodsList, id: string) =>
     (PeriodRow & { kind: "period" }) | undefined;
 function editButton(el: PeriodsList, id = "p1") {
   const grid = table(el)!;
-  const row = grid.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
-  const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-period]");
+  const button = grid.shadowRoot!.querySelector<HTMLButtonElement>(
+    `tr[data-row-key="period:${id}"] button.row-activate`,
+  );
   expect(button, `Edit on ${id}`).not.toBeNull();
   return button!;
 }
@@ -396,21 +415,27 @@ it("saves a changed period through the visible native button", async () => {
   await expect.poll(() => dialogOf(el)).toBeNull();
 });
 
-it("keeps the row menu reachable on a phone and opens Edit with native controls", async () => {
+it("on a phone a row tap opens its dialog and its bin is on screen", async () => {
   const initial = { width: window.innerWidth, height: window.innerHeight };
   try {
     await page.viewport(390, 844);
+    expect(window.innerWidth).toBe(390);
     const el = await mount();
     const grid = table(el)!;
-    const menu = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      'tr[data-row-key="period:p1"] wt-row-actions',
+    const bin = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      'tr[data-row-key="period:p1"] [data-test=delete-period]',
     )!;
-    await menu.updateComplete;
-    expectRowMenusOnScreen(grid, 1);
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-    const button = editButton(el);
-    await button.updateComplete;
-    await userEvent.click(button.shadowRoot!.querySelector("button")!);
+    await bin.updateComplete;
+    expectBinsOnScreen(grid, 1);
+    const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(at.width).toBeGreaterThan(0);
+    expect(at.left).toBeGreaterThanOrEqual(0);
+    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
+    const index = grid.columns.findIndex((c) => c.key === "customerMenu");
+    const menuCell = grid.shadowRoot!.querySelectorAll<HTMLElement>(
+      'tr[data-row-key="period:p1"] td',
+    )[index]!;
+    await userEvent.click(menuCell, { force: true });
     await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
   } finally {
     await page.viewport(initial.width, initial.height);

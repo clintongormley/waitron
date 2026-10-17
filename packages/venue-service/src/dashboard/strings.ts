@@ -715,12 +715,10 @@ const en = {
   "menu.offset_timetable": "Change this period’s end offset to fit these time ranges.",
   "menu.offset_timetable_named": "Change the end offset of {period} to fit these times.",
   "menu.actions": "Actions",
-  "menu.row_actions": "Actions: {name}",
   "nav.periods": "Periods",
   "period.title": "Periods",
   "period.add_button": "+ Add period",
   "period.column.period": "Period",
-  "period.open_hours": "Open in Calendar",
   "period.load_error": "Periods could not be loaded. It will be tried again.",
   "period.painted_in_error":
     "Where periods are painted could not be loaded. It will be tried again.",
@@ -757,7 +755,6 @@ const en = {
   "period.delete_read_error": "What deleting it changes could not be read.",
   "period.delete_clock_changed":
     "The business-day start changed. Check what deleting it changes, then delete it again.",
-  "menu.edit": "Edit",
   "menu.delete": "Delete",
   "menu.name_required": "Enter a name.",
   "menu.menu_required": "Choose a menu.",
@@ -1573,12 +1570,10 @@ const es: Record<keyof typeof en, string> = {
   "menu.offset_timetable_named":
     "Cambia el desfase del final de {period} para ajustarlo a estos horarios.",
   "menu.actions": "Acciones",
-  "menu.row_actions": "Acciones: {name}",
   "nav.periods": "Periodos",
   "period.title": "Periodos",
   "period.add_button": "+ Añadir periodo",
   "period.column.period": "Periodo",
-  "period.open_hours": "Abrir en Calendario",
   "period.load_error": "No se pudieron cargar los periodos. Se volverá a intentar.",
   "period.painted_in_error":
     "No se pudo cargar dónde se pintan los periodos. Se volverá a intentar.",
@@ -1615,7 +1610,6 @@ const es: Record<keyof typeof en, string> = {
   "period.delete_read_error": "No se pudo leer qué cambia al eliminarlo.",
   "period.delete_clock_changed":
     "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
-  "menu.edit": "Editar",
   "menu.delete": "Eliminar",
   "menu.name_required": "Indica un nombre.",
   "menu.menu_required": "Elige una carta.",

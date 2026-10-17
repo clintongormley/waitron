@@ -108,9 +108,11 @@ async function mount(
 function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-function rowButton(el: PeriodsList, test: string, id = "p1") {
+function rowButton(el: PeriodsList, test: "edit-period" | "delete-period", id = "p1") {
   const row = table(el)!.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
-  const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`);
+  const button = row?.querySelector<HTMLElement>(
+    test === "edit-period" ? "button.row-activate" : `[data-test=${test}]`,
+  );
   expect(button, `${test} on ${id}`).not.toBeNull();
   return button!;
 }

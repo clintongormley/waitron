@@ -1,17 +1,37 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { cleanup, expectRowMenusOnScreen, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodsList } from "./periods-list.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "./periods-list.js";
 
 afterEach(() => {
   cleanup();
   setLocale("en");
 });
+
+/** Each bin lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
+function expectBinsOnScreen(table: Element, rows: number) {
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  expect(scroll.scrollLeft).toBe(0);
+  const box = scroll.getBoundingClientRect();
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  expect(bins).toHaveLength(rows);
+  for (const [index, bin] of bins.entries()) {
+    const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(at.width, `row ${index}`).toBeGreaterThan(0);
+    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+    const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && bin.contains(hit), `row ${index} is covered`).toBe(true);
+  }
+}
 
 type Period = OpeningHoursModel["departments"][number]["periods"][number];
 const period = (id: string, name: string, colour: Period["colour"], menuId: string): Period => ({
@@ -96,7 +116,7 @@ function paintedIn(nowhere: boolean): PaintedInRow[] {
   ];
 }
 
-async function mount(state: string, theme: "light" | "dark") {
+async function mount(state: string, theme: "light" | "dark", inWindow = false) {
   const wrapper = await mountThemed("<div></div>", theme);
   const screen = document.createElement("periods-list") as PeriodsList;
   screen.api = new OpeningHoursApi((async (path: string, method: string) => {
@@ -127,7 +147,12 @@ async function mount(state: string, theme: "light" | "dark") {
     return model(state === "empty");
   }) as DashboardRequest);
   screen.readOnly = state === "viewer";
-  wrapper.append(screen);
+  if (inWindow) {
+    const frame = document.createElement("wt-modal");
+    frame.open = true;
+    wrapper.append(frame);
+    frame.append(screen);
+  } else wrapper.append(screen);
   const done = {
     "load-failed": "[data-test=read-error]",
     "painted-in-failed": "[data-test=painted-in-error]",
@@ -189,19 +214,20 @@ describe.each(["light", "dark"] as const)("Periods (%s)", (theme) => {
   });
 });
 
-describe.each(["en", "es"] as const)("Periods row menus (%s)", (locale) => {
+describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale) => {
   test.each([1280, 390])("stay on screen at %s px", async (width) => {
     setLocale(locale);
     await page.viewport(width, 900);
     try {
-      const screen = await mount("list", "light");
+      expect(window.innerWidth).toBe(width);
+      const screen = await mount("list", "light", true);
       const table = screen.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
-      const menus = [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
-      expect(menus).toHaveLength(4);
-      if (width === 390) expectRowMenusOnScreen(table, 4);
-      for (const menu of menus) {
-        const at = menu.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      const bins = [...table.shadowRoot!.querySelectorAll("[data-test=delete-period]")];
+      expect(bins).toHaveLength(4);
+      if (width === 390) expectBinsOnScreen(table, 4);
+      for (const bin of bins) {
+        const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
         expect(at.width).toBeGreaterThan(0);
         expect(at.right).toBeLessThanOrEqual(window.innerWidth);
         expect(at.left).toBeGreaterThanOrEqual(0);
