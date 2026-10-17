@@ -69,8 +69,9 @@ export class PeriodsList extends LitElement {
         gap: var(--wt-space-3);
         margin-block-end: var(--wt-space-4);
       }
-      h1 {
+      h2 {
         margin: 0;
+        font-size: var(--wt-font-size-lg);
       }
       wt-data-table::part(swatch) {
         display: inline-block;
@@ -82,17 +83,6 @@ export class PeriodsList extends LitElement {
         vertical-align: middle;
       }
       ${swatchColours}
-      wt-data-table::part(swatch-unpainted) {
-        background: transparent;
-        border: 1px dashed var(--wt-color-text-muted);
-      }
-      wt-data-table::part(unpainted),
-      wt-data-table::part(unavailable) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(unavailable) {
-        font-style: italic;
-      }
       wt-data-table::part(not-painted) {
         color: var(--wt-color-warning);
       }
@@ -202,10 +192,6 @@ export class PeriodsList extends LitElement {
   private menuName(id: string) {
     return this.lookup().menuNames.get(id) ?? id;
   }
-  private unpainted(row: PeriodRow) {
-    const painted = row.kind === "period" ? this.painted?.get(row.id) : undefined;
-    return painted !== undefined && !painted.seasons.length && !painted.specialDays.length;
-  }
   private paintedInCell(row: PeriodRow & { kind: "period" }) {
     const painted = this.painted?.get(row.id);
     if (!painted) return nothing;
@@ -278,12 +264,8 @@ export class PeriodsList extends LitElement {
             return row.periods.length
               ? row.name
               : html`${row.name}<span part="no-periods">${t("period.no_periods")}</span>`;
-          const unpainted = this.unpainted(row);
-          return html`<span
-              part=${`swatch colour-${row.colour}${unpainted ? " swatch-unpainted" : ""}`}
-              data-colour=${row.colour}
-            ></span
-            ><span part=${unpainted ? "name unpainted" : "name"}>${row.name}</span>`;
+          return html`<span part=${`swatch colour-${row.colour}`} data-colour=${row.colour}></span
+            ><span part="name">${row.name}</span>`;
         },
       },
       {
@@ -302,11 +284,6 @@ export class PeriodsList extends LitElement {
               : "—",
       },
       {
-        key: "floorPlan",
-        label: t("period.floor_plan"),
-        cell: (row) => (row.kind === "period" ? html`<span part="unavailable">—</span>` : nothing),
-      },
-      {
         key: "paintedIn",
         label: t("period.painted_in"),
         cell: (row) => (row.kind === "period" ? this.paintedInCell(row) : nothing),
@@ -323,7 +300,7 @@ export class PeriodsList extends LitElement {
           ]),
     ];
     return html`<div class="toolbar">
-        <h1>${t("period.title")}</h1>
+        <h2>${t("period.title")}</h2>
         ${
           this.readOnly
             ? nothing
