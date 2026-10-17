@@ -435,7 +435,7 @@ export class SpecialDayPainter extends LitElement {
    *  moved there. */
   private vacated?: { draft: OwnerPaint; baseline: OwnerPaint };
   /** A pressed Save is waiting for {@link merge} to fill {@link vacated}; re-reads still run. */
-  private filling = false;
+  private filling?: object;
   /** The newest re-read of the stored day, until it answers. */
   private rereading?: Promise<boolean | undefined>;
   /** The clock revision the draft was seeded with; followed only while nothing is edited. */
@@ -551,6 +551,7 @@ export class SpecialDayPainter extends LitElement {
     this.followAfterRead = false;
     this.unanswered = undefined;
     this.rereading = undefined;
+    this.filling = undefined;
     this.seeded = key;
     this.saving = false;
     this.attempted = false;
@@ -656,7 +657,7 @@ export class SpecialDayPainter extends LitElement {
   /** Waits for re-reads of the stored day until {@link merge} has filled {@link vacated}: false
    *  when one fails, or is dropped with no newer one asked for. */
   private async fillVacated(): Promise<boolean> {
-    this.filling = true;
+    const mine = (this.filling = {});
     try {
       while (this.vacated) {
         const outcome = await (this.rereading ?? this.follow());
@@ -664,7 +665,7 @@ export class SpecialDayPainter extends LitElement {
       }
       return true;
     } finally {
-      this.filling = false;
+      if (this.filling === mine) this.filling = undefined;
     }
   }
   /** Name and Every year each follow `detail`, in the draft and the saved state alike, where the
@@ -1593,6 +1594,7 @@ export class SpecialDayPainter extends LitElement {
           this.generation = {};
           this.seedToken = {};
           this.unanswered = undefined;
+          this.filling = undefined;
           this.saving = false;
           this.adding = false;
           this.deleting = undefined;

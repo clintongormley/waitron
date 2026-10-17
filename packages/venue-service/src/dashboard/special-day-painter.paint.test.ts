@@ -725,13 +725,20 @@ describe("a period deleted with a replacement before the stored day is read agai
   /** Mounts a day with Lunch 08:00–10:00 saved on Dec 15, then stores Dinner there in its place
    *  and drops Lunch from the model, with each re-read of the day awaiting `reread`; `reads` counts
    *  the re-reads. */
-  async function deleteLunch(reread: () => Promise<unknown> | undefined) {
+  async function deleteLunch(
+    reread: () => Promise<unknown> | undefined,
+    more: SpecialDayAnswers = {},
+  ) {
     let follow: () => Promise<unknown> | undefined = () => undefined;
     let reads = 0;
     const day = storedDay({
       paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("08:00", "10:00")] }],
     });
-    const mounted = await mount({ days: { sd1: day }, dayAfter: () => follow() });
+    const mounted = await mount({
+      ...more,
+      days: { sd1: day, ...more.days },
+      dayAfter: () => follow(),
+    });
     follow = () => {
       reads += 1;
       return reread();
@@ -794,6 +801,47 @@ describe("a period deleted with a replacement before the stored day is read agai
     expect(sentPaint(writes[0]!)).toEqual([{ departmentId: "d1", date: DEC_15, ranges: refilled }]);
     expect(reads()).toBe(3);
   });
+
+  for (const leaving of ["closed first", "switched while open"] as const)
+    it(`reads nothing while a later save's write is out, after a press waiting on a hung re-read is left behind (${leaving})`, async () => {
+      let hung = true;
+      let hold: () => void = () => {};
+      const { painter, writes, reads } = await deleteLunch(
+        () => {
+          if (!hung) return undefined;
+          hung = false;
+          return new Promise<void>(() => {});
+        },
+        {
+          days: { sd2: storedDay({ id: "sd2", name: "New Year" }) },
+          answer: () => new Promise<void>((resolve) => (hold = resolve)),
+        },
+      );
+      saveButton(painter).click();
+      await settle(painter);
+      expect(frame(painter).busy).toBe(true);
+      if (leaving === "closed first") {
+        frame(painter).dispatchEvent(
+          new CustomEvent("painter-close", { bubbles: true, composed: true }),
+        );
+        await settle(painter);
+      }
+      painter.specialDayId = "sd2";
+      painter.open = true;
+      await loaded(painter);
+      chip(painter, "paint-p2").click();
+      await drag(painter, DEC_14, at("19:00"), at("22:00"));
+      saveButton(painter).click();
+      await expect.poll(() => writes.length).toBe(1);
+      expect(writes[0]!.url).toContain("sd2");
+      const before = reads();
+      painter.model = painterModel();
+      await settle(painter);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(reads() - before).toBe(0);
+      hold();
+      await expect.poll(() => frame(painter).busy).toBe(false);
+    });
 
   it("reads the stored day again when a save that was out as the period was deleted is refused", async () => {
     let reads = 0;
