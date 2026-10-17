@@ -1459,8 +1459,11 @@ seated, joined, paid and taken off. Three additions the owner asked for:
 and mock-ups before anything is built.** The owner: the page is ugly, the edit form assumes the
 roles are a ranking, and "does the logic work? are we asking the right questions?"
 
-**Design (2026-10-17):** [the rules worked through, the page, eight owner questions](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
-with [mock-ups](mockups/a758-adjustment-reasons/). Nothing is built until the owner answers.
+**Design (2026-10-17, revised the same day with the owner's answers):** [the decisions, the rules, the page and the starter list](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
+with [mock-ups](mockups/a758-adjustment-reasons/). No question is open; the build may start. The
+notes below are the review as written before the answers: where they differ from the design's
+decisions (§1 there) — three kinds, give-away against 100% discount, "Invitación", role lists
+"with or after" editable roles — the design wins.
 
 How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
 (void), give away (comp), a percentage discount and an amount discount; it may cap the percentage

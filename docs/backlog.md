@@ -1930,12 +1930,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)
 
-- **A758. Adjustment reasons: review the rules, then a page of their own (owner, 2026-10-16).**
-  Design first: an approver never asked, limits nobody can approve, one kind per reason, role lists
-  instead of a ranking, give-away against 100% discount, the bill-wide limit, staff meals, how a
-  Square import sorts reasons, and a starter list. Then the page under Service, with search, drag
-  handles and Delete. Role lists with or after editable roles. **Design written 2026-10-17, waiting
-  for the owner's answers (Q1–Q8).**
+- **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
+  answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
+  the give-away, printed "Descuento 100%"); per reason, "Who can apply it" and "Who can approve it"
+  as multi-selects over today's roles, built now (editable roles, A7, has not landed); every limit
+  the venue's own, with an approver's PIN above it; the bill-wide limit a euro amount of comps with
+  its own approver list; a Void switch "Ask for approval only once the kitchen has it", matched to
+  A773-1's Cancel item choices; a seven-reason starter list. Then the page "Voids and comps" under
+  Service, with search, drag handles and Delete. **Design revised 2026-10-17; no question open, the
+  build may start.**
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
