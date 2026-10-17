@@ -211,7 +211,8 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
 ## Npm notices and module-type-only manifests
 
 A776's 2026-10-17 probe ran `bundledNpmNotices([require.resolve("stripe")])` with a require rooted at
-`packages/payments-stripe/package.json`. Both main's 22.6.2 and the upgrade's 23.0.0 resolved to
+`packages/payments-stripe/package.json`. Main was commit `3d72c051c86c7b174a4de0faeba5042395973bfb`.
+Both its installed 22.6.2 and the upgrade's 23.0.0 resolved to
 `cjs/stripe.cjs.node.js`; both returned `No bundled npm packages.`. Their nearest `cjs/package.json`
 contains only `{"type":"commonjs"}`; `esm/package.json` likewise declares only the module type.
 The generator's `packageForModule` returns null at that first manifest

@@ -244,7 +244,7 @@ describe("stripeClient's refund through the Stripe SDK itself", () => {
     }
   });
 
-  it("keeps a refund unknown when the successful HTTP response body is severed", async () => {
+  it("reports no HTTP status when the response body is severed", async () => {
     const stripe = await stripeAnswering((_n, _req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       res.write('{"id":"re_partial",', () => res.destroy());
