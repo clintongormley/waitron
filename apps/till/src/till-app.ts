@@ -2287,6 +2287,7 @@ export class TillApp extends LitElement {
   #zoneMenuMemory?: ZoneMenuMemory;
   #counterDefaultMenuId: string | null = null;
   #tableDefaultMenuId: string | null = null;
+  #heldOpenCheck: number | undefined;
   #counterMenuPending = false;
   #pendingCounterMenus?: TillZoneMenu[];
   #counterOffersDue = false;
@@ -4641,7 +4642,11 @@ export class TillApp extends LitElement {
         state.liveFields === this.#tableOffers.liveFields &&
         !serviceMoved
       ) {
-        if (state.defaultMenuId !== undefined && state.defaultMenuId !== this.#tableDefaultMenuId) {
+        if (
+          this.#heldOpenCheck === this.#tableOfferRequest &&
+          state.defaultMenuId !== undefined &&
+          state.defaultMenuId !== this.#tableDefaultMenuId
+        ) {
           this.#tableDefaultMenuId = state.defaultMenuId;
           this.#followTableMenu();
         }
@@ -8636,7 +8641,10 @@ export class TillApp extends LitElement {
           held.menus,
           this.#tableDefaultMenuId,
         );
-        void this.#menuPoll.readNow(heldZone);
+        this.#heldOpenCheck = offerRequest;
+        void this.#menuPoll.readNow(heldZone).finally(() => {
+          if (this.#heldOpenCheck === offerRequest) this.#heldOpenCheck = undefined;
+        });
       } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
         try {
           const catalogue = await this.#readZoneOffers(table.zoneId);
