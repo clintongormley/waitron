@@ -6,6 +6,7 @@ import {
   devices,
   diningTables,
   kitchenPrintJobs,
+  lineServiceCancellations,
   kitchenStations,
   locations,
   kitchenTimingDefaults,
@@ -69,10 +70,12 @@ import {
   listStationNotices,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
+  writeEditSentLines,
 } from "@waitron/venue-service";
 import {
   bumpGroupReady,
   fireGroup,
+  fireHeldLine,
   listOrderGroups,
   readCurrentOrders,
   markGroupAway,
@@ -84,6 +87,7 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import "./errors.js";
+import { recallToDraft } from "./draft-recall.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
@@ -5187,4 +5191,278 @@ describe("splitting a held line into units", () => {
       [1000, 1000, true],
     ]);
   });
+});
+
+describe("Fire now on one held dish", () => {
+  async function fixture(printHeld: boolean) {
+    const v = await setupVenue();
+    const extraStation = await seedKitchenStation(db, {
+      locationId: v.cfg.locationId,
+      name: "Sauce kitchen",
+      isDefault: false,
+    });
+    await inTx(async (tx) => {
+      await writePrintHeldWork(tx, printHeld);
+      await setRoutingCell(
+        tx,
+        v.cfg,
+        { row: { kind: "product", productId: v.productId.sauce }, zoneId: null },
+        { kind: "station", stationId: extraStation },
+      );
+      await attachPrinterToStation(tx, {
+        locationId: v.cfg.locationId,
+        stationId: extraStation,
+        printerId: v.printerId,
+      });
+    });
+    const s = await seated(v);
+    const result = await submit(v, s.partyId, [
+      {
+        release: "hold",
+        lines: [
+          {
+            ...line(v, "steak", "2"),
+            extras: [
+              { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+            ],
+          },
+          line(v, "fish"),
+        ],
+      },
+    ]);
+    const rows = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    return {
+      v,
+      s,
+      held: result.groups[0]!,
+      rows,
+      steak: rows.find((r) => r.productId === v.productId.steak)!,
+      fish: rows.find((r) => r.productId === v.productId.fish)!,
+      extra: rows.find((r) => r.parentLineId !== null)!,
+    };
+  }
+
+  it.each([false, true])(
+    "fires only the whole dish and its extras, printed HOLD=%s, once on replay",
+    async (printHeld) => {
+      const { v, s, held, rows, steak, fish, extra } = await fixture(printHeld);
+      const command = await args(s.partyId);
+      const beforePrint = (await printed(v)).length;
+      const answer = await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+      expect(answer).toEqual({ revision: command.expectedPartyRevision + 1 });
+      const groups = await groupsOf(s.partyId);
+      expect(groups.groups.map((g) => [g.displayNumber, g.state, g.lineIds])).toEqual([
+        [1, "held", [fish.id]],
+        [2, "fired", [steak.id]],
+      ]);
+      const fired = groups.groups[1]!;
+      const after = await db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, s.tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(after).toEqual(
+        rows.map((row) => ({
+          ...row,
+          groupId: row.id === fish.id ? held.id : fired.id,
+          sentAt: row.id === fish.id ? row.sentAt : expect.any(String),
+        })),
+      );
+      expect(after.find((r) => r.id === fish.id)).toEqual(fish);
+      expect(await firedTicketLineIds(s.partyId)).toEqual([steak.id, extra.id].sort());
+      const paper = (await printed(v)).slice(beforePrint).join("\n");
+      expect(paper).toContain("K-STEAK");
+      expect(paper).not.toContain("K-FISH");
+      if (printHeld) {
+        expect(paper).toContain("HOLD CHANGED");
+        expect(paper).toContain("FIRE");
+      } else expect(paper).not.toContain("HOLD CHANGED");
+      const afterFirst = await snapshot(v, s.partyId);
+      expect(await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command))).toEqual(
+        answer,
+      );
+      expect(await snapshot(v, s.partyId)).toEqual(afterFirst);
+    },
+  );
+
+  it("fires while sent edits are disabled", async () => {
+    const { v, s, steak } = await fixture(false);
+    await inTx((tx) => writeEditSentLines(tx, false));
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
+  });
+
+  it("refuses a recalled dish without changing its outbox or its held companions", async () => {
+    const { v, s, steak } = await fixture(false);
+    await inTx(async (tx) => recallToDraft(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
+    const command = await args(s.partyId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
+      { code: "management.request_invalid", params: { field: "sourceLineId" } },
+    );
+  });
+
+  it("refuses a wholly cancelled held dish", async () => {
+    const { v, s, steak } = await fixture(false);
+    await db.insert(lineServiceCancellations).values({
+      lineId: steak.id,
+      quantity: steak.quantity,
+      cancelledAt: "2026-10-17T10:00:00.000Z",
+      wasStarted: false,
+      actorId: ALEX,
+    });
+    const command = await args(s.partyId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
+      { code: "management.request_invalid", params: { field: "lineId" } },
+    );
+  });
+
+  it("releases a dish needing no kitchen preparation without creating a kitchen record", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const held = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "water")] }]))
+      .groups[0]!;
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, held.lineIds[0]!, command));
+    expect(await ticketsOf(s.partyId)).toEqual([]);
+    const [released] = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, held.lineIds[0]!));
+    expect(released!.sentAt).toEqual(expect.any(String));
+    expect(released!.quantity).toBe(1000);
+    expect((await groupsOf(s.partyId)).groups.map((g) => [g.state, g.lineIds])).toEqual([
+      ["fired", [held.lineIds[0]]],
+    ]);
+  });
+
+  it("refuses a dish while its bill is being paid", async () => {
+    const { v, s, steak } = await fixture(true);
+    await db
+      .update(workingOrders)
+      .set({ paymentAttemptAt: "2026-10-17T10:00:00.000Z" })
+      .where(eq(workingOrders.id, s.tabId));
+    const command = await args(s.partyId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
+      { code: "order.payment_in_flight" },
+    );
+  });
+
+  it("refuses a different dish reusing an accepted submission id", async () => {
+    const { v, s, steak, fish } = await fixture(false);
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, fish.id, command)),
+      { code: "submission.id_reused" },
+    );
+  });
+
+  it("refuses an abandoned bill while still permitting presented service", async () => {
+    const { v, s, steak, fish } = await fixture(false);
+    await db.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, s.tabId));
+    await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, await args(s.partyId)));
+    expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
+    await db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, s.tabId));
+    const command = await args(s.partyId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, fish.id, command)),
+      { code: "tab.not_open" },
+    );
+  });
+
+  it("fires only the active remainder of a partly cancelled dish", async () => {
+    const { v, s, steak, extra } = await fixture(true);
+    await db.insert(lineServiceCancellations).values({
+      lineId: steak.id,
+      quantity: 1000,
+      cancelledAt: "2026-10-17T10:00:00.000Z",
+      wasStarted: false,
+      actorId: ALEX,
+    });
+    await db
+      .update(ticketItems)
+      .set({ quantity: 1000 })
+      .where(inArray(ticketItems.workingOrderLineId, [steak.id, extra.id]));
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    const tickets = (await ticketsOf(s.partyId)).filter((item) => item.firedAt !== null);
+    expect(tickets.map((item) => [item.lineId, item.quantity]).sort()).toEqual(
+      [
+        [steak.id, 1000],
+        [extra.id, 1000],
+      ].sort(),
+    );
+    const [charge] = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, steak.id));
+    expect(charge).toMatchObject({ quantity: 2000, unitPriceGross: 2200, lineTotal: 4400 });
+  });
+
+  it("removes the emptied held group but keeps its paper number reserved", async () => {
+    const { v, s, held, steak, fish } = await fixture(false);
+    for (const lineId of [steak.id, fish.id])
+      await inTx(async (tx) => fireHeldLine(tx, v.cfg, s.partyId, lineId, await args(s.partyId)));
+    const [source] = await db.select().from(orderGroups).where(eq(orderGroups.id, held.id));
+    expect(source).toMatchObject({ state: "removed", displayNumber: 1 });
+    expect((await groupsOf(s.partyId)).groups.map((g) => [g.displayNumber, g.state])).toEqual([
+      [2, "fired"],
+      [3, "fired"],
+    ]);
+  });
+
+  it.each(["unknown", "extra", "foreign", "fired", "stale"] as const)(
+    "refuses %s without changing lines, tickets, paper or command audit",
+    async (kind) => {
+      const { v, s, steak, extra } = await fixture(false);
+      let lineId = steak.id;
+      let code = "group.not_found";
+      let command = await args(s.partyId);
+      if (kind === "unknown") lineId = randomUUID();
+      if (kind === "extra") lineId = extra.id;
+      if (kind === "foreign") {
+        const other = await seated(v);
+        const group = await submit(v, other.partyId, [
+          { release: "hold", lines: [line(v, "fish")] },
+        ]);
+        lineId = group.groups[0]!.lineIds[0]!;
+      }
+      if (kind === "fired") {
+        await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, lineId, command));
+        command = await args(s.partyId);
+        code = "group.not_held";
+      }
+      if (kind === "stale") {
+        command = { ...command, expectedPartyRevision: command.expectedPartyRevision - 1 };
+        code = "party.out_of_date";
+      }
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, lineId, command)),
+        { code },
+      );
+    },
+  );
 });

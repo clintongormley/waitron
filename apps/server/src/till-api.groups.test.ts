@@ -1,10 +1,14 @@
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
+import { sessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   orderGroupEvents,
+  orderGroups,
+  devices,
+  deviceProfiles,
   products,
   serviceCommands,
   ticketItems,
@@ -2301,4 +2305,182 @@ it("direct group HTTP cannot claim an existing bill line using the internal rese
   expect((await dishLines(party.tabId)).find((line) => line.id === originalId)!.groupId).toBe(
     first.groups[0]!.id,
   );
+});
+
+describe("POST one held dish's Fire now", () => {
+  it("fires the named dish using the authenticated operator, leaves other held groups and replays once", async () => {
+    const party = await withGroups();
+    const command = {
+      lineId: party.tarta.lineIds[0]!,
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      operatorId: randomUUID(),
+    };
+    const path = `/api/parties/${party.partyId}/groups/fire-line`;
+    const answer = await call("POST", path, command);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({ revision: command.expectedPartyRevision + 1 });
+    const held = await venue.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, party.croquetas.lineIds[0]!));
+    expect(held[0]!.groupId).toBe(party.croquetas.id);
+    const fired = await venue.db
+      .select()
+      .from(orderGroupEvents)
+      .where(eq(orderGroupEvents.partyId, party.partyId));
+    expect(fired.at(-1)).toMatchObject({ actorId: venue.operatorId });
+    const before = await snapshot(party);
+    expect(await call("POST", path, command)).toEqual(answer);
+    expect(await snapshot(party)).toEqual(before);
+  });
+  it.each([undefined, null, 3, [], "bad-id"])(
+    "refuses invalid lineId %j without writes",
+    async (lineId) => {
+      const party = await withGroups();
+      const before = await snapshot(party);
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/fire-line`, {
+        lineId,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual(refusal("management.request_invalid", { field: "lineId" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
+  it("requires a session without touching the kitchen", async () => {
+    const party = await withGroups();
+    const before = await snapshot(party);
+    const answer = await send(
+      venue.app,
+      "",
+      "POST",
+      `/api/parties/${party.partyId}/groups/fire-line`,
+      {
+        lineId: party.tarta.lineIds[0],
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+      },
+    );
+    expect(answer.status).toBe(401);
+    expect(answer.json).toMatchObject({ code: "session.required" });
+    expect(await snapshot(party)).toEqual(before);
+  });
+});
+
+describe("one held dish rechecks admission after reading its request", () => {
+  async function stored(party: Seated) {
+    return {
+      revision: await revisionOf(party.partyId),
+      lines: await venue.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.id),
+      groups: await venue.db
+        .select()
+        .from(orderGroups)
+        .where(eq(orderGroups.partyId, party.partyId))
+        .orderBy(orderGroups.id),
+      tickets: await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, party.tabId))
+        .orderBy(ticketItems.id),
+      events: await eventCount(party.partyId),
+      commands: await commandCount(party.partyId),
+    };
+  }
+
+  it.each([
+    ["ended session", "session.required", 401],
+    ["disabled device", "device.unauthorized", 401],
+    ["removed action", "device.forbidden_action", 403],
+    ["removed admission", "device_profile.not_admitted", 403],
+  ] as const)("refuses %s without firing", async (kind, code, status) => {
+    const party = await withGroups();
+    const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+    const [profile] = await venue.db
+      .select()
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, device!.deviceProfileId));
+    const [session] = await venue.db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.deviceId, venue.deviceId),
+          eq(sessions.personId, venue.operatorId),
+          isNull(sessions.endedAt),
+        ),
+      );
+    const text = JSON.stringify({
+      lineId: party.tarta.lineIds[0],
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+    });
+    let entered!: () => void;
+    let release!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = new Request(`http://localhost/api/parties/${party.partyId}/groups/fire-line`, {
+      method: "POST",
+      headers: { cookie: venue.cookie, "content-type": "application/json" },
+      body: text,
+    });
+    request.text = async () => {
+      entered();
+      await resume;
+      return text;
+    };
+    const before = await stored(party);
+    const pending = venue.app.request(request);
+    try {
+      await reading;
+      await inTx(venue, async (tx) => {
+        if (kind === "ended session")
+          await tx
+            .update(sessions)
+            .set({ endedAt: "2026-10-17T10:00:00.000Z" })
+            .where(eq(sessions.id, session!.id));
+        if (kind === "disabled device")
+          await tx.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
+        if (kind === "removed action")
+          await tx
+            .update(deviceProfiles)
+            .set({
+              capabilities: (profile!.capabilities as string[]).filter(
+                (cap) => cap !== "take-orders",
+              ),
+            })
+            .where(eq(deviceProfiles.id, profile!.id));
+        if (kind === "removed admission")
+          await setProfileAdmission(tx, profile!.id, {
+            personExceptions: [{ personId: venue.operatorId, admitted: false }],
+          });
+      });
+      release();
+      const answer = await pending;
+      expect(answer.status).toBe(status);
+      expect(await answer.json()).toMatchObject({ error: { code } });
+      expect(await stored(party)).toEqual(before);
+    } finally {
+      release();
+      await pending;
+      await inTx(venue, async (tx) => {
+        await tx.update(sessions).set({ endedAt: null }).where(eq(sessions.id, session!.id));
+        await tx.update(devices).set({ active: true }).where(eq(devices.id, venue.deviceId));
+        await tx
+          .update(deviceProfiles)
+          .set({ capabilities: profile!.capabilities })
+          .where(eq(deviceProfiles.id, profile!.id));
+        await setProfileAdmission(tx, profile!.id, { personExceptions: [] });
+      });
+    }
+  });
 });

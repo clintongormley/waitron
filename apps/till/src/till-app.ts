@@ -10060,6 +10060,13 @@ export class TillApp extends LitElement {
     await this.#onGroupRequest((party, command) => this.api.fireGroup(party.id, groupId, command));
   }
 
+  async #onFireHeldLine(event: Event): Promise<void> {
+    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
+    await this.#onGroupRequest((party, command) =>
+      this.api.fireHeldLine(party.id, lineId, command),
+    );
+  }
+
   async #onReorderGroups(event: Event): Promise<void> {
     const { heldGroupIds } = (event as CustomEvent<ReorderGroupsDetail>).detail;
     await this.#onGroupRequest((party, command) =>
@@ -14147,6 +14154,7 @@ export class TillApp extends LitElement {
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
         @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
+        @fire-held-line=${(event: Event) => void this.#onFireHeldLine(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
         @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}

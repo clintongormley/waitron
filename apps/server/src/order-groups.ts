@@ -414,6 +414,113 @@ export async function fireGroup(
   );
 }
 
+/** Fire a whole held dish and its extras without changing its bill's financial facts. */
+export async function fireHeldLine(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  lineId: string,
+  args: PartyCommandArgs,
+  attendance?: OrderAttendance,
+): Promise<{ revision: number }> {
+  const routing = routingOnce(tx, cfg, new Date());
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    args.submissionId,
+    "group.fire_line",
+    { partyId, lineId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      const [line] = await tx
+        .select({
+          groupId: workingOrderLines.groupId,
+          quantity: workingOrderLines.quantity,
+          workingOrderId: workingOrderLines.workingOrderId,
+          billStatus: workingOrders.status,
+          state: orderGroups.state,
+        })
+        .from(workingOrderLines)
+        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .where(
+          and(
+            eq(workingOrderLines.id, lineId),
+            isNull(workingOrderLines.parentLineId),
+            eq(workingOrders.partyId, partyId),
+            eq(orderGroups.partyId, partyId),
+            ne(orderGroups.state, "removed"),
+          ),
+        );
+      if (line === undefined) throw new AppError("group.not_found", { lineId });
+      if (line.state !== "held") throw new AppError("group.not_held", { groupId: line.groupId! });
+      if (line.billStatus === "abandoned")
+        throw new AppError("tab.not_open", { tabId: line.workingOrderId });
+      await refuseRecalledWrite(tx, eq(workingOrderLines.id, lineId));
+      const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
+      if (line.quantity <= cancelled)
+        throw new AppError("management.request_invalid", { field: "lineId" });
+      await refusePaymentInFlight(tx, [line.workingOrderId]);
+      const source = line.groupId!;
+      const printed = (await printedHeldGroups(tx, [source])).get(source);
+      const labels = await readGroupNumberLabels(tx, [partyId]);
+      if (printed !== undefined) {
+        const items = (await heldItemsOf(tx, [lineId])).get(lineId) ?? [];
+        await correctHoldTickets(
+          tx,
+          cfg,
+          items.map((item) => ({
+            workingOrderId: line.workingOrderId,
+            workingOrderLineId: item.workingOrderLineId,
+            stationId: item.stationId,
+            quantity: item.firedQuantity,
+            group: printed,
+            numberPartyLabel: labels.get(source),
+          })),
+          { kind: "HOLD CHANGED", direction: "removed" },
+        );
+      }
+      const groupId = await startGroup(tx, partyId, "fire", args.operatorId, {
+        at: routing.at.toISOString(),
+        by: { personId: args.operatorId },
+      });
+      await tx
+        .update(workingOrderLines)
+        .set({ groupId })
+        .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)));
+      await fireOrderLines(
+        tx,
+        cfg,
+        line.workingOrderId,
+        [lineId],
+        printed === undefined ? undefined : "FIRE",
+        routing,
+      );
+      const snapshot =
+        attendance === undefined
+          ? undefined
+          : {
+              recorder: attendance.recorder,
+              at: attendance.clock.now().instant.toISOString(),
+            };
+      await recordGroupEvent(
+        tx,
+        {
+          partyId,
+          groupId,
+          kind: "fired",
+          actorId: args.operatorId,
+          detail: { lineId, from: source },
+        },
+        snapshot,
+      );
+      await removeEmptiedHeldGroups(tx, partyId, [source], args.operatorId, snapshot);
+      return { revision };
+    },
+    cfg.madeHereSink,
+  );
+}
+
 /**
  * The pass's Ready for a group: every fired kitchen item of its lines, on every bill of the party,
  * goes straight to `ready`. A held group's items are unfired, so it changes none, yet the command is
@@ -874,7 +981,7 @@ export async function moveLinesToGroup(
         if (line.groupState !== "held") {
           throw new AppError("group.not_held", { groupId: line.groupId! });
         }
-        // A paid bill may still hold a held line; its lines can no longer be written.
+        // This command can split quantities; only open bills may change their financial rows.
         if (line.billStatus !== "open") {
           throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
         }

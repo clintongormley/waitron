@@ -8020,3 +8020,31 @@ describe("till-app: a box update while a bill request still waits for the server
     expect(updateBar(el)).not.toBeNull();
   });
 });
+
+describe("one held dish Fire now app command", () => {
+  it("fires only the named dish and refreshes the party revision", async () => {
+    const fireHeldLine = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openMesa(el);
+    emit(order, "fire-held-line", { lineId: "line-steak" });
+    await flush(el);
+    expect(fireHeldLine).toHaveBeenCalledExactlyOnceWith("v1", "line-steak", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+    });
+    expect(tableOrder(el)!.party?.revision).toBe(4);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("refreshes a raced party but never fires a second time", async () => {
+    const fireHeldLine = vi.fn().mockRejectedValue({ code: "party.out_of_date" });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+    emit(order, "fire-held-line", { lineId: "line-steak" });
+    await flush(el);
+    expect(fireHeldLine).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+  });
+});

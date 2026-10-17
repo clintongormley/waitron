@@ -3952,6 +3952,24 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("fireHeldLine sends one whole dish with its revision and preserves service refusals", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ revision: 9 }))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: "group.not_held" } }, 409));
+    const api = new TillApi("", fetchStub);
+    const command = { submissionId: "sub-line", expectedPartyRevision: 8 };
+    await expect(api.fireHeldLine("v1", "line-2", command)).resolves.toEqual({ revision: 9 });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/groups/fire-line",
+      post({ ...command, lineId: "line-2" }),
+    );
+    await expect(api.fireHeldLine("v1", "line-2", command)).rejects.toMatchObject({
+      code: "group.not_held",
+      status: 409,
+    });
+  });
+
   it("fireGroup surfaces an already-fired group as { code }", async () => {
     const fetchStub = vi
       .fn()

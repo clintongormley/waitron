@@ -4030,6 +4030,17 @@ export class TillApi {
     });
   }
 
+  fireHeldLine(
+    partyId: string,
+    lineId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/parties/${partyId}/groups/fire-line`, "POST", {
+      ...command,
+      lineId,
+    });
+  }
+
   splitHeldLineIntoUnits(
     partyId: string,
     lineId: string,

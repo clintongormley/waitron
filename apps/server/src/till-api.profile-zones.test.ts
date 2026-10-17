@@ -158,7 +158,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/groups/:gid/fire|ready|away|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
  * | POST /api/parties/:id/served, /unserved                 | party                  | refuses POST /api/parties/:id/<served|unserved>      |
  * | PUT  /api/parties/:id/groups/order                      | party                  | refuses PUT /api/parties/:id/groups/order            |
- * | POST /api/parties/:id/groups/move, /groups/split-line   | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
+ * | POST /api/parties/:id/groups/move, /groups/split-line, /groups/fire-line | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
@@ -995,6 +995,13 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/groups/order`,
     () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, heldGroupIds: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/groups/fire-line",
+    "POST",
+    (x) => `/api/parties/${x.deliParty}/groups/fire-line`,
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, lineId: randomUUID() }),
     deliTableZone,
   ],
   [

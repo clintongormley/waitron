@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
@@ -41,6 +43,7 @@ import { saveDraft, submitDraft, type Draft, type DraftLineInput } from "./order
 import {
   bumpGroupReady,
   fireGroup,
+  fireHeldLine,
   moveLinesToGroup,
   readCurrentOrders,
   listOrderGroups,
@@ -1801,5 +1804,120 @@ describe("Sent panel read facts (A773)", () => {
       netAmount: "2.00",
       billStatus: "open",
     });
+  });
+});
+
+describe("a paid held dish fired on its own", () => {
+  it("keeps every financial and fiscal fact while firing the dish and extras, leaving its companion held", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const held = await group(v, s.partyId, "hold", [
+      {
+        ...line(v, "steak", "2"),
+        extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
+      },
+      line(v, "flan"),
+    ]);
+    await inTx(async (tx) => {
+      await tx
+        .insert(persons)
+        .values({ id: ALEX, displayName: "Alex", role: "admin", status: "active" });
+      const reason = await createAdjustmentReason(tx, {
+        name: "Held dish discount",
+        names: {},
+        actions: ["discount_percent"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRole: "staff",
+        approverRole: "staff",
+        noteRequired: false,
+      });
+      const [dish] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, held.lineIds[0]!));
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, s.tabId));
+      await applyAdjustment(
+        tx,
+        v.cfg,
+        {
+          orderId: s.tabId,
+          expectedRevision: bill!.revision,
+          submissionId: randomUUID(),
+          lineId: dish!.id,
+          reasonId: reason.id,
+          action: "discount_percent",
+          percentBp: 2500,
+          note: null,
+          operatorId: ALEX,
+        },
+        v.cfg.locale,
+      );
+    });
+    await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      id: s.tabId,
+      lines: [],
+      tender: { method: "cash", amount: "100.00" },
+    });
+    const before = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const steak = before.find((row) => row.name === "steak")!;
+    const flan = before.find((row) => row.name === "flan")!;
+    async function financial() {
+      return {
+        bill: await suite.db.select().from(workingOrders).where(eq(workingOrders.id, s.tabId)),
+        sales: await suite.db.all(sql`select * from sales order by id`),
+        saleLines: await suite.db.all(sql`select * from sale_lines order by id`),
+        tenders: await suite.db.all(sql`select * from tenders order by id`),
+        invoices: await suite.db.all(sql`select * from registros_facturacion order by id`),
+        numbers: await suite.db.all(sql`select * from invoice_series order by id`),
+        adjustments: await suite.db.select().from(adjustments).orderBy(adjustments.id),
+        payments: await suite.db.all(sql`select * from bill_payments order by id`),
+        refunds: await suite.db.all(sql`select * from bill_payment_refunds order by id`),
+      };
+    }
+    const facts = await financial();
+    expect(facts.bill[0]!.status).toBe("settled");
+    expect(facts.adjustments).toHaveLength(1);
+    expect(facts.adjustments[0]).toMatchObject({ action: "discount_percent", percentBp: 2500 });
+    expect(facts.sales).toHaveLength(1);
+    expect(facts.invoices).toHaveLength(1);
+    const command = await args(s.partyId);
+    await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
+    expect(await financial()).toEqual(facts);
+    const after = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const fired = after.find((row) => row.id === steak.id)!.groupId;
+    expect(fired).not.toBe(held.id);
+    expect(after).toEqual(
+      before.map((row) => ({
+        ...row,
+        groupId: row.id === flan.id ? row.groupId : fired,
+        sentAt: row.id === flan.id ? row.sentAt : expect.any(String),
+      })),
+    );
+    expect(after.find((row) => row.id === flan.id)).toEqual(flan);
+    expect(
+      after
+        .filter((row) => row.id === steak.id || row.parentLineId === steak.id)
+        .map((row) => row.groupId),
+    ).toEqual([fired, fired]);
+    const read = await currentOrders(s.partyId);
+    expect(read.groups.map((g) => [g.displayNumber, g.state, g.rows.map((r) => r.name)])).toEqual([
+      [1, "held", ["flan"]],
+      [2, "fired", ["steak"]],
+    ]);
+    const afterFirst = await snapshot(s.partyId);
+    expect(await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command))).toEqual({
+      revision: command.expectedPartyRevision + 1,
+    });
+    expect(await snapshot(s.partyId)).toEqual(afterFirst);
+    expect(await financial()).toEqual(facts);
   });
 });

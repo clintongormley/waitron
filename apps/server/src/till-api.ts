@@ -29,6 +29,7 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   authorizeManager,
+  canUseDeviceProfile,
   createPinThrottle,
   endSession,
   listActivePersonsWithPermission,
@@ -156,6 +157,7 @@ import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
+  fireHeldLine,
   listOrderGroups,
   markGroupAway,
   moveLinesToGroup,
@@ -196,6 +198,7 @@ import {
   isUuid,
   readSessionToken,
   requireSession,
+  assertStillSignedIn,
   setSessionCookie,
 } from "./till-session.js";
 import {
@@ -3208,6 +3211,43 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.json(reordered);
+    }),
+  );
+
+  app.post("/api/parties/:id/groups/fire-line", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const command = groupCommand(session.personId, body);
+      if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
+      const lineId = body.lineId.toLowerCase();
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await assertStillSignedIn(tx, session);
+        const device = await assertDeviceStillProven(tx, {
+          device: session.device,
+          tokenHash: null,
+        });
+        if (device.locationId !== deps.cfg.locationId)
+          throw new AppError("device.unauthorized", {});
+        assertProfileAction(device, "take-orders");
+        if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+          throw new AppError("device_profile.not_admitted", {});
+        const current = { ...session, device };
+        const cfg = requestCfg(deps.cfg, current);
+        await checkZones(tx, deps.cfg, current, [{ partyId }]);
+        return fireHeldLine(
+          tx,
+          cfg,
+          partyId,
+          lineId,
+          command,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
+      return c.json(answer);
     }),
   );
 

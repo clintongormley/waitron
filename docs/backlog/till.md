@@ -2118,7 +2118,9 @@ build after A757's board if it has been decided, else name the table alone.
   what it sees. [Panel mockups](mockups/a773-order-panel/).
   The unlanded Task 20 foundation retains cancelled charges separately from active food through
   bill splits. Fire, serving, Recall and reminder reads now consume that state; the cancellation
-  command, screen projection and public refund handoff remain to be built.
+  command and public refund handoff exist on that branch; the sent-line menu and final panels
+  remain to be connected. Single-dish Fire now has its server/API and till command path, including
+  the owner-approved paid-line group-only exception; its visible menu follows in Task 16.
   Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](mockups/a773-courses-and-groups/)
 
