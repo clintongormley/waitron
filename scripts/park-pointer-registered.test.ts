@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
  * `commands.parkPointer` call in a package's source, and for the `...parkPointerCommands` spread in
  * its vitest config. A rename of the command or the shared fragment, or a helper reached under a
  * different spelling, would slip past. The same holds for `pointerGestureCommands`: a literal
- * `commands.mouseDrag`, `commands.mouseMove` or `commands.touchGesture` call, and the `...pointerGestureCommands` spread.
+ * `commands.mouseDrag`, `commands.mouseMove`, `commands.touchGesture` or `commands.parkTouch` call, and the `...pointerGestureCommands` spread.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -22,7 +22,7 @@ const IMPORTS_A11Y_HELPERS = /^\s*import\b[^\n]*\ba11y-helpers\b/m;
 /** A source file calls the command directly (a local test-helpers copy of the hook). */
 const CALLS_PARK_POINTER = /\bcommands\.parkPointer\b/;
 /** A source file calls one of the commands in `pointerGestureCommands`. */
-const CALLS_POINTER_GESTURE = /\bcommands\.(?:mouseDrag|mouseMove|touchGesture)\b/;
+const CALLS_POINTER_GESTURE = /\bcommands\.(?:mouseDrag|mouseMove|touchGesture|parkTouch)\b/;
 
 function sourceFilesIn(dir: string): string[] {
   const out: string[] = [];

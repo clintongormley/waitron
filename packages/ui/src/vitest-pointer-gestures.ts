@@ -21,7 +21,7 @@ interface CdpSession {
 }
 
 interface TouchEventParams {
-  type: "touchStart" | "touchMove" | "touchEnd";
+  type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel";
   touchPoints: { x: number; y: number }[];
 }
 
@@ -33,6 +33,7 @@ interface PlaywrightPage {
     wheel(deltaX: number, deltaY: number): Promise<void>;
   };
   context(): { newCDPSession(page: PlaywrightPage): Promise<CdpSession> };
+  viewportSize(): { width: number; height: number } | null;
 }
 
 /** Only the playwright provider's command context carries these, hence the cast. */
@@ -177,8 +178,28 @@ export const touchGesture: BrowserCommand<[gesture: TouchGesture]> = async (cont
   }
 };
 
+/** Run after each test that calls `touchGesture`. After a swipe lifted in motion that the page did
+ * not take as a scroll, Linux Chromium sends no click for the next touch begun within roughly
+ * 0.8 s, so a later test's tap would open nothing. This touch is that next one: cancelled, so it
+ * can click nothing, and below the window, where no element of the test page is. */
+export const parkTouch: BrowserCommand<[]> = async (context) => {
+  const ctx = context as unknown as PlaywrightCommandContext;
+  const viewport = ctx.page.viewportSize();
+  if (viewport === null) throw new Error("parkTouch needs a page with a set viewport");
+  const session = await ctx.page.context().newCDPSession(ctx.page);
+  try {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: viewport.width / 2, y: viewport.height + 50 }],
+    });
+    await session.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+  } finally {
+    await session.detach();
+  }
+};
+
 /**
- * Spread into `test.browser.commands` by every config whose tests call `mouseDrag`, `mouseMove`
- * or `touchGesture`. Guard: `scripts/park-pointer-registered.test.ts`.
+ * Spread into `test.browser.commands` by every config whose tests call `mouseDrag`, `mouseMove`,
+ * `touchGesture` or `parkTouch`. Guard: `scripts/park-pointer-registered.test.ts`.
  */
-export const pointerGestureCommands = { mouseDrag, mouseMove, touchGesture };
+export const pointerGestureCommands = { mouseDrag, mouseMove, touchGesture, parkTouch };

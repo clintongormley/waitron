@@ -18,6 +18,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await commands.parkPointer();
   for (const host of hosts.splice(0)) host.remove();
+  await commands.parkTouch();
   window.scrollTo(0, 0);
   setLocale("en");
 });
