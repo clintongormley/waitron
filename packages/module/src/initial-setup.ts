@@ -20,7 +20,23 @@ export interface InitialSetupImport {
   readonly summary: unknown;
 }
 
+export interface InitialSetupCommandActions {
+  output(line: string): void;
+  prompt(question: string): Promise<string>;
+  prepare(proposal: unknown): Promise<unknown>;
+  select(proposal: unknown): Promise<unknown>;
+}
+
+export type InitialSetupCommandResult =
+  | { readonly status: "ready"; readonly input: unknown }
+  | { readonly status: "waiting" }
+  | { readonly status: "cancelled" };
+
 export interface InitialSetupContribution {
+  command?(
+    context: InitialSetupContext,
+    actions: InitialSetupCommandActions,
+  ): Promise<InitialSetupCommandResult>;
   localHistory?(
     tx: Transaction,
     environment: "production" | "preproduction" | null,

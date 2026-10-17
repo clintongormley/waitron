@@ -465,3 +465,46 @@ starting commit `118b02458b6e87e0fa499f07cfaf1c53b3cce353` in an independently i
 and after this extraction. Their failing test names match. The local receipt directory is
 `a679-cli-preparation-20261017`. Their hour/PDF qualification remains open; no existing fiscal
 assertion changed to make this check pass.
+
+## Owned terminal preparation, 2026-10-17
+
+No existing test, assertion or fixture changes in this continuation. The complete previous
+`initial-hour-setup.test.ts` remains a byte-identical prefix, followed by new terminal cases.
+The new `packages/provisioning/src/first-setup-command.test.ts` uses the shared owner, store,
+preparation journal and real hour contribution. Only external time replies and release metadata
+are controlled. It checks password refusal, cancelled answers, retained waits, selected-input
+replay, owner rotation, module version changes and retired-assignment floors.
+
+The module owns the terminal questions and clock policy through `InitialSetupContribution.command`.
+The generic stage waits until every contributing module has frozen its request before importing
+any input, because the durable store accepts imports only after that transition. It returns owned
+preparation state for the later delivery stage; it performs no activation or publication. The actual
+`runCli`/`bin.ts` lifecycle remains unfinished. This does not qualify the complete provisioning
+command or close Task 4.
+
+The local receipts are in `a679-cli-command-20261017`. The protected allocation/restore source and
+both golden suites match the starting commit. Existing coverage and retained paper-journey gaps
+remain open; no threshold, exclusion, SQL, fiscal writer or guard changes in this continuation.
+
+Returning to an unspent wait reuses its recorded answer and UTC target. A new clock comparison
+is still required. The real-host password-recovery case first failed with `event_mismatch` because
+the old wait used an owner-generation fingerprint. The host now supplies a stable continuation key
+for waits while selected material and clock confirmations retain their owner-specific keys. The
+existing `first-setup-runtime.test.ts` check that rejects a selected input after owner recovery
+remains unchanged. An initial implementation applied the stable key to selections too; that
+existing check failed and the implementation was narrowed to waits.
+
+The focused final host command passes 69 cases across command, runtime and preparation files.
+The six-file fiscal command passes 172 cases, including the 20 unchanged golden/immutability cases.
+The command-stage-only coverage report names `first-setup-command.ts` and measures 100% in all four
+metrics across 22 cases. This is not package-wide coverage. The attempted complete provisioning
+coverage run exceeded its 300-second outer deadline before printing a case count; its full log and
+process snapshot are retained. The earlier package coverage gap remains open.
+
+The final independent installed checkout passes the same 69 host and 172 fiscal cases. Eleven
+serial omissions each fail their intended assertion; every restoration passes. This includes the
+unchanged selected-owner refusal. The first configuration-check omission was still rejected by a
+downstream import check, so a cancelled-command preflight case was added and the intended omission
+then failed. The initial receipt remains alongside the corrected controls. Both changed fiscal
+test files retain their entire former contents as byte-identical prefixes. The disposable checkout
+and its parent were removed after checking all 6,748 product paths and open working directories.

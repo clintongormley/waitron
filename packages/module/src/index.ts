@@ -114,6 +114,8 @@ export type {
   InitialSetupContext,
   InitialSetupImport,
   InitialSetupContribution,
+  InitialSetupCommandActions,
+  InitialSetupCommandResult,
 } from "./initial-setup.js";
 export { initialSetupFor } from "./initial-setup-selection.js";
 export type { ModuleOperationHost } from "./operation-preparation.js";

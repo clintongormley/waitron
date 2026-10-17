@@ -177,18 +177,23 @@ export function createFirstSetupRuntime(options: {
         return contribution.localHistory!(tx, environment);
       });
       check();
+      const continuationContext = [
+        state.frozen.attemptId,
+        context.country,
+        context.taxId,
+        context.environment,
+        state.frozen.request.location,
+        context.bases,
+        state.frozen.modules.map(({ module, version }) => ({ module, version })),
+        state.frozen.configurationImport ?? null,
+      ];
       return structuredClone({
         context,
+        continuationKey: JSON.stringify(continuationContext),
         contextKey: JSON.stringify([
-          state.frozen.attemptId,
+          continuationContext[0],
           state.ownerGeneration,
-          context.country,
-          context.taxId,
-          context.environment,
-          state.frozen.request.location,
-          context.bases,
-          state.frozen.modules.map(({ module, version }) => ({ module, version })),
-          state.frozen.configurationImport ?? null,
+          ...continuationContext.slice(1),
         ]),
         localHistory,
       });

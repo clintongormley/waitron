@@ -80,6 +80,69 @@ export function createHourInitialSetup(
     ...base,
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
+    async command(context, actions) {
+      if (record(context.request) && context.request.status === "selected")
+        return { status: "ready", input: readHourSetupInput(context, context.request.input) };
+      const comparison = (await actions.prepare({
+        action: "compare-clocks",
+        browser: null,
+      })) as Awaited<ReturnType<ReturnType<typeof hostedHourPreparation>["compareClocks"]>>;
+      for (const sample of comparison.clock.usable)
+        actions.output(
+          `${sample.source}: ${new Date(sample.lowerMs).toISOString()} – ${new Date(sample.upperMs).toISOString()}`,
+        );
+      for (const sample of comparison.clock.unavailable)
+        actions.output(`${sample.source}: unavailable`);
+      if (comparison.clock.boundaryWait) {
+        actions.output("Clocks span a UTC-hour boundary. Check again before choosing an hour.");
+        return { status: "waiting" };
+      }
+      if (comparison.clock.requiresConfirmation) {
+        actions.output(
+          "Accepting a wrong time can reuse invoice names or date invoices incorrectly.",
+        );
+        const confirmed = (
+          await actions.prompt("The box's displayed date and time are correct? [y/N]: ")
+        )
+          .trim()
+          .toLowerCase();
+        if (confirmed !== "y" && confirmed !== "yes") return { status: "cancelled" };
+        await actions.prepare({ action: "confirm-clock", comparisonId: comparison.id });
+      }
+      const waiting = (targetMs: unknown) => {
+        actions.output(`Wait until ${new Date(targetMs as number).toISOString()}.`);
+        actions.output(
+          "This countdown does not reserve a separate hour. Coordinate setups one at a time.",
+        );
+        return { status: "waiting" as const };
+      };
+      const preview = await actions.prepare({ action: "selection" });
+      if (!record(preview)) return refuse();
+      if (preview.status === "waiting") return waiting(preview.targetMs);
+      if (
+        !["selected", "preview"].includes(preview.status as string) ||
+        !["no", "yes", "unknown"].includes(preview.answer as string)
+      )
+        return refuse();
+      actions.output(
+        "Include every venue using this taxpayer's NIF, interrupted setups and recoveries. Arrange them one at a time.",
+      );
+      const answer =
+        preview.status === "selected" || preview.answer !== "no"
+          ? (preview.answer as string)
+          : (
+              await actions.prompt(
+                "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
+              )
+            )
+              .trim()
+              .toLowerCase();
+      if (!["no", "yes", "unknown"].includes(answer)) return { status: "cancelled" };
+      const selected = await actions.select({ answer });
+      if (record(selected) && selected.status === "waiting") return waiting(selected.targetMs);
+      if (!record(selected) || selected.status !== "selected") return refuse();
+      return { status: "ready", input: selected.input };
+    },
     async preparation(context, proposal) {
       contextBinding(context);
       if (!record(proposal)) return refuse("malformed_allocation");

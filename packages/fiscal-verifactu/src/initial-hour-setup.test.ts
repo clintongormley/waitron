@@ -291,3 +291,156 @@ it("configured setup cannot enrol or confirm legacy outside evidence", () => {
     }),
   );
 });
+
+function terminal(f: ReturnType<typeof configured>, answers: string[]) {
+  const output: string[] = [];
+  const prompts: string[] = [];
+  const actions = {
+    output: (line: string) => {
+      output.push(line);
+    },
+    prompt: async (question: string) => {
+      prompts.push(question);
+      return answers.shift() ?? "";
+    },
+    prepare: f.prepare,
+    select: async (proposal: unknown) =>
+      f.seat.request(context, await f.seat.candidates(context, proposal)),
+  };
+  return { actions, output, prompts };
+}
+
+it("the terminal's unavailable-clock confirmation prepares the exact complete hour input", async () => {
+  const f = configured();
+  const t = terminal(f, [" YES ", " NO "]);
+  const result = await f.seat.command!(context, t.actions);
+  expect(result).toEqual({ status: "ready", input });
+  expect(t.output.join("\n")).toContain("box: 2026-10-16T11:40:00.000Z");
+  expect(t.output.join("\n")).toContain("internet: unavailable");
+  expect(t.output.join("\n")).toContain("every venue using this taxpayer's NIF");
+  expect(t.prompts).toHaveLength(2);
+  expect(f.history).toHaveLength(1);
+});
+
+it.each(["yes", "unknown"])(
+  "terminal %s retains a wait without returning a usable input",
+  async (answer) => {
+    const f = configured();
+    const t = terminal(f, ["yes", answer]);
+    expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+    expect(t.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
+    expect(t.output.join("\n")).toContain("does not reserve a separate hour");
+    expect(f.history).toHaveLength(1);
+  },
+);
+
+it.each([[""], ["no"], ["yes", ""], ["yes", "maybe"]])(
+  "terminal cancellation %j records no hour",
+  async (...answers: string[]) => {
+    const f = configured();
+    const t = terminal(f, answers);
+    expect(await f.seat.command!(context, t.actions)).toEqual({ status: "cancelled" });
+    expect(f.history).toEqual([]);
+  },
+);
+
+it("the terminal keeps an already selected request without another comparison or declaration", async () => {
+  const f = configured();
+  const t = terminal(f, []);
+  expect(await f.seat.command!(fixture(), t.actions)).toEqual({ status: "ready", input });
+  expect(t.prompts).toEqual([]);
+  expect(t.output).toEqual([]);
+  expect(f.history).toEqual([]);
+});
+
+it("the terminal uses automatic agreement without a manual clock question", async () => {
+  const f = configured();
+  source.internet.mockImplementation(async () => {
+    const monotonic = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 500,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: monotonic,
+      monotonicFinishedMs: monotonic,
+    };
+  });
+  const t = terminal(f, ["no"]);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "ready", input });
+  expect(t.prompts).toHaveLength(1);
+  expect(t.output.join("\n")).not.toContain("wrong time");
+});
+
+it("the terminal waits when clock uncertainty spans the hour boundary", async () => {
+  const f = configured();
+  vi.setSystemTime(new Date("2026-10-16T11:59:59.900Z"));
+  source.internet.mockImplementation(async () => {
+    const monotonic = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 500,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: monotonic,
+      monotonicFinishedMs: monotonic,
+    };
+  });
+  const t = terminal(f, []);
+  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+  expect(t.prompts).toEqual([]);
+  expect(t.output.join("\n")).toContain("UTC-hour boundary");
+  expect(f.history).toEqual([]);
+});
+
+it.each([null, { status: "invalid" }])(
+  "the terminal rejects an unusable selection response %j",
+  async (selected) => {
+    const f = configured();
+    const t = terminal(f, ["yes", "no"]);
+    await expect(
+      f.seat.command!(context, { ...t.actions, select: async () => selected }),
+    ).rejects.toMatchObject(refusal);
+    expect(f.history).toEqual([]);
+  },
+);
+
+it("the terminal reconnects to the same wait without asking the taxpayer question again", async () => {
+  const f = configured();
+  expect(await f.seat.command!(context, terminal(f, ["yes", "unknown"]).actions)).toEqual({
+    status: "waiting",
+  });
+  const before = structuredClone(f.history);
+  const again = terminal(f, ["yes"]);
+  expect(await f.seat.command!(context, again.actions)).toEqual({ status: "waiting" });
+  expect(again.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+  expect(again.output.join("\n")).toContain("2026-10-16T12:00:00.000Z");
+  expect(f.history).toEqual(before);
+});
+
+it("the terminal retains the original unknown answer when its monotonic wait has finished", async () => {
+  let monotonic = 1;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+  try {
+    const f = configured();
+    expect(await f.seat.command!(context, terminal(f, ["yes", "unknown"]).actions)).toEqual({
+      status: "waiting",
+    });
+    monotonic += 1_200_000;
+    vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
+    const resumed = terminal(f, ["yes"]);
+    const result = await f.seat.command!(context, resumed.actions);
+    expect(result).toMatchObject({
+      status: "ready",
+      input: { allocation: { installationIdentity: "06RC" } },
+    });
+    expect(resumed.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+    expect(f.history).toHaveLength(2);
+  } finally {
+    clock.mockRestore();
+  }
+});

@@ -357,8 +357,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks moved with it, and the built command refuses a missing host-state directory before creating
   venue files. The shared runtime now also provides password-confirmed candidate selection,
   waiting responses and exact input import; the HTTP routes use these same operations.
-  New direct checks exercise the real hour selector and opaque module contracts. Complete wizard
-  and CLI claim, delivery and publication remain unfinished.
+  New direct checks exercise the real hour selector and opaque module contracts. The module-owned
+  terminal preparation stage now checks clock agreement, taxpayer-wide answers, password confirmation,
+  retained waits and exact input replay. Connecting it to the command's claim, delivery and publication
+  lifecycle remains open, alongside the complete wizard.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

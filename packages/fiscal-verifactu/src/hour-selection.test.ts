@@ -585,3 +585,59 @@ it("accepts only a matching clock confirmation from the trusted facts reader", a
   await expect(f.run()).rejects.toMatchObject(refusal("clock_unconfirmed"));
   expect(f.writes).toHaveLength(before);
 });
+
+it("keeps an unspent wait's target and monotonic progress when ownership changes", async () => {
+  const f = fixture();
+  f.facts = { ...f.facts, waitKey: "frozen-event" };
+  expect(await f.run("unknown")).toMatchObject({
+    status: "waiting",
+    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    remainingMs: 1_200_000,
+  });
+  f.at(instant + 300_000, 300_000);
+  f.facts = { ...f.facts, contextKey: "owner-generation-2" };
+  expect(await f.preview()).toMatchObject({
+    status: "waiting",
+    targetMs: Date.parse("2026-10-16T12:00:00Z"),
+    remainingMs: 900_000,
+  });
+  expect(f.writes).toHaveLength(1);
+  f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
+  expect(await f.run("unknown")).toMatchObject({
+    status: "selected",
+    identity: "06RC",
+    contextKey: "owner-generation-2",
+  });
+  f.facts = { ...f.facts, contextKey: "owner-generation-3" };
+  await expect(f.run("unknown")).rejects.toMatchObject(refusal("event_mismatch"));
+  expect(f.writes).toHaveLength(2);
+});
+
+it("a stable wait key does not permit changing the configured bases", async () => {
+  const f = fixture();
+  f.facts = { ...f.facts, waitKey: "frozen-event" };
+  await f.run("yes");
+  f.facts = {
+    ...f.facts,
+    contextKey: "owner-2",
+    bases: [{ code: "changed", purpose: "standard" }, ...bases.slice(1)],
+  };
+  await expect(f.preview()).rejects.toMatchObject(refusal("event_mismatch"));
+  expect(f.writes).toHaveLength(1);
+});
+
+it("a different frozen event cannot reconnect to another event's wait", async () => {
+  const f = fixture();
+  f.facts = { ...f.facts, waitKey: "frozen-event" };
+  await f.run("yes");
+  f.facts = { ...f.facts, waitKey: "changed-event" };
+  await expect(f.preview()).rejects.toMatchObject(refusal("event_mismatch"));
+  expect(f.writes).toHaveLength(1);
+});
+
+it("refuses an empty continuation key before recording a wait", async () => {
+  const f = fixture();
+  f.facts = { ...f.facts, waitKey: "" };
+  await expect(f.run("yes")).rejects.toMatchObject(refusal("event_mismatch"));
+  expect(f.writes).toEqual([]);
+});

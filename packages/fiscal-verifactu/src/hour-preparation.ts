@@ -154,6 +154,7 @@ export function createHostedHourPreparation(
         scope: { taxpayerNif: facts.context.taxId, environment: facts.context.environment },
         bases: facts.context.bases,
         contextKey: facts.contextKey,
+        ...(facts.continuationKey === undefined ? {} : { waitKey: facts.continuationKey }),
         history: [facts.localHistory as HourHistorySource],
         clock: clock.clock,
         ...(clock.confirmation === undefined ? {} : { confirmation: clock.confirmation }),

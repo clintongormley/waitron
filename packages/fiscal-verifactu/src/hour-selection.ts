@@ -21,6 +21,7 @@ export interface HourSelectionFacts {
   readonly scope: HourScope;
   readonly bases: readonly { readonly code: string; readonly purpose: string }[];
   readonly contextKey: string;
+  readonly waitKey?: string;
   readonly clock: HourClockDecision;
   readonly confirmation?: object;
   readonly history: readonly HourHistorySource[];
@@ -200,7 +201,12 @@ export function createHourSelection(options: {
       authorize();
       const fresh = await options.read({ ...request.binding });
       authorize();
-      if (!validScope(fresh.scope) || !validBases(fresh.bases) || !text(fresh.contextKey))
+      if (
+        !validScope(fresh.scope) ||
+        !validBases(fresh.bases) ||
+        !text(fresh.contextKey) ||
+        (fresh.waitKey !== undefined && !text(fresh.waitKey))
+      )
         return refuse("event_mismatch");
       if (fresh.history.length === 0) return refuse("history_invalid");
       const facts = {
@@ -250,7 +256,17 @@ export function createHourSelection(options: {
         contextKey: facts.contextKey,
         answer,
       };
-      if (sameEvent.some((entry) => fingerprint(entry) !== fingerprint(base)))
+      if (
+        sameEvent.some(
+          (entry) =>
+            fingerprint(entry) !==
+            fingerprint({
+              ...base,
+              contextKey:
+                entry.kind === "wait" ? (facts.waitKey ?? facts.contextKey) : facts.contextKey,
+            }),
+        )
+      )
         return refuse("event_mismatch");
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
       const permitted = canSelectHour(facts.clock, request.confirmation ?? facts.confirmation);
@@ -304,7 +320,12 @@ export function createHourSelection(options: {
       };
       if (answer !== "no") {
         if (wait === undefined) {
-          wait = { ...base, kind: "wait", targetMs: (Math.floor(now / HOUR_MS) + 1) * HOUR_MS };
+          wait = {
+            ...base,
+            contextKey: facts.waitKey ?? facts.contextKey,
+            kind: "wait",
+            targetMs: (Math.floor(now / HOUR_MS) + 1) * HOUR_MS,
+          };
           if (persist) await write(wait);
         }
         const timerKey = fingerprint(wait);
