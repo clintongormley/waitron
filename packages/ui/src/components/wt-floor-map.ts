@@ -490,10 +490,10 @@ export class WtFloorMap extends LitElement {
         if (id !== null) this.#send("wt-table-details", id);
       },
       holdDrag: this.#onHoldDrag,
-      holdDrop: (at) => {
+      holdDrop: () => {
         const drag = this.#drag;
         this.#endDrag();
-        if (drag !== null) this.#sendDrop(drag, at);
+        if (drag !== null) this.#sendDrop(drag);
       },
       cancel: () => this.#endDrag(),
       pan: ({ dx, dy }) => this.#moveView(1, 0, 0, dx, dy),
@@ -657,14 +657,18 @@ export class WtFloorMap extends LitElement {
     );
   }
 
-  #sendDrop(drag: Drag, at: GesturePoint): void {
+  /** Sends the table `data-drop-target` marks, not the one under the pointer at release: a refit
+   * since the last move can make the two differ. */
+  #sendDrop(drag: Drag): void {
+    const { targetId } = drag;
+    const marked = targetId !== null && this.#groupOf.get(targetId)?.members[0]!.id === targetId;
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
         detail: {
           tableId: drag.tableId,
           x: drag.x,
           y: drag.y,
-          targetId: this.#targetAt(at, drag.tableId),
+          targetId: marked ? targetId : null,
         },
         bubbles: true,
         composed: true,

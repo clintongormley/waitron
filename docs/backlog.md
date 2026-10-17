@@ -2239,11 +2239,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   move, nothing resizes or refits the map, during the drag or at release, and the held table can
   be drawn past the map's edge.
 
-- **After the till's map rescales mid-drag, the drawn table lags the finger** — left open by A766
-  (#1824); seen on the demo stack (`~/waitron-campaign-b/a766-shots`). The drop-target highlight
-  is worked out on each move and the drop's target again at release, so after a refit that
-  follows the last move a table can be highlighted while the release sends a plain move.
-
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 

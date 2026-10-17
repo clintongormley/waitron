@@ -231,6 +231,70 @@ it("a drag that grew the plan lands where it is drawn", async () => {
   expect(drops).toEqual([{ tableId: "t1", x: 14, y: 5, targetId: null }]);
 });
 
+const marked = (el: WtFloorMap) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-drop-target]")].map(
+    (b) => b.dataset["tableId"],
+  );
+
+it("a release after the plan refitted under a still finger drops on the table it marks", async () => {
+  const t2 = t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 });
+  const el = await growingMap([t1, t2]);
+  const from = centreOf(el, "t1");
+  const box = button(el, "t2").getBoundingClientRect();
+  const outer = el.getBoundingClientRect();
+  // Just inside T2's right edge, so the move takes T1 past the plan's edge.
+  const to = { x: box.right - outer.left - 6, y: from.y };
+  hold(el, from.x, from.y);
+  move(el, to.x, to.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(24 / 8);
+  expect(marked(el)).toEqual(["t2"]);
+  const client = at(el, to.x, to.y);
+  // The refit has moved T2 out from under the finger.
+  expect(
+    el.shadowRoot!.elementsFromPoint(client.clientX, client.clientY).includes(button(el, "t2")),
+  ).toBe(false);
+  up(el, to.x, to.y);
+  expect(drops).toEqual([{ tableId: "t1", x: 22, y: 5, targetId: "t2" }]);
+});
+
+it("a release after the marked table left the tables drops on no table", async () => {
+  const t2 = t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 });
+  const el = await growingMap([t1, t2]);
+  const from = centreOf(el, "t1");
+  const to = centreOf(el, "t2");
+  hold(el, from.x, from.y);
+  move(el, to.x, to.y);
+  await settled(el);
+  expect(marked(el)).toEqual(["t2"]);
+  el.tables = [t1];
+  await settled(el);
+  expect(marked(el)).toEqual([]);
+  up(el, to.x, to.y);
+  expect(drops).toEqual([expect.objectContaining({ tableId: "t1", targetId: null })]);
+});
+
+it("a release after the marked table joined a merge it does not head drops on no table", async () => {
+  const t2 = t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 });
+  const el = await growingMap([t1, t2]);
+  const from = centreOf(el, "t1");
+  const to = centreOf(el, "t2");
+  hold(el, from.x, from.y);
+  move(el, to.x, to.y);
+  await settled(el);
+  expect(marked(el)).toEqual(["t2"]);
+  // The merge is drawn as one button, headed by T0, the first label.
+  el.tables = [
+    t1,
+    { ...t2, joinId: "j" },
+    { ...t("t0", "T0", { x: 26, y: 5, width: 4, height: 4 }), joinId: "j" },
+  ];
+  await settled(el);
+  expect(marked(el)).toEqual([]);
+  up(el, to.x, to.y);
+  expect(drops).toEqual([expect.objectContaining({ tableId: "t1", targetId: null })]);
+});
+
 it("dragging the edge table inward does not shrink the plan during the drag", async () => {
   const el = await growingMap([t1, t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 })]);
   const before = heightOfHost(el);
