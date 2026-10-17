@@ -3,14 +3,18 @@ import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
-import { holidayDateName } from "../holiday-naming.js";
 import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
-import { monthNames, type MonthNames } from "./opening-hours-day.js";
+import { FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
+import {
+  chosenDepartment,
+  dayNameLines,
+  monthNames,
+  type MonthNames,
+} from "./opening-hours-day.js";
 import {
   dateAroundDay,
   format,
@@ -24,6 +28,7 @@ import { closedHatch } from "./period-colour-styles.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
+import { showPicker } from "./calendar-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -48,12 +53,8 @@ export interface CalendarDaysOpen {
   to: LocalDate;
 }
 
-/** The months the month read serves: its first week must start in year 0100 or later. */
-const FIRST_MONTH = "0100-02";
-const LAST_MONTH = "9998-12";
 /** A Monday, so its week names the columns Monday first. */
 const A_MONDAY = "2024-01-01";
-const ALL = "all";
 
 function stepMonth(month: string, by: number): string {
   const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + by;
@@ -350,13 +351,6 @@ export class OpeningHoursMonthView extends LitElement {
     return this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`);
   }
 
-  /** The chosen department's id when the read carries it, else "" for every department. */
-  #chosen(model: OpeningHoursMonth): string {
-    return model.days[0]!.departments.some((d) => d.departmentId === this.departmentId)
-      ? this.departmentId
-      : "";
-  }
-
   #rows(day: Day, chosen: string, { name }: MonthNames): Row[] {
     const place = placeOnDay(day);
     const placed = (ranges: readonly ServiceRange[]) =>
@@ -434,13 +428,9 @@ export class OpeningHoursMonthView extends LitElement {
     const rows = this.#rows(day, chosen, names);
     const none = this.#noOrders(rows);
     const place = this.#placer(day);
-    const holidayName = holidayDateName(day.holidays, day.date, "");
-    const special = day.specialDay?.name ?? "";
     const isToday = day.date === model.today;
-    const lines = [
-      ...(special && special !== holidayName ? [{ name: special, kind: "special" }] : []),
-      ...(holidayName ? [{ name: holidayName, kind: "holiday" }] : []),
-    ];
+    const named = dayNameLines(day);
+    const lines = [...named];
     if (day.closedAllDay)
       lines[0] = lines[0]
         ? { ...lines[0], name: format("hours.calendar.special_closed", { name: lines[0].name }) }
@@ -463,8 +453,7 @@ export class OpeningHoursMonthView extends LitElement {
     });
     const label = [
       formatLongDate(day.date),
-      special !== holidayName ? special : "",
-      holidayName,
+      ...named.map((line) => line.name),
       day.closedAllDay ? t("hours.closed") : "",
       isToday ? t("hours.today") : "",
       ...this.#describe(day, rows, names),
@@ -549,35 +538,12 @@ export class OpeningHoursMonthView extends LitElement {
     </td>`;
   }
 
-  #picker(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
-    const value = chosen || ALL;
-    const options = [
-      { value: ALL, label: t("opening.all_departments") },
-      ...model.days[0]!.departments.map((d) => ({
-        value: d.departmentId,
-        label: names.name(d.departmentId),
-      })),
-    ];
-    return html`<wt-combobox
-      name="departmentId"
-      label=${t("opening.show")}
-      search="never"
-      .options=${options}
-      .value=${value}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        const chooser = event.currentTarget as HTMLElementTagNameMap["wt-combobox"];
-        chooser.value = value;
-        const next = event.detail.value === ALL ? "" : event.detail.value;
-        if (next !== chosen) this.#emit("month-department-change", { departmentId: next });
-      }}
-    ></wt-combobox>`;
-  }
-
   override render() {
     const current = this.month || this.model?.month;
     if (!current) return nothing;
     const model = this.model?.month === current ? this.model : undefined;
+    const chosen = model ? chosenDepartment(model.days[0]!, this.departmentId) : "";
+    const names = monthNames(this.departments);
     const step = (by: number, test: string, label: Parameters<typeof t>[0], glyph: string) => {
       const target = stepMonth(current, by);
       const blocked = target < FIRST_MONTH || target > LAST_MONTH;
@@ -618,21 +584,25 @@ export class OpeningHoursMonthView extends LitElement {
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
         ${fixedTitle(html`<h2 data-test="month" aria-live="polite">${heading}</h2>`, titles)}
-        ${step(1, "next-month", "month.next", "›")} ${model ? this.#tools(model) : nothing}
+        ${step(1, "next-month", "month.next", "›")}
+        ${model ? this.#tools(model, chosen, names) : nothing}
       </div>
       ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
-      ${model ? this.#grid(model) : nothing}`;
+      ${model ? this.#grid(model, chosen, names) : nothing}`;
   }
 
-  #tools(model: OpeningHoursMonth) {
+  #tools(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     if (this.stationMode) return nothing;
-    return this.#picker(model, this.#chosen(model), monthNames(this.departments));
+    return showPicker({
+      model,
+      chosen,
+      names,
+      onDepartment: (departmentId) => this.#emit("month-department-change", { departmentId }),
+    });
   }
 
-  #grid(model: OpeningHoursMonth) {
-    const chosen = this.#chosen(model);
+  #grid(model: OpeningHoursMonth, chosen: string, names: MonthNames) {
     const tints = seasonTints(model.seasons);
-    const names = monthNames(this.departments);
     const stop =
       [this.#dayPicker.focusDate, model.today].find(
         (date): date is LocalDate => date != null && model.days.some((day) => day.date === date),

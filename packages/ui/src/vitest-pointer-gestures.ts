@@ -108,6 +108,31 @@ export const mouseDrag: BrowserCommand<[selectors: string[], options?: MouseDrag
   }
 };
 
+export interface MouseMoveOptions {
+  steps?: number;
+  /** Keeps the first centre's x for every later point, so the path runs straight up or down. */
+  keepX?: boolean;
+}
+
+/** Moves the real mouse, no button held, to the first element's centre (scrolled into view if it is
+ * not wholly on screen), then through each next centre in `steps` steps. Positions are read as the
+ * pointer reaches each. */
+export const mouseMove: BrowserCommand<[selectors: string[], options?: MouseMoveOptions]> = async (
+  context,
+  selectors,
+  { steps = MOVE_STEPS, keepX = false } = {},
+) => {
+  const ctx = context as unknown as PlaywrightCommandContext;
+  const [first, ...rest] = selectors;
+  if (first === undefined) throw new Error("mouseMove needs at least one selector");
+  const start = await centreOf(ctx, first, { reveal: true });
+  await ctx.page.mouse.move(start.x, start.y);
+  for (const selector of rest) {
+    const next = await centreOf(ctx, selector);
+    await ctx.page.mouse.move(keepX ? start.x : next.x, next.y, { steps });
+  }
+};
+
 export interface TouchGesture {
   at: string;
   holdMs?: number;
@@ -153,7 +178,7 @@ export const touchGesture: BrowserCommand<[gesture: TouchGesture]> = async (cont
 };
 
 /**
- * Spread into `test.browser.commands` by every config whose tests call `mouseDrag` or
- * `touchGesture`. Guard: `scripts/park-pointer-registered.test.ts`.
+ * Spread into `test.browser.commands` by every config whose tests call `mouseDrag`, `mouseMove`
+ * or `touchGesture`. Guard: `scripts/park-pointer-registered.test.ts`.
  */
-export const pointerGestureCommands = { mouseDrag, touchGesture };
+export const pointerGestureCommands = { mouseDrag, mouseMove, touchGesture };

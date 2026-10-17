@@ -176,7 +176,11 @@ const drawnView = (el: Screen) =>
           .shadowRoot!.querySelector("opening-hours-month")
           ?.shadowRoot?.querySelector("[data-test=month]")
       ? "month"
-      : undefined;
+      : el
+            .shadowRoot!.querySelector("opening-hours-week")
+            ?.shadowRoot?.querySelector("[data-test=week]")
+        ? "week"
+        : undefined;
 /** No Year / Month switch, in the screen or in either view. */
 const noViewSwitch = (el: Screen) =>
   [
@@ -317,7 +321,7 @@ it("keeps a zone through Back and Forward and clears it when choosing a departme
   }
 });
 it("ignores a zone belonging to another department", async () => {
-  history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
+  history.replaceState(null, "", "/manage/opening-hours/view/season/department/bar/zone/terrace");
   const el = await mount((async (path: string) =>
     path.includes("/opening-hours/year?")
       ? yearRead(2026)
@@ -1083,7 +1087,7 @@ describe("Year view", () => {
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe(t("day.loading"));
     expect(dayBox(el)!.line).toBe("");
-    expect(boxButtons(el)).toEqual(["Make a special day"]);
+    expect(boxButtons(el)).toEqual(["Make a special day", "Open this week"]);
     await expect.poll(() => held.length).toBe(1);
     const { monthModel } = await import("../testing/opening-hours-month-fixture.js");
     held[0]!.release(monthModel({ month: "2026-12" }));
@@ -1130,7 +1134,11 @@ describe("Year view", () => {
     await expect.poll(() => dayBox(el)?.error).toBe(t("opening.load_error"));
     expect(dayBox(el)!.message).toBe("");
     expect(dayBox(el)!.line).toBe("");
-    expect(boxButtons(el)).toEqual(["Edit special day", "Edit All year's standard week"]);
+    expect(boxButtons(el)).toEqual([
+      "Edit special day",
+      "Edit All year's standard week",
+      "Open this week",
+    ]);
   });
 
   it("fills the box once a reread of its failed month succeeds", async () => {
@@ -1263,11 +1271,11 @@ describe("Year view", () => {
     yearDate(await shownYear(view), "2026-10-13").click();
     await expect.poll(() => boxOpen(el)).toBe(true);
     expect(dayBox(el)!.message).toBe(t("day.loading"));
-    expect(boxButtons(el)).toEqual(["Show All year's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show All year's standard week", "Open this week"]);
     await expect.poll(() => held.length).toBe(1);
     held[0]!.release(await redated("2026-10"));
     await expect.poll(() => dayBox(el)?.line).not.toBe("");
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
     expect(boxButton(el, "special-edit")).toBeNull();
     expect(boxButton(el, "special-add")).toBeNull();
   });
@@ -1815,7 +1823,11 @@ describe("Month view", () => {
     expect(placed.bottom).toBeLessThanOrEqual(innerHeight);
     expect(box.heading).toBe(formatDate("2026-12-10"));
     expect(box.line).toBe("Winter standard hours");
-    expect(boxButtons(el)).toEqual(["Make a special day", "Edit Winter's standard week"]);
+    expect(boxButtons(el)).toEqual([
+      "Make a special day",
+      "Edit Winter's standard week",
+      "Open this week",
+    ]);
   });
 
   it("Edit Winter's standard week opens the season painter on that season, keeping the month's department", async () => {
@@ -1931,7 +1943,7 @@ describe("Month view", () => {
       withWinter,
     );
     await openBox(el, await shown(view));
-    expect(boxButtons(el)).toEqual(["Show Winter's standard week"]);
+    expect(boxButtons(el)).toEqual(["Show Winter's standard week", "Open this week"]);
     boxButton(el, "edit-week")!.click();
     await expect
       .poll(() => el.shadowRoot!.querySelector("season-painter")?.seasonId)
@@ -2258,14 +2270,18 @@ describe("Month view", () => {
   });
 });
 
-describe("no Day tab and no real week", () => {
-  it("offers no Real week switch and ignores a week in the address", async () => {
+describe("no Day tab, and a week query ignored", () => {
+  it("draws the week holding today for `/view/week?week=…`, ignoring the query", async () => {
+    vi.setSystemTime(new Date("2026-10-20T12:00:00Z"));
     history.replaceState(null, "", "/manage/opening-hours/view/week?week=2026-10-12");
-    const el = await mount();
-    await expect.poll(() => el.shadowRoot!.querySelector("season-painter")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/opening-hours/view/season/department/restaurant");
+    const el = await mount((async (path: string) =>
+      path.includes("/opening-hours/month?")
+        ? { days: [] }
+        : structuredClone(model())) as DashboardRequest);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("opening-hours-week")?.date)
+      .toBe("2026-10-20");
     expect(el.shadowRoot!.querySelector("[name=realWeek]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=previous-week]")).toBeNull();
     expect(location.search).toBe("?week=2026-10-12");
   });
 
@@ -2528,9 +2544,8 @@ describe("the Calendar's module views", () => {
     expect(el.shadowRoot!.querySelector("[data-test=stub-staffing]")).not.toBeNull();
   });
 
-  // The words the screen routes itself, in `followUrl` and `openCalendarView`, and the old `week`
-  // address that opens the season painter: the app refuses a module view by these names only while
-  // the kit's list holds every one.
+  // The words the screen routes itself, in `followUrl` and `openCalendarView`: the app refuses a
+  // module view by these names only while the kit's list holds every one.
   it.each(["year", "month", "season", "special-day", "date", "calendar", "hours", "week"])(
     "keeps its own view word %s in the kit's list of words no module view may take",
     (word) => {

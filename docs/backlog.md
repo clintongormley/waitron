@@ -1391,9 +1391,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
     under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
     stops scrolling, no number is selected, and no click or menu follows the lift.
-  - Add `to` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not list the
-    special-day address's new `to`. Nothing breaks, because that list keeps words it does not name,
-    but adding it changes an exact-match check in `navigation.test.ts`.
+  - Add `to` and `week` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not
+    list the special-day address's new `to` or the Week's `week`. Nothing breaks, because that list
+    keeps words it does not name, but adding them changes an exact-match check in
+    `navigation.test.ts`.
   - Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
     `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
     themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
@@ -1403,9 +1404,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
   ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **A722. A Week view in the Calendar (owner, 2026-10-15).** One real week with each block's period
-  and times, a full label on a sliver, one day at a time on a phone; Show also lists prep stations.
-  Reached from the day box's "Open this week", with no Week button (A759). [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+- **A722. The Calendar's Week: one day at a time on a phone, and prep stations in Show (owner,
+  2026-10-15).** On a phone the Week shows one day at a time, each row as its times in words over a
+  thin bar; Show lists prep stations in the Week and the Month. Left open by A722 Part 1, #1823.
+  [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying

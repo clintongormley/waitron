@@ -25,6 +25,8 @@ import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
 import "./opening-hours-month.js";
 import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
+import "./opening-hours-week.js";
+import { weekDates, weekInRange, weekMonth } from "./week-rows.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -48,7 +50,7 @@ import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 
-type View = "year" | "month";
+type View = "year" | "month" | "week";
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`,
@@ -152,22 +154,29 @@ export class OpeningHoursScreen extends LitElement {
   private knownSpecialDaysRead = {};
   /** The address's month, or "" for the venue's current one. */
   @state() private requestedMonth = "";
+  /** The address's `week` date, or "" for the venue's today. */
+  @state() private requestedWeekDate = "";
   @state() private monthModel?: OpeningHoursMonth;
   @state() private monthReadError = "";
   private readonly monthWatch = new MonthWatch();
-  /** The Year's or the Month's date whose day box is drawn. */
   @state() private dayBox?: CalendarDayOpen;
   /** The month read behind the Year's day box, held while that box is open. */
   @state() private boxMonth?: OpeningHoursMonth;
   private readonly boxMonthWatch = new MonthWatch();
   @state() private boxMonthError = "";
-  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's year link held focus
-   *  as it opened the Year, and the Year draws its month names only once its read arrives. Only
-   *  the address change numbered `navigation` keeps it; `armed` once that change has been followed. */
+  /** The `YYYY-MM` whose name in the Year takes focus once drawn: the Month's or the Week's year
+   *  link held focus as it opened the Year, and the Year draws its month names only once its read
+   *  arrives. Only the address change numbered `navigation` keeps it; `armed` once that change has
+   *  been followed. */
   private focusHandOff?: { month: string; navigation: number; armed: boolean };
   private readonly endFocusHandOff = () => {
     this.focusHandOff = undefined;
     document.removeEventListener("focusin", this.endFocusHandOff, true);
+  };
+  private weekFocus?: { date: LocalDate; navigation: number };
+  private readonly endWeekFocus = () => {
+    this.weekFocus = undefined;
+    document.removeEventListener("focusin", this.endWeekFocus, true);
   };
   /** Counts the addresses followed, so a hand-off can tell its own navigation from any other. */
   private navigations = 0;
@@ -209,6 +218,7 @@ export class OpeningHoursScreen extends LitElement {
         to: "to",
         year: "year",
         month: "month",
+        week: "week",
         window: "window",
       },
     },
@@ -228,6 +238,7 @@ export class OpeningHoursScreen extends LitElement {
       (windowId === "seasons" ||
         requestedView === "year" ||
         requestedView === "month" ||
+        requestedView === "week" ||
         this.calendarView(requestedView))
     ) {
       this.replaceAddress(this.calendarUrl(current.pathname));
@@ -301,7 +312,7 @@ export class OpeningHoursScreen extends LitElement {
     underlying.pathname = contentPath;
     const href = underlying.href;
     const shown: View | undefined =
-      view === "year" || view === "month"
+      view === "year" || view === "month" || view === "week"
         ? view
         : view === "calendar" || (view === null && !this.namesWeek(new URL(href)))
           ? "year"
@@ -318,6 +329,8 @@ export class OpeningHoursScreen extends LitElement {
     this.departmentId = named.departmentId;
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
+    const week = this.url.read("week");
+    this.requestedWeekDate = isLocalDate(week) && weekInRange(week) ? week : "";
   }
   private calendarView(id: string | null) {
     return this.calendar?.views.find(({ view }) => view.id === id);
@@ -423,11 +436,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
-    const month = this.moduleView
-      ? this.moduleView.params["month"]
-      : this.view === "month"
-        ? this.shownMonth()
-        : "";
+    const month = this.moduleView ? this.moduleView.params["month"] : this.readMonth();
     this.openCalendarView(id, month ? { month } : {});
   }
   private static readonly ViewHost = class implements CalendarViewHost {
@@ -523,6 +532,7 @@ export class OpeningHoursScreen extends LitElement {
     this.boxMonthWatch.stop();
     this.afterDayBox = undefined;
     this.endFocusHandOff();
+    this.endWeekFocus();
     this.generation = {};
     super.disconnectedCallback();
   }
@@ -547,6 +557,7 @@ export class OpeningHoursScreen extends LitElement {
     )
       void this.placeDayBox();
     if (this.focusHandOff?.armed) void this.focusPendingMonth();
+    if (this.weekFocus) void this.focusPendingWeekDay();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     // A new list without the shown view returns to Opening hours, replacing the address naming it.
@@ -604,8 +615,20 @@ export class OpeningHoursScreen extends LitElement {
     const today = businessDateToday(this.model);
     return (today || browserToday()).slice(0, 7);
   }
+  private shownWeekDate() {
+    if (!this.model || this.view !== "week") return "";
+    return this.requestedWeekDate || businessDateToday(this.model) || browserToday();
+  }
+  /** The month read the shown view draws from: the Month's month, or the Week's Monday's. */
+  private readMonth() {
+    if (this.view === "week") {
+      const date = this.shownWeekDate();
+      return date ? weekMonth(date) : "";
+    }
+    return this.shownMonth();
+  }
   private watchMonth() {
-    this.monthWatch.follow(this.shownMonth(), (month) => {
+    this.monthWatch.follow(this.readMonth(), (month) => {
       this.monthReadError = "";
       if (!month) {
         this.monthModel = undefined;
@@ -707,7 +730,13 @@ export class OpeningHoursScreen extends LitElement {
   };
   private openMonth(month: string) {
     return Promise.resolve(
-      this.url.write({ dashboard: "opening-hours", view: "month", month, year: null }),
+      this.url.write({
+        dashboard: "opening-hours",
+        view: "month",
+        month,
+        year: null,
+        week: null,
+      }),
     ).then(() => this.followUrl());
   }
   private openYear(year: string) {
@@ -717,6 +746,7 @@ export class OpeningHoursScreen extends LitElement {
         view: "year",
         year: year.padStart(4, "0"),
         month: null,
+        week: null,
         date: null,
         to: null,
       }),
@@ -993,8 +1023,9 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async placeDayBox() {
     const open = this.dayBox;
-    await this.shadowRoot?.querySelector<LitElement>("opening-hours-month, opening-hours-year")
-      ?.updateComplete;
+    await this.shadowRoot?.querySelector<LitElement>(
+      "opening-hours-month, opening-hours-year, opening-hours-week",
+    )?.updateComplete;
     const drawn = this.shadowRoot?.querySelector("calendar-day-box");
     await Promise.all(
       [drawn, ...(drawn?.children ?? [])].map(
@@ -1027,11 +1058,12 @@ export class OpeningHoursScreen extends LitElement {
   private dayBoxContent(date: LocalDate) {
     const year = this.view === "year" ? this.yearModel : undefined;
     const read = year ? this.boxMonth : this.monthModel;
-    // The Month's own alert already announces a failed reread of its month.
+    // Over the Month and the Week, the screen's month-read-error alert already announces a failed
+    // reread.
     const error = year ? this.boxMonthError : "";
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
-      // The department picker is the Month's: the Year lists every department.
+      // The Month and the Week pick a department; the Year lists every one.
       const departmentId = year ? "" : this.departmentId;
       return {
         shown: openingHoursDay(day, read.seasons, this.model!.departments, departmentId),
@@ -1104,7 +1136,66 @@ export class OpeningHoursScreen extends LitElement {
             >`
           : nothing
       }
+      ${
+        this.view === "year" || this.view === "month"
+          ? html`<wt-button
+              variant="secondary"
+              data-test="open-week"
+              @click=${act(() => this.openWeekFromBox(open.date))}
+              >${t("day.open_week")}</wt-button
+            >`
+          : nothing
+      }
     </calendar-day-box>`;
+  }
+  /** Focus left on the page by the box's Open this week goes to the date's name in the Week, which
+   *  draws its names only once its month read arrives. */
+  private openWeekFromBox(date: LocalDate) {
+    this.endWeekFocus();
+    const pending = { date, navigation: this.navigations + 1 };
+    this.weekFocus = pending;
+    document.addEventListener("focusin", this.endWeekFocus, true);
+    void Promise.resolve(
+      this.url.write({
+        dashboard: "opening-hours",
+        view: "week",
+        week: date,
+        month: null,
+        year: null,
+        date: null,
+        to: null,
+      }),
+    ).then(() => {
+      this.followUrl();
+      if (this.weekFocus === pending && this.navigations !== pending.navigation)
+        this.endWeekFocus();
+      else void this.focusPendingWeekDay();
+    });
+  }
+  private async focusPendingWeekDay() {
+    const pending = this.weekFocus;
+    if (!pending || this.navigations < pending.navigation) return;
+    // The view the box sat over still holds focus until the Week replaces it.
+    await this.updateComplete;
+    if (this.weekFocus !== pending) return;
+    if (
+      this.navigations !== pending.navigation ||
+      !focusLost() ||
+      this.view !== "week" ||
+      this.moduleView ||
+      this.overlaid()
+    ) {
+      this.endWeekFocus();
+      return;
+    }
+    const week = this.shadowRoot?.querySelector("opening-hours-week");
+    await week?.updateComplete;
+    const name = week?.shadowRoot?.querySelector<HTMLElement>(
+      `[data-test=day-name][data-date="${pending.date}"]`,
+    );
+    if (this.weekFocus !== pending || !name) return;
+    this.endWeekFocus();
+    if (this.isConnected && focusLost()) name.focus();
   }
   private heldFocus(view: EventTarget | null, selector: string) {
     if (!(view instanceof LitElement) || this.shadowRoot?.activeElement !== view) return null;
@@ -1114,9 +1205,12 @@ export class OpeningHoursScreen extends LitElement {
   /** A month name pressed while it held focus leaves focus on the Month's year link, since the
    *  name goes with the Year it sat in. */
   private openMonthFromYear(event: CustomEvent<{ date: string }>) {
+    this.openMonthHolding(event, "[data-test=month-name]", event.detail.date.slice(0, 7));
+  }
+  private openMonthHolding(event: Event, selector: string, monthToOpen: string) {
     event.stopPropagation();
-    const held = this.heldFocus(event.currentTarget, "[data-test=month-name]");
-    const opened = this.openMonth(event.detail.date.slice(0, 7));
+    const held = this.heldFocus(event.currentTarget, selector);
+    const opened = this.openMonth(monthToOpen);
     if (!held) return;
     void opened.then(async () => {
       await this.updateComplete;
@@ -1127,11 +1221,15 @@ export class OpeningHoursScreen extends LitElement {
     });
   }
   private openYearFromMonth(event: CustomEvent<{ year: number }>) {
+    this.openYearHolding(event, "[data-test=month-year]", this.shownMonth());
+  }
+  /** `month` is the one whose name in the Year takes focus; it must lie in the year opened. */
+  private openYearHolding(event: CustomEvent<{ year: number }>, selector: string, month: string) {
     event.stopPropagation();
-    const held = this.heldFocus(event.currentTarget, "[data-test=month-year]");
+    const held = this.heldFocus(event.currentTarget, selector);
     this.endFocusHandOff();
     const handOff = held && {
-      month: this.shownMonth(),
+      month,
       navigation: this.navigations + 1,
       armed: false,
     };
@@ -1174,11 +1272,12 @@ export class OpeningHoursScreen extends LitElement {
     this.endFocusHandOff();
     if (this.isConnected && focusLost()) name.focus();
   }
+  private writeChanges(changes: Record<string, string | null>) {
+    void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
+      this.followUrl(),
+    );
+  }
   private month() {
-    const write = (changes: Record<string, string | null>) =>
-      void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
-        this.followUrl(),
-      );
     return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
       <opening-hours-month
         .model=${this.monthModel}
@@ -1192,13 +1291,50 @@ export class OpeningHoursScreen extends LitElement {
         @month-year-open=${this.openYearFromMonth}
         @month-change=${(event: CustomEvent<{ month: string }>) => {
           event.stopPropagation();
-          write({ view: "month", month: event.detail.month, date: null, to: null });
+          this.writeChanges({ view: "month", month: event.detail.month, date: null, to: null });
         }}
         @month-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
           event.stopPropagation();
-          write({ department: event.detail.departmentId || null, zone: null });
+          this.writeChanges({ department: event.detail.departmentId || null, zone: null });
         }}
       ></opening-hours-month>`;
+  }
+  /** A drawn day box would otherwise be shown again over the view a title link opens. */
+  private dropDayBox() {
+    const box = this.dayBox;
+    this.dayBox = undefined;
+    this.dayBoxPlaced = undefined;
+    this.afterDayBox = undefined;
+    if (box) this.shadowRoot?.querySelector("calendar-day-box")?.hide();
+  }
+  private week() {
+    return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
+      <opening-hours-week
+        .model=${this.monthModel}
+        .date=${this.shownWeekDate()}
+        .departmentId=${this.departmentId}
+        .departments=${this.model!.departments}
+        @calendar-day-open=${this.openDayBox}
+        @week-month-open=${(event: CustomEvent<{ month: string }>) => {
+          this.dropDayBox();
+          this.openMonthHolding(event, "[data-test=week-month]", event.detail.month);
+        }}
+        @week-year-open=${(event: CustomEvent<{ year: number }>) => {
+          this.dropDayBox();
+          const year = String(event.detail.year).padStart(4, "0");
+          const first =
+            weekDates(this.shownWeekDate()).find((date) => date.startsWith(year)) ?? `${year}-01`;
+          this.openYearHolding(event, "[data-test=week-year]", first.slice(0, 7));
+        }}
+        @week-change=${(event: CustomEvent<{ date: string }>) => {
+          event.stopPropagation();
+          this.writeChanges({ view: "week", week: event.detail.date });
+        }}
+        @week-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
+          event.stopPropagation();
+          this.writeChanges({ department: event.detail.departmentId || null, zone: null });
+        }}
+      ></opening-hours-week>`;
   }
   override render() {
     return html`${this.calendarHeading()}
@@ -1237,9 +1373,13 @@ export class OpeningHoursScreen extends LitElement {
                   }}
                   @year-month-open=${this.openMonthFromYear}
                 ></opening-hours-year>`
-            : this.shownMonth()
-              ? this.month()
-              : nothing
+            : this.view === "week"
+              ? this.shownWeekDate()
+                ? this.week()
+                : nothing
+              : this.shownMonth()
+                ? this.month()
+                : nothing
     }
     ${this.dayBoxTemplate()}
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}

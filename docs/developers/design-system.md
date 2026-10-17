@@ -3768,7 +3768,7 @@ station closures and service extensions do not change them. A default station sh
 station" and no month. A failed read shows "This station's times could not be loaded. It will be
 tried again." above the month until that read succeeds again. The month is not kept in the
 address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
-from the Year or the month.
+from the Year, the Month or the Week.
 
 ### Tabbed management pages
 
@@ -3947,18 +3947,20 @@ an active station's drag grip stays before its name. The Routes tab's All catego
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
-Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year and
-the Month (`opening-hours-screen.ts`): a month's name in the Year opens that month, and the Month's
-year, drawn as a link, opens that year's Year, keeping the department and the rest of the address.
+Department opening hours belong to `/manage/opening-hours`. No switch picks between the Year, the
+Month and the Week (`opening-hours-screen.ts`): a month's name in the Year opens that month, and the
+Month's year, drawn as a link, opens that year's Year, keeping the department and the rest of the
+address; the Week opens from the day box's Open this week (Week and Day box below).
 The page opens on Year when its address names no view and
 no department, zone, season or `?station=`, and on an old `/view/calendar` address
-(`opening-hours-screen.ts`). A `week=` in the address is ignored. `/view/year/year/<yyyy>` picks a
+(`opening-hours-screen.ts`). A `?week=` query is ignored. `/view/year/year/<yyyy>` picks a
 year; `/department/<id>` selects the department.
 The page is titled Calendar (Calendario). When another module adds a view the person may read
 (`calendarViews`, conventions-ui.md), a switch beside the title offers Opening hours, then each
-view in `order`; with none, no switch is drawn. A chosen view replaces the Year or the Month at
+view in `order`; with none, no switch is drawn. A chosen view replaces the Year, the Month or the Week at
 `/view/<id>`, followed by that view's own `<key>/<value>` pairs, and choosing a view from Opening
-hours' month carries that month into its address. The Staffing view
+hours' Month carries that month into its address, and from the Week the month of the shown week's
+Monday. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
 covering a month; each day lists the areas with a bar whose width is the area's share of the
 month's largest number, and the number. ‹ › step months, its title keeps one width as the Month's
@@ -4003,9 +4005,8 @@ The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view
 it was opened from, or the Year on a direct load, and closing it returns there. An unknown season
 gives the current one, a missing department the first active one, and a zone the department does
-not have the department's own week. Every other week address opens the painter in its place:
-`/view/week`, with or without a department, a station or All departments, an address with no view
-naming a season, a department, a zone or `?station=`, and an unknown view. The
+not have the department's own week. Every other week address opens the painter in its place: an
+address with no view naming a season, a department, a zone or `?station=`, and an unknown view. The
 special-day painter (Forms above) has its own address too: `/view/special-day` for a new day,
 with `/date/<yyyy-mm-dd>` for a new day holding that date, `/date/<yyyy-mm-dd>/to/<yyyy-mm-dd>`
 for a new day holding every date from the first to the second (the editor on a picked run; `to` is
@@ -4052,6 +4053,29 @@ Opening hours' Year.
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
   today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
   the dates are plain and nothing is picked.
+- **Week.** `/view/week[/department/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws the
+  Monday-to-Sunday week holding the `week` date, which need not be a Monday. A missing, malformed
+  or out-of-range date shows the week holding the venue's today, and the address is left as
+  written. An old `/view/week` bookmark opens the Week, not the season painter. Each day sits under
+  its name, with its special day's and public holiday's names, and has one row per active
+  department, or, with one department picked in Show, a row for it and one per zone. ‹ › step a
+  week. In the title ("28 Dec 2026 – 3 Jan 2027") each month name opens that Month and each year
+  that Year, keeping the department; the title keeps one width, as wide as the longest title of a
+  week starting in 2026 in any interface language (`fixed-title.ts`). Time runs left to right from
+  each day's changeover, every day on one scale, the week's longest day, so a shorter day's track
+  ends early. The ruler above the days is labelled every two hours from Monday's changeover, so a
+  week whose days have different changeovers is labelled by Monday's; where the track is too narrow
+  for that it is labelled every four, six, eight, twelve or twenty-four hours, and the label before
+  the last is left out when the last, kept inside the track, would come within `--wt-space-2` of it. A department's blocks carry
+  their period's colour, name and times; a zone's piece that only follows its department is faded
+  and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
+  labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
+  all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
+  when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
+  hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can
+  still reach the tip on a path the bridge does not cover, and a click elsewhere, Escape, a scroll or a change of
+  the Week's size hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
+  is the one button per day and opens the day box (below). Nothing is painted in the Week.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
@@ -4070,21 +4094,24 @@ Opening hours' Year.
   opens the editor.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
-  (above), and A722's Week is to open it too (backlog A722). One box at a time floats below the date that
+  (above), and so does the Week, from a day's name. One box at a time floats below the date that
   opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
   resize leaves none of the date inside the window and every box around it that clips its contents.
   In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
-  them; then each department's hours followed by its zones' (in the Month, with one department
-  picked, that department alone). A zone that follows its department reads "as <department>"; a
+  them; then each department's hours followed by its zones' (in the Month and the Week, with one
+  department picked, that department alone). A zone that follows its department reads "as <department>"; a
   zone with hours of its own lists them and its closed times, in bold as a department is. Opened
   from the Year, it reads its date's month and says Loading… until that read answers; when its
   month's read fails it says so, beside any hours it already shows. Make a
   special day (Edit special day on a special-day date) opens the special-day painter (Forms above,
   hosted by `opening-hours-screen.ts`) on a new day holding the date, pre-filled when the date is a
   public holiday, or on the stored day; Edit <season>'s standard week opens the season painter. A
-  viewer's box has no special-day button and offers Show <season>'s standard week, read-only. A
+  viewer's box has no special-day button and offers Show <season>'s standard week, read-only. In
+  the Year and the Month, a viewer's box included, the last button is Open this week: it opens the
+  Week on that date's week and puts focus on the date's name, unless focus has moved elsewhere by
+  then. A box opened from the Week does not offer it. A
   button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
   the date when focus was inside. A special day is deleted from its painter, which asks first.
 - **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start

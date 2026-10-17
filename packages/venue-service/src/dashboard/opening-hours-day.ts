@@ -1,7 +1,7 @@
 import { holidayDateName } from "../holiday-naming.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import type { ClosedRange, ServiceRange } from "../service-day.js";
-import { zoneOwnHours } from "../zone-own-hours.js";
+import type { ServiceRange } from "../service-day.js";
+import { zoneOwnHours, type ZoneOwnHours } from "../zone-own-hours.js";
 import type { DayBoxRow } from "./calendar-day-box.js";
 import { format } from "./hours-view.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
@@ -36,6 +36,27 @@ export function monthNames(departments: readonly MonthDepartment[]): MonthNames 
   };
 }
 
+/** `departmentId` when `day`'s read carries it, else "" for every department. */
+export function chosenDepartment(day: Day, departmentId: string): string {
+  return day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
+}
+
+export interface DayNameLine {
+  name: string;
+  kind: OpeningHoursDay["nameKind"];
+}
+
+/** A date's names as the Month and the Week write them: its special day's, left out when it is the
+ *  holiday's, then its holiday's. */
+export function dayNameLines(day: Day): DayNameLine[] {
+  const holiday = holidayDateName(day.holidays, day.date, "");
+  const special = day.specialDay?.name ?? "";
+  return [
+    ...(special && special !== holiday ? [{ name: special, kind: "special" as const }] : []),
+    ...(holiday ? [{ name: holiday, kind: "holiday" as const }] : []),
+  ];
+}
+
 /** What the day box shows for one date of a month read. `departmentId` "", or one the date's read
  *  does not carry, lists every department, each followed by its zones; a department id the read
  *  carries lists that department and its zones. */
@@ -56,38 +77,21 @@ export function openingHoursDay(
       ? format("day.standard", { season })
       : "";
   const names = monthNames(departments);
-  const list = (ranges: readonly ServiceRange[]) =>
-    ranges.map((range) =>
-      format("month.range", {
-        name: names.period(range.periodId).name,
-        start: range.startsAt,
-        end: range.endsAt,
-      }).trim(),
-    );
-  const closed = (pieces: readonly ClosedRange[]) =>
-    pieces.map(({ startsAt, endsAt }) =>
-      format("day.closed_range", { start: startsAt, end: endsAt }),
-    );
-  const chosen = day.departments.some((d) => d.departmentId === departmentId) ? departmentId : "";
+  const chosen = chosenDepartment(day, departmentId);
   const rows = day.departments
     .filter((d) => !chosen || d.departmentId === chosen)
-    .flatMap((read): DayBoxRow[] => {
-      const name = names.name(read.departmentId);
+    .flatMap((read) => {
+      const department = departmentRow(read, names);
       return [
-        {
-          name,
-          text: read.ranges.length ? list(read.ranges).join(" · ") : t("hours.closed"),
-          strong: true,
-        },
-        ...read.zones.map((zone) => {
-          const own = zoneOwnHours(read.ranges, zone.closed, day);
-          const row = { name: names.name(zone.zoneId) };
-          if (!own.closed.length) return { ...row, text: format("day.as_department", { name }) };
-          const text = own.ranges.length
-            ? [...list(own.ranges), ...closed(own.closed)].join(" · ")
-            : t("hours.closed");
-          return { ...row, text, strong: true };
-        }),
+        department,
+        ...read.zones.map((zone) =>
+          zoneRow(
+            zoneOwnHours(read.ranges, zone.closed, day),
+            names.name(zone.zoneId),
+            department.name,
+            names,
+          ),
+        ),
       ];
     });
   return {
@@ -96,4 +100,44 @@ export function openingHoursDay(
     line,
     rows,
   };
+}
+
+/** The day box's row for a department of a date's read. */
+export function departmentRow(read: Day["departments"][number], names: MonthNames): DayBoxRow {
+  return {
+    name: names.name(read.departmentId),
+    text: read.ranges.length
+      ? read.ranges.map((range) => serviceRangeText(range, names)).join(" · ")
+      : t("hours.closed"),
+    strong: true,
+  };
+}
+
+/** The day box's row for the zone `name` of the department named `department`, from the zone's
+ *  own hours. */
+export function zoneRow(
+  own: ZoneOwnHours,
+  name: string,
+  department: string,
+  names: MonthNames,
+): DayBoxRow {
+  if (!own.closed.length) return { name, text: format("day.as_department", { name: department }) };
+  const text = own.ranges.length
+    ? [
+        ...own.ranges.map((range) => serviceRangeText(range, names)),
+        ...own.closed.map(({ startsAt, endsAt }) =>
+          format("day.closed_range", { start: startsAt, end: endsAt }),
+        ),
+      ].join(" · ")
+    : t("hours.closed");
+  return { name, text, strong: true };
+}
+
+/** A range in words, "Dinner 20:00–23:00". */
+export function serviceRangeText(range: ServiceRange, names: MonthNames): string {
+  return format("month.range", {
+    name: names.period(range.periodId).name,
+    start: range.startsAt,
+    end: range.endsAt,
+  }).trim();
 }

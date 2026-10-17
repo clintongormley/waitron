@@ -1,6 +1,14 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { dateAroundDay, format, formatDate, formatLongDate, formatWeekday } from "./hours-view.js";
+import {
+  dateAroundDay,
+  format,
+  formatDate,
+  formatDayHeading,
+  formatLongDate,
+  formatWeekTitleParts,
+  formatWeekday,
+} from "./hours-view.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -72,5 +80,40 @@ it("splits a date at its day number in each language's own order", () => {
   expect(dateAroundDay("2026-12-08", { day: "numeric", month: "long" })).toEqual({
     before: "",
     after: " de diciembre",
+  });
+});
+
+describe("formatWeekTitleParts and formatDayHeading", () => {
+  const joined = (parts: { text: string }[]) => parts.map((p) => p.text).join("");
+
+  it("names a week within one month", () => {
+    const parts = formatWeekTitleParts("2026-10-12", "2026-10-18", "en");
+    expect(joined(parts)).toBe("12 – 18 Oct 2026");
+    expect(parts.filter((p) => p.month)).toEqual([{ text: "Oct", month: "2026-10" }]);
+    expect(parts.filter((p) => p.year)).toEqual([{ text: "2026", year: 2026 }]);
+    expect(joined(formatWeekTitleParts("2026-10-12", "2026-10-18", "es"))).toBe("12–18 oct 2026");
+  });
+
+  it("names a week across two months and two years", () => {
+    const parts = formatWeekTitleParts("2026-09-28", "2026-10-04", "en");
+    expect(joined(parts)).toBe("28 Sept – 4 Oct 2026");
+    expect(parts.flatMap((p) => p.month ?? [])).toEqual(["2026-09", "2026-10"]);
+    const years = formatWeekTitleParts("2026-12-28", "2027-01-03", "es");
+    expect(joined(years)).toBe("28 dic 2026 – 3 ene 2027");
+    expect(years.flatMap((p) => p.year ?? [])).toEqual([2026, 2027]);
+    expect(years.flatMap((p) => p.month ?? [])).toEqual(["2026-12", "2027-01"]);
+  });
+
+  it("uses the dashboard's language when none is given", () => {
+    setLocale("es");
+    try {
+      expect(joined(formatWeekTitleParts("2026-10-12", "2026-10-18"))).toBe("12–18 oct 2026");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("heads a day with its weekday, day and short month", () => {
+    expect(formatDayHeading("2026-10-12")).toBe("Mon 12 Oct");
   });
 });

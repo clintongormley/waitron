@@ -694,7 +694,7 @@ Whether a date falls on a day is decided in one place, `specialDateIn` and `shar
 name (`special_day_dates.holiday_name`) and, after its first year, falls where the shipped calendar
 puts that name, or nowhere (see [public-holidays.md](public-holidays.md)). `saveSpecialDay` in the
 same file is the writer behind the API; a configuration import inserts a bundle's rows directly
-(below). In the dashboard, the special-day painter, opened from the Year or the month, writes a special
+(below). In the dashboard, the special-day painter, opened from the Year, the Month or the Week, writes a special
 day's name, dates, Every year and the paint of each department or zone and date it changed, in one
 request (see [design-system.md](design-system.md), "Forms").
 
