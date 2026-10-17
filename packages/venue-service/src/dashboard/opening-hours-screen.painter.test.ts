@@ -1043,6 +1043,79 @@ describe("the Calendar window address", () => {
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
     expect(drawnView(el)).toBe("year");
   });
+  it("a painter's station address keeps its Periods window and drops the station query", async () => {
+    const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+    const pushed = vi.spyOn(history, "pushState");
+    const el = await mount(`${base}/window/periods?station=s1`);
+    await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+    expect(location.search).toBe("");
+    expect(pushed).not.toHaveBeenCalled();
+    await periodsWindow(el);
+    const painter = await shownPainter(el);
+    expect([painter.seasonId, painter.departmentId]).toEqual(["winter", "d1"]);
+  });
+  it("draws Periods as the wide window, where Seasons is compact", async () => {
+    const el = await mount("/manage/opening-hours/view/year/window/periods");
+    const { modal } = await periodsWindow(el);
+    expect(modal.hasAttribute("size")).toBe(false);
+    expect(modal.size).toBeUndefined();
+    history.replaceState(null, "", "/manage/opening-hours/view/year/window/seasons");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=seasons]"))
+      .not.toBeNull();
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=calendar-window][data-window=seasons]")!
+        .getAttribute("size"),
+    ).toBe("compact");
+  });
+  it("moving from Seasons to Periods asks about the season draft and keeps the painter's paint", async () => {
+    const base = "/manage/opening-hours/view/season/season/winter/department/d1";
+    history.replaceState(null, "", base);
+    let app: PainterApp | undefined;
+    const guard = screenGuard(() => app);
+    try {
+      const mounted = await mountApp();
+      app = mounted.app;
+      const el = mounted.el;
+      const painter = await shownPainter(el);
+      await drag(painter, "3", 120, 240);
+      const before = painter.edited();
+      await guard.write(`${base}/window/seasons`);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window] season-chips"))
+        .not.toBeNull();
+      const chips = el.shadowRoot!.querySelector<HTMLElementTagNameMap["season-chips"]>(
+        "[data-test=calendar-window] season-chips",
+      )!;
+      await expect
+        .poll(() => chips.shadowRoot!.querySelector("[data-test=season-edit]"))
+        .not.toBeNull();
+      chips.shadowRoot!.querySelector<HTMLElement>("[data-test=season-edit]")!.click();
+      await chips.updateComplete;
+      const dialog = chips.shadowRoot!.querySelector("season-dialog")!;
+      await dialog.updateComplete;
+      dialog
+        .shadowRoot!.querySelector<HTMLElement>("[name=name]")!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed spring" } }));
+      await dialog.updateComplete;
+      const keeping = guard.write(`${base}/window/periods`);
+      await choose(app, "keep");
+      await keeping;
+      expect(location.pathname).toBe(`${base}/window/seasons`);
+      const discarding = guard.write(`${base}/window/periods`);
+      await choose(app, "discard");
+      await discarding;
+      expect(location.pathname).toBe(`${base}/window/periods`);
+      await periodsWindow(el);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.edited()).toEqual(before);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+    } finally {
+      guard.dispose();
+    }
+  });
 });
 
 it("closing the Seasons window protects its own season draft while retaining the painter draft", async () => {
