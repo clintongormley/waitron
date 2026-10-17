@@ -14,7 +14,7 @@ import {
   staffingBlocks,
   staffRoles,
 } from "./schema/staffing.js";
-import type { CalendarColour, StaffRole } from "./staffing-types.js";
+import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
 
 type Cfg = { locationId: string };
@@ -97,6 +97,32 @@ async function readStaffRoles(
 /** The location's staff roles in position order, with who holds each. */
 export function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRole[]> {
   return readStaffRoles(tx, cfg, null);
+}
+
+/** The location's staff roles as `listStaffRoles` gives them, each with its holders' names. */
+export async function listStaffRolesWithHolderNames(
+  tx: Transaction,
+  cfg: Cfg,
+): Promise<ListedStaffRole[]> {
+  const staffRoleList = await listStaffRoles(tx, cfg);
+  const compare = createLabelComparator();
+  const holders = (
+    await tx
+      .select({
+        staffRoleId: personStaffRoles.staffRoleId,
+        personId: persons.id,
+        name: persons.displayName,
+      })
+      .from(personStaffRoles)
+      .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
+      .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
+      .where(eq(staffRoles.locationId, cfg.locationId))
+      .orderBy(asc(persons.id))
+  ).sort((a, b) => compare(a.name, b.name));
+  return staffRoleList.map((staffRole) => ({
+    ...staffRole,
+    holderNames: holders.filter((h) => h.staffRoleId === staffRole.id).map((h) => h.name),
+  }));
 }
 
 /** Adds a staff role after the location's last one. */

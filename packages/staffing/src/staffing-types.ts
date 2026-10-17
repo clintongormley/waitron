@@ -18,6 +18,11 @@ export interface StaffRole {
   holderIds: string[];
 }
 
+export interface ListedStaffRole extends StaffRole {
+  /** Every holder's display name, whatever their status, in name order. */
+  holderNames: string[];
+}
+
 /** A period's opening or sending range, drawn behind the staffing paint. */
 export interface StaffingGuideRange {
   periodId: string;

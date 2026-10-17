@@ -1,7 +1,11 @@
 import { vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
-import type { SpecialDayStaffing, SpecialDayStaffingEdit, StaffRole } from "../staffing-types.js";
+import type {
+  ListedStaffRole,
+  SpecialDayStaffing,
+  SpecialDayStaffingEdit,
+} from "../staffing-types.js";
 import { StaffingApi } from "../dashboard/client.js";
 import { STAFF_ROLES, headChef, sous, LUNCH_GUIDE, BAR_GUIDE } from "./season-staffing-fixture.js";
 import { bar, kitchen, restaurant } from "./staffing-month-fixture.js";
@@ -41,7 +45,7 @@ export function specialDayStaffing(): SpecialDayStaffing {
 export interface SpecialDayApiOptions {
   read?: (specialDayId: string) => Promise<SpecialDayStaffing>;
   save?: (specialDayId: string, edits: SpecialDayStaffingEdit[]) => Promise<void>;
-  staffRoles?: () => Promise<StaffRole[]>;
+  staffRoles?: () => Promise<ListedStaffRole[]>;
 }
 
 /** A StaffingApi serving a special day's staffing, the staff roles and an empty list of people. */

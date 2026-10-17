@@ -3,16 +3,16 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 import type { StaffingBlock } from "../slots.js";
 import type {
   SeasonStaffing,
+  ListedStaffRole,
   SeasonStaffingEdit,
-  StaffRole,
   StaffingGuideRange,
 } from "../staffing-types.js";
 import { StaffingApi } from "../dashboard/client.js";
 import { bar, kitchen, restaurant } from "./staffing-month-fixture.js";
 
-export const STAFF_ROLES: StaffRole[] = [
-  { id: "hc", name: "Head chef", colour: "purple", position: 0, holderIds: [] },
-  { id: "sc", name: "Sous chef", colour: "green", position: 1, holderIds: [] },
+export const STAFF_ROLES: ListedStaffRole[] = [
+  { id: "hc", name: "Head chef", colour: "purple", position: 0, holderIds: [], holderNames: [] },
+  { id: "sc", name: "Sous chef", colour: "green", position: 1, holderIds: [], holderNames: [] },
 ];
 export const headChef: StaffingBlock = {
   staffRoleId: "hc",
@@ -79,7 +79,7 @@ export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
 export interface SeasonApiOptions {
   read?: (seasonId: string) => Promise<SeasonStaffing>;
   save?: (seasonId: string, edits: SeasonStaffingEdit[]) => Promise<void>;
-  staffRoles?: () => Promise<StaffRole[]>;
+  staffRoles?: () => Promise<ListedStaffRole[]>;
 }
 
 /** A StaffingApi serving a season's staffing, the staff roles and an empty list of people. */

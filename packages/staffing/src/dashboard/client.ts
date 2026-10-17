@@ -7,6 +7,7 @@ import type {
   RotaShiftInput,
   RotaShiftPatch,
   CalendarColour,
+  ListedStaffRole,
   SeasonStaffing,
   SeasonStaffingEdit,
   SpecialDayStaffing,
@@ -20,6 +21,7 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 export type {
   AreaRef,
   CalendarColour,
+  ListedStaffRole,
   SeasonStaffing,
   SeasonStaffingEdit,
   SpecialDayStaffing,
@@ -57,7 +59,7 @@ export class StaffingApi {
   /** Keeps `apply` fed with the staff roles in position order; resolves after the first read. */
   watchStaffRoles(
     queries: QueryController,
-    apply: (staffRoles: StaffRole[]) => void | Promise<void>,
+    apply: (staffRoles: ListedStaffRole[]) => void | Promise<void>,
   ): Promise<void> {
     return queries.watch(
       "staff-roles",
@@ -66,7 +68,7 @@ export class StaffingApi {
         dependencies: QUERY_DEPENDENCIES["staff-roles"].map((type) => ({ type })),
         read: async () =>
           (
-            await this.request<{ staffRoles: StaffRole[] }>(BASE, "GET", undefined, {
+            await this.request<{ staffRoles: ListedStaffRole[] }>(BASE, "GET", undefined, {
               passive: true,
             })
           ).staffRoles,
