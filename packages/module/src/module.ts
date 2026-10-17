@@ -617,7 +617,6 @@ export interface FloorPlanSetSummary {
 }
 
 export interface DueFloorLayout {
-  /** Null: the zone is in no active department, or its department has no set. */
   setId: string | null;
   setName: string | null;
   /** The due run's occurrence key; null on a day with no period, or when the clock names no day. */

@@ -201,14 +201,31 @@ describe("which floor layout is due", () => {
     });
   });
 
-  it("is the default with no occurrence when the clock names no day", async () => {
+  it("is the default with no occurrence, and reads no day, when the clock names no day", async () => {
     const f = await fixture();
-    const layouts = await due(f, [f.zones.dining], new Date(Number.NaN));
-    expect(layouts.get(f.zones.dining)).toEqual({
-      setId: f.standard,
-      setName: "Standard",
-      occurrence: null,
-      periodName: null,
+    await run(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const layouts = await VENUE_SERVICE.dueFloorLayouts(
+          tx,
+          f.cfg,
+          [{ zoneId: f.zones.dining, recordedOccurrence: null }],
+          new Date(Number.NaN),
+        );
+        expect(layouts.get(f.zones.dining)).toEqual({
+          setId: f.standard,
+          setName: "Standard",
+          occurrence: null,
+          periodName: null,
+        });
+        const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+        expect(sql.filter((q) => q.includes('from "menu_period_staff_menus"'))).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { DueFloorLayout } from "@waitron/module";
 import { readLocationClock } from "@waitron/reporting";
@@ -148,8 +148,7 @@ export async function dueFloorLayouts(
       isDefault: departmentFloorPlanSets.isDefault,
     })
     .from(departmentFloorPlanSets)
-    .where(inArray(departmentFloorPlanSets.departmentId, departmentIds))
-    .orderBy(asc(departmentFloorPlanSets.setId));
+    .where(inArray(departmentFloorPlanSets.departmentId, departmentIds));
   const withSets = departmentIds.filter((id) => sets.some((set) => set.departmentId === id));
   if (withSets.length === 0) return result;
   const periodSets = await tx
@@ -164,11 +163,12 @@ export async function dueFloorLayouts(
   for (const departmentId of withSets) {
     const own = sets.filter((set) => set.departmentId === departmentId);
     const fallback = own.find((set) => set.isDefault);
-    const day = await departmentDay(tx, cfg, departmentId, moment, clock);
+    const day =
+      today === null ? null : await departmentDay(tx, cfg, departmentId, today.moment, clock);
     for (const { zoneId, recordedOccurrence } of zones) {
       if (departmentOf.get(zoneId) !== departmentId) continue;
       const run =
-        today === null
+        today === null || day === null
           ? null
           : dueRun({
               day: {
@@ -190,7 +190,7 @@ export async function dueFloorLayouts(
         occurrence:
           run === null ? null : occurrenceKey(departmentId, today!.moment.businessDay, run),
         periodName:
-          run === null ? null : day.periods.find((period) => period.id === run.periodId)!.name,
+          run === null ? null : day!.periods.find((period) => period.id === run.periodId)!.name,
       });
     }
   }
