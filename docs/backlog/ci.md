@@ -309,6 +309,12 @@ this load with the bound lifted, and whether the case can be made cheaper.
 
 ### A668-5 normal-push recurrence, 2026-10-16
 
+2026-10-17: A770 (#1816, `d2f9bc3de08c2a3c0d2284a03efcc342319809a1`) reproduced
+paused-thread failures in the step-watch cases and changed their budgets, retaining their phase
+checks. Lane G resumed A668-5 after rebasing onto that change. The installer, menu-upgrade and
+mutation-fixture failures below retain their separate investigations. The original observations
+follow unchanged.
+
 At branch head `73e539c90f6ed27c62bda0c36485d47e134c04ab`, the normal pre-push
 `pnpm vitest run --coverage` failed two of 6,780 cases in 264.73 seconds:
 
