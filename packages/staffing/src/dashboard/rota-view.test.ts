@@ -577,16 +577,28 @@ describe("the Rota's bar", () => {
     await el.updateComplete;
     return el;
   }
-  it("the bar holds the week, Show, then the state, the counts, the labour count and Publish, in that order, on one row at 1440 while the week is being changed", async () => {
-    const el = await barAt(1440, changing());
+  // The bar's one-row width depends on the fonts that draw it, and CI's are wider than macOS's.
+  async function wordsOf(api: StaffingApi) {
+    const el = await mount(api, "4000px");
+    await vi.waitFor(() => expect(q(el, "[data-test=labour-count]")).toBeTruthy());
+    await el.updateComplete;
+    const bar = q(el, "[data-test=bar]")!;
+    const gap = parseFloat(getComputedStyle(bar).columnGap);
+    const words = box(show(el)).right - box(bar).left + gap + box(q(el, ".end")!).width;
+    el.parentElement!.remove();
+    return Math.ceil(words);
+  }
+  it("the bar holds the week, Show, then the state, the counts, the labour count and Publish, in that order, on one row when the view is wider than its words while the week is being changed", async () => {
+    const room = 72;
+    const el = await barAt((await wordsOf(changing())) + room, changing());
     const { left, right } = barParts(el);
     expect(right).toHaveLength(7);
     oneRow([...left, ...right]);
     inOrder([...left, ...right]);
-    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(72);
+    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(room);
   });
-  it("at 1280 a week being changed moves the whole right-hand group below the week and Show, right-aligned, in order, overlapping nothing", async () => {
-    const el = await barAt(1280, changing());
+  it("a week being changed in a view narrower than its words moves the whole right-hand group below the week and Show, right-aligned, in order, overlapping nothing", async () => {
+    const el = await barAt((await wordsOf(changing())) - 64, changing());
     const { left, right } = barParts(el);
     oneRow(left);
     oneRow(right);
@@ -607,13 +619,14 @@ describe("the Rota's bar", () => {
     expect(Math.abs(bar.right - box(right.at(-1)!).right)).toBeLessThanOrEqual(1);
     expect(box(right[0]!).left - bar.left).toBeGreaterThanOrEqual(64);
   });
-  it("at 1280 an ordinary draft with counts and a labour count fits on one row", async () => {
-    const el = await barAt(1280, ordinary());
+  it("an ordinary draft with counts and a labour count fits on one row in a view wider than its words", async () => {
+    const room = 64;
+    const el = await barAt((await wordsOf(ordinary())) + room, ordinary());
     const { left, right } = barParts(el);
     expect(q(el, "[data-test=still-published]")).toBeNull();
     oneRow([...left, ...right]);
     inOrder([...left, ...right]);
-    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(64);
+    expect(box(right[0]!).left - box(show(el)).right).toBeGreaterThanOrEqual(room);
   });
   it("the labour count leads with a warning sign and is drawn in the danger colour", async () => {
     const el = await mount(withWarnings().api);
