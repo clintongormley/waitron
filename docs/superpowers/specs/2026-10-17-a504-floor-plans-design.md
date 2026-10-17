@@ -23,9 +23,10 @@ added after a fresh-context review of this revision.
    `floor_today_zones`, gains three facts: the set its today's plan was last made from, that
    layout's revision at the time, and the **period occurrence** it was made for: the period and the
    start of that run on that day, since one period can run several times a day (none on a day with
-   no period). The occurrence is kept as the opaque key venue-service already makes for a running
-   period (`periodOccurrenceKey`, `packages/venue-service/src/menu-timetable.ts:459-461`), with no
-   foreign key, because a core table cannot name a module's row. A key whose period has been
+   no period). The occurrence is kept in the format of the key venue-service already makes for a
+   running period (`periodOccurrenceKey`, `packages/venue-service/src/menu-timetable.ts:459-462`),
+   built the same way for a next or last occurrence that is not running, for which that field is
+   null today (`menu-timetable.test.ts:3662`), with no foreign key, because a core table cannot name a module's row. A key whose period has been
    deleted, or that has no run starting at that time today, counts as "the recorded occurrence is
    gone". Four resets write the record: the day's first, the dashboard's first save of a zone
    (decision 19), Update layout and Reset to … plan. Nothing stores which layout is due
@@ -47,7 +48,7 @@ added after a fresh-context review of this revision.
    service day so a run past midnight counts as late. A period reopened after its end keeps its
    run's start, because "keep open" starts at the run's painted end and joins it
    (`scheduledEnd`, `packages/venue-service/src/keep-open.ts:58-62`, `126`; `serviceRuns`,
-   `menu-timetable.ts:326-335`), so it never comes back once a later occurrence is recorded. When
+   `menu-timetable.ts:327-336`), so it never comes back once a later occurrence is recorded. When
    the recorded occurrence is gone, this rule does not apply (section 7.1).
 5. **The banner and its words.** One line above the map or the list, under the zone tabs:
    "**{period} layout is ready.** [Update layout]" ("El plano de {period} está listo.
@@ -63,20 +64,22 @@ added after a fresh-context review of this revision.
    with a new code, `floor_today.layout_changed`; the till reads again and the banner shows what is
    due (section 7.2).
 7. **What Update layout does to each table** is answer 8(a)'s rule: free tables go to their new
-   places at once, free 4 and 5 become 4+5, tables taken off for today stay off, and free tables
+   places at once, unless a new place is blocked (section 7.5), free 4 and 5 become 4+5, tables taken off for today stay off, and free tables
    pushed together today come apart. A table with guests, or that needs clearing, waits
    (section 7.3).
 8. **"Needs moving" is a column.** `floor_reset_tables` gains `ready_to_move`. The catch-up is told
-   whether it runs inside a reset: inside one, it places free tables as today; on a later read, a
+   whether it runs inside a reset: inside one, it places free tables as today, unless a new place
+   is blocked (section 7.5); on a later read, a
    pending row whose table no longer waits and whose change moves the table is not placed but
    marked `ready_to_move`, and the table shows "Needs moving" until "Mark moved". Rows waiting only
    for a name, removals of deleted tables, and seats-only changes still apply by themselves. A
-   table with guests that has no today's row yet is seeded from the recorded set's layout, so it
-   appears where it stood, and waits (section 7.4).
+   table with guests that has no today's row yet is seeded from the new layout, as today
+   (section 7.4).
 9. **The same for every reset.** Reset to … plan, the day's first reset and the dashboard's first
    save use "Needs moving" too, in place of today's silent catch-up. So once a reset has run, a
    table that waited never jumps on the map by itself. Tables that are free when a reset runs do
-   move at once, including at the day's first reset, which nobody presses (section 7.4).
+   move at once, unless a new place is blocked (section 7.5), including at the day's first reset,
+   which nobody presses (section 7.4).
 10. **A table that needs clearing waits.** It is a new waiting reason beside today's, at every
     reset, and so is a split group with a part that needs clearing; the reset no longer clears
     "needs clearing" on split-off tables it takes back. Such a table shows "Needs clearing" first
@@ -397,8 +400,8 @@ The owner's worked example, which this section turns into rules:
 
 **Occurrences.** One period can be painted several times in a day: a venue-service test paints one
 period 12:00–14:00, 18:00–20:00 and 22:00–02:00 and reads three different occurrence keys
-(`packages/venue-service/src/menu-timetable.test.ts:3597-3640`). The key is the department, the
-business day, the period and the start of the run (`menu-timetable.ts:459-461`). This design works in
+(`packages/venue-service/src/menu-timetable.test.ts:3597-3647`). The key is the department, the
+business day, the period and the start of the run (`menu-timetable.ts:459-462`). This design works in
 occurrences, not periods.
 
 **The record.** `floor_today_zones` gains `set_id`, `layout_revision` and `occurrence`: the layout
@@ -421,7 +424,7 @@ business day than the recorded occurrence's run, comparing minutes of the servic
 (`rangeSpan`, `packages/venue-service/src/service-day.ts:33`), so a run past midnight counts as late.
 A period reopened after its end keeps its run's start: "keep open" starts at the run's painted end
 (`scheduledEnd`, `packages/venue-service/src/keep-open.ts:58-62`, used at line 126), and runs that
-touch join into one (`serviceRuns`, `menu-timetable.ts:326-335`). **When the recorded occurrence is
+touch join into one (`serviceRuns`, `menu-timetable.ts:327-336`). **When the recorded occurrence is
 gone** (its period deleted, or no run of it starting at that time today after a repaint) the
 exception does not apply, and the banner's words treat it as a different occurrence.
 
@@ -532,13 +535,17 @@ part 2a); the till reads again and the waiter tries again.
   (line 375). A table with guests and no today's row yet is given one from the new plan at once
   (`plan.seed`, `floor-reset-plan.ts:87`; `floor-today-store.ts:383-385`).
 - **What changes.** The catch-up is told whether it runs inside a reset. Inside one, it places
-  free tables as today. On a later read, a pending, unplaced row whose table no longer waits, and
+  free tables as today, unless a new place is blocked (section 7.5). On a later read, a pending, unplaced row whose table no longer waits, and
   whose change moves the table (a new place, into store, onto the map, joined or apart), is not
   placed but marked with a new column, `floor_reset_tables.ready_to_move`. A row waiting only for a
   name, a removal of a table deleted from the plan, and a change of seats alone apply as today.
-  A seeded table with guests is given its place in the recorded set's layout when that set still
-  exists, so it appears where it stood, and its row waits; when the set is gone it is seeded from
-  the new layout, as today.
+  A table with guests and no today's row is still seeded from the new layout, as today: it was on
+  no map today, so there is no old place to keep.
+- **The catch-up's other callers.** Reset table (`apps/server/src/floor-today-reset-table.ts:141`)
+  and the split group change (`apps/server/src/floor-today-split-group.ts:192`) also run the zone's
+  catch-up, after writing their own table's row. By default both behave as a later read: they mark
+  other waiting tables ready to move rather than placing them, because a staff action on one table
+  should not move others silently.
 - **Why a column.** Seating and the tables read must know the state cheaply, as `needs_clearing`
   is a column the seating check reads (`dining_tables.needs_clearing_since`, checked at
   `apps/server/src/working-order.ts:1407-1409`). Working it out on every read from holders and
@@ -572,13 +579,16 @@ Reset table's own check, `refusePlaceTaken`, compares a place with every table o
 refuse a free table whose new place belongs to another free table moving at the same time. So:
 
 - **Every reset** (all four of section 7.6) works out where each table will stand after it. A table
-  that will not move this time (it waits, or it is taken off and stays off) keeps its place. A free
+  that will not move this time because it waits keeps its place. Only tables drawn on today's map
+  can block: a table taken off for today, or a part out of service inside a joined table, blocks
+  nothing, as Reset table's check leaves both out (`floor-today-reset-table.ts:181-183`). A free
   table whose new place overlaps a table that keeps its place, by the same overlap test
   (`standsIn`, `apps/server/src/joined-split-layout.ts:152`), keeps its own place too, and its row
   is marked ready to move. This repeats until a pass changes nothing, so a chain is caught: if table
   2 keeps its place because 3 waits there, table 1, whose new place is where 2 stands, keeps its
   place as well. Tables that all move never block each other.
-- **Mark moved** is refused while a table that does not itself need moving stands in the new place,
+- **Mark moved** is refused while a table drawn on today's map that does not itself need moving
+  stands in the new place,
   with a new code `table.new_place_taken` and the words "{other} is standing in {table}'s new place.
   Move {other} first." ("{other} ocupa el nuevo sitio de {table}. Mueve {other} primero."). Reset
   table's own words, "{table} is standing in {joined}'s place. Move {table}, then Reset table
@@ -708,7 +718,7 @@ A sketch for the plan to settle, not a final schema.
   a refusing case each.
 - New codes: `floor_today.layout_changed` { zoneId } (Update layout offered a layout no longer
   due), `table.needs_moving` { tableId } (seating a table that needs moving), `table.new_place_taken`
-  { tableId, standingId } (Mark moved), and `floor_plan_set.zone_outside` { setId, zoneId } (the
+  { tableId, standingId } (Mark moved), and `floor_plan_set.invalid` { field: "zoneId" } (the
   editor's address, or a save, names a zone not in the set's department; the server refuses it).
 - **What the till reads.** Each zone on `GET /api/zones` gains the recorded set's name (for Reset's
   label, absent when the set is deleted) and, when a different layout is due, the banner's facts.
@@ -816,9 +826,14 @@ New: on a phone, List and Map go into the ⋮ menu (section 7.7).
 - **Not measured:** how soon a till shows the banner. "About 15 seconds" rests on reading the
   menu-checking timer's `onTick`; no till was run across a period boundary. The cost of working out
   each department's due layout on every zones read is not measured.
-- **Read, not run:** that "keep open" starts at the run's painted end and joins the run
-  (`keep-open.ts:58-62`, `126`; `menu-timetable.ts:326-335`), which the exception of section 7.1
-  relies on.
+- **Run:** that a stored "keep open" starting at a run's painted end joins the run and keeps its
+  start. `pnpm exec vitest run src/menu-timetable.test.ts -t "distinguishes repeated days and runs"`
+  in `packages/venue-service` at `4933c60eb` passed (1 passed, 116 skipped); in it, a lunch run
+  12:00–14:00 with a keep open stored from 14:00 to 15:00 reads at 14:30 with the 12:00 run's key
+  (`menu-timetable.test.ts:3663-3672`).
+- **Read, not run:** that keeping a period open makes the stored keep open start at the run's
+  painted end (`scheduledEnd`, `keep-open.ts:58-62`, used at `126`); the test above stores the row
+  directly. The exception of section 7.1 relies on both.
 - **Expected, not tested:** that `planReset`'s waiting rules, with needing clearing added, carry
   over to Update layout onto another set's layout; that the exception of section 7.1 is enough for
   answer 7(a) in every order of keep open and Update layout; and that the repeated place check of
