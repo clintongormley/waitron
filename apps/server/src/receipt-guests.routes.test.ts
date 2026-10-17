@@ -33,6 +33,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
+import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { addTabRound, createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -72,6 +73,8 @@ interface Venue {
   tableItemId: string;
   /** A free product's offer at 0,00 € in the counter zone. */
   freeItemId: string;
+  /** The free product's offer in the tables zone. */
+  tableFreeItemId: string;
 }
 
 async function venue(db: Database): Promise<Venue> {
@@ -123,6 +126,7 @@ async function venue(db: Database): Promise<Venue> {
     tablesZone,
     tableItemId,
     freeItemId,
+    tableFreeItemId,
   } = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Tapas" });
@@ -143,7 +147,10 @@ async function venue(db: Database): Promise<Venue> {
       vatClass: "general",
     });
     const offers = await offerProducts(tx, cfg, { productIds: [product.id, free.id] });
-    const tables = await offerProducts(tx, cfg, { zone: "tables", productIds: [product.id] });
+    const tables = await offerProducts(tx, cfg, {
+      zone: "tables",
+      productIds: [product.id, free.id],
+    });
     const [staff] = await tx
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
@@ -180,6 +187,7 @@ async function venue(db: Database): Promise<Venue> {
       tablesZone: tables.zoneId,
       tableItemId: tables.offerFor(product.id),
       freeItemId: offers.offerFor(free.id),
+      tableFreeItemId: tables.offerFor(free.id),
     };
   });
   const backend = new VerifactuBackend({
@@ -226,6 +234,7 @@ async function venue(db: Database): Promise<Venue> {
     tablesZone,
     tableItemId,
     freeItemId,
+    tableFreeItemId,
   };
 }
 
@@ -348,13 +357,22 @@ describe("/api/sales keeps the guests its receipt prints", () => {
 
 /** A party of 4 seated on one bill holding eight at 1,50 € (12,00 €), never sent. */
 async function partyOfFourBill(v: Venue): Promise<string> {
+  return partyBill(v, 4);
+}
+
+/** A party of `guestCount` on one bill holding `quantity` of `menuItemId` (eight at 1,50 € unless named), never sent. */
+async function partyBill(
+  v: Venue,
+  guestCount: number,
+  { menuItemId = v.tableItemId, quantity = "8" } = {},
+): Promise<string> {
   return withTransaction(v.db, async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, {
       label: `Mesa ${randomUUID().slice(0, 8)}`,
       zoneId: v.tablesZone,
     });
-    const { tabId } = await seatTable(tx, v.cfg, { tableId, guestCount: 4, operatorId: v.staffId });
-    await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.tableItemId, quantity: "8" }]);
+    const { tabId } = await seatTable(tx, v.cfg, { tableId, guestCount, operatorId: v.staffId });
+    await addTabRound(tx, v.cfg, tabId, [{ menuItemId, quantity }]);
     return tabId;
   });
 }
@@ -585,4 +603,82 @@ describe("/api/pay keeps the guests its receipt prints", () => {
       expect(writtenTables(suite.db)).toEqual(before);
     },
   );
+});
+
+/** A card captured for the bill at 12,00 € whose answer never reached the till: a payment with no sale. */
+async function lostCapture(v: Venue, id: string): Promise<void> {
+  await withTransaction(v.db, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: v.cfg.origin,
+      workingOrderId: id,
+      provider: "simulator",
+      paymentRef: `sim-ref-${randomUUID()}`,
+      amount: decimal("12.00"),
+      settledAt: new Date(),
+      externalRef: `sim-lost-${randomUUID()}`,
+    }),
+  );
+}
+
+/** Files a captured payment as the recovery loop and the manager's resolve do: no till request, no guests. */
+async function recover(v: Venue, id: string) {
+  return payWorkingOrderIntegratedOrchestration(
+    { db: v.db, backend: v.backend, clock, provider: new SimulatorPaymentProvider(v.db) },
+    v.cfg,
+    { id, lines: [] },
+  );
+}
+
+describe("a recovery with no till request stores the default guests", () => {
+  it("stores a party's 4 when it files a captured card", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyOfFourBill(v);
+    await lostCapture(v, billId);
+    const out = await recover(v, billId);
+    expect(out.outcome).toBe("captured");
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+  });
+});
+
+describe("a party above 999 guests still pays, its receipt printing no guests", () => {
+  it("files a reader payment that sends no guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 1000);
+    const pay = await payByReader(v, { lines: [] }, { id: billId });
+    expect(pay.status).toBe(200);
+    expect((pay.body as { outcome: string }).outcome).toBe("captured");
+    expect(await salesOf(suite.db, billId)).toHaveLength(1);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+  });
+
+  it("files a card captured before a lost response when no till request sends guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 1000);
+    await lostCapture(v, billId);
+    const out = await recover(v, billId);
+    expect(out.outcome).toBe("captured");
+    expect(await salesOf(suite.db, billId)).toHaveLength(1);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+  });
+
+  it("files a cash sale on /api/sales that sends no guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 1000);
+    const sale = await sell(v, { lines: [] }, { id: billId });
+    expect(sale.status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+  });
+});
+
+describe("/api/pay with nothing to charge on a placed party bill", () => {
+  it("stores the chosen count", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 4, { menuItemId: v.tableFreeItemId, quantity: "1" });
+    await placeOrder({ db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
+    const pay = await payByReader(v, { lines: [], guests: 2 }, { id: billId });
+    expect(pay.status).toBe(200);
+    expect((pay.body as { outcome: string }).outcome).toBe("captured");
+    expect(await paymentsOf(suite.db, billId)).toEqual([]);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+  });
 });

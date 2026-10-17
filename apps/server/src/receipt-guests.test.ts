@@ -379,6 +379,14 @@ describe("the guests row written beside a recorded sale", () => {
     expect(await storedRows(saleId)).toEqual([{ guests: 4 }]);
   });
 
+  it("writes no line when the request sent none and the party's count is above 999", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Fila 1000"), 1000);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    const saleId = await saleWithNoRow(tabId);
+    await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
+    expect(await storedRows(saleId)).toEqual([{ guests: null }]);
+  });
+
   it("writes no line by default for a party that split a dish onto a second bill", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Fila 4"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);

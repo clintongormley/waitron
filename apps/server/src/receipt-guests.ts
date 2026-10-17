@@ -14,7 +14,7 @@ export function readGuestsChoice(value: unknown): GuestsChoice {
   throw invalid("guests");
 }
 
-/** Writes the row of a sale just recorded: the choice, or the default read now when there is none. Skips a full invoice. */
+/** Writes the row of a sale just recorded: the choice, or the default read now when there is none. Skips a full invoice. The choice must already have passed {@link readGuestsChoice}. */
 export async function recordReceiptGuests(
   tx: Transaction,
   saleId: string,
@@ -25,8 +25,14 @@ export async function recordReceiptGuests(
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale!.counterpartyTaxId !== null) return;
-  const guests = choice === undefined ? ((await readReceiptGuests(tx, saleId)) ?? null) : choice;
+  const guests = choice === undefined ? await storableDefault(tx, saleId) : choice;
   await tx.insert(saleReceiptGuests).values({ saleId, guests });
+}
+
+/** The default as the row can hold it: a party's count above 999, which the parties table allows, stores no line. */
+async function storableDefault(tx: Transaction, saleId: string): Promise<number | null> {
+  const guests = await readReceiptGuests(tx, saleId);
+  return guests !== undefined && isValidGuestCount(guests) ? guests : null;
 }
 
 /** What a paper receipt of the sale prints: a simplified sale's stored row when it has one, else {@link readReceiptGuests}. */
