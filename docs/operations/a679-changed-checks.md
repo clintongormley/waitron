@@ -806,3 +806,38 @@ provisioning run passes 1,132 cases, but its unchanged coverage gate fails at 92
 node-row and preserved-product-row assertions; the final focused group includes them.
 Ten installed omission controls fail at the intended boundaries and pass after restoration.
 The protected fiscal pair passes its 20 unedited cases. This is a local checkpoint, not branch readiness.
+
+## Shared import service qualification (2026-10-17)
+
+The shared staging and transfer services need checks in provisioning's own package, where their
+coverage is measured. Three new suites cover encrypted staging after a key rotation, incomplete
+publication, tampering, refused replacement, declaration and schema boundaries, dependent rows
+left behind, fresh identifiers, BLOB bytes and ordinary text. Kitchen checks cover inherited
+thresholds, invalid inputs, inactive stations and missing defaults. Their database fixtures use
+the real opener and migrations; the kitchen and import targets use the non-filing GB regime.
+
+Existing assertions and fixtures changed: **none**. Production source, SQL, schema, coverage
+configuration and guards are unchanged in this qualification step. The new staging fixture's
+initial error-code expectation, archive argument shape, module import and location enum values
+were corrected against the real contracts before qualification; those failures were fixture
+errors, not product defects.
+
+Eight omissions in an independently installed checkout exercise stage validation, wrapped-key
+version, previous-key recovery, effective station timing, default inheritance, dependent-row
+filtering, BLOB decoding and import-version validation. Each fails its owning case, and each
+restored case passes. The previous-key omission refuses a valid read before its value assertion;
+the retained failure identifies that refusal explicitly. The complete retained `boot.test.ts`
+suite passes all 62 cases unchanged; this step adds no startup-order fix.
+
+A separate fixture proposal replaces `provisionAllocatedTestVenue`'s signed-paper setup material
+with the real hour-preparation code and controlled clocks/history. In the installed proposal,
+the retained provisioning and demo cases pass. Four HTTP setup cases remain failing. The exact
+patch and comparison with the unmodified checkout are retained in the lane's approval question;
+the proposal is not applied here. It qualifies a direct server fixture, not the real host's clock,
+durability or PDF journey. Task 4 and the remaining branch gates stay open.
+
+The final installed group passes 95 new cases. The full provisioning run passes 1,227 cases in
+64 files; the unchanged coverage gate still fails at 94.55% statements, 92.38% branches,
+97.22% functions and 96.77% lines. Staging and kitchen timing each report 100% in all four
+measures. Transfer reports 92.76% statements, 89.7% branches, 94.44% functions and 93.52% lines.
+These are package-run measurements, not a claim that the remaining setup journeys are complete.
