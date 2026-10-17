@@ -21,6 +21,8 @@ import type {
 } from "./api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { ServerRouter } from "./api/server-router.js";
+import type { TillMenuBrowser } from "./widgets/menu-browser.js";
+import { setLocale, t } from "./i18n/t.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -595,5 +597,173 @@ describe("A768 a held zone's menu follows the server", () => {
     await reopen(el, "t4");
     expect(api.listZoneOffers).not.toHaveBeenCalled();
     expect(beer(el)!.unitPrice).toBe("7.00");
+  });
+});
+
+describe("A768 the left draft saves in the background", () => {
+  beforeEach(() => {
+    setLocale("en");
+    server = draftServer();
+  });
+
+  afterEach(() => {
+    cleanupWidgets();
+  });
+
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
+  const rows = (el: TillApp) =>
+    tableOrder(el)!.draftStore?.lines.map((line) => `${line.product.name} ×${line.quantity}`) ??
+    null;
+  const savedLines = () =>
+    server.drafts.flatMap((each) =>
+      each.lines.map((line) => `${line.menuItemId} ×${Number(line.quantity)}`),
+    );
+
+  async function tap(el: TillApp, name: string): Promise<void> {
+    [
+      ...tableOrder(el)!
+        .shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
+        .shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
+    ]
+      .find((button) => button.querySelector(".name")?.textContent === name)!
+      .click();
+    await flush(el);
+  }
+
+  /** Holds the next save until the returned function is called, then saves it as the person who
+   * sent it, or fails it with `error`. */
+  function holdNextSave(): (error?: unknown) => void {
+    let answer!: (error?: unknown) => void;
+    const held = new Promise<unknown>((resolve) => (answer = resolve));
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      const sentBy = server.personId;
+      const error = await held;
+      if (error !== undefined) throw error;
+      const now = server.personId;
+      server.personId = sentBy;
+      const saved = server.save(partyId, save);
+      server.personId = now;
+      return structuredClone(saved);
+    });
+    return answer;
+  }
+
+  it("another party's table shows its order before the left draft's save answers", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t7");
+    expect(tableOrder(el)!.draftStore).not.toBeNull();
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    release();
+    await flush(el);
+    expect(savedLines()).toContain("offer-beer ×1");
+  });
+
+  /** Opens Mesa 7 from Mesa 4's order screen, so the save of Mesa 4's draft is the release's own. */
+  async function moveToMesa7(el: TillApp): Promise<void> {
+    emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+  }
+
+  it("a background save that fails is said on the next table", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(banner(el)).toBeNull();
+    release(new TypeError("Failed to fetch"));
+    await flush(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+  });
+
+  it("a background save refused for another reason says it on the next table", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release({ code: "draft.taken_over", status: 409, ownerName: "Bea" });
+    await flush(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(banner(el)!.textContent).toContain("Bea");
+  });
+
+  it("a background save refused for an ended session says nothing", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release({ code: "session.required", status: 401 });
+    await flush(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("signing out closes a draft still saving in the background", async () => {
+    const savedBy: string[] = [];
+    const { el } = await mountApp({
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        savedBy.push(server.personId);
+        return server.saveDraft(...args);
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t7");
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    await tap(el, "Steak");
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(api.logout).not.toHaveBeenCalled();
+    release();
+    await flush(el);
+    expect(api.logout).toHaveBeenCalledOnce();
+    await signIn(el, "p2", "Bea");
+    await flush(el);
+    expect(savedBy).not.toContain("p2");
+    expect(savedLines()).toEqual(expect.arrayContaining(["offer-beer ×1", "offer-steak ×1"]));
+  });
+
+  it("the same party's table still waits for its own save", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t4");
+    expect(tableOrder(el)?.draftStore ?? null).toBeNull();
+    release();
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("A, B, then A again waits for A's own save", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t7");
+    await back(el);
+    const reads = api.listDrafts.mock.calls.length;
+    await reopen(el, "t4");
+    expect(tableOrder(el)?.draftStore ?? null).toBeNull();
+    expect(api.listDrafts.mock.calls.slice(reads).map(([partyId]) => partyId)).not.toContain("v1");
+    release();
+    await flush(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    await tap(el, "Steak");
+    await back(el);
+    expect(banner(el)).toBeNull();
+    expect(savedLines()).toEqual(["offer-beer ×1", "offer-steak ×1"]);
   });
 });

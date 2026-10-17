@@ -1653,6 +1653,7 @@ export class TillApp extends LitElement {
     this.permissions = [];
     this.#endOperatorSession();
     this.#dropDraft();
+    this.#dropLeavingDrafts();
     this.errorKey = "server.switched";
     this.#setScreen("lock");
     void this.#boot();
@@ -2085,6 +2086,8 @@ export class TillApp extends LitElement {
   #markedRounds = new Set<WorkingOrderStore>();
   /** The signed-in person's draft on the open order's party. */
   #draftSync?: DraftSync;
+  /** Drafts left for another party's table, each settling once its save has answered. */
+  #leavingDrafts = new Map<DraftSync, Promise<void>>();
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
   #signIns = 0;
@@ -8465,6 +8468,32 @@ export class TillApp extends LitElement {
     await this.#openTableFromEvent(event, left);
   }
 
+  /** Takes the draft off the screen and lets its save answer in the background. Its own `onRefused`
+   * no longer speaks once it is not the shown draft, so the outcome is said here. */
+  #releaseDraft(sync: DraftSync): void {
+    this.#draftSync = undefined;
+    this.#draftReady = false;
+    this.requestUpdate();
+    const session = this.#operatorSession;
+    this.#leavingDrafts.set(
+      sync,
+      sync.flush().then((saved) => {
+        this.#leavingDrafts.delete(sync);
+        sync.drop();
+        if (session !== this.#operatorSession || saved === "saved") return;
+        if (saved === "failed") this.errorKey = "table.draft_save_failed";
+        else if (saved.refused !== "session.required") this.errorKey = draftRefusalError(saved);
+      }),
+    );
+  }
+
+  /** Settles once every left draft on `partyId` has had its save answered. */
+  async #savesOutFor(partyId: string | undefined): Promise<void> {
+    await Promise.all(
+      [...this.#leavingDrafts].filter(([sync]) => sync.partyId === partyId).map(([, out]) => out),
+    );
+  }
+
   async #openTableFromEvent(event: Event, left: () => boolean = () => false): Promise<void> {
     if (!this.#inShell() || left()) return;
     const { tableId, seated, guestCount, withTableIds } = (
@@ -8494,7 +8523,13 @@ export class TillApp extends LitElement {
     this.#tableOpensPending++;
     const session = this.#operatorSession;
     try {
-      await this.#flushDraft();
+      const leaving = this.#draftSync;
+      if (
+        leaving !== undefined &&
+        leaving.partyId !== this.tables.find((row) => row.id === tableId)?.party?.id
+      )
+        this.#releaseDraft(leaving);
+      else await this.#flushDraft();
       if (left() || session !== this.#operatorSession) return;
       await this.#openTable(
         tableId,
@@ -8607,6 +8642,8 @@ export class TillApp extends LitElement {
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTabId = billToOpen(read.bills ?? []);
       }
+      await this.#savesOutFor(this.orderParty?.id);
+      if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
       const [, opened] = await Promise.all([
         billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
         this.#openDraft(true, session),
@@ -8947,6 +8984,11 @@ export class TillApp extends LitElement {
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
     else this.#reconcileDraft();
+  }
+
+  #dropLeavingDrafts(): void {
+    for (const sync of this.#leavingDrafts.keys()) sync.drop();
+    this.#leavingDrafts.clear();
   }
 
   #dropDraft(): void {
@@ -12298,11 +12340,14 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const sync = this.#draftSync;
-    if (sync !== undefined) {
+    const leaving = [...this.#leavingDrafts.keys()];
+    if (sync !== undefined || leaving.length > 0) {
       this.#draftSync = undefined;
       this.#draftReady = false;
-      await this.#holdingReload(() => sync.close());
-      sync.drop();
+      await this.#holdingReload(() =>
+        Promise.all([sync?.close(), ...leaving.map((each) => each.close())]),
+      );
+      sync?.drop();
     }
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     try {
