@@ -59,7 +59,8 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    `groupStep` as today. While the scale never changes `banked` is 0 and `dxAtBank` is 0, so the
    squares are exactly today's `round(dx / scale)`. A still finger moves nothing after a refit; the
    table keeps moving at finger speed on screen. A wheel zoom during a drag is banked the same way
-   (today it rescales the travel already made; no existing test covers it).
+   (today it rescales the travel already made; no existing test covers it). A move while the
+   scale is not above 0, as on a hidden host, whose fit is 0, banks nothing and moves nothing.
 5. **A waiter's own pan or zoom is kept, and turns the growth off.** A drag that starts on a touched
    view has no drag's crop: the map publishes the tables' ratio and nothing changes during the drag.
    A pan or zoom during a drag stops the drag's crop growing, but the map keeps publishing it until

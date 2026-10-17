@@ -586,7 +586,7 @@ export class WtFloorMap extends LitElement {
     const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
     const squares = this.#travelled(dx, dy);
-    if (!this.canDrag) return;
+    if (squares === null || !this.canDrag) return;
     // The whole group stays on the grid, as the server holds it when the move lands.
     const { dx: movedX, dy: movedY } = groupStep(
       members!.map((m) => m.placement),
@@ -630,9 +630,11 @@ export class WtFloorMap extends LitElement {
     return this.#dragCrop ?? this.#tablesCrop;
   }
 
-  /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale. */
-  #travelled(dx: number, dy: number): { x: number; y: number } {
+  /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale.
+   * Null, and nothing banked, while the scale is not above 0, as on a hidden host. */
+  #travelled(dx: number, dy: number): { x: number; y: number } | null {
     const scale = this.#view!.scale;
+    if (!(scale > 0)) return null;
     const travel = (this.#travel ??= { x: 0, y: 0, fromX: 0, fromY: 0, scale, dx: 0, dy: 0 });
     if (travel.scale !== scale) {
       travel.x += (travel.dx - travel.fromX) / travel.scale;

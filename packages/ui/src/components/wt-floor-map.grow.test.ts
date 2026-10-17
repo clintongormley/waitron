@@ -506,6 +506,24 @@ it("a diagonal drag keeps the travel it made on both axes across two scale chang
   expect(drops).toEqual([{ tableId: "t1", x: 15, y: 10, targetId: null }]);
 });
 
+it("a move while the host is hidden leaves the drag's travel as it was", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 375, 150);
+  await settled(el);
+  const client = at(el, 375, 150);
+  el.style.display = "none";
+  await settled(el);
+  pointer(window, "pointermove", client);
+  await settled(el);
+  el.style.display = "block";
+  await settled(el);
+  pointer(window, "pointermove", client);
+  await settled(el);
+  pointer(window, "pointerup", client);
+  expect(drops).toEqual([{ tableId: "t1", x: 12, y: 5, targetId: null }]);
+});
+
 it("a hold released on a view kept over new tables keeps that view", async () => {
   const el = await map([t1]);
   el.tables = [t1, t("t2", "T2", { x: 30, y: 5, width: 4, height: 4 })];
