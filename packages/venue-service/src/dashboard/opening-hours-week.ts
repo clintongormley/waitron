@@ -8,7 +8,7 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { showPicker } from "./calendar-show.js";
-import { formatDayHeading, formatWeekTitleParts } from "./hours-view.js";
+import { formatDayHeading, formatDayTitleParts, formatWeekTitleParts } from "./hours-view.js";
 import {
   chosenDepartment,
   dayNameLines,
@@ -67,6 +67,35 @@ function titleCandidates(): TemplateResult[] {
     );
   }
   return widthCandidates;
+}
+
+let dayWidthCandidates: TemplateResult[] | undefined;
+/** A phone's day title for every weekday in every month, day 28 standing for every day, in each
+ *  interface language, each shaped as the title is. */
+function dayTitleCandidates(): TemplateResult[] {
+  if (!dayWidthCandidates) {
+    const titles = new Map<string, TemplateResult>();
+    for (const language of Object.keys(VENUE_SERVICE_STRINGS))
+      for (let year = 2026; year < 2033; year++)
+        for (let month = 1; month <= 12; month++) {
+          const parts = formatDayTitleParts(
+            `${year}-${String(month).padStart(2, "0")}-28`,
+            language,
+          );
+          titles.set(
+            `${language} ${parts.map((part) => part.text).join("")}`,
+            html`<span class="day-title"
+              >${parts.map((part) =>
+                part.day || part.month
+                  ? html`<span class="title-link">${part.text}</span>`
+                  : part.text,
+              )}</span
+            >`,
+          );
+        }
+    dayWidthCandidates = [...titles.values()];
+  }
+  return dayWidthCandidates;
 }
 
 /** How long an unpinned tip outlasts the pointer leaving its block or itself, so a path from the
@@ -276,9 +305,13 @@ export class OpeningHoursWeekView extends LitElement {
         white-space: nowrap;
       }
       .day-title {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+      .day-title .title-link {
+        min-inline-size: var(--wt-space-5);
+        min-block-size: var(--wt-space-5);
       }
       .day-names {
         display: flex;
@@ -578,12 +611,47 @@ export class OpeningHoursWeekView extends LitElement {
       };
     return html`<div class="head">
         ${this.#step(-1, "previous-day", "week.previous_day", "‹")}
-        <h2 class="day-title" data-test="week" aria-live="polite">
-          ${formatDayHeading(this.date)}
-        </h2>
+        ${fixedTitle(
+          html`<h2 class="day-title" data-test="week" aria-live="polite">${this.#dayTitle()}</h2>`,
+          dayTitleCandidates(),
+        )}
         ${this.#step(1, "next-day", "week.next_day", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
-      ${drawn ? this.#day(drawn) : nothing}`;
+      ${drawn ? this.#day(drawn) : nothing}
+      <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>`;
+  }
+
+  #dayTitle() {
+    const date = this.date;
+    return formatDayTitleParts(date).map((part) => {
+      const { month } = part;
+      if (part.day)
+        return html`<button
+          type="button"
+          class="title-link"
+          data-test="day-name"
+          data-date=${date}
+          @click=${() =>
+            this.#emit<CalendarDayOpen>("calendar-day-open", {
+              date,
+              returnTo: () => this.#dayButton(date),
+            })}
+        >
+          ${part.text}
+        </button>`;
+      if (month)
+        return html`<button
+          type="button"
+          class="title-link"
+          data-test="week-month"
+          data-month=${month}
+          aria-describedby="month-hint"
+          @click=${() => this.#emit("week-month-open", { month })}
+        >
+          ${part.text}
+        </button>`;
+      return part.text;
+    });
   }
 
   #day({ days: [day], chosen, names }: Drawn) {

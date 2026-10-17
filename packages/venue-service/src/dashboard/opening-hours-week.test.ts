@@ -762,7 +762,8 @@ describe("Opening hours week on a phone", () => {
   it("below 560 px it shows the address's day alone", async () => {
     const el = await mount({ date: "2026-12-01", departmentId: "rest" });
     expect(root(el).querySelectorAll("section")).toHaveLength(0);
-    expect(root(el).querySelectorAll('[data-test="day-name"]')).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-test="day-name"]')).toHaveLength(1);
+    expect(root(el).querySelector('[data-test="week"] [data-test="day-name"]')).not.toBeNull();
     expect(text(testId(el, "week"))).toBe("Tue 1 Dec");
     expect([...card(el).querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([
       "rest",
@@ -852,6 +853,59 @@ describe("Opening hours week on a phone", () => {
     expect(testId(el, "next-day")!.hasAttribute("disabled")).toBe(false);
     await userEvent.click(testId(el, "previous-day")!, { force: true });
     expect(sent).toHaveLength(2);
+  });
+
+  it("the day's name opens the day box", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const name = testId(el, "day-name")!;
+    expect(text(name)).toBe("Tue 1");
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    await userEvent.click(name);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.date).toBe("2026-12-01");
+    expect(opened[0]!.returnTo()).toBe(name);
+    const month = testId(el, "week-month")!;
+    expect(text(month)).toBe("Dec");
+    const monthSent = events<{ month: string }>(el, "week-month-open");
+    await userEvent.click(month);
+    expect(monthSent).toEqual([{ month: "2026-12" }]);
+    expect(testId(el, "week-year")).toBeNull();
+  });
+
+  it("the day title keeps one width", async () => {
+    const dates: LocalDate[] = [];
+    for (let date = "2026-11-30"; date <= "2026-12-06"; date = addDays(date, 1)) dates.push(date);
+    dates.push("2026-09-01", "2027-02-28");
+    const lefts: [string, number][] = [];
+    try {
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = await mount({ model: undefined });
+        for (const date of dates) {
+          el.date = date;
+          await el.updateComplete;
+          lefts.push([`${locale} ${date}`, testId(el, "next-day")!.getBoundingClientRect().left]);
+        }
+      }
+    } finally {
+      setLocale("en");
+    }
+    expect(lefts).toHaveLength(18);
+    for (const [shown, left] of lefts)
+      expect(Math.abs(left - lefts[0]![1]), shown).toBeLessThanOrEqual(0.5);
+  });
+
+  it("the title's links are big enough to tap and apart", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const day = testId(el, "day-name")!.getBoundingClientRect();
+    const month = testId(el, "week-month")!.getBoundingClientRect();
+    for (const box of [day, month]) {
+      expect(box.width).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+    }
+    const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
+    expect(gap).toBeGreaterThan(0);
+    expect(month.left - day.right).toBeGreaterThanOrEqual(gap);
   });
 
   it("back above 560 px it shows the whole week again", async () => {

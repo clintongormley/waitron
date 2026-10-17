@@ -133,7 +133,10 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
   });
 });
 
-const phoneStates: Record<string, { props: Partial<OpeningHoursWeekView>; shown: string[] }> = {
+const phoneStates: Record<
+  string,
+  { props: Partial<OpeningHoursWeekView>; shown: string[]; spanish?: true }
+> = {
   "a day on a phone": {
     props: { date: "2026-12-08" },
     shown: ['[data-test="day-card"]', ".name.holiday"],
@@ -145,6 +148,11 @@ const phoneStates: Record<string, { props: Partial<OpeningHoursWeekView>; shown:
       '[data-test="day-card"] .block[data-kind="closed"]',
     ],
   },
+  "a day on a phone, Spanish": {
+    props: { date: "2026-12-01" },
+    shown: ['[data-test="day-name"]', '[data-test="week-month"]'],
+    spanish: true,
+  },
 };
 
 describe.each(["light", "dark"] as const)(
@@ -153,10 +161,15 @@ describe.each(["light", "dark"] as const)(
     test.each(Object.keys(phoneStates))("%s", async (state) => {
       await page.viewport(390, 800);
       expect(window.innerWidth).toBe(390);
-      const el = await mountWeek(theme, phoneStates[state]!.props);
-      for (const shown of phoneStates[state]!.shown)
-        expect(el.shadowRoot!.querySelector(shown), shown).not.toBeNull();
-      await expectNoA11yViolations(host);
+      if (phoneStates[state]!.spanish) setLocale("es");
+      try {
+        const el = await mountWeek(theme, phoneStates[state]!.props);
+        for (const shown of phoneStates[state]!.shown)
+          expect(el.shadowRoot!.querySelector(shown), shown).not.toBeNull();
+        await expectNoA11yViolations(host);
+      } finally {
+        setLocale("en");
+      }
     });
   },
 );
