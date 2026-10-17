@@ -40,6 +40,7 @@ afterEach(() => {
   chooseTheme("device");
   localStorage.removeItem(THEME_STORAGE_KEY);
   root.remove();
+  for (const frame of document.querySelectorAll("iframe")) frame.remove();
   for (const probe of document.querySelectorAll("theme-choice-probe, theme-choice-applying-probe"))
     probe.remove();
 });
@@ -226,6 +227,7 @@ describe("the saved theme choice", () => {
   it("a change to session storage under the theme's key, or a session storage clear, changes nothing", () => {
     startThemeChoice(root);
     chooseTheme("dark");
+    localStorage.setItem(THEME_STORAGE_KEY, "light");
     window.dispatchEvent(
       new StorageEvent("storage", {
         key: THEME_STORAGE_KEY,
@@ -235,6 +237,20 @@ describe("the saved theme choice", () => {
     );
     expect(currentThemeChoice()).toBe("dark");
     window.dispatchEvent(new StorageEvent("storage", { key: null, storageArea: sessionStorage }));
+    expect(currentThemeChoice()).toBe("dark");
+    expect(root.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("follows a real storage event from another same-origin window", async () => {
+    startThemeChoice(root);
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const delivered = new Promise<StorageEvent>((resolve) =>
+      window.addEventListener("storage", resolve, { once: true }),
+    );
+    frame.contentWindow!.localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    const event = await delivered;
+    expect(event.storageArea).toBe(localStorage);
     expect(currentThemeChoice()).toBe("dark");
     expect(root.getAttribute("data-theme")).toBe("dark");
   });
