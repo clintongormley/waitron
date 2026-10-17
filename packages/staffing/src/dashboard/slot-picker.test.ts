@@ -142,7 +142,7 @@ describe("the slot picker", () => {
   it("shows the same chooser in Spanish", async () => {
     setLocale("es");
     const el = await mount();
-    expect(el.shadowRoot!.textContent).toContain("Mostrar a todo el mundo");
+    expect(el.shadowRoot!.textContent).toContain("Mostrar a todo el equipo");
     expect(el.shadowRoot!.textContent).toContain(STAFFING_STRINGS.es["staffing.rota.leave"]);
   });
 });

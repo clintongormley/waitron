@@ -322,7 +322,7 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.free": "libre",
   "staffing.rota.leave": "de permiso",
   "staffing.rota.working": "trabajando {times}",
-  "staffing.rota.show_everyone": "Mostrar a todo el mundo",
+  "staffing.rota.show_everyone": "Mostrar a todo el equipo",
   "staffing.rota.week_link": "Turnos de esta semana",
   "staffing.rota.empty": "No hay áreas activas.",
   "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
