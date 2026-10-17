@@ -631,3 +631,38 @@ paper preparation. Their assertions have not all executed. Task 5 and the branch
 The earlier complete provisioning coverage result remains below its bar; it was not remeasured
 or declared repaired in this step. No protected writer, golden test, SQL, schema or root guard
 changes in this step. Receipts are in the lane's `a679-task5-qualification-20261017` directory.
+
+
+## Remaining Task 5 fixtures qualified, 2026-10-17
+
+You can finish an exact committed setup after recovering ownership with its password. The retained
+route fixtures now exercise the hour/key-only flow, so their publication and refusal assertions
+run beyond the retired paper preparation. This updates the earlier qualification receipts above.
+
+Authority: the approved hour design's entry-path table and retention/Finish decisions, and
+implementation-plan Tasks 5 and 6. No production source changed in this continuation.
+
+| Existing check or fixture | Before | After |
+| --- | --- | --- |
+| `first-fiscal-interruption.test.ts:72,163,175` | The fixture selects paper serials, imports a signed block, enrols its signer and confirms an outside register; retries use the provision route. | The shared fixture selects an hour, imports its exact input and explicitly keeps the staged recovery document. Password recovery precedes publication-only Finish through a real HTTPS listener. All test bodies from the first `it` onward are byte-identical; their counter, allocation, refusal, outcome and publication assertions remain. Six fixture-only HTTP-success matchers move to the shared hour transport checks or real ownership calls. |
+| `first-setup-finish.route.test.ts:84,278,396,562` | The fixture delivers a declared register PDF. Three success journeys upload/confirm another register document before Finish. | The fixture keeps the key-only document. Those journeys rediscover the exact public stage and imported input; two also compare the staged-key file before and after Finish. Six obsolete document/reconfirmation success matchers are replaced by nine public-reference/key-preservation assertions. Existing allocation, permission, error, restart, settings and disabled-module assertions remain. |
+| `first-setup-empty-selection.route.test.ts:24,350` | A missing paper-history file is declared only through an environment setting the hour contribution no longer reads. | A test module declares a missing evidence file through `resolutionEvidence`. The actual host and HTTPS entry still enforce the same refusal, error code and absent restart. All 35 matcher expressions remain. |
+| `first-setup-unused-pdf.test.ts:56,124` | A paper fixture reserves serials 1 and 42; the successor tries 1, 2, 42 and 43. | The hour fixture keeps its document. Successors present literal earlier/current/later hours 06R9/06RA/06RB/06RC with different bases. The existing conflict/refusal and later-hour success assertions remain. Successive replacements advance the controlled clock by one hour. |
+| Same file, evidence-refusal table | Corrupt or missing legacy manifest/chunk files refuse. | A malformed key-document manifest and a mismatched public binding refuse; key, stage, modules, missing database, unknown input and orphan-file checks remain. |
+| Same file:317, rehashed document | The fixture checks one legacy chunk, then rehashes a statement with a false register confirmation. | The fixture checks the exact key-delivery kind, then recomputes the public digest after changing the key name. The same `setup.not_ready` refusal remains. This reaches the module's name-to-stage binding rather than merely failing JSON parsing. |
+| `test/hour-first-fiscal.ts` | Every fixture owns a fresh root and omits its optional module configuration from the return value. | The fixture can enter a selected isolated workspace, retains optional module configuration, and removes only a root it created. |
+
+The feature checkout passes 120 cases across the six retained suites and the hour-Finish suite.
+The provisioning resolution/workspace pair passes 97. The protected golden and immutability pair
+passes its unchanged 20 cases. These are focused results, not a complete-package coverage result.
+The earlier provisioning coverage gap and the remaining command, recovery and wizard tasks stay open.
+Receipts: the lane's `a679-task5-continuation-20261017` directory, including the full matcher inventory.
+
+The independently frozen-installed candidate also passes all 120 cases. Removing the retired-hour
+floor lets two forbidden hours through; removing the staged-key comparison permits a changed stage;
+removing the module key-name comparison permits a rehashed mismatched document; removing both
+publication-digest comparisons permits changed publication secrets. Each removal fails its named
+assertion, and each exact restoration passes. The first control receipt classifier rejected Vitest's
+“resolved instead of rejecting” assertion text; the corrected classifier and both attempts are retained.
+Six protected writer/golden files match the continuation base byte for byte. Types, scoped lint,
+source formatting and four focused root suites also pass. No complete-package coverage claim follows.

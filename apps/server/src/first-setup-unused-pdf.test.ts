@@ -1,11 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { readFile, readdir, writeFile, rm } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
-import { initialSetupFor } from "@waitron/module";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -14,10 +13,10 @@ import {
   inspectFirstSetupWorkspaceSelection,
   type RegisterAnswer,
 } from "@waitron/provisioning";
-import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
+import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request } from "../test/first-fiscal.js";
-import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
-import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -27,42 +26,46 @@ import { freePorts } from "./testing/free-ports.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-const fixtures: Awaited<ReturnType<typeof declaredFirstFiscalFixture>>[] = [];
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 500,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+});
+const fixtures: Awaited<ReturnType<typeof hourFirstFiscalFixture>>[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
-async function fixture(
-  workspace?: { root: string; stateDir: string; venueDir: string },
-  serial = 43,
-) {
-  const f = await declaredFirstFiscalFixture({
-    serials: workspace === undefined ? [1, 42] : [serial, serial + 1],
+async function fixture(workspace?: { root: string; stateDir: string; venueDir: string }) {
+  if (workspace !== undefined) vi.setSystemTime(new Date(Date.now() + 3_600_000));
+  const f = await hourFirstFiscalFixture({
+    database: () => suite.db,
     ...(workspace === undefined ? {} : { workspace }),
   });
   fixtures.push(f);
-  const keys = createFirstSetupNodeKeys(f);
-  const staged = await keys.stageInitialNodeKey(
-    f.ownerAttempt,
-    await f.owner.reconfirm(f.ownerAttempt, f.password, "block-use"),
-  );
-  const delivery = createFirstFiscalDelivery({ ...f, keys });
-  await delivery.registerFirstFiscalDelivery(f.ownerAttempt, {
-    module: f.module,
-    stageId: staged.stage.stageId,
-    inputDigest: publicDigest(f.input),
-    historyDigest: f.statement.delivery.historyDigest,
-    documentDigest: f.statement.delivery.documentDigest,
-    statement: f.statement,
-  });
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
-  const host = createFirstSetupModuleHost({ ...f, environment: {} });
+  const host = f.host;
   const actions = createFirstSetupResolutionActions({ ...f, host });
   const answer = (status: "Consumed" | "Not consumed" | "Unknown" = "Consumed") => ({
     kind: "current-master" as const,
     status,
     custodian: "Elena",
-    reference: f.statement.delivery.historyDigest,
+    reference: f.staged.ref.bindingDigest,
     consultedAt: "2026-10-16T12:20:00.000Z",
   });
   const start = async (register: RegisterAnswer = answer()) => {
@@ -112,25 +115,47 @@ it.each(["Consumed", "Not consumed", "Unknown"] as const)(
     });
   },
 );
-it.each([1, 2, 42, 43])(
-  "retiring the unused PDF burns its entire frozen block before proposing serial %s",
-  async (serial) => {
+it.each([
+  { identity: "06R9", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
+  { identity: "06RA", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
+  { identity: "06RB", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
+  { identity: "06RC", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
+])(
+  "retiring the unused PDF excludes hour $identity across changed bases, spent=$spent",
+  async ({ identity, issuedAt, spent }) => {
     const f = await fixture();
     const binding = await f.start();
     const next = createFirstSetupModuleHost({ ...binding, modules: f.modules, environment: {} });
     await next.owner.claimFirstSetup(
-      { environment: "production", request },
+      {
+        environment: "production",
+        request: {
+          ...request,
+          seriesCode: "B",
+          fullSeriesCode: "BFF",
+          rectificativeSeriesCode: "BR",
+        },
+      },
       randomBytes(32).toString("base64url"),
     );
     let state = (await next.store.read())!;
     const context = firstSetupModuleContext(state, f.module);
-    const seat = initialSetupFor(next.modules, f.module)!;
+    const input = hourSetupInput(
+      {
+        binding: context.binding,
+        scope: { taxpayerNif: context.taxId, environment: context.environment },
+        bases: [...context.bases].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)),
+        identity,
+        issuedAt,
+      },
+      context.administratorId,
+    );
     state = await next.store.update(state.frozen.attemptId, state.revision, {
       kind: "candidates",
       module: f.module,
-      request: seat.request(context, seat.candidates(context, { serials: [serial] })),
+      request: { kind: "waitron-hour-setup", status: "selected", identity, input },
     });
-    if (serial <= 42)
+    if (spent)
       await expect(next.assertFreshAssignment(state, f.module)).rejects.toMatchObject({
         code: "setup.attempt_conflict",
       });
@@ -165,10 +190,11 @@ it("successive never-activated PDFs retain every old block while allowing a thir
     stateDir: secondBinding.stateDir,
   });
   const thirdBinding = await second.start();
-  const third = await fixture(
-    { root: first.root, venueDir: thirdBinding.venueDir, stateDir: thirdBinding.stateDir },
-    45,
-  );
+  const third = await fixture({
+    root: first.root,
+    venueDir: thirdBinding.venueDir,
+    stateDir: thirdBinding.stateDir,
+  });
   await expect(third.start()).resolves.toMatchObject({
     anchorStateDir: secondBinding.anchorStateDir,
     selectionGeneration: 3,
@@ -214,7 +240,7 @@ it.each([
   "key",
   "stage",
   "manifest",
-  "chunk",
+  "binding",
   "modules",
   "missing-db",
   "unknown-input",
@@ -229,15 +255,13 @@ it.each([
     key.stageId = "11111111-1111-4111-8111-111111111111";
     await writeFile(path, JSON.stringify(key));
   }
-  if (why === "manifest") await rm(join(directory, `${f.module}.json`));
-  if (why === "chunk")
-    await writeFile(
-      join(
-        directory,
-        (await readdir(directory)).find((n) => n.endsWith("-0.json"))!,
-      ),
-      "{}",
-    );
+  if (why === "manifest") await writeFile(join(directory, `${f.module}.recovery.json`), "{}");
+  if (why === "binding") {
+    const path = join(directory, `${f.module}.recovery.json`);
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.bindingDigest = "0".repeat(64);
+    await writeFile(path, JSON.stringify(manifest));
+  }
   if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
   if (why === "missing-db") await rm(join(f.venueDir, "venue.db"));
   if (why === "unknown-input") {
@@ -288,18 +312,12 @@ it.each([
 it("a rehashed document with an invalid module confirmation cannot authorise unused-PDF reset", async () => {
   const f = await fixture();
   const directory = join(f.stateDir, "first-fiscal-documents");
-  const manifestPath = join(directory, `${f.module}.json`);
+  const manifestPath = join(directory, `${f.module}.recovery.json`);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  expect(manifest.chunks).toBe(1);
-  const chunkPath = join(directory, `${manifest.id}-0.json`);
-  const chunk = JSON.parse(await readFile(chunkPath, "utf8"));
-  const statement = JSON.parse(Buffer.from(chunk.data, "base64").toString("utf8"));
-  statement.current.currentRegisterConfirmed = false;
-  const bytes = Buffer.from(JSON.stringify(statement));
-  manifest.length = bytes.length;
-  manifest.publicDigest = publicDigest(statement);
+  expect(manifest.kind).toBe("recovery-key-delivery");
+  manifest.statement.nodeKey.name = "different-recovery-key";
+  manifest.bindingDigest = publicDigest(manifest.statement);
   await writeFile(manifestPath, JSON.stringify(manifest));
-  await writeFile(chunkPath, JSON.stringify({ data: bytes.toString("base64") }));
   await expect(f.start()).rejects.toMatchObject({ code: "setup.not_ready" });
 });
 it.each(["first-setup-workspace.json", "first-setup-selection.json"])(

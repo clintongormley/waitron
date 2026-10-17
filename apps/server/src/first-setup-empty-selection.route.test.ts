@@ -21,15 +21,48 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePorts } from "./testing/free-ports.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
 
+const declaredEvidence = vi.hoisted(() => ({ path: undefined as string | undefined }));
+vi.mock("@waitron/composition", async (original) => {
+  const actual = await original<typeof import("@waitron/composition")>();
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) => {
+      const setup = module.provisioning?.initialSetup;
+      if (module.name !== "fiscal-verifactu" || setup?.configure === undefined) return module;
+      return {
+        ...module,
+        provisioning: {
+          ...module.provisioning!,
+          initialSetup: {
+            ...setup,
+            configure(host: import("@waitron/module").ModuleOperationHost) {
+              const configured = setup.configure!(host);
+              return {
+                ...configured,
+                resolutionEvidence: () =>
+                  declaredEvidence.path === undefined
+                    ? (configured.resolutionEvidence?.() ?? { files: [], directories: [] })
+                    : { files: [declaredEvidence.path], directories: [] },
+              };
+            },
+          },
+        },
+      };
+    }),
+  };
+});
 vi.mock("node:fs/promises", { spy: true });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  declaredEvidence.path = undefined;
+  vi.restoreAllMocks();
+});
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const noMaster = { kind: "no-current-master", confirmed: true } as const;
 
 async function fixture(
   point = "first-setup-workspace.json",
   tls = true,
-  outsideHistory = false,
+  missingModuleEvidence = false,
   passwordRetirement = false,
 ) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "empty-selection-")));
@@ -115,15 +148,13 @@ async function fixture(
     vi.mocked(filesystem.rename).mockRestore();
     const [port] = await freePorts(1);
     const restart = vi.fn();
+    if (missingModuleEvidence) declaredEvidence.path = join(root, "new-module-evidence.json");
     server = await startServerOrFirstSetupResolution(
       {
         WAITRON_STATE_DIR: roots.stateDir,
         WAITRON_VENUE_DIR: roots.venueDir,
         WAITRON_HTTP_HOST: "127.0.0.1",
         WAITRON_HTTP_PORT: String(port),
-        ...(outsideHistory
-          ? { WAITRON_FISCAL_PAPER_HISTORY_FILE: join(root, "new-outside-history.json") }
-          : {}),
       },
       {},
       { requestRestart: restart },
@@ -316,7 +347,7 @@ it.each(["module-operation-public.json", "first-setup-node-key.json", "trading.e
   },
 );
 
-it("a newly configured but missing outside register cannot resume an empty reset without a password", async () => {
+it("newly declared but missing module evidence cannot resume an empty reset without a password", async () => {
   const f = await fixture("first-setup-selection.json", true, true);
   try {
     const inspection = await f.get();

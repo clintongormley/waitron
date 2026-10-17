@@ -12,8 +12,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
-import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
-import { createFirstSetupModuleHost } from "./module-operation-host.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { activateFirstFiscal } from "./first-fiscal-activation.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -45,6 +44,29 @@ vi.mock("@waitron/composition", async (original) => {
     ),
   };
 });
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 500,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const publication = {
   mode: "live",
@@ -59,53 +81,19 @@ const publication = {
 };
 
 async function fixture(realEntry = false, withoutBookings = false) {
-  const f = await declaredFirstFiscalFixture({
+  const f = await hourFirstFiscalFixture({
+    database: () => suite.db,
     modules: ALL_MODULES,
     ...(withoutBookings
       ? { moduleConfig: parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES) }
       : {}),
-    extendHistory: (history) => history,
   });
   let server: Awaited<ReturnType<typeof serveRecovery>> | undefined;
   let agent: Agent | undefined;
   let entryServer: { close(): Promise<void> } | undefined;
   try {
-    const modules = f.modules.map((m) =>
-      m.name !== f.module
-        ? m
-        : {
-            ...m,
-            fiscal: {
-              ...m.fiscal!,
-              provisioningSecret: {
-                required: () => false,
-                validate: () => {},
-                seal: async () => {},
-              },
-            },
-          },
-    );
-    const host = createFirstSetupModuleHost({ ...f, modules, environment: {} });
-    const staged = await host.keys.stageInitialNodeKey(
-      f.ownerAttempt,
-      await host.owner.reconfirm(f.ownerAttempt, f.password, "block-use"),
-    );
-    const ref = {
-      module: f.module,
-      stageId: staged.stage.stageId,
-      inputDigest: publicDigest(f.input),
-      historyDigest: f.statement.delivery.historyDigest,
-      documentDigest: f.statement.delivery.documentDigest,
-    };
-    await host.delivery.registerFirstFiscalDelivery(f.ownerAttempt, {
-      ...ref,
-      statement: f.statement,
-    });
-    await host.delivery.confirmFirstFiscalDocumentKept(
-      f.ownerAttempt,
-      { ...ref, kept: true },
-      await host.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
-    );
+    const host = f.host;
+    const ref = f.staged.ref;
     const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 12).toString("base64") });
     let activations = 0,
       publications = 0,
@@ -287,7 +275,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
   }
 }
 
-it("HTTPS Finish publishes the exact committed setup after fresh document confirmation without activation", async () => {
+it("HTTPS Finish publishes the exact committed setup after public reference rediscovery without activation", async () => {
   const f = await fixture();
   try {
     const owner = await f.recover();
@@ -297,18 +285,19 @@ it("HTTPS Finish publishes the exact committed setup after fresh document confir
       owner,
     );
     expect(confirm.status).toBe(200);
-    const document = await f.post(
-      "document",
-      { ...f.ref, statement: { ...f.statement, priorActivation: "committed" } },
-      owner,
-    );
+    const beforeKey = await readFile(join(f.stateDir, "first-setup-node-key.json"));
+    const document = await f.publicationDetails(owner);
     expect(document.status).toBe(200);
-    const kept = await f.post(
-      "document-kept",
-      { ...f.ref, kept: true, reconfirmation: (await confirm.json()).reconfirmation },
-      owner,
-    );
-    expect(kept.status).toBe(200);
+    expect(document.headers.get("Cache-Control")).toBe("no-store");
+    const details = await document.json();
+    expect(details.stage).toEqual({
+      stageId: f.ref.stageId,
+      nodeId: owner.state.nodeId,
+      name: f.staged.key.name,
+    });
+    expect(
+      details.modules.find((entry: { module: string }) => entry.module === f.module).input,
+    ).toEqual(f.input);
     const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
@@ -317,6 +306,7 @@ it("HTTPS Finish publishes the exact committed setup after fresh document confir
       expect(f.counts()).toEqual({ activations: 1, publications: 1, opens: 1, restart: 1 }),
     );
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(f.rows);
+    expect(await readFile(join(f.stateDir, "first-setup-node-key.json"))).toEqual(beforeKey);
     expect((await f.host.store.read())?.status).toBe("complete");
   } finally {
     await f.dispose();
@@ -407,30 +397,22 @@ it("the real direct entry can finish its retained database and publish trading s
   const f = await fixture(true);
   try {
     const owner = await f.recover();
-    const document = await f.post(
-      "document",
-      { ...f.ref, statement: { ...f.statement, priorActivation: "committed" } },
-      owner,
-    );
+    const beforeKey = await readFile(join(f.stateDir, "first-setup-node-key.json"));
+    const document = await f.publicationDetails(owner);
     expect(document.status).toBe(200);
-    const confirm = await f.post(
-      "reconfirm",
-      { password: f.password, purpose: "activation" },
-      owner,
-    );
-    expect(confirm.status).toBe(200);
+    const details = await document.json();
+    expect(details.stage).toEqual({
+      stageId: f.ref.stageId,
+      nodeId: owner.state.nodeId,
+      name: f.staged.key.name,
+    });
     expect(
-      (
-        await f.post(
-          "document-kept",
-          { ...f.ref, kept: true, reconfirmation: (await confirm.json()).reconfirmation },
-          owner,
-        )
-      ).status,
-    ).toBe(200);
+      details.modules.find((entry: { module: string }) => entry.module === f.module).input,
+    ).toEqual(f.input);
     const response = await f.post("finish", { ...(await f.snapshot()), publication }, owner);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+    expect(await readFile(join(f.stateDir, "first-setup-node-key.json"))).toEqual(beforeKey);
     const settings = parseEnvFile(await readFile(join(f.stateDir, "trading.env"), "utf8"));
     expect(settings).toMatchObject({
       WAITRON_TILL_NODE_ID: owner.state.nodeId,
@@ -588,30 +570,14 @@ it("publication recovery retains an explicitly disabled optional module", async 
     expect(details.state.modules.some((m: { module: string }) => m.module === "bookings")).toBe(
       false,
     );
+    expect(details.stage).toEqual({
+      stageId: f.ref.stageId,
+      nodeId: owner.state.nodeId,
+      name: f.staged.key.name,
+    });
     expect(
-      (
-        await f.post(
-          "document",
-          { ...f.ref, statement: { ...f.statement, priorActivation: "committed" } },
-          owner,
-        )
-      ).status,
-    ).toBe(200);
-    const reconfirm = await f.post(
-      "reconfirm",
-      { password: f.password, purpose: "activation" },
-      owner,
-    );
-    expect(reconfirm.status).toBe(200);
-    expect(
-      (
-        await f.post(
-          "document-kept",
-          { ...f.ref, kept: true, reconfirmation: (await reconfirm.json()).reconfirmation },
-          owner,
-        )
-      ).status,
-    ).toBe(200);
+      details.modules.find((entry: { module: string }) => entry.module === f.module).input,
+    ).toEqual(f.input);
     expect((await f.post("finish", { ...(await f.snapshot()), publication }, owner)).status).toBe(
       200,
     );

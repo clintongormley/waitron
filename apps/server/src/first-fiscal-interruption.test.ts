@@ -1,11 +1,14 @@
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { Agent } from "undici";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { serveRecovery } from "./node-entry.js";
+import { freePorts } from "./testing/free-ports.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries, tenants, nodes } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -13,24 +16,42 @@ import { parseModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { createFirstSetupModuleHost } from "./module-operation-host.js";
+import { publicFirstSetupState } from "./first-setup-owner.js";
+import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
-import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
-import { publicFirstFiscalInput } from "../test/first-fiscal-public.js";
+import { PASSWORD, MODULE } from "../test/first-fiscal.js";
 
 vi.mock("./module-config.js", { spy: true });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-const dirs: string[] = [];
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => ({
+    source: "internet",
+    result: "usable",
+    instantMs: Date.now(),
+    uncertaintyMs: 500,
+    wallStartedMs: Date.now(),
+    wallFinishedMs: Date.now(),
+    monotonicStartedMs: performance.now(),
+    monotonicFinishedMs: performance.now(),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime("2026-10-16T11:40:00Z");
+});
+const fixtures: { dispose(): Promise<void> }[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
-  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
 async function fixture(fault?: string) {
-  const root = await mkdtemp(join(tmpdir(), "first-interrupt-"));
-  dirs.push(root);
-  const stateDir = join(root, "state"),
-    venueDir = join(root, "venue");
   // The fiscal schema is real; unrelated optional product seeds are disabled in this focused venue.
   const available = ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name)).map(
     (m) =>
@@ -48,13 +69,20 @@ async function fixture(fault?: string) {
             },
           },
   );
-  const host = createFirstSetupModuleHost({
-    environment: {},
-    modules: available,
-    stateDir,
-    venueDir,
-    moduleConfig: parseModuleConfig({}, available),
+  const f = await hourFirstFiscalFixture({ database: () => suite.db, modules: available });
+  let server: Awaited<ReturnType<typeof serveRecovery>> | undefined;
+  let agent: Agent | undefined;
+  fixtures.push({
+    dispose: async () => {
+      if (server)
+        await new Promise<void>((resolve, reject) =>
+          server!.close((error) => (error ? reject(error) : resolve())),
+        );
+      await agent?.close();
+      await f.dispose();
+    },
   });
+  const { host, stateDir } = f;
   let applied = 0,
     publication = 0,
     throwOnce = fault;
@@ -117,95 +145,86 @@ async function fixture(fault?: string) {
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
-  const nonce = randomBytes(32).toString("base64url");
-  const claim = await (
-    await post("/setup-api/first-setup/claim", { clientClaimNonce: nonce, venue: request })
-  ).json();
+  mountFirstSetupResolutionApi(app, host, () => {}, {
+    withPublication: async (run) => run(deps),
+    requestRestart: () => {},
+  });
+  const initial = (await host.store.read())!;
+  const claim = { state: publicFirstSetupState(initial), capability: f.ownerAttempt.capability };
   let state = claim.state;
+  let finishing = false;
   const headers = () => ({
     "X-Waitron-Setup-Owner": claim.capability,
     "X-Waitron-Setup-Attempt": state.attemptId,
     "X-Waitron-Setup-Revision": String(state.revision),
     "X-Waitron-Setup-Generation": String(state.ownerGeneration),
   });
-  const reconfirm = async (purpose = "activation") => {
-    const res = await post(
-      "/setup-api/first-setup/reconfirm",
-      { password: PASSWORD, purpose },
-      headers(),
-    );
-    expect(res.status).toBe(200);
-    return res.json();
-  };
-  const chosen = await post(
-    "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { serials: [1] }, ...(await reconfirm("block-use")) },
-    headers(),
-  );
-  expect(chosen.status).toBe(200);
-  state = (await chosen.json()).state;
-  const exported = await app.request("/setup-api/first-setup/request", { headers: headers() });
-  const publicRequest = (await exported.json()).modules[0].request;
-  const signed = publicFirstFiscalInput(publicRequest);
-  const imported = await post(
-    "/setup-api/first-setup/input",
-    { module: MODULE, input: signed.input },
-    headers(),
-  );
-  expect(imported.status).toBe(200);
-  state = (await imported.json()).state;
-  expect(
-    (
-      await post(
-        "/setup-api/first-setup/enrol",
-        { module: MODULE, publicKey: signed.key, comparison: signed.key.fingerprint },
-        headers(),
-      )
-    ).status,
-  ).toBe(200);
-  const confirm = async (prior = "none") => {
-    const response = await post(
-      "/setup-api/first-setup/current-master",
-      {
-        module: MODULE,
-        statement: { ...signed.current, priorActivation: prior },
-        ...(await reconfirm()),
-      },
-      headers(),
-    );
-    expect(response.status).toBe(200);
-  };
+  const owner = () => ({ ...state, capability: claim.capability });
   const refresh = async () => {
-    const res = await post("/setup-api/first-setup/resume", {
-      clientClaimNonce: nonce,
+    const inspection = await host.resolution.inspectFirstSetupResolution();
+    const next = await host.owner.recoverFirstSetupOwner({
+      inspectionId: inspection.inspectionId,
+      revision: inspection.revision!,
+      ownerGeneration: inspection.ownerGeneration!,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
       password: PASSWORD,
     });
-    expect(res.status).toBe(200);
-    const next = await res.json();
     state = next.state;
     claim.capability = next.capability;
   };
-  const activate = (overrides: Record<string, unknown> = {}) =>
-    post(
-      "/setup-api/provision",
-      {
-        mode: "live",
-        aeatCert: { synthetic: true },
-        email: {
-          server: "smtp.example.test",
-          port: 465,
-          encryption: "tls",
-          user: "test",
-          password: "test",
-          from: "owner@example.test",
-        },
-        ...overrides,
+  const confirm = async (prior = "none") => {
+    if (prior === "committed") {
+      await refresh();
+      finishing = true;
+    } else await keepHourRecoveryDocument(host, owner(), PASSWORD);
+  };
+  const activate = async (overrides: Record<string, unknown> = {}) => {
+    const publication = {
+      mode: "live",
+      aeatCert: { synthetic: true },
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        user: "test",
+        password: "test",
+        from: "owner@example.test",
       },
-      headers(),
-    );
+      ...overrides,
+    };
+    if (finishing) {
+      const inspected = await host.resolution.inspectFirstSetupResolution();
+      if (server === undefined) {
+        await ensureBoxSecrets({
+          stateDir,
+          hostnames: ["localhost"],
+          now: () => new Date(),
+          listIpv4: () => ["127.0.0.1"],
+        });
+        const [port] = await freePorts(1);
+        server = await serveRecovery(app, { stateDir, port, httpHost: "127.0.0.1", log: () => {} });
+        agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+      }
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("missing test listener");
+      const origin = `https://127.0.0.1:${address.port}`;
+      return fetch(`${origin}/setup-api/first-setup/resolution/finish`, {
+        dispatcher: agent,
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin, ...headers() },
+        body: JSON.stringify({
+          inspectionId: inspected.inspectionId,
+          revision: inspected.revision,
+          ownerGeneration: inspected.ownerGeneration,
+          publication,
+        }),
+      } as RequestInit);
+    }
+    return post("/setup-api/provision", publication, headers());
+  };
   return {
     host,
-    current: signed.current,
+    current: { priorActivation: "none" },
     stateDir,
     claim,
     headers,

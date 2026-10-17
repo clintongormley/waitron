@@ -369,7 +369,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The owned host binds explicit kept confirmation to the current public document, staged key and
   password-confirmed owner before activation. Retained publication, boot and import fixtures use
   this replacement delivery path without changing their earlier behavioral assertions.
-  Other legacy paper fixtures still fail qualification. Final command composition, the complete
+  Retained interruption, Finish, unused-PDF and empty-selection fixtures now use the hour/key-only
+  flow. Their combined local qualification passes, including exact publication after password
+  recovery and whole-hour exclusion across changed bases. Final command composition, the complete
   wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

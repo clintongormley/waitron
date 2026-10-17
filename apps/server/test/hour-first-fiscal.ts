@@ -16,11 +16,12 @@ export async function hourFirstFiscalFixture(options: {
   environment?: "production" | "preproduction";
   modules?: readonly WaitronModule[];
   moduleConfig?: ModuleConfig;
+  workspace?: { root: string; stateDir: string; venueDir: string };
 }) {
-  const root = await mkdtemp(join(tmpdir(), "hour-first-fiscal-"));
+  const root = options.workspace?.root ?? (await mkdtemp(join(tmpdir(), "hour-first-fiscal-")));
   try {
-    const stateDir = join(root, "state"),
-      venueDir = join(root, "venue");
+    const stateDir = options.workspace?.stateDir ?? join(root, "state"),
+      venueDir = options.workspace?.venueDir ?? join(root, "venue");
     const modules =
       options.modules ??
       ALL_MODULES.filter((module) => ["core", MODULE, "fiscal-none"].includes(module.name));
@@ -55,6 +56,7 @@ export async function hourFirstFiscalFixture(options: {
       stateDir,
       venueDir,
       modules,
+      ...(options.moduleConfig === undefined ? {} : { moduleConfig: options.moduleConfig }),
       host,
       store: host.store,
       ownerAttempt,
@@ -63,10 +65,12 @@ export async function hourFirstFiscalFixture(options: {
       password: PASSWORD,
       module: MODULE,
       staged: { ...owned.recovery, stage: await host.keys.readStage(ownerAttempt) },
-      dispose: () => rm(root, { recursive: true, force: true }),
+      dispose: async () => {
+        if (options.workspace === undefined) await rm(root, { recursive: true, force: true });
+      },
     };
   } catch (error) {
-    await rm(root, { recursive: true, force: true });
+    if (options.workspace === undefined) await rm(root, { recursive: true, force: true });
     throw error;
   }
 }
