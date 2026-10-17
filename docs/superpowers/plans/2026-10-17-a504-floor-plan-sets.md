@@ -66,9 +66,10 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
 3. **The Floor plans page is venue-service's** (screen `floor-plans`, Operations group, order 11,
    between Departments and zones at 10 and Prep stations at 12,
    `packages/venue-service/src/dashboard/index.ts:16-21`, `75-79`), needing `venue.configure` with
-   `venue.view` reading it. Its routes are venue-service's; the layout rows they copy and delete go
-   through a new core port, `CoreServices.floorPlanSets`, as zone deletion already goes through
-   `CoreServices.floorDeletion` (`packages/module/src/module.ts:36-43`, `94-101`).
+   `venue.view` reading it. Its routes are venue-service's; the layout rows they make and copy go
+   through a new core port, `CoreServices.floorPlanSets`, and every removal of a set goes through
+   one verb on the existing deletion port, `FloorDeletion.removeSets`, as zone deletion already
+   goes through `CoreServices.floorDeletion` (`packages/module/src/module.ts:36-43`, `94-101`).
 4. **The editor keeps its own address word:** `/manage/floor-plan/set/{set}/zone/{zone}?back=…`,
    not the spec's `/manage/floor-plans/set/…` (§5). The page is a module screen and the editor a
    core screen, and each screen owns the first word of its address (`dashboardPath.children`,
@@ -85,12 +86,25 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    (`waitingTogether`, `apps/server/src/floor-today-store.ts:500-517`). When they become free, each
    of them drawn on today's map whose change moves it shows "Needs moving", and Mark moved on any of
    them applies the whole group's change (spec §11's proposal).
-9. **A layout that leaves a joined table off and stands any of its tables releases all its
-   tables**, and the joined table is then out of service on the till (it reads as "come apart",
-   `joinedTableApart`, `packages/db/src/joined-parts.ts:32-44`), which is how "not offered as a
-   spare while its tables stand" (spec §4.2) is built. A part's place in a layout that places its
-   joined table reads as off, so a change of parts saved in one set never makes another set's
-   layout invalid.
+9. **Whether a joined table holds its tables is read from today's map, not from the saved
+   plan.** Today a part is "still joined" whenever its joined table has a live table, wherever
+   either stands (`stillJoinedPart`, `packages/db/src/joined-parts.ts:9-29`), so a layout that
+   stands 4 and 5 and leaves 4+5 off would leave 4 and 5 out of service and 4+5 offered as a spare
+   — the reverse of spec §4.2. The rule becomes: a part is still joined only while its joined
+   table is drawn on today's map, or while none of the joined table's parts that were not split
+   off today is drawn there. So under Standard (4 and 5 drawn, 4+5 off) 4 and 5 are free tables
+   and 4+5 has "come apart" (`joinedTableApart`, `joined-parts.ts:32-44`), which keeps it out of
+   every spare list and picker (`sparesOf`, `apps/till/src/state/floor-today.ts:288-297`); under
+   Dinner (4+5 drawn) 4 and 5 are out of service as today; with 4+5 and its tables all off, 4+5
+   stays a spare that can be placed, as today. Reading the map rather than the new layout is what
+   keeps 4 and 5 out of service while 4+5 still has guests waiting to be taken apart. `copyParts`
+   keeps copying every shared part (the link is shared; whether it holds is the map's question).
+   `savedPart` (`joined-parts.ts:52-58`), which hides parts from `GET /api/tables`
+   (`apps/server/src/tables.ts:51`) and makes bookings refuse them (`packages/bookings/src/bookings.ts:55-69`),
+   reads the zone's recorded layout instead of every layout: a table is a saved part when its
+   joined table is placed in that layout, or when none of the joined table's parts is (a zone with
+   no recorded set keeps today's reading). A part's place in a layout that places its joined table
+   reads as off, so a change of parts saved in one set never makes another set's layout invalid.
 10. **A table off today's map never shows "Needs moving".** A table in store, or taken off for
     today, is not drawn, so there is nothing to carry. Such a table whose new place is taken waits
     for that place, and a later read puts it on the map once nothing stands there that does not
@@ -111,7 +125,7 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     `floor_plan_set.name_taken` { departmentId, name }, `floor_plan_set.is_default` { setId }
     (deleting the default), and `menu_period.invalid`'s `field` gains `"floorPlanSetId"` (a set of
     another department). `floor_plan_set.invalid` keeps the spec's { field } and is also used for
-    `"name"`, `"departmentId"` and `"fromSetId"`.
+    `"name"`, `"departmentId"`, `"fromSetId"` and `"replaceWith"`.
 16. **The zones read works the due layout out at `deps.clock.now().instant`**, so tests can fix
     the moment; its closing states keep their `new Date()` (`apps/server/src/till-api.ts:2614`).
 17. **The grey default is a new `muted` flag on `wt-combobox` options** (`ComboboxOption`,
@@ -126,6 +140,27 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
 21. **Seeds:** the demo seed gives each department one set named "Standard" ("Estándar" in a
     Spanish seed) holding the zones' current tables. Provisioning makes none (spec decision 18:
     "A department starts with no sets").
+22. **A "keep open" that pushes the next run's start later does not make that run a new
+    occurrence.** `withExtension` cuts a range that overlaps the extension and restarts it at the
+    extension's end (`packages/venue-service/src/service-day.ts:161-184`), which changes the run's
+    occurrence key. Without a rule, Update layout at 16:05 records Dinner 20:00, Lunch kept open
+    at 16:10 until 20:30 turns Dinner into a 20:30 run, the recorded occurrence counts as gone, and
+    Lunch's layout is offered again — which answer 7(a) rules out. DEFAULT: when no run of the
+    recorded period starts at the recorded time today, the recorded occurrence is the earliest run
+    of the same period on the same business day that starts later than the recorded time; only
+    when there is none does it count as gone. A run moved earlier, or a period with no later run,
+    is gone as before.
+23. **"Back to its saved place" on a table that needs moving is Mark moved**: the same place
+    check (`table.new_place_taken`), the whole joined group's change, and the mark cleared. Today
+    it would put the table at its new place and leave the mark (`backToSaved` reads the reset row,
+    `apps/server/src/floor-today-store.ts:740-758`).
+24. **At the day's first read, a zone with tables but no due layout** (its department has no set,
+    or it is in none — decision 5) **is left as it is**: no reset, no record, no map on the till
+    (`hasPlan` false). Its first read after its department gains a set resets it onto the due
+    layout.
+25. **Bookings judge a part by today's recorded layout** (decision 9's `savedPart`), whatever the
+    booking's time. A booking for tonight made while Lunch's layout is recorded is judged by
+    Lunch's. Spec §11 leaves bookings across layouts to the bookings work.
 
 ## Global constraints
 
@@ -145,11 +180,13 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
   fixed by resetting the set's `drizzle/` to `main` and regenerating. A generation that rebuilds a
   table must not also add a column to it, and must not rebuild a table with an expression index
   (there is none on the floor tables). Read every generated SQL file before committing it.
-- **No data-migration code** (CLAUDE.md §3). The pull request's first line reads
-  **"Venue reset needed: …"** if `scripts/migration-upgrade.test.ts` needs a `RESETS` entry
-  (Task 23 expects it to); the dev venues and the Santet venue are reset when it lands (owner
-  answer 10(a)). The build lands before the A760 squash freeze or starts after the squash lands,
-  never across it.
+- **No data-migration code** (CLAUDE.md §3). **A venue reset is certain** (Task 23 rebuilds
+  `floor_plan_tables`, which live tables point at). The pull request's first line reads:
+  "Venue reset needed: the owner's box, every `wa-wt` dev venue (demo and onboarding, every
+  slot) and the Santet real-data venue." (owner answer 10(a)). Nobody starts the dev stack on the
+  branch before Task 23 lands, so no venue holds rows of the branch's interim shape; Tasks 29a
+  and 29b reset theirs first. The build lands before the A760 squash freeze or starts after the
+  squash lands, never across it.
 - Tables are classified in their module's list: core in `packages/db/src/classification.ts`
   (floor tables at lines 108-120), venue-service in
   `packages/venue-service/src/classification.ts` (beside `menu_periods`, line 18). All new tables
@@ -190,6 +227,9 @@ Tests pinning these may change, under the commit rule above:
   places stored on `floor_plan_tables` (`floor-plans.ts:97-116`).
 - A joined table's parts never placed on the saved plan (`checkParts`,
   `apps/server/src/floor-plan.ts:222`; the editor's guard, `apps/dashboard/src/screens/floor-plan-tables-panel.ts:191`).
+- A part out of service whenever its joined table has a live table, wherever either stands
+  (`stillJoinedPart`, `packages/db/src/joined-parts.ts:9-29`), and a table counted a saved part
+  whatever the layout (`savedPart`, `joined-parts.ts:52-58`) — Task 7b.
 - A waiting table moving by itself on a later read (`catchUpZone`,
   `apps/server/src/floor-today-store.ts:219-227`).
 - A table that only needs clearing moving at a reset, and a reset clearing "needs clearing" on the
@@ -227,42 +267,50 @@ test in the task named.
 
 ## Task overview
 
-| # | Task | Size |
-| --- | --- | --- |
-| 1 | Core schema, first generation (additive) | S |
-| 2 | Shared tables and placements: core reads and writes the new columns, one layout per zone | M |
-| 3 | Venue-service schema: department sets and a period's set | S |
-| 4 | The due-occurrence rule (pure) | M |
-| 5 | The due-layout seat | M |
-| 6 | Editor read and save per set | M |
-| 7 | Resets onto a chosen layout, and the record | M |
-| 8 | Move the test helpers, seeds and floor-plan tests to sets | M |
-| 9 | Move the remaining server callers to sets; remove the zone-only functions | M |
-| 10 | Core `FloorPlanSets` port; department delete removes sets | M |
-| 11 | Venue-service set routes | M |
-| 12 | Reset waiting rules: clearing waits, joined groups wait together, taken-off stays | M |
-| 13 | "Needs moving": later reads mark, tables state reports | M |
-| 14 | `table.needs_moving` refusals | S |
-| 15 | No table put down on another, at every reset (A600) | M |
-| 16 | Mark moved | M |
-| 17 | The zones read offers the due layout | M |
-| 18 | Update layout, and Reset to … plan onto the recorded set | M |
-| 19 | `wt-combobox` muted option | S |
-| 20 | Floor plans page: the list | M |
-| 21 | Floor plans page: Add set, Rename, Copy | M |
-| 22 | Floor plans page: Make default and Delete | M |
-| 23 | Core rebuild generation | M |
-| 24 | Period dialog field and Periods column | M |
-| 25 | Editor: address, title, shared-tables line, parts per layout | M |
-| 26 | Till: banner and Update layout | M |
-| 27 | Till: Needs moving on the map and the list | M |
-| 28 | Till: zone menu wording, and List/Map in the menu on a phone | M |
-| 29 | LOOK | M |
-| 30 | Docs and backlog | S |
+Listed in DISPATCH ORDER. Task numbers keep the subjects together, so they are not in sequence.
 
-Order matters: 9 needs 25's editor off the old routes, so run 25 before 9 (the numbering keeps
-the subjects together; the dispatch order is 1–8, 25, 9–24, 26–30). Task 23 runs after every
-task that reads or writes the old columns (2, 6–9).
+| Order | Task | Subject | Size |
+| --- | --- | --- | --- |
+| 1 | 1 | Core schema, first generation (additive) | S |
+| 2 | 2 | Shared tables and placements: core reads and writes the new columns, one layout per zone | M |
+| 3 | 3 | Venue-service schema: department sets and a period's set | S |
+| 4 | 4 | The due-occurrence rule (pure) | M |
+| 5 | 5 | The due-layout seat | M |
+| 6 | 6 | Editor read and save per set | M |
+| 7 | 7 | Resets onto a chosen layout, and the record | M |
+| 8 | 7b | Joined tables follow today's map; saved parts follow the recorded layout | M |
+| 9 | 8 | Move the test helpers, seeds and floor-plan tests to sets | M |
+| 10 | 25a | Editor: address, API, title, shared-tables line, Close | M |
+| 11 | 25b | Editor: a joined table's parts per layout | S |
+| 12 | 9a | Move the first group of server test callers to sets | M |
+| 13 | 9b | Move the rest; remove the zone-only functions and routes | M |
+| 14 | 23 | Core rebuild generation | M |
+| 15 | 10 | Core `FloorPlanSets` port; `FloorDeletion.removeSets`; department delete removes sets | M |
+| 16 | 11 | Venue-service set routes | M |
+| 17 | 12 | Reset waiting rules: clearing waits, joined groups wait together, taken-off stays | M |
+| 18 | 13 | "Needs moving": later reads mark, tables state reports | M |
+| 19 | 14 | `table.needs_moving` refusals | S |
+| 20 | 15 | No table put down on another, at every reset (A600) | M |
+| 21 | 16 | Mark moved (and Back to saved place on a table that needs moving) | M |
+| 22 | 17 | The zones read offers the due layout | M |
+| 23 | 18 | Update layout, and Reset to … plan onto the recorded set | M |
+| 24 | 19 | `wt-combobox` muted option | S |
+| 25 | 20 | Floor plans page: the list | M |
+| 26 | 21 | Floor plans page: Add set, Rename, Copy | M |
+| 27 | 22 | Floor plans page: Make default and Delete | M |
+| 28 | 24 | Period dialog field and Periods column | M |
+| 29 | 26 | Till: banner and Update layout | M |
+| 30 | 27 | Till: Needs moving on the map and the list | M |
+| 31 | 28 | Till: zone menu wording, and List/Map in the menu on a phone | M |
+| 32 | 29a | LOOK, dashboard (scripted) | M |
+| 33 | 29b | LOOK, till (scripted) | M |
+| 34 | 30 | Docs and backlog; the Santet importer (local, not in the PR) | S |
+
+Why this order: 9a/9b remove the old editor routes, so the editor (25a) moves first. Task 23
+drops `floor_plan_tables.plan_id`, which until then ties every table to one layout row: a set's
+layout row cannot be deleted while a table names it (`floor_plan_tables_plan_fk`,
+`packages/db/src/schema/floor-plans.ts:109-113`), so 23 runs before 10 deletes sets, and after
+every task that reads or writes the old columns (2, 6, 7, 7b, 8, 9a, 9b).
 
 ---
 
@@ -279,7 +327,7 @@ task that reads or writes the old columns (2, 6–9).
 ```ts
 export const floorPlanSets;        // floor_plan_sets: id, location_id (FK locations)
 export const floorPlanPlacements;  // floor_plan_placements: id, plan_id (FK floor_plans), plan_table_id (FK floor_plan_tables),
-                                   //   x, y, width, height, shape, rotation — all NOT NULL, same checks as placementChecks;
+                                   //   x, y, width, height, shape, rotation — all NOT NULL, with the place checks (not the seats check);
                                    //   unique floor_plan_placements_table_key (plan_id, plan_table_id)
 // New nullable columns, each with its foreign key:
 //   floor_plans.set_id → floor_plan_sets.id
@@ -290,8 +338,12 @@ export const floorPlanPlacements;  // floor_plan_placements: id, plan_id (FK flo
 //   floor_today_zones.occurrence label (nullable, venue-service's occurrence key),
 //   floor_reset_tables.ready_to_move flag NOT NULL default false.
 // Unique indexes: floor_plans_zone_key (zone_id) is REPLACED by floor_plans_set_zone_key (set_id, zone_id);
-//   ADDED beside the old ones: floor_plan_tables_zone_label_key (zone_id, label),
-//   floor_plan_table_sizes_plan_table_key (plan_id, plan_table_id).
+//   floor_plan_table_sizes_table_key (plan_table_id) is REPLACED by
+//   floor_plan_table_sizes_plan_table_key (plan_id, plan_table_id) — kept beside it, a second
+//   layout's kept size for the same table would be refused from Task 6 on;
+//   ADDED beside the old one: floor_plan_tables_zone_label_key (zone_id, label).
+// Between this task and Task 2, size rows written with a null plan_id are not held to one per
+// table (null never equals null in a unique index); Task 2 writes plan_id on every size row.
 ```
 
 - [ ] **Step 1: Write the failing tests** in `floor-plans.test.ts` (it already opens a venue with
@@ -305,17 +357,26 @@ export const floorPlanPlacements;  // floor_plan_placements: id, plan_id (FK flo
     `floor_plans_set_zone_key`.
   - "starts a reset row not ready to move": a `floorResetTables` insert without `readyToMove`
     reads back `false`.
+  - "keeps a table's off-plan size in each layout": two `floorPlanTableSizes` rows for one table
+    with different `planId`s both insert; a repeat of `(planId, planTableId)` is refused naming
+    `floor_plan_table_sizes_plan_table_key`.
   Failing run prints: `floorPlanPlacements` / `floorPlanSets` is not exported (TypeError reading
   `undefined`).
 - [ ] **Step 2:** `pnpm --filter @waitron/db exec vitest run src/schema/floor-plans.test.ts` — FAIL.
-- [ ] **Step 3:** Declare the tables and columns above. Reuse `placementChecks` for
-  `floor_plan_placements` with its columns `notNull()`. Classify `floor_plan_sets` and
+- [ ] **Step 3:** Declare the tables and columns above. `placementChecks`
+  (`packages/db/src/schema/floor-plans.ts:54-75`) starts with a seats check
+  (`${name}_seats_ck`, line 57) that `floor_plan_placements` has no column for: split it into
+  `seatsCheck(name, seats)` and `placeChecks(name, t)`, have the three existing callers (lines
+  114, 198, 269) use both so their generated constraint names do not change (the generation must
+  not touch them), and give `floor_plan_placements` `placeChecks` alone, with its columns
+  `notNull()`. Classify `floor_plan_sets` and
   `floor_plan_placements` as `state` beside the floor tables. Add `{ name: "floor_plan_sets",
   locationColumns: ["location_id"] }` before `floor_plans` and `{ name: "floor_plan_placements" }`
   after `floor_plan_tables` to the core configuration export.
 - [ ] **Step 4:** `pnpm --filter @waitron/db db:generate`. Read the SQL: it must be CREATE TABLE,
-  `ALTER TABLE … ADD`, `DROP INDEX` and `CREATE UNIQUE INDEX` only, with no `__new_` table. If
-  drizzle chose a rebuild for any table, stop and report.
+  `ALTER TABLE … ADD`, `DROP INDEX` and `CREATE UNIQUE INDEX` only, with no `__new_` table (the
+  two index swaps are plain index drops and creates). If drizzle chose a rebuild for any table,
+  stop and report.
 - [ ] **Step 5:** Run the test file (PASS), then the guards:
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/journal-monotonic.test.ts scripts/id-columns-are-references.test.ts scripts/column-vocabulary.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migration-upgrade.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`. All
@@ -385,6 +446,12 @@ Behaviour does not change: each zone still has one saved plan. Core code stops r
 //   uniqueIndex department_floor_plan_sets_one_default_key (department_id) where is_default.
 // menu_periods.floor_plan_set_id: nullable, references floor_plan_sets.id (a plain column
 //   reference, so drizzle adds it with ALTER TABLE and does not rebuild menu_periods).
+//   CLAUDE.md §3 comment AT THE COLUMN, saying what the key cannot hold and where the refusal
+//   lives: "A set of this period's own department. The key names core's floor_plan_sets, so the
+//   database takes any department's set; the period routes refuse another department's with
+//   menu_period.invalid (floorPlanSetId) and the configuration import with
+//   menu_periods.floor_plan_set_id. A composite key to department_floor_plan_sets would rebuild
+//   menu_periods, whose rebuild empties menu_period_staff_menus (its key cascades)." 
 export interface FloorPlanSetSummary {
   setId: string; departmentId: string; name: string; isDefault: boolean;
   /** The department's zones, in display order. */
@@ -444,14 +511,19 @@ export async function readFloorPlanSets(
 ```ts
 export interface RecordedRun { periodId: string; startsAt: string } // parsed from today's occurrence key
 /** The run whose layout is due at `minute`: running ("keep open" included) → next later today →
- *  last that ran today → null. Never one starting earlier in the service day than `recorded`
- *  while `recorded` names a run that still starts at that time today (spec decision 4). */
+ *  last that ran today → null. Never one starting earlier in the service day than the run
+ *  `recorded` matches (spec decision 4); when `recorded` matches none, the rule does not apply. */
 export function dueRun(input: {
   runs: readonly ServiceRange[]; minute: number; context: ServiceDayContext;
   recorded: RecordedRun | null;
 }): ServiceRange | null;
 /** Parses venue-service's occurrence key; null for another department, another business day, or not a key. */
 export function recordedRun(key: string | null, departmentId: string, businessDay: string): RecordedRun | null;
+/** The run today that `recorded` is: the run of its period starting at its time, else the
+ *  earliest run of its period starting later the same business day (plan decision 22), else null (gone). */
+export function matchRecorded(
+  runs: readonly ServiceRange[], recorded: RecordedRun, context: ServiceDayContext,
+): ServiceRange | null;
 export function occurrenceKey(departmentId: string, businessDay: string, run: ServiceRange): string;
 // Same format as resolveDepartmentService's periodOccurrenceKey (menu-timetable.ts:455-462);
 // resolveDepartmentService switches to this helper so the two never drift.
@@ -473,8 +545,13 @@ export function occurrenceKey(departmentId: string, businessDay: string, run: Se
     an earlier run.
   - "is the last run after the day's last ends": at 23:45 → D 20:00.
   - "is null on a day with no period": runs empty → null.
-  - "ignores a record whose run is gone": record L 12:00 after a repaint made Lunch 13:00 →
-    returns L 13:00 (the exception does not apply).
+  - "ignores a record whose run is gone": record L 14:00 after a repaint made Lunch 13:00–16:00
+    (no Lunch run starts at or after 14:00) at 14:30 → L 13:00, the exception not applying.
+  - "keeps a run whose start a keep open pushed later" (plan decision 22): record D 20:00 at
+    16:05; L kept open 16:00–20:30 (which `withExtension` turns into L 13:00–20:30 and D
+    20:30–23:30); at 16:10 → D 20:30, not L; `matchRecorded` returns D 20:30. Control: without
+    `matchRecorded`'s later-start branch the same case returns L 13:00 — run it once with the
+    branch removed and see it fail.
   - `recordedRun` cases: another department's key → null; yesterday's key → null; `"[1,2"` → null;
     today's key → `{ periodId, startsAt }`.
   - `occurrenceKey` equals `resolveDepartmentService`'s `periodOccurrenceKey` for a running run.
@@ -537,7 +614,7 @@ export interface DueFloorLayout {
 ### Task 6: Editor read and save per set
 
 Expand only: the zone-only `readZonePlan`/`saveZonePlan` keep working on the set-less row until
-Task 9.
+Task 9b.
 
 **Files:**
 - Modify: `apps/server/src/floor-plan.ts`, `apps/server/src/errors.ts` (beside
@@ -600,7 +677,7 @@ export async function saveLayout(
 - Create: `apps/server/src/floor-layout-due.ts`, `…/floor-layout-due.test.ts`
 - Modify: `apps/server/src/floor-today-store.ts` (`resetZone` 93-103, `resetZoneFor` 106-174,
   `copyParts` 177-202, `ensureToday` 533-579), `apps/server/src/floor-plan.ts` (first-save reset,
-  422-426)
+  422-426), `apps/server/src/floor-today-parts.ts` (`partsOf`, 31-66)
 
 **Interfaces — Produces:**
 
@@ -619,7 +696,7 @@ export function layoutOffer(state: ZoneLayoutState): { setId: string; revision: 
 // floor-today-store.ts:
 export async function resetZone(
   tx, cfg, removals, zoneId: string, now: Date,
-  onto: { setId: string | null; occurrence: string | null } | "due", // setId null = the set-less row, until Task 9
+  onto: { setId: string | null; occurrence: string | null } | "due", // setId null = the set-less row, until Task 9b
 ): Promise<number | null>;
 ```
 
@@ -635,7 +712,11 @@ export async function resetZone(
     only the chosen set's places" (Dinner differs; reset onto Dinner → Dinner's places, spec
     decision 19); "the dashboard's first save resets onto the due layout, not the set saved"
     (save Dinner at 14:00 for a zone with no today's plan → recorded set Standard).
-  Failing run: `layoutOffer` not exported; `setId` null on the record.
+  - In `floor-today-split.test.ts` (it exercises `partsOf` through Split): "a part's size comes
+    from the recorded layout": Standard keeps part 4 off-plan at 8×8 and Dinner at 12×6; with
+    Dinner recorded, splitting 4 off 4+5 lays it out 12 wide, and Split lists 4 once (with sizes
+    per layout, today's join by table alone, `floor-today-parts.ts:53-54`, would list it twice).
+  Failing run: `layoutOffer` not exported; `setId` null on the record; 4 listed twice.
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/floor-layout-due.test.ts src/floor-today-store.test.ts` — FAIL.
 - [ ] **Step 3:** Implement. `zoneLayouts` reads the records (`floorTodayZones` with
   `todayBusinessDay`, `floor-today-store.ts:80-86`), asks `VENUE_SERVICE.dueFloorLayouts` with each
@@ -645,10 +726,71 @@ export async function resetZone(
   starts from active zones with a table or a layout row (not from `floor_plans` alone,
   `floor-today-store.ts:541-545`), asks `zoneLayouts` only for the zones it will reset, and resets
   onto the due layout; a zone whose due is null keeps today's behaviour on its set-less row until
-  Task 9 removes it. `saveLayout` and `saveZonePlan` reset with `"due"`.
+  Task 9b removes it. `saveLayout` and `saveZonePlan` reset with `"due"`. `partsOf` stops
+  reading `floor_plan_tables`' old place columns (lines 36-37) and reads the part's place and
+  kept size from the zone's recorded layout: `floor_plan_placements` and `floor_plan_table_sizes`
+  joined on the recorded `(set_id, zone_id)` layout row's id as well as the table.
 - [ ] **Step 4:** Run the files; then every floor suite as in Task 2 Step 4 (behaviour for
   set-less zones unchanged).
 - [ ] **Step 5:** Commit: "Floor plan sets, step 7: every reset reads one set's layout and records it".
+
+### Task 7b: Joined tables follow today's map; saved parts follow the recorded layout
+
+Builds spec §4.2 and owner answer 2 ("Dinner places 4+5, Standard has 4 and 5 apart") on the
+till and for bookings, by plan decision 9. Runs after Task 7, before Task 12.
+
+**Files:**
+- Modify: `packages/db/src/joined-parts.ts` (`stillJoinedPart` 9-29, `savedPart` 52-58)
+- Test: `packages/db/src/joined-parts.test.ts`, `apps/server/src/joined-parts.test.ts` (its
+  "a part still in a joined table" cases, from line 70, stay unchanged: they describe a layout
+  that places the joined table), `packages/bookings/src/bookings.test.ts` (beside the
+  `table.in_joined_table` cases at 812 and 834), `apps/server/src/floor-today-state.test.ts`
+
+**Interfaces:** the three SQL helpers keep their signatures. Unchanged on purpose: `copyParts`
+(Task 7) still copies every shared part into `floor_reset_table_parts`; `joinedTableApart` and
+`joinedOutOfService` (32-49) are unchanged and follow from the new `stillJoinedPart`.
+
+- [ ] **Step 1: Write the failing tests.** Zone Inside, tables 4, 5 and the joined table 4+5
+  made of them; Standard places 4 and 5 and leaves 4+5 off; Dinner places 4+5 and leaves 4 and 5
+  off; a third set "All off" places none of the three.
+  - `packages/db/src/joined-parts.test.ts`, with today's rows written as each reset leaves them:
+    "under Standard 4 and 5 are free and 4+5 has come apart" (`stillJoinedPart(4)` false,
+    `joinedTableApart(4+5)` true); "under Dinner 4 and 5 are still joined" (true, false, as
+    today); "with all three off, 4+5 is a spare and 4 and 5 are still joined" (today's
+    behaviour kept); "a part split off today does not count as standing" (Dinner, 4 split off and
+    drawn: 5 is still joined); `savedPart(4)`: false with Standard recorded, true with Dinner
+    recorded, true with no recorded set.
+  - `apps/server/src/joined-parts.test.ts`, new describe "a layout that stands a joined table's
+    tables": after a reset onto Standard, seating a party at 4 succeeds; joining 5 to that party
+    succeeds; `GET /api/tables` lists 4 and 5; `GET /api/tables/state` reads 4+5 with
+    `today.joined.apart: true`, so the till's `sparesOf` leaves it out
+    (`apps/till/src/state/floor-today.ts:288-297`); placing 4+5 on today's map is refused
+    `table.in_joined_table`.
+  - Same file, "4+5 with guests waits joined under a layout that leaves it off" (spec §7.3's
+    take-apart row, up to the wait): Dinner recorded, a party at 4+5, reset onto Standard → 4+5
+    keeps its place, 4 and 5 stay off the map and seating either is refused
+    `table.in_joined_table`. (When the party leaves: Task 13 marks it; Task 16 finishes it.)
+  - `packages/bookings/src/bookings.test.ts`: "books table 4 while its zone's recorded layout
+    stands it": with Standard recorded the booking is accepted; with Dinner recorded it is
+    refused `table.in_joined_table` as today.
+  Failing run: seating 4 under Standard refused `table.in_joined_table`; `GET /api/tables` leaves
+  4 and 5 out; the booking refused.
+- [ ] **Step 2:** `pnpm --filter @waitron/db exec vitest run src/joined-parts.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/joined-parts.test.ts src/floor-today-state.test.ts`,
+  `pnpm --filter @waitron/bookings exec vitest run src/bookings.test.ts` — FAIL.
+- [ ] **Step 3:** In `stillJoinedPart`, add to the `where`: the joined table's today's row is
+  drawn (`floor_today_tables` with `x` not null and `taken_off = 0`), or no part of the same
+  joined reset row whose table is not in `floor_today_split_parts` has a drawn today's row. In
+  `savedPart`, add: the zone's recorded set (`floor_today_zones.set_id`) is null, or its
+  `(set_id, zone_id)` layout places the joined table, or places none of its parts (a part's place
+  in a layout that places the joined table counts as off, decision 9). Read the emitted SQL with
+  `.toSQL()` for one call of each (CLAUDE.md §3: a correlated subquery against the outer table
+  breaks silently).
+- [ ] **Step 4:** Run the files above, then every joined and split suite:
+  `pnpm --filter @waitron/server exec vitest run src/joined src/floor-today-split src/floor-today-reset-table src/floor-today-merges src/floor-today-flatten src/floor-catch-up src/tables.test.ts src/booking-seat.test.ts`.
+  An existing assertion that changes is a STOP unless it pins a part being out of service under
+  a layout that stands it, which this plan removes.
+- [ ] **Step 5:** Commit: "Floor plan sets, step 7b: a layout that stands a joined table's tables makes them usable".
 
 ### Task 8: Move the test helpers, seeds and floor-plan tests to sets
 
@@ -677,46 +819,59 @@ export async function defaultLayout(tx: Transaction, cfg: TillConfig, zoneId: st
   suite that uses `plannedZone` (`grep -l plannedZone apps/server/src`) — PASS.
 - [ ] **Step 4:** Commit: "Floor plan sets, step 8: tests and the demo seed use sets".
 
-### Task 9: Move the remaining server callers to sets; remove the zone-only functions
+### Task 9a: Move the first group of server test callers to sets
 
-Runs after Task 25 (the editor no longer calls the old routes).
+Runs after Tasks 25a and 25b. Arguments only; no assertion changes.
 
-**Files:**
-- Modify: every remaining caller found by
-  `grep -rln "saveZonePlan\|readZonePlan" apps packages scripts --include='*.ts'`
-  (at `9d6ccd7b8`: `service-delete.integration.test.ts`, `floor-catch-up.test.ts`,
-  `joined-parts.test.ts`, `floor-today-store.test.ts`, `floor-today-state.test.ts`,
-  `floor-today-api.test.ts`, `configuration-transfer.test.ts`, `table-removal.test.ts`,
-  `management-api.service-delete.test.ts`, `floor-today-split.test.ts`,
-  `floor-today-reset-table.test.ts`, `floor-revision.test.ts`, `booking-seat.test.ts`,
-  `till-api.today-joins.test.ts`, `tables.test.ts`, `floor-today-split-group.test.ts`,
-  `floor-today-changes.test.ts`); `apps/server/src/floor-plan.ts`;
-  `apps/server/src/management-api.ts` (old routes 1666-1690, `parseZonePlanSave` stays);
-  `apps/server/src/floor-today-store.ts` (the set-less fallback); `apps/dashboard/src/api/live-queries.ts:481-488`
-- Test: the files above
+**Files** (call counts of `saveZonePlan`/`readZonePlan` at `9d6ccd7b8`, `apps/server/src/`):
+`service-delete.integration.test.ts` (11), `floor-catch-up.test.ts` (7), `joined-parts.test.ts`
+(6), `floor-today-store.test.ts` (5), `floor-today-state.test.ts` (5), `floor-today-api.test.ts`
+(4), `configuration-transfer.test.ts` (4).
 
-- [ ] **Step 1:** Write the failing test in `management-api.floor-plan-sets.test.ts`: "no longer
-  serves the zone-only floor plan routes": `GET /management-api/zones/:id/floor-plan` answers 404.
-  Run — FAIL (it answers 200).
-- [ ] **Step 2:** Move each caller to `defaultLayout` + `saveLayout`/`readLayout` (arguments only).
-  Delete `readZonePlan`, `saveZonePlan`, `checkZonePlanSave`, the set-less `planOf` branch, the
-  `"due"`-less reset fallback, and the two old routes. `resetZone`'s `onto.setId` becomes
+- [ ] **Step 1:** Move each call to Task 8's `defaultLayout` with `saveLayout`/`readLayout`.
+- [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run` on the seven files: the same
+  `Tests` count as before the change, all passing. `grep -c "saveZonePlan\|readZonePlan"` on each
+  prints 0.
+- [ ] **Step 3:** Commit: "Floor plan sets, step 9a: more tests use sets".
+
+### Task 9b: Move the rest; remove the zone-only functions and routes
+
+**Files:** `apps/server/src/` `table-removal.test.ts` (3), `management-api.service-delete.test.ts`
+(3), `floor-today-split.test.ts` (3), `floor-today-reset-table.test.ts` (3),
+`floor-revision.test.ts` (3), `booking-seat.test.ts` (3), `till-api.today-joins.test.ts` (2),
+`tables.test.ts` (2), `floor-today-split-group.test.ts` (2), `floor-today-changes.test.ts` (2);
+`apps/server/src/floor-plan.ts`; `apps/server/src/management-api.ts` (old routes 1666-1690,
+`parseZonePlanSave` stays); `apps/server/src/floor-today-store.ts` (the set-less fallback,
+`ensureToday`); `apps/dashboard/src/api/live-queries.ts:481-488`.
+
+- [ ] **Step 1: Write the failing tests.** In `management-api.floor-plan-sets.test.ts`: "no longer
+  serves the zone-only floor plan routes": `GET /management-api/zones/:id/floor-plan` answers
+  404. In `floor-today-store.test.ts` (plan decision 24): "leaves a zone with tables but no due
+  layout as it is at the day's first read": a zone moved into a department with no set keeps
+  yesterday's today's rows and record after the first read of a new business day; after its
+  department gains a set, the next read resets it onto that set and records it. Run — FAIL (the
+  route answers 200; the zone is reset from its set-less row).
+- [ ] **Step 2:** Move the ten files' calls as in 9a. Delete `readZonePlan`, `saveZonePlan`,
+  `checkZonePlanSave`, the set-less `planOf` branch, the set-less reset fallback and the two old
+  routes; `ensureToday` skips a zone whose due layout is null. `resetZone`'s `onto.setId` becomes
   `string`. Add `floor_plan_placements` and `floor_plan_sets` to the dashboard live query
   `getFloorPlan`'s list.
 - [ ] **Step 3:** `grep -rn "saveZonePlan\|readZonePlan\|checkZonePlanSave" apps packages scripts`
-  prints nothing. Run every file the step touched, by name, with
-  `pnpm --filter @waitron/server exec vitest run <files>`, and
+  prints nothing. Run every file the task touched, by name, and
   `pnpm exec vitest run scripts/live-subscriptions.test.ts`. CI runs the package's coverage.
-- [ ] **Step 4:** Commit: "Floor plan sets, step 9: one layout per set everywhere".
+- [ ] **Step 4:** Commit: "Floor plan sets, step 9b: one layout per set everywhere".
 
-### Task 10: Core `FloorPlanSets` port; a department's delete removes its sets
+### Task 10: Core `FloorPlanSets` port; `FloorDeletion.removeSets`; a department's delete removes its sets
 
 **Files:**
 - Create: `apps/server/src/floor-plan-sets.ts`, `…/floor-plan-sets.test.ts`
 - Modify: `packages/module/src/module.ts` (`CoreServices` 36-43, `FloorDeletion` 94-101),
   `apps/server/src/parties.ts:119-129` (`moduleCoreServices`), `apps/server/src/floor-delete.ts`
   (`floorDeletionFor`, 150), `packages/venue-service/src/service-delete.ts` (`remove`, 309-331),
-  `packages/venue-service/src/service-delete-settings.ts` (the removes list, 282-325)
+  `packages/venue-service/src/service-delete-settings.ts` (the removes list, 282-325),
+  `packages/venue-service/src/dashboard/service-delete-copy.ts` (`itemKeys`, 5-28),
+  `packages/venue-service/src/dashboard/strings.ts` (beside `venue.delete_item_department_periods`,
+  31 and 853)
 
 **Interfaces — Produces:**
 
@@ -726,8 +881,6 @@ export interface FloorPlanSets {
   create(tx: Transaction): Promise<string>;
   /** Copies every layout row, placement and kept size of `fromSetId` into `toSetId`, each layout at revision 1. */
   copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void>;
-  /** Deletes the sets' placements, sizes, layouts and rows; a today's record naming one keeps its layout and loses its set. */
-  remove(tx: Transaction, setIds: readonly string[]): Promise<void>;
   /** Each zone's table count, and each (set, zone) layout's revision and counts, a missing row as 0/0/all spare. */
   readLayouts(tx: Transaction, setIds: readonly string[], zoneIds: readonly string[]): Promise<{
     tableCounts: ReadonlyMap<string, number>;
@@ -736,7 +889,16 @@ export interface FloorPlanSets {
   /** The zones whose today's record names the set, for the delete dialog's line. */
   zonesShowing(tx: Transaction, setId: string): Promise<string[]>;
 }
-// CoreServices gains `floorPlanSets: FloorPlanSets`; FloorDeletion gains `removeSets(tx, setIds)`.
+// CoreServices gains `floorPlanSets: FloorPlanSets`.
+// FloorDeletion gains the ONE verb for removing sets, used by the department delete and the set
+// delete route (Task 11) alike:
+/** Deletes the sets' placements, sizes, layouts and rows; a today's record naming one keeps its
+ *  today's rows and loses its set. */
+removeSets(tx: Transaction, setIds: readonly string[]): Promise<void>;
+// Spares counted by layoutCounts: an unplaced plain table; an unplaced joined table none of whose
+// parts is placed. Not spares: a part of a placed joined table; an unplaced joined table with a
+// placed part (it has come apart, decision 9); a part of an unplaced joined table none of whose
+// parts is placed (still joined).
 /** Pure: a table counts once (spec §3). */
 export function layoutCounts(tables: readonly { id: string; placed: boolean; partOf: string | null }[]): { onPlan: number; spare: number };
 ```
@@ -746,16 +908,20 @@ export function layoutCounts(tables: readonly { id: string; placed: boolean; par
     Dinner (4+5 placed, 4 and 5 off, others placed) → `{ 11, 0 }`; Private party (4+5, 1, 2, 3
     placed) → `{ 4, 7 }`. Terrace Standard (T1–T10 of 16) → `{ 10, 6 }`.
   - "copies a set's layouts": Dinner copied to "Late" reads the same places, revision 1.
-  - "removes a set and nulls today's record": after `remove`, no layout row of the set exists and
+  - "removes a set and nulls today's record": after `floorDeletionFor(…).removeSets`, no layout row of the set exists and
     the zone's `floor_today_zones.setId` is null while its today's rows are unchanged.
   - In `apps/server/src/service-delete.integration.test.ts`, which runs venue-service's delete
     with the real core port: "deleting a department
     removes its sets": its periods' `floorPlanSetId` become null, its links and sets are gone, and
     the impact read lists `{ key: "floor_plan_sets", count: 2 }`.
+  - `packages/venue-service/src/dashboard/service-delete-copy.test.ts`: the item reads "Removes 2
+    floor plan sets." / "Quita 2 conjuntos de planos de sala.".
 - [ ] **Step 2:** Run the files — FAIL.
-- [ ] **Step 3:** Implement; wire `floorPlanSets` into `moduleCoreServices`; in `remove()` for a
-  department, read its links, empty its periods' field, delete the links, then
-  `floor.removeSets`.
+- [ ] **Step 3:** Implement; wire `floorPlanSets` into `moduleCoreServices` and `removeSets` into
+  `floorDeletionFor`; in `remove()` for a department, read its links, empty its periods' field,
+  delete the links, then `floor.removeSets`. Add `floor_plan_sets:
+  "venue.delete_item_floor_plan_sets"` to `itemKeys`, with "Removes {count} floor plan sets." /
+  "Quita {count} conjuntos de planos de sala.".
 - [ ] **Step 4:** Run the files, `src/service-delete.integration.test.ts`,
   `src/management-api.service-delete.test.ts`, and `pnpm --filter @waitron/venue-service exec vitest run src/service-delete`.
 - [ ] **Step 5:** Commit: "Floor plan sets, step 10: core copies and removes a set's layouts".
@@ -799,12 +965,15 @@ export interface FloorPlanSetsModel {
   { field: "fromSetId" }; a second set without it → the same; a `fromSetId` of another department →
   the same; a taken name → `floor_plan_set.name_taken`; delete of the default →
   `floor_plan_set.is_default`; delete Dinner with `replaceWith: null` empties the Dinner period's
-  field; make-default swaps the flags in one request; a `venue.view` person reads the model and is
+  field; delete Dinner with `replaceWith` Private party sets the Dinner period's field to Private
+  party; a `replaceWith` of Bar's set → `floor_plan_set.invalid` { field: "replaceWith" } and
+  nothing deleted; a `replaceWith` naming the set being deleted → the same; make-default swaps the flags in one request; a `venue.view` person reads the model and is
   refused every write.
 - [ ] **Step 2:** Run `pnpm --filter @waitron/venue-service exec vitest run src/floor-plan-set-routes.test.ts` — FAIL.
-- [ ] **Step 3:** Implement with `ctx.core.floorPlanSets`. Make default clears the old flag before
-  setting the new one (the partial unique index, Task 3). Delete writes the periods first, then
-  the link, then `floorPlanSets.remove`. Register `floor_plan_set.is_default`,
+- [ ] **Step 3:** Implement with `ctx.core.floorPlanSets` (create, copy, counts) and
+  `ctx.core.floorDeletion.removeSets` (delete). Make default clears the old flag before setting
+  the new one (the partial unique index, Task 3). Delete writes the periods first, then the link,
+  then `removeSets`. Register `floor_plan_set.is_default`,
   `floor_plan_set.invalid` (identical to the server's) and statuses (409, 409, 400, 404).
 - [ ] **Step 4:** Run the file, then `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/module-seams.test.ts`.
 - [ ] **Step 5:** Commit: "Floor plan sets, step 11: routes to add, rename, copy, default and delete a set".
@@ -825,6 +994,9 @@ joinedWithWaiting: boolean; // in a joined group (a reset row's joined table and
 // catchUpZone gains an options argument, used by Tasks 13 and 18:
 export interface CatchUp { inReset: boolean; keepTakenOff: boolean }
 export async function catchUpZone(tx, cfg, removals, zoneId, now, options?: CatchUp): Promise<void>; // default { inReset: false, keepTakenOff: false }
+// resetZone (Task 7) gains a last argument passed through to the catch-up, so this task can test
+// it before Task 18 gives it a route:
+export async function resetZone(tx, cfg, removals, zoneId, now, onto, options?: { keepTakenOff: boolean }): Promise<number | null>;
 ```
 
 - [ ] **Step 1: Write the failing tests:**
@@ -835,7 +1007,10 @@ export async function catchUpZone(tx, cfg, removals, zoneId, now, options?: Catc
     split group with a part needing clearing waits at Reset to saved plan, and the mark stays
     (Reset table's own clearing, `floor-today-reset-table.ts:114-117`, is unchanged); "taking 4 into
     4+5 waits while 4 has guests": Dinner places 4+5, a party at 4 → 4, 5 and 4+5 all keep today's
-    rows; "a reset with keepTakenOff keeps table 9 off at its new place".
+    rows; "a reset with keepTakenOff keeps table 9 off at its new place" — table 9 taken off
+    today, then `resetZone(…, onto Dinner, { keepTakenOff: true })` called directly: 9's today's
+    row reads `takenOff: true` with Dinner's place; the control, the same call without the option,
+    reads `takenOff: false`.
   Failing run: the table moved / the mark cleared / 5 vanished.
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/floor-reset-plan.test.ts src/floor-catch-up.test.ts` — FAIL.
 - [ ] **Step 3:** Read `needs_clearing_since` for the zone's tables in `catchUpPass`; add the
@@ -869,13 +1044,24 @@ export function movesTable(
   - `floor-reset-plan.test.ts`: `movesTable` true for a new place, into store, a table in a merge,
     a split-off table; false for a seats-only change, a table not drawn, a taken-off table.
   - `floor-catch-up.test.ts` (Review focus 2): "a table that frees up after a reset needs moving
-    and stays put": party at 3; reset onto Dinner; finish the party; tables read → 3's today's
-    row keeps its lunch place, its reset row has `readyToMove: true`, `pending: true`; "a
+    and stays put", with the clearing setting OFF, stated in the test by
+    `writeClearingWorkflow(tx, false)` (`packages/venue-service/src/kitchen-notices.ts:340-345`;
+    Finish table marks the table needing clearing only when it is on, `leaveForClearing`,
+    `apps/server/src/parties.ts:657-668`): party at 3; reset onto Dinner; finish the party; tables
+    read → 3's today's row keeps its lunch place, its reset row has `readyToMove: true`,
+    `pending: true`; "with clearing on, a table shows Needs clearing first and Needs moving once
+    cleared" (spec decision 10's server path): the same with `writeClearingWorkflow(tx, true)` →
+    after Finish the tables read leaves 3's row pending with `readyToMove: false` and 3 reads
+    `condition: "needs_clearing"`; `POST /api/tables/:id/cleared`; the next tables read sets
+    `readyToMove: true` and 3 reads `today.needsMoving: true`, still at its lunch place; "a
     seats-only change still applies by itself"; "a row waiting for its name still applies"; "a
     removal of a deleted table still applies"; "a table seated with no today's row is still
     seeded"; "Reset table's and Split's catch-up mark other tables, not move them".
   - `floor-today-state.test.ts`: "reports needsMoving": the table above reads
-    `today.needsMoving: true`; others `false`; "marking moves the room's revision".
+    `today.needsMoving: true`; others `false`; "marking moves the room's revision"; "4+5 with
+    guests is marked once free under a layout that leaves it off" (continuing Task 7b's take-apart
+    wait): after its party finishes, 4+5 reads `needsMoving: true` at its place and 4 and 5 stay
+    off the map.
 - [ ] **Step 2:** Run the three files — FAIL.
 - [ ] **Step 3:** In `catchUpPass`, when `options.inReset` is false, an `apply` entry whose table
   `movesTable` (or any member of its joined group does) is not applied: its row and its group's
@@ -892,7 +1078,8 @@ export function movesTable(
 - Modify: `packages/db/src/joined-parts.ts` (add the helper beside `joinedOutOfService`, 47-49),
   `apps/server/src/working-order.ts:1407-1409`, `apps/server/src/move-bill.ts:247-260`,
   `apps/server/src/floor-today-table.ts:97-109`, `apps/server/src/errors.ts:383-386`,
-  `apps/server/src/till-api.ts:547`, `packages/bookings/src/routes.ts:51`
+  `apps/server/src/till-api.ts:547`, `packages/bookings/src/routes.ts:51`,
+  `apps/dashboard/src/i18n/codes.ts` (beside `table.needs_clearing`, 638-641)
 - Test: `apps/server/src/floor-today-seat-api.test.ts`, `apps/server/src/party-move-bill.test.ts`,
   `apps/server/src/parties.test.ts` (the join path), `apps/server/src/floor-today-merges.test.ts`,
   `apps/server/src/booking-seat.test.ts` — each already tests `table.needs_clearing`
@@ -907,10 +1094,14 @@ export function needsMoving(tableId: SQLWrapper): SQL;
 
 - [ ] **Step 1: Write the failing tests:** seating a table that needs moving → `table.needs_moving`
   with its id; moving a party to it → the same; joining it to a party → the same; merging it on
-  today's map → the same; a table needing clearing AND moving is refused `table.needs_clearing`
-  first (spec decision 10's order).
+  today's map → the same; booking-seat (seating a booking's party) → the same. (A table cannot
+  need clearing and moving at once: needing clearing keeps its row waiting, Task 12, so it is not
+  marked until cleared — Task 13 tests that order.)
 - [ ] **Step 2:** Run — FAIL (seated).
-- [ ] **Step 3:** Implement and register; add the status in both maps.
+- [ ] **Step 3:** Implement and register; add the status in both maps. Dashboard copy beside
+  `table.needs_clearing`: "That table needs moving first. Mark it moved on the till, then try
+  again" / "Esa mesa está por mover. Márcala como movida en la caja e inténtalo de nuevo", with a
+  case in the dashboard's codes test if `table.needs_clearing` has one.
 - [ ] **Step 4:** Run the files; `pnpm exec vitest run scripts/errors-reachable.test.ts`.
 - [ ] **Step 5:** Commit.
 
@@ -952,13 +1143,14 @@ export function blockedMoves(input: {
 - [ ] **Step 4:** Run the files and all floor suites.
 - [ ] **Step 5:** Commit: "Floor plan sets, step 15: no reset puts a table down on another (A600)".
 
-### Task 16: Mark moved
+### Task 16: Mark moved (and Back to saved place on a table that needs moving)
 
 **Files:**
 - Create: `apps/server/src/floor-today-mark-moved.ts`, `…/floor-today-mark-moved.test.ts`
 - Modify: `apps/server/src/floor-today-api.ts` (a `tableRoute("mark-moved", …)` beside the others,
   167-224), `apps/server/src/floor-today-store.ts` (extract the apply half of `catchUpPass` into
-  `applyResetRows(tx, cfg, removals, zoneId, rows, now)`), `apps/server/src/errors.ts` (beside
+  `applyResetRows(tx, cfg, removals, zoneId, rows, now)`; `backToSaved` 727-760),
+  `apps/server/src/errors.ts` (beside
   `table.place_taken`, 381), `apps/server/src/till-api.ts:527`,
   `apps/server/src/till-api.profile-actions.test.ts:105`, `:428-430`,
   `apps/server/src/till-api.profile-zones.test.ts:131-146`, `:852-875`
@@ -973,7 +1165,13 @@ export async function markMoved(tx, cfg: TillConfig, removals, tableId: string, 
 
 - [ ] **Step 1: Write the failing tests** in `floor-today-mark-moved.test.ts`: "puts a table
   needing moving in its new place and clears its mark"; "moves the whole joined group" (4 and 5
-  ready, Mark moved on 5 → 4 and 5 off, 4+5 at its dinner place); "is refused while a table that
+  ready, Mark moved on 5 → 4 and 5 off, 4+5 at its dinner place); "takes 4+5 apart" (spec
+  §7.3's row, finishing Tasks 7b and 13: Dinner recorded, 4+5 with guests, reset onto Standard,
+  party finished, Mark moved on 4+5 → 4+5 off the map and out of service, 4 and 5 at their
+  Standard places and seatable; refused `table.new_place_taken` instead while a table that does
+  not need moving stands in 4's place); "Back to its saved place on a table that needs moving is
+  Mark moved" (plan decision 23: placed, mark cleared, and refused `table.new_place_taken` in the
+  same case Mark moved is); "is refused while a table that
   does not need moving stands in the new place" (`table.new_place_taken` naming it); "is not
   blocked by a table that itself needs moving" (2 and 3 swap: mark 2 first, then 3; the map
   overlaps between); "changes nothing on a table that does not need moving" (plan decision 11).
@@ -983,6 +1181,8 @@ export async function markMoved(tx, cfg: TillConfig, removals, tableId: string, 
 - [ ] **Step 2:** Run — FAIL.
 - [ ] **Step 3:** Implement on `applyResetRows`, checking each moving member's new place with
   `standsIn` against drawn tables that neither need moving nor belong to the group.
+  `backToSaved` calls `markMoved` when the table's reset row is `readyToMove`, before its own
+  checks.
 - [ ] **Step 4:** Run the files and the two route-map files.
 - [ ] **Step 5:** Commit.
 
@@ -1005,7 +1205,10 @@ layoutDue: { setId: string; revision: number; periodName: string | null } | null
   `periodName: "Dinner"`; an edit saved to Standard at 14:00 → `periodName: null`; Dinner's field
   changed to Private party at 17:00 after an update to Dinner → `periodName: null` (spec's 17:00
   example); the set deleted → `layoutSetName: null` and `layoutDue` the default; a record from
-  yesterday → `layoutDue: null`; the read writes nothing (`floor_today_zones` unchanged).
+  yesterday → `layoutDue: null`; the read writes nothing (`floor_today_zones` unchanged);
+  "hasPlan says the department has a set" (plan decision 19): a zone of a department with a set
+  but no tables reads `hasPlan: true`; a zone with tables whose department has no set, and a zone
+  in no department, read `hasPlan: false`.
 - [ ] **Step 2:** Run `pnpm --filter @waitron/server exec vitest run src/till-api.zones-layout.test.ts` — FAIL.
 - [ ] **Step 3:** Implement with `zoneLayouts` and `layoutOffer` at `deps.clock.now().instant`.
 - [ ] **Step 4: Measure** the read's cost (spec §7.1, "which the plan measures"): in a throwaway
@@ -1056,11 +1259,17 @@ layoutDue: { setId: string; revision: number; periodName: string | null } | null
 - Test: `packages/ui/src/components/wt-combobox.test.ts`, `…/wt-combobox.a11y.test.ts`
 
 **Interfaces — Produces:** `ComboboxOption.muted?: true` — "Drawn in `--wt-color-text-muted` in
-the open list and on the closed field when chosen."
+the open list and on the closed field when chosen." The default set is an option with value `""`,
+so its callers (Tasks 22 and 24) also set `showEmptyOption`, without which an empty value shows
+no text at all (`showEmptyOption`, `wt-combobox.ts:382-384`; `selectedText`, `493-504`). This is a
+change to a shared `wt-*` primitive: it carries a token-painting test and the a11y test's new
+state in both themes.
 
 - [ ] **Step 1: Write the failing tests:** the token-painting case: a muted option's row and the
-  closed field's text compute to `--wt-color-text-muted` in both themes; a non-muted chosen option
-  does not; the a11y file adds the open list with a muted first option, both themes, axe clean.
+  closed field's text (with `showEmptyOption` and the muted `""` option chosen) compute to
+  `--wt-color-text-muted` in light and dark; a non-muted chosen option does not; the a11y file
+  adds two states, the closed field showing the muted choice and the open list with a muted first
+  option, each in both themes, axe clean.
 - [ ] **Step 2:** `pnpm --filter @waitron/ui exec vitest run src/components/wt-combobox.test.ts src/components/wt-combobox.a11y.test.ts` — FAIL.
 - [ ] **Step 3:** Implement with a `part` or class on the row and on `.value`; no new token.
 - [ ] **Step 4:** Run the files; `pnpm exec vitest run scripts/style-token-names.test.ts`;
@@ -1113,8 +1322,9 @@ the open list and on the closed field when chosen."
 `mode: "add" | "rename" | "copy"`. Add asks Department (a `wt-combobox`), Name, and Start from
 only once the chosen department has a set (default first); Rename and Copy ask Name.
 
-- [ ] **Step 1: Write the failing tests:** Save is quiet and disabled until the draft changes and
-  the required fields are filled (A331); "+ Add set" for a department with no set shows no Start
+- [ ] **Step 1: Write the failing tests:** Department and Name are marked required, and so is
+  Start from whenever it shows (design-system.md → Forms: required fields visibly marked); Save
+  is quiet and disabled until the draft changes and the required fields are filled (A331); "+ Add set" for a department with no set shows no Start
   from and sends no `fromSetId`; for Restaurant it shows Start from preselected to the default;
   a `floor_plan_set.name_taken` refusal marks Name with "Another set of this department already
   has this name." / "Otro conjunto de este departamento ya tiene este nombre." and the bottom
@@ -1136,7 +1346,7 @@ only once the chosen department has a set (default first); Rename and Copy ask N
   another set's offers Make default and Delete… too; Make default sends one request and the list
   follows its live read; Delete… reads the impact, titles "Delete Dinner?", lists the periods
   using it, says the tables stay, offers Replace with preselected to "Standard (default)" drawn
-  muted (Task 19), adds "On the floor, Inside keep today's layout until someone presses Update
+  muted (Task 19: the `""` option with `muted`, and `showEmptyOption` on the field), adds "On the floor, Inside keep today's layout until someone presses Update
   layout." only while a zone shows the set today, and the danger button reads "Delete Dinner".
   Spanish for each from spec §8.
 - [ ] **Step 2:** Run — FAIL.
@@ -1147,44 +1357,79 @@ only once the chosen department has a set (default first); Rename and Copy ask N
 
 ### Task 23: Core rebuild generation
 
-Runs after Tasks 2, 6–9: nothing reads `floor_plan_tables.plan_id` or its place columns.
+Dispatched right after Task 9b and before Task 10: nothing reads or writes
+`floor_plan_tables.plan_id` or its place columns any more, and until this lands a set's layout
+row cannot be deleted while a table names it (`floor_plan_tables_plan_fk`,
+`packages/db/src/schema/floor-plans.ts:109-113`).
 
 **Files:**
 - Modify: `packages/db/src/schema/floor-plans.ts`, `scripts/migration-upgrade.test.ts` (`RESETS`,
-  from line 361), code that still writes the old columns (`grep -rn "planId" apps/server/src/floor-plan.ts`)
+  from line 361), and every reader or writer of the dropped columns found by
+  `grep -rnE "floorPlanTables\.(planId|x|y|width|height|shape|rotation)\b|planId: plan|floor_plan_tables\.(plan_id|x|y|width|height|shape|rotation)" apps packages scripts --include='*.ts'`
+  (at `9d6ccd7b8` that includes `apps/server/src/floor-plan.ts`, `floor-today-store.ts`,
+  `floor-today-parts.ts:36-37` and `floor-delete.ts`; Tasks 2, 7 and 9b should have emptied it;
+  anything left is moved here)
 - Create: the generated SQL and snapshot
 
 The generation changes, with no column added: `floor_plan_tables` drops `plan_id`, its six place
-columns, their checks and `floor_plan_tables_plan_label_key`, and makes `zone_id` NOT NULL;
-`floor_plan_table_sizes` makes `plan_id` NOT NULL and drops `floor_plan_table_sizes_table_key`;
-`floor_plans` makes `set_id` NOT NULL.
+columns, the place checks and `floor_plan_tables_plan_label_key`, keeps
+`floor_plan_tables_seats_ck` (seats stay on the shared table; Task 1's `seatsCheck`), and makes
+`zone_id` NOT NULL; `floor_plan_table_sizes` makes `plan_id` NOT NULL; `floor_plans` makes
+`set_id` NOT NULL.
 
 **Foreign keys pointing at the tables it rebuilds** (read in the schema at `9d6ccd7b8` plus Task 1;
 all `no action`, so a `DROP TABLE` is refused while a child row exists — CLAUDE.md §3):
 - `floor_plan_tables`: `dining_tables.plan_table_id` (`packages/db/src/schema/dining-tables.ts:26`),
   `floor_reset_tables.plan_table_id` (`floor-plans.ts:181`), `floor_plan_table_parts.joined_table_id`
   and `.part_table_id` (`floor-plans.ts:130-139`), `floor_plan_table_sizes.plan_table_id`
-  (`floor-plans.ts:155-159`), `floor_plan_placements.plan_table_id` (Task 1).
-- `floor_plans`: `floor_plan_placements.plan_id` and `floor_plan_table_sizes.plan_id` (Task 1).
+  (`floor-plans.ts:156-160`), `floor_plan_placements.plan_table_id` (Task 1).
+- `floor_plans`: `floor_plan_placements.plan_id` and `floor_plan_table_sizes.plan_id` (Task 1),
+  and `floor_plan_tables.plan_id` until this generation drops it.
 - `floor_plan_table_sizes`: none.
 Before generating, confirm the list on a database migrated to Task 1's generation:
 `select m.name, p."from", p."table", p.on_delete from sqlite_master m join pragma_foreign_key_list(m.name) p where p."table" in ('floor_plan_tables','floor_plans','floor_plan_table_sizes')`.
 Also confirm no trigger body names the three tables: `select name from sqlite_master where type = 'trigger' and sql like '%floor_plan%'` prints nothing but change-feed triggers (which `applyMigrations` removes first, CLAUDE.md §2).
 
+**What happens to rows — and why the answer is a venue reset, not a cleverer migration.** A
+database holding floor tables cannot carry them through this generation, whoever wrote them:
+- Rows written by `main`'s code have no `zone_id`, so drizzle's copy into
+  `__new_floor_plan_tables` fails `NOT NULL constraint failed: __new_floor_plan_tables.zone_id`
+  (the reviewer's probe, 2026-10-17).
+- Rows written by the branch before this task have `zone_id`, so the copy succeeds, and then
+  `DROP TABLE floor_plan_tables` is refused `FOREIGN KEY constraint failed`, because live tables
+  (`dining_tables.plan_table_id`) and reset rows point at it and the migrator runs inside a
+  transaction where `PRAGMA foreign_keys=OFF` does nothing (CLAUDE.md §3; the reviewer's probe).
+No order of rebuilds avoids the second: every rebuild of a table that live tables point at drops
+it. A backfill would fix only the first. Deleting the dependent rows deliberately would mean
+deleting live tables, parties' table links and reset rows — data-migration code CLAUDE.md §3
+forbids before go-live, and a loss of live state on a venue. So: the step is declared in
+`RESETS` (every installation is reset, Global constraints), nobody runs the dev stack on the branch
+before this task (so no venue holds the branch's interim shape), and the guard proves the rest.
+
 - [ ] **Step 1:** Write the failing test in `packages/db/src/schema/floor-plans.test.ts`:
   "floor_plan_tables has no place columns and needs a zone": the table's `pragma_table_info` lists
-  none of `plan_id, x, y, width, height, shape, rotation`, and an insert without `zone_id` is
-  refused `NOT NULL constraint failed: floor_plan_tables.zone_id`. Run — FAIL.
+  none of `plan_id, x, y, width, height, shape, rotation`, still has `seats` with its check, and
+  an insert without `zone_id` is refused `NOT NULL constraint failed: floor_plan_tables.zone_id`.
+  Run — FAIL.
 - [ ] **Step 2:** Change the schema; `pnpm --filter @waitron/db db:generate`; read the SQL: three
-  `__new_` rebuilds, no `ADD` column. Stop the code writing `planId` on tables.
-- [ ] **Step 3:** Run `pnpm exec vitest run scripts/migration-upgrade.test.ts`. Expected to fail at
-  the new step with `DROP TABLE … FOREIGN KEY constraint failed` or `NOT NULL constraint failed:
-  __new_floor_plan_tables.zone_id`. Add a `RESETS` entry with the message parts the walk printed
-  and a one-line comment saying why. Rerun: PASS. If it passes with no entry, record that the PR
-  needs no reset line.
+  `__new_` rebuilds, no `ADD` column, no other table touched.
+- [ ] **Step 3: The data path, proved two ways.**
+  - `pnpm exec vitest run scripts/migration-upgrade.test.ts` FAILS first at the new step, naming
+    it. Add a `RESETS` entry, `refused`, with the message parts the walk printed (with its
+    synthetic rows, either of the two messages above; `zone_id` sits in a unique index, so the
+    walk may not leave it null), and a one-line comment: "Rebuilds floor_plan_tables, which live
+    tables point at; every venue needs a reset (A504)." Rerun: PASS. This guard proves three
+    things: the step fails exactly as declared, an EMPTY database migrates through it, and the
+    steps after it carry rows (the walk refills after a listed step).
+  - A throwaway probe, not committed: a `useVenueDb`-style case that applies the chain up to the
+    step before this one, writes a zone, a set, a layout, two tables (one placed), and lets a
+    reset make their live tables and reset rows as the branch's code does, then applies this
+    generation: it must reject with `FOREIGN KEY constraint failed` and leave the database
+    unchanged (a `select count(*)` of each floor table equal before and after). Record the
+    command and the counts in the ledger and the PR description.
 - [ ] **Step 4:** Run every guard of Global constraints' migration list, the inmutabilidad file, the
   golden case (`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts -t "as main did for the same basket"`),
-  and `pnpm --filter @waitron/server exec vitest run src/floor-` .
+  and `pnpm --filter @waitron/server exec vitest run src/floor- src/joined`.
 - [ ] **Step 5:** Commit: "Floor plan sets, step 23: a zone's tables keep no place of their own (venue reset needed)".
 
 ### Task 24: Period dialog field and Periods column
@@ -1210,46 +1455,71 @@ Also confirm no trigger body names the three tables: `select name from sqlite_ma
   "(default)" muted through `part=`, and nothing for a department without tables; the column shows
   only when some department has a zone with tables.
 - [ ] **Step 2:** Run — FAIL.
-- [ ] **Step 3:** Implement. The column cell's muted part is styled with `::part()`.
+- [ ] **Step 3:** Implement. The field's first option is `{ value: "", label: "Standard
+  (default)", muted: true }` and the field sets `showEmptyOption` (Task 19), so an empty field
+  shows that text muted rather than nothing. The column cell's muted part is styled with
+  `::part()`.
 - [ ] **Step 4:** Run the files; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/live-subscriptions.test.ts`.
 - [ ] **Step 5:** Commit.
 
-### Task 25: Editor — address, title, shared-tables line, parts per layout
+### Task 25a: Editor — address, API, title, shared-tables line, Close
 
-Runs before Task 9.
+Dispatched after Task 8 and before Task 9a.
 
 **Files:**
 - Modify: `apps/dashboard/src/navigation.ts:34`, `apps/dashboard/src/dashboard-app.ts:295`,
   `apps/dashboard/src/api/client.ts:3095-3110` (and the `FloorPlan` type, 671-700),
   `apps/dashboard/src/screens/floor-plan-editor.ts` (address read 550-582, title near 1107 and
-  1185), `apps/dashboard/src/screens/floor-plan-tables-panel.ts:189-191`,
-  `apps/dashboard/src/screens/floor-plan-draft.ts`, `apps/dashboard/src/i18n` strings
-- Test: `floor-plan-editor.test.ts`, `floor-plan-tables-panel.test.ts`, `floor-plan-draft.test.ts`
+  1185), `apps/dashboard/src/i18n` strings
+- Test: `apps/dashboard/src/screens/floor-plan-editor.test.ts`,
+  `…/floor-plan-editor.deleted-zone.test.ts`, `…/floor-plan-editor.save.test.ts`
 
 **Interfaces — Produces:** `DashboardApi.getFloorPlan(setId, zoneId)`,
 `saveFloorPlan(setId, zoneId, body)`; `dashboardPath.children["floor-plan"] = { set: "set", zone: "zone" }`;
-`placeTable` on a joined table also takes its parts off this layout.
+`FloorPlan` gains `setId` and `setName` (Task 6's read answer).
 
 - [ ] **Step 1: Write the failing tests:** the editor opened at
-  `/manage/floor-plan/set/S/zone/Z?back=%2Fmanage%2Ffloor-plans` reads `GET
-  /management-api/floor-plan-sets/S/zones/Z/floor-plan`; its title reads "Inside · Dinner"; the line
-  "Tables are shared by every set. Adding, renaming or deleting one here does it in every set." (and
-  Spanish) shows under it; Close goes to `/manage/floor-plans`; pressing a part of a joined table
-  that is off this layout places it; pressing a part of a placed joined table does nothing (as
-  today); placing a joined table whose parts stand takes them off in one undo step; a
-  `floor_plan_set.invalid` load shows the not-found state the deleted-zone case shows.
-- [ ] **Step 2:** Run — FAIL.
+  `/manage/floor-plan/set/S/zone/Z?back=%2Fmanage%2Ffloor-plans` reads
+  `GET /management-api/floor-plan-sets/S/zones/Z/floor-plan` and saves with `PUT` to the same
+  path; its title reads "Inside · Dinner"; the line "Tables are shared by every set. Adding,
+  renaming or deleting one here does it in every set." / "Las mesas son comunes a todos los
+  conjuntos. Añadir, renombrar o eliminar una aquí lo hace en todos." shows under it; Close goes
+  to `/manage/floor-plans`; a `floor_plan_set.not_found` or `floor_plan_set.invalid` load shows
+  the not-found state the deleted-zone case shows.
+- [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-editor` — FAIL.
+- [ ] **Step 3:** Implement. Header buttons stay Undo, Redo, Cancel, Save (design-system.md, "The
+  floor plan editor's header is the owner's exception").
+- [ ] **Step 4:** Run every `floor-plan-editor*` test file, `floor-plan-editor.unsaved.test.ts` and
+  `floor-plan-editor.a11y.test.ts` included; `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
+- [ ] **Step 5:** Commit: "Floor plan sets, step 25a: the editor opens a set's layout".
+
+### Task 25b: Editor — a joined table's parts per layout
+
+**Files:**
+- Modify: `apps/dashboard/src/screens/floor-plan-tables-panel.ts:189-191` (the guard that ignores
+  a press on a part), `apps/dashboard/src/screens/floor-plan-draft.ts` (`placeTable`;
+  `freeTables` 322-331 is unchanged: a new joined table is still made of tables off this layout)
+- Test: `floor-plan-tables-panel.test.ts`, `floor-plan-draft.test.ts`
+
+**Interfaces — Produces:** `placeTable` on a joined table also takes its standing parts off this
+layout in the same change; on a part whose joined table stands, it changes nothing.
+
+- [ ] **Step 1: Write the failing tests:** pressing a part of a joined table that is off this
+  layout places it; pressing a part of a placed joined table does nothing (as today); placing a
+  joined table whose parts stand takes them off, and one Undo puts all three back; the draft sent
+  never places both a joined table and one of its parts (the server's rule, Task 6).
+- [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/floor-plan-tables-panel.test.ts src/screens/floor-plan-draft.test.ts` — FAIL.
 - [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the editor's test files including `floor-plan-editor.unsaved.test.ts` and
-  `floor-plan-editor.a11y.test.ts`.
-- [ ] **Step 5:** Commit.
+- [ ] **Step 4:** Run the two files and `floor-plan-editor.test.ts`.
+- [ ] **Step 5:** Commit: "Floor plan sets, step 25b: a layout may stand a joined table's tables".
 
 ### Task 26: Till — banner and Update layout
 
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (`FloorZone` 1828-1839; a method beside `resetZoneToday`,
-  4241-4246), `apps/till/src/screens/till-floor-screen.ts` (under the toolbar, 1772-1790),
-  `apps/till/src/i18n/strings.ts`, `apps/till/src/i18n/codes.ts`
+  4241-4246), `apps/till/src/screens/till-floor-screen.ts` (under the toolbar, 1772-1790;
+  `FloorRefreshDetail`, 117), `apps/till/src/till-app.ts` (`#onFloorRefresh` 8487-8491, the
+  `@floor-refresh` handler near 13154), `apps/till/src/i18n/strings.ts`, `apps/till/src/i18n/codes.ts`
 - Test: `apps/till/src/screens/till-floor-screen.layout.test.ts` (new), `till-floor-screen.a11y.test.ts`, `apps/till/src/i18n/codes.test.ts`
 
 **Interfaces — Produces:** `TillApi.updateLayoutToday(zoneId, offer: { setId: string; revision: number }, zoneRevision: number | null): Promise<FloorAnswer>`;
@@ -1263,10 +1533,18 @@ cambiado. Revisa la sala e inténtalo de nuevo".
   "Dinner layout is ready." with Update layout under the tabs, above the map and above the list;
   `periodName: null` shows "A newer layout is ready."; no banner without `canChangeToday`; no
   close button; pressing sends the offered set and revision with the room's revision through
-  `#onZoneChange` (`till-floor-screen.ts:1650-1660`); a `floor_today.layout_changed` refusal
-  re-reads the floor; axe clean in both themes.
+  `#onZoneChange` (`till-floor-screen.ts:1649-1659`); after the press, whether it succeeded or
+  was refused, the till re-reads the ZONES as well as the tables — today a floor refresh re-reads
+  the tables only (`#onFloorRefresh` → `#refreshFloor`, `till-app.ts:8487-8491`) and the banner's
+  facts come from the 15-second zones read (`#refreshFloorZones`, 8477); "the banner goes after a
+  successful press": with a mocked api whose second `listZones` answers no `layoutDue`, the banner
+  is gone straight after the press, without waiting for a tick; a `floor_today.layout_changed`
+  refusal re-reads both and shows what is due; axe clean in both themes.
 - [ ] **Step 2:** `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.layout.test.ts` — FAIL.
 - [ ] **Step 3:** Implement. The banner is a `role="status"` line in the floor screen.
+  `FloorRefreshDetail` (today `{ poll: true }`) becomes `{ poll?: true; zones?: true }`; the floor screen sends `{ zones: true }` after Update layout (and,
+  in Task 28, after Reset to … plan); `till-app` then runs `#refreshFloorZones` beside
+  `#refreshFloor`.
 - [ ] **Step 4:** Run the files and `src/screens/till-floor-screen.zone-menu.test.ts`.
 - [ ] **Step 5:** Commit.
 
@@ -1323,30 +1601,52 @@ place. Move it first" / "Otra mesa ocupa su nuevo sitio. Muévela primero";
   holding only List or Map; axe clean at both widths in both themes.
 - [ ] **Step 2:** Run — FAIL.
 - [ ] **Step 3:** Implement with `matchMedia(PHONE_WIDTH)` as `till-counter-screen.ts:250-262`.
+  Reset to … plan sends Task 26's `floor-refresh` with `zones: true` after it settles, success or
+  refusal, with a test: after a successful Reset to … plan that brings the edit the banner offered,
+  the "A newer layout is ready." banner is gone without waiting for a tick.
 - [ ] **Step 4:** Run the files and `till-floor-screen.test.ts`.
 - [ ] **Step 5:** Commit.
 
-### Task 29: LOOK
+### Task 29a: LOOK, dashboard (scripted)
 
-Open the real thing and look; no code unless a defect is found (then fix it test-first in the
-owning task's files and say so).
+Open the real thing and look; no product code unless a defect is found, which is then fixed
+test-first in the owning task's files and said so.
 
-- [ ] **Step 1:** In the branch worktree run `wa-wt reset demo <worktree-name>` then
-  `wa-wt demo <worktree-name>` (never a bare `pnpm dev*`; `docs/developers/workflow-guide.md:192-235`).
-  Check `lsof` on the venue folder and port 8080 before the reset.
-- [ ] **Step 2:** On the dashboard, add a "Dinner" set to the Restaurant (Start from Standard),
-  move some tables and join two in it, set the Dinner period's Floor plan to Dinner, paint today
-  so a period ends within minutes.
-- [ ] **Step 3:** Screenshots to `/Users/clintongormley/waitron-campaign-b/a504-shots/`, each in
-  English and Spanish, light and dark, at 1280 and 390 wide: the Floor plans page; its Add set,
-  Delete and row menu; the period dialog with the field empty and chosen; the Periods window's
-  column; the editor's title and line; the till map with the banner; the till list with the banner;
-  a "Needs moving" table on the map and on the list, and its question; the phone ⋮ menu on the map
-  and on the list. Name files `<surface>-<lang>-<theme>-<width>.png`.
-- [ ] **Step 4:** Compare with the mock-ups in `docs/backlog/mockups/a504-floor-plans/`; list
+- [ ] **Step 1:** Check `lsof +D <venue folder>` and `lsof -i :8080` for holders, then in the
+  branch worktree `wa-wt reset demo <worktree-name>` and `wa-wt demo <worktree-name>` (never a
+  bare `pnpm dev*`; `docs/developers/workflow-guide.md:192-235`).
+- [ ] **Step 2:** Write the script `/Users/clintongormley/waitron-campaign-b/a504-shots/look-dashboard.mjs`
+  (outside the repository), resolving Playwright from the worktree with
+  `createRequire("<worktree>/apps/dashboard/package.json")("playwright")`. It signs in, then
+  through the dashboard itself: adds a "Dinner" set to the Restaurant starting from Standard,
+  opens its Inside layout, moves two tables, places the joined table if the seed has one, saves;
+  sets the Dinner period's Floor plan to Dinner. It then captures, each in English and Spanish,
+  light and dark, at 1280 and 390 wide, named `dash-<surface>-<lang>-<theme>-<width>.png`: the
+  Floor plans page; its Add set dialog (first set of a department, and a later one); a set's row
+  menu open; the Delete dialog; the period dialog with the field empty and chosen; the Periods
+  window's column; the editor's title and line.
+- [ ] **Step 3:** Run it with `node`; list each file written.
+- [ ] **Step 4:** Compare with mock-ups 1 and 2 in `docs/backlog/mockups/a504-floor-plans/`; list
   every difference in the ledger and the PR description, each fixed or stated.
 
-### Task 30: Docs and backlog
+### Task 29b: LOOK, till (scripted)
+
+- [ ] **Step 1:** On the same running stack, repaint today (through the dashboard, in the script)
+  so Lunch ends two minutes from the run's start and Dinner follows; seat a party at one table
+  that Dinner moves.
+- [ ] **Step 2:** Write `/Users/clintongormley/waitron-campaign-b/a504-shots/look-till.mjs` the same
+  way (resolving Playwright through `apps/till/package.json`). It waits for the banner (polling the
+  page, bounded at three minutes), then captures, each in English and Spanish, light and dark, at
+  1280 and 390 wide, named `till-<surface>-<lang>-<theme>-<width>.png`: the map with the banner;
+  the list with the banner; after Update layout, the seated table still at its old place; after
+  finishing its party, its "Needs moving" chip on the map and its card on the list, and the Mark
+  moved question; the ⋮ menu open on the map and on the list (at 390 wide with List or Map first
+  and the heading).
+- [ ] **Step 3:** Run it with `node`; list each file written.
+- [ ] **Step 4:** Compare with mock-ups 3 and 4; list every difference in the ledger and the PR
+  description, each fixed or stated.
+
+### Task 30: Docs and backlog; the Santet importer (local, not in the PR)
 
 **Files:** `docs/backlog.md` (A504 at 91-92 and 2412-2418; A600 at 2349-2352),
 `docs/backlog/till.md` (A600 at 377-…; A504 at 516-535), `docs/developers/conventions-data.md`
@@ -1362,20 +1662,32 @@ rule changed, `CLAUDE.md` only if a new rule was paid for.
   difference left open.
 - [ ] **Step 2:** Rewrite the conventions-data section to the new model: sets and layouts, the
   record on `floor_today_zones`, the waiting rules (needs clearing, joined groups), `ready_to_move`
-  and Mark moved, the place check at every reset, and the incoming foreign keys of the rebuilt
-  tables. Read every claim in the section across the whole base-to-tip range (CLAUDE.md §1, "A
+  and Mark moved, the place check at every reset, when a joined table holds its tables (today's
+  map) and when a table is a saved part (the recorded layout), and the incoming foreign keys of
+  the rebuilt tables. Read every claim in the section across the whole base-to-tip range (CLAUDE.md §1, "A
   behaviour change retires every receipt").
 - [ ] **Step 3:** `pnpm exec vitest run scripts/claude-md-pointers.test.ts`; commit with the code
   (this is not a docs-only change).
+- [ ] **Step 4: The Santet importer — local, untracked, NOT in the pull request.**
+  `local/square/import.mjs` in the `waitron-local-santet-data` worktree (excluded through
+  `.git/info/exclude`, so git never sees it) saves each zone with
+  `` put(`/zones/${created.id}/floor-plan`, …) `` (line 344), a route Task 9b removes. Change it to
+  make a "Standard" set for each department it creates
+  (`POST /venue-service/floor-plan-sets` with `departmentId` and `name`, no `fromSetId`), then save
+  each zone with `PUT /floor-plan-sets/{setId}/zones/{zoneId}/floor-plan`, keeping its `ids`
+  answer. Run `node --check` on it. Rebuilding the Santet venue with `local/square/reset.sh` is
+  the landing step (owner answer 10(a)), not this task. Say in the ledger and the PR description
+  that the importer was changed outside the repository.
 
 ---
 
 ## Self-review against the spec
 
 - Decisions 1–4 → Tasks 4, 5, 7, 17. Decision 5 → 7 (`layoutOffer`), 26. Decision 6 → 18.
-  Decisions 7, 9 → 12, 18. Decision 8 → 13. Decision 10 → 12. Decision 11 → 14. Decision 12 → 27.
-  Decisions 13, 20 → 15, 16. Decision 14 → 18, 28. Decision 15 → 7. Decision 16 → 28. Decision 17
-  → 19, 24. Decision 18 → 11, 21. Decision 19 → 7. Decision 21 → 16. Decision 22 → 27.
-- §5 page → 20–22; §6 field → 24; §4.2 shared tables and joined tables → 2, 6, 25 and plan
-  decision 9; §9 storage → 1, 3, 23; live reads and export → 1, 3, 9, 20, 24; §11 gaps → plan
-  decisions 5–8; A600 → 15, 16, 30.
+  Decisions 7, 9 → 12, 18. Decision 8 → 13. Decision 10 → 12, 13. Decision 11 → 14. Decision 12
+  → 27. Decisions 13, 20 → 15, 16. Decision 14 → 18, 28. Decision 15 → 7. Decision 16 → 28.
+  Decision 17 → 19, 24. Decision 18 → 11, 21. Decision 19 → 7. Decision 21 → 16. Decision 22 → 27.
+- §5 page → 20–22; §6 field → 24; §4.2 shared tables and joined tables → 2, 6, 7b, 25b and plan
+  decision 9; §7.3's joined rows → 7b, 12, 13, 16; §9 storage → 1, 3, 23; live reads and export →
+  1, 3, 9b, 20, 24; §11 gaps → plan decisions 5–8 and 24–25; A600 → 15, 16, 30; the till's
+  re-read after a press → 26, 28; LOOK → 29a, 29b.
