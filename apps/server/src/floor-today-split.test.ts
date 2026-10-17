@@ -28,7 +28,7 @@ import { partsOf } from "./floor-today-parts.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   OPERATOR,
   activeTablesOf,

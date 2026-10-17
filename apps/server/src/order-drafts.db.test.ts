@@ -64,7 +64,7 @@ import { discardPartyDrafts, readDrafts, submitDraft } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
 import { mergeBills, splitBill } from "./bill-actions.js";
-import { joinTables, splitTable } from "./table-actions.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { saveRecalledLine } from "./draft-recall.js";
 
@@ -3337,7 +3337,7 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
       submissionId,
       expectedEdit,
     });
-    await merge(v, mesa4, mesa5, SAM);
+    await merge(v, mesa4, mesa5, ALEX);
     const before = await everything();
 
     const again = await submit(v, mesa5.partyId, alexOn5, ALEX, sent, {
@@ -4183,7 +4183,7 @@ describe("source-backed draft foundations", () => {
     const from = await seated(v, "Other table");
     const own = await billDraft(v, into.partyId, into.tabId);
     const source = await reserved(v, from.partyId, from.tabId);
-    await merge(v, into, from, SAM);
+    await merge(v, into, from, ALEX);
     const read = await draftsOf(v, into.partyId);
     expect(read).toHaveLength(1);
     expect(read[0]).toMatchObject({

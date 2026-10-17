@@ -54,7 +54,7 @@ import { openPartyTab, serveLine, splitPartyBill } from "./testing/serve-line.js
 import "./errors.js";
 import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
 import { moveBill } from "./move-bill.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { cancelLine } from "./testing/cancel-line.js";
 

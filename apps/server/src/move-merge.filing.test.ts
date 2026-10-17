@@ -31,7 +31,7 @@ import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";

@@ -54,7 +54,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { cancelLine } from "./testing/cancel-line.js";
 

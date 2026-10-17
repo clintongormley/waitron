@@ -21,7 +21,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { discardPartyDrafts, moveDraftsToParty, submitDraft, type Draft } from "./order-drafts.js";
+import { discardPartyDrafts, moveDraftsToBill, submitDraft, type Draft } from "./order-drafts.js";
 import { OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { newId } from "@waitron/db";
 import { createOpenOrder } from "./working-order.js";
@@ -217,21 +217,19 @@ describe("natural draft-event attendance snapshots", () => {
   it("an absorbed draft retains the mover, original source location and supplied command instant", async () => {
     const from = await save();
     const target = await seat(v, await v.table("Target"));
-    await save(OPERATOR, target.partyId);
+    const into = await save(OPERATOR, target.partyId);
+    await run((tx) =>
+      takeOverDraft(tx, v.cfg, partyId, from.id, other, from.revision, recordAttendanceFact),
+    );
+    await run((tx) =>
+      takeOverDraft(tx, v.cfg, target.partyId, into.id, other, into.revision, recordAttendanceFact),
+    );
     const before = await state();
     await run((tx) =>
-      moveDraftsToParty(
-        tx,
-        v.cfg,
-        partyId,
-        target.partyId,
-        other,
-        {
-          recorder: recordAttendanceFact,
-          at: "2026-01-05T16:00:00.987Z",
-        },
-        new Map([[from.billId, target.tabId]]),
-      ),
+      moveDraftsToBill(tx, v.cfg, from.billId, target.tabId, other, {
+        recorder: recordAttendanceFact,
+        at: "2026-01-05T16:00:00.987Z",
+      }),
     );
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));

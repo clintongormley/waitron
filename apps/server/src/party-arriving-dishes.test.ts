@@ -27,7 +27,7 @@ import {
   readCurrentOrders,
 } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { joinTables, splitTable } from "./table-actions.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { addTabRound, fireCourse, listExpoQueue, parkOrder, placeOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { seedSessionDevice } from "./testing/session-device.js";

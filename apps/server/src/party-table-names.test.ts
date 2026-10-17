@@ -4,7 +4,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { diningTables, partyTables } from "@waitron/db";
 import { finishTable } from "./parties.js";
-import { joinTables, splitTable } from "./table-actions.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { listOrders, type OrderListFilter } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {

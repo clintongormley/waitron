@@ -9,7 +9,7 @@ import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { moveBill, type MoveTarget } from "./move-bill.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { partyMainBill } from "./parties.js";
-import { joinTables, splitTable } from "./table-actions.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   OPERATOR,
   activeTablesOf,

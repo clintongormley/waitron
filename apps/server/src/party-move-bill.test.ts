@@ -20,7 +20,7 @@ import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js"
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { switchOff } from "./testing/live-table.js";
 import {
   addTabRound,

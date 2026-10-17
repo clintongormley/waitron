@@ -69,7 +69,7 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";

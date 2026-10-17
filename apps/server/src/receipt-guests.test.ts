@@ -20,7 +20,7 @@ import {
 import { completeBillPayment } from "./bill-payments.js";
 import { mergeBills, transferItems } from "./bill-actions.js";
 import { setPartyGuests } from "./parties.js";
-import { joinTables, splitTable } from "./table-actions.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   readGuestsChoice,
   readPrintedGuests,

@@ -20,7 +20,7 @@ import { splitJoinedTable } from "./floor-today-split.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./parties.js";
-import { splitTable } from "./table-actions.js";
+import { splitTable } from "./testing/table-action-fixture.js";
 import {
   activeTablesOf,
   billsOfParty,

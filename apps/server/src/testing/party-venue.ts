@@ -32,7 +32,7 @@ import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
-import { joinTables } from "../table-actions.js";
+import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";

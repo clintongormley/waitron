@@ -63,7 +63,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills } from "./bill-actions.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 const suite = useVenueDb({
@@ -1282,6 +1282,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/join`, {
       tableId: s.tableId,
       bills: "merge",
+      expectedEdits: await inTx(suite, (tx) => partyBillEditsForTest(tx, [s.partyId, t.partyId])),
       expectedPartyRevision: await revisionOf(suite, t.partyId),
       otherPartyId: s.partyId,
       expectedOtherPartyRevision: await revisionOf(suite, s.partyId),

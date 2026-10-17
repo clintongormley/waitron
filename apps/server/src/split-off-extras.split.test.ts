@@ -18,7 +18,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { transferItems } from "./bill-actions.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { splitPartyBill } from "./testing/serve-line.js";

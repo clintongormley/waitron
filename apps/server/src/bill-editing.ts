@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   billEditStates,
   nowIso,
   orderDraftLines,
   orderDraftRecalledLines,
   orderDrafts,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -103,6 +104,18 @@ async function writeEditor(tx: Transaction, edit: BillEditState, editorId: strin
       target: billEditStates.billId,
       set: { editorId, editorVersion: edit.editorVersion + 1 },
     });
+}
+
+export async function readPartyBillIds(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<string[]> {
+  const bills = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(inArray(workingOrders.partyId, [...partyIds]))
+    .orderBy(workingOrders.id);
+  return bills.map((bill) => bill.id);
 }
 
 export function parseBillEditExpecteds(value: unknown): BillEditExpected[] {

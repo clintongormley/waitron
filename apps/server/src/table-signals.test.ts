@@ -33,7 +33,7 @@ import { moveBill } from "./move-bill.js";
 
 import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
 import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   cashContribution,
   commandFor,

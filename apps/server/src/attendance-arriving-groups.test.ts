@@ -18,7 +18,7 @@ import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { groupArrivingDishes } from "./order-groups.js";
 import { mountTillApi } from "./till-api.js";
 import { createTable } from "./testing/live-table.js";

@@ -172,7 +172,11 @@ import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./or
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState } from "./order-drafts.js";
-import { parseBillEditExpected, readBillEditState } from "./bill-editing.js";
+import {
+  parseBillEditExpected,
+  parseBillEditExpecteds,
+  readBillEditState,
+} from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
@@ -893,6 +897,7 @@ function tableActionCommand(personId: string, body: Record<string, unknown>): Ta
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     operatorId: personId,
     ...otherPartyRead(body),
+    expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
 }
 
@@ -2719,6 +2724,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         for (const otherId of withTableIds) {
           if ((await holderOf(tx, otherId)) === seated.partyId) continue;
           await joinTables(tx, sendCfg, seated.partyId, otherId, {
+            expectedEdits: [
+              { billId: seated.tabId, editorVersion: 0, draftId: null, draftRevision: null },
+            ],
             bills: "merge",
             expectedPartyRevision: await partyRevision(tx, seated.partyId),
             operatorId: personId,

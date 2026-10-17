@@ -71,7 +71,7 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";

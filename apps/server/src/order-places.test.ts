@@ -10,7 +10,7 @@ import {
   readPlacedOrders,
 } from "./order-places.js";
 import { finishTable } from "./parties.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import {
   billRow,
   commandFor,

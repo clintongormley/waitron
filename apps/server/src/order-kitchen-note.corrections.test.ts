@@ -35,7 +35,7 @@ import {
   setOrderKitchenNote,
 } from "./order-kitchen-note.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   commandFor,

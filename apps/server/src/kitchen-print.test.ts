@@ -79,7 +79,7 @@ import {
   tableAt,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { moveGuests } from "./table-actions.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import "./errors.js";
 import {
   setupVenue,

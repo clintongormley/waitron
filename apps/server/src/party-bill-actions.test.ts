@@ -42,7 +42,7 @@ import {
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
-import { joinTables, moveGuests } from "./table-actions.js";
+import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";

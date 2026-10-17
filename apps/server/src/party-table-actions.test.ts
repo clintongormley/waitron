@@ -29,7 +29,7 @@ import {
   moveGuests,
   splitTable,
   type TableActionOptions,
-} from "./table-actions.js";
+} from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   OPERATOR,

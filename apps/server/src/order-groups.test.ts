@@ -91,7 +91,7 @@ import "./errors.js";
 import { recallToDraft } from "./draft-recall.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
-import { joinTables } from "./table-actions.js";
+import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { cancelLine } from "./testing/cancel-line.js";
 

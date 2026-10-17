@@ -939,6 +939,9 @@ const ROUTES: readonly Row[] = [
       (x) => ({
         [verb === "move" ? "toTableId" : "tableId"]: x.restFreeTable,
         expectedPartyRevision: 0,
+        expectedEdits: [
+          { billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       }),
       deliTableZone,
     ],
@@ -949,6 +952,9 @@ const ROUTES: readonly Row[] = [
       (x) => ({
         [verb === "move" ? "toTableId" : "tableId"]: x.deliTable,
         expectedPartyRevision: 0,
+        expectedEdits: [x.restTab, x.deliTab]
+          .sort()
+          .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
       }),
       deliTableZone,
     ],
@@ -1029,7 +1035,8 @@ const ROUTES: readonly Row[] = [
     `POST /api/parties/:id/drafts/:did/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/${verb}`,
-    () => ({
+    (x) => ({
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: id, draftRevision: 0 },
       submissionId: randomUUID(),
       expectedPartyRevision: 0,
       revision: 0,
@@ -1053,7 +1060,12 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/drafts/:did/discard",
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/discard`,
-    () => ({ submissionId: randomUUID(), revision: 0, expectedRevision: 0 }),
+    (x) => ({
+      submissionId: randomUUID(),
+      revision: 0,
+      expectedRevision: 0,
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: id, draftRevision: 0 },
+    }),
     deliTableZone,
   ],
   [

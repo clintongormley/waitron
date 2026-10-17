@@ -58,6 +58,7 @@ import {
   closeBillDraft,
   parseBillEditExpected,
   readBillEditState,
+  relocateBillEditor,
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
@@ -628,47 +629,23 @@ export async function moveBillDraftsToParty(
 
 export async function moveDraftsToParty(
   tx: Transaction,
-  cfg: TillConfig,
   fromPartyId: string,
   intoPartyId: string,
-  operatorId: string,
-  attendance?: { recorder: AttendanceRecorder; at: string },
-  mergedBills: ReadonlyMap<string, string> = new Map(),
+  expectedEdits: BillEditExpected[],
 ): Promise<void> {
-  const moving = await openDraftsOn(tx, fromPartyId);
-  if (moving.length === 0) return;
-  const targetBill = (draft: { billId: string | null }) =>
-    draft.billId === null ? null : (mergedBills.get(draft.billId) ?? draft.billId);
-  const key = (draft: { ownerId: string; billId: string | null }) =>
-    JSON.stringify([draft.ownerId, targetBill(draft)]);
-  const held = new Map((await openDraftsOn(tx, intoPartyId)).map((draft) => [key(draft), draft]));
-  const moved = moving.filter((draft) => !held.has(key(draft)));
-  const absorbed = moving.filter((draft) => held.has(key(draft)));
-  for (const draft of moved) {
+  // Separate bills keep their outboxes; explicit bill merges resolve theirs before relocation.
+  for (const expected of expectedEdits) {
+    await relocateBillEditor(tx, expected.billId, expected);
     await tx
       .update(orderDrafts)
-      .set({
-        partyId: intoPartyId,
-        billId: targetBill(draft),
-        revision: sql`${orderDrafts.revision} + 1`,
-        updatedAt: nowIso(),
-      })
-      .where(eq(orderDrafts.id, draft.id));
-  }
-  await discardDrafts(
-    tx,
-    absorbed.map((draft) => draft.id),
-  );
-  for (const draft of absorbed) {
-    await addDiscardedDraft(
-      tx,
-      cfg,
-      draft.id,
-      held.get(key(draft))!,
-      draft.ownerId,
-      operatorId,
-      attendance,
-    );
+      .set({ partyId: intoPartyId })
+      .where(
+        and(
+          eq(orderDrafts.partyId, fromPartyId),
+          eq(orderDrafts.billId, expected.billId),
+          eq(orderDrafts.state, "open"),
+        ),
+      );
   }
 }
 
