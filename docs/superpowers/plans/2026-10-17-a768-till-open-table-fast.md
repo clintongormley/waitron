@@ -664,9 +664,10 @@ baseline on another, and an answer from the old `api` is already refused by `#re
   `#savesOutFor(partyId: string | undefined): Promise<void>`, which awaits every entry whose
   `sync.partyId === partyId` and resolves at once when there is none.
 
-(2026-10-17, finish-branch review: a save that gets no answer no longer drops the sync. It is kept
-by party for the person who made it, shown and saved again when that party's table opens for them,
-and sent at their sign-out; see the A768 pull request.)
+(2026-10-17, finish-branch review: a save that gets no answer no longer drops the sync while the
+person's session lasts. It is kept by party for them, shown and saved again when that party's table
+opens for them, and sent at their sign-out; a sign-in by someone else and a server switch drop it.
+See the A768 pull request.)
 
 `#releaseDraft` takes the sync off the screen (`#draftSync = undefined`, `#draftReady = false`,
 `requestUpdate()`) without dropping it. It stores `sync.flush().then(...)` in `#leavingDrafts`.

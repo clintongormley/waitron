@@ -1220,7 +1220,7 @@ src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed th
 
 A signed-in till keeps two things it has read, and asks `/api/menu-state` every 15 seconds
 (`POLL_MS`, `apps/till/src/state/menu-state-poll.ts`), for the counter's zone and the zone of the table whose
-order is on screen (`#menuPoll`'s `zones`), whether either moved. A held menu of any other zone is checked only when a
+order is on screen once it has opened (`#menuPoll`'s `zones`), whether either moved. A held menu of any other zone is checked only when a
 table in it opens. The poll starts at
 sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
 
