@@ -1312,6 +1312,16 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
+- **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
+  name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
+  height with about 300 px blank above Close, because it is the unsized `wt-modal`. Both measured
+  on the demo venue (`~/waitron-campaign/a719-look-report.md`, C2 and C4). Left open by A719.
+
+- **The special-day painter does not say a deleted period's replacement is still missing after a
+  failed re-read.** When a period is deleted in the Periods window over the painter and the
+  painter's re-read of the day fails, nothing tells the manager until Save shows "could not save"
+  (finish-branch's account of its own fix on #1838; not re-run since). Left open by A719.
+
 - **A per-field department policy repair changes the trading-name default.** With no policy row,
   readers show the trading name off; PATCH of `orderStart` inserts a row with it on. A real route
   probe at base `c704ac0dc` returned `{before:false, after:true}`. Left open by A493's review;
@@ -3513,6 +3523,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
+  `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
+  move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
+
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
   #1828).** `wt-colour-chooser` copies the panel placement and the grid arrow-key handling that
   several other `wt-*` components (`wt-combobox`, `wt-language-chooser` among them) each carry
@@ -4993,6 +5007,12 @@ the tree. What remains, largest first:
   open by SQLite slice 1 (#490 and the preparation tasks).
 
 ### CI, tests and developer tooling
+
+- **Tests copy the dashboard shell's link handler instead of calling it.** `#onAppLink`
+  (`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
+  `packages/venue-service/src/testing/shell-link-capture.ts` (A719); a change to the real handler
+  is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
+  use. Left open by A719 (#1838).
 
 - **The simulator suite lost its worker to the venue watchdog during A739a investigation
   (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
