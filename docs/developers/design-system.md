@@ -2396,8 +2396,8 @@ and nothing guards it across screens:
   `staffing-special-day-painter.ts`). Each has a sibling `*.unsaved.test.ts`;
 - A761: the staffing grid's block editor (`packages/staffing/src/dashboard/staffing-grid.ts`).
   Its Save writes its own comparison (`sameBlock` of the draft against the block as it was opened),
-  and it takes no draft scope and has no `*.unsaved.test.ts`. The owner wants a click outside to
-  throw its change away (owner, 2026-10-16); taking no scope, so that leaving the painter does not
+  and it takes no draft scope and has no `*.unsaved.test.ts`. The owner asked for "a Save rather than saving
+  on a click outside" (owner, 2026-10-16), so a click outside throws the change away; taking no scope, so that leaving the painter does not
   ask about the editor, is Decision 8 of the
   [A761 plan](../superpowers/plans/2026-10-17-a761-staffing-grid-paint-and-editor.md). Closing the
   tab, reloading or going Back with a changed editor open therefore also throws its change away
@@ -2646,8 +2646,7 @@ editing, offers a danger-styled Discard changes action and emits `wt-unsaved-cho
 `detail: { decision: "keep" | "discard" }`. Escape chooses Keep. Closing its `open` property
 for an aborted request emits no choice. Its message is the inner dialog's accessible description.
 Keep the original editor mounted until the coordinator approves leaving, so Keep restores focus
-and preserves the draft. Read-only and automatically saved forms need no draft scope, and neither does the staffing grid's
-block editor (A761, in the A331 list above).
+and preserves the draft. Read-only and automatically saved forms need no draft scope.
 
 The dashboard, till and setup shells share this controller and the accepted-history adapter.
 Its leave callback receives the destination URL so Account settings can retain underlying
@@ -2665,8 +2664,8 @@ Each form owns its comparison and successful-write boundary. Compare membership 
 ID sets and preserve order for submitted positions. Nested image forms retain File identity;
 a child save commits that child without committing its parent. Independent receipt, credential
 and inline-row writes commit separately. A failed refresh after a successful write cannot make
-that submitted value dirty again. Read-only views, immediately saved controls and safety
-acknowledgements remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
+that submitted value dirty again. Read-only views, immediately saved controls, safety
+acknowledgements and the staffing grid's block editor (A761) remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
 records the coverage and limits of the rollout checks.
 
 The dirty-only unload listener requests the browser's own warning. Activated desktop Chromium
