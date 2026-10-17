@@ -23,6 +23,15 @@ const CHOICES: readonly ColourChoice[] = [
   { value: "purple", label: "Purple", fill: "var(--wt-color-palette-purple)" },
 ];
 
+/** More names than a 390x700 window has room for. */
+const CHOICES_USED_BY_MANY: readonly ColourChoice[] = CHOICES.map((choice) => ({
+  ...choice,
+  usedBy: Array.from(
+    { length: 10 },
+    (_, i) => `Restaurant department number ${i} with a long name`,
+  ),
+}));
+
 async function mountChooser(attributes = 'name="colour" label="Colour" value="blue"') {
   host?.remove();
   const el = (await mount(
@@ -71,6 +80,18 @@ describe("the field", () => {
     const named = page.getByRole("button", { name: "Colour Blue", exact: true });
     await expect.element(named).toBeInTheDocument();
     expect(named.element()).toBe(trigger);
+  });
+
+  test("a named chooser uses its name as the trigger's id; an unnamed one gets a generated id", async () => {
+    const named = await mountChooser('name="colour" label="Colour" value="blue"');
+    expect(named.trigger.id).toBe("colour");
+    expect(named.trigger.getAttribute("aria-labelledby")).toBe(`${named.label.id} colour`);
+    const unnamed = await mountChooser('label="Colour" value="blue"');
+    expect(unnamed.trigger.id).toMatch(/^wt-colour-chooser-trigger-\d+$/);
+    expect(unnamed.trigger.hasAttribute("name")).toBe(false);
+    expect(unnamed.trigger.getAttribute("aria-labelledby")).toBe(
+      `${unnamed.label.id} ${unnamed.trigger.id}`,
+    );
   });
 
   test("required draws the star; without it there is none", async () => {
@@ -532,6 +553,118 @@ describe("position", () => {
       expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
       expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
       expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("in a 390x700 window, more names than fit keep the panel inside it, scrolling, and End brings the last tile into view", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(390, 700);
+    try {
+      expect(window.innerWidth).toBe(390);
+      expect(window.innerHeight).toBe(700);
+      const { el, root, panel, tile } = await mountChooser();
+      el.style.cssText = "position: fixed; right: 8px; bottom: 8px; width: 160px";
+      el.choices = CHOICES_USED_BY_MANY;
+      await el.updateComplete;
+      hostSetsValue(el);
+      await openByClick(el);
+      const box = panel.getBoundingClientRect();
+      // The names really need more room than the window has, so a panel that fits is one that scrolls.
+      expect(panel.scrollHeight).toBeGreaterThan(innerHeight);
+      expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+      await userEvent.keyboard("{End}");
+      await vi.waitFor(() => expect(root.activeElement).toBe(tile("purple")));
+      const last = tile("purple").getBoundingClientRect();
+      expect(last.top).toBeGreaterThanOrEqual(box.top - 0.5);
+      expect(last.bottom).toBeLessThanOrEqual(box.bottom + 0.5);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("names arriving while the panel is open at the right of a 390px window keep it inside the window", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(390, 700);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const { el, panel } = await mountChooser();
+      el.style.cssText = "position: fixed; right: 8px; bottom: 8px; width: 160px";
+      await openByClick(el);
+      const before = panel.getBoundingClientRect();
+      el.choices = CHOICES_USED_BY_MANY;
+      await vi.waitFor(() => {
+        expect(panel.querySelector(".used-by")!.textContent).toContain("Restaurant department");
+        const box = panel.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(before.width);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+        expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+        expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+      });
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("shrinking the window while the panel is open moves the panel inside the new width", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(1280, 800);
+    try {
+      expect(window.innerWidth).toBe(1280);
+      const { el, panel } = await mountChooser();
+      el.style.cssText = "position: fixed; right: 8px; top: 80px; width: 160px";
+      await openByClick(el);
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).not.toBeNull());
+      expect(panel.getBoundingClientRect().left).toBeGreaterThan(390);
+      await page.viewport(390, 700);
+      expect(window.innerWidth).toBe(390);
+      await vi.waitFor(() => {
+        const box = panel.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+      });
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  test("once closed or removed, the panel is not placed again by a resize or a re-render", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(1280, 800);
+    try {
+      expect(window.innerWidth).toBe(1280);
+      const closed = await mountChooser();
+      closed.el.style.cssText = "position: fixed; right: 8px; top: 80px; width: 160px";
+      await openByClick(closed.el);
+      await vi.waitFor(() => expect(closed.trigger.getAttribute("aria-expanded")).toBe("true"));
+      // Pulled left of the trigger to fit its width, so a placement made while closed, which
+      // measures no width, would write another left.
+      expect(parseFloat(closed.panel.style.left)).toBeLessThan(
+        closed.trigger.getBoundingClientRect().left - 1,
+      );
+      const placed = { left: closed.panel.style.left, top: closed.panel.style.top };
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(closed.trigger.getAttribute("aria-expanded")).toBe("false"));
+      closed.el.value = "red";
+      await closed.el.updateComplete;
+      expect({ left: closed.panel.style.left, top: closed.panel.style.top }).toEqual(placed);
+      await page.viewport(1000, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect({ left: closed.panel.style.left, top: closed.panel.style.top }).toEqual(placed);
+
+      await page.viewport(1280, 800);
+      const removed = await mountChooser();
+      removed.el.style.cssText = "position: fixed; right: 8px; top: 80px; width: 160px";
+      await openByClick(removed.el);
+      await vi.waitFor(() => expect(removed.trigger.getAttribute("aria-expanded")).toBe("true"));
+      const at = { left: removed.panel.style.left, top: removed.panel.style.top };
+      removed.el.remove();
+      await page.viewport(1000, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect({ left: removed.panel.style.left, top: removed.panel.style.top }).toEqual(at);
     } finally {
       await page.viewport(width, height);
     }

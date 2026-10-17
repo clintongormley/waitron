@@ -339,6 +339,7 @@ export class StaffRoleDialog extends LitElement {
         <wt-colour-chooser
           name="colour"
           label=${t("staffing.role.colour")}
+          required
           .value=${this.draft.colour}
           .choices=${this.colourChoices()}
           .usedByLabel=${this.usedByLabel}

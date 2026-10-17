@@ -68,4 +68,18 @@ describe.each(["light", "dark"] as const)("wt-colour-chooser a11y (%s theme)", (
     expect(panel.querySelectorAll(".used-by")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
+
+  test("open, with more names than the window has room for, so the panel scrolls", async () => {
+    const el = await mountChooser('value="blue"', theme);
+    el.choices = CHOICES.map((choice) => ({
+      ...choice,
+      usedBy: Array.from({ length: 20 }, (_, i) => `Restaurant department number ${i}`),
+    }));
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(el.shadowRoot!.querySelector("button.trigger")!);
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+    expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+    await expectNoA11yViolations(host);
+  });
 });

@@ -137,6 +137,13 @@ describe("staff-role dialog", () => {
     expect(save().variant).toBe("secondary");
   });
 
+  it("the colour chooser is required and draws its mark", async () => {
+    await mount();
+    expect(chooser().required).toBe(true);
+    await chooser().updateComplete;
+    expect(chooser().shadowRoot!.querySelector("[data-required]")).not.toBeNull();
+  });
+
   it("opens an existing staff role with its values, keeping a suspended holder offered", async () => {
     await mount(waiter);
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Edit staff role");

@@ -77,6 +77,7 @@ export class WtColourChooser extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
+        overflow-y: auto;
       }
 
       [role="radiogroup"] {
@@ -151,7 +152,7 @@ export class WtColourChooser extends LitElement {
   @query("[popover]") private popup!: HTMLElement | null;
 
   private readonly labelId = uniqueId("wt-colour-chooser-label");
-  private readonly triggerId = uniqueId("wt-colour-chooser-trigger");
+  private readonly generatedTriggerId = uniqueId("wt-colour-chooser-trigger");
   private readonly panelId = uniqueId("wt-colour-chooser-panel");
   private readonly errorId = uniqueId("wt-colour-chooser-error");
 
@@ -170,12 +171,16 @@ export class WtColourChooser extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    // A popover removed from the page closes without a toggle event.
     this.expanded = false;
+    removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
   }
 
   override updated(changed: PropertyValues<this>): void {
     if (changed.has("disabled") && this.disabled) this.hide();
+    // New choices or names can change the open panel's size.
+    if (this.popup!.matches(":popover-open")) this.positionPopup();
     // An arrow key chooses as it moves, and focus follows the choice once the host has set it.
     if (changed.has("value") && this.popup?.contains(this.shadowRoot!.activeElement))
       this.tabStop()?.focus();
@@ -189,7 +194,6 @@ export class WtColourChooser extends LitElement {
     return this.popup!.querySelector<HTMLButtonElement>('[role="radio"][tabindex="0"]');
   }
 
-  /** `wt-combobox`'s placement. */
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup!;
@@ -197,11 +201,14 @@ export class WtColourChooser extends LitElement {
     popup.style.width = "max-content";
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
+    popup.style.maxHeight = `${innerHeight - 16}px`;
     const box = popup.getBoundingClientRect();
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
   }
+
+  private readonly onWindowResize = (): void => this.positionPopup();
 
   private closeAndReturnFocus(): void {
     this.hide();
@@ -257,12 +264,13 @@ export class WtColourChooser extends LitElement {
 
   private onToggle(event: ToggleEvent): void {
     this.expanded = event.newState === "open";
+    if (this.expanded) addEventListener("resize", this.onWindowResize);
+    else removeEventListener("resize", this.onWindowResize);
   }
 
   private onTileClick(choice: ColourChoice, event: MouseEvent): void {
     if (choice.value !== this.value) dispatchWtChange(this, event, { value: choice.value });
-    this.hide();
-    this.trigger.focus();
+    this.closeAndReturnFocus();
   }
 
   private renderSwatch(fill: string) {
@@ -274,7 +282,7 @@ export class WtColourChooser extends LitElement {
   }
 
   private renderTile(choice: ColourChoice, tabStop: boolean) {
-    const usedBy = choice.usedBy ?? [];
+    const usedBy = (choice.usedBy ?? []).join(", ");
     const checked = choice.value === this.value;
     return html`<button
       type="button"
@@ -283,14 +291,14 @@ export class WtColourChooser extends LitElement {
       aria-checked=${checked ? "true" : "false"}
       tabindex=${tabStop ? "0" : "-1"}
       data-value=${choice.value}
-      aria-label=${usedBy.length ? this.usedByLabel(choice.label, usedBy.join(", ")) : choice.label}
+      aria-label=${usedBy ? this.usedByLabel(choice.label, usedBy) : choice.label}
       @click=${(event: MouseEvent) => this.onTileClick(choice, event)}
     >
       <span class="tile-text" aria-hidden="true">
         ${this.renderSwatch(choice.fill)}
         <span class="names">
           <span class="colour-name">${choice.label}</span>
-          ${usedBy.length ? html`<span class="used-by">${usedBy.join(", ")}</span>` : nothing}
+          ${usedBy ? html`<span class="used-by">${usedBy}</span>` : nothing}
         </span>
       </span>
     </button>`;
@@ -300,6 +308,7 @@ export class WtColourChooser extends LitElement {
     const chosen = this.chosen;
     const hasError = this.error !== "";
     const stopIndex = chosen ? this.choices.indexOf(chosen) : 0;
+    const triggerId = this.name || this.generatedTriggerId;
     return html`
       <div
         class="field"
@@ -317,12 +326,12 @@ export class WtColourChooser extends LitElement {
         >
         <button
           type="button"
-          id=${this.triggerId}
+          id=${triggerId}
           name=${this.name || nothing}
           class="field-control trigger"
           aria-expanded=${this.expanded ? "true" : "false"}
           aria-controls=${this.panelId}
-          aria-labelledby=${`${this.labelId} ${this.triggerId}`}
+          aria-labelledby=${`${this.labelId} ${triggerId}`}
           aria-invalid=${hasError ? "true" : nothing}
           aria-describedby=${hasError ? this.errorId : nothing}
           popovertarget=${this.panelId}
