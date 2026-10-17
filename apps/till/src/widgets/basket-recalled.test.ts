@@ -1,3 +1,4 @@
+import { draftSnapshot, partyDraftSnapshot } from "./test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { Draft, DraftLine, RecalledDraftLine, TillMenuOffer } from "../api/client.js";
@@ -522,12 +523,13 @@ describe("recalled source modifier editor", () => {
       });
       let answer!: (saved: Draft) => void;
       const api = {
-        listDrafts: vi.fn(async () => [draft(source())]),
-        saveDraft: vi.fn(
-          () =>
+        listDrafts: vi.fn(async () => Promise.resolve([draft(source())]).then(partyDraftSnapshot)),
+        saveDraft: vi.fn(() =>
+          Promise.resolve(
             new Promise<Draft>((resolve) => {
               answer = resolve;
             }),
+          ).then(draftSnapshot),
         ),
         takeOverDraft: vi.fn(),
       };

@@ -792,7 +792,7 @@ export interface DeadEndAnswer {
   revision?: number;
 }
 
-/** One person's unsent order on a party, at the revision a save or submit sends back. */
+/** A bill's saved unsent dishes at the revision last read or saved. */
 export interface Draft {
   id: string;
   partyId: string;
@@ -811,7 +811,38 @@ export interface DraftSave {
   billId: string;
   draftId: string | null;
   revision: number;
+  expectedEdit: BillEditExpected;
   lines: DraftLineInput[];
+}
+
+export interface BillEditState {
+  billId: string;
+  editorId: string | null;
+  editorName: string | null;
+  editorVersion: number;
+  draftId: string | null;
+  draftRevision: number | null;
+}
+
+export type BillEditExpected = Pick<
+  BillEditState,
+  "billId" | "editorVersion" | "draftId" | "draftRevision"
+>;
+
+export interface BillDraftSnapshot {
+  draft: Draft | null;
+  edit: BillEditState;
+}
+
+export interface PartyDraftSnapshot {
+  drafts: Draft[];
+  billEdits: BillEditState[];
+}
+
+export interface DraftTakeover {
+  revision: number;
+  expectedEdit: BillEditExpected;
+  submissionId: string;
 }
 
 export interface DraftDiscard {
@@ -846,7 +877,7 @@ export interface DraftSubmission extends GroupCommand {
 }
 
 /** The groups placed, and the draft as it is left: null once every line was sent. */
-export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
+export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 
 /** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
 export interface UnsentDraft {
@@ -3785,24 +3816,17 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups`, "POST", submission, options.signal);
   }
 
-  /** Every open draft on a party, whoever holds it, oldest first → `GET /api/parties/:partyId/drafts`. */
-  async listDrafts(partyId: string, options: ReadOptions = {}): Promise<Draft[]> {
-    const { drafts } = await this.#request<{ drafts: Draft[] }>(
-      `/api/parties/${partyId}/drafts`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-    return drafts;
+  /** Saved outboxes and every bill's editing state, read together. */
+  listDrafts(partyId: string, options: ReadOptions = {}): Promise<PartyDraftSnapshot> {
+    return this.#request(`/api/parties/${partyId}/drafts`, "GET", undefined, options.signal);
   }
 
-  /**
-   * Replace every line of the signed-in person's draft → `PUT /api/parties/:partyId/drafts`. The
-   * server merges lines that order the same thing and answers the draft as saved. Rejects, among
-   * others, `draft.out_of_date` (with the draft's `draftId` and `revision`), `draft.taken_over` (with
-   * `ownerId` and `ownerName`), `draft.not_found`, `draft.already_submitted` and `party.not_open`.
-   */
-  saveDraft(partyId: string, save: DraftSave, options: ReadOptions = {}): Promise<Draft> {
+  /** Replace this bill's outbox at its observed editing state. */
+  saveDraft(
+    partyId: string,
+    save: DraftSave,
+    options: ReadOptions = {},
+  ): Promise<BillDraftSnapshot> {
     return this.#request(`/api/parties/${partyId}/drafts`, "PUT", save, options.signal);
   }
 
@@ -3865,21 +3889,17 @@ export class TillApi {
     });
   }
 
-  /**
-   * Make another person's draft the signed-in person's →
-   * `POST /api/parties/:partyId/drafts/:draftId/take-over`. When they already hold a draft on the
-   * party, the taken lines join it and the answer is THAT draft, under its own id.
-   */
+  /** Transfer the shown bill's saved outbox in place, with replay under the same submission id. */
   takeOverDraft(
     partyId: string,
     draftId: string,
-    revision: number,
+    command: DraftTakeover,
     options: ReadOptions = {},
-  ): Promise<Draft> {
+  ): Promise<BillDraftSnapshot> {
     return this.#request(
       `/api/parties/${partyId}/drafts/${draftId}/take-over`,
       "POST",
-      { revision },
+      command,
       options.signal,
     );
   }

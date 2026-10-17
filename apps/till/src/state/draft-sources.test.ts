@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Draft, DraftLine, RecalledDraftLine, TabLine } from "../api/client.js";
-import { draftServer } from "../widgets/test-helpers.js";
+import { draftSnapshot, partyDraftSnapshot, draftServer } from "../widgets/test-helpers.js";
 import {
   fromDraftLine,
   orderLineMergeKey,
@@ -243,11 +243,13 @@ describe("recalled draft sources", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const first = recalled();
     const api = {
-      listDrafts: vi.fn(async () => [own([first])]),
-      saveDraft: vi.fn(async () => ({
-        ...own([{ ...recalled("reference-1", "replacement"), slot: 2, joinGroupId: null }]),
-        revision: 2,
-      })),
+      listDrafts: vi.fn(async () => Promise.resolve([own([first])]).then(partyDraftSnapshot)),
+      saveDraft: vi.fn(async () =>
+        Promise.resolve({
+          ...own([{ ...recalled("reference-1", "replacement"), slot: 2, joinGroupId: null }]),
+          revision: 2,
+        }).then(draftSnapshot),
+      ),
       takeOverDraft: vi.fn(),
     };
     const sync = new DraftSync({
@@ -276,12 +278,15 @@ describe("recalled draft sources", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       let answer!: (draft: Draft) => void;
       const api = {
-        listDrafts: vi.fn(async () => [own([recalled()])]),
-        saveDraft: vi.fn(
-          () =>
+        listDrafts: vi.fn(async () =>
+          Promise.resolve([own([recalled()])]).then(partyDraftSnapshot),
+        ),
+        saveDraft: vi.fn(() =>
+          Promise.resolve(
             new Promise<Draft>((resolve) => {
               answer = resolve;
             }),
+          ).then(draftSnapshot),
         ),
         takeOverDraft: vi.fn(),
       };
@@ -338,12 +343,13 @@ describe("recalled draft sources", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let answer!: (draft: Draft) => void;
     const api = {
-      listDrafts: vi.fn(async () => [own([recalled()])]),
-      saveDraft: vi.fn(
-        () =>
+      listDrafts: vi.fn(async () => Promise.resolve([own([recalled()])]).then(partyDraftSnapshot)),
+      saveDraft: vi.fn(() =>
+        Promise.resolve(
           new Promise<Draft>((resolve) => {
             answer = resolve;
           }),
+        ).then(draftSnapshot),
       ),
       takeOverDraft: vi.fn(),
     };
@@ -455,12 +461,15 @@ describe("recalled draft sources", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       let answer!: (draft: Draft) => void;
       const api = {
-        listDrafts: vi.fn(async () => [own([recalled()])]),
-        saveDraft: vi.fn(
-          () =>
+        listDrafts: vi.fn(async () =>
+          Promise.resolve([own([recalled()])]).then(partyDraftSnapshot),
+        ),
+        saveDraft: vi.fn(() =>
+          Promise.resolve(
             new Promise<Draft>((resolve) => {
               answer = resolve;
             }),
+          ).then(draftSnapshot),
         ),
         takeOverDraft: vi.fn(),
       };
@@ -531,8 +540,10 @@ describe("recalled draft sources", () => {
     changed.source.line.optionSnapshots = [];
     changed.source.extras = [];
     const api = {
-      listDrafts: vi.fn(async () => [own([recalled()])]),
-      saveDraft: vi.fn(async () => ({ ...own([changed]), revision: 2 })),
+      listDrafts: vi.fn(async () => Promise.resolve([own([recalled()])]).then(partyDraftSnapshot)),
+      saveDraft: vi.fn(async () =>
+        Promise.resolve({ ...own([changed]), revision: 2 }).then(draftSnapshot),
+      ),
       takeOverDraft: vi.fn(),
     };
     const sync = new DraftSync({
@@ -562,12 +573,13 @@ describe("recalled draft sources", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let answer!: (draft: Draft) => void;
     const api = {
-      listDrafts: vi.fn(async () => [own([recalled()])]),
-      saveDraft: vi.fn(
-        () =>
+      listDrafts: vi.fn(async () => Promise.resolve([own([recalled()])]).then(partyDraftSnapshot)),
+      saveDraft: vi.fn(() =>
+        Promise.resolve(
           new Promise<Draft>((resolve) => {
             answer = resolve;
           }),
+        ).then(draftSnapshot),
       ),
       takeOverDraft: vi.fn(),
     };

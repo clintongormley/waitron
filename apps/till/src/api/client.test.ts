@@ -4237,18 +4237,23 @@ describe("TillApi: a party's drafts", () => {
     lines: [{ ...beer, id: "dl-1", quantity: "1.000", unavailable: false }],
   };
 
+  const emptyEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
+  const observed = { billId: "wo-4", editorVersion: 1, draftId: "d1", draftRevision: 1 };
+  const edit = { ...observed, editorId: "p-alex", editorName: "Alex" };
+  const takeover = { revision: 1, expectedEdit: observed, submissionId: "takeover-1" };
+
   it("listDrafts and saveDraft hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ drafts: [] }))
-      .mockResolvedValueOnce(jsonResponse(draft));
+      .mockResolvedValueOnce(jsonResponse({ drafts: [], billEdits: [] }))
+      .mockResolvedValueOnce(jsonResponse({ draft, edit }));
     const api = new TillApi("", fetchStub);
     const signal = new AbortController().signal;
 
     await api.listDrafts("v1", { signal });
     await api.saveDraft(
       "v1",
-      { billId: "wo-4", draftId: null, revision: 0, lines: [beer] },
+      { billId: "wo-4", draftId: null, revision: 0, expectedEdit: emptyEdit, lines: [beer] },
       { signal },
     );
 
@@ -4256,9 +4261,14 @@ describe("TillApi: a party's drafts", () => {
   });
 
   it("listDrafts GETs every open draft on the party and answers the list", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ drafts: [draft] }));
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ drafts: [draft], billEdits: [edit] }));
 
-    await expect(new TillApi("", fetchStub).listDrafts("v1")).resolves.toEqual([draft]);
+    await expect(new TillApi("", fetchStub).listDrafts("v1")).resolves.toEqual({
+      drafts: [draft],
+      billEdits: [edit],
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts",
@@ -4267,36 +4277,54 @@ describe("TillApi: a party's drafts", () => {
   });
 
   it("saveDraft PUTs a new draft as draftId null at revision 0, and answers the saved draft", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(draft));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ draft, edit }));
 
     await expect(
       new TillApi("", fetchStub).saveDraft("v1", {
         billId: "wo-4",
         draftId: null,
         revision: 0,
+        expectedEdit: emptyEdit,
         lines: [beer],
       }),
-    ).resolves.toEqual(draft);
+    ).resolves.toEqual({ draft, edit });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts",
-      send("PUT", { billId: "wo-4", draftId: null, revision: 0, lines: [beer] }),
+      send("PUT", {
+        billId: "wo-4",
+        draftId: null,
+        revision: 0,
+        expectedEdit: emptyEdit,
+        lines: [beer],
+      }),
     );
   });
 
   it("saveDraft PUTs an existing draft's id and the revision it was read at", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ ...draft, revision: 2 }));
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ draft: { ...draft, revision: 2 }, edit: { ...edit, draftRevision: 2 } }),
+      );
 
     await new TillApi("", fetchStub).saveDraft("v1", {
       billId: "wo-4",
       draftId: "d1",
       revision: 1,
+      expectedEdit: observed,
       lines: [],
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts",
-      send("PUT", { billId: "wo-4", draftId: "d1", revision: 1, lines: [] }),
+      send("PUT", {
+        billId: "wo-4",
+        draftId: "d1",
+        revision: 1,
+        expectedEdit: observed,
+        lines: [],
+      }),
     );
   });
 
@@ -4318,6 +4346,7 @@ describe("TillApi: a party's drafts", () => {
         billId: "wo-4",
         draftId: "d1",
         revision: 1,
+        expectedEdit: observed,
         lines: [beer],
       }),
     ).rejects.toEqual({
@@ -4344,6 +4373,7 @@ describe("TillApi: a party's drafts", () => {
         billId: "wo-4",
         draftId: null,
         revision: 0,
+        expectedEdit: emptyEdit,
         lines: [beer],
       }),
     ).rejects.toEqual({ code: "draft.out_of_date", status: 409, draftId: "d1", revision: 3 });
@@ -4351,21 +4381,26 @@ describe("TillApi: a party's drafts", () => {
 
   it("takeOverDraft POSTs the revision it read to the draft's /take-over route and answers the draft now held", async () => {
     const taken = { ...draft, ownerId: "p-sam", ownerName: "Sam", revision: 2 };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(taken));
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ draft: taken, edit: { ...edit, draftRevision: 2 } }));
 
-    await expect(new TillApi("", fetchStub).takeOverDraft("v1", "d1", 1)).resolves.toEqual(taken);
+    await expect(new TillApi("", fetchStub).takeOverDraft("v1", "d1", takeover)).resolves.toEqual({
+      draft: taken,
+      edit: { ...edit, draftRevision: 2 },
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts/d1/take-over",
-      send("POST", { revision: 1 }),
+      send("POST", takeover),
     );
   });
 
   it("takeOverDraft hands a caller's abort signal to fetch", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(draft));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ draft, edit }));
     const signal = new AbortController().signal;
 
-    await new TillApi("", fetchStub).takeOverDraft("v1", "d1", 1, { signal });
+    await new TillApi("", fetchStub).takeOverDraft("v1", "d1", takeover, { signal });
 
     expect(fetchStub.mock.calls[0]![1]?.signal).toBe(signal);
   });

@@ -4641,6 +4641,9 @@ export class TillApp extends LitElement {
   #reconcileDraft(reread = true): void {
     const sync = this.#draftSync;
     if (!this.#draftRefreshDue || sync === undefined || !this.#draftReady) return;
+    if (sync.store.editsLocked || sync.candidate !== null) return;
+    const edit = sync.edit;
+    if (edit === null || (edit.editorId !== null && edit.editorId !== sync.personId)) return;
     if (!this.#tableOffers.loaded || sync.store.sending || sync.saving) return;
     if (this.basketRefresh !== undefined || dialogOpenUnder(this.renderRoot)) return;
     const zoneId = this.#tableZoneId;
@@ -9972,7 +9975,7 @@ export class TillApp extends LitElement {
     }
     this.#notePartyRevision(party.id, submitted.revision);
     if (!live()) return;
-    sync.submitted(submitted.draft, sent);
+    sync.submitted(submitted.draft, sent, submitted.edit);
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
   }
 

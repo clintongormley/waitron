@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Draft, DraftLine, RecalledDraftLine, TillProduct } from "../api/client.js";
-import { draftServer } from "../widgets/test-helpers.js";
+import type {
+  PartyDraftSnapshot,
+  BillDraftSnapshot,
+  Draft,
+  DraftLine,
+  RecalledDraftLine,
+  TillProduct,
+} from "../api/client.js";
+import { partyDraftSnapshot, draftServer } from "../widgets/test-helpers.js";
 import { fromDraftLine } from "./draft-lines.js";
 import { DraftSync, DRAFT_SAVE_DELAY_MS } from "./draft-sync.js";
 import { lineGross } from "./order-line.js";
@@ -107,7 +114,7 @@ describe("draft source commands", () => {
     const saved = deferred<void>();
     server.saveDraft.mockImplementationOnce(async (party, input) => {
       await saved.promise;
-      return structuredClone(server.save(party, input));
+      return server.snapshot(server.save(party, input));
     });
     const requests: unknown[] = [];
     const command = sync.runCommand(async (state, options) => {
@@ -122,7 +129,19 @@ describe("draft source commands", () => {
     sync.store.addProduct(beer, "1");
     saved.resolve();
     expect(await command).toEqual({ applied: { revision: 4 }, reloaded: true });
-    expect(requests).toEqual([{ draftId: server.drafts[0]!.id, revision: 1, aborted: false }]);
+    expect(requests).toEqual([
+      {
+        draftId: server.drafts[0]!.id,
+        revision: 1,
+        aborted: false,
+        expectedEdit: {
+          billId: "bill-1",
+          editorVersion: 1,
+          draftId: server.drafts[0]!.id,
+          draftRevision: 1,
+        },
+      },
+    ]);
     expect(sync.revision).toBe(2);
     expect(sync.store.lines.map((line) => [line.draftLineId, line.quantity])).toEqual([
       [server.drafts[0]!.lines[0]!.id, "1"],
@@ -161,7 +180,7 @@ describe("draft source commands", () => {
     const { server, sync } = setup(own([source()]));
     await sync.load();
     const answer = deferred<void>();
-    const read = deferred<Draft[]>();
+    const read = deferred<PartyDraftSnapshot>();
     server.listDrafts.mockImplementationOnce(() => read.promise);
     const command = sync.runCommand(async () => {
       await answer.promise;
@@ -184,7 +203,7 @@ describe("draft source commands", () => {
     answer.resolve();
     await vi.advanceTimersByTimeAsync(0);
     expect(sync.store.sending).toBe(true);
-    read.resolve([own([source()], 2)]);
+    read.resolve(partyDraftSnapshot([own([source()], 2)]));
     expect(await command).toEqual({ applied: "split", reloaded: true });
     expect(sync.store.sending).toBe(false);
     sync.drop();
@@ -268,18 +287,18 @@ describe("draft source commands", () => {
   it("ignores a read begun before the command while its preceding save is still out", async () => {
     const { server, sync } = setup(own([source()]));
     await sync.load();
-    const stale = deferred<Draft[]>();
+    const stale = deferred<PartyDraftSnapshot>();
     const save = deferred<void>();
     server.listDrafts.mockImplementationOnce(() => stale.promise);
     const oldRead = sync.load();
     sync.store.setLineQuantity(0, "3");
     server.saveDraft.mockImplementationOnce(async (party, input) => {
       await save.promise;
-      return structuredClone(server.save(party, input));
+      return server.snapshot(server.save(party, input));
     });
     const command = sync.runCommand(async (state) => state.revision);
     await vi.advanceTimersByTimeAsync(0);
-    stale.resolve([]);
+    stale.resolve({ drafts: [], billEdits: [server.edit("bill-1")] });
     expect(await oldRead).toBe(false);
     expect(sync.store.lines[0]!.quantity).toBe("3");
     save.resolve();
@@ -301,8 +320,9 @@ describe("draft source commands", () => {
       }),
     ).toBe("unsaved");
     expect(calls).toEqual([]);
-    expect(sync.draftId).toBeNull();
-    expect(sync.store.lines).toEqual([]);
+    expect(sync.draftId).toBe("draft-1");
+    expect(sync.store.lines.map((line) => line.workingOrderLineId)).toEqual(["recorded-7"]);
+    expect(sync.candidate?.lines[0]?.quantity).toBe("3");
     expect(sync.others.map((draft) => draft.ownerName)).toEqual(["Sam"]);
     sync.drop();
   });
@@ -310,7 +330,7 @@ describe("draft source commands", () => {
   it("cannot begin a command during a takeover or an existing send", async () => {
     const { server, sync } = setup();
     await sync.load();
-    const taken = deferred<Draft>();
+    const taken = deferred<BillDraftSnapshot>();
     server.takeOverDraft.mockImplementationOnce(() => taken.promise);
     const takeover = sync.takeOver("theirs", 1);
     await vi.advanceTimersByTimeAsync(0);
@@ -320,7 +340,7 @@ describe("draft source commands", () => {
         calls.push("during takeover");
       }),
     ).toBe("failed");
-    taken.resolve(own([source()], 2));
+    taken.resolve(server.snapshot(own([source()], 2)));
     expect(await takeover).toBe("taken");
     sync.store.sending = true;
     expect(
@@ -364,7 +384,7 @@ describe("draft source commands", () => {
     const saved = deferred<void>();
     server.saveDraft.mockImplementationOnce(async (party, input) => {
       await saved.promise;
-      return structuredClone(server.save(party, input));
+      return server.snapshot(server.save(party, input));
     });
     const calls: string[] = [];
     const command = sync.runCommand(async () => {
@@ -386,9 +406,9 @@ describe("draft source commands", () => {
         throw { code: "draft.taken_over", ownerName: "Sam" };
       }),
     ).toEqual({ refused: "draft.taken_over", ownerName: "Sam" });
-    expect(sync.store.lines).toEqual([]);
+    expect(sync.store.lines.map((line) => line.workingOrderLineId)).toEqual(["recorded-7"]);
     expect(sync.others.map((draft) => draft.ownerName)).toEqual(["Sam"]);
-    expect(sync.store.editsLocked).toBe(false);
+    expect(sync.store.editsLocked).toBe(true);
     sync.drop();
   });
 
@@ -424,14 +444,14 @@ describe("draft source commands", () => {
     async (end) => {
       const { server, sync } = setup(own([source()]));
       await sync.load();
-      const read = deferred<Draft[]>();
+      const read = deferred<PartyDraftSnapshot>();
       server.listDrafts.mockImplementationOnce(() => read.promise);
       const command = sync.runCommand(async () => "discarded");
       await vi.advanceTimersByTimeAsync(0);
       expect(server.listDrafts).toHaveBeenCalledTimes(2);
       if (end === "close") await sync.close();
       else sync.drop();
-      read.resolve([]);
+      read.resolve({ drafts: [], billEdits: [server.edit("bill-1")] });
       expect(await command).toBe("failed");
       expect(sync.draftId).toBe("draft-1");
       expect(sync.revision).toBe(1);
@@ -452,6 +472,9 @@ describe("draft source commands", () => {
     expect(await sync.flush()).toBe("failed");
     expect(await sync.load()).toBe(true);
     expect(sync.store.lines[0]!.quantity).toBe("2");
+    expect(sync.candidate?.lines[0]?.quantity).toBe("3");
+    expect(sync.store.editsLocked).toBe(true);
+    sync.resolveCandidate(null);
     expect(sync.store.editsLocked).toBe(false);
     sync.drop();
   });
@@ -461,7 +484,7 @@ describe("draft source commands", () => {
     let signal!: AbortSignal;
     server.listDrafts.mockImplementationOnce(async (...args: unknown[]) => {
       signal = (args[1] as { signal: AbortSignal }).signal;
-      return new Promise<Draft[]>((_resolve, reject) => {
+      return new Promise<PartyDraftSnapshot>((_resolve, reject) => {
         signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), {
           once: true,
         });

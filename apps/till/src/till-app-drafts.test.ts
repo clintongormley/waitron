@@ -1009,7 +1009,7 @@ function holdNextSave(): () => void {
     server.personId = sentBy;
     const saved = server.save(partyId, save);
     server.personId = now;
-    return structuredClone(saved);
+    return server.snapshot(saved);
   });
   return answer;
 }
@@ -1067,7 +1067,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     let answer!: () => void;
     api.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
 
     emit(order, "take-payment", { workingOrderId: "wo-check" });
@@ -1136,7 +1136,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     let answer!: () => void;
     api.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
 
     emit(order, "take-payment", { workingOrderId: "wo-check" });
@@ -1479,7 +1479,7 @@ describe("till-app: signing out with a draft", () => {
       server.personId = sentBy;
       const saved = server.save(partyId, save);
       server.personId = now;
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -2552,7 +2552,7 @@ describe("till-app: signing out while a save is out", () => {
     await openMesa(el);
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     await tap(el, "Beer");
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -4913,7 +4913,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       const answer = server.flagged(structuredClone(server.save(partyId, save)));
       answer.lines.reverse();
-      return answer;
+      return server.snapshot(answer);
     });
     draft(el).setLineQuantity(1, "2");
     await saved(el);
@@ -6868,7 +6868,8 @@ describe("recalled draft source splitting", () => {
       await new Promise<void>((resolve) => {
         answer = resolve;
       });
-      return { tabId: "wo-4", revision: 5, groups: [], draft: null };
+      server.drafts = server.drafts.filter((draft) => draft.billId !== "wo-4");
+      return { tabId: "wo-4", revision: 5, groups: [], draft: null, edit: server.edit("wo-4") };
     });
     const store = draft(el);
     emit(tableOrder(el)!, "submit-draft", {
@@ -7000,7 +7001,7 @@ describe("recalled draft source splitting", () => {
     api.saveDraft.mockImplementationOnce(async (partyId, ask) => {
       const saved = server.save(partyId, ask);
       saved.lines = [];
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     draft(el).setLineExtras(0, { note: "No pepper" });
     await userEvent.click(button);
@@ -7078,7 +7079,7 @@ describe("recalled draft source splitting", () => {
       await new Promise<void>((resolve) => {
         answer = resolve;
       });
-      return structuredClone(server.save(partyId, ask));
+      return server.snapshot(server.save(partyId, ask));
     });
     draft(el).setLineExtras(0, { note: "No pepper" });
     await userEvent.click(button);
@@ -7191,7 +7192,7 @@ describe("recalled draft source splitting", () => {
         await new Promise<void>((resolve) => {
           release = resolve;
         });
-        return structuredClone(server.save(partyId, ask));
+        return server.snapshot(server.save(partyId, ask));
       });
       emit(order, "recall-lines", { lineNos: [7] });
       emit(order, "recall-lines", { lineNos: [7] });

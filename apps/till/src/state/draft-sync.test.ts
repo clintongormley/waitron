@@ -10,7 +10,13 @@ import {
   resendUnanswered,
 } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
-import type { Draft, DraftLine, FreshDraftLine, TillProduct } from "../api/client.js";
+import type {
+  BillDraftSnapshot,
+  Draft,
+  DraftLine,
+  FreshDraftLine,
+  TillProduct,
+} from "../api/client.js";
 import type { Place } from "./draft-place.js";
 import { fromDraftLine } from "./draft-lines.js";
 
@@ -112,14 +118,16 @@ afterEach(() => vi.useRealTimers());
 describe("DraftSync: reading a party's drafts", () => {
   it("shows the signed-in person's own draft and keeps the others' apart", async () => {
     const theirs = seed("p2", steak);
+    theirs.billId = "wo-check";
     seed("p1", beer, beer);
     const draft = sync();
 
     expect(await draft.load()).toBe(true);
 
     expect(rows(draft)).toEqual(["Beer ×2"]);
-    expect(draft.others.map((other) => other.id)).toEqual([theirs.id]);
+    expect(draft.others.map((other) => other.id)).toEqual([]);
     expect(draft.draftId).toBe(server.drafts[1]!.id);
+    expect(server.drafts.find((row) => row.id === theirs.id)?.billId).toBe("wo-check");
     expect(draft.revision).toBe(1);
     expect(draft.store.dirty).toBe(false);
     await settle();
@@ -142,10 +150,8 @@ describe("DraftSync: bill ownership", () => {
     const ownOther = seed("p1", steak);
     const colleagueOther = seed("p2", beer);
     server.drafts = [
-      { ...ownOther, billId: "wo-check" },
       { ...colleagueOther, billId: "wo-check" },
       { ...ownOther, id: "own-here", billId: "wo-4", lines: colleagueOther.lines },
-      { ...colleagueOther, id: "colleague-here", billId: "wo-4", lines: ownOther.lines },
     ];
     const draft = sync();
 
@@ -153,7 +159,7 @@ describe("DraftSync: bill ownership", () => {
 
     expect(draft.draftId).toBe("own-here");
     expect(rows(draft)).toEqual(["Beer ×1"]);
-    expect(draft.others.map((other) => other.id)).toEqual(["colleague-here"]);
+    expect(draft.others.map((other) => other.id)).toEqual([]);
   });
 
   it("starts empty on another bill owned by the same person", async () => {
@@ -230,7 +236,7 @@ describe("DraftSync: saving", () => {
     let answer!: () => void;
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     const draft = sync();
     await draft.load();
@@ -269,6 +275,7 @@ describe("DraftSync: saving", () => {
         billId: "wo-4",
         draftId: null,
         revision: 0,
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
       },
       { signal: expect.any(AbortSignal) },
@@ -291,6 +298,12 @@ describe("DraftSync: saving", () => {
         billId: "wo-4",
         draftId: server.drafts[0]!.id,
         revision: 1,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: server.drafts[0]!.id,
+          draftRevision: 1,
+        },
         lines: [expect.anything(), expect.anything()],
       },
       { signal: expect.any(AbortSignal) },
@@ -304,7 +317,7 @@ describe("DraftSync: saving", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -322,6 +335,12 @@ describe("DraftSync: saving", () => {
       billId: "wo-4",
       draftId: server.drafts[0]!.id,
       revision: 1,
+      expectedEdit: {
+        billId: "wo-4",
+        editorVersion: 1,
+        draftId: server.drafts[0]!.id,
+        draftRevision: 1,
+      },
       lines: [
         expect.objectContaining({ menuItemId: "offer-beer", quantity: "1" }),
         expect.objectContaining({ menuItemId: "offer-steak", quantity: "2" }),
@@ -350,7 +369,10 @@ describe("DraftSync: saving", () => {
     draft.store.addProduct(beer, "1");
 
     expect(await draft.flush()).toBe("failed");
-    expect(draft.lineIds([0])).toBeNull();
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
 
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
@@ -398,7 +420,7 @@ describe("DraftSync: saving", () => {
         (saved.lines[0] as FreshDraftLine).options.reverse();
         (saved.lines[0] as FreshDraftLine).extras[0]!.picks.reverse();
         change(saved.lines[0] as FreshDraftLine);
-        return saved;
+        return server.snapshot(saved);
       });
       await draft.flush();
       return draft;
@@ -421,7 +443,7 @@ describe("DraftSync: saving", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -461,16 +483,17 @@ describe("DraftSync: a refused save", () => {
   it.each(["draft.taken_over", "draft.not_found", "draft.already_submitted"])(
     "re-reads the drafts after %s and says so",
     async (code) => {
-      const theirs = seed("p2", steak);
       const draft = sync();
       await draft.load();
       server.saveDraft.mockRejectedValueOnce({ code, status: 409 });
       draft.store.addProduct(beer, "1");
+      const theirs = seed("p2", steak);
 
       expect(await draft.flush()).toEqual({ refused: code });
 
       expect(server.listDrafts).toHaveBeenCalledTimes(2);
-      expect(draft.store.lineCount).toBe(0);
+      expect(draft.store.lineCount).toBe(1);
+      expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
       expect(draft.others.map((other) => other.id)).toEqual([theirs.id]);
       expect(refused).toEqual([code]);
     },
@@ -484,6 +507,9 @@ describe("DraftSync: a refused save", () => {
 
     expect(await draft.flush()).toBe("failed");
     expect(refused).toEqual([]);
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
   });
@@ -501,13 +527,13 @@ describe("DraftSync: a refused save", () => {
     expect(refused).toEqual(["party.not_open"]);
   });
 
-  it("ignores a save answer overtaken by a read", async () => {
+  it("accepts a newer save answer after a read with the same observation", async () => {
     let answer!: () => void;
     const draft = sync();
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     const saving = draft.flush();
@@ -518,8 +544,9 @@ describe("DraftSync: a refused save", () => {
     answer();
     await saving;
 
-    expect(draft.draftId).toBeNull();
-    expect(draft.store.lineCount).toBe(0);
+    expect(draft.draftId).toBe(server.drafts[0]!.id);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
   });
 });
 
@@ -549,6 +576,9 @@ describe("DraftSync: a save or read that does not come back", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(outcome).toBe("failed");
 
+    expect(await draft.flush()).toBe("failed");
+    expect(server.saveDraft).toHaveBeenCalledTimes(1);
+    draft.resolveCandidate(draft.candidate!.lines);
     expect(await draft.flush()).toBe("saved");
     expect(server.saveDraft).toHaveBeenCalledTimes(2);
   });
@@ -587,19 +617,20 @@ describe("DraftSync: a save or read that does not come back", () => {
 });
 
 describe("DraftSync: signing out", () => {
-  it("sends what is unsaved at once when no save is out, and nothing after", async () => {
+  it("retains unsaved work at sign-out and starts no further save", async () => {
     const draft = sync();
     await draft.load();
     draft.store.addProduct(beer, "1");
 
     const closed = draft.close();
-    expect(await closed).toBe("saved");
-    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(await closed).toBe("failed");
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(server.saveDraft).not.toHaveBeenCalled();
 
     draft.store.addProduct(steak, "1");
     await settle();
     expect(await draft.flush()).toBe("failed");
-    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
   });
 
   it("sends nothing more while a save is out, since it could go out under the next session", async () => {
@@ -608,7 +639,7 @@ describe("DraftSync: signing out", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     await settle();
@@ -640,7 +671,7 @@ describe("DraftSync: after a submission", () => {
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
 
-    draft.submitted(answered.draft, [sentLine!]);
+    draft.submitted(answered.draft, [sentLine!], answered.edit);
 
     expect(draft.store.lines).toEqual([kept]);
     expect(draft.store.lines[0]).toBe(kept);
@@ -656,7 +687,8 @@ describe("DraftSync: after a submission", () => {
     draft.store.addProduct(beer, "1");
     await draft.flush();
 
-    draft.submitted(null, draft.store.lines);
+    server.drafts = [];
+    draft.submitted(null, draft.store.lines, server.edit("wo-4"));
 
     expect(draft.store.lineCount).toBe(0);
     expect(draft.draftId).toBeNull();
@@ -677,7 +709,7 @@ describe("DraftSync: after a submission", () => {
     await draft.flush();
     const rest = seed("p9", steak);
 
-    draft.submitted(rest, []);
+    draft.submitted(rest, [], server.edit(rest.billId));
 
     expect(rows(draft)).toEqual(["Steak ×1"]);
     expect(draft.lineIds([0])).toEqual([rest.lines[0]!.id]);
@@ -706,7 +738,10 @@ describe("DraftSync: a party's draft store", () => {
       draft.store.addProduct(steak, "1");
       server.saveDraft.mockImplementationOnce(async (party, input) => {
         const result = server.save(party, input);
-        return { ...result, lines: result.lines.map((line) => ({ ...line, ...wire })) };
+        return server.snapshot({
+          ...result,
+          lines: result.lines.map((line) => ({ ...line, ...wire })),
+        });
       });
       expect(await draft.flush()).toBe("saved");
       expect(draft.store.lines[0]!.place).toEqual(
@@ -838,8 +873,9 @@ describe("DraftSync: a party's draft store", () => {
     expect(store.lines[0]).not.toHaveProperty("place");
   });
 
-  it("adds a tap into the line ordering the same thing", () => {
+  it("adds a tap into the line ordering the same thing", async () => {
     const draft = sync();
+    await draft.load();
     draft.store.addProduct(beer, "1");
     draft.store.addProduct(steak, "1");
     draft.store.addProduct(beer, "2");
@@ -858,7 +894,16 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.takeOverDraft).toHaveBeenCalledExactlyOnceWith(
       "v1",
       theirs.id,
-      theirs.revision,
+      {
+        revision: theirs.revision,
+        expectedEdit: {
+          billId: "wo-4",
+          editorVersion: 1,
+          draftId: theirs.id,
+          draftRevision: theirs.revision,
+        },
+        submissionId: expect.any(String),
+      },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(rows(draft)).toEqual(["Steak ×1"]);
@@ -876,60 +921,69 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(refused).toEqual([]);
   });
 
-  it("saves the person's own edit first, then takes the draft the server added into theirs", async () => {
-    const theirs = seed("p2", steak);
+  it("takes only the saved bill outbox and retains the losing local edit separately", async () => {
     const draft = sync();
     await draft.load();
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
     expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    const saved = server.saveDraft.mock.invocationCallOrder[0]!;
-    expect(saved).toBeLessThan(server.takeOverDraft.mock.invocationCallOrder[0]!);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
     const own = server.drafts.find((each) => each.ownerId === "p1")!;
     expect(draft.draftId).toBe(own.id);
-    expect(draft.draftId).not.toBe(theirs.id);
-    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
-    expect(draft.lineIds([0, 1])).toEqual(own.lines.map((line) => line.id));
+    expect(draft.draftId).toBe(theirs.id);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.lineIds([0])).toEqual(own.lines.map((line) => line.id));
     expect(draft.others).toEqual([]);
   });
 
   it("keeps the other people's drafts it did not take", async () => {
     const theirs = seed("p2", steak);
     const another = seed("p3", beer);
+    another.billId = "wo-check";
     const draft = sync();
     await draft.load();
 
     expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    expect(draft.others.map((other) => other.id)).toEqual([another.id]);
+    expect(draft.others).toEqual([]);
+    expect(server.drafts.find((row) => row.id === another.id)).toEqual(another);
   });
 
-  it("takes nothing over when the person's own edit could not be saved", async () => {
-    const theirs = seed("p2", steak);
+  it("takeover sends no preparatory save even when saving would fail", async () => {
     const draft = sync();
     await draft.load();
     server.saveDraft.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
-    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("taken");
 
-    expect(server.takeOverDraft).not.toHaveBeenCalled();
-    expect(rows(draft)).toEqual(["Beer ×1"]);
-    expect(draft.lineIds([0])).toBeNull();
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(draft.store.editsLocked).toBe(true);
   });
 
-  it("takes nothing over when the person's own edit was refused, which it has already said", async () => {
-    const theirs = seed("p2", steak);
+  it("a refused takeover preserves the saved editor and local candidate", async () => {
     const draft = sync();
     await draft.load();
-    server.saveDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
+    server.takeOverDraft.mockRejectedValueOnce({ code: "party.not_open", status: 409 });
     draft.store.addProduct(beer, "1");
+    const theirs = seed("p2", steak);
+    await draft.load();
 
-    expect(await draft.takeOver(theirs.id, theirs.revision)).toBe("unsaved");
+    expect(await draft.takeOver(theirs.id, theirs.revision)).toEqual({ refused: "party.not_open" });
 
-    expect(server.takeOverDraft).not.toHaveBeenCalled();
-    expect(refused).toEqual(["party.not_open"]);
+    expect(server.takeOverDraft).toHaveBeenCalledOnce();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    expect(draft.candidate?.lines[0]?.product.id).toBe("beer");
+    expect(draft.edit?.editorId).toBe("p2");
   });
 
   it("reads the drafts again, and sends nothing more, when the draft moved on since it was read", async () => {
@@ -945,8 +999,8 @@ describe("DraftSync: taking over another person's draft", () => {
     expect(server.takeOverDraft).toHaveBeenCalledOnce();
     expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
     expect(draft.others.map((other) => other.ownerId)).toEqual(["p2"]);
-    expect(draft.draftId).toBeNull();
-    expect(rows(draft)).toEqual([]);
+    expect(draft.draftId).toBe(theirs.id);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
     await settle();
     expect(server.takeOverDraft).toHaveBeenCalledOnce();
     expect(server.saveDraft).not.toHaveBeenCalled();
@@ -971,20 +1025,20 @@ describe("DraftSync: taking over another person's draft", () => {
     const theirs = seed("p2", steak);
     const draft = sync();
     await draft.load();
-    let answer!: (value: Draft) => void;
+    let answer!: (value: BillDraftSnapshot) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((resolve) => (answer = resolve)),
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
     );
     const reads = server.listDrafts.mock.calls.length;
 
     const outcome = draft.takeOver(theirs.id, theirs.revision);
     await vi.advanceTimersByTimeAsync(0);
     draft.drop();
-    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+    answer(server.snapshot(server.takeOver("v1", theirs.id, theirs.revision)));
 
     expect(await outcome).toBe("failed");
-    expect(rows(draft)).toEqual([]);
-    expect(draft.draftId).toBeNull();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.draftId).toBe(theirs.id);
     expect(server.listDrafts).toHaveBeenCalledTimes(reads);
   });
 
@@ -994,7 +1048,7 @@ describe("DraftSync: taking over another person's draft", () => {
     await draft.load();
     let refuse!: (error: unknown) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((_resolve, reject) => (refuse = reject)),
+      () => new Promise<BillDraftSnapshot>((_resolve, reject) => (refuse = reject)),
     );
     const reads = server.listDrafts.mock.calls.length;
 
@@ -1011,16 +1065,16 @@ describe("DraftSync: taking over another person's draft", () => {
     const theirs = structuredClone(seed("p2", steak));
     const draft = sync();
     await draft.load();
-    let answer!: (value: Draft) => void;
+    let answer!: (value: BillDraftSnapshot) => void;
     server.takeOverDraft.mockImplementationOnce(
-      () => new Promise<Draft>((resolve) => (answer = resolve)),
+      () => new Promise<BillDraftSnapshot>((resolve) => (answer = resolve)),
     );
 
     const outcome = draft.takeOver(theirs.id, theirs.revision);
     await vi.advanceTimersByTimeAsync(0);
     expect(draft.store.sending).toBe(true);
     draft.store.addProduct(beer, "1");
-    answer(structuredClone(server.takeOver("v1", theirs.id, theirs.revision)));
+    answer(server.snapshot(server.takeOver("v1", theirs.id, theirs.revision)));
 
     expect(await outcome).toBe("taken");
     await vi.advanceTimersByTimeAsync(2_000);
@@ -1105,7 +1159,7 @@ describe("DraftSync: what the server says about each line", () => {
       groups: [{ lineIds: draft.lineIds([0])!, release: "fire" }],
     });
 
-    draft.submitted(answered.draft, [sentLine!]);
+    draft.submitted(answered.draft, [sentLine!], answered.edit);
 
     expect(flags(draft)).toEqual([true]);
   });
@@ -1152,7 +1206,7 @@ describe("DraftSync: what the server says about each line", () => {
     await draft.load();
     server.saveDraft.mockImplementationOnce(async (partyId, save) => {
       await new Promise<void>((resolve) => (answer = resolve));
-      return structuredClone(server.save(partyId, save));
+      return server.snapshot(server.save(partyId, save));
     });
     draft.store.addProduct(beer, "1");
     expect(draft.saving).toBe(false);
@@ -1248,6 +1302,7 @@ describe("A773 drafts on a bill that is no longer open", () => {
     "%s refuses edits and saves without losing the pending dishes",
     async (status) => {
       const s = sync();
+      await s.load();
       s.store.addProduct(beer, "1");
       s.billStatus = status;
       s.store.addProduct(steak, "1");
@@ -1286,6 +1341,7 @@ describe("A773 drafts on a bill that is no longer open", () => {
   it("an authoritative read cannot clear the bill's edit restriction", async () => {
     seed("p1", beer);
     const s = sync();
+    await s.load();
     s.billStatus = "settled";
     expect(await s.load()).toBe(true);
     s.store.addProduct(steak, "1");
@@ -1296,6 +1352,7 @@ describe("A773 drafts on a bill that is no longer open", () => {
 
   it("a bill reopening permits retained edits to save without clearing a separate read lock", async () => {
     const s = sync();
+    await s.load();
     s.store.addProduct(beer, "1");
     s.billStatus = "placed";
     const unlock = s.store.lockEdits();
@@ -1316,18 +1373,22 @@ describe("A773 drafts on a bill that is no longer open", () => {
     const theirs = seed("p2", steak);
     const s = sync();
     await s.load();
+    await s.load();
     s.billStatus = "placed";
     expect(await s.takeOver(theirs.id, theirs.revision)).toEqual({ refused: "bill.presented" });
     expect(server.drafts[0]!.ownerId).toBe("p2");
-    expect(s.store.lines).toEqual([]);
+    expect(s.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(s.store.editsLocked).toBe(true);
     s.drop();
   });
 
   it("sign-out does not write pending dishes onto a paid bill", async () => {
     const s = sync();
+    await s.load();
     s.store.addProduct(beer, "1");
     s.billStatus = "settled";
-    expect(await s.close()).toEqual({ refused: "bill.paid" });
+    expect(await s.close()).toBe("failed");
+    expect(s.candidate?.lines[0]?.product.name).toBe("Beer");
     expect(server.drafts).toEqual([]);
     expect(s.store.lines[0]!.product.name).toBe("Beer");
     s.drop();
