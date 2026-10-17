@@ -1,5 +1,9 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
-import { readLineCancellations, serviceCompletedAt } from "./line-service-state.js";
+import {
+  readLineCancellations,
+  serviceCompletedAt,
+  serviceQuantities,
+} from "./line-service-state.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -41,7 +45,7 @@ import {
   stringToThousandths,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { enqueueHoldCorrections, enqueueKitchenTickets } from "./kitchen-print.js";
+import { enqueueHoldCorrections, enqueueKitchenTickets, firedQuantity } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
@@ -122,7 +126,7 @@ export interface OrderGroup {
   ready?: true;
   /** Present only when every fired kitchen item of the group has been sent away from the pass. */
   away?: true;
-  /** The group's dish lines, whichever of the party's bills they sit on. */
+  /** Dishes with active service, excluding recalled sources. */
   lineIds: string[];
   courseIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
@@ -746,7 +750,7 @@ export async function reorderHeldGroups(
 export const MAX_SNOOZE_MINUTES = 120;
 
 /**
- * Snooze the release reminder of the group waiting, the party's first held group: its `remind_at`
+ * Snooze the release reminder of the group waiting: its `remind_at`
  * becomes now plus `minutes` (D11).
  */
 export async function snoozeReminder(
@@ -1285,6 +1289,10 @@ async function readGroups(
     kitchen.filter((row) => row.away === row.fired).map((row) => row.groupId!),
   );
   const linesByGroup = new Map<string, typeof lines>();
+  const cancellations = await readLineCancellations(
+    tx,
+    lines.map((line) => line.id),
+  );
   for (const line of lines) {
     const own = linesByGroup.get(line.groupId!) ?? [];
     own.push(line);
@@ -1292,8 +1300,15 @@ async function readGroups(
   }
   return groups.map((group) => {
     const own = linesByGroup.get(group.id) ?? [];
+    const active = own
+      .filter((line) => !line.recalled)
+      .map((line) => ({
+        ...line,
+        quantity: serviceQuantities(line.quantity, 0, cancellations.get(line.id) ?? 0).active,
+      }))
+      .filter((line) => line.quantity > 0);
     const counts = new Map<string, number>();
-    for (const line of own.filter((line) => !line.recalled)) {
+    for (const line of active) {
       const label = staffPresentationName(line);
       counts.set(label, (counts.get(label) ?? 0) + line.quantity);
     }
@@ -1304,7 +1319,7 @@ async function readGroups(
       state: group.state as "held" | "fired",
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
       ...(awayGroups.has(group.id) ? { away: true as const } : {}),
-      lineIds: own.filter((line) => !line.recalled).map((line) => line.id),
+      lineIds: active.map((line) => line.id),
       courseIds: [
         ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
       ],
@@ -1321,18 +1336,22 @@ async function readGroups(
 /** The group waiting to be released, and when staff are reminded to release it (D11). */
 export interface ReleaseReminder {
   groupId: string;
-  /** Null while a fired group before it has a dish line not fully served, or nothing dates it. */
+  /** Null while earlier active dishes remain unserved, or when no completion dates it. */
   dueAt: string | null;
 }
 
 /** `servedAt` carries the effective completion time, including charged cancellation. */
 export function releaseReminder(
   groups: readonly Pick<OrderGroup, "id" | "state" | "remindAt">[],
-  lines: readonly { groupId: string | null; servedAt: string | null }[],
+  lines: readonly { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[],
   minutes: number | null,
 ): ReleaseReminder | null {
   if (minutes === null) return null;
-  const waiting = groups.findIndex((group) => group.state === "held");
+  const waiting = groups.findIndex((group) => {
+    if (group.state !== "held") return false;
+    const own = lines.filter((line) => line.groupId === group.id);
+    return own.length === 0 || own.some((line) => line.fullyCancelled !== true);
+  });
   if (waiting === -1) return null;
   const { id: groupId, remindAt } = groups[waiting]!;
   const ahead = new Set(groups.slice(0, waiting).map((group) => group.id));
@@ -1414,7 +1433,11 @@ export async function readReleaseReminders(
         own.map((group) => ({ ...group, state: group.state as "held" | "fired" })),
         lines
           .filter((line) => ids.has(line.groupId!))
-          .map((line) => ({ groupId: line.groupId, servedAt: serviceCompletedAt(line) })),
+          .map((line) => ({
+            groupId: line.groupId,
+            servedAt: serviceCompletedAt(line),
+            ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
+          })),
         minutes,
       ),
     );
@@ -1440,6 +1463,8 @@ export interface CurrentOrderExtra {
   /** The staff name. */
   name: string;
   quantity: string;
+  /** Present only for food cancelled while its charge remains on the bill. */
+  cancelledQuantity?: string;
 }
 
 /** A dish line of the party, on whichever of its bills, a paid one included. */
@@ -1452,10 +1477,11 @@ export interface CurrentOrderRow {
   /** The staff name, the variant's on a variant line. */
   name: string;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Decimal places the line's unit takes, so a part can be served (0 = sold by the unit). */
   unitPrecision: number | null;
   servedQuantity: string;
-  /** Set once the whole quantity is served. */
   servedAt: string | null;
   /** Released work, which alone can be marked served. */
   released: boolean;
@@ -1594,6 +1620,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     lines.map((line) => line.id),
   );
   const extras = new Map<string, CurrentOrderExtra[]>();
+  const cancellations = await readLineCancellations(
+    tx,
+    lines.map((line) => line.id),
+  );
   const heldExtras = new Set(
     lines
       .filter(
@@ -1610,6 +1640,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         lineId: line.id,
         name: staffPresentationName({ name: line.name, variantName: line.variantName }),
         quantity: thousandthsToDecimal(line.quantity),
+        ...((cancellations.get(line.id) ?? 0) > 0
+          ? { cancelledQuantity: thousandthsToDecimal(cancellations.get(line.id)!) }
+          : {}),
       },
     ]);
   }
@@ -1626,7 +1659,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     }));
   const byId = new Map(shown.map((group) => [group.id, group]));
   const ungrouped: CurrentOrderRow[] = [];
-  const dishes: { groupId: string | null; servedAt: string | null }[] = [];
+  const dishes: { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[] = [];
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
     if (line.parentLineId !== null) continue;
@@ -1634,7 +1667,11 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     if (line.recalled) continue;
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
-    dishes.push({ groupId: line.groupId, servedAt: serviceCompletedAt(line) });
+    dishes.push({
+      groupId: line.groupId,
+      servedAt: serviceCompletedAt(line),
+      ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
+    });
     const row: CurrentOrderRow = {
       lineId: line.id,
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
@@ -1643,10 +1680,14 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       courseId: line.courseId,
       name: staffPresentationName({ name: line.name, variantName: line.variantName }),
       quantity: thousandthsToDecimal(line.quantity),
+      ...(line.cancelledQuantity > 0
+        ? { cancelledQuantity: thousandthsToDecimal(line.cancelledQuantity) }
+        : {}),
       unitPrecision: line.unitPrecision,
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
-      released: isReleased(line) && !heldExtras.has(line.id),
+      released:
+        line.quantity > line.cancelledQuantity && isReleased(line) && !heldExtras.has(line.id),
       kitchen:
         line.ticketState === null
           ? null
@@ -1812,7 +1853,7 @@ export async function correctJoin(
       workingOrderId: ticketItems.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
@@ -1844,16 +1885,13 @@ async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Prom
   return rows.map((row) => row.workingOrderId);
 }
 
-/** The group is the party's first held one, the one its release reminder waits on. */
+/** The group is the party's first held one with active sent dishes. */
 async function requireWaitingGroup(tx: Transaction, partyId: string, groupId: string) {
   await requireHeldGroup(tx, partyId, groupId);
-  const [waiting] = await tx
-    .select({ id: orderGroups.id })
-    .from(orderGroups)
-    .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")))
-    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id))
-    .limit(1);
-  if (waiting!.id !== groupId) throw new AppError("group.not_waiting", { groupId });
+  const waiting = (await readGroups(tx, partyId)).find(
+    (group) => group.state === "held" && group.lineIds.length > 0,
+  );
+  if (waiting?.id !== groupId) throw new AppError("group.not_waiting", { groupId });
 }
 
 async function requireHeldGroup(tx: Transaction, partyId: string, groupId: string): Promise<void> {

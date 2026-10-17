@@ -3767,6 +3767,8 @@ export interface TabLine {
    * tells the two apart. */
   parentLineNo: number | null;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Physical amount represented by one priced portion, frozen with the line. */
   priceQuantity: string;
   /** Decimal places the line's unit takes, frozen at add time (0 = sold by the unit). */
@@ -3861,6 +3863,10 @@ export async function readTabLines(
   );
   // The stored `line_no` is what this read returns, so, unlike `readLockedLines`, no renumbering.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
+  const cancellations = await readLineCancellations(
+    tx,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => {
     const sold = soldProduct(row);
     return {
@@ -3872,6 +3878,9 @@ export async function readTabLines(
       productId: row.productId,
       parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
       quantity: thousandthsToDecimal(row.quantity),
+      ...((cancellations.get(row.id) ?? 0) > 0
+        ? { cancelledQuantity: thousandthsToDecimal(cancellations.get(row.id)!) }
+        : {}),
       priceQuantity: thousandthsToDecimal(row.priceQuantity),
       unitPrecision: row.unitPrecision,
       unitPriceGross: centsToDecimal(row.unitPriceGross),

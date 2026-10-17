@@ -574,8 +574,7 @@ export interface OrderGroup {
   summary: string;
 }
 
-/** The party's first held group, and when staff are reminded to fire it; `dueAt` is null while a
- * fired group before it has a dish line not fully served, or when nothing dates it. */
+/** When to remind staff to fire the next held group with active dishes. */
 export interface ReleaseReminder {
   groupId: string;
   dueAt: string | null;
@@ -606,15 +605,16 @@ export interface CurrentOrderRow {
   /** The staff name. */
   name: string;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Decimal places the line's unit takes (0 = sold by the unit). */
   unitPrecision: number | null;
   servedQuantity: string;
-  /** Set once the whole quantity is served. */
   servedAt: string | null;
   released: boolean;
   kitchen: CurrentOrderKitchen | null;
   note: string | null;
-  extras: { lineId: string; name: string; quantity: string }[];
+  extras: { lineId: string; name: string; quantity: string; cancelledQuantity?: string }[];
 }
 
 export interface CurrentOrderGroup {
@@ -2167,8 +2167,7 @@ export interface TabLines {
 
 /**
  * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
- * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
- * marker (`null` ⇒ still to serve).
+ * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {
   nutrition?: LineNutrition;
@@ -2192,6 +2191,8 @@ export interface TabLine {
    * on this wire that tells the two apart. An absent value reads as a dish. */
   parentLineNo?: number | null;
   quantity: string;
+  /** Part of the billed quantity cancelled without removing its charge. */
+  cancelledQuantity?: string;
   /** Physical amount represented by one priced portion, frozen when the line was added. */
   priceQuantity?: string;
   /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit).
@@ -3944,7 +3945,7 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/served`, "POST", command);
   }
 
-  /** Put off the release reminder of the group waiting (the party's first held group) →
+  /** Put off the release reminder of the group waiting →
    * `POST /api/parties/:partyId/groups/:groupId/snooze`: it becomes due `minutes` from now. A
    * fired group rejects `group.not_held`, and a held group other than the one waiting
    * `group.not_waiting`. */
