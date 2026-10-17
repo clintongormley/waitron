@@ -193,6 +193,8 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
   /** Whether the server can issue a full invoice naming the customer (F1). */
   fullInvoices: boolean;
+  /** A hash of every field here but `servers`; `/api/menu-state` names it too. */
+  setupRevision: string;
 }
 
 /**
@@ -448,7 +450,11 @@ export interface ServiceZoneSummary {
 
 export type { MenuState, MenuUnavailable };
 
-export type MenuStateAnswer = MenuState & { defaultMenuId?: string | null; liveFields?: string };
+export type MenuStateAnswer = MenuState & {
+  defaultMenuId?: string | null;
+  liveFields?: string;
+  setupRevision?: string;
+};
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
 function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {

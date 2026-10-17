@@ -1883,6 +1883,10 @@ export class TillApp extends LitElement {
   #browserLocaleVenue?: string;
   #localeList?: Awaited<ReturnType<TillApi["getLocales"]>>["locales"];
   #bootGeneration = 0;
+  /** The setup revision of the last setup applied. */
+  #setupRevision?: string;
+  /** A read of the setup a poll asked for, while it is out. */
+  #setupRead?: Promise<void>;
   #preLoginChoice?: string;
   #venueLocaleReady = false;
   #loginPending = false;
@@ -2915,6 +2919,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
+    this.#setupRead = undefined;
     // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
     // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
     // so nothing would stop a battery reporter started now.
@@ -2949,26 +2954,9 @@ export class TillApp extends LitElement {
       // A login can begin while `getTill` is in flight; its saved language wins.
       if (this.operatorName === "" && !this.#loginPending && this.#preLoginChoice === undefined)
         setLocale(this.#preLoginLocale());
-      // A separate field: the UI default drops UI-unsupported codes, which must never change the
-      // printed ticket's language.
-      this.invoiceLocale = till.invoiceLocale;
-      this.receiptLanguages = till.receiptLanguages ?? [];
-      this.onboardingIntent = till.onboardingIntent;
-      this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = "prepay";
       this.receiptPrintMode = "auto";
-      this.bumpMode = till.bumpMode;
-      this.fireControl = till.fireControl;
-      this.courses = till.courses;
-      this.cardProvider = till.cardProvider;
-      this.tipsEnabled = till.tipsEnabled;
-      // A server too old to send it sets no limit.
-      this.#simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
-      this.#store.simplifiedInvoiceLimit = this.#simplifiedInvoiceLimit;
-      // A server too old to send it counts as off.
-      this.fullInvoices = till.fullInvoices === true;
-      this.activeReaders = till.activeReaders ?? [];
-      this.defaultReaderId = till.defaultReaderId;
+      this.#applyVenueSetup(till);
       this.#applyProfileSetup(till);
       // Validated and retained, but not written to the URL: the front-door surfaces are not `/tabs/*`
       // destinations, so the tab is published only when the shell opens.
@@ -4599,6 +4587,7 @@ export class TillApp extends LitElement {
   }
 
   #onMenuState(zoneId: string, state: MenuStateAnswer): void {
+    this.#noteSetupRevision(state.setupRevision);
     if (zoneId === this.counterServiceZoneId) {
       const unavailableMoved = this.#counterOffers.setUnavailable(state.unavailable);
       if (this.#counterGridOffers.setUnavailable(state.unavailable) || unavailableMoved)
@@ -7813,6 +7802,7 @@ export class TillApp extends LitElement {
     this.#pendingDeviceZoneSelection = null;
     if (this.#pendingDeviceZoneSetup) {
       const previousTimeout = this.#inactivityTimeoutSeconds;
+      this.#applyVenueSetup(this.#pendingDeviceZoneSetup);
       this.#applyProfileSetup(this.#pendingDeviceZoneSetup);
       this.#pendingDeviceZoneSetup = undefined;
       this.activeProfileId = selection.profileId;
@@ -8061,6 +8051,47 @@ export class TillApp extends LitElement {
     this.profileOpen = false;
   }
 
+  /** The parts of the till's setup that come from the venue. */
+  #applyVenueSetup(till: TillInfo): void {
+    // A separate field: the UI default drops UI-unsupported codes, which must never change the
+    // printed ticket's language.
+    this.invoiceLocale = till.invoiceLocale;
+    this.receiptLanguages = till.receiptLanguages ?? [];
+    this.onboardingIntent = till.onboardingIntent;
+    this.issuer = { venueName: till.venueName, nif: till.nif };
+    this.bumpMode = till.bumpMode;
+    this.fireControl = till.fireControl;
+    this.courses = till.courses;
+    this.cardProvider = till.cardProvider;
+    this.tipsEnabled = till.tipsEnabled;
+    // A server too old to send it sets no limit.
+    this.#simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
+    this.#store.simplifiedInvoiceLimit = this.#simplifiedInvoiceLimit;
+    // A server too old to send it counts as off.
+    this.fullInvoices = till.fullInvoices === true;
+    this.activeReaders = till.activeReaders ?? [];
+    this.defaultReaderId = till.defaultReaderId;
+    this.#setupRevision = till.setupRevision;
+  }
+
+  /** A poll named a setup revision: read the setup again when it is not the one applied. */
+  #noteSetupRevision(revision: string | undefined): void {
+    if (revision === undefined || revision === this.#setupRevision || this.#setupRead) return;
+    const generation = this.#bootGeneration;
+    const api = this.api;
+    const read: Promise<void> = api
+      .getTill()
+      .then((till) => {
+        if (generation === this.#bootGeneration && api === this.api && this.isConnected)
+          this.#applyVenueSetup(till);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.#setupRead === read) this.#setupRead = undefined;
+      });
+    this.#setupRead = read;
+  }
+
   /** The parts of the till's setup that come from the device's profile. */
   #applyProfileSetup(till: TillInfo): void {
     this.#clockingAvailable = till.clockingAvailable === true;
@@ -8075,6 +8106,7 @@ export class TillApp extends LitElement {
     try {
       const till = await this.api.getTill();
       if (session !== this.#operatorSession) return;
+      this.#applyVenueSetup(till);
       this.#applyProfileSetup(till);
     } catch {
       if (session === this.#operatorSession) this.errorKey = "boot.error";
