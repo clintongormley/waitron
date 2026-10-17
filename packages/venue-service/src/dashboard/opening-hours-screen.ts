@@ -23,8 +23,14 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
-import "./opening-hours-month.js";
-import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
+import {
+  FIRST_MONTH,
+  LAST_MONTH,
+  type CalendarDayOpen,
+  type CalendarDaysOpen,
+} from "./opening-hours-month.js";
+import "./opening-hours-week.js";
+import { weekMonth } from "./week-rows.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -48,7 +54,7 @@ import { browserToday, format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 
-type View = "year" | "month";
+type View = "year" | "month" | "week";
 /** What a painter address names, as written; `painterTarget` resolves it against the model. */
 type PainterAddress = { seasonId: string; departmentId: string; zoneId: string };
 /** A special-day painter address: a stored day, with a date to add to it, or a new day on `date`,
@@ -152,6 +158,8 @@ export class OpeningHoursScreen extends LitElement {
   private knownSpecialDaysRead = {};
   /** The address's month, or "" for the venue's current one. */
   @state() private requestedMonth = "";
+  /** The address's `week` date, or "" for the venue's today. */
+  @state() private requestedWeekDate = "";
   @state() private monthModel?: OpeningHoursMonth;
   @state() private monthReadError = "";
   private readonly monthWatch = new MonthWatch();
@@ -209,6 +217,7 @@ export class OpeningHoursScreen extends LitElement {
         to: "to",
         year: "year",
         month: "month",
+        week: "week",
         window: "window",
       },
     },
@@ -228,6 +237,7 @@ export class OpeningHoursScreen extends LitElement {
       (windowId === "seasons" ||
         requestedView === "year" ||
         requestedView === "month" ||
+        requestedView === "week" ||
         this.calendarView(requestedView))
     ) {
       this.replaceAddress(this.calendarUrl(current.pathname));
@@ -301,7 +311,7 @@ export class OpeningHoursScreen extends LitElement {
     underlying.pathname = contentPath;
     const href = underlying.href;
     const shown: View | undefined =
-      view === "year" || view === "month"
+      view === "year" || view === "month" || view === "week"
         ? view
         : view === "calendar" || (view === null && !this.namesWeek(new URL(href)))
           ? "year"
@@ -318,6 +328,11 @@ export class OpeningHoursScreen extends LitElement {
     this.departmentId = named.departmentId;
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
+    const week = this.url.read("week");
+    this.requestedWeekDate =
+      isLocalDate(week) && weekMonth(week) >= FIRST_MONTH && weekMonth(week) <= LAST_MONTH
+        ? week
+        : "";
   }
   private calendarView(id: string | null) {
     return this.calendar?.views.find(({ view }) => view.id === id);
@@ -427,7 +442,9 @@ export class OpeningHoursScreen extends LitElement {
       ? this.moduleView.params["month"]
       : this.view === "month"
         ? this.shownMonth()
-        : "";
+        : this.view === "week"
+          ? weekMonth(this.shownWeekDate())
+          : "";
     this.openCalendarView(id, month ? { month } : {});
   }
   private static readonly ViewHost = class implements CalendarViewHost {
@@ -604,8 +621,20 @@ export class OpeningHoursScreen extends LitElement {
     const today = businessDateToday(this.model);
     return (today || browserToday()).slice(0, 7);
   }
+  private shownWeekDate() {
+    if (!this.model || this.view !== "week") return "";
+    return this.requestedWeekDate || businessDateToday(this.model) || browserToday();
+  }
+  /** The month read the shown view draws from: the Month's month, or the Week's Monday's. */
+  private readMonth() {
+    if (this.view === "week") {
+      const date = this.shownWeekDate();
+      return date ? weekMonth(date) : "";
+    }
+    return this.shownMonth();
+  }
   private watchMonth() {
-    this.monthWatch.follow(this.shownMonth(), (month) => {
+    this.monthWatch.follow(this.readMonth(), (month) => {
       this.monthReadError = "";
       if (!month) {
         this.monthModel = undefined;
@@ -993,8 +1022,9 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async placeDayBox() {
     const open = this.dayBox;
-    await this.shadowRoot?.querySelector<LitElement>("opening-hours-month, opening-hours-year")
-      ?.updateComplete;
+    await this.shadowRoot?.querySelector<LitElement>(
+      "opening-hours-month, opening-hours-year, opening-hours-week",
+    )?.updateComplete;
     const drawn = this.shadowRoot?.querySelector("calendar-day-box");
     await Promise.all(
       [drawn, ...(drawn?.children ?? [])].map(
@@ -1200,6 +1230,27 @@ export class OpeningHoursScreen extends LitElement {
         }}
       ></opening-hours-month>`;
   }
+  private week() {
+    const write = (changes: Record<string, string | null>) =>
+      void Promise.resolve(this.url.write({ dashboard: "opening-hours", ...changes })).then(() =>
+        this.followUrl(),
+      );
+    return html`${this.monthReadError ? html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>` : nothing}
+      <opening-hours-week
+        .model=${this.monthModel}
+        .date=${this.shownWeekDate()}
+        .departmentId=${this.departmentId}
+        .departments=${this.model!.departments}
+        @week-change=${(event: CustomEvent<{ date: string }>) => {
+          event.stopPropagation();
+          write({ view: "week", week: event.detail.date });
+        }}
+        @week-department-change=${(event: CustomEvent<{ departmentId: string }>) => {
+          event.stopPropagation();
+          write({ department: event.detail.departmentId || null, zone: null });
+        }}
+      ></opening-hours-week>`;
+  }
   override render() {
     return html`${this.calendarHeading()}
     ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}${
@@ -1237,9 +1288,13 @@ export class OpeningHoursScreen extends LitElement {
                   }}
                   @year-month-open=${this.openMonthFromYear}
                 ></opening-hours-year>`
-            : this.shownMonth()
-              ? this.month()
-              : nothing
+            : this.view === "week"
+              ? this.shownWeekDate()
+                ? this.week()
+                : nothing
+              : this.shownMonth()
+                ? this.month()
+                : nothing
     }
     ${this.dayBoxTemplate()}
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}

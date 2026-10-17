@@ -296,9 +296,9 @@ describe("links into the painter", () => {
     }
   });
 
-  it("closing a painter reached by Back to an old Week address replaces it with the view it drew over", async () => {
+  it("closing a painter reached by Back to an address naming a department replaces it with the view it drew over", async () => {
     history.replaceState(null, "", "/manage/before");
-    history.pushState(null, "", "/manage/opening-hours/view/week/department/d1");
+    history.pushState(null, "", "/manage/opening-hours/department/d1");
     history.pushState(null, "", "/manage/opening-hours/view/year");
     const el = await mount("/manage/opening-hours/view/year");
     history.back();
@@ -350,14 +350,14 @@ describe("links into the painter", () => {
   });
 
   it.each([
-    ["a department", "/manage/opening-hours/view/week/department/d3", "winter/department/d3"],
+    ["a department", "/manage/opening-hours/view/old/department/d3", "winter/department/d3"],
     [
       "a zone and a season",
-      "/manage/opening-hours/view/week/department/d1/zone/z1/season/spring",
+      "/manage/opening-hours/view/old/department/d1/zone/z1/season/spring",
       "spring/department/d1/zone/z1",
     ],
     ["no view and a department", "/manage/opening-hours/department/d1", "winter/department/d1"],
-  ])("a Week address naming %s opens the painter in its place", async (_, address, painted) => {
+  ])("an address naming %s opens the painter in its place", async (_, address, painted) => {
     history.replaceState(null, "", "/manage/before");
     history.pushState(null, "", "/manage/before-hours");
     const pushed = pushedPaths();
@@ -370,22 +370,21 @@ describe("links into the painter", () => {
     expect(drawnView(el)).toBe("year");
   });
 
-  it.each([
-    ["a station's query", "/manage/opening-hours?view=week&station=s1"],
-    ["a station's path", "/manage/opening-hours/view/week/station/s1"],
-    ["All departments", "/manage/opening-hours/view/week/department/all"],
-  ])("an old Week address naming %s opens the painter in its place", async (_, address) => {
-    history.replaceState(null, "", "/manage/before");
-    const pushed = pushedPaths();
-    const el = await mount(address);
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
-    expect(new URLSearchParams(location.search).has("station")).toBe(false);
-    expect(pushed()).toEqual([]);
-    await shownPainter(el);
-    expect(drawnView(el)).toBe("year");
-  });
+  it.each([["a station's query", "/manage/opening-hours?view=week&station=s1"]])(
+    "an old Week address naming %s opens the painter in its place",
+    async (_, address) => {
+      history.replaceState(null, "", "/manage/before");
+      const pushed = pushedPaths();
+      const el = await mount(address);
+      await expect
+        .poll(() => location.pathname)
+        .toBe("/manage/opening-hours/view/season/season/winter/department/d1");
+      expect(new URLSearchParams(location.search).has("station")).toBe(false);
+      expect(pushed()).toEqual([]);
+      await shownPainter(el);
+      expect(drawnView(el)).toBe("year");
+    },
+  );
 
   it("a season chip asking for a week while the painter is open changes nothing", async () => {
     const el = await mount("/manage/opening-hours/view/year/year/2027");
@@ -741,14 +740,9 @@ describe("a viewer's painter", () => {
     await expect.poll(() => painterOf(el)).toBeNull();
   });
 
-  it("an old department Week address opens a painter with no Save, whose drag changes and sends nothing", async () => {
+  it("a department address with no view opens a painter with no Save, whose drag changes and sends nothing", async () => {
     const writes: unknown[] = [];
-    const el = await mount(
-      "/manage/opening-hours/view/week/department/d1",
-      undefined,
-      writes,
-      true,
-    );
+    const el = await mount("/manage/opening-hours/department/d1", undefined, writes, true);
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/season/season/winter/department/d1");

@@ -60,7 +60,7 @@ export interface CalendarViewHost {
 }
 
 /** The Calendar's own address view words, which no module view may take; `hours` is how a view
- * asks to return to Opening hours, and `week` is an old address that opens the season painter. */
+ * asks to return to Opening hours, and `week` is the Week's. */
 export const CALENDAR_OWN_VIEW_IDS: readonly string[] = [
   "year",
   "month",
