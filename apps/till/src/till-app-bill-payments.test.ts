@@ -2812,6 +2812,7 @@ describe("till-app: the steak's two choices", () => {
         applied: "15.00",
         tip: "10.00",
         entry: "manual",
+        guests: 4,
         submissionId: expect.any(String),
       },
     ]);
