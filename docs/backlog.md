@@ -5322,10 +5322,16 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   Dependabot's switch-on (#760, 2026-09-27).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
-- **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner); #1181 (stripe 23, a
-  major) is lane F's A776. **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
+- **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner).
+  **axe-core is held at 4.13** (#1760, A775): 4.14 turns on a serious
   accessibility rule our screens fail, so it moves in its own PR with the fixes (A775).
   [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
+
+- **Bundled npm notices stop at a module-type-only package manifest.** Running
+  `bundledNpmNotices` on Stripe's installed `cjs/stripe.cjs.node.js` returns no packages on both
+  22.6.2 and 23.0.0. Stripe 23 carries a separate licence in `deploy/third-party/stripe/`; fix the
+  generator to continue to the owning package and test both module layouts and workspace exclusion.
+  [Detail](backlog/dependencies.md#npm-notices-and-module-type-only-manifests)
 
 - **Comments and docs still name drizzle-orm 0.45.2 and 0.45.3; 0.45.4 is installed** — OPEN (found
   2026-10-03 by #1139's review). **Next action:** read each claim against the installed 0.45.4, then

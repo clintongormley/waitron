@@ -7,9 +7,6 @@ their full text.
 
 - **#1179 (Vitest 5)** waits on Stryker (owner): see _A Vitest 5 retry has to re-measure mutation_
   below.
-- **#1181 (stripe 22.6.2 → 23.0.0, a major)** is lane F's A776: `packages/payments-stripe` is
-  mid-change there. Map each breaking change to its call sites; test through the real client as well
-  as a fake (CLAUDE.md §4). Payments: full review path.
 - **axe-core 4.13 → 4.14 — held back in #1760 (A775, 2026-10-16).** 4.14.0's changelog: "**label-content-name-mismatch:** Enable rule by default (#5421)" — in 4.13.0 the
   rule carried the `experimental` tag, which axe skips by default. On #1760's CI (run 38956342330)
   it failed every package with accessibility tests that ran, except ui-core, whose only failure was
@@ -210,3 +207,19 @@ is ever in doubt, validating the parsed values on arrival is the cheap fix. `htm
 tried and reverted: it decodes 35 named entities XML does not define and turns `&nbsp;` and `&#160;`
 into U+00A0 where 4.5.7 gave U+0020. Exact XML semantics would need version 5's `entityDecoder`
 hook, which is bespoke code on a fiscal path and a decision rather than a bump.
+
+## Npm notices and module-type-only manifests
+
+A776's 2026-10-17 probe ran `bundledNpmNotices([require.resolve("stripe")])` with a require rooted at
+`packages/payments-stripe/package.json`. Main was commit `3d72c051c86c7b174a4de0faeba5042395973bfb`.
+Both its installed 22.6.2 and the upgrade's 23.0.0 resolved to
+`cjs/stripe.cjs.node.js`; both returned `No bundled npm packages.`. Their nearest `cjs/package.json`
+contains only `{"type":"commonjs"}`; `esm/package.json` likewise declares only the module type.
+The generator's `packageForModule` returns null at that first manifest
+(`scripts/npm-bundle-notices.mjs`), before reaching the package's name, version and licence.
+
+The Stripe 23 upgrade carries its installed licence separately in `deploy/third-party/stripe/`.
+Fix the general lookup to walk past manifests without package identity, retain workspace exclusion,
+and run it on CJS and ESM entry paths and other included packages. No claim is made here about
+which other installed packages are affected. Do not remove the separate Stripe copy before checking
+the emitted server notices through the actual build.

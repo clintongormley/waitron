@@ -49,6 +49,67 @@ describe("stripeClient's PaymentIntent binding", () => {
   });
 });
 
+describe("stripeClient's Terminal creation through the real SDK", () => {
+  it("sends only card-present payments using the supported API allowlist", async () => {
+    const requests: unknown[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk: string) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        requests.push({
+          method: req.method,
+          path: req.url,
+          version: req.headers["stripe-version"],
+          key: req.headers["idempotency-key"],
+          body: Object.fromEntries(new URLSearchParams(body)),
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: "pi_terminal", object: "payment_intent" }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = stripeClient(
+        new Stripe("sk_test_local", {
+          host: "127.0.0.1",
+          port,
+          protocol: "http",
+          maxNetworkRetries: 0,
+        }),
+      );
+      expect(
+        await client.createPaymentIntent({
+          amount: decimal("12.10"),
+          currency: "eur",
+          idempotencyKey: "wo_terminal",
+        }),
+      ).toEqual({ id: "pi_terminal" });
+      expect(requests).toEqual([
+        {
+          method: "POST",
+          path: "/v1/payment_intents",
+          version: "2026-09-30.endive",
+          key: "wo_terminal",
+          body: {
+            amount: "1210",
+            currency: "eur",
+            "allowed_payment_method_types[0]": "card_present",
+            capture_method: "automatic",
+          },
+        },
+      ]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+});
+
 describe("stripeClient's refund binding", () => {
   function refundsStripe(calls: unknown[], create: (args: unknown[]) => Promise<unknown>) {
     const pages: Record<string, { data: unknown[]; has_more: boolean }> = {
@@ -141,8 +202,6 @@ describe("stripeClient's refund binding", () => {
   });
 });
 
-// The installed SDK (stripe@22.6.2) run against a local server standing in for Stripe: what
-// reaches the server, and what reaches our code, for one `createRefund`.
 describe("stripeClient's refund through the Stripe SDK itself", () => {
   async function stripeAnswering(
     answer: (attempt: number, req: IncomingMessage, res: ServerResponse) => void,
@@ -168,6 +227,39 @@ describe("stripeClient's refund through the Stripe SDK itself", () => {
     idempotencyKey: "bpr_r1",
     metadata: { bill_payment_refund_id: "r1" },
   };
+
+  it.each([401, 403, 409])("preserves HTTP %s without resending the refund", async (status) => {
+    const stripe = await stripeAnswering((_n, _req, res) =>
+      json(res, status, { error: { type: "invalid_request_error", message: "refused" } }),
+    );
+    try {
+      expect(await stripe.client.createRefund(params)).toEqual({
+        ok: false,
+        httpStatus: status,
+        attempts: 1,
+      });
+      expect(stripe.keys).toEqual(["bpr_r1"]);
+    } finally {
+      stripe.close();
+    }
+  });
+
+  it("reports no HTTP status when the response body is severed", async () => {
+    const stripe = await stripeAnswering((_n, _req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"id":"re_partial",', () => res.destroy());
+    });
+    try {
+      expect(await stripe.client.createRefund(params)).toEqual({
+        ok: false,
+        httpStatus: null,
+        attempts: 1,
+      });
+      expect(stripe.keys).toEqual(["bpr_r1"]);
+    } finally {
+      stripe.close();
+    }
+  });
 
   it("does not send a refund again after a server error", async () => {
     const stripe = await stripeAnswering((_n, _req, res) =>

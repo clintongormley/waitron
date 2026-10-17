@@ -51,7 +51,7 @@ function activityOf(db: Database): Activity {
 
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
-/** Stripe (stripe@22.6.2, `PaymentIntents.d.ts`): "You can cancel a PaymentIntent object when it's
+/** Stripe (stripe@23.0.0, `resources/PaymentIntents.d.ts`): "You can cancel a PaymentIntent object when it's
  * in one of these statuses: requires_payment_method, requires_capture, requires_confirmation,
  * requires_action or, in rare cases, processing." */
 const CANCELLABLE = new Set([
