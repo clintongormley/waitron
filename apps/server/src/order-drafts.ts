@@ -110,6 +110,25 @@ export interface Draft {
   takenOverFrom: { personId: string; name: string } | null;
 }
 
+export interface BillEditState {
+  billId: string;
+  editorId: string | null;
+  editorName: string | null;
+  editorVersion: number;
+  draftId: string | null;
+  draftRevision: number | null;
+}
+
+export type BillEditExpected = Pick<
+  BillEditState,
+  "billId" | "editorVersion" | "draftId" | "draftRevision"
+>;
+
+export interface BillDraftSnapshot {
+  draft: Draft | null;
+  edit: BillEditState;
+}
+
 export { normaliseDraftLines };
 
 export type FreshDraftLineInput = Omit<

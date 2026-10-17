@@ -200,6 +200,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who (a person or a kitchen display) submitted, fired, reordered or moved a party's groups; never corrected, copied to a standby, never drained back",
   ),
   classify(
+    "bill_edit_states",
+    "state",
+    "bill editing responsibility and retained ownership version; copied to a standby, never drained back",
+  ),
+  classify(
     "order_drafts",
     "state",
     "each operator's unsent order on a seated party; copied to a standby, never drained back",
