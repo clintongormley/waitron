@@ -146,13 +146,17 @@ describe("floor plan tables", () => {
     ).toBe(true);
   });
 
-  it("keeps one plan, and one today's row, per zone", async () => {
+  it("keeps one plan per zone in a set, and one today's row per zone", async () => {
+    const setId = await insertSet();
+    await inTx((tx) => tx.update(floorPlans).set({ setId }).where(eq(floorPlans.id, PLAN)));
     const plan = await captureError(() =>
-      inTx((tx) => tx.insert(floorPlans).values({ zoneId: ZONE, savedAt: "2026-10-08T11:00:00Z" })),
+      inTx((tx) =>
+        tx.insert(floorPlans).values({ zoneId: ZONE, setId, savedAt: "2026-10-08T11:00:00Z" }),
+      ),
     );
-    expect(refusalOn(plan, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["zone_id"] })).toBe(
-      true,
-    );
+    expect(
+      refusalOn(plan, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["set_id", "zone_id"] }),
+    ).toBe(true);
 
     await inTx((tx) =>
       tx.insert(floorTodayZones).values({ zoneId: OTHER_ZONE, businessDay: "2026-10-08" }),
@@ -335,6 +339,7 @@ describe("floor plan tables", () => {
     expect(plan).toEqual({
       id: PLAN,
       zoneId: ZONE,
+      setId: null,
       revision: 0,
       savedAt: "2026-10-08T10:00:00Z",
     });
@@ -344,6 +349,7 @@ describe("floor plan tables", () => {
     expect(master).toEqual({
       id: masterId,
       planId: PLAN,
+      zoneId: null,
       label: "T1",
       seats: 4,
       fixed: true,
@@ -642,20 +648,24 @@ describe("floor plan tables", () => {
     ]);
   });
 
-  it("keeps one size per master table, 1 to 99 squares each way", async () => {
+  it("keeps one size per master table in a layout, 1 to 99 squares each way", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+      tx
+        .insert(floorPlanTableSizes)
+        .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const duplicate = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 3, height: 3 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter3, width: 3, height: 3 }),
       ),
     );
     expect(
       refusalOn(duplicate, UNIQUE_VIOLATION, {
         table: "floor_plan_table_sizes",
-        columns: ["plan_table_id"],
+        columns: ["plan_id", "plan_table_id"],
       }),
     ).toBe(true);
     const narrow = await captureError(() =>
