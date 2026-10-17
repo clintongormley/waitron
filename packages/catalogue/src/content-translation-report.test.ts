@@ -22,7 +22,7 @@ import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
-import { sections } from "./schema/sections.js";
+import { sections, sectionMembers } from "./schema/sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { units } from "./schema/units.js";
 
@@ -278,6 +278,10 @@ describe("the missing-translations report", () => {
         showAsFolder: true,
         overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
       });
+      await tx
+        .update(sectionMembers)
+        .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+        .where(eq(sectionMembers.id, member));
       // A section and a unit missing Catalan too, so the order of the kinds shows.
       const [desserts] = await tx
         .insert(sections)
@@ -340,6 +344,10 @@ describe("the missing-translations report", () => {
         showAsFolder: true,
         overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
       });
+      await tx
+        .update(sectionMembers)
+        .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+        .where(eq(sectionMembers.id, nested.id));
 
       expect((await report(tx))("ca")).toEqual([
         {
@@ -553,6 +561,10 @@ describe("the missing-translations report", () => {
           showAsFolder: true,
           overrides: { names: { es: "FOLDER-ES Barra", ca: "" } },
         });
+        await tx
+          .update(sectionMembers)
+          .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+          .where(eq(sectionMembers.id, member));
         expect((await report(tx))("ca")).toHaveLength(1);
         await deactivateCatalogue(tx, lunch.id);
         expect((await report(tx))("ca")).toEqual([]);

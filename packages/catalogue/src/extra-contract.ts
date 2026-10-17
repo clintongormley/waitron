@@ -1,15 +1,9 @@
-import {
-  AppError,
-  contentLanguageCode,
-  decimal,
-  isUuid,
-  multiplyDecimal,
-  toScale,
-} from "@waitron/shared";
+import { AppError, decimal, isUuid, multiplyDecimal, toScale } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import type { ExtraList, ExtraListItemInput, ExtraListInput } from "./modifier-list-types.js";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "./modifier-limits.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { validateOptionalTranslations } from "./optional-translations.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 import "./errors.js";
 
@@ -46,13 +40,10 @@ function staffName(value: unknown, field: string): string {
 function translations(value: unknown, field: string): Record<string, string> | null {
   if (value === undefined || value === null) return null;
   const map = record(value, field);
-  for (const [language, text] of Object.entries(map)) {
-    if (typeof text !== "string") invalid(field);
-    try {
-      contentLanguageCode(language);
-    } catch {
-      invalid(field);
-    }
+  try {
+    validateOptionalTranslations(map);
+  } catch {
+    invalid(field);
   }
   return nonBlankTranslations({ ...map } as Record<string, string>);
 }

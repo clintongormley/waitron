@@ -53,6 +53,7 @@ export type {
 } from "./operations.js";
 export { foldName } from "./name-uniqueness.js";
 export * from "./content-languages.js";
+export { validateOptionalTranslations } from "./optional-translations.js";
 export * from "./content-translation-report.js";
 export * from "./allergens.js";
 export * from "./derivation.js";

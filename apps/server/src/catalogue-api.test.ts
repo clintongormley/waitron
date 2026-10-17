@@ -702,7 +702,7 @@ describe("content-language configuration", () => {
     ).toBe(403);
   });
 
-  it("requires the configured default for a new product's customer-facing name", async () => {
+  it("saves a new product without customer text in the configured default", async () => {
     const app = mountApp("en-GB");
     const catalogueId = await createCatalogueVia(app, "Lunch");
     const product = {
@@ -715,18 +715,84 @@ describe("content-language configuration", () => {
       vatClass: "general",
     };
     const missing = await send(app, "POST", "/management-api/products", { body: product });
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toEqual({
-      error: { code: "content.translation_required", params: { language: "en" } },
-    });
+    expect(missing.status).toBe(201);
+    const saved = (await missing.json()) as { id: string; customerName: unknown };
+    expect(saved.customerName).toEqual({ fr: "Pain" });
+    const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { customerName: unknown }).customerName).toEqual({ fr: "Pain" });
     expect(
       (
         await send(app, "POST", "/management-api/products", {
-          body: { ...product, customerName: { en: "Bread" } },
+          body: { ...product, name: "Pain with English text", customerName: { en: "Bread" } },
         })
       ).status,
     ).toBe(201);
   });
+
+  it.each([
+    [{ en: " Potatoes ", es: "  " }, { en: "Potatoes" }],
+    [{}, null],
+    [null, null],
+    [{ fr: "Pommes de terre" }, { fr: "Pommes de terre" }],
+  ])(
+    "creates optional customer maps through the direct product API: %j",
+    async (customerName, expected) => {
+      const app = mountApp("es-ES");
+      const catalogueId = await createCatalogueVia(app, "Lunch");
+      const configured = await send(app, "PUT", "/management-api/content-languages", {
+        body: { defaultLanguage: "es", languages: ["es", "en"] },
+      });
+      expect(configured.status).toBe(204);
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "Patatas",
+          customerName,
+          pricingUnit: "each",
+          unitPrice: "2.00",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(201);
+      const created = (await response.json()) as {
+        id: string;
+        name: string;
+        customerName: unknown;
+      };
+      expect(created.name).toBe("Patatas");
+      expect(created.customerName).toEqual(expected);
+      const read = await send(app, "GET", `/management-api/products/${created.id}/editor`);
+      expect(read.status).toBe(200);
+      expect(((await read.json()) as { customerName: unknown }).customerName).toEqual(expected);
+    },
+  );
+
+  it.each([{ EN: "Potatoes" }, { en: "é".repeat(2049) }])(
+    "refuses malformed or oversized direct product maps atomically",
+    async (customerName) => {
+      const app = mountApp("en-GB");
+      const catalogueId = await createCatalogueVia(app, "Lunch");
+      const before = (await suite.db.execute(sql`select * from products`)).rows;
+      const response = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId,
+          categoryId: null,
+          name: "Patatas",
+          customerName,
+          pricingUnit: "each",
+          unitPrice: "2.00",
+          vatClass: "general",
+        },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "content.translation_invalid", params: {} },
+      });
+      expect((await suite.db.execute(sql`select * from products`)).rows).toEqual(before);
+    },
+  );
 
   const BARCELONA: ContentLanguageRules = {
     required: ["ca", "es"],
@@ -3955,25 +4021,22 @@ describe("mountCatalogueApi — extras lists", () => {
     }
   });
 
-  /**
-   * The VENUE's fallback language decides which language a customer-facing name must carry, so the
-   * mount here is `fr-FR` and nothing else in the file is: a route passing `FALLBACK_LOCALE`
-   * (`en-GB`) or nothing at all would report the gap as `en`, and a route passing the mounted
-   * `es-ES` of every other test would find no gap in an `es` map and answer 201.
-   */
-  it("reports a missing customer-facing name in the venue's own language, on create and on update", async () => {
+  it("saves incomplete customer names with the venue's own default, on create and update", async () => {
     const app = mountApp("fr-FR");
+    expect(
+      (
+        await send(app, "PUT", "/management-api/content-languages", {
+          body: { defaultLanguage: "fr", languages: ["fr", "es"] },
+        })
+      ).status,
+    ).toBe(204);
     const [alioli] = await twoProducts(app);
-    const refused = await send(app, "POST", "/management-api/modifiers/extras", {
+    const created = await send(app, "POST", "/management-api/modifiers/extras", {
       body: sauces([alioli]),
     });
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: {
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "fr" },
-      },
-    });
+    expect(created.status).toBe(201);
+    const first = ((await created.json()) as { extraList: ExtraList }).extraList;
+    expect(first.customerName).toEqual({ es: "¿Alguna salsa?" });
     const list = await createListVia(app, {
       ...sauces([alioli]),
       customerName: { fr: "Une sauce ?" },
@@ -3981,13 +4044,12 @@ describe("mountCatalogueApi — extras lists", () => {
     const patched = await send(app, "PATCH", `/management-api/modifiers/extras/${list.id}`, {
       body: sauces([alioli]),
     });
-    expect(patched.status).toBe(400);
-    expect(await patched.json()).toMatchObject({
-      error: {
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "fr" },
-      },
-    });
+    expect(patched.status).toBe(200);
+    const saved = ((await patched.json()) as { extraList: ExtraList }).extraList;
+    expect(saved.customerName).toEqual({ es: "¿Alguna salsa?" });
+    expect(saved.name).toBe("Salsas");
+    expect(saved.kitchenName).toBe("SALSA");
+    expect(saved.items.map((item) => item.productId)).toEqual([alioli]);
   });
 
   it("gates every extras-list route and refuses an id naming no list", async () => {

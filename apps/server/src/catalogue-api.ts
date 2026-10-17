@@ -1,7 +1,7 @@
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import {
   isProductOrdering,
-  nonBlankTranslations,
+  validateOptionalTranslations,
   type TranslationContext,
 } from "@waitron/catalogue";
 import "./errors.js";
@@ -30,7 +30,6 @@ import {
   readContentLanguages,
   listTranslationGapReport,
   writeContentLanguages,
-  validateContentTranslations,
   createCatalogue,
   duplicateMenu,
   createCategory,
@@ -1582,9 +1581,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.ordering === undefined ? {} : { ordering: body.ordering }),
       };
       const created = await gated(c, sessionId, async (tx) => {
-        if (customerName !== null) {
-          await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
-        }
         const product = await createProduct(tx, input);
         if (modifiers === undefined) return { ...product, modifiers: [] };
         await writeProductModifiers(tx, product.id, modifiers);
@@ -1615,10 +1611,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * A map with no non-blank entry means the same as `null` — the staff name is what a receipt shows —
- * so `nonBlankTranslations` folds it to `null`, the same fold the product editor's parser makes.
- */
 function screenCustomerName(value: unknown): Record<string, string> | null {
   if (value === undefined || value === null) return null;
   if (!isPlainObject(value)) {
@@ -1628,5 +1620,6 @@ function screenCustomerName(value: unknown): Record<string, string> | null {
   if (entries.some(([, text]) => typeof text !== "string")) {
     throw new AppError("management.request_invalid", { field: "customerName" });
   }
-  return nonBlankTranslations(Object.fromEntries(entries) as Record<string, string>);
+  const names = validateOptionalTranslations(value);
+  return Object.keys(names).length === 0 ? null : names;
 }

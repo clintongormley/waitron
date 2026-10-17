@@ -94,6 +94,10 @@ async function fixture(tx: Transaction) {
     { showAsFolder: false, overrides: { names: { en: "" }, color: "#123456" } },
     "es",
   );
+  await tx
+    .update(sectionMembers)
+    .set({ folderOverrides: { names: { en: "" }, color: "#123456" } })
+    .where(eq(sectionMembers.id, member.id));
   const [unit] = await tx
     .insert(units)
     .values({

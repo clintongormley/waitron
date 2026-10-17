@@ -28,6 +28,7 @@ import { BATCH_SIZE } from "./batches.js";
 import * as vatRates from "./vat-rates.js";
 import { createCategory, updateCategory } from "./categories.js";
 import * as settings from "./settings.js";
+import { writeContentLanguages } from "./content-languages.js";
 import {
   createCatalogue,
   createProduct,
@@ -1878,6 +1879,9 @@ describe("an include shown as a folder or directly", () => {
 
   it("the folder shows the fixed names and colour, and follows every field left alone", async () => {
     const f = await menusFixture(fx.db);
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] }),
+    );
     await fixBar(f, await includeIn(f.lunch, f.lunchRoot, f.drinks));
     const fixed = { names: { en: "Bar" }, color: "#112233" };
     const node = sectionAt((await build(f.lunch)).root.members, f.drinks);
@@ -2015,6 +2019,9 @@ describe("an include shown as a folder or directly", () => {
 
     it("fixing a folder name is this menu's change; renaming the included menu is the included menu's", async () => {
       const f = await menusFixture(fx.db);
+      await app((tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] }),
+      );
       const memberId = await includeIn(f.lunch, f.lunchRoot, f.drinks);
       const live = await build(f.lunch);
       await setFolder(f.lunchRoot, memberId, {
@@ -2050,6 +2057,9 @@ describe("an include shown as a folder or directly", () => {
     it("an include's names read back with their keys in another order are no change", async () => {
       const f = await menusFixture(fx.db);
       await app((tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] }),
+      );
+      await app((tx) =>
         updateMenuDetails(tx, f.drinksMenu, {
           names: { en: "Something to drink", es: "Bebidas", fr: "Boissons" },
         }),
@@ -2064,6 +2074,9 @@ describe("an include shown as a folder or directly", () => {
 
     it("a fixed name and the included menu's renaming each point at their own languages", async () => {
       const f = await menusFixture(fx.db);
+      await app((tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] }),
+      );
       const live = await build(f.lunch);
       await setFolder(f.lunchRoot, await includeIn(f.lunch, f.lunchRoot, f.drinks), {
         showAsFolder: true,

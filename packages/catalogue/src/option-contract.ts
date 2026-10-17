@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { AppError, contentLanguageCode, isUuid } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import type { OptionLabel, OptionList } from "./modifier-list-types.js";
 import type { OptionSelection } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
 
 export type { OptionSelection, OptionSnapshot } from "@waitron/shared";
@@ -41,13 +42,10 @@ function staffName(value: unknown, field: string): string {
 function translations(value: unknown, field: string): Record<string, string> | null {
   if (value === undefined || value === null) return null;
   const map = record(value, field);
-  for (const [language, text] of Object.entries(map)) {
-    if (typeof text !== "string") invalid(field);
-    try {
-      contentLanguageCode(language);
-    } catch {
-      invalid(field);
-    }
+  try {
+    validateOptionalTranslations(map);
+  } catch {
+    invalid(field);
   }
   return nonBlankTranslations({ ...map } as Record<string, string>);
 }

@@ -843,12 +843,24 @@ export async function updateMenuDetails(
   },
 ): Promise<void> {
   const rootSectionId = await requireMenuRoot(tx, catalogueId);
-  const presentation = await sectionPatchValues(tx, {
-    internalName: patch.name,
-    names: patch.names,
-    image: patch.image,
-    color: patch.color,
-  });
+  const [stored] =
+    patch.names === undefined
+      ? []
+      : await tx
+          .select({ names: sections.names })
+          .from(sections)
+          .where(eq(sections.id, rootSectionId));
+  const presentation = await sectionPatchValues(
+    tx,
+    {
+      internalName: patch.name,
+      names: patch.names,
+      image: patch.image,
+      color: patch.color,
+    },
+    undefined,
+    stored?.names,
+  );
   if (presentation.internalName !== undefined)
     await tx
       .update(catalogues)

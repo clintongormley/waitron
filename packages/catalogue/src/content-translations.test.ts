@@ -552,47 +552,51 @@ describe("atomic content translations", () => {
     ).rejects.toMatchObject({ code: "content.translation_stale" });
   });
   it.each(["configured", "unset"] as const)(
-    "existing menu, section and folder checks expose the %s default fallback",
+    "menu, section and folder writes keep enabled maps optional with %s configuration",
     async (mode) => {
       const ids = await fixture();
       if (mode === "unset") await app((tx) => tx.delete(contentLanguages));
-      for (const [writer, language] of [
-        [
-          () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "Only català" } })),
-          mode === "configured" ? "es" : "en",
-        ],
-        [
-          () => app((tx) => updateSection(tx, ids.section, { names: { ca: "Only català" } }, "es")),
-          "es",
-        ],
-        [
-          () =>
-            app((tx) =>
-              setIncludeFolder(
-                tx,
-                ids.menu,
-                ids.included_menu,
-                {
-                  showAsFolder: false,
-                  overrides: { names: { ca: "Only català", es: "", en: "" } },
-                },
-                "es",
-              ),
+      for (const writer of [
+        () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "Only català" } })),
+        () => app((tx) => updateSection(tx, ids.section, { names: { ca: "Only català" } }, "es")),
+        () =>
+          app((tx) =>
+            setIncludeFolder(
+              tx,
+              ids.menu,
+              ids.included_menu,
+              {
+                showAsFolder: false,
+                overrides: { names: { ca: "Only català", es: "", en: "" } },
+              },
+              "es",
             ),
-          "es",
-        ],
-      ] as const) {
-        await expect(writer()).rejects.toMatchObject({
-          code: "menu_section.translation_required",
-          params: { field: "names", language },
-        });
+          ),
+      ]) {
+        if (mode === "unset") {
+          await expect(writer()).rejects.toMatchObject({ code: "content.translation_invalid" });
+        } else {
+          await writer();
+        }
+      }
+      if (mode === "configured") {
+        const rows = await suite.db
+          .select({ id: sections.id, names: sections.names })
+          .from(sections);
+        expect(rows.find((row) => row.id === ids.menu)!.names).toEqual({ ca: "Only català" });
+        expect(rows.find((row) => row.id === ids.section)!.names).toEqual({ ca: "Only català" });
+        const [member] = await suite.db
+          .select()
+          .from(sectionMembers)
+          .where(eq(sectionMembers.id, ids.included_menu));
+        expect(member!.folderOverrides).toEqual({ names: { ca: "Only català" } });
       }
       if (mode === "unset") {
         await expect(
           app((tx) => updateMenuDetails(tx, ids.menuId, { names: { es: "Español" } })),
         ).rejects.toMatchObject({
-          code: "menu_section.translation_required",
-          params: { language: "en" },
+          code: "content.translation_invalid",
+          params: {},
         });
         await app((tx) => updateSection(tx, ids.section, { names: { es: "Español" } }, "es"));
         await app((tx) =>

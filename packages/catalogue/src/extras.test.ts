@@ -1177,21 +1177,18 @@ describe("extra list CRUD", () => {
     ]);
   });
 
-  it("refuses a customer name with no text in the venue's default language", async () => {
-    const error = await refusal((tx) =>
+  it("saves a customer name with no text in the default language", async () => {
+    const created = await run((tx) =>
       createExtraList(
         tx,
         { name: "Bread", customerName: { fr: "Votre pain" }, items: [{ productId: breads.rye }] },
         "en",
       ),
     );
-
-    expect(error).toEqual(
-      expect.objectContaining({
-        code: "extras.translation_required",
-        params: { field: "customerName", language: "en" },
-      }),
-    );
+    const saved = await run((tx) => getExtraList(tx, created.id));
+    expect(saved.customerName).toEqual({ fr: "Votre pain" });
+    expect(saved.name).toBe("Bread");
+    expect(saved.items.map((item) => item.productId)).toEqual([breads.rye]);
   });
 
   it("saves an all-blank customer name as nothing rather than refusing it", async () => {

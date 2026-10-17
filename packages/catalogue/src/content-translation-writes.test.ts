@@ -228,16 +228,21 @@ describe("shared translation writes", () => {
           .from(products)
           .where(eq(products.id, ids[kind]));
         expect(stored!.customerName).toEqual({ en: "English only" });
-      } else
-        await expect(
-          withTransaction(suite.db, (tx) => existingWrite(tx, kind, ids, { en: "English only" })),
-        ).rejects.toMatchObject({
-          code: codes[kind],
-          params: {
-            language: "es",
-            field: kind === "option_label" ? "labels.0.customerName" : "customerName",
-          },
+      } else {
+        await withTransaction(suite.db, async (tx) => {
+          await existingWrite(tx, kind, ids, { en: "English only" });
+          const { targets } = await resolveTranslationTargets(
+            tx,
+            "en",
+            [{ kind, id: ids[kind] }],
+            context,
+          );
+          const resolved = targets[0];
+          expect(resolved?.state === "present" ? resolved.names : undefined).toEqual({
+            en: "English only",
+          });
         });
+      }
       await withTransaction(suite.db, async (tx) => {
         await existingWrite(tx, kind, ids, { en: "English", es: "Castellano" });
         const { targets } = await resolveTranslationTargets(

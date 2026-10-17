@@ -153,6 +153,9 @@ afterEach(() => {
 describe("section details", () => {
   it("creates, reads and updates an owned section", async () => {
     await fixture();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
     const drinks = await app((tx) =>
       createOwned(tx, {
         internalName: "  Drinks  ",
@@ -237,22 +240,20 @@ describe("section details", () => {
     expect(await app((tx) => readSection(tx, drinks.id))).toEqual(drinks);
   });
 
-  it("refuses customer names with no text in the default content language, but accepts none", async () => {
+  it("saves customer names without default text and permits clearing them", async () => {
     await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
     );
     const drinks = await owned("Drinks");
-    const refusal = {
-      code: "menu_section.translation_required",
-      params: { field: "names", language: "en" },
-    };
-    await expect(
-      app((tx) => createOwned(tx, { internalName: "Bebidas", names: { es: "Bebidas" } })),
-    ).rejects.toMatchObject(refusal);
-    await expect(
-      app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } })),
-    ).rejects.toMatchObject(refusal);
+    const created = await app((tx) =>
+      createOwned(tx, { internalName: "Bebidas", names: { es: "Bebidas" } }),
+    );
+    expect(created.names).toEqual({ es: "Bebidas" });
+    expect((await app((tx) => readSection(tx, created.id))).names).toEqual({ es: "Bebidas" });
+    expect(
+      (await app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } }))).names,
+    ).toEqual({ es: "Bebidas" });
     expect(
       (await app((tx) => updateSection(tx, drinks.id, { names: { en: "Drinks", es: "Bebidas" } })))
         .names,
