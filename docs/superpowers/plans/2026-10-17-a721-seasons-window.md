@@ -174,8 +174,11 @@ what it does not name).
 
 ## Decisions this plan makes (defaults; each may be overruled)
 
-1. **`seasons.colour` is a plain `label("colour").notNull().default("grey")`, with no CHECK and no
-   trigger.** A CHECK makes drizzle rebuild `seasons`, and that rebuild's `DROP TABLE` empties
+1. **`seasons.colour` is a plain `label("colour").$type<CalendarColour>().notNull().default("grey")`,
+   with no CHECK and no trigger.** `$type` gives `readSeasons` the `CalendarColour` type without a
+   vocabulary, so schema conformance passes (a plan reviewer's probe in a throwaway worktree,
+   2026-10-17: the venue-service conformance suite passed 67 of 67 with that column, failed with
+   `enumType` and no CHECK, and a CHECK made drizzle-kit write a rebuild). A CHECK makes drizzle rebuild `seasons`, and that rebuild's `DROP TABLE` empties
    `department_days`, `zone_days` and `staffing_days` (above). `enumType` without a CHECK fails
    schema conformance, so the column is a plain label. A trigger pair (the `products.ordering`
    precedent, `packages/db/drizzle/0047_product_ordering_check.sql`) was rejected: it adds refusal
@@ -217,7 +220,10 @@ what it does not name).
 8. **Clock.** A call that only renames or recolours is a `"metadata"` write and skips the stale
    revision, as a rename does today; any add, delete or moved start is a `"time"` write. The window
    sends the clock revision its draft was last clean at, as the chips' dialog sent the revision it
-   opened at (`season-chips.ts:20-22`).
+   opened at (`season-chips.ts:20-22`). **The check order changes for an add:** today `addSeason`
+   checks the clock revision before it validates the input (`seasons.ts:109-111`), while
+   `saveSeason` validates first (`:86-94`); `saveSeasons` validates everything first, then checks the
+   clock. No existing case pins the order (each refusal case sends one fault at a time).
 9. **A new season copies the weeks of the season that held its start before the call** — read
    before any delete, so splitting a season deleted in the same call still copies its weeks. Today's
    `addSeason` rule, with "before the call" made explicit.
@@ -262,11 +268,15 @@ what it does not name).
     Close; no draft scope.
 17. **A snapshot arriving while the window is open** (`mergeSeasonDraft`, Task 6): with a clean draft
     the rows follow the new list and the clock revision is taken again. With a dirty draft, per
-    stored season: one the person has not touched follows the new list (draft and baseline); one
-    they touched keeps their values, with its baseline moved to the new list; a season new to the
-    list is appended untouched; a season gone from the list is dropped if untouched or binned, and
-    kept with "This season no longer exists." under its name if touched — Save stays disabled until
-    that row is binned (binning a gone row sends no delete). New draft rows are never affected.
+    stored season and per field, as the house's `DraftRows` does (`packages/dashboard-kit/src/merge-draft.ts:1-21`,
+    named by `docs/developers/dashboard-live-updates.md:29-32`): a field the person has not changed
+    takes the new value, a field they changed keeps theirs, and the baseline moves to the new list;
+    a season new to the list is appended untouched; a season gone from the list is dropped if
+    untouched or binned, and kept with "This season no longer exists." under its name if touched —
+    Save stays disabled until that row is binned (binning a gone row sends no delete). New draft
+    rows are never affected. `DraftRows` itself is not reused: its `merge` maps over the incoming
+    rows only (`merge-draft.ts:6-17`), so a changed row whose season was deleted elsewhere vanishes
+    with the person's edits, and it has no notion of new rows (no id) or of binned ones.
 18. **The window does not open a season's week**; the chips keep that (mockup 02 note 4).
 19. **`wt-colour-chooser` gains `hide-label`:** the label is kept in the DOM, visually hidden, so the
     trigger's name is still label then colour name; no asterisk drawn; the field draws no label
@@ -320,7 +330,10 @@ what it does not name).
   Read the `Tests` count; a run without one proves nothing. CI runs the package suites and coverage
   (new files hold 98/98/98/95); no whole-workspace local run (CLAUDE.md §2).
 - **Every implementer dispatch** also runs `pnpm format:check`, and `pnpm --filter <pkg> typecheck`
-  and `lint` for each package it touched.
+  and `lint` for each package it touched **and each package that imports what it changed**
+  (`@waitron/staffing` imports venue-service's season types and `season-tint`). **Every commit in
+  task order leaves typecheck green across the workspace** — the task order below is built for it;
+  a task that cannot commit green stops and reports.
 - **Changing an existing test check** is allowed only where the spec changes what it checks (owner
   decision 2026-10-05). Each task lists them under "Existing checks that change"; the PR description
   repeats the union under **"Changed test checks"**. A check deleted without an equally strict
@@ -347,9 +360,9 @@ what it does not name).
 2. **Another session deletes, renames or adds a season while the window has edits.** Expected: an
    untouched row follows; a touched row keeps the person's values; a touched row whose season is
    gone is marked under its name and blocks Save until binned; an added season appears. Pinned in
-   Task 6 (rule) and Task 7b (element).
+   Task 6 (rule) and Task 7c (element).
 3. **A viewer opens `window/seasons`.** Expected: a read-only table, a Close, nothing to change.
-   Pinned in Tasks 7a and 8b.
+   Pinned in Tasks 7a and 8a.
 4. **A phone (390 px), English and Spanish.** Expected: the table scrolls inside its region, the
    page does not scroll sideways, Cancel and Save are on screen, a colour panel opens on screen.
    Pinned in Task 7a.
@@ -390,7 +403,8 @@ what it does not name).
   siblings in that fixture has (`opening-hours-month-fixture.ts`'s two seasons must differ:
   `opening-hours-month.test.ts:134-140`).
 - Test: `packages/venue-service/src/seasons.test.ts`, `migrations.test.ts`,
-  `menu-timetable.test.ts`, `opening-hours-calendar.test.ts`, `configuration-transfer.test.ts`
+  `menu-timetable.test.ts`, `opening-hours-calendar.test.ts`, `configuration-transfer.test.ts`,
+  `season-routes.test.ts`
 
 **Interfaces:**
 - Produces: `interface Season { id: string; name: string; startsOn: string; colour: CalendarColour }`
@@ -411,20 +425,26 @@ what it does not name).
     CHECK: this pins Decision 1 so a later CHECK — and its rebuild — is a visible decision).
   - `menu-timetable.test.ts:1444-1449`, `opening-hours-calendar.test.ts:143-148` and `:348-351`:
     each expected season gains its default colour.
+  - `season-routes.test.ts:329-345` and `:347-364`: the whole-body answers gain `colour` (Summer
+    `"amber"`; the added Feria `"grey"`, `addSeason`'s interim insert) — a plan reviewer ran Task 1's
+    read change and the venue-service node suite failed these two beside the eight named here.
   - `configuration-transfer.test.ts`, new **"refuses a season whose colour is not a calendar
     colour, or has none"**: with the shared valid tables, `colour: "mauve"` and a deleted `colour`
     each throw `refusal("seasons.colour")`; `"teal"` passes.
 - [ ] **Step 2: Run them, see them fail** (no column; `colour` missing from reads):
-  `pnpm --filter @waitron/venue-service exec vitest run --project node src/seasons.test.ts src/migrations.test.ts src/menu-timetable.test.ts src/opening-hours-calendar.test.ts src/configuration-transfer.test.ts`
-- [ ] **Step 3: Implement.** The column (`label("colour").notNull().default("grey")`, one comment
+  `pnpm --filter @waitron/venue-service exec vitest run --project node src/seasons.test.ts src/migrations.test.ts src/menu-timetable.test.ts src/opening-hours-calendar.test.ts src/configuration-transfer.test.ts src/season-routes.test.ts`
+- [ ] **Step 3: Implement.** The column (`label("colour").$type<CalendarColour>().notNull().default("grey")`, one comment
   line: no CHECK because adding one rebuilds `seasons` and the rebuild's DROP cascades its weeks;
   refused by `saveSeasons` and `validateSeasonWeeks`). Then generate:
   `pnpm --filter @waitron/venue-service db:generate`. **Read the SQL:** it must be the single
   statement ``ALTER TABLE `seasons` ADD `colour` text DEFAULT 'grey' NOT NULL;`` — if it creates
   `__new_seasons` or holds anything else, STOP and report. Never hand-edit the SQL, snapshot or
   journal. Then the reads, types, defaults, the transfer refusal and the fixtures.
-- [ ] **Step 4: Run** the five files; then `pnpm --filter @waitron/venue-service typecheck` (the
-  fixtures are what it catches); then the guards from the repository root:
+- [ ] **Step 4: Run** the six files, then the whole venue-service node project
+  (`pnpm --filter @waitron/venue-service exec vitest run --project node`) to catch any other
+  whole-shape pin, adding any it finds to this task's list; then `pnpm --filter @waitron/venue-service typecheck`
+  (the fixtures are what it catches) and `pnpm --filter @waitron/staffing typecheck` (unchanged
+  until Task 1b, still green: staffing maps explicit fields); then the guards from the repository root:
   `pnpm exec vitest run scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migration-upgrade.test.ts scripts/journal-monotonic.test.ts scripts/column-vocabulary.test.ts`,
   `pnpm --filter @waitron/venue-service exec vitest run --project node src/schema/schema-conformance.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`
@@ -432,14 +452,39 @@ what it does not name).
 - [ ] **Step 5: Run the browser files whose fixtures changed** (`season-chips.test.ts`,
   `opening-hours-year.test.ts`, `opening-hours-month.test.ts`, `periods-list.test.ts`,
   `period-dialog.test.ts`, `season-painter.test.ts`): unchanged counts, all pass (tints are still by
-  place until Task 4).
+  place until Task 4a).
 - [ ] **Step 6: Commit** — `git commit -s -m "Seasons store a colour; new venues start Spring green, Summer amber, Autumn orange, Winter blue (A721)"`
 
 **Existing checks that change:** `seasons.test.ts:89` (gains `colour: "grey"`),
-`menu-timetable.test.ts:1444-1449`, `opening-hours-calendar.test.ts:143-148`, `:348-351` (each
-gains the season's colour) — spec point 2. Setup: the fixtures listed above; in
+`menu-timetable.test.ts:1444-1449`, `opening-hours-calendar.test.ts:143-148`, `:348-351`,
+`season-routes.test.ts:338`, `:340`, `:356` (each whole-shape pin gains the season's colour; the
+owner rule allows a check to change when the spec changes the shape it pins) — spec point 2. Setup: the fixtures listed above; in
 `seasons.test.ts:266-280`, `:341-346`, `:375-384` the season `saveSeason`/`addSeason` return gains its
 colour (those cases are moved in Task 2 and deleted in Task 3).
+
+## Task 1b: Staffing carries each season's colour
+
+**Files:**
+- Modify: `packages/staffing/src/staffing-types.ts:42`, `:76-83` (`colour: CalendarColour`),
+  `packages/staffing/src/month.ts:42-47`, `packages/staffing/src/paint.ts:284`
+- Fixtures (setup): `packages/staffing/src/testing/season-staffing-fixture.ts:54-57`,
+  `staffing-month-fixture.ts:58-60` (Winter `blue`, Summer `amber`, any other a colour its
+  siblings lack)
+- Test: `packages/staffing/src/month.test.ts:136-138`, `paint.test.ts:331-334`,
+  `routes.test.ts:575-577`
+
+- [ ] **Step 1: Write the failing tests.** The three node expectations gain each season's colour
+  (`paint.test.ts:325`'s inserted Winter reads `"grey"`).
+- [ ] **Step 2: Run, see them fail**:
+  `pnpm --filter @waitron/staffing exec vitest run --project node src/month.test.ts src/paint.test.ts src/routes.test.ts`
+- [ ] **Step 3: Implement** the types and the two projections.
+- [ ] **Step 4: Run** them, and `--project browser src/dashboard/staffing-month.test.ts
+  src/dashboard/staffing-season-painter.test.ts` (unchanged counts: tints are still by place until
+  Task 4a); staffing `typecheck`, `lint`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Staffing carries each season's colour (A721)"`
+
+**Existing checks that change:** `month.test.ts:136-138`, `paint.test.ts:331-334`,
+`routes.test.ts:575-577` (whole-shape pins gain `colour`) — spec point 2.
 
 ## Task 2: `saveSeasons`, the one writer for season changes
 
@@ -516,7 +561,7 @@ colour (those cases are moved in Task 2 and deleted in Task 3).
   if a `"time"` write, `scheduleEndOffsetClash` once (refusal field `seasons`); return `readSeasons`.
   `temporaryStart` enumerates `MM-DD` for MM `00`–`19`, DD `00`–`39`, skipping every value
   `parseSeasonStart` accepts and `02-29` (434 values).
-- [ ] **Step 4: Run** `seasons.test.ts` (old and new cases pass), `season-routes.test.ts` (unchanged),
+- [ ] **Step 4: Run** `seasons.test.ts` (old and new cases pass), `season-routes.test.ts`,
   and `scripts/errors-reachable.test.ts` from the root; `typecheck`, `lint`.
 - [ ] **Step 5: Commit** — `git commit -s -m "saveSeasons writes every season change in one transaction (A721)"`
 
@@ -588,20 +633,20 @@ the old).
 (the `saveSeason`, `addSeason`, `deleteSeason` describes) — each moved to the case named in Task 2
 or above (Decisions 5, 6, 7).
 
-## Task 4a: Tint seasons by their stored colour (venue-service and the tokens)
+## Task 4a: Tint seasons by their stored colour, on every view
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/season-tint.ts` (Decisions 10, 11)
 - Modify: `packages/venue-service/src/dashboard/periods-list.ts:44-51`, `:207` (parts
   `tint-<colour>`, fallback `"grey"`); `period-dialog.ts:127` (`seasons: readonly { id: string;
   colour: string }[]`)
-- Modify: `packages/ui-core/src/tokens/colors.css` (delete the twelve `--wt-color-season-*` /
-  `--wt-color-on-season-*` declarations in each of its four theme blocks — 32 lines in all,
-  `grep -c color-season` says 32 today) and `colors.test.ts:474-532` (delete `SEASON_FILLS` and the
-  "season colours" describe)
 - Create: `packages/venue-service/src/dashboard/season-tint.test.ts`
 - Test: `season-chips.test.ts`, `opening-hours-year.test.ts`, `period-dialog.test.ts`,
-  `periods-list.test.ts`, `season-painter.test.ts`
+  `period-dialog.a11y.test.ts` (fixture), `periods-list.test.ts`, `season-painter.test.ts`, and in
+  staffing `src/dashboard/staffing-month.test.ts`, `src/dashboard/staffing-season-painter.test.ts`
+  (staffing's readers, `staffing-month.ts:449` and `staffing-season-painter.ts:391`, need no code
+  change: their seasons carry `colour` since Task 1b, so this commit leaves staffing typechecking
+  and only its expected tint values move)
 
 **Interfaces:**
 - Produces: `seasonTints(seasons: readonly { id: string; colour: string }[]): Map<string, CalendarColour>`;
@@ -616,19 +661,19 @@ or above (Decisions 5, 6, 7).
     line with the station tokens"**: for each colour, `SEASON_TINT_TOKENS[c]` equals `{ tint:
     STATION_COLOUR_TOKENS[c].fill, onTint: "var(--wt-color-text)", line: STATION_COLOUR_TOKENS[c].dot }`
     and `seasonTintStyles.cssText` holds its rule; **"each season paint reads in both themes"**
-    (replaces the deleted token cases): in a themed root (light, then dark), a probe painted with
-    each colour's tint, text and line resolves (parse both `rgb(…)` and `color(srgb …)`, which
-    Chromium gives a `color-mix`) to text ≥ 4.5:1 on the tint, line ≥ 3:1 from the tint and from
-    `--wt-color-surface`, for all thirteen colours.
+    (the replacement for the token cases Task 4b deletes): in a themed root (light, then dark), a
+    probe painted with each colour's tint, text and line resolves (parse both `rgb(…)` and
+    `color(srgb …)`, which Chromium gives a `color-mix`) to text ≥ 4.5:1 on the tint, line ≥ 3:1
+    from the tint and from `--wt-color-surface`, for all thirteen colours.
   - `season-chips.test.ts:90-104`: tints become `["green", "amber", "teal", "orange", "blue"]` (the
-    fixture's colours in start order; the ✎ parts of this case are Task 8a's).
+    fixture's colours in start order; the ✎ parts of this case are Task 8b's).
   - `season-chips.test.ts:106-126` **"paints each chip with its season's stored colour"**: each chip's
     background, text and top border equal the probe of `SEASON_TINT_TOKENS[colour]`'s three values;
     the Set of backgrounds has the fixture's number of distinct colours.
   - `opening-hours-year.test.ts:206-228` becomes **"tints each day and chip by its season's stored
     colour"** (dates of each season read that season's colour; with the fifth season "Late" from
-    12-20, 2027-12-20 reads `purple` and its chip `purple`, not a recycled first tint); `:230-253` **"paints each tinted day with its season's colour"** against
-    `SEASON_TINT_TOKENS`.
+    12-20, 2027-12-20 reads `purple` and its chip `purple`, not a recycled first tint); `:230-253`
+    **"paints each tinted day with its season's colour"** against `SEASON_TINT_TOKENS`.
   - `period-dialog.test.ts:773-777` and `period-dialog.a11y.test.ts:48` fixture seasons gain
     colours (`winter` blue, `summer` amber; setup, for the prop's new type);
     `:821`, `:828`, `:848` expect `"blue"`, `"amber"`, `["blue", "amber", null]`.
@@ -636,50 +681,44 @@ or above (Decisions 5, 6, 7).
     and finds each `tint-<value>` part painted; with the fixture's colours it now proves colour
     parts.
   - `season-painter.test.ts:333` stays `tinted: true` (fixture colour from Task 1).
+  - `staffing-month.test.ts:170-171` expect the fixture's colours instead of `"1"`/`"2"`; new
+    **"the season chip takes the season's stored colour"** in `staffing-season-painter.test.ts`
+    (`[data-test=season]`'s `data-tint` equals the fixture season's colour).
 - [ ] **Step 2: Run, see them fail** (tints are still `"1"`–`"4"`).
-- [ ] **Step 3: Implement** `season-tint.ts`; the two consumers' types and parts; delete the tokens
-  and their cases.
-- [ ] **Step 4: Run** the six browser files above, `opening-hours-month.test.ts` (its `:134-140`
-  autumn ≠ winter holds by fixture colour), `opening-hours-year.a11y.test.ts`,
+- [ ] **Step 3: Implement** `season-tint.ts` and the two venue-service consumers' types and parts.
+  The `--wt-color-season-*` tokens stay declared until Task 4b; nothing reads them after this task.
+- [ ] **Step 4: Run** the venue-service browser files above, `opening-hours-month.test.ts` (its
+  `:134-140` autumn ≠ winter holds by fixture colour), `opening-hours-year.a11y.test.ts`,
   `season-chips.a11y.test.ts`, `periods-list.a11y.test.ts`, `period-dialog.a11y.test.ts`,
-  `opening-hours-month.a11y.test.ts` (axe contrast now on station tints), and
-  `pnpm --filter @waitron/ui-core exec vitest run src/tokens/colors.test.ts`; root
-  `scripts/style-token-names.test.ts`. All pass.
+  `opening-hours-month.a11y.test.ts` (axe contrast now on station tints); the two staffing browser
+  files; venue-service and staffing `typecheck`, `lint`. All pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "Seasons paint their stored colour on every view (A721)"`
 
 **Existing checks that change:** `season-chips.test.ts:100`, `:106-126`; `opening-hours-year.test.ts:206-228`,
-`:230-253`; `period-dialog.test.ts:821`, `:828`, `:848` (place → stored colour, spec point 2);
-`colors.test.ts:474-532` (deleted with the tokens; replaced by the season-paint contrast case in
-`season-tint.test.ts`, which covers thirteen paints to the same bars, Decision 10 — the hue-order
-case `:498-520` has no replacement because no order exists any more, and the default seasons'
-colours are pinned in Task 1).
+`:230-253`; `period-dialog.test.ts:821`, `:828`, `:848`; `staffing-month.test.ts:170-171` (place →
+stored colour, spec point 2).
 
-## Task 4b: Staffing carries and paints the stored colour
+## Task 4b: The four season tokens go
 
 **Files:**
-- Modify: `packages/staffing/src/staffing-types.ts:42`, `:76-83` (`colour: CalendarColour`),
-  `packages/staffing/src/month.ts:42-47`, `packages/staffing/src/paint.ts:284`
-- Fixtures (setup): `packages/staffing/src/testing/season-staffing-fixture.ts:54-57`,
-  `staffing-month-fixture.ts:58-60`
-- Test: `packages/staffing/src/month.test.ts:136-138`, `paint.test.ts:331-334`,
-  `routes.test.ts:575-577`, `packages/staffing/src/dashboard/staffing-month.test.ts:166-171`, and a
-  new case in `staffing-season-painter.test.ts`
+- Modify: `packages/ui-core/src/tokens/colors.css` (delete every `--wt-color-season-<n>`,
+  `--wt-color-season-<n>-line` and `--wt-color-on-season-<n>` declaration in its four theme blocks:
+  48 lines — `grep -c color-season` counts 32, `grep -c color-on-season` 16)
+- Modify: `packages/ui-core/src/tokens/colors.test.ts:474-532` (delete `SEASON_FILLS` and the
+  "season colours" describe)
 
-- [ ] **Step 1: Write the failing tests.** The three node expectations gain each season's colour
-  (`paint.test.ts:325`'s inserted Winter reads `"grey"`); `staffing-month.test.ts:170-171` expect the
-  fixture's colours instead of `"1"`/`"2"`; new **"the season chip takes the season's stored
-  colour"** in `staffing-season-painter.test.ts` (`[data-test=season]`'s `data-tint` equals the
-  fixture season's colour).
-- [ ] **Step 2: Run, see them fail**:
-  `pnpm --filter @waitron/staffing exec vitest run --project node src/month.test.ts src/paint.test.ts src/routes.test.ts`
-  and `--project browser src/dashboard/staffing-month.test.ts src/dashboard/staffing-season-painter.test.ts`.
-- [ ] **Step 3: Implement** the types and the two projections.
-- [ ] **Step 4: Run** them; staffing `typecheck`, `lint`.
-- [ ] **Step 5: Commit** — `git commit -s -m "Staffing paints each season's stored colour (A721)"`
+- [ ] **Step 1:** `git grep -n "color-season\|color-on-season" -- packages apps scripts` finds only
+  the two files above (Task 4a removed the readers).
+- [ ] **Step 2: Delete** the declarations and the describe.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/ui-core exec vitest run src/tokens/colors.test.ts`
+  (the count drops by the deleted cases, the rest pass) and root `scripts/style-token-names.test.ts`;
+  the grep in Step 1 now finds nothing; `ui-core` `typecheck`, `lint`.
+- [ ] **Step 4: Commit** — `git commit -s -m "Retire the four position-based season tokens (A721)"`
 
-**Existing checks that change:** `month.test.ts:136-138`, `paint.test.ts:331-334`,
-`routes.test.ts:575-577` (gain `colour`), `staffing-month.test.ts:170-171` (place → colour) — spec
-point 2.
+**Existing checks that change:** `colors.test.ts:474-532` (deleted with the tokens; replaced by Task
+4a's season-paint contrast case, which holds all thirteen paints to the same bars, Decision 10 — the
+hue-order case `:498-520` has no replacement because no order exists any more, and the default
+seasons' colours are pinned in Task 1).
 
 ## Task 5: `wt-colour-chooser` takes `hide-label`
 
@@ -699,7 +738,12 @@ point 2.
 - [ ] **Step 2: Run, see them fail.** `pnpm --filter @waitron/ui exec vitest run src/components/wt-colour-chooser.test.ts src/components/wt-colour-chooser.a11y.test.ts`
 - [ ] **Step 3: Implement** in the `wt-combobox` way (`wt-combobox.ts:970-980`), keeping the label
   element with a visually-hidden class.
-- [ ] **Step 4: Run** both files; `ui` `typecheck`, `lint`.
+- [ ] **Step 4: Run** both files; `ui` `typecheck`, `lint`. `ui`'s mutation floor of 90 is checked
+  only by the nightly merged run (`docs/developers/ci-and-gates.md:318-325`), so check the new lines
+  here: `pnpm --filter @waitron/ui exec stryker run --mutate src/components/wt-colour-chooser.ts`
+  (a local run prints a score and gates nothing; it runs the suites Vitest finds related to the
+  file). Every mutant on the lines this task added must be killed; add the assertion that kills a
+  survivor, and list any equivalent mutant left, with why, in the commit message.
 - [ ] **Step 5: Commit** — `git commit -s -m "wt-colour-chooser takes hide-label for use in a table row (A721)"`
 
 **Existing checks that change:** none.
@@ -743,8 +787,9 @@ point 2.
   `rowErrors` (blank, missing month, duplicate name `" Winter"`/`"Winter"`, duplicate start, both
   rows marked); `seasonChange` (unchanged → empty; a rename, a recolour, a move, a new row, a delete;
   keys line up); `mergeSeasonDraft`: clean → follows latest; dirty with an untouched row renamed
-  elsewhere → follows; a touched row renamed elsewhere → keeps the person's name, baseline takes the
-  new one; a season added elsewhere → appended to both; an untouched season deleted elsewhere →
+  elsewhere → follows; a row whose name the person changed, renamed elsewhere → keeps the person's
+  name, baseline takes the new one; a row whose colour the person changed, renamed elsewhere → takes
+  the new name and keeps the person's colour; a season added elsewhere → appended to both; an untouched season deleted elsewhere →
   dropped from both; a touched one → kept, its key in `gone`; a binned one deleted elsewhere →
   removed from `deleted`; new rows untouched.
 - [ ] **Step 2: Run, see them fail**:
@@ -810,187 +855,235 @@ point 2.
 
 **Existing checks that change:** none.
 
-## Task 7b: `seasons-window` — Save, refusals, the delete note, live data, leaving
+## Task 7b: `seasons-window` — Save and its refusals
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/seasons-window.ts`
-- Create: `packages/venue-service/src/dashboard/season-refusal.ts` (the end-offset wording moved from
-  `season-dialog.ts:195-222`)
-- Test: `seasons-window.test.ts`, new `seasons-window.unsaved.test.ts`, `seasons-window.a11y.test.ts`
+- Create: `packages/venue-service/src/dashboard/season-refusal.ts` (the refusal wording moved from
+  `season-dialog.ts:181-222`; the dialog keeps its own copy until Task 8b deletes it)
+- Test: `seasons-window.test.ts`, `seasons-window.a11y.test.ts`
 
 **Interfaces:**
 - Produces: `seasonRefusalText(refusal: Refusal, seasons: readonly { id: string; name: string }[], specialDays: readonly { id: string; name: string }[]): string`.
   The window dispatches `seasons-saved` (`CustomEvent<{ seasons: Season[] }>`, bubbles, composed)
-  after a successful Save, having committed its draft scope first.
+  after a successful Save, having committed its draft scope first. Each opening (connect, or a new
+  `seasons` baseline taken while clean after a reconnect) gets a fresh generation object; a Save's
+  answer acts only if the generation it was sent under is still current.
 
 - [ ] **Step 1: Write the failing tests** (`seasons-window.test.ts`; each moved check names the
-  season-chips or season-dialog case it replaces, deleted in Task 8a):
+  `season-chips.test.ts` case it replaces — Task 8b deletes the originals):
   - **"Save is quiet and disabled until the draft changes, and an undone edit makes it quiet
-    again"** (from `season-dialog.unsaved.test.ts:86-91`, `season-chips.test.ts:128-143`'s
-    disabled/variant checks).
+    again"** (from `season-chips.test.ts:128-143`'s disabled and variant checks).
   - **"one Save sends every change with the clock revision the draft was clean at, then says it
-    saved"** (from `season-chips.test.ts:128`, `:145`, `:163`, `:478`, `:489`): rename Winter,
-    recolour Spring, move Summer, add Feria, bin Autumn → exactly one `saveSeasons` call with
+    saved"** (from `:128`, `:145`, `:163`, `:478`, `:489`): rename Winter, recolour Spring, move
+    Summer, add Feria, bin Autumn → exactly one `saveSeasons` call with
     `{ save: [Winter, Spring, Summer, Feria], delete: [autumn] }` and the revision given at mount
     even after a later `clockRevision` arrives with the draft dirty; on success one `seasons-saved`.
   - **"swapping two starts sends one request holding both"** (Review Focus 1).
   - **"asks for a name and a start before sending, beside each row, with one message at the bottom"**
-    (from `season-chips.test.ts:178`, `:430`): a new row left empty → after Save, its name says
-    "Enter a name.", its start group "Choose a day and a month." once (day and month both
-    `invalid`, the group described by the message), the bottom says "Correct the highlighted fields
-    to continue.", focus on the first invalid field, nothing sent, Save disabled until fixed.
+    (from `:178`, `:430`): a new row left empty → after Save, its name says "Enter a name.", its
+    start group "Choose a day and a month." once (day and month both `invalid`, the group described
+    by the message), the bottom says "Correct the highlighted fields to continue.", focus on the first
+    invalid field, nothing sent, Save disabled until fixed.
   - **"marks two rows that share a name or a start"**.
-  - **"puts a refused field under its row, and keeps Save enabled"** (from `season-chips.test.ts:226`,
-    `:346`; Review Focus 5): `season.invalid { field: "save.1.name", reason: "taken" }` marks the row
-    whose key is `keys[1]` "Another season has this name."; `save.0.startsOn` taken → "Another season
-    starts on this day."; `save.0.colour` → "Choose a colour."; Save stays enabled; editing that field
-    clears its message.
+  - **"puts a refused field under its row, and keeps Save enabled"** (from `:226`, every row of its
+    `it.each`, and `:346`; Review Focus 5): `season.invalid { field: "save.1.name", reason: "taken" }`
+    marks the row whose key is `keys[1]` "Another season has this name."; `save.0.startsOn` with
+    `reason: "taken"` → "Another season starts on this day."; **`save.0.startsOn` with no reason →
+    "Choose a day and a month." under that row's start** (the `:226` row that refuses a start with no
+    reason); `save.0.name` with no reason → "Enter a name."; `save.0.colour` → "Choose a colour.";
+    Save stays enabled; editing that field clears its message.
   - **"says an end-offset clash, a changed or pending business-day start and the last season at the
-    bottom"** (from `season-chips.test.ts:249`, `:286`, `:301`): `end_offset` with a season and
-    weekday → `season.offset_season`, with a known special day → `season.offset_day`, a date alone →
-    `season.offset_date`; `hours.clock_changed`, `hours.clock_change_pending`; `delete`/`last` →
-    "A venue keeps at least one season."; anything else → "The change could not be saved.".
+    bottom"** (from `:249`, every row of its `it.each`, `:286`, `:301`): `end_offset` with a season
+    and weekday → `season.offset_season`; with a special day the window knows → `season.offset_day`;
+    **with a `specialDayId` the window does not know and a date → the date-only wording
+    `season.offset_date`, no field marked, the draft kept, the window still open** (the `:249` row
+    naming an unknown special day); `hours.clock_changed`, `hours.clock_change_pending`;
+    `delete`/`last` → "A venue keeps at least one season."; anything else → "The change could not
+    be saved.".
+  - **"while saving, Save shows busy, nothing else acts, and Escape does not close"** (from `:376`,
+    `:399`): a second Save press sends nothing.
+  - **"a save's answer that arrives after the window was closed and reopened neither closes the new
+    window nor commits its draft"** (moved from `:501`, "keeps a save busy when an earlier save…",
+    whose intent — an answer from an earlier opening must not end a later one's state — this keeps):
+    Save with a held answer; remove the element and add it again (a new opening), edit a name; resolve
+    the held answer → no `seasons-saved`, the new opening's Save is not busy, its draft is still
+    dirty (`saveActionState` not `unchanged`), and its edit is still shown. Control: the same answer
+    resolved without the reopen does fire `seasons-saved`. A refusal from the earlier opening
+    likewise shows nothing in the new one.
+  - a11y (`seasons-window.a11y.test.ts`): a refused state, both themes.
+- [ ] **Step 2: Run, see them fail.**
+- [ ] **Step 3: Implement**: `draftScopeFor(this, { id, parent: this.draftParent, current, snapshot,
+  equal: sameDraft, restore })` (none when read-only); `saveActionState`; `focusFirstInvalid` on the
+  modal; `submitOnEnter` on Save; the refusal mapping (path `save.<i>.<field>` → `keys[i]`);
+  `seasonRefusalText`; the opening generation (reset in `disconnectedCallback`, as
+  `season-dialog.ts:119-125` does); on success, still current, `scope.commit(submitted)` then
+  `seasons-saved`. The modal is not dismissible while saving.
+- [ ] **Step 4: Run** both files; `typecheck`, `lint`.
+- [ ] **Step 5: Commit** — `git commit -s -m "The Seasons window saves every change at once and explains a refusal (A721)"`
+
+**Existing checks that change:** none in this task (the moved cases' originals go in Task 8b).
+
+## Task 7c: `seasons-window` — the delete note, live data, leaving
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/seasons-window.ts`
+- Test: `seasons-window.test.ts`, new `seasons-window.unsaved.test.ts`, `seasons-window.a11y.test.ts`
+
+- [ ] **Step 1: Write the failing tests:**
   - **"binning a stored season says where its days go and what is lost"** (from
     `season-chips.test.ts:194`, `:211`, `:361`): binning Autumn reads its impact once and shows
     "Saving deletes Autumn; its days join Summer. The hours of Restaurant in it are lost."; with no
     departments "…No department has hours in it."; a failed read "…Which departments lose hours
-    could not be read.".
-  - **"while saving, Save shows busy, nothing else acts, and Escape does not close"** (from
-    `season-chips.test.ts:376`, `:399`, `:501`): a second Save press sends nothing.
-  - **"a season another session deleted is marked under a row the person changed"** (from
-    `season-chips.test.ts:318`, `:529`; Review Focus 2): new `seasons` without Spring after Spring's
-    name changed → "This season no longer exists." under Spring's name, Save disabled until its bin
-    is pressed, and the Save then sends no delete for it; a refusal `season.not_found { seasonId }`
-    marks that row the same way.
-  - **"a snapshot while clean follows it; while dirty keeps the person's edits"** (Decision 17,
-    through the element).
-  - **"Spanish"** (from `season-chips.test.ts:445`): bin "Eliminar Otoño", note "Al guardar se
-    elimina Otoño; sus días pasan a Verano."
+    could not be read."; a newer read's answer wins over an older one.
+  - **"Spanish"** (from `:445`): bin "Eliminar Otoño", note "Al guardar se elimina Otoño; sus días
+    pasan a Verano."
+  - **"a season another session deleted is marked under a row the person changed"** (from `:318`,
+    `:529`; Review Focus 2): new `seasons` without Spring after Spring's name changed → "This season
+    no longer exists." under Spring's name, Save disabled until its bin is pressed, and the Save then
+    sends no delete for it; a refusal `season.not_found { seasonId }` marks that row the same way; a
+    binned season deleted elsewhere loses its note and sends no delete.
+  - **"a snapshot while clean follows it; while dirty keeps the person's changed fields"**
+    (Decision 17, through the element; includes a season added elsewhere appearing as a row).
   - `seasons-window.unsaved.test.ts` (moved from `season-dialog.unsaved.test.ts:67`, `:86`, `:96`):
     inside a leave app with the draft parented to a root, **"asks before closing a changed draft,
     and Keep keeps the rows"**; **"restoring the opened values closes without asking"**; **"a close
     asked in the turn a Save starts is refused"**; **"a draft parented to the window root is asked
     about only for that root"**.
-  - a11y: a refused state and a deleting state, both themes.
+  - a11y: a deleting state (the note shown), both themes.
 - [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement**: `draftScopeFor(this, { id, parent: this.draftParent, current, snapshot,
-  equal: sameDraft, restore })` (none when read-only); `saveActionState`; `focusFirstInvalid` on the
-  modal; `submitOnEnter` on Save; the refusal mapping (path `save.<i>.<field>` → `keys[i]`);
-  `seasonRefusalText`; impact reads per binned stored row (a newer read wins); `willUpdate` runs
-  `mergeSeasonDraft` when `seasons` changes; on success `scope.commit(submitted)` then
-  `seasons-saved`. The modal is not dismissible while saving.
+- [ ] **Step 3: Implement**: impact reads per binned stored row (a request token per row, the newest
+  wins); `willUpdate` runs `mergeSeasonDraft` when `seasons` changes, commits the moved baseline to
+  the scope, and retakes `clockRevision` only while clean.
 - [ ] **Step 4: Run** the three files; `typecheck`, `lint`.
-- [ ] **Step 5: Commit** — `git commit -s -m "The Seasons window saves every change at once and explains a refusal (A721)"`
+- [ ] **Step 5: Commit** — `git commit -s -m "The Seasons window warns before deleting and follows other sessions' changes (A721)"`
 
-**Existing checks that change:** none in this task (the moved cases' originals go in Task 8a).
+**Existing checks that change:** none in this task.
 
-## Task 8a: The chips lose ✎ and "+ Season"; the Year offers "Seasons…"; the dialog goes
+## Task 8a: The screen opens the Seasons window; the Year offers "Seasons…"
 
-**Files:**
-- Modify: `packages/venue-service/src/dashboard/season-chips.ts` (keep `seasons`, `readOnly`,
-  `keyOnly`, the week button and the slot; delete `clockRevision`, `api`, `specialDays`,
-  `draftParent`, the dialog, its state and `SeasonWrites`)
-- Delete: `season-dialog.ts`, `season-dialog.unsaved.test.ts`
-- Modify: `opening-hours-year.ts:13-15`, `:203-208`, `:485-503` (drop `api`, `specialDays`; add
-  "Seasons…" before "Periods…"); `opening-hours-month.ts:650` (drop `.clockRevision`)
-- Modify: `strings.ts` (remove the unread season strings, Decision 21)
-- Test: `season-chips.test.ts`, `season-chips.a11y.test.ts`, `opening-hours-year.test.ts`
-
-**Interfaces:**
-- Produces: `wt-button[data-test=open-seasons]` (text `season.open_window`), first in the Year's
-  slot, dispatching `calendar-window-open` with `{ window: "seasons" }`.
-
-- [ ] **Step 1: Write the failing tests.**
-  - `opening-hours-year.test.ts:478` case becomes **"the season row ends with Seasons… then
-    Periods…, also for a viewer, each asking for its window"**: slotted order `open-seasons`,
-    `open-periods`; a `userEvent.click` on Seasons… dispatches one composed `calendar-window-open`
-    with `{ window: "seasons" }`; Spanish "Temporadas…".
-  - `opening-hours-year.test.ts:407-430` becomes **"hands the seasons and read-only to the chips"**:
-    `chips.seasons` is the model's, `chips.readOnly` follows; the chips have no `api` property set
-    and no `season-changed` is re-dispatched (spec: the chips write nothing).
-  - `season-chips.test.ts:90-104`: labels without " ✎"; no `[data-test=season-edit]`;
-    `:611-629` becomes **"slotted content follows the last chip"** (no "+ Season");
-    `:335-344` becomes **"read-only chips offer their weeks and nothing else"**; `:557`, `:586`
-    (`season-dialog` null) become `wt-modal` null — the chips draw no window at all.
-  - `season-chips.a11y.test.ts:104-112`: the states become `chips`, `read-only`, `empty`
-    (`editing`, `refused`, `end-offset`, `delete` moved to `seasons-window.a11y.test.ts`, Task 7a/7b).
-- [ ] **Step 2: Run, see them fail.**
-- [ ] **Step 3: Implement**; delete the dialog-driven cases of `season-chips.test.ts` (`:128`, `:145`,
-  `:163`, `:178`, `:188`, `:194`, `:211`, `:226`, `:249`, `:286`, `:301`, `:318`, `:346`, `:361`,
-  `:376`, `:399`, `:430`, `:445`, `:458`, `:478`, `:489`, `:501`, `:529`) and its `fakeApi`, each
-  replaced by the Task 7a/7b case that names it (`:188` → "the last row's bin is disabled"; `:458` →
-  Task 8b's special-day read on opening the window). `git grep -n "season-dialog\|SeasonWrites\|season-changed\|season-dialog-open"`
-  then finds only `opening-hours-screen.ts` and its tests (Task 8b) and docs.
-- [ ] **Step 4: Run** `season-chips.test.ts`, `season-chips.a11y.test.ts`, `opening-hours-year.test.ts`,
-  `opening-hours-year.a11y.test.ts`, `opening-hours-month.test.ts`; `typecheck` may fail only on
-  `opening-hours-screen.ts` (Task 8b) — if so, commit with that stated in the ledger and go straight
-  to Task 8b in the same dispatch.
-- [ ] **Step 5: Commit** — `git commit -s -m "Season chips become a key; the Year offers Seasons… (A721)"`
-
-**Existing checks that change:** `season-chips.test.ts:90-104` (no ✎), `:335-344`, `:557`, `:586`,
-`:611-629`, and the dialog cases listed in Step 3 (moved to Task 7a/7b); `season-chips.a11y.test.ts:105`
-(states move); `season-dialog.unsaved.test.ts` (whole file, moved to `seasons-window.unsaved.test.ts`);
-`opening-hours-year.test.ts:407-430`, `:478` — spec point 1 ("The separate season editor and the
-chips' ✎ go"; "Seasons…" before "Periods…").
-
-## Task 8b: The screen opens the Seasons window at `window/seasons`
+The chips and the season dialog are left as they are in this task (the Year briefly offers both ✎
+and "Seasons…"), so every file still typechecks; Task 8b removes them.
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/opening-hours-screen.ts` (`:21`, `:434-474` the
-  seasons branch draws `seasons-window`; `:258-275` read the special days when the window becomes
-  `seasons`; `:1515-1532` the Year loses `.api`, `.specialDays`, `@season-dialog-open`,
-  `@season-changed`; a `seasons-saved` listener re-reads and closes the window)
-- Modify: `opening-hours-client.ts:15-24`, `:262-270` (delete `SeasonInput` and the three old
-  methods; `SeasonDeleteImpact` and `readSeasonDeleteImpact` stay)
-- Test: `opening-hours-screen.painter.test.ts`, `opening-hours-screen.test.ts`,
-  `opening-hours-screen.a11y.test.ts`, `opening-hours-client.test.ts`,
-  `apps/dashboard/src/dashboard-app.search-modules.test.ts`
+  seasons branch draws `<seasons-window data-test="calendar-window" data-window="seasons">` with
+  `.seasons=${this.model.seasons}`, `.clockRevision`, `.specialDays=${this.knownSpecialDays}`,
+  `.readOnly`, `.draftParent=${this.windowDraftRoot}`, `.api`, `.beforeClose=${this.beforeWindowClose}`,
+  `@wt-close=${this.windowClosed}`; `:258-275` read the special days when the window becomes
+  `seasons`; a `seasons-saved` listener calls `this.api.rereadWithSpecialDays()` then
+  `closeWindow()`)
+- Modify: `opening-hours-year.ts:485-503` (add "Seasons…" before "Periods…" in the slot)
+- Modify: `strings.ts` (`season.open_window` if Task 7a did not add it)
+- Test: `opening-hours-screen.painter.test.ts`, `opening-hours-screen.a11y.test.ts`,
+  `opening-hours-year.test.ts`, `apps/dashboard/src/dashboard-app.search-modules.test.ts`
+
+**Interfaces:**
+- Produces: `wt-button[data-test=open-seasons]` (text `season.open_window`) in the Year's slot, just
+  before `open-periods`, dispatching `calendar-window-open` with `{ window: "seasons" }`.
 
 - [ ] **Step 1: Write the failing tests.**
+  - `opening-hours-year.test.ts:478` case becomes **"the season row offers Seasons… then Periods…,
+    also for a viewer, each asking for its window"**: `open-seasons` is the slotted element just
+    before `open-periods`; a `userEvent.click` on it dispatches one composed `calendar-window-open`
+    with `{ window: "seasons" }`; Spanish "Temporadas…".
   - `opening-hours-screen.painter.test.ts:828-850` **"opens Seasons after loading and Cancel closes
     only its window pair"**: `[data-test=calendar-window][data-window=seasons]` is a `seasons-window`
     whose rows are the model's seasons; its modal's heading "Seasons"; `cancel-seasons` returns to
     `/manage/opening-hours/view/year/year/2027` with the Year drawn.
   - `:852-877` **"a viewer's Seasons window lists the seasons with nothing to change"**: read-only
     rows, `close-seasons` closes it (the window offers no week: Decision 18).
-  - `:358-370` becomes **"Seasons… on the Year pushes window/seasons, and Back closes it"**:
-    `pushedPaths()` records `/manage/opening-hours/view/year/window/seasons`; `history.back()` →
-    `/manage/opening-hours/view/year`, no window.
-  - `:261`, `:763` (`season-dialog` null) become `[data-window=seasons]` null.
+  - New **"Seasons… on the Year pushes window/seasons, and Back closes it"**: `pushedPaths()` records
+    `/manage/opening-hours/view/year/window/seasons`; `history.back()` → `/manage/opening-hours/view/year`,
+    no window.
   - `:1081-1096` **"draws Periods and Seasons as wide windows"**: the Seasons window's modal has no
     `size` (Decision 14).
   - `:1097-1142` and `:1145-1194`: the draft is made by changing the first row's name in the window
     (`[name=season-0-name]`); every Keep/Discard/painter assertion stays word for word.
   - New **"a Save re-reads the hours and closes the window, keeping the painter's paint"**: painter
-    with paint → window → rename → Save → one `PUT …/seasons`, then the re-read requests, the
-    address back to the painter's, `painter.edited()` unchanged.
-  - New **"opening the Seasons window reads the special days once and hands them to it"** (replaces
-    `season-chips.test.ts:458` and `opening-hours-screen.test.ts:981-1003`'s dialog trigger).
-  - `opening-hours-screen.test.ts:1351-1370`: the trigger becomes opening, closing and reopening the
-    window; the newest-list assertions stay. `:1440-1450` becomes **"re-reads the year and the
-    opening hours after the window saves"** (a `seasons-saved` from the window).
+    with paint → window → rename → Save → one `PUT …/seasons`, then the re-read requests, the address
+    back to the painter's, `painter.edited()` unchanged.
+  - New **"opening the Seasons window reads the special days once and hands them to it"** (takes
+    over from `season-chips.test.ts:458` and the dialog trigger of
+    `opening-hours-screen.test.ts:981-1003`, both changed in Task 8b).
   - `opening-hours-screen.a11y.test.ts`: `window/seasons`, editable and read-only, both themes.
-  - `opening-hours-client.test.ts:142-158` becomes **"reads a season delete's impact"** (the three
-    write calls go with their methods; the impact GET assertion stays).
   - `dashboard-app.search-modules.test.ts:235-251`, `:291-305`: wait for the window's rows to show
     "Spring" (`calendar(el).shadowRoot` → `seasons-window` → its shadow root); the dialog box is the
     inner `wt-modal`'s; every fit and axe assertion stays. `:343`: the close press is the window's
     `cancel-seasons` (setup).
 - [ ] **Step 2: Run, see them fail**:
-  `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/opening-hours-screen.painter.test.ts src/dashboard/opening-hours-screen.test.ts src/dashboard/opening-hours-screen.a11y.test.ts src/dashboard/opening-hours-client.test.ts`
+  `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/opening-hours-screen.painter.test.ts src/dashboard/opening-hours-screen.a11y.test.ts src/dashboard/opening-hours-year.test.ts`
   and `pnpm --filter @waitron/dashboard exec vitest run --project browser src/dashboard-app.search-modules.test.ts`.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** those files plus `opening-hours-screen.unsaved.test.ts`,
-  `opening-hours-screen.special-day.test.ts`, `opening-hours-screen.week.test.ts`, `index.test.ts`;
-  venue-service and dashboard `typecheck`, `lint`. `git grep -n "season-dialog\|season-changed\|season-dialog-open\|SeasonWrites\|SeasonInput\|addSeason\|deleteSeason"`
-  in `packages` and `apps` finds nothing.
-- [ ] **Step 5: Commit** — `git commit -s -m "window/seasons opens the Seasons window (A721)"`
+- [ ] **Step 4: Run** those files plus `opening-hours-screen.test.ts`, `opening-hours-screen.unsaved.test.ts`,
+  `opening-hours-screen.special-day.test.ts`, `opening-hours-screen.week.test.ts`, `index.test.ts`,
+  `season-chips.test.ts` (unchanged); venue-service and dashboard `typecheck`, `lint`.
+- [ ] **Step 5: Commit** — `git commit -s -m "window/seasons opens the Seasons window, and the Year offers Seasons… (A721)"`
 
-**Existing checks that change:** `opening-hours-screen.painter.test.ts:261`, `:358-370`, `:763`,
-`:828-850`, `:852-877`, `:1081-1096` (compact → wide, Decision 14), `:1097-1142` and `:1145-1194`
-(how the draft is made; assertions kept); `opening-hours-screen.test.ts:981-1003`, `:1351-1370`,
-`:1440-1450`; `opening-hours-client.test.ts:142-158`; `dashboard-app.search-modules.test.ts:243`,
-`:295-297`, `:343` (selectors) — spec point 1.
+**Existing checks that change:** `opening-hours-year.test.ts:478`; `opening-hours-screen.painter.test.ts:828-850`,
+`:852-877`, `:1081-1096` (compact → wide, Decision 14), `:1097-1142` and `:1145-1194` (how the draft
+is made; assertions kept); `dashboard-app.search-modules.test.ts:243`, `:295-297`, `:343`
+(selectors) — spec point 1.
+
+## Task 8b: The chips lose ✎ and "+ Season"; the season dialog goes
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/season-chips.ts` (keep `seasons`, `readOnly`,
+  `keyOnly`, the week button and the slot; delete `clockRevision`, `api`, `specialDays`,
+  `draftParent`, the dialog, its state and `SeasonWrites`)
+- Delete: `season-dialog.ts`, `season-dialog.unsaved.test.ts`
+- Modify: `opening-hours-year.ts:13-15`, `:203-208`, `:485-490` (drop `api`, `specialDays` and their
+  bindings); `opening-hours-month.ts:650` (drop `.clockRevision`); `opening-hours-screen.ts:1515-1532`
+  (the Year loses `.api`, `.specialDays`, `@season-dialog-open`, `@season-changed`)
+- Modify: `opening-hours-client.ts:15-19`, `:262-270` (delete `SeasonInput` and the three old
+  methods; `SeasonDeleteImpact` and `readSeasonDeleteImpact` stay)
+- Modify: `strings.ts` (remove the unread season strings, Decision 21)
+- Test: `season-chips.test.ts`, `season-chips.a11y.test.ts`, `opening-hours-year.test.ts`,
+  `opening-hours-screen.painter.test.ts`, `opening-hours-screen.test.ts`,
+  `opening-hours-client.test.ts`
+
+- [ ] **Step 1: Write the failing tests.**
+  - `season-chips.test.ts:90-104`: labels without " ✎"; no `[data-test=season-edit]`;
+    `:611-629` becomes **"slotted content follows the last chip"** (no "+ Season");
+    `:335-344` becomes **"read-only chips offer their weeks and nothing else"**; `:557`, `:586`
+    (`season-dialog` null) become `wt-modal` null — the chips draw no window at all.
+  - `season-chips.a11y.test.ts:104-112`: the states become `chips`, `read-only`, `empty`
+    (`editing`, `refused`, `end-offset`, `delete` are covered by `seasons-window.a11y.test.ts`,
+    Tasks 7a–7c).
+  - `opening-hours-year.test.ts:407-430` becomes **"hands the seasons and read-only to the chips"**:
+    `chips.seasons` is the model's, `chips.readOnly` follows; no `season-changed` is re-dispatched
+    (spec: the chips write nothing).
+  - `opening-hours-screen.painter.test.ts:358-370` ("a season chip's ✎ still opens the season dialog
+    and not the painter") is deleted — the spec removes ✎ — and Task 8a's "Seasons… on the Year
+    pushes window/seasons" is its replacement; `:261`, `:763` (`season-dialog` null) become
+    `[data-window=seasons]` null.
+  - `opening-hours-screen.test.ts:981-1003` becomes **"hands the Year its model and read-only"** (the
+    special-day read is Task 8a's window case); `:1351-1370`: the trigger becomes opening, closing
+    and reopening the Seasons window; the newest-list assertions stay. `:1440-1450` becomes
+    **"re-reads the year and the opening hours after the window saves"** (a `seasons-saved` from the
+    window).
+  - `opening-hours-client.test.ts:142-158` becomes **"reads a season delete's impact"** (the three
+    write calls go with their methods; the impact GET assertion stays).
+- [ ] **Step 2: Run, see them fail.**
+- [ ] **Step 3: Implement**; delete the dialog-driven cases of `season-chips.test.ts` (`:128`, `:145`,
+  `:163`, `:178`, `:188`, `:194`, `:211`, `:226`, `:249`, `:286`, `:301`, `:318`, `:346`, `:361`,
+  `:376`, `:399`, `:430`, `:445`, `:458`, `:478`, `:489`, `:501`, `:529`) and its `fakeApi`, each
+  replaced by the Task 7a–7c or 8a case that names it (`:188` → 7a's "the last row's bin is
+  disabled"; `:458` → 8a's special-day read on opening the window).
+- [ ] **Step 4: Run** the six test files plus `season-chips.a11y.test.ts`, `opening-hours-year.a11y.test.ts`,
+  `opening-hours-month.test.ts`, `seasons-window.test.ts`; venue-service, staffing and dashboard
+  `typecheck`, `lint`. `git grep -n "season-dialog\|season-changed\|season-dialog-open\|SeasonWrites\|SeasonInput\|addSeason\|deleteSeason"`
+  in `packages` and `apps` finds nothing.
+- [ ] **Step 5: Commit** — `git commit -s -m "Season chips become a key; the season dialog goes (A721)"`
+
+**Existing checks that change:** `season-chips.test.ts:90-104` (no ✎), `:335-344`, `:557`, `:586`,
+`:611-629`, and the dialog cases listed in Step 3 (moved to Tasks 7a–7c and 8a);
+`season-chips.a11y.test.ts:105` (states move); `season-dialog.unsaved.test.ts` (whole file, moved to
+`seasons-window.unsaved.test.ts`); `opening-hours-year.test.ts:407-430`;
+`opening-hours-screen.painter.test.ts:261`, `:358-370` (deleted; replaced in 8a), `:763`;
+`opening-hours-screen.test.ts:981-1003`, `:1351-1370`, `:1440-1450`;
+`opening-hours-client.test.ts:142-158` — spec point 1 ("The separate season editor and the chips' ✎
+go").
 
 ## Task 9: Docs and backlog
 
@@ -1015,7 +1108,12 @@ chips' ✎ go"; "Seasons…" before "Periods…").
   `seasons.colour` has no CHECK and why (Decision 1).
 - [ ] `docs/backlog.md:1400-1402`: delete the A721 entry. `:1570-1573`: delete "Season colours
   differ…". `:1577-1579`: delete "A season dialog whose season another session deletes stays open…"
-  (the dialog is gone; Decision 17 handles the case). `docs/backlog/service-periods.md:184-201`:
+  (the dialog is gone; Decision 17 handles the case). `:4121-4124` ("Opening hours' create texts
+  say 'New …' and '+ …'"): `season.new` is gone with the dialog — reword to name only
+  `special.new` and `season.add` (the window keeps "+ Season", Decision 21). `:4352-4354` (A702,
+  season chips widening the page on a long name): the chips lost ✎, so recheck at 390 px in Task 10
+  and either delete the entry with what was measured or keep it with the new measurement.
+  `docs/backlog/service-periods.md:184-201`:
   delete the A721 section; `:368-370`: delete the "No 'Seasons…' button until A721" note; `:95`:
   point at `saveSeasons` in place of `deleteSeason`. Add to its "## Decisions and deliberate limits"
   Decisions 1, 3, 12, 13, 14, 15 and 17, each one line with "(A721 plan, Decision N; plan default)".
