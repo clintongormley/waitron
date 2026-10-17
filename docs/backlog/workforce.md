@@ -134,59 +134,20 @@ confirmations (open point 7). Decide whether to add a shared deletion-impact sea
 can ask contributing modules for that count, or deliberately keep the confirmation without it.
 The completed rota retirement does not depend on that choice.
 
-## A763. The Rota view redesigned: one Show menu, no button per cell, an empty week that says why
+## A763 point 9. The Staffing month's Monday "Rota for this week" link goes
 
-**A763 (owner, 2026-10-16).** The owner, on the Santet venue: "the rota screen is completely
-unusable". Approved [mockups](mockups/a763-rota/) (canvas:
-https://claude.ai/artifact/AoJHtjzj7j4wiPKFWuy5Rw). What the owner saw on Calendar → Rota, week of
-26 Jan 2026: By person was a wall of 7 × N "Add shift" buttons; By area showed staff role rows with
-nothing in them and did not say the week had no staffing painted; "People this week (all areas)"
-repeated the By person rows and squeezed the grid; three rows of controls came before any content,
-with "Labour rules are not set up" on a line of its own. Files:
-`packages/staffing/src/dashboard/rota-view.ts`, `rota-by-area.ts`, `rota-by-person.ts`,
-`slot-picker.ts`, `staffing-month.ts` and `strings.ts`. Before A586–A588, which build on this
-screen.
+**A763 point 9 (owner, 2026-10-16).** Waits for lane F's A724 Part 2. A763's points 1–8 are
+built (the [plan](../superpowers/plans/2026-10-17-a763-rota-redesign.md)). The owner's point, as written:
 
-1. **One Show menu replaces both the Area picker and the By area | By person switch**
-   ([board 1](mockups/a763-rota/01-show-one-area.png)). "Everyone" draws one row per person; an area
-   draws its staff roles and their slots. This retires the A585 spec's decision 9. A staff role row
-   appears only when the area has slots or shifts for it that week.
-2. **Two rows of controls.** The Calendar switch stays; one bar holds `‹ week ›`, Show, then on the
-   right the week's state, what needs attention and the one action. The week title keeps a fixed
-   width and links back to Staffing → Month for that month, as the Calendar Week's title does (`opening-hours-week.ts`).
-3. **"People this week" goes.** Hours show where a choice is made — in the picker — and under each
-   name in Show: Everyone. The picker opens beside the slot that was clicked, not in a side panel.
-4. **No "Add shift" in every cell.** In an area, a dashed slot is the place to fill; a shift beyond
-   the paint is added from the empty part of a cell, where "+ Add shift" appears on hover or focus.
-   In Show: Everyone ([board 2](mockups/a763-rota/02-show-everyone.png)), clicking the empty part of
-   a day offers that day's open slots, those in the person's staff roles first and the rest marked
-   outside staff role, then "Another shift…" (the shift editor), so the rota can be filled from
-   either view.
-5. **The bar's counts are buttons that step to the next such slot**; zero counts are left out, and
-   with none left it reads "All slots filled". A day needing attention says so under its date ("2
-   unfilled"). A day with no paint and no hours reads "Closed" once, in its header.
-6. **Empty weeks say why** ([board 3](mockups/a763-rota/03-empty-week.png)). An area with no paint
-   for the week explains that slots come from staffing paint and offers "Paint {season}'s standard
-   week" (the painter for that area, or the special day's editor on a special day) and "Show
-   everyone"; shifts it already has show beneath, marked not needed. Show: Everyone with no shifts
-   keeps everyone's rows with one line saying how to add one.
-7. **The bar in each state** ([board 4](mockups/a763-rota/04-toolbar-states.png)). "Labour rules are
-   not set up" becomes a quiet "No labour rules to check against" in the bar. A published week
-   shows "Change this week"; a week being changed says "Staff still see the published week" and its
-   button reads "Publish changes"; the open-swaps notice sits under the bar. Publish is always in
-   the bar of a week that is not published, drawn quiet while the week has no shifts. Today it
-   shows only once the week has a draft version, which its first shift creates
-   (`packages/staffing/src/rota.ts:231-232`), and a draft whose shifts were all deleted still
-   offers it. The warnings dialog is unchanged.
-8. **Phone width: one day at a time** ([board 5](mockups/a763-rota/05-phone.png)), as the Calendar's
-   Week on a phone, but with a seven-day strip marking days that need attention and the week
-   arrows still stepping a week; the picker as a sheet from the bottom, Publish at the foot. Show: Everyone lists
-   each person with that day's shifts; a tap opens the same open-slots menu.
-9. **Staffing month: the Monday "Rota for this week" link goes**
-   ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
-   `staffing-month.ts`), so Monday's box is the same height as the others. The day box already offers "Rota for this week" on every
-   day (A720 Part 5); it is still to state where that week's rota stands. The Rota tab opens the
-   week of the day last picked in the month, else the current week.
+> **Staffing month: the Monday "Rota for this week" link goes**
+> ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
+> `staffing-month.ts`), so Monday's box is the same height as the others. The day box already
+> offers "Rota for this week" on every day (A720 Part 5); it is still to state where that week's
+> rota stands. The Rota tab opens the week of the day last picked in the month, else the current
+> week.
+
+The button is drawn on a Monday at `packages/staffing/src/dashboard/staffing-month.ts:600`
+(`data-rota-week`).
 
 ## A699. The Staffing month keeps its own copy of month stepping, and staffing its own date formatting
 
@@ -198,8 +159,12 @@ and the cached `dateFormat` in `packages/staffing/src/dashboard/format.ts`, whic
 both staffing painters use, copies `hours-view.ts`'s (A585-3's review; the season tints are
 already shared through `@waitron/venue-service/dashboard/season-tint`). The same file's
 `dateAroundDay` repeats `hours-view.ts`'s, taking a formatter where that one takes format options,
-because venue-service's `exports` map does not include `hours-view.ts` (A775). Next: move `stepMonth`
-and the limits into a browser-safe venue-service file and export it.
+because venue-service's `exports` map does not include `hours-view.ts` (A775). A763 added more
+copies of venue-service code outside that map: `weekTitleParts` in `format.ts` (of
+`formatWeekTitleParts`, `hours-view.ts`); `rota-popup.ts`'s follow-and-close logic with its own
+`flatParent` and `scrollTargets` (of `calendar-day-box.ts` and `flat-tree.ts`); and `rota-view.ts`'s
+swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
+limits, and these, into browser-safe venue-service files and export them.
 
 ## A703. Keeping a Calendar view's address words is a special case named in the app
 
@@ -231,10 +196,17 @@ records the implementation and its verification checks.
 ### A585. Staff roles and rota planning
 
 The [agreed design](../superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md) keeps the
-owner's staffing and rota decisions. Plan shifts in Calendar → Rota, by area or by person. Each
+owner's staffing and rota decisions. Plan shifts in Calendar → Rota, for one area or for everyone
+(A763, 2026-10-17). Each
 assignment names an area and a staff role; own schedules show module descriptions, or no label
 when no module describes a shift. The old Team Rota screen and free-text shift/template role are
 retired in part 8. Reset pre-live venues for that contract change.
+
+In one area the rota does not show a person's weekly labour warnings (weekly maximum, overtime
+cap, weekly rest), which have no cell there; the bar's labour count and the publish dialog still
+include them, and Everyone shows them under the name (A763, 2026-10-17). A rota day's header reads
+"Closed" when no active department opens that day, whichever area is shown, and the shown area (or
+Everyone) has no slot that day (`isClosed`, `packages/staffing/src/dashboard/rota-model.ts`; A763).
 
 
 ### A10. Clocking in and out — the working-time record

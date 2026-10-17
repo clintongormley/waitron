@@ -11,14 +11,14 @@ import { RotaView } from "./rota-view.js";
 const A = "2026-11-30",
   B = "2026-12-07";
 const frames: HTMLElement[] = [];
-/** Scrolls the page home and waits for the scroll event, so it cannot reach a later popup and
- *  close it: a popup closes on a scroll that leaves its anchor out of view. */
 async function useViewport(width: number, height: number) {
   const before = [innerWidth, innerHeight] as const;
   await page.viewport(width, height);
   await vi.waitFor(() => expect(innerWidth).toBe(width));
   onTestFinished(() => page.viewport(...before));
 }
+/** Scrolls the page home and waits for the scroll event, so it cannot reach a later popup and
+ *  close it: a popup closes on a scroll that leaves its anchor out of view. */
 async function scrollHome() {
   if (scrollX === 0 && scrollY === 0) return;
   const done = new Promise((resolve) => addEventListener("scroll", resolve, { once: true }));
