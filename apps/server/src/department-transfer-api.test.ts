@@ -49,8 +49,8 @@ import {
 } from "./till-sale.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { closeParty, openParty } from "./parties.js";
-import { mergeCheckedBills } from "./bill-actions.js";
-import { takeIntoParty } from "./move-bill.js";
+import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
+import { takeIntoParty } from "./testing/move-bill-fixture.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { decimal } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";

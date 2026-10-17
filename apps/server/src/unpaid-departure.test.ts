@@ -1,3 +1,4 @@
+import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -887,6 +888,9 @@ describe("a bill that owes nothing", () => {
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
       bills: "separate",
+      expectedEdits: await inTx(venue, (tx) =>
+        partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
+      ),
       expectedPartyRevision: revisionOf(ana.partyId),
       otherPartyId: luis.partyId,
       expectedOtherPartyRevision: revisionOf(luis.partyId),
@@ -1549,6 +1553,9 @@ describe("a merged party", () => {
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
       bills: "separate",
+      expectedEdits: await inTx(venue, (tx) =>
+        partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
+      ),
       expectedPartyRevision: revisionOf(ana.partyId),
       otherPartyId: luis.partyId,
       expectedOtherPartyRevision: revisionOf(luis.partyId),

@@ -27,7 +27,7 @@ import {
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./order-groups.js";
 import {
   readOrderKitchenNotes,

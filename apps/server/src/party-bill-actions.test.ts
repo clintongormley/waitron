@@ -15,7 +15,12 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
-import { mergeBills, requireUntouched, splitBill, transferItems } from "./bill-actions.js";
+import {
+  mergeBills,
+  requireUntouched,
+  splitBill,
+  transferItems,
+} from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { refundBillPayment } from "./bill-refunds.js";

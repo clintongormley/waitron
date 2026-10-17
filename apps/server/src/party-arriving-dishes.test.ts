@@ -19,7 +19,7 @@ import { createPrinter } from "@waitron/printing";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import { splitBill } from "./bill-actions.js";
 import { createCourse } from "./kitchen.js";
-import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
+import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import {
   bumpGroupReady,
   fireGroup,

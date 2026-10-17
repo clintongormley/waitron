@@ -881,6 +881,7 @@ function moveCommand(personId: string, body: Record<string, unknown>): MoveBillO
   const command: MoveBillOptions = {
     ...billCommand(personId, partyId === null ? rest : body),
     bills,
+    expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
   if (partyId === null) command.partyId = null;
   return { ...command, ...otherPartyRead(body) };
@@ -2954,6 +2955,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               expectedPartyRevision,
               operatorId: personId,
               guests,
+              expectedEdits: parseBillEditExpecteds(body.expectedEdits),
             },
             deps.attendance === undefined
               ? undefined
@@ -3877,7 +3879,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           cfg,
           intoBillId,
           fromBillId,
-          command,
+          { ...command, expectedEdits: parseBillEditExpecteds(body.expectedEdits) },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },

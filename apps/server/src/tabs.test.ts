@@ -65,7 +65,7 @@ import {
 } from "./working-order.js";
 import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
 import "./errors.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { fireGroup } from "./order-groups.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";

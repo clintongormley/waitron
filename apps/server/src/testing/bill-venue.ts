@@ -1,5 +1,6 @@
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments, departmentReceipts } from "@waitron/venue-service";
+import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -458,6 +459,12 @@ export async function placedCounterBillMovedTo(
   );
   const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
     to: { tableId: party.tableId },
+    expectedEdits: await withTransaction(venue.db, async (tx) => {
+      const edits = [];
+      for (const billId of [id, ...(await readPartyBillIds(tx, [party.partyId]))].sort())
+        edits.push(await readBillEditState(tx, billId));
+      return edits;
+    }),
     otherPartyId: party.partyId,
     expectedOtherPartyRevision: row!.revision,
   });

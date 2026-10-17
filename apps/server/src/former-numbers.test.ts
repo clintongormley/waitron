@@ -8,7 +8,7 @@ import { workingOrderLines, workingOrders } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";

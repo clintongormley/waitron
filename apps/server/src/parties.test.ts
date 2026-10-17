@@ -62,7 +62,7 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { splitBill, mergeBills } from "./bill-actions.js";
+import { splitBill, mergeBills } from "./testing/bill-action-fixture.js";
 import { joinTables, moveGuests, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 

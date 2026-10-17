@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { mergeBills, transferItems } from "./bill-actions.js";
+import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import {
   OPERATOR,
   commandFor,

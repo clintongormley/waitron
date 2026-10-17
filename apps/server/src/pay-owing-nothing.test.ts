@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { createProduct } from "@waitron/catalogue";
 import { payments } from "@waitron/payments";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

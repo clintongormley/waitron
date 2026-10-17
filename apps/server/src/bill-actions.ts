@@ -12,6 +12,8 @@ import {
 } from "./kitchen-print.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { requireBillEditors } from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
@@ -177,7 +179,7 @@ export async function mergeBills(
   cfg: TillConfig,
   intoBillId: string,
   fromBillId: string,
-  command: BillCommand,
+  command: BillCommand & { expectedEdits: BillEditExpected[] },
   attendance?: OrderAttendance,
 ): Promise<void> {
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
@@ -186,6 +188,7 @@ export async function mergeBills(
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId, {
     operatorId: command.operatorId,
+    expectedEdits: command.expectedEdits,
     ...(attendance === undefined
       ? {}
       : {
@@ -211,16 +214,26 @@ export async function mergeCheckedBills(
   fromBillId: string,
   known: {
     operatorId: string;
+    expectedEdits: BillEditExpected[];
     mainBillId?: string | null;
     kitchenTold?: boolean;
     attendance?: { recorder: AttendanceRecorder; at: string };
   },
 ): Promise<void> {
+  await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
-  await moveDraftsToBill(tx, cfg, fromBillId, intoBillId, known.operatorId, known.attendance);
+  await moveDraftsToBill(
+    tx,
+    cfg,
+    fromBillId,
+    intoBillId,
+    known.operatorId,
+    known.expectedEdits,
+    known.attendance,
+  );
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
   await tx

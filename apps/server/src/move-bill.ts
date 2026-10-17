@@ -15,6 +15,13 @@ import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
+import {
+  readPartyBillIds,
+  requireBillEditors,
+  requireRelocatableBillEditors,
+  relocateBillEditor,
+} from "./bill-editing.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
@@ -51,6 +58,7 @@ export interface OtherPartyRead {
 }
 
 export interface MoveBillOptions extends OtherPartyRead {
+  expectedEdits: BillEditExpected[];
   bills: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
@@ -90,6 +98,28 @@ export async function moveBill(
 
   if (path.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
   if (path.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
+  const affected = [
+    billId,
+    ...(destination.kind === "party" ? await readPartyBillIds(tx, [destination.partyId]) : []),
+  ];
+  await requireRelocatableBillEditors(tx, affected, options.operatorId, options.expectedEdits);
+  const main = destination.kind === "party" ? await readMainBill(tx, destination.partyId) : null;
+  const zoneId =
+    destination.kind === "party" ? await partyZone(tx, cfg, destination.partyId) : null;
+  const merging =
+    options.bills === "merge" &&
+    main !== null &&
+    (await isUntouched(tx, billId)) &&
+    (await isUntouched(tx, main)) &&
+    (zoneId === null
+      ? await serviceModesMatch(tx, cfg, billId, main)
+      : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode ===
+        (await VENUE_SERVICE.findOrderContext(tx, cfg, main))?.serviceMode);
+  const mergingEdits = options.expectedEdits.filter(
+    (e) => e.billId === billId || e.billId === main,
+  );
+  if (merging) await requireBillEditors(tx, [billId, main!], options.operatorId, mergingEdits);
+  const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
   const open = path.status === "open";
   const activity =
     attendance === undefined
@@ -123,6 +153,7 @@ export async function moveBill(
       })
       .where(eq(workingOrders.id, billId));
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
+    await relocateBillEditor(tx, billId, expectedEdit);
     result = { partyId: null, billId, merged: false };
   } else if (destination.kind === "free") {
     const { partyId } = await openParty(tx, {
@@ -134,7 +165,7 @@ export async function moveBill(
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
-    await moveBillDraftsToParty(tx, billId, partyId);
+    await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     ({ held } = await groupArrivingDishes(
       tx,
       partyId,
@@ -150,7 +181,7 @@ export async function moveBill(
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
-    const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
+    await takeIntoParty(tx, cfg, billId, partyId, zoneId);
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
     ({ held } = await groupArrivingDishes(
@@ -161,24 +192,18 @@ export async function moveBill(
       firers,
       activity,
     ));
-    const main = await readMainBill(tx, partyId);
-    if (
-      options.bills === "merge" &&
-      main !== null &&
-      (await isUntouched(tx, billId, moved)) &&
-      (await isUntouched(tx, main)) &&
-      (await serviceModesMatch(tx, cfg, billId, main))
-    ) {
+    if (merging && main !== null) {
       // `before` was read while the bill was still at its old tables, so the kitchen is told below.
       await mergeCheckedBills(tx, cfg, partyId, main, billId, {
         operatorId: options.operatorId,
+        expectedEdits: mergingEdits,
         ...(activity === undefined ? {} : { attendance: activity }),
         mainBillId: main,
         kitchenTold: true,
       });
       result = { partyId, billId: main, merged: true };
     } else {
-      await moveBillDraftsToParty(tx, billId, partyId);
+      await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
       if (main === null && open) await setMainBill(tx, partyId, billId);
       result = { partyId, billId, merged: false };
     }

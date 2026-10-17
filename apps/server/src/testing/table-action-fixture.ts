@@ -6,9 +6,10 @@ import {
   combineParties as combine,
   joinTables as join,
   moveGuests as move,
+  splitTable as split,
   type TableActionOptions as Options,
 } from "../table-actions.js";
-import type { TillConfig } from "../till-config.js";
+import type { OriginConfig, TillConfig } from "../till-config.js";
 import type { OrderAttendance } from "../working-order.js";
 export * from "../table-actions.js";
 
@@ -91,6 +92,32 @@ export async function combineParties(
       ...args,
       expectedEdits:
         args.expectedEdits ?? (await partyBillEditsForTest(tx, [args.from, args.into])),
+    },
+    attendance,
+  );
+}
+
+export async function splitTable(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  billId: string | null,
+  options: Omit<Parameters<typeof split>[5], "expectedEdits"> & {
+    expectedEdits?: BillEditExpected[];
+  },
+  attendance?: OrderAttendance,
+) {
+  return split(
+    tx,
+    cfg,
+    partyId,
+    tableId,
+    billId,
+    {
+      ...options,
+      expectedEdits:
+        options.expectedEdits ?? (billId === null ? [] : [await readBillEditState(tx, billId)]),
     },
     attendance,
   );

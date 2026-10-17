@@ -963,7 +963,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/split-table",
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
-    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0 }),
+    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
     deliTableZone,
   ],
   ...(["bills", "groups", "current-orders", "print-problems", "drafts"] as const).map(
@@ -1149,14 +1149,24 @@ const ROUTES: readonly Row[] = [
     "POST /api/bills/:id/merge (into)",
     "POST",
     (x) => `/api/bills/${x.deliTab}/merge`,
-    (x) => ({ fromBillId: x.restTab }),
+    (x) => ({
+      fromBillId: x.restTab,
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/merge (from)",
     "POST",
     (x) => `/api/bills/${x.restTab}/merge`,
-    (x) => ({ fromBillId: x.deliTab }),
+    (x) => ({
+      fromBillId: x.deliTab,
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
@@ -1177,21 +1187,32 @@ const ROUTES: readonly Row[] = [
     "POST /api/bills/:id/move (bill)",
     "POST",
     (x) => `/api/bills/${x.deliTab}/move`,
-    (x) => ({ to: { tableId: x.restFreeTable } }),
+    (x) => ({
+      to: { tableId: x.restFreeTable },
+      expectedEdits: [{ billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null }],
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/move (table)",
     "POST",
     (x) => `/api/bills/${x.restTab}/move`,
-    (x) => ({ to: { tableId: x.deliTable } }),
+    (x) => ({
+      to: { tableId: x.deliTable },
+      expectedEdits: [x.restTab, x.deliTab]
+        .sort()
+        .map((billId) => ({ billId, editorVersion: 0, draftId: null, draftRevision: null })),
+    }),
     deliTableZone,
   ],
   [
     "POST /api/bills/:id/move (counter)",
     "POST",
     (x) => `/api/bills/${x.restTab}/move`,
-    (x) => ({ to: { counter: { zoneId: x.deliCounter } } }),
+    (x) => ({
+      to: { counter: { zoneId: x.deliCounter } },
+      expectedEdits: [{ billId: x.restTab, editorVersion: 0, draftId: null, draftRevision: null }],
+    }),
     deliOrderZone,
   ],
   [

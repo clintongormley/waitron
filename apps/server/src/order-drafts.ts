@@ -8,6 +8,7 @@ import {
   orderDraftRecalledLines,
   workingOrderLines,
   orderDrafts,
+  billEditStates,
   orderGroups,
   workingOrders,
 } from "@waitron/db";
@@ -59,6 +60,7 @@ import {
   parseBillEditExpected,
   readBillEditState,
   relocateBillEditor,
+  requireBillEditors,
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
@@ -584,31 +586,67 @@ export async function moveDraftsToBill(
   fromBillId: string,
   intoBillId: string,
   operatorId: string,
+  expectedEdits: BillEditExpected[],
   attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<void> {
+  const edits = await requireBillEditors(tx, [fromBillId, intoBillId], operatorId, expectedEdits);
+  const from = edits.find((e) => e.billId === fromBillId)!;
+  const into = edits.find((e) => e.billId === intoBillId)!;
   const [bill] = await tx
     .select({ partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, intoBillId));
   if (bill?.partyId == null) throw invalid("billId");
-  const moving = await tx
-    .select({ id: orderDrafts.id, ownerId: orderDrafts.ownerId })
-    .from(orderDrafts)
-    .where(and(eq(orderDrafts.billId, fromBillId), eq(orderDrafts.state, "open")));
-  for (const draft of moving) {
-    const [own] = await openDraftsOn(tx, bill.partyId, draft.ownerId, intoBillId);
+  if (from.draftId !== null) {
+    if (into.draftId === null) {
+      await tx
+        .update(orderDrafts)
+        .set({
+          partyId: bill.partyId,
+          billId: intoBillId,
+          revision: from.draftRevision! + 1,
+          updatedAt: nowIso(),
+        })
+        .where(eq(orderDrafts.id, from.draftId));
+    } else {
+      await tx
+        .update(orderDrafts)
+        .set({
+          billId: intoBillId,
+          state: "discarded",
+          revision: from.draftRevision! + 1,
+          updatedAt: nowIso(),
+        })
+        .where(eq(orderDrafts.id, from.draftId));
+      await addDiscardedDraft(
+        tx,
+        cfg,
+        from.draftId,
+        { id: into.draftId, revision: into.draftRevision! },
+        operatorId,
+        operatorId,
+        attendance,
+      );
+    }
+  } else if (into.draftId !== null) {
     await tx
       .update(orderDrafts)
-      .set({
-        ...(own === undefined ? { partyId: bill.partyId } : {}),
-        billId: intoBillId,
-        revision: sql`${orderDrafts.revision} + 1`,
-        updatedAt: nowIso(),
-        ...(own === undefined ? {} : { state: "discarded" as const }),
-      })
-      .where(eq(orderDrafts.id, draft.id));
-    if (own !== undefined)
-      await addDiscardedDraft(tx, cfg, draft.id, own, draft.ownerId, operatorId, attendance);
+      .set({ revision: into.draftRevision! + 1, updatedAt: nowIso() })
+      .where(eq(orderDrafts.id, into.draftId));
+  }
+  // A merged bill releases its editor even when its draft moves intact to the surviving bill.
+  for (const edit of edits) {
+    const editorId =
+      edit.billId === fromBillId || (from.draftId === null && into.draftId === null)
+        ? null
+        : operatorId;
+    await tx
+      .insert(billEditStates)
+      .values({ billId: edit.billId, editorId, editorVersion: edit.editorVersion + 1 })
+      .onConflictDoUpdate({
+        target: billEditStates.billId,
+        set: { editorId, editorVersion: edit.editorVersion + 1 },
+      });
   }
 }
 
@@ -616,13 +654,13 @@ export async function moveBillDraftsToParty(
   tx: Transaction,
   billId: string,
   intoPartyId: string,
+  expectedEdit: BillEditExpected,
 ): Promise<void> {
+  await relocateBillEditor(tx, billId, expectedEdit);
   await tx
     .update(orderDrafts)
     .set({
       partyId: intoPartyId,
-      revision: sql`${orderDrafts.revision} + 1`,
-      updatedAt: nowIso(),
     })
     .where(and(eq(orderDrafts.billId, billId), eq(orderDrafts.state, "open")));
 }
@@ -1247,7 +1285,7 @@ async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Prom
 
 /**
  * Discarding `fromDraftId` into `into`, which its owner holds: the event, then `into`'s lines
- * followed by the discarded draft's, added together and numbered from one, and `into`'s revision
+ * followed by the discarded draft's, retaining row ids and numbered from one, and `into`'s revision
  * moved on. The caller has already marked `fromDraftId` discarded.
  */
 async function addDiscardedDraft(
@@ -1272,22 +1310,7 @@ async function addDiscardedDraft(
     stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
     stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
   );
-  const [owner] = await tx
-    .select({ partyId: orderDrafts.partyId })
-    .from(orderDrafts)
-    .where(eq(orderDrafts.id, into.id));
-  const allergy = await VENUE_SERVICE.readPartyAllergy(tx, owner!.partyId);
-  const assigned = new Set(
-    allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
-  );
-  await replaceLines(
-    tx,
-    [into.id, fromDraftId],
-    into.id,
-    normaliseDraftLines(
-      combined.map((line) => (assigned.has(line.id) ? { ...line, noMerge: true } : line)),
-    ),
-  );
+  await replaceLines(tx, [into.id, fromDraftId], into.id, combined);
   await tx
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })

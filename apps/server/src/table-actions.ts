@@ -308,6 +308,9 @@ export async function combineParties(
     if (merging && intoMain !== null) {
       await mergeCheckedBills(tx, cfg, into, intoMain, fromMain, {
         operatorId: args.operatorId,
+        expectedEdits: args.expectedEdits.filter(
+          (e) => e.billId === fromMain || e.billId === intoMain,
+        ),
         ...(attendance === undefined
           ? {}
           : {
@@ -377,7 +380,12 @@ export async function splitTable(
   partyId: string,
   tableId: string,
   billId: string | null,
-  options: { expectedPartyRevision: number; operatorId: string; guests?: SplitGuests },
+  options: {
+    expectedPartyRevision: number;
+    operatorId: string;
+    guests?: SplitGuests;
+    expectedEdits: BillEditExpected[];
+  },
   attendance?: OrderAttendance,
 ): Promise<{ partyId: string; mainBillId: string | null }> {
   await checkAndBumpParty(
@@ -390,6 +398,12 @@ export async function splitTable(
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
+  await requireRelocatableBillEditors(
+    tx,
+    billId === null ? [] : [billId],
+    options.operatorId,
+    options.expectedEdits,
+  );
   const partyMain = await readMainBill(tx, partyId);
   let firers: ReadonlyMap<string, Firer> = new Map();
   if (billId !== null) {
@@ -415,7 +429,7 @@ export async function splitTable(
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
     } else {
       const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-      await moveBillDraftsToParty(tx, billId, newParty);
+      await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
       const { held } = await groupArrivingDishes(
         tx,
         newParty,

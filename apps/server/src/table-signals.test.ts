@@ -29,7 +29,7 @@ import { takeBillPayment } from "./bill-payments.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 
 import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
 import { finishTable } from "./parties.js";

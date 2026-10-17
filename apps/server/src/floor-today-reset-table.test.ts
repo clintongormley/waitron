@@ -24,7 +24,7 @@ import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { finishTable } from "./parties.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";

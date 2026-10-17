@@ -14,9 +14,9 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { mergeBills, splitBill } from "./bill-actions.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
+import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";

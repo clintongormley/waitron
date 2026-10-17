@@ -55,7 +55,7 @@ import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./testing/table-action-fixture.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table

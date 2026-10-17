@@ -31,7 +31,7 @@ import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@w
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill, transferItems } from "./bill-actions.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";

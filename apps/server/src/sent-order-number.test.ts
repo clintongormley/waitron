@@ -4,11 +4,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./order-groups.js";
 import {
   OPERATOR,

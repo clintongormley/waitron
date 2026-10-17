@@ -63,9 +63,9 @@ import type { GroupRelease } from "./order-groups.js";
 import { discardPartyDrafts, readDrafts, submitDraft } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
-import { mergeBills, splitBill } from "./bill-actions.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { moveBill } from "./move-bill.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
 import { saveRecalledLine } from "./draft-recall.js";
 
 const LOCALE = "es-ES";
@@ -4064,7 +4064,7 @@ describe("source-backed draft foundations", () => {
       mergeBills(tx, v.cfg, intoId, tabId, {
         partyId,
         expectedPartyRevision: await partyRevision(partyId),
-        operatorId: SAM,
+        operatorId: ALEX,
       }),
     );
 
@@ -4095,7 +4095,7 @@ describe("source-backed draft foundations", () => {
       kind: "discarded",
       fromPerson: ALEX,
       toPerson: ALEX,
-      actorId: SAM,
+      actorId: ALEX,
       detail: { intoDraftId: own.id },
     });
     expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(beforeTicks);
@@ -4120,7 +4120,7 @@ describe("source-backed draft foundations", () => {
     ]);
   });
 
-  it("a direct bill merge rebinds every owner's draft without absorbing another owner's draft", async () => {
+  it("a direct bill merge refuses another editor before explicit takeover and retains all source rows", async () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const intoId = randomUUID();
@@ -4142,6 +4142,18 @@ describe("source-backed draft foundations", () => {
       position: 3,
       slot: 1,
     });
+    await refusedWritingNothing(
+      () =>
+        inTx(async (tx) =>
+          mergeBills(tx, v.cfg, intoId, tabId, {
+            partyId,
+            expectedPartyRevision: await partyRevision(partyId),
+            operatorId: SAM,
+          }),
+        ),
+      { code: "draft.taken_over", params: { billId: tabId, draftId: source.id, ownerId: ALEX } },
+    );
+    await takeOver(v, partyId, source.id, SAM, source.revision);
     await inTx(async (tx) =>
       mergeBills(tx, v.cfg, intoId, tabId, {
         partyId,
@@ -4149,11 +4161,19 @@ describe("source-backed draft foundations", () => {
         operatorId: SAM,
       }),
     );
-    expect(await draftRow(source.id)).toMatchObject({ state: "open", billId: intoId, revision: 1 });
-    expect(await draftRow(own.id)).toMatchObject({ state: "open", billId: intoId, revision: 0 });
-    const read = (await draftsOf(v, partyId)).find((draft) => draft.id === source.id)!;
-    expect(read.lines.map((line) => line.id)).toEqual([...lineIds(source), referenceId]);
-    expect(read.lines[2]).toMatchObject({
+    expect(await draftRow(source.id)).toMatchObject({
+      state: "discarded",
+      billId: intoId,
+      revision: 2,
+    });
+    expect(await draftRow(own.id)).toMatchObject({ state: "open", billId: intoId, revision: 1 });
+    const read = (await draftsOf(v, partyId)).find((draft) => draft.id === own.id)!;
+    expect(read.lines.map((line) => line.id)).toEqual([
+      ...lineIds(own),
+      ...lineIds(source),
+      referenceId,
+    ]);
+    expect(read.lines[4]).toMatchObject({
       sourceLineId: frozen.parentId,
       source: { netAmount: "12.50" },
     });
@@ -4573,7 +4593,7 @@ describe("source-backed draft foundations", () => {
         { tableId: target.tableId },
         {
           bills: "merge",
-          operatorId: SAM,
+          operatorId: ALEX,
           partyId: moving.from.partyId,
           expectedPartyRevision: await partyRevision(moving.from.partyId),
           otherPartyId: target.partyId,
