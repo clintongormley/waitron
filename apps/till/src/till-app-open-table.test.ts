@@ -338,6 +338,17 @@ async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScre
   return tableOrder(el)!;
 }
 
+async function back(el: TillApp): Promise<void> {
+  tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+  await flush(el);
+}
+
+async function reopen(el: TillApp, tableId: string): Promise<TillTableOrderScreen> {
+  emit(floor(el)!, "open-table", { tableId, seated: true });
+  await flush(el);
+  return tableOrder(el)!;
+}
+
 describe("A768 a moved course or category is read again", () => {
   beforeEach(() => {
     server = draftServer();
@@ -381,5 +392,53 @@ describe("A768 a moved course or category is read again", () => {
     await poll(el);
     expect(api.menuState.mock.calls.slice(checks).map(([zoneId]) => zoneId)).toContain("z1");
     expect(api.listZoneOffers.mock.calls.length).toBe(before);
+  });
+});
+
+describe("A768 a held zone's menu", () => {
+  beforeEach(() => {
+    server = draftServer();
+  });
+
+  afterEach(() => {
+    cleanupWidgets();
+  });
+
+  const beer = (el: TillApp) => tableOrder(el)!.products.find((p) => p.name === "Beer");
+
+  it("a second open of a table in a zone already read sends no offers read and one menu-state read", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await back(el);
+    api.listZoneOffers.mockClear();
+    api.menuState.mockClear();
+    const screen = await reopen(el, "t7");
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(api.menuState).toHaveBeenCalledTimes(1);
+    expect(api.menuState.mock.calls[0]![0]).toBe("z1");
+    expect(screen.draftStore).toBeTruthy();
+    expect(beer(el)).toBeDefined();
+  });
+
+  it("a menu published while the zone was off screen is read again when the table opens", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await back(el);
+    api.listZoneOffers.mockClear();
+    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.menuState.mockImplementation(async () => state("v2"));
+    await reopen(el, "t7");
+    await flush(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
+    expect(beer(el)!.unitPrice).toBe("6.00");
+  });
+
+  it("a table in a zone not yet read reads its offers", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await back(el);
+    api.listZoneOffers.mockClear();
+    await reopen(el, "t9");
+    expect(api.listZoneOffers).toHaveBeenCalledWith("z2");
   });
 });

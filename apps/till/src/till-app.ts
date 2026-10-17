@@ -2058,6 +2058,9 @@ export class TillApp extends LitElement {
   readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
+  /** Each zone's latest offers read from {@link api}, numbered by when the read was sent. */
+  readonly #zoneCatalogues = new Map<string, { read: number; catalogue: ZoneOfferCatalogue }>();
+  #zoneOfferReads = 0;
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
@@ -3914,10 +3917,13 @@ export class TillApp extends LitElement {
         });
         this.counterServiceZoneId = "";
       } else {
-        const catalogue =
-          retainedZone === undefined
-            ? await this.api.listDefaultZoneOffers()
-            : await this.api.listZoneOffers(retainedZone);
+        let catalogue: ZoneOfferCatalogue;
+        if (retainedZone === undefined) {
+          const api = this.api;
+          const read = ++this.#zoneOfferReads;
+          catalogue = await api.listDefaultZoneOffers();
+          if (api === this.api) this.#rememberZoneCatalogue(read, catalogue);
+        } else catalogue = await this.#readZoneOffers(retainedZone);
         if (replaced()) return;
         const { zones, context } = catalogue;
         this.#loadCounterOffers(catalogue);
@@ -4325,7 +4331,7 @@ export class TillApp extends LitElement {
     const request = ++this.#counterOfferRequest;
     const session = this.#operatorSession;
     try {
-      const catalogue = await this.api.listZoneOffers(zoneId);
+      const catalogue = await this.#readZoneOffers(zoneId);
       const { context } = catalogue;
       if (
         request !== this.#counterOfferRequest ||
@@ -4720,6 +4726,28 @@ export class TillApp extends LitElement {
     this.#followDefault();
   }
 
+  async #readZoneOffers(
+    zoneId: string,
+    options?: ReadOptions,
+    api: TillApi = this.api,
+  ): Promise<ZoneOfferCatalogue> {
+    const read = ++this.#zoneOfferReads;
+    const catalogue = await (options === undefined
+      ? api.listZoneOffers(zoneId)
+      : api.listZoneOffers(zoneId, options));
+    if (api === this.api) this.#rememberZoneCatalogue(read, catalogue, zoneId);
+    return catalogue;
+  }
+
+  #rememberZoneCatalogue(
+    read: number,
+    catalogue: ZoneOfferCatalogue,
+    zoneId = catalogue.context.zoneId,
+  ): void {
+    if ((this.#zoneCatalogues.get(zoneId)?.read ?? 0) > read) return;
+    this.#zoneCatalogues.set(zoneId, { read, catalogue });
+  }
+
   /** Reloads the open table's offers; false when they could not be read or a table open overtook
    * the read. */
   async #reloadTableOffers(zoneId: string): Promise<boolean> {
@@ -4728,7 +4756,7 @@ export class TillApp extends LitElement {
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), TABLE_REQUEST_LIMIT_MS);
     try {
-      const catalogue = await this.api.listZoneOffers(zoneId, { signal: read.signal });
+      const catalogue = await this.#readZoneOffers(zoneId, { signal: read.signal });
       if (
         request !== this.#tableRefreshRequest ||
         action !== this.#tableOfferRequest ||
@@ -4758,7 +4786,7 @@ export class TillApp extends LitElement {
       const action = this.#counterOfferRequest;
       const request = ++this.#counterRefreshRequest;
       try {
-        const catalogue = await api.listZoneOffers(zoneId);
+        const catalogue = await this.#readZoneOffers(zoneId, undefined, api);
         if (
           !this.isConnected ||
           session !== this.#operatorSession ||
@@ -8474,9 +8502,21 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
-    if (table?.zoneId !== null && table?.zoneId !== undefined) {
+    const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
+    const held = heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
+    if (heldZone !== undefined && held !== undefined) {
+      // Shown at once; the check's answer reaches #onMenuState, which reads again if it moved.
+      this.#loadTableOffers(heldZone, held);
+      this.tableSelectedCatalogueId = this.#resolveZoneMenu(
+        heldZone,
+        held.service.periodOccurrenceKey,
+        held.menus,
+        this.#tableDefaultMenuId,
+      );
+      void this.#menuPoll.readNow(heldZone);
+    } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
       try {
-        const catalogue = await this.api.listZoneOffers(table.zoneId);
+        const catalogue = await this.#readZoneOffers(table.zoneId);
         if (left() || offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession)
           return;
         this.#loadTableOffers(table.zoneId, catalogue);

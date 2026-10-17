@@ -1523,7 +1523,11 @@ describe("till-app: the party on a handheld", () => {
     it("Finish, with an open of another table under way that then fails, clears the finished party from the order tab", async () => {
       const { call, answer } = held();
       const offersRead = held();
-      const { el } = await mountApp({ ...onPhone(), finishTable: call });
+      const { el } = await mountApp({
+        ...onPhone(),
+        finishTable: call,
+        getTablesState: vi.fn().mockResolvedValue([mesa4, { ...mesa7, zoneId: "z2" }, mesa9]),
+      });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
       await selectTab(el, "floor");

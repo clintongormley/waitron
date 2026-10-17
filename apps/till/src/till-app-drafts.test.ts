@@ -232,7 +232,10 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     }),
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue({
+      ...catalogue("v1"),
+      context: { ...catalogue("v1").context, zoneId: "zc" },
+    }),
     listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
@@ -472,7 +475,11 @@ describe("W69 unassigned table draft", () => {
   });
 
   it("a refused table read after Discard keeps the memory-only draft unload-protected", async () => {
-    const { el } = await opening();
+    const { el } = await opening({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([{ ...mesa4, zoneId: "z2" }, table("t9", "9", null)]),
+    });
     await tap(el, "Beer");
     const original = draft(el);
     await back(el);
