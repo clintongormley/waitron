@@ -83,6 +83,7 @@ import {
   resendUnanswered,
   type DraftRefused,
   type DraftSaveOutcome,
+  type RetainedDraftCandidate,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
 import "./screens/till-lock-screen.js";
@@ -1754,7 +1755,12 @@ export class TillApp extends LitElement {
     this.sessionActivity.noteInteraction();
   };
 
+  readonly #onDraftFocus = (): void => {
+    void this.#refreshBillDraft();
+  };
+
   readonly #onVisibility = (): void => {
+    void this.#refreshBillDraft();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
@@ -1800,6 +1806,7 @@ export class TillApp extends LitElement {
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
+    window.addEventListener("focus", this.#onDraftFocus);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
@@ -1843,6 +1850,10 @@ export class TillApp extends LitElement {
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    window.removeEventListener("focus", this.#onDraftFocus);
+    clearTimeout(this.#billDraftTimer);
+    this.#candidateScope?.dispose();
+    this.#candidateScope = undefined;
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
@@ -2164,7 +2175,6 @@ export class TillApp extends LitElement {
   /** Rounds whose lines carry a mark from a refused send, marked again whenever their table's offers
    * change, so a dish that can be sold again is not left marked. */
   #markedRounds = new Set<WorkingOrderStore>();
-  /** The signed-in person's draft on the open order's party. */
   #draftSync?: DraftSync;
   /** Drafts left for another party's table, each settling once its save has answered. */
   #leavingDrafts = new Map<DraftSync, Promise<void>>();
@@ -2172,6 +2182,34 @@ export class TillApp extends LitElement {
    * party opens for the person who made it; a sign-out sends that person's and drops the rest; a
    * sign-in by someone else and a server switch drop them. */
   #unsavedDrafts = new Map<string, DraftSync>();
+  readonly #draftCandidates = new Map<string, RetainedDraftCandidate>();
+  @state() private resolvingDraftCandidate: DraftSync | null = null;
+  #billDraftTimer?: ReturnType<typeof setTimeout>;
+  #billDraftReading?: DraftSync;
+  readonly #candidateOwner = {};
+  #candidateScope?: DraftScope<string>;
+  #candidateObserved = "[]";
+
+  #syncCandidateProtection(): void {
+    if (!this.isConnected) return;
+    if (this.#candidateScope === undefined) {
+      this.#candidateScope = this.leave.coordinator.register({
+        id: this.#candidateOwner,
+        current: () => JSON.stringify([...this.#draftCandidates.keys()]),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: () => undefined,
+      });
+      this.#candidateScope.commit("[]");
+      this.#candidateObserved = "[]";
+    }
+    const current = JSON.stringify([...this.#draftCandidates.keys()]);
+    if (current !== this.#candidateObserved) {
+      this.#candidateObserved = current;
+      this.#candidateScope.changed();
+    }
+  }
+
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
   #signIns = 0;
@@ -2792,11 +2830,15 @@ export class TillApp extends LitElement {
     ...tillPath,
     leave: {
       isDirty: () =>
-        this.leave.coordinator.isDirty(undefined, [this.#basketOwner, this.#partylessOwner]),
+        this.leave.coordinator.isDirty(undefined, [
+          this.#basketOwner,
+          this.#partylessOwner,
+          this.#candidateOwner,
+        ]),
       request: (proceed, signal) =>
         this.leave.coordinator.request({
           scopes: "all",
-          except: [this.#basketOwner, this.#partylessOwner],
+          except: [this.#basketOwner, this.#partylessOwner, this.#candidateOwner],
           reason: "navigation",
           proceed,
           signal,
@@ -2819,7 +2861,9 @@ export class TillApp extends LitElement {
     reason: "navigation" | "signout" = "navigation",
   ): void {
     const except =
-      reason === "signout" ? [this.#basketOwner] : [this.#basketOwner, this.#partylessOwner];
+      reason === "signout"
+        ? [this.#basketOwner, this.#candidateOwner]
+        : [this.#basketOwner, this.#partylessOwner, this.#candidateOwner];
     if (!this.leave.coordinator.isDirty(undefined, except)) {
       void proceed();
       return;
@@ -2919,6 +2963,7 @@ export class TillApp extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    this.#syncCandidateProtection();
     this.#reconcileSavedDeviceZones();
     if (this.operatorName !== "" && !this.#loginPending) {
       if (this.#counterMenuPending) this.#followDefault();
@@ -2940,6 +2985,8 @@ export class TillApp extends LitElement {
       this.#closeCancelItem();
     if (changed.has("api")) {
       this.#forgetZoneCatalogues();
+      if (changed.get("api") !== undefined && this.#draftSync !== undefined)
+        this.#resumeOrderDraft();
       this.#cancelFindBillRead();
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
@@ -8917,7 +8964,7 @@ export class TillApp extends LitElement {
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         const [, opened] = await Promise.all([
           billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
-          this.#openDraft(true, session),
+          this.#openDraft(session),
         ]);
         if (left() || session !== this.#operatorSession) return;
         this.#showDraft(opened);
@@ -8960,11 +9007,24 @@ export class TillApp extends LitElement {
               ownerRevision: revision,
             },
           };
-          const opened = await this.#openDraft(false, session);
+          const opened = await this.#openDraft(session);
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           // A restart with no sign-out keeps the session counter, so the next person may be in by now.
-          if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0)
-            opened.sync.store.appendLines(this.#placeFirstOrder(carried.lines));
+          if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0) {
+            const lines = this.#placeFirstOrder(carried.lines);
+            if (opened.read && !opened.sync.store.editsLocked) opened.sync.store.appendLines(lines);
+            else {
+              this.#draftCandidates.set(JSON.stringify([carried.carrier, tabId]), {
+                personId: carried.carrier,
+                partyId,
+                billId: tabId,
+                base: { billId: tabId, editorVersion: 0, draftId: null, draftRevision: null },
+                lines: structuredClone(lines),
+                localGeneration: 0,
+              });
+              opened.sync.store.ownershipLocked = true;
+            }
+          }
           this.#showDraft(opened);
         } catch (error) {
           if (session !== this.#operatorSession) return;
@@ -9239,11 +9299,7 @@ export class TillApp extends LitElement {
       : null;
   }
 
-  /** Starts the person's draft on the order's party: the one kept for them when its save got no
-   * answer, or else one read from the server unless `read` is false.
-   * The screen shows it only once {@link #showDraft} says so. Nothing is started for a table opened
-   * in an operator session that has since ended. */
-  async #openDraft(read: boolean, session: number): Promise<OpenedDraft> {
+  async #openDraft(session: number): Promise<OpenedDraft> {
     this.#dropDraft();
     this.#resetPartylessDraft();
     if (session !== this.#operatorSession) return undefined;
@@ -9263,6 +9319,7 @@ export class TillApp extends LitElement {
       partyId: party.id,
       billId,
       personId: this.#sessionPersonId,
+      candidates: this.#draftCandidates,
       rebuild: (lines) =>
         lines.map((line) =>
           fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
@@ -9313,11 +9370,12 @@ export class TillApp extends LitElement {
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {
       if (sync === this.#draftSync) {
+        this.requestUpdate();
         this.#markDraft(false, false);
         if (this.#tableMenuPending) this.#followTableMenu();
       }
     });
-    return { sync, read: read ? await sync.load() : true };
+    return { sync, read: await sync.load() };
   }
 
   #syncDraftBillStatus(): void {
@@ -9332,7 +9390,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const party = this.orderParty?.id;
     if (![...this.#leavingDrafts.keys()].some((sync) => sync.partyId === party)) {
-      void this.#openDraft(true, session).then((opened) => this.#showDraft(opened));
+      void this.#openDraft(session).then((opened) => this.#showDraft(opened));
       return;
     }
     void this.#savesOutFor(party).then(async () => {
@@ -9342,7 +9400,7 @@ export class TillApp extends LitElement {
         this.#draftSync !== undefined
       )
         return;
-      this.#showDraft(await this.#openDraft(true, session));
+      this.#showDraft(await this.#openDraft(session));
     });
   }
 
@@ -9351,6 +9409,7 @@ export class TillApp extends LitElement {
   #showDraft(opened: OpenedDraft): void {
     if (opened === undefined || opened.sync !== this.#draftSync) return;
     this.#draftReady = opened.read;
+    if (opened.sync !== undefined) this.#scheduleBillDraftRefresh();
     if (opened.read) this.#clearUnlistedDraftStations();
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
@@ -9381,7 +9440,59 @@ export class TillApp extends LitElement {
     this.#unsavedDrafts.clear();
   }
 
+  #scheduleBillDraftRefresh(): void {
+    clearTimeout(this.#billDraftTimer);
+    this.#billDraftTimer = setTimeout(() => {
+      void this.#refreshBillDraft().finally(() => {
+        if (this.isConnected && this.#draftSync !== undefined) this.#scheduleBillDraftRefresh();
+      });
+    }, 15_000);
+  }
+
+  async #refreshBillDraft(): Promise<void> {
+    const sync = this.#draftSync;
+    if (
+      sync === undefined ||
+      this.#billDraftReading === sync ||
+      !this.#tableCatalogueActive() ||
+      this.operatorName === "" ||
+      document.hidden
+    )
+      return;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const before = sync.edit;
+    this.#billDraftReading = sync;
+    try {
+      const loaded = await sync.load();
+      if (
+        !loaded ||
+        sync !== this.#draftSync ||
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit
+      )
+        return;
+      this.#draftReady = true;
+      const edit = sync.edit;
+      if (
+        sync.candidate !== null &&
+        edit?.editorId != null &&
+        edit.editorId !== sync.personId &&
+        (before?.editorId !== edit.editorId || before.editorVersion !== edit.editorVersion)
+      ) {
+        this.#onDraftRefused(sync, {
+          refused: "draft.taken_over",
+          ...(edit.editorName === null ? {} : { ownerName: edit.editorName }),
+        });
+      }
+      this.requestUpdate();
+    } finally {
+      if (this.#billDraftReading === sync) this.#billDraftReading = undefined;
+    }
+  }
+
   #dropDraft(): void {
+    clearTimeout(this.#billDraftTimer);
     if (this.adjusting?.source !== undefined) this.#closeAdjust();
     this.#draftSync?.drop();
     this.#draftSync = undefined;
@@ -9416,11 +9527,9 @@ export class TillApp extends LitElement {
     const party = this.orderParty?.id;
     await this.#savesOutFor(party);
     if (this.#draftSync !== sync || this.orderParty?.id !== party) return;
-    this.#showDraft(await this.#openDraft(true, session));
+    this.#showDraft(await this.#openDraft(session));
   }
 
-  /** A save refused. An edit made after the session ended is lost: nothing can send it now. A line
-   * the refusal names is marked once the table's offers are read again. */
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     this.errorKey = draftRefusalError(refusal);
@@ -9458,7 +9567,6 @@ export class TillApp extends LitElement {
     views: readonly OtherDraft[];
   };
 
-  /** The person's own unsaved edits go first; the answer's draft becomes theirs to change. */
   async #onTakeOverDraft(event: Event): Promise<void> {
     const { draftId, revision } = (event as CustomEvent<TakeOverDraftDetail>).detail;
     const sync = this.#draftSync;
@@ -9475,6 +9583,54 @@ export class TillApp extends LitElement {
       else this.errorKey = takeOverRefusalError(outcome.refused);
     } finally {
       this.takeOversAnswered += 1;
+    }
+  }
+
+  async #onResolveDraftCandidate(
+    event: CustomEvent<{ candidate: RetainedDraftCandidate; apply: boolean }>,
+  ): Promise<void> {
+    const sync = this.#draftSync;
+    const { candidate, apply } = event.detail;
+    if (sync === undefined || sync.candidate !== candidate || this.resolvingDraftCandidate === sync)
+      return;
+    if (!apply) {
+      sync.resolveCandidate(null);
+      this.requestUpdate();
+      return;
+    }
+    const expected = sync.expectedEdit;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    this.resolvingDraftCandidate = sync;
+    try {
+      const read = await sync.load();
+      if (
+        session !== this.#operatorSession ||
+        visit !== this.#orderVisit ||
+        sync !== this.#draftSync ||
+        sync.candidate !== candidate
+      )
+        return;
+      if (!read) {
+        this.errorKey = "table.draft_recovery_failed";
+        return;
+      }
+      const current = sync.expectedEdit;
+      if (
+        expected === null ||
+        current === null ||
+        expected.billId !== current.billId ||
+        expected.editorVersion !== current.editorVersion ||
+        expected.draftId !== current.draftId ||
+        expected.draftRevision !== current.draftRevision
+      ) {
+        this.#onDraftRefused(sync, { refused: "draft.out_of_date" });
+        return;
+      }
+      sync.resolveCandidate(candidate.lines);
+    } finally {
+      if (this.resolvingDraftCandidate === sync) this.resolvingDraftCandidate = null;
+      this.requestUpdate();
     }
   }
 
@@ -12779,6 +12935,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#resetPartylessDraft();
     this.leave.forceReset();
+    this.#candidateScope = undefined;
     this.#partylessScope = undefined;
     this.#basketScope = undefined;
     this.#syncBasketDraft();
@@ -13526,7 +13683,6 @@ export class TillApp extends LitElement {
     this.#abandonListRefreshes();
     this.#setScreen("lock");
     this.#configureSessionActivity();
-    // The server takes the person from the session, so the draft is saved before the session ends.
     const signIns = this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
@@ -13742,6 +13898,9 @@ export class TillApp extends LitElement {
       .orderId=${this.activeTabId}
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
+      .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+      .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
+      .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
       .takeOversAnswered=${this.takeOversAnswered}
       .party=${this.orderParty}
       .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
@@ -13867,6 +14026,9 @@ export class TillApp extends LitElement {
           .orderId=${this.activeTabId}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
+          .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
+          .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
+          .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.orderParty}
           .kitchenNote=${this.orderParty?.kitchenNote.note ?? null}
@@ -14156,6 +14318,7 @@ export class TillApp extends LitElement {
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}
         @take-over-draft=${(event: Event) => void this.#onTakeOverDraft(event)}
+        @resolve-draft-candidate=${(event: CustomEvent<{ candidate: RetainedDraftCandidate; apply: boolean }>) => void this.#onResolveDraftCandidate(event)}
         @fire-group=${(event: Event) => void this.#onFireGroup(event)}
         @fire-held-line=${(event: Event) => void this.#onFireHeldLine(event)}
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}

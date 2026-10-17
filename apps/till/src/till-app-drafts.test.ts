@@ -210,6 +210,8 @@ let server: DraftServer;
 let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
+  server.bills.add("wo-7");
+  server.bills.add("wo-new");
   return {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
@@ -404,6 +406,33 @@ describe("W69 unassigned table draft", () => {
     emit(await question(el), "wt-unsaved-choice", { decision });
     await flush(el, 6);
   }
+
+  it("retains carried dishes for review when the newly seated bill cannot be read", async () => {
+    const { el } = await opening({
+      seatTable: vi.fn(async () => {
+        api.getTablesState.mockResolvedValue([
+          mesa4,
+          table("t9", "9", party({ id: "v-new", mainBillId: "wo-new", tableIds: ["t9"] })),
+        ]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+    });
+    await tap(el, "Beer");
+    await back(el);
+    api.listDrafts.mockRejectedValueOnce(new TypeError("offline after seating"));
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+    expect(tableOrder(el)!.draftStore).toBeNull();
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(
+      tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")?.textContent ?? "",
+    ).toContain("Beer");
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
 
   it("places carried dishes as a first table order only when the table is seated", async () => {
     const { el } = await opening({
@@ -7655,7 +7684,11 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       expect(replacement.recordSale).not.toHaveBeenCalled();
       expect(replacement.getBillBalance).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
-      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(rows(el)).toEqual([]);
+      expect(
+        tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")?.textContent ?? "",
+      ).toContain("Beer");
+      expect(draft(el).editsLocked).toBe(true);
     },
   );
 
@@ -7822,5 +7855,346 @@ describe("A773 known bill draft switch restrictions", () => {
     expect(rows(el)).toEqual([]);
     expect(browser(el)!.inert).toBe(true);
     expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+});
+
+describe("A773 retained bill candidates in the app", () => {
+  const candidate = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-candidate]");
+  async function loseSave(el: TillApp): Promise<void> {
+    await tap(el, "Beer");
+    api.saveDraft.mockRejectedValueOnce(new TypeError("lost save reply"));
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el, 6);
+  }
+  async function reopen(el: TillApp, personId: string, name: string): Promise<void> {
+    await signIn(el, personId, name);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+  }
+
+  it("keeps a failed save separate from the saved order without an automatic retry", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    expect(rows(el)).toEqual([]);
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(candidate(el)!.querySelector("[data-draft-select]")).toBeNull();
+    expect(draft(el).editsLocked).toBe(true);
+    await tap(el, "Steak");
+    expect(rows(el)).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("retains the same person's candidate across sign-out and hides it from another person", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    await reopen(el, "p2", "Luis");
+    expect(candidate(el)).toBeNull();
+    expect(rows(el)).toEqual([]);
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    await reopen(el, "p1", "Ana");
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(rows(el)).toEqual([]);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("finds the bill's candidate after relocation without applying its old party or expectation", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    api.getTablesState.mockResolvedValue([
+      table("t4", "4", party({ id: "joined", mainBillId: "wo-4" })),
+      mesa7,
+    ]);
+    await reopen(el, "p1", "Ana");
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(rows(el)).toEqual([]);
+    const saves = api.saveDraft.mock.calls.length;
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(candidate(el)).toBeNull();
+    expect(api.saveDraft.mock.calls.length).toBe(saves);
+    await back(el);
+    expect(api.saveDraft.mock.calls.at(-1)![0]).toBe("joined");
+    expect(api.saveDraft.mock.calls.at(-1)![1].expectedEdit).toEqual({
+      billId: "wo-4",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
+  });
+
+  it("requires an authoritative read before applying a reviewed candidate", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("discards only the local candidate without writing or sending the saved order", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-discard]")!.click();
+    await flush(el, 6);
+    expect(candidate(el)).toBeNull();
+    expect(rows(el)).toEqual([]);
+    expect(draft(el).editsLocked).toBe(false);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    await tap(el, "Steak");
+    expect(rows(el)).toEqual(["Steak ×1"]);
+  });
+  it("refreshes the visible bill on focus and separates a rival takeover from local edits", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    await tap(el, "Steak");
+    const saved = server.drafts[0]!;
+    server.personId = "p2";
+    server.personName = "Luis";
+    server.takeOver("v1", saved.id, saved.revision);
+    server.personId = "p1";
+    server.personName = "Ana";
+    const reads = api.listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(candidate(el)?.textContent ?? "").toContain("Steak");
+    expect(banner(el)?.textContent ?? "").toContain("Luis");
+    expect(candidate(el)!.querySelector("[data-candidate-apply]")!.hasAttribute("disabled")).toBe(
+      true,
+    );
+    const selection =
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-select]")!;
+    selection.click();
+    await flush(el);
+    expect(selection.getAttribute("aria-pressed")).toBe("false");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes every fifteen seconds and keeps confirmed authority after a failed periodic read", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      el.api = { ...api } as unknown as TillApi;
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      const reads = api.listDrafts.mock.calls.length;
+      api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
+      await vi.advanceTimersByTimeAsync(15_000);
+      await el.updateComplete;
+      expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
+      expect(draft(el).editsLocked).toBe(false);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(api.listDrafts.mock.calls.length).toBe(reads + 2);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+    await back(el);
+    const reads = api.listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    expect(api.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("retains unsaved work when the API is replaced and ignores the old save reply", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    let answer!: () => void;
+    api.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return server.snapshot(server.save(partyId, save));
+    });
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    const read = vi.fn(server.listDrafts.getMockImplementation()!);
+    el.api = { ...api, listDrafts: read } as unknown as TillApi;
+    await flush(el, 6);
+    expect(read).toHaveBeenCalled();
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(rows(el)).toEqual([]);
+    answer();
+    await flush(el, 6);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(rows(el)).toEqual([]);
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+  });
+
+  it("protects retained candidates from browser unload until they are explicitly resolved", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    const before = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(before);
+    expect(before.defaultPrevented).toBe(true);
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-discard]")!.click();
+    await flush(el);
+    const after = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
+
+  it("keeps the candidate when the saved bill changes during explicit review", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    const originalRead = server.listDrafts.getMockImplementation()!;
+    api.listDrafts.mockImplementationOnce(async (partyId) => {
+      server.personId = "p1";
+      server.personName = "Ana";
+      server.save(partyId, {
+        ...api.saveDraft.mock.calls[0]![1],
+        lines: [{ ...api.saveDraft.mock.calls[0]![1].lines[0], menuItemId: "offer-flan" }],
+      });
+      server.personId = "p1";
+      server.personName = "Ana";
+      return originalRead(partyId);
+    });
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(draft(el).editsLocked).toBe(true);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280])
+        it(`retained candidate native review and discard ${locale} ${theme} ${width}`, async () => {
+          const size = { width: window.innerWidth, height: window.innerHeight };
+          await page.viewport(width, 900);
+          try {
+            const { el, host } = await mountApp({}, undefined, theme);
+            await openMesa(el);
+            await loseSave(el);
+            setLocale(locale);
+            await flush(el, 6);
+            const screen = tableOrder(el)!;
+            await resized(screen);
+            const review = screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+            if (width === 390) {
+              expect(review).not.toBeNull();
+              await userEvent.click(review!);
+              await flush(el);
+            }
+            const panel = candidate(el)!;
+            expect(panel.getBoundingClientRect().width).toBeGreaterThan(0);
+            expect(panel.textContent).toContain(t("unsaved.message"));
+            expect(panel.textContent).toContain("Beer");
+            await commands.parkPointer();
+            await expectNoA11yViolations(host);
+            await page.screenshot({
+              path: `__screenshots__/a773-candidate-look/${locale}-${theme}-${width}.png`,
+            });
+            await userEvent.click(panel.querySelector<HTMLElement>("[data-candidate-discard]")!);
+            await flush(el, 6);
+            expect(candidate(el)).toBeNull();
+            expect(rows(el)).toEqual([]);
+            expect(api.saveDraft).toHaveBeenCalledOnce();
+          } finally {
+            setLocale("en");
+            await page.viewport(size.width, size.height);
+          }
+        });
+  it("keeps a pending reviewed candidate after leaving its table", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    const read = server.listDrafts.getMockImplementation()!;
+    let answer!: () => void;
+    api.listDrafts.mockImplementationOnce(async (partyId) => {
+      const observed = await read(partyId);
+      await new Promise<void>((resolve) => (answer = resolve));
+      return observed;
+    });
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    answer();
+    await flush(el, 6);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(candidate(el)?.textContent ?? "").toContain("Beer");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+  it("starts another bill's candidate review while an old bill's read is still pending", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await loseSave(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el, 6);
+    await tap(el, "Steak");
+    api.saveDraft.mockRejectedValueOnce(new TypeError("lost second save"));
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 6);
+    const read = server.listDrafts.getMockImplementation()!;
+    let answer!: () => void;
+    api.listDrafts.mockImplementationOnce(async (partyId) => {
+      const observed = await read(partyId);
+      await new Promise<void>((resolve) => (answer = resolve));
+      return observed;
+    });
+    expect(candidate(el)).not.toBeNull();
+    candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!.click();
+    await flush(el);
+    try {
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el, 6);
+      const apply = candidate(el)!.querySelector<HTMLElement>("[data-candidate-apply]")!;
+      expect(apply.hasAttribute("disabled")).toBe(false);
+      apply.click();
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Steak ×1"]);
+      expect(candidate(el)).toBeNull();
+      expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    } finally {
+      answer();
+      await flush(el, 6);
+    }
   });
 });

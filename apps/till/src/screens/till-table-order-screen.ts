@@ -1,3 +1,4 @@
+import type { RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupName, groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import {
@@ -1434,8 +1435,10 @@ export class TillTableOrderScreen extends LitElement {
 
   readonly #ownDraft = new WorkingOrderStore();
 
-  /** The other people's open drafts on the party, oldest first. */
   @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
+  @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
+  @property({ type: Boolean }) candidateReviewAllowed = false;
+  @property({ type: Boolean }) candidateReviewBusy = false;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
@@ -1477,6 +1480,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = {
       store,
       stop: store.subscribe(() => {
+        if (store.editsLocked) {
+          this.#selected = new WeakSet();
+          this.pendingDraft = null;
+          this.#closeChange();
+        }
         this.#noteDraftStart(store);
         this.requestUpdate();
       }),
@@ -2776,8 +2784,38 @@ export class TillTableOrderScreen extends LitElement {
           }
         </div>
         ${this.#roundControl(draft, entries)} ${this.#otherDraftPanels(draft)}
+        ${this.#retainedDraftPanel()}
       </section>
     </div>`;
+  }
+
+  #retainedDraftPanel(): TemplateResult | typeof nothing {
+    const candidate = this.retainedDraft;
+    if (candidate === null) return nothing;
+    return html`<section
+      class="other-draft"
+      data-draft-candidate
+      aria-labelledby="draft-candidate-title"
+    >
+      <h3 class="other-draft-title" id="draft-candidate-title">${t("unsaved.message")}</h3>
+      <ul class="other-draft-lines">
+        ${candidate.lines.map((line) => html`<li class="other-draft-line" data-candidate-line>${this.#lineSummary(line, "other-draft-name")}</li>`)}
+      </ul>
+      <wt-button
+        variant="secondary"
+        data-candidate-discard
+        ?disabled=${this.candidateReviewBusy}
+        @click=${() => this.#dispatch("resolve-draft-candidate", { candidate, apply: false })}
+        >${t("unsaved.discard")}</wt-button
+      >
+      <wt-button
+        variant=${this.candidateReviewAllowed ? "primary" : "secondary"}
+        data-candidate-apply
+        ?disabled=${!this.candidateReviewAllowed || this.candidateReviewBusy}
+        @click=${() => this.#dispatch("resolve-draft-candidate", { candidate, apply: true })}
+        >${t("basket_refresh.confirm")}</wt-button
+      >
+    </section>`;
   }
 
   /** Read-only: nothing in a panel changes or sends another person's lines but taking them over. */
@@ -3188,7 +3226,10 @@ export class TillTableOrderScreen extends LitElement {
         class="option draft-select"
         data-draft-select=${index}
         aria-pressed=${selected}
-        @click=${() => this.#toggleSelected(line)}
+        ?disabled=${store.editsLocked || store.sending}
+        @click=${() => {
+          if (!store.editsLocked && !store.sending) this.#toggleSelected(line);
+        }}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
         <span class="draft-line-name"
