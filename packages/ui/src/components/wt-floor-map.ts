@@ -13,6 +13,7 @@ import {
   cropToTables,
   fitScale,
   showsName,
+  unionRect,
 } from "../floor-plan-geometry.js";
 
 /** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
@@ -405,6 +406,12 @@ export class WtFloorMap extends LitElement {
 
   #travel: Travel | null = null;
 
+  #tablesCrop: PlanRect | null = null;
+
+  /** Every crop this drag has drawn, united, so a drag back inward does not shrink the plan; null
+   * when no movable group is dragged. */
+  #dragCrop: PlanRect | null = null;
+
   /** Built from `tables` when it changes: the groups in `tables`' order, in reading order, and by
    * member id. */
   #groups: Group[] = [];
@@ -548,6 +555,7 @@ export class WtFloorMap extends LitElement {
   #endDrag(): void {
     this.#clearHeld();
     this.#drag = null;
+    this.#dragCrop = null;
     this.requestUpdate();
   }
 
@@ -579,8 +587,27 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
+    this.#dragCrop = this.#grownCrop(this.#dragCrop);
     this.requestUpdate();
   };
+
+  /** `from`, or the tables' crop, united with the crop of the tables as the drag draws them. */
+  #grownCrop(from: PlanRect | null): PlanRect | null {
+    const drag = this.#drag!;
+    const group = this.#groupOf.get(drag.tableId)!;
+    if (group.fixed) return null;
+    const moved = this.tables.map((t) =>
+      group.members.includes(t)
+        ? { ...t.placement, x: t.placement.x + drag.dx, y: t.placement.y + drag.dy }
+        : t.placement,
+    );
+    return unionRect(from ?? this.#tablesCrop!, cropToTables(moved)!);
+  }
+
+  /** What the view fits and the ratio describes: a drag's crop while the person has not moved the view. */
+  #crop(): PlanRect | null {
+    return (this.#touched ? null : this.#dragCrop) ?? this.#tablesCrop;
+  }
 
   /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale. */
   #travelled(dx: number, dy: number): { x: number; y: number } {
@@ -771,21 +798,24 @@ export class WtFloorMap extends LitElement {
       this.#links = linksOf(this.#groups);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
+      this.#tablesCrop = cropToTables(this.tables.map((t) => t.placement));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
-      const crop = cropToTables(this.tables.map((t) => t.placement));
-      this.style.setProperty(
-        "--floor-map-ratio",
-        String(crop === null ? 1 : crop.width / crop.height),
-      );
+      else if (this.#drag !== null) this.#dragCrop = this.#grownCrop(null);
     }
+    const crop = this.#crop();
+    // A host whose CSS reads this is resized when it changes, and the observer refits the view.
+    this.style.setProperty(
+      "--floor-map-ratio",
+      String(crop === null ? 1 : crop.width / crop.height),
+    );
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
   }
 
   #fitView(): void {
     if (this.#size === null) return;
-    const crop = cropToTables(this.tables.map((t) => t.placement));
+    const crop = this.#crop();
     if (crop === null) return;
     const scale = fitScale(crop, this.#size);
     this.#fit = { scale, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };

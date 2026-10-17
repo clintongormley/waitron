@@ -247,6 +247,17 @@ export function cropToTables(
   };
 }
 
+export function unionRect(a: PlanRect, b: PlanRect): PlanRect {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
+  };
+}
+
 /** Pixels per grid square that fit the whole crop into the viewport. */
 export function fitScale(crop: PlanRect, viewport: { width: number; height: number }): number {
   return Math.min(viewport.width / crop.width, viewport.height / crop.height);

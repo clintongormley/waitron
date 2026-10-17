@@ -161,3 +161,147 @@ it("a second drag starts its travel afresh", async () => {
     { tableId: "t1", x: 11, y: 5, targetId: null },
   ]);
 });
+
+/** A host whose height follows the published ratio, as the till's CSS makes it. */
+async function growingMap(tables: FloorMapTable[]): Promise<WtFloorMap> {
+  const el = (await mountInShadowRoot(
+    `<wt-floor-map style="display: block; width: 360px; aspect-ratio: var(--floor-map-ratio)"></wt-floor-map>`,
+  )) as WtFloorMap;
+  el.tables = tables;
+  await settled(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  return el;
+}
+
+function centreOf(el: WtFloorMap, id: string): { x: number; y: number } {
+  const box = button(el, id).getBoundingClientRect();
+  const outer = el.getBoundingClientRect();
+  return { x: box.left - outer.left + box.width / 2, y: box.top - outer.top + box.height / 2 };
+}
+
+/** Holds `id` at its centre and moves the pointer `squares` across and down at the drawn scale. */
+async function holdAndMove(el: WtFloorMap, id: string, across: number, down: number) {
+  const scale = button(el, id).getBoundingClientRect().width / 8;
+  const from = centreOf(el, id);
+  hold(el, from.x, from.y);
+  const to = { x: from.x + across * scale, y: from.y + down * scale };
+  move(el, to.x, to.y);
+  await settled(el);
+  return { from, to };
+}
+
+function drawnInside(el: WtFloorMap, id: string): boolean {
+  const box = button(el, id).getBoundingClientRect();
+  const outer = el.getBoundingClientRect();
+  return (
+    box.left >= outer.left &&
+    box.top >= outer.top &&
+    box.right <= outer.right &&
+    box.bottom <= outer.bottom
+  );
+}
+
+const widthOf = (el: WtFloorMap, id: string) => button(el, id).getBoundingClientRect().width;
+const heightOfHost = (el: WtFloorMap) => el.getBoundingClientRect().height;
+
+// T1 in the growing host: its 12 × 8 crop at 30 px a square, the host 360 × 240. Kept inside the
+// test page's 414 px width, past which a press finds no table.
+it("grows the plan while a table is held past its right edge, and fits it", async () => {
+  const el = await growingMap([t1]);
+  expect(widthOf(el, "t1")).toBe(240);
+  await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  expect(heightOfHost(el)).toBe(180);
+  expect(widthOf(el, "t1")).toBe(180);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("grows the plan while a table is held past its bottom edge, and fits it", async () => {
+  const el = await growingMap([t1]);
+  await holdAndMove(el, "t1", 0, 6);
+  expect(Number(ratioOf(el))).toBe(12 / 14);
+  expect(heightOfHost(el)).toBe(420);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("a drag that grew the plan lands where it is drawn", async () => {
+  const el = await growingMap([t1]);
+  const { to } = await holdAndMove(el, "t1", 4, 0);
+  up(el, to.x, to.y);
+  expect(drops).toEqual([{ tableId: "t1", x: 14, y: 5, targetId: null }]);
+});
+
+it("dragging the edge table inward does not shrink the plan during the drag", async () => {
+  const el = await growingMap([t1, t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 })]);
+  const before = heightOfHost(el);
+  const scale = widthOf(el, "t1") / 8;
+  const from = centreOf(el, "t2");
+  hold(el, from.x, from.y);
+  move(el, from.x - 4 * scale, from.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(20 / 8);
+  expect(heightOfHost(el)).toBe(before);
+});
+
+it("a release whose new tables have the drag's crop keeps the view where the drag left it", async () => {
+  // T0 holds the left edge, so the moved tables' crop is the drag's crop.
+  const t0 = t("t0", "T0", { x: 0, y: 5, width: 4, height: 4 });
+  const el = await growingMap([t0, t1]);
+  const { to } = await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(26 / 8);
+  const during = button(el, "t1").getBoundingClientRect();
+  document.addEventListener(
+    "wt-table-drag-end",
+    () => (el.tables = [t0, { ...t1, placement: { ...t1.placement, x: 14 } }]),
+    { once: true },
+  );
+  up(el, to.x, to.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(26 / 8);
+  expect(button(el, "t1").getBoundingClientRect().toJSON()).toEqual(during.toJSON());
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("a drag out and back, released on the same tables, returns to the tables' ratio and fit", async () => {
+  const el = await growingMap([t1]);
+  const { from, to } = await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  const scale = widthOf(el, "t1") / 8;
+  move(el, to.x - 4 * scale, to.y);
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(16 / 8);
+  up(el, to.x - 4 * scale, from.y);
+  await settled(el);
+  expect(drops).toEqual([{ tableId: "t1", x: 10, y: 5, targetId: null }]);
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(240);
+});
+
+it("after a pan, a drag past the edge changes neither the ratio nor the scale", async () => {
+  const el = await growingMap([t1]);
+  const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 });
+  el.dispatchEvent(event);
+  await settled(el);
+  await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(240);
+});
+
+it("a fixed table's drag changes neither the ratio nor the scale", async () => {
+  const el = await growingMap([{ ...t1, fixed: true }]);
+  await holdAndMove(el, "t1", 4, 0);
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(240);
+});
+
+it("tables replaced mid-drag restart the drag's crop from the new tables", async () => {
+  const el = await growingMap([t1, t("t2", "T2", { x: 22, y: 5, width: 4, height: 4 })]);
+  await holdAndMove(el, "t1", 2, 0);
+  expect(Number(ratioOf(el))).toBe(20 / 8);
+  el.tables = [t1];
+  await settled(el);
+  expect(Number(ratioOf(el))).toBe(14 / 8);
+});
