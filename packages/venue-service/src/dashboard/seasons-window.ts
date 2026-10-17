@@ -400,7 +400,7 @@ export class SeasonsWindow extends LitElement {
       // The saved list is the new baseline, so the snapshot that follows finds nothing changed; a
       // list delivered while the Save was in flight is kept over the answer.
       this.baseline = draftOf(this.seasons === listed ? saved : this.seasons);
-      this.draft = { ...this.baseline, next: submitted.next };
+      this.draft = { ...this.baseline, next: Math.max(this.draft!.next, submitted.next) };
       this.scope?.commit(this.baseline);
       this.dispatchEvent(
         new CustomEvent<{ seasons: OpeningHoursModel["seasons"] }>("seasons-saved", {
