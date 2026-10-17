@@ -8173,7 +8173,6 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
-  /** A bill with a full invoice chosen prints no guests line, so its payment asks none. */
   #billPayingAsksGuests(open: BillPaying): boolean {
     return open.surface === "table"
       ? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.invoiceType !== "F1"
@@ -11787,15 +11786,17 @@ export class TillApp extends LitElement {
     const asked = open.asked!;
     const detail: ReceiptGuestsDetail =
       (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
-    const confirmation = {
-      ...confirmationOf(
-        paymentAsk(asked.choice, asked.pay, asked.allocation),
-        open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
-        asked.card,
-      ),
-      ...("guests" in detail ? { guests: detail.guests } : {}),
-    };
-    const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    const confirmation = confirmationOf(
+      paymentAsk(asked.choice, asked.pay, asked.allocation),
+      open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
+      asked.card,
+    );
+    // The guests stay out of the resend key, as the server's `retryShapeOf` leaves them out.
+    const keyed = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    const submission =
+      "guests" in detail
+        ? { ...keyed, request: { ...keyed.request, guests: detail.guests } }
+        : keyed;
     const turn = ++this.#paymentSends;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;

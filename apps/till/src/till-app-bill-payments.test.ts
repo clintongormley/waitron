@@ -2369,6 +2369,46 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(sent()[0]).toHaveProperty("guests", null);
   });
 
+  it("sends a payment that got no answer again under the same submission id after the guests count changed, carrying the new count", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await retrieved({ takeBillPayment });
+    payRest(el)!.click();
+    await flush(el);
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const first = takeBillPayment.mock.calls.length;
+
+    const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "3";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    takeBillPayment.mockResolvedValueOnce(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
+        invoiceOf("120.00"),
+      ),
+    );
+    await press(el, "[data-pay-confirm]");
+
+    await expect.poll(() => takeBillPayment.mock.calls.length).toBe(first + 1);
+    expect(new Set(sent().map((request) => request.submissionId)).size).toBe(1);
+    expect(
+      sent()
+        .slice(0, first)
+        .map((request) => request.guests),
+    ).toEqual(Array(first).fill(null));
+    expect(sent()[first]).toHaveProperty("guests", 3);
+  });
+
   it("asks no guests and sends no guests key on a counter order with a full invoice chosen", async () => {
     const takeBillPayment = vi
       .fn()
