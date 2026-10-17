@@ -113,10 +113,16 @@ export interface RotaWeek {
   timeZone: string;
   week: string;
   version: { id: string; status: "draft" | "published"; changedSincePublished: boolean } | null;
+  /** The seasons the week's days fall in, in the order the days first name them. */
+  seasons: { id: string; name: string }[];
   days: {
     businessDay: string;
     cutover: string;
     closedAllDay: boolean;
+    /** Some active department has opening hours that business day. */
+    hasHours: boolean;
+    seasonId: string | null;
+    specialDay: { id: string; name: string } | null;
     areas: { area: AreaRef; match: import("./slots.js").AreaDayMatch }[];
     notInSlot: { shiftId: string; outsideWeek: boolean }[];
   }[];

@@ -88,6 +88,7 @@ const request = (async (path: string) => {
       locationId: "location",
       timeZone: "Europe/Madrid",
       version: null,
+      seasons: [],
       days: [],
       shifts: [],
       openSwaps: [],

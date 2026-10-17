@@ -36,10 +36,14 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
     timeZone: "Europe/Madrid",
     week,
     version: { id: "draft", status: "draft", changedSincePublished: true },
+    seasons: [{ id: "winter", name: "Winter" }],
     days: Array.from({ length: 7 }, (_, n) => ({
       businessDay: day(n),
       cutover: "06:00",
       closedAllDay: n === 0,
+      hasHours: n !== 0,
+      seasonId: "winter",
+      specialDay: null,
       areas: [
         {
           area: rotaArea,

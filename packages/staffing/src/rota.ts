@@ -9,6 +9,8 @@ import {
   localTimeOccurrences,
   offsetMinutes,
   readDayPlan,
+  readSeasons,
+  resolveDepartmentsDays,
 } from "@waitron/venue-service";
 import { WorkforceBackend, absences, employments, shifts, shiftSwaps } from "@waitron/workforce";
 import { listStaffingAreas, resolveStaffing } from "./paint.js";
@@ -38,8 +40,19 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const clock = await readLocationClock(tx, cfg.locationId);
   const cutover = (day: string) => cutoverForBusinessDay(clock, day);
-  const plan = await readDayPlan(tx, { locationId: locationId(cfg.locationId) }, days);
+  const scope = { locationId: locationId(cfg.locationId) };
+  const venueSeasons = await readSeasons(tx, scope);
+  const plan = await readDayPlan(tx, scope, days, venueSeasons);
   const areas = await listStaffingAreas(tx, cfg);
+  const opening = await resolveDepartmentsDays(
+    tx,
+    scope,
+    areas.flatMap(({ area }) => (area.kind === "department" ? [area.id] : [])),
+    days,
+    clock,
+    plan,
+  );
+  const weekSeasonIds = new Set(days.map((day) => plan.seasonIdOn.get(day)));
   const paint = await resolveStaffing(tx, cfg, days, { plan, areas, cutover: clock.dayCutover });
   const roles = await listStaffRoles(tx, cfg);
   const data = await readRotaRows(tx, cfg, week, week);
@@ -80,44 +93,55 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
             version.status === "draft" && data.versions.some((v) => v.status === "published"),
         }
       : null,
-    days: days.map((businessDay, index) => ({
-      businessDay,
-      cutover: cutover(businessDay),
-      closedAllDay: plan.special.get(businessDay)?.closedAllDay ?? false,
-      areas: areas.map(({ area }) => ({
-        area,
-        match: matchAreaDay(
-          slotsForDay(
-            businessDay,
-            area,
-            paint.get(businessDay)!.get(areaKey(area)) ?? [],
-            cutover(businessDay),
+    seasons: [...weekSeasonIds].flatMap((id) =>
+      venueSeasons.filter((season) => season.id === id).map(({ id, name }) => ({ id, name })),
+    ),
+    days: days.map((businessDay, index) => {
+      const special = plan.special.get(businessDay) ?? null;
+      return {
+        businessDay,
+        cutover: cutover(businessDay),
+        closedAllDay: special?.closedAllDay ?? false,
+        hasHours: [...opening.values()].some((d) => d.get(businessDay)!.ranges.length > 0),
+        seasonId: plan.seasonIdOn.get(businessDay) ?? null,
+        specialDay: special && { id: special.specialDayId, name: special.name },
+        areas: areas.map(({ area }) => ({
+          area,
+          match: matchAreaDay(
+            slotsForDay(
+              businessDay,
+              area,
+              paint.get(businessDay)!.get(areaKey(area)) ?? [],
+              cutover(businessDay),
+            ),
+            placed.filter(
+              (s) =>
+                s.businessDay === businessDay &&
+                s.area !== null &&
+                areaKey(s.area) === areaKey(area),
+            ),
+            holds,
           ),
-          placed.filter(
-            (s) =>
-              s.businessDay === businessDay && s.area !== null && areaKey(s.area) === areaKey(area),
-          ),
-          holds,
-        ),
-      })),
-      notInSlot: placed
-        .filter(
-          (s) =>
-            (s.businessDay < week
-              ? index === 0
-              : s.businessDay > days[6]!
-                ? index === 6
-                : s.businessDay === businessDay) &&
-            (s.businessDay < week ||
-              s.businessDay > days[6]! ||
-              s.area === null ||
-              !areas.some((a) => areaKey(a.area) === areaKey(s.area!))),
-        )
-        .map((s) => ({
-          shiftId: s.shiftId,
-          outsideWeek: s.businessDay < week || s.businessDay > days[6]!,
         })),
-    })),
+        notInSlot: placed
+          .filter(
+            (s) =>
+              (s.businessDay < week
+                ? index === 0
+                : s.businessDay > days[6]!
+                  ? index === 6
+                  : s.businessDay === businessDay) &&
+              (s.businessDay < week ||
+                s.businessDay > days[6]! ||
+                s.area === null ||
+                !areas.some((a) => areaKey(a.area) === areaKey(s.area!))),
+          )
+          .map((s) => ({
+            shiftId: s.shiftId,
+            outsideWeek: s.businessDay < week || s.businessDay > days[6]!,
+          })),
+      };
+    }),
     shifts: placed,
     openSwaps: placed.length
       ? await tx

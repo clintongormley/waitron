@@ -2,10 +2,25 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  kitchenStations,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { VENUE_SERVICE_MIGRATIONS, departments } from "@waitron/venue-service";
+import {
+  VENUE_SERVICE_MIGRATIONS,
+  departmentDayRanges,
+  departmentDays,
+  departments,
+  menuPeriods,
+  seasons,
+  specialDayDates,
+  specialDays,
+} from "@waitron/venue-service";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -130,6 +145,60 @@ async function rawShift(
   });
 }
 
+async function servicePeriod(departmentId: string) {
+  return tx(async (t) => {
+    const menuId = randomUUID();
+    await t.insert(catalogues).values({ id: menuId, name: `Menu ${menuId}` });
+    const [period] = await t
+      .insert(menuPeriods)
+      .values({ departmentId, menuId, name: "Service" })
+      .returning({ id: menuPeriods.id });
+    return period!.id;
+  });
+}
+async function seasonHours(
+  v: { departmentId: string; seasonId: string },
+  periodId: string,
+  weekday: number,
+) {
+  await tx(async (t) => {
+    const [day] = await t
+      .insert(departmentDays)
+      .values({ departmentId: v.departmentId, seasonId: v.seasonId, weekday })
+      .returning({ id: departmentDays.id });
+    await t.insert(departmentDayRanges).values({
+      dayId: day!.id,
+      departmentId: v.departmentId,
+      periodId,
+      startsAt: "19:00:00",
+      endsAt: "23:00:00",
+    });
+  });
+}
+async function specialDay(cfg: Cfg, name: string, date: string, closedAllDay = false) {
+  return tx(async (t) => {
+    const [special] = await t
+      .insert(specialDays)
+      .values({ locationId: cfg.locationId, name })
+      .returning({ id: specialDays.id });
+    const [row] = await t
+      .insert(specialDayDates)
+      .values({ specialDayId: special!.id, locationId: cfg.locationId, date, closedAllDay })
+      .returning({ id: specialDayDates.id });
+    return { id: special!.id, dateId: row!.id };
+  });
+}
+async function addSeason(cfg: Cfg, name: string, startsOn: string) {
+  return tx(async (t) => {
+    const [row] = await t
+      .insert(seasons)
+      .values({ locationId: cfg.locationId, name, startsOn })
+      .returning({ id: seasons.id });
+    return row!.id;
+  });
+}
+const hours = (r: RotaWeek) => r.days.map((d) => [d.businessDay, d.hasHours]);
+
 describe("the rota week", () => {
   it("includes its location and clock zone for passive warning reads and candidate previews", async () => {
     const v = await venue();
@@ -196,6 +265,110 @@ describe("the rota week", () => {
     const r = await read(v);
     expect(r.version).toEqual({ id: draft, status: "draft", changedSincePublished: true });
     expect(r.absences).toEqual([{ personId: v.ana, startsOn: "2026-11-29", endsOn: "2026-11-30" }]);
+  });
+  it("names each day's season and special day, and the seasons the week touches", async () => {
+    const v = await venue();
+    const fiesta = await specialDay(v.cfg, "Fiesta", "2026-12-02");
+    const r = await read(v);
+    expect(r.days[0]!.seasonId).toBe(v.seasonId);
+    expect(r.days[2]!.specialDay).toEqual({ id: fiesta.id, name: "Fiesta" });
+    expect(r.days.filter((_, i) => i !== 2).map((d) => d.specialDay)).toEqual(Array(6).fill(null));
+    expect(r.seasons).toEqual([{ id: v.seasonId, name: "Summer" }]);
+  });
+  it("lists the seasons in the order the week first touches them when one starts mid-week", async () => {
+    const v = await venue();
+    const winter = await addSeason(v.cfg, "Winter", "12-03");
+    const r = await read(v);
+    expect(r.days.map((d) => d.seasonId)).toEqual([
+      ...Array(3).fill(v.seasonId),
+      ...Array(4).fill(winter),
+    ]);
+    expect(r.seasons).toEqual([
+      { id: v.seasonId, name: "Summer" },
+      { id: winter, name: "Winter" },
+    ]);
+  });
+  it("lists a season that starts earlier in the year after the one the week begins in", async () => {
+    const v = await venue();
+    const winter = await addSeason(v.cfg, "Winter", "01-01");
+    const r = await read(v, "2026-12-28");
+    expect(r.days.map((d) => d.seasonId)).toEqual([
+      ...Array(4).fill(v.seasonId),
+      ...Array(3).fill(winter),
+    ]);
+    expect(r.seasons).toEqual([
+      { id: v.seasonId, name: "Summer" },
+      { id: winter, name: "Winter" },
+    ]);
+  });
+  it("says which days have opening hours: a season weekday with a range, not one without, and not a special day closed all day", async () => {
+    const v = await venue();
+    const period = await servicePeriod(v.departmentId);
+    await seasonHours(v, period, 2);
+    await seasonHours(v, period, 4);
+    await specialDay(v.cfg, "Closed", "2026-12-03", true);
+    expect(hours(await read(v))).toEqual([
+      ["2026-11-30", false],
+      ["2026-12-01", true],
+      ["2026-12-02", false],
+      ["2026-12-03", false],
+      ["2026-12-04", false],
+      ["2026-12-05", false],
+      ["2026-12-06", false],
+    ]);
+  });
+  it.each([
+    ["with", true],
+    ["without", false],
+  ] as const)(
+    "a special day %s a range of its own on a weekday the season has none has hours %s",
+    async (_, painted) => {
+      const v = await venue();
+      const period = await servicePeriod(v.departmentId);
+      const fiesta = await specialDay(v.cfg, "Fiesta", "2026-12-02");
+      if (painted)
+        await tx(async (t) => {
+          const [day] = await t
+            .insert(departmentDays)
+            .values({ departmentId: v.departmentId, specialDayDateId: fiesta.dateId })
+            .returning({ id: departmentDays.id });
+          await t.insert(departmentDayRanges).values({
+            dayId: day!.id,
+            departmentId: v.departmentId,
+            periodId: period,
+            startsAt: "13:00:00",
+            endsAt: "16:00:00",
+          });
+        });
+      expect(hours(await read(v))).toEqual(
+        [
+          "2026-11-30",
+          "2026-12-01",
+          "2026-12-02",
+          "2026-12-03",
+          "2026-12-04",
+          "2026-12-05",
+          "2026-12-06",
+        ].map((d) => [d, d === "2026-12-02" && painted]),
+      );
+    },
+  );
+  it("an inactive department's hours do not count", async () => {
+    const v = await venue();
+    await seasonHours(v, await servicePeriod(v.departmentId), 2);
+    expect((await read(v)).days[1]!.hasHours).toBe(true);
+    await tx((t) =>
+      t.update(departments).set({ active: false }).where(eq(departments.id, v.departmentId)),
+    );
+    expect((await read(v)).days.map((d) => d.hasHours)).toEqual(Array(7).fill(false));
+  });
+  it("a location with no season names none", async () => {
+    const v = await seedVenue(suite.db);
+    await tx((t) => t.delete(seasons).where(eq(seasons.id, v.seasonId)));
+    const r = await read(v);
+    expect(r.days.map((d) => d.seasonId)).toEqual(Array(7).fill(null));
+    expect(r.days.map((d) => d.hasHours)).toEqual(Array(7).fill(false));
+    expect(r.seasons).toEqual([]);
   });
   it.each(["department", "station"] as const)(
     "moves a switched-off %s's shifts into Not in a slot and hides its paint",
