@@ -64,7 +64,8 @@ describe("full-field replacement", () => {
     expect(
       mergeOptionalTranslations(stored, { en: "Chips", fr: "Pommes de terre" }, config),
     ).toEqual({ en: "Chips", fr: "Pommes de terre" });
-    for (const supplied of [{ fr: "Frites" }, { de: "Kartoffeln" }, { fr: " " }]) {
+    const changes: Record<string, string>[] = [{ fr: "Frites" }, { de: "Kartoffeln" }, { fr: " " }];
+    for (const supplied of changes) {
       expect(() => mergeOptionalTranslations(stored, supplied, config)).toThrowError(
         expect.objectContaining({ code: "content.translation_invalid" }),
       );
