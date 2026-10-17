@@ -40,7 +40,7 @@ const host = () =>
   ({ addController: vi.fn() }) as unknown as ConstructorParameters<typeof QueryController>[0];
 
 describe("StaffingApi", () => {
-  it.each(["staff_roles", "person_staff_roles"])(
+  it.each(["staff_roles", "person_staff_roles", "persons"])(
     "watches staff roles passively and re-reads after %s changes",
     async (type) => {
       const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ staffRoles: [waiter] }));
@@ -50,7 +50,11 @@ describe("StaffingApi", () => {
       await api(fetchImpl, liveData).watchStaffRoles(queries, apply);
       expect(apply).toHaveBeenCalledWith([waiter]);
       expect(sent(fetchImpl)).toMatchObject({ path: BASE, method: "GET", live: "1" });
-      expect(liveData.interests).toEqual([{ type: "staff_roles" }, { type: "person_staff_roles" }]);
+      expect(liveData.interests).toEqual([
+        { type: "staff_roles" },
+        { type: "person_staff_roles" },
+        { type: "persons" },
+      ]);
       fetchImpl.mockResolvedValue(jsonResponse({ staffRoles: [] }));
       liveData.invalidate([{ type }]);
       await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith([]));

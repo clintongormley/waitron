@@ -8,10 +8,15 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import type { StaffRole, StaffingApi } from "./client.js";
+import type { ListedStaffRole, StaffRole, StaffingApi } from "./client.js";
 import { staffRoleDeleteCopy } from "./staff-role-delete-copy.js";
-import { holderCount, t, tf } from "./strings.js";
+import { holderNames, t, tf } from "./strings.js";
 import "./staff-role-dialog.js";
+
+/** How many holders' names the People column shows before "plus N more". */
+export const HOLDER_NAMES_SHOWN = 5;
+
+const NO_STAFF_ROLES: readonly ListedStaffRole[] = [];
 
 type Deletion = {
   staffRoleId: string;
@@ -85,7 +90,7 @@ export class StaffRolesScreen extends LitElement {
 
   @property({ attribute: false }) api!: StaffingApi;
   @property({ type: Boolean }) readOnly = false;
-  @state() private staffRoles?: StaffRole[];
+  @state() private staffRoles?: ListedStaffRole[];
   @state() private loadError?: string;
   /** A refused move; kept apart from `loadError`, so a read's recovery does not clear it. */
   @state() private actionError?: string;
@@ -262,8 +267,8 @@ export class StaffRolesScreen extends LitElement {
     </wt-row-actions>`;
   }
 
-  #columns(): DataTableColumn<StaffRole>[] {
-    const columns: DataTableColumn<StaffRole>[] = [
+  #columns(): DataTableColumn<ListedStaffRole>[] {
+    const columns: DataTableColumn<ListedStaffRole>[] = [
       {
         key: "name",
         label: t("staffing.role.column.name"),
@@ -276,7 +281,7 @@ export class StaffRolesScreen extends LitElement {
       {
         key: "people",
         label: t("staffing.role.column.people"),
-        cell: (staffRole) => holderCount(staffRole.holderIds.length),
+        cell: (staffRole) => holderNames(staffRole.holderNames, HOLDER_NAMES_SHOWN),
       },
     ];
     if (this.readOnly) return columns;
@@ -353,9 +358,9 @@ export class StaffRolesScreen extends LitElement {
       <wt-data-table
         data-test="staff-roles"
         aria-label=${t("staffing.role.title")}
-        .rows=${staffRoles ?? []}
+        .rows=${staffRoles ?? NO_STAFF_ROLES}
         .columns=${this.#columns()}
-        .rowKey=${(staffRole: StaffRole) => staffRole.id}
+        .rowKey=${(staffRole: ListedStaffRole) => staffRole.id}
         .loading=${staffRoles === undefined && this.loadError === undefined}
         .loadingMessage=${t("staffing.role.loading")}
         .errorMessage=${staffRoles === undefined ? (this.loadError ?? "") : ""}
@@ -368,7 +373,7 @@ export class StaffRolesScreen extends LitElement {
               .api=${this.api}
               .staffRole=${this.editing ?? undefined}
               .open=${this.editing !== undefined}
-              .staffRoles=${this.staffRoles ?? []}
+              .staffRoles=${staffRoles ?? NO_STAFF_ROLES}
               @staff-role-close=${(event: CustomEvent<{ wrote: boolean }>) => {
                 this.editing = undefined;
                 if (event.detail.wrote) void this.#afterWrite();

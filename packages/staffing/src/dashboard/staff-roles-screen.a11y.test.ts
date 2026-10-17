@@ -3,7 +3,7 @@ import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-k
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { DeleteImpact } from "@waitron/shared";
-import { StaffingApi, type StaffRole } from "./client.js";
+import { StaffingApi, type ListedStaffRole, type StaffRole } from "./client.js";
 import type { StaffRolesScreen } from "./staff-roles-screen.js";
 import "./staff-roles-screen.js";
 
@@ -28,12 +28,13 @@ const staffRoles: Role[] = (["red", "amber", "grey", "blue", "green", "purple"] 
 );
 
 /** What the list read answers for `role`: it does not say what uses it. */
-const listed = ({ id, name, colour, position, holderIds }: Role): StaffRole => ({
+const listed = ({ id, name, colour, position, holderIds }: Role): ListedStaffRole => ({
   id,
   name,
   colour,
   position,
   holderIds,
+  holderNames: holderIds.map(() => "Ana"),
 });
 const staffRoleList = staffRoles.map(listed);
 

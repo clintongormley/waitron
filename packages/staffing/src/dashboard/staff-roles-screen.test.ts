@@ -10,8 +10,8 @@ import {
 import { applyTokens, type DataTableColumn } from "@waitron/ui";
 import { chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DeleteImpact } from "@waitron/shared";
-import { StaffingApi, type StaffPerson, type StaffRole } from "./client.js";
-import type { StaffRolesScreen } from "./staff-roles-screen.js";
+import { StaffingApi, type ListedStaffRole, type StaffPerson, type StaffRole } from "./client.js";
+import { HOLDER_NAMES_SHOWN, type StaffRolesScreen } from "./staff-roles-screen.js";
 import { STAFFING_STRINGS } from "./strings.js";
 import "./staff-roles-screen.js";
 
@@ -48,14 +48,19 @@ const runner: Role = {
   shiftCount: 0,
 };
 const people: StaffPerson[] = [{ personId: "p-ana", displayName: "Ana", status: "active" }];
+const holderNameOf: Record<string, string> = { "p-ana": "Ana", "p-marc": "Marc" };
 
 /** What the list read answers for `role`: it does not say what uses it. */
-const listed = ({ id, name, colour, position, holderIds }: Role): StaffRole => ({
+const listed = (
+  { id, name, colour, position, holderIds }: Role,
+  nameOf: (personId: string) => string = (personId) => holderNameOf[personId] ?? personId,
+): ListedStaffRole => ({
   id,
   name,
   colour,
   position,
   holderIds,
+  holderNames: holderIds.map(nameOf),
 });
 
 /** What the server's delete-impact read answers for `staffRole`. */
@@ -96,7 +101,8 @@ function fakeRequest(roles: () => Role[], routes: Routes = {}) {
   return vi.fn(async (path: string, method: string = "GET", body?: unknown) => {
     const route = routes[`${method} ${path}`];
     if (route) return route(body);
-    if (method === "GET" && path === BASE) return { staffRoles: roles().map(listed) };
+    if (method === "GET" && path === BASE)
+      return { staffRoles: roles().map((role) => listed(role)) };
     if (method === "GET" && path === "/management-api/staff") return people;
     const impact = /^\/management-api\/staffing\/staff-roles\/([^/]+)\/delete-impact$/.exec(path);
     if (method === "GET" && impact)
@@ -198,15 +204,15 @@ async function confirmAndClose() {
 }
 
 describe("the staff roles page", () => {
-  it("lists each staff role's swatch and name, and its holder count, in position order", async () => {
+  it("lists each staff role's swatch and name, and who holds it, in position order", async () => {
     await mount(fakeRequest(() => [runner, waiter, cook]));
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Staff roles");
     expect(rowKeys()).toEqual(["role-w", "role-c", "role-r"]);
     expect(
       (table()!.columns as readonly DataTableColumn<StaffRole>[]).map((column) => column.key),
     ).toEqual(["name", "people", "actions"]);
-    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "2 people"]);
-    expect(cells("role-c").slice(0, 2)).toEqual(["Cook", "1 person"]);
+    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "Ana, Marc"]);
+    expect(cells("role-c").slice(0, 2)).toEqual(["Cook", "Ana"]);
     expect(cells("role-r").slice(0, 2)).toEqual(["Runner", "No people"]);
     const nameCell = row("role-c").querySelector("td")!;
     const swatch = nameCell.querySelector<HTMLElement>("[part~=swatch]")!;
@@ -221,6 +227,30 @@ describe("the staff roles page", () => {
     expect(painted).not.toBe(
       getComputedStyle(row("role-w").querySelector("[part~=swatch]")!).backgroundColor,
     );
+  });
+
+  it("names the first holders and says how many more there are, to a reader too", async () => {
+    const holders = (count: number) =>
+      Array.from({ length: count }, (_, index) => `p-${String(index + 1).padStart(2, "0")}`);
+    const nameOf = (personId: string) => `Person ${personId.slice(2)}`;
+    const many = { ...waiter, holderIds: holders(HOLDER_NAMES_SHOWN + 2) };
+    const exact = { ...cook, holderIds: holders(HOLDER_NAMES_SHOWN) };
+    const request = () =>
+      fakeRequest(() => [many, exact], {
+        [`GET ${BASE}`]: () => ({ staffRoles: [many, exact].map((role) => listed(role, nameOf)) }),
+      });
+    const shown = holders(HOLDER_NAMES_SHOWN).map(nameOf).join(", ");
+    for (const readOnly of [false, true]) {
+      host?.remove();
+      await mount(request(), { readOnly });
+      expect(cells("role-w")[1], `readOnly ${readOnly}`).toBe(`${shown} plus 2 more`);
+      expect(cells("role-c")[1], `readOnly ${readOnly}`).toBe(shown);
+    }
+    host.remove();
+    setLocale("es");
+    await mount(request());
+    expect(cells("role-w")[1]).toBe(`${shown} y 2 más`);
+    expect(cells("role-c")[1]).toBe(shown);
   });
 
   it("centres the swatch on the name, and keeps the name on the row's text line", async () => {
@@ -262,7 +292,7 @@ describe("the staff roles page", () => {
     await mount(request);
     expect(table()!.loading).toBe(true);
     expect(table()!.loadingMessage).toBe("Loading staff roles…");
-    answer({ staffRoles: [waiter] });
+    answer({ staffRoles: [listed(waiter)] });
     await settle();
     expect(table()!.loading).toBe(false);
     expect(rowKeys()).toEqual(["role-w"]);
@@ -279,7 +309,7 @@ describe("the staff roles page", () => {
     const request = fakeRequest(() => [waiter], {
       [`GET ${BASE}`]: () => {
         if (fail) throw { code: "connection.failed" };
-        return { staffRoles: [waiter] };
+        return { staffRoles: [listed(waiter)] };
       },
     });
     const liveData = new LiveData();
@@ -299,7 +329,7 @@ describe("the staff roles page", () => {
     const request = fakeRequest(() => [waiter], {
       [`GET ${BASE}`]: () => {
         if (fail) throw { code: "connection.failed" };
-        return { staffRoles: [waiter] };
+        return { staffRoles: [listed(waiter)] };
       },
     });
     const liveData = new LiveData();
@@ -329,12 +359,19 @@ describe("the staff roles page", () => {
     liveData.clear();
   });
 
-  it("refreshes a renamed holder in the delete warning without re-reading the list, and refreshes holder counts", async () => {
+  it("refreshes a renamed holder in the delete warning and in the list, and refreshes the holders", async () => {
     let roles = [{ ...runner, blockCount: 0, holderIds: ["p-ana"] }];
     let holderName = "Ana";
     const liveData = new LiveData();
     const request = await mount(
       fakeRequest(() => roles, {
+        [`GET ${BASE}`]: () => ({
+          staffRoles: roles.map((role) =>
+            listed(role, (personId) =>
+              personId === "p-ana" ? holderName : holderNameOf[personId]!,
+            ),
+          ),
+        }),
         [`GET ${BASE}/role-r/delete-impact`]: () => ({
           ...impactOf(roles[0]!),
           removes: [
@@ -354,18 +391,19 @@ describe("the staff roles page", () => {
     const listReads = () => request.mock.calls.filter(([path]) => path === BASE).length;
     await choose("delete-role-r");
     expect(dialogLines()).toEqual(["Removes it from 1 person: Ana."]);
-    expect(cells("role-r")[1]).toBe("1 person");
+    expect(cells("role-r")[1]).toBe("Ana");
     expect(listReads()).toBe(1);
 
     holderName = "Ana Ruiz";
     liveData.invalidate([{ type: "persons" }]);
     await vi.waitFor(() => expect(dialogLines()).toEqual(["Removes it from 1 person: Ana Ruiz."]));
-    expect(listReads()).toBe(1);
+    await vi.waitFor(() => expect(cells("role-r")[1]).toBe("Ana Ruiz"));
+    expect(listReads()).toBe(2);
 
     roles = [{ ...runner, blockCount: 0, holderIds: ["p-ana", "p-marc"] }];
     liveData.invalidate([{ type: "person_staff_roles" }]);
-    await vi.waitFor(() => expect(cells("role-r")[1]).toBe("2 people"));
-    expect(listReads()).toBe(2);
+    await vi.waitFor(() => expect(cells("role-r")[1]).toBe("Ana Ruiz, Marc"));
+    expect(listReads()).toBe(3);
     liveData.clear();
   });
 
@@ -391,7 +429,7 @@ describe("the staff roles page", () => {
     await mount(fakeRequest(() => [waiter, cook, runner]));
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-staff-role]")!);
     await settle();
-    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map(listed));
+    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map((role) => listed(role)));
     const colour = dialog().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
       "wt-colour-chooser[name=colour]",
     )!;
@@ -401,7 +439,7 @@ describe("the staff roles page", () => {
   it("hands an edited staff role's dialog every staff role, its own included", async () => {
     await mount(fakeRequest(() => [waiter, cook, runner]));
     await choose("edit-role-c");
-    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map(listed));
+    expect(dialog().staffRoles).toEqual([waiter, cook, runner].map((role) => listed(role)));
   });
 
   it("does not read the list again when the dialog is cancelled", async () => {
@@ -916,7 +954,7 @@ describe("the staff roles page", () => {
     setLocale("es");
     await mount(fakeRequest(() => [waiter]));
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Roles de personal");
-    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "2 personas"]);
+    expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "Ana, Marc"]);
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")!.textContent!.trim()).toBe(
       "Añadir rol de personal",
     );
