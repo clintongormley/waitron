@@ -58,6 +58,7 @@ export class PeriodEditing implements ReactiveController {
       readOnly?: () => boolean;
       /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
       onDelete?: (department: Department, period: Period) => void;
+      draftParent?: () => object | undefined;
     },
   ) {
     host.addController(this);
@@ -234,7 +235,7 @@ export class PeriodEditing implements ReactiveController {
         .menus=${model.menus}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}
-        .fromPainter=${fromPainter}
+        .draftParent=${this.options.draftParent?.()}
         .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}
         @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {

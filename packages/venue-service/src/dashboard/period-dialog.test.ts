@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
@@ -128,14 +128,7 @@ it("orders Name, Colour, Customer menu, Staff-only menus, End offset, in English
   const el = await mount(true);
   const order = () =>
     [...el.shadowRoot!.querySelectorAll("[name]")].map((node) => node.getAttribute("name"));
-  expect(order()).toEqual([
-    "name",
-    "colour",
-    "menuId",
-    "staffMenuIds",
-    "endOffsetMinutes",
-    "floorPlanId",
-  ]);
+  expect(order()).toEqual(["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"]);
   expect(field(el, "menuId").label).toBe("Customer menu");
   setLocale("es");
   el.requestUpdate();
@@ -332,7 +325,7 @@ it("Cancel closes without a coordinator, and reopening clears earlier edits and 
   await change(el, "name", { value: "Dinner" });
   el.refusal = { code: "menu_period.name_taken" };
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
   await expect.poll(() => el.open).toBe(false);
   el.period = undefined;
   el.open = true;
@@ -549,17 +542,16 @@ it("a refusal naming colour shows on the colour field", async () => {
   expect(chooserTrigger(el).getAttribute("aria-invalid")).toBe("true");
 });
 
-it("the floor plan field is shown disabled with Not available yet, and is never sent", async () => {
+it("no Floor plan field when adding or editing, and a save sends no floor plan", async () => {
   const el = await mount(true);
   const writes: { input: object }[] = [];
   el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
-  const plan = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "wt-combobox[name=floorPlanId]",
-  );
-  expect(plan).not.toBeNull();
-  expect(plan!.disabled).toBe(true);
-  expect(plan!.label).toBe("Floor plan");
-  expect(plan!.placeholder).toBe("Not available yet");
+  const fresh = await mount();
+  const edit = await mountEdit(() => {});
+  for (const dialog of [el, fresh, edit]) {
+    expect(dialog.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
+    expect(dialog.shadowRoot!.innerHTML).not.toContain("Floor plan");
+  }
   await change(el, "name", { value: "Dinner" });
   save(el).click();
   await el.updateComplete;
@@ -572,19 +564,12 @@ it("the floor plan field is shown disabled with Not available yet, and is never 
     "staffMenuIds",
   ]);
   setLocale("es");
-  el.requestUpdate();
-  await el.updateComplete;
-  expect(plan!.label).toBe("Plano de sala");
-  expect(plan!.placeholder).toBe("Aún no disponible");
-  const fresh = await mount();
-  expect(fresh.shadowRoot!.querySelector("[name=floorPlanId]")).not.toBeNull();
-});
-
-it("adding from a painter shows no floor plan field", async () => {
-  const el = await mount();
-  el.fromPainter = true;
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
+  for (const dialog of [el, fresh, edit]) {
+    dialog.requestUpdate();
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector("[name=floorPlanId]")).toBeNull();
+    expect(dialog.shadowRoot!.innerHTML).not.toContain("Plano de sala");
+  }
 });
 
 it("committing an input without colour keeps the submitted colour as the saved baseline", async () => {
@@ -616,7 +601,7 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   const oldMenu = field(el, "menuId");
   const oldStaffMenus = field(el, "staffMenuIds");
   const oldSave = save(el);
-  const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel]")!;
+  const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!;
   const oldModal = el.shadowRoot!.querySelector("wt-modal")!;
   el.open = false;
   await el.updateComplete;
@@ -942,8 +927,20 @@ it("Delete… shows only when deletable and editing", async () => {
     el.deletable = true;
   });
   expect(deleteButton(editing)?.textContent?.trim()).toBe("Delete…");
-  expect(deleteButton(editing)?.variant).toBe("secondary");
-  expect(deleteButton(editing)!.closest("wt-form-actions")).toBeNull();
+  expect(deleteButton(editing)?.variant).toBe("danger");
+  const footer = editing.shadowRoot!.querySelector("wt-modal > wt-form-actions[slot=footer]");
+  expect(footer).not.toBeNull();
+  expect(deleteButton(editing)!.closest("wt-form-actions")).toBe(footer);
+  const cancelGroup = footer!.querySelector(":scope > [slot=cancel]");
+  expect(
+    [...cancelGroup!.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+  ).toEqual(["Cancel", "Delete…"]);
+  expect(
+    [...footer!.querySelectorAll(":scope > wt-button:not([slot])")].map((button) =>
+      button.getAttribute("data-test"),
+    ),
+  ).toEqual(["save-period"]);
+  expect(editing.shadowRoot!.querySelector(".form [data-test=delete-period]")).toBeNull();
   setLocale("es");
   editing.requestUpdate();
   await editing.updateComplete;
@@ -953,6 +950,39 @@ it("Delete… shows only when deletable and editing", async () => {
   adding.deletable = true;
   await adding.updateComplete;
   expect(deleteButton(adding)).toBeNull();
+});
+
+it.each([1280, 390])("Delete… sits left of Save, after Cancel, at %i px", async (width) => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(width, 900);
+    expect(window.innerWidth).toBe(width);
+    const el = await mountEdit((el) => {
+      el.deletable = true;
+    });
+    const footer = el.shadowRoot!.querySelector("wt-form-actions")!;
+    const cancel = footer.querySelector<HTMLElement>("[slot=cancel] wt-button:not([data-test])")!;
+    const remove = deleteButton(el)!;
+    const submit = save(el);
+    await Promise.all(
+      [cancel, remove, submit].map(
+        (b) => (b as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+      ),
+    );
+    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    const [c, d, s] = [cancel, remove, submit].map((b) => b.getBoundingClientRect());
+    if (width === 1280) {
+      expect(c!.right).toBeLessThanOrEqual(d!.left);
+      expect(d!.right).toBeLessThan(s!.left);
+    }
+    for (const box of [c!, d!, s!]) {
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+    }
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
 
 it("Delete… on a clean draft closes the dialog and emits period-delete once with the period id", async () => {

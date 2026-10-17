@@ -97,6 +97,11 @@ export class PeriodDialog extends LitElement {
       [data-test="not-painted"] {
         color: var(--wt-color-warning);
       }
+      .cancel-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
       [data-test="menu-includes"],
       [data-test="offset-explanation"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
@@ -110,8 +115,7 @@ export class PeriodDialog extends LitElement {
   @property() departmentName = "";
   /** The submit button's text; Save when empty. */
   @property() submitLabel = "";
-  /** Adding a period from a painter, which asks for no floor plan. */
-  @property({ type: Boolean }) fromPainter = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
@@ -187,6 +191,7 @@ export class PeriodDialog extends LitElement {
     if (this.isConnected && !this.scope) {
       const { coordinator, scope } = draftScopeFor(this, {
         id: this.identity,
+        parent: this.draftParent,
         current: () => this.input,
         snapshot: copy,
         equal: (a, b) =>
@@ -525,47 +530,36 @@ export class PeriodDialog extends LitElement {
             }}
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
-          ${
-            this.period || !this.fromPainter
-              ? html`<wt-combobox
-                  name="floorPlanId"
-                  label=${t("period.floor_plan")}
-                  placeholder=${t("period.floor_plan_later")}
-                  disabled
-                ></wt-combobox>`
-              : nothing
-          }
           ${this.paintedInSection()}
-          ${
-            this.period && this.deletable
-              ? html`<div>
-                  <wt-button
-                    data-test="delete-period"
-                    variant="secondary"
-                    ?disabled=${this.busy}
-                    @click=${() => {
-                      if (current()) void this.requestDelete(this.period!.id);
-                    }}
-                    >${t("period.delete_ellipsis")}</wt-button
-                  >
-                </div>`
-              : nothing
-          }
         </div>
         <wt-form-actions
           slot="footer"
           .error=${[bottom, marked ? t("menu.fix_fields") : ""].filter(Boolean).join(" ")}
         >
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (current())
-                void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-            }}
-            >${t("menu.cancel")}</wt-button
-          >
+          <div slot="cancel" class="cancel-group">
+            <wt-button
+              variant="secondary"
+              ?disabled=${this.busy}
+              @click=${() => {
+                if (current())
+                  void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+              }}
+              >${t("menu.cancel")}</wt-button
+            >
+            ${
+              this.period && this.deletable
+                ? html`<wt-button
+                    data-test="delete-period"
+                    variant="danger"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (current()) void this.requestDelete(this.period!.id);
+                    }}
+                    >${t("period.delete_ellipsis")}</wt-button
+                  >`
+                : nothing
+            }
+          </div>
           <wt-button
             data-test="save-period"
             variant=${s.variant}

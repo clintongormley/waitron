@@ -79,7 +79,9 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     if (state === "not-painted")
       expect(el.shadowRoot!.querySelector("[data-test=not-painted]")).not.toBeNull();
     if (state === "deletable")
-      expect(el.shadowRoot!.querySelector("[data-test=delete-period]")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector("[data-test=delete-period]")!.closest("wt-form-actions"),
+      ).not.toBeNull();
     if (state === "add-from-page")
       expect(el.shadowRoot!.querySelector("[name=departmentId]")).not.toBeNull();
     const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
@@ -98,10 +100,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
           "wt-colour-chooser[name=colour]",
         )!.choices,
       ).toHaveLength(13);
-      expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=floorPlanId]")!
-          .disabled,
-      ).toBe(true);
     }
     if (state === "colour-invalid") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));
