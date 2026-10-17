@@ -795,6 +795,23 @@ export interface DraftSave {
   lines: DraftLineInput[];
 }
 
+export interface DraftDiscard {
+  submissionId: string;
+  revision: number;
+  expectedRevision: number;
+  reasonId?: string;
+  note?: string | null;
+  approver?: { personId: string; pin: string };
+}
+
+export interface DiscardedDraft {
+  draftId: string;
+  billId: string;
+  revision: number;
+  adjustmentIds: string[];
+  party: BillParty;
+}
+
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -3766,6 +3783,20 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/drafts`, "PUT", save, options.signal);
   }
 
+  discardDraft(
+    partyId: string,
+    draftId: string,
+    command: DraftDiscard,
+    options: ReadOptions = {},
+  ): Promise<DiscardedDraft> {
+    return this.#request(
+      `/api/parties/${partyId}/drafts/${draftId}/discard`,
+      "POST",
+      command,
+      options.signal,
+    );
+  }
+
   askDraftDeadEnds(
     partyId: string,
     draftId: string,
@@ -4052,8 +4083,14 @@ export class TillApi {
     partyId: string,
     lineId: string,
     command: { submissionId: string; expectedPartyRevision: number },
+    options: ReadOptions = {},
   ): Promise<{ revision: number; draft: Draft }> {
-    return this.#request(`/api/parties/${partyId}/lines/${lineId}/recall`, "POST", command);
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/recall`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   /** The active reasons a cancel, a give-away or a discount can be made under →

@@ -58,6 +58,14 @@ export interface DraftRefused {
  * gone to `onRefused`. */
 export type TakeOverOutcome = "taken" | "failed" | "unsaved" | DraftRefused;
 
+export type DraftCommandOutcome<T> =
+  { applied: T; reloaded: boolean } | "failed" | "unsaved" | DraftRefused;
+
+export interface DraftCommandState {
+  draftId: string | null;
+  revision: number;
+}
+
 export interface DraftSyncOptions {
   api: Pick<TillApi, "listDrafts" | "saveDraft" | "takeOverDraft">;
   partyId: string;
@@ -207,6 +215,11 @@ export class DraftSync {
   #reads = 0;
   #muted = false;
   #dropped = false;
+  #commanding = false;
+  #commandsStarted = 0;
+  #commandAbort?: AbortController;
+  #recoveryRequired = false;
+  #unlockRecovery?: () => void;
   readonly #unsubscribe: () => void;
 
   constructor(options: DraftSyncOptions) {
@@ -238,9 +251,15 @@ export class DraftSync {
 
   /** Reads the party's drafts and shows the person's own; false when they could not be read. */
   async load(): Promise<boolean> {
+    if (this.#commanding) return false;
+    return this.#load();
+  }
+
+  async #load(): Promise<boolean> {
+    const command = this.#commandsStarted;
     const read = ++this.#reads;
     this.#cancelTimer();
-    const limit = limited(this.#options.requestLimitMs);
+    const limit = limited(this.#options.requestLimitMs, this.#commandAbort?.signal);
     let drafts: Draft[];
     try {
       drafts = await this.#options.api.listDrafts(this.partyId, { signal: limit.signal });
@@ -249,17 +268,27 @@ export class DraftSync {
     } finally {
       limit.done();
     }
-    if (this.#dropped || read !== this.#reads) return false;
+    if (
+      this.#dropped ||
+      (this.#commanding && this.#closed) ||
+      read !== this.#reads ||
+      command !== this.#commandsStarted
+    )
+      return false;
     drafts = drafts.filter((draft) => draft.billId === this.billId);
     const own = drafts.find((draft) => draft.ownerId === this.personId) ?? null;
     this.others = drafts.filter((draft) => draft !== own);
     this.#show(own);
+    this.#recoveryRequired = false;
+    this.#unlockRecovery?.();
+    this.#unlockRecovery = undefined;
     return true;
   }
 
   /** Sends any unsaved edit now; resolves once every save has answered, with the last outcome, or
    * as `failed` once `signal` aborts, which also cuts off the save this sends. */
   flush(signal?: AbortSignal): Promise<DraftSaveOutcome> {
+    if (this.#commanding || this.#recoveryRequired) return Promise.resolve("failed");
     this.#cancelTimer();
     const saved = this.#save(signal);
     if (signal === undefined) return saved;
@@ -269,6 +298,7 @@ export class DraftSync {
   /** At sign-out. What is unsaved is sent now only when no save is out: one started after the next
    * person has signed in would be saved as theirs. No save starts after this. */
   close(): Promise<DraftSaveOutcome> {
+    this.#commandAbort?.abort();
     this.#cancelTimer();
     const last = this.#saving ? this.#queue : this.#save(undefined, true);
     this.#closed = true;
@@ -293,6 +323,7 @@ export class DraftSync {
    * sync is dropped, is not sent: the next person may have signed in by then.
    */
   async takeOver(draftId: string, revision: number): Promise<TakeOverOutcome> {
+    if (this.#commanding || this.#recoveryRequired) return "failed";
     const locked = this.store.sending;
     this.store.sending = true;
     try {
@@ -327,6 +358,54 @@ export class DraftSync {
     return "taken";
   }
 
+  /** Source commands change stored bill rows and their draft together. No edit or save may use
+   * the old draft after the command until an authoritative read succeeds. */
+  async runCommand<T>(
+    send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
+  ): Promise<DraftCommandOutcome<T>> {
+    if (
+      this.#ended ||
+      this.#commanding ||
+      this.#recoveryRequired ||
+      this.store.sending ||
+      this.store.editsLocked
+    )
+      return "failed";
+    this.#commanding = true;
+    this.#commandsStarted++;
+    this.#cancelTimer();
+    this.store.sending = true;
+    const abort = new AbortController();
+    this.#commandAbort = abort;
+    const limit = limited(this.#options.requestLimitMs, abort.signal);
+    try {
+      const saved = await this.#save(limit.signal);
+      if (this.#ended) return "failed";
+      if (saved !== "saved") return "unsaved";
+      this.#recoveryRequired = true;
+      let applied: T;
+      try {
+        applied = await send(
+          { draftId: this.#draftId, revision: this.#revision },
+          { signal: limit.signal },
+        );
+      } catch (error) {
+        if (this.#ended) return "failed";
+        await this.#load();
+        return asRefusal(error) ?? "failed";
+      }
+      if (this.#ended) return "failed";
+      const reloaded = await this.#load();
+      return this.#ended ? "failed" : { applied, reloaded };
+    } finally {
+      limit.done();
+      this.#commandAbort = undefined;
+      if (this.#recoveryRequired && !this.#ended) this.#unlockRecovery = this.store.lockEdits();
+      this.#commanding = false;
+      this.store.sending = false;
+    }
+  }
+
   /** Replaces the lines at the given positions for display only: the saved draft does not change,
    * so nothing is saved. */
   reshow(lines: ReadonlyMap<number, OrderLine>): void {
@@ -336,6 +415,7 @@ export class DraftSync {
   /** No save is sent after this, and no answer taken. */
   drop(): void {
     this.#dropped = true;
+    this.#commandAbort?.abort();
     this.#cancelTimer();
     this.#unsubscribe();
   }
@@ -408,8 +488,10 @@ export class DraftSync {
       this.#unsaved = true;
       return "failed";
     }
-    if (DRAFT_REFUSALS.has(refusal.refused)) await this.load();
-    else this.#unsaved = true;
+    if (DRAFT_REFUSALS.has(refusal.refused)) {
+      const reloaded = await this.#load();
+      if (this.#commanding && !reloaded) this.#recoveryRequired = true;
+    } else this.#unsaved = true;
     this.#options.onRefused(refusal.refused, refusal.ownerName);
     return refusal;
   }
