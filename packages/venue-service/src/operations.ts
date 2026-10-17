@@ -28,7 +28,8 @@ import {
   documentOffers,
   isEachUnit,
   readLiveDocuments,
-  readUnavailable,
+  readLiveState,
+  NO_LIVE_FIELDS,
   units,
   type MenuDocument,
   type MenuOffer,
@@ -928,7 +929,7 @@ export async function listZoneOffers(
   const published = await zoneLiveDocuments(tx, zoneId, options.asserted, [
     ...new Set(membership.map((row) => row.menuId)),
   ]);
-  const served = await applyLiveFields(
+  const { offers: served, liveFields } = await applyLiveFields(
     tx,
     published.map((menu) => menu.document),
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
@@ -972,6 +973,7 @@ export async function listZoneOffers(
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
+    liveFields,
   };
 }
 
@@ -1002,6 +1004,7 @@ export async function menuState(
       },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
+      liveFields: NO_LIVE_FIELDS,
     };
   const { service, zoneOpen, zoneKeepOpen } = await zoneServiceState(
     tx,
@@ -1011,6 +1014,10 @@ export async function menuState(
     at,
   );
   const published = await zoneLiveDocuments(tx, zoneId);
+  const live = await readLiveState(
+    tx,
+    published.map((menu) => menu.document),
+  );
   return {
     service: {
       open: service.open,
@@ -1026,10 +1033,7 @@ export async function menuState(
       orderable: service.orderableMenuIds.includes(menuId),
       sendable: service.sendableMenuIds.includes(menuId),
     })),
-    unavailable: await readUnavailable(
-      tx,
-      published.map((menu) => menu.document),
-    ),
+    ...live,
   };
 }
 

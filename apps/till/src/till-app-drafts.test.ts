@@ -232,7 +232,10 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     }),
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue({
+      ...catalogue("v1"),
+      context: { ...catalogue("v1").context, zoneId: "zc" },
+    }),
     listZoneOffers: vi.fn().mockResolvedValue(catalogue("v1")),
     menuState: vi.fn(() => new Promise(() => {})),
     setServiceZone: vi.fn(),
@@ -472,7 +475,11 @@ describe("W69 unassigned table draft", () => {
   });
 
   it("a refused table read after Discard keeps the memory-only draft unload-protected", async () => {
-    const { el } = await opening();
+    const { el } = await opening({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([{ ...mesa4, zoneId: "z2" }, table("t9", "9", null)]),
+    });
     await tap(el, "Beer");
     const original = draft(el);
     await back(el);
@@ -2179,8 +2186,22 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     return floorReads;
   }
 
-  it("seats no table for the next person when opening it waited on a save at sign-out", async () => {
+  /** Every list, seat and read call so far, with who was signed in when it was sent. */
+  function recordingWho() {
+    const calls: string[] = [];
+    const wrap =
+      <A extends unknown[], R>(name: string, call: (...args: A) => R) =>
+      (...args: A): R => {
+        calls.push(`${name}(${String(args[0])}) as ${server.personId}`);
+        return call(...args);
+      };
+    return { calls, wrap };
+  }
+
+  it("seats a free table for the first waiter at once while the left draft saves, and nothing for the next person", async () => {
+    const who = recordingWho();
     const { el } = await mountApp({
+      listDrafts: vi.fn(who.wrap("listDrafts", server.listDrafts)),
       getTill: vi.fn().mockResolvedValue(till(sideBySide)),
       getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
       seatTable: vi.fn().mockResolvedValue({
@@ -2198,19 +2219,35 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     await flush(el);
     const answer = await editBehindHeldSave(el);
     const offerReads = api.listZoneOffers.mock.calls.length;
+    const tabReads = api.getTabLines.mock.calls.length;
+    who.calls.length = 0;
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
 
+    expect(api.seatTable.mock.calls).toEqual([["t9", 2]]);
+    expect(api.getTabLines.mock.calls.slice(tabReads)).toEqual([["wo-new"]]);
+    expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
+    expect(who.calls).toEqual([]);
+    const seatCalls = api.seatTable.mock.calls.length;
+    const tabCalls = api.getTabLines.mock.calls.length;
+
     await signOutAndInAsSam(el, answer);
 
-    expect(api.seatTable).not.toHaveBeenCalled();
+    expect(api.seatTable.mock.calls.length).toBe(seatCalls);
+    expect(api.getTabLines.mock.calls.length).toBe(tabCalls);
     expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
-    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-new");
+    expect(who.calls).toEqual([]);
+    expect(tableOrder(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
     expect(banner(el)).toBeNull();
   });
 
-  it("opens no seated table for the next person when opening it waited on a save at sign-out", async () => {
-    const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(sideBySide)) });
+  it("opens a seated table for the first waiter at once while the left draft saves, and nothing for the next person", async () => {
+    const who = recordingWho();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(sideBySide)),
+      listDrafts: vi.fn(who.wrap("listDrafts", server.listDrafts)),
+    });
     await flush(el);
     await signIn(el);
     emit(shell(el), "screen-select", { screen: "floor" });
@@ -2218,13 +2255,25 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     const answer = await editBehindHeldSave(el);
+    const tabReads = api.getTabLines.mock.calls.length;
+    const offerReads = api.listZoneOffers.mock.calls.length;
+    who.calls.length = 0;
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
 
+    expect(api.getTabLines.mock.calls.slice(tabReads)).toEqual([["wo-7"]]);
+    expect(who.calls).toEqual(["listDrafts(v7) as p1"]);
+    expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
+    const tabCalls = api.getTabLines.mock.calls.length;
+    who.calls.length = 0;
+
     await signOutAndInAsSam(el, answer);
 
-    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-7");
-    expect(api.listDrafts).not.toHaveBeenCalledWith("v7", expect.anything());
+    expect(api.getTabLines.mock.calls.length).toBe(tabCalls);
+    expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
+    expect(who.calls).toEqual(["listDrafts(v7) as p2"]);
+    expect(tableOrder(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
     expect(banner(el)).toBeNull();
   });
 
@@ -2751,6 +2800,10 @@ describe("till-app: seating a free table while something else happens", () => {
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
+    expect(seat.seatTable).toHaveBeenCalledTimes(1);
+    // The order tab replaces the floor at once, so the waiter goes back to it to open the next.
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -3029,6 +3082,10 @@ describe("till-app: two table opens overlapping", () => {
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(api.seatTable).toHaveBeenCalledTimes(1);
+    // The order tab replaces the floor at once, so the waiter goes back to it to open the next.
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);

@@ -17,6 +17,7 @@ import {
   createSectionIn,
   deactivateCatalogue,
   menuDocumentHash,
+  NO_LIVE_FIELDS,
   publishMenu,
   readMenuStructure,
   setProductVariants,
@@ -35,6 +36,7 @@ import {
   floorZones,
   floorTodayTables,
   invoiceSeries,
+  kitchenCourses,
   kitchenStations,
   locations,
   sales,
@@ -1054,6 +1056,7 @@ describe("venue service routing", () => {
         },
         menus: [{ id: menu.id, name: "Terrace", isDefault: true, versionId }],
         offers: [],
+        liveFields: NO_LIVE_FIELDS,
       });
       await expect(
         getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000099"),
@@ -2541,6 +2544,7 @@ describe("zone offers from the published menus", () => {
         },
         menus: [],
         offers: [],
+        liveFields: NO_LIVE_FIELDS,
       });
     });
   });
@@ -2642,6 +2646,7 @@ describe("zone offers from the published menus", () => {
         },
         menus: [],
         offers: [],
+        liveFields: NO_LIVE_FIELDS,
       });
     });
   });
@@ -2675,6 +2680,40 @@ describe("zone offers from the published menus", () => {
       },
       menus: [],
       unavailable: { products: [], optionLabels: [] },
+      liveFields: NO_LIVE_FIELDS,
+    });
+  });
+
+  it("menuState and listZoneOffers name the same live fields, and both move when a dish changes course", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const before = await menuState(tx, venue.cfg, venue.diningZone);
+      expect((await listZoneOffers(tx, venue.cfg, venue.diningZone)).liveFields).toBe(
+        before.liveFields,
+      );
+      const [course] = await tx
+        .insert(kitchenCourses)
+        .values({ locationId: venue.cfg.locationId, name: "Starters" })
+        .returning({ id: kitchenCourses.id });
+      await tx
+        .update(products)
+        .set({ courseId: course!.id })
+        .where(eq(products.id, venue.lemonade));
+      const after = await menuState(tx, venue.cfg, venue.diningZone);
+      expect(after.liveFields).not.toBe(before.liveFields);
+      expect((await listZoneOffers(tx, venue.cfg, venue.diningZone)).liveFields).toBe(
+        after.liveFields,
+      );
+    });
+  });
+
+  it("a zone with no published menu names NO_LIVE_FIELDS on both reads", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      await deactivateCatalogue(tx, venue.menuId);
+      expect((await menuState(tx, venue.cfg, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
+      expect((await listZoneOffers(tx, venue.cfg, venue.barZone)).liveFields).toBe(NO_LIVE_FIELDS);
+      expect((await menuState(tx, venue.cfg, UNKNOWN_ID)).liveFields).toBe(NO_LIVE_FIELDS);
     });
   });
 
@@ -2703,6 +2742,7 @@ describe("zone offers from the published menus", () => {
         },
         menus,
         unavailable: { products: [], optionLabels: [] },
+        liveFields: expect.any(String),
       });
 
       await updateProduct(tx, venue.burger, { available: false });
@@ -2768,6 +2808,7 @@ describe("zone offers from the published menus", () => {
         },
         menus: [],
         unavailable: { products: [], optionLabels: [] },
+        liveFields: NO_LIVE_FIELDS,
       });
     });
   });
@@ -2814,7 +2855,9 @@ describe("zone offers from the published menus", () => {
       expect(named).toEqual({
         ...whole,
         offers: whole.offers.filter((offer) => offer.id === venue.lemonadeOffer),
+        liveFields: expect.any(String),
       });
+      expect(named.liveFields).not.toBe(whole.liveFields);
       // The live rows are read for the named offer's products alone.
       const productReads = prepared.mock.calls
         .map(([query]) => query as unknown as { sql: string; params: unknown[] })

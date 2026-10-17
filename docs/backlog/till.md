@@ -1316,7 +1316,8 @@ Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-
 
 - **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name;
   Matching displayed section names is included (A461). Every `/api/menu-state` read from an enrolled device reads the device, once
-  per zone the till holds at each poll; the token's scrypt check (21.1 ms, measured once on a Mac)
+  per zone it polls (the counter's, and the open table's while its order shows), and each read also
+  reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token's scrypt check (21.1 ms, measured once on a Mac)
   runs off the lock, once per device until its token changes, the server restarts or the device
   falls out of the 256 the server remembers.
 
@@ -2074,25 +2075,6 @@ the party id and no table name. The server sends the table's name (a joined tabl
 name) with each order, and every list that shows orders names it: Held orders first, then Waiting,
 Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
 build after A757's board if it has been decided, else name the table alone.
-
-## A768. The till: open a table fast, and stop needing a reload
-
-**A768 (owner, 2026-10-16).** Two halves that share one idea: keep what the till has read, and ask
-the server cheaply whether it changed.
-
-- **Opening a table takes a second or two.** The order screen appears only after, in turn: the
-  draft being left is saved (`#flushDraft`); the zone's whole menu is re-read
-  (`listZoneOffers`, every open, the same zone included); for a seated table with no main bill,
-  its bills; then its lines and bills beside the draft. Time each step on a till first. Then keep
-  each zone's menu and check it with the existing `/api/menu-state` read (`MenuStatePoll` already
-  does this for the counter's zone and the open table's), re-reading only when it moved; switch to
-  the order screen at once with a loading state; and stop waiting on the save of the order left.
-- **Settings read once at page load go stale.** The till takes the venue's courses from its start
-  read (`listCourses`, `apps/server/src/till-api.ts`; `this.courses = till.courses`,
-  `apps/till/src/till-app.ts`) and never again. Seen 2026-10-16: no course headings or course
-  pickers on a table's unsent order until the till page was reloaded. Courses first; then every
-  other value from that read (bump mode, fire control, card provider, tips, receipt languages and
-  the rest) is either refreshed while the till is open or recorded as fixed until reload, with why.
 
 ## A669. An allergy at the table
 

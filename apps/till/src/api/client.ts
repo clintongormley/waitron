@@ -184,7 +184,6 @@ export interface TillInfo {
   inactivityTimeoutSeconds: number | null;
   /** The screen the CALLING device's profile opens at each sign-in; absent or `null` for none. */
   startingScreen?: NavigationScreen | null;
-  /** This node's id, so the app can tell which `servers` entry it is on. */
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
   servers: TillServer[];
@@ -193,6 +192,8 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
   /** Whether the server can issue a full invoice naming the customer (F1). */
   fullInvoices: boolean;
+  /** A hash of every field here but `servers`; `/api/menu-state` names it too. */
+  setupRevision: string;
 }
 
 /**
@@ -435,6 +436,7 @@ export interface ZoneOfferCatalogue {
   menus: TillZoneMenu[];
   offers: TillMenuOffer[];
   zones?: ServiceZoneSummary[];
+  liveFields?: string;
 }
 
 export interface ServiceZoneSummary {
@@ -447,7 +449,11 @@ export interface ServiceZoneSummary {
 
 export type { MenuState, MenuUnavailable };
 
-export type MenuStateAnswer = MenuState & { defaultMenuId?: string | null };
+export type MenuStateAnswer = MenuState & {
+  defaultMenuId?: string | null;
+  liveFields?: string;
+  setupRevision?: string;
+};
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
 function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {

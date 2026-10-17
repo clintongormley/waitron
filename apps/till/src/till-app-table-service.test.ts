@@ -248,7 +248,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     getDeviceStationScreen: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOffers),
+    listDefaultZoneOffers: vi
+      .fn()
+      .mockResolvedValue({ ...counterOffers, context: { ...counterOffers.context, zoneId: "zc" } }),
     listZoneOffers: vi.fn().mockResolvedValue(diningOffers),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -534,6 +536,7 @@ describe("till-app table ordering: the table's menus", () => {
     await flush(el);
 
     emit(floor(el)!, "open-table", { tableId: tableA.id, seated: true });
+    await flush(el);
     emit(floor(el)!, "open-table", { tableId: tableB.id, seated: true });
     await flush(el);
     rejectA({ code: "service_zone.not_found" });
@@ -1444,10 +1447,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   describe("an answer that arrives after the waiter has moved to another table", () => {
+    // Another zone, so its open reads offers and can be held or refused by the test.
     const otherTable: TableState = {
       ...openTable,
       id: "t3",
       label: "3",
+      zoneId: "z2",
       party: {
         ...openTable.party!,
         kitchenNote: {
@@ -1955,10 +1960,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   describe("an answer that arrives once the waiter is back on the same order", () => {
+    // Another zone, so its open reads offers and can be held or refused by the test.
     const otherTable: TableState = {
       ...openTable,
       id: "t3",
       label: "3",
+      zoneId: "z2",
       party: {
         ...openTable.party!,
         kitchenNote: {

@@ -203,7 +203,7 @@ does with an email or A4 choice (A555), obtain the asesor's manual-remedy approv
 applicable B2B delivery before enabling public F1. The enablement change needs its own direct, invoice-first, unpaid-departure,
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
 and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Enabling it also means: the
-server sends `fullInvoices: true` in `GET /api/till` (`apps/server/src/till-api.ts`), so the till
+server sends `fullInvoices: true` in `GET /api/till` (`apps/server/src/till-setup.ts`), so the till
 draws its Full invoice buttons again (A741); `sale.over_simplified_limit` is reworded, since it
 says the till cannot issue a full invoice; and someone decides whether the server should go on
 accepting a saved F1 choice (`setOrderInvoiceChoice`, `apps/server/src/working-order.ts`), which

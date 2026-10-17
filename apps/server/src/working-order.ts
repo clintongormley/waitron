@@ -137,6 +137,7 @@ import {
   customerPresentationText,
   effectiveProductColumns,
   kitchenPresentationName,
+  NO_LIVE_FIELDS,
   parentJoin,
   parentProducts,
   staffPresentationName,
@@ -567,6 +568,7 @@ export async function priceOrderLines(
         defaultMenuId: null,
         menus: [],
         offers: [],
+        liveFields: NO_LIVE_FIELDS,
       },
     };
   }

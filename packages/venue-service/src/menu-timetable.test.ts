@@ -11,6 +11,7 @@ import {
   createCategory,
   createProduct,
   menuDocumentHash,
+  NO_LIVE_FIELDS,
   publishMenu,
 } from "@waitron/catalogue";
 import {
@@ -1736,7 +1737,13 @@ describe("the offers a zone lists at an instant", () => {
     const v = await timed();
     const at = madrid(MONDAY, "10:00");
     const offers = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { at }));
-    expect(Object.keys(offers).sort()).toEqual(["defaultMenuId", "menus", "offers", "service"]);
+    expect(Object.keys(offers).sort()).toEqual([
+      "defaultMenuId",
+      "liveFields",
+      "menus",
+      "offers",
+      "service",
+    ]);
     expect(offers.defaultMenuId).toBe(v.menus.Desayunos);
     expect(offers.menus.filter((menu) => menu.isDefault).map((menu) => menu.id)).toEqual([
       v.menus.Desayunos,
@@ -2510,6 +2517,7 @@ describe("department service periods", () => {
       },
       menus: [],
       offers: [],
+      liveFields: NO_LIVE_FIELDS,
     });
     const other = await serviceVenue();
     await expect(scoped((tx) => listZoneOffers(tx, v.cfg, other.barra))).rejects.toMatchObject({

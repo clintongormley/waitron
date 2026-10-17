@@ -1714,7 +1714,7 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
 
     if (diningReadsFail)
       api.listZoneOffers.mockImplementation((zoneId: string) =>
-        zoneId === "zone-dining"
+        zoneId === tableC.zoneId
           ? Promise.reject({ code: "server.internal" })
           : Promise.resolve(V1),
       );
@@ -1729,7 +1729,7 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
   }
 
   it("keeps its mark when the other table's offers fail to load", async () => {
-    const round = await refusedThenOpen(tableB, true);
+    const round = await refusedThenOpen({ ...tableB, zoneId: "zone-terrace" }, true);
     expect(round.lines[0]!.blocked).toBe("unavailable");
   });
 

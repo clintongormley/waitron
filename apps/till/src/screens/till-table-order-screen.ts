@@ -1205,6 +1205,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Number }) kitchenNoteRevision = 0;
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) loading = false;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
@@ -2155,7 +2156,11 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The course goes on the line, so the draft saves it. */
   #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
-    store.setLineCourse(store.lines.indexOf(line), courseId === "" ? undefined : courseId);
+    store.setLineCourse(
+      store.lines.indexOf(line),
+      courseId === "" ? undefined : courseId,
+      this.courses.find((course) => course.id === courseId),
+    );
   }
 
   #makeAtPicker(
@@ -2645,11 +2650,16 @@ export class TillTableOrderScreen extends LitElement {
     event.stopPropagation();
   }
 
+  /** One probe across both views, because {@link #observeWidth} watches the element it first finds. */
   override render() {
+    return html`<div class="width-probe"></div>
+      ${this.loading ? this.#loadingScreen() : this.#orderScreen()}`;
+  }
+
+  #orderScreen(): TemplateResult {
     const pending = this.#pending();
     const draft = this.#draftStore;
     return html`
-      <div class="width-probe"></div>
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}
@@ -2677,18 +2687,7 @@ export class TillTableOrderScreen extends LitElement {
                 : nothing
             }
           </wt-button>
-          ${
-            this.embedded
-              ? nothing
-              : html`<wt-button
-                  class="back"
-                  data-back
-                  variant="secondary"
-                  @click=${() => this.#back()}
-                >
-                  ${t("table.back")}
-                </wt-button>`
-          }
+          ${this.#floorBackButton()}
         </div>
         ${this.#printProblem()}
         <till-order-kitchen-note
@@ -2713,6 +2712,35 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#splitGuestsDialog()}
       </section>
     `;
+  }
+
+  #loadingScreen(): TemplateResult {
+    return html`
+      <section
+        class="screen"
+        data-order-id=${this.orderId ?? nothing}
+        aria-label=${t("table.title")}
+        aria-busy="true"
+      >
+        ${
+          this.embedded
+            ? nothing
+            : html`<header class="head">
+                <h1 class="title">${t("table.title")}</h1>
+              </header>`
+        }
+        <div class="head-actions">${this.#floorBackButton()}</div>
+        <p role="status" data-loading>${t("table.loading")}</p>
+      </section>
+    `;
+  }
+
+  #floorBackButton(): TemplateResult | typeof nothing {
+    return this.embedded
+      ? nothing
+      : html`<wt-button class="back" data-back variant="secondary" @click=${() => this.#back()}>
+          ${t("table.back")}
+        </wt-button>`;
   }
 
   /** Browsing and the draft: side by side when the screen is wide enough, otherwise browsing, with

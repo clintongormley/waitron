@@ -292,6 +292,9 @@ called weaker than its name, the topic file lists what it does not see.
   and both paths apply the same replacement checks.** Cost: A413's reopening read hid a newer ask
   and left its replaced Pair dialog open. Covered in `apps/dashboard/src/screens/devices-screen.test.ts`;
   the receipt is in [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A value the till takes from its start read either refreshes through `setupRevision` or is
+  listed as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
+  Cost: courses stayed missing from an open table until a reload (A768). Nothing guards it.
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** A rejected subscription closes

@@ -81,7 +81,7 @@ export interface OrderLine {
   note?: string;
   /** The waiter's course override on a table draft; ABSENT means the product's default course. */
   courseId?: string;
-  /** Read-only course metadata from a restored draft, never sent on a write. */
+  /** Course metadata from a restored draft or the waiter's pick, never sent on a write. */
   course?: TillCourse;
   /** The chosen making station on a table draft line. */
   makeAt?: string;
@@ -429,6 +429,12 @@ export class WorkingOrderStore {
     for (const line of this.#lines) delete line.notOfferedExtras;
   }
 
+  appendLines(lines: readonly OrderLine[]): void {
+    if (this.#refusesEdits || lines.length === 0) return;
+    this.#lines.push(...lines);
+    this.#changedLines();
+  }
+
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     if (this.#refusesEdits) return;
     if (this.#refusesSelection(product)) return;
@@ -525,14 +531,17 @@ export class WorkingOrderStore {
     this.#changedLines();
   }
 
-  /** The waiter's course override on a table draft line; `undefined` goes back to the dish's own. */
-  setLineCourse(index: number, courseId: string | undefined): void {
+  /** The waiter's course override on a table draft line; `undefined` goes back to the dish's own.
+   * `course` is kept as the line's course metadata, so its name still shows once a refresh drops
+   * it from the venue's courses. */
+  setLineCourse(index: number, courseId: string | undefined, course?: TillCourse): void {
     if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (line === undefined) return;
     delete line.course;
     if (courseId === undefined) delete line.courseId;
     else line.courseId = courseId;
+    if (course !== undefined) line.course = course;
     this.#markDirty();
     this.emit("changed");
   }

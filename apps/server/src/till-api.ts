@@ -1,6 +1,6 @@
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
-import type { ExtraSelection, OptionSelection, TillReaderProvider } from "@waitron/shared";
+import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray } from "drizzle-orm";
@@ -14,15 +14,12 @@ import {
   type JoinSide,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
-  tillProviderForReader,
 } from "@waitron/shared";
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
   floorPlans,
-  locations,
   newId,
   readNodeMembership,
-  readTenant,
   sales,
   ticketItems,
   workingOrderLines,
@@ -46,8 +43,8 @@ import {
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
-import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
-import type { CapabilityFlag, NavigationScreen, ProfileAction } from "@waitron/layouts";
+import { kindOfFormFactor } from "@waitron/layouts";
+import type { ProfileAction } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { CardProviderContribution, PaymentProvider } from "@waitron/payments";
 import {
@@ -57,7 +54,6 @@ import {
   DEMO_READER_ID,
   DEMO_READER_REF,
   readReaderRole,
-  resolveDeviceReaderId,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
 import { resendInvoicePrintJob } from "./invoice-print.js";
@@ -136,7 +132,7 @@ import {
   unsentDishLines,
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
-import { listCourses, listStationsToday } from "./kitchen.js";
+import { listStationsToday } from "./kitchen.js";
 import {
   finishTable,
   holderOf,
@@ -237,7 +233,7 @@ import {
   switchToReceipt,
 } from "./invoice-delivery-actions.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
-import { readOfferedReceiptLanguages } from "./venue-locale.js";
+import { readTillSetup, setupRevisionOf } from "./till-setup.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -319,9 +315,6 @@ async function newOrderZoneIn(
 function named(...subjects: (ZoneSubject | false)[]): ZoneSubject[] {
   return subjects.filter((subject): subject is ZoneSubject => subject !== false);
 }
-
-/** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
-type TillCardProvider = TillReaderProvider | "simulator" | "none";
 
 /**
  * The reader a card is charged on: the one the request names, else the device's own. It must be
@@ -1390,117 +1383,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // is due.
       const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const held = await readNodeMembership(deps.db);
-      const boot = await withTransaction(deps.db, async (tx) => {
-        const taxpayer = await readTenant(tx);
-        const [loc] = await tx
-          .select({
-            bumpMode: locations.bumpMode,
-            fireControl: locations.fireControl,
-          })
-          .from(locations)
-          .where(eq(locations.id, deps.cfg.locationId));
-        const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
-          id: course.id,
-          name: course.name,
-          displayOrder: course.displayOrder,
-        }));
-        let capabilities: CapabilityFlag[] = [];
-        let inactivityTimeoutSeconds: number | null = null;
-        let startingScreen: NavigationScreen | null = null;
-        if (device != null) {
-          const profile = await getDeviceProfile(tx, device.deviceProfileId);
-          capabilities = device.capabilities;
-          inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
-          startingScreen = profile?.startingScreen ?? null;
-        }
-        let defaultReaderProvider: TillReaderProvider | undefined;
-        let defaultReaderId: string | undefined;
-        const activeReaders: {
-          id: string;
-          name: string;
-          provider: TillReaderProvider;
-        }[] = [];
-        const resolvedReaderId =
-          device == null ? null : await resolveDeviceReaderId(tx, device.deviceId);
-        if (resolvedReaderId !== null) {
-          const [reader] = await tx
-            .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
-            .from(cardReaders)
-            .where(and(eq(cardReaders.id, resolvedReaderId), eq(cardReaders.active, true)));
-          const provider =
-            reader === undefined ? undefined : tillProviderForReader(reader.provider);
-          if (reader !== undefined && provider !== undefined) {
-            defaultReaderProvider = provider;
-            defaultReaderId = reader.id;
-            activeReaders.push({ id: reader.id, name: reader.name, provider });
-          }
-        }
-        const receiptLanguages = await readOfferedReceiptLanguages(tx, {
-          locationId: deps.cfg.locationId,
-        });
-        return {
-          invoiceLocale: receiptLanguages[0],
-          receiptLanguages,
-          issuer:
-            taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-          bumpMode: loc?.bumpMode,
-          fireControl: loc?.fireControl,
-          courses,
-          formFactor: device?.formFactor ?? "till",
-          capabilities,
-          inactivityTimeoutSeconds,
-          startingScreen,
-          defaultReaderProvider,
-          defaultReaderId,
-          activeReaders,
-        };
-      });
-      /* v8 ignore start */
-      if (
-        boot.issuer === undefined ||
-        boot.bumpMode === undefined ||
-        boot.fireControl === undefined
-      ) {
-        // Unreachable once provisioned: the taxpayer row and the till's own location both exist.
-        throw new Error(`GET /api/till: no taxpayer/location row for ${deps.cfg.locationId}`);
-      }
-      /* v8 ignore stop */
+      const setup = await withTransaction(deps.db, (tx) => readTillSetup(tx, deps, device));
       return c.json({
-        locale: deps.venueLocale,
-        clockingAvailable: deps.workforceEnabled === true,
-        // The location's receipt language, kept separate from the UI `locale`: the UI derivation
-        // drops UI-unsupported codes, which must never reach the receipt.
-        invoiceLocale: boot.invoiceLocale,
-        receiptLanguages: boot.receiptLanguages,
-        onboardingIntent: deps.onboardingIntent,
-        venueName: boot.issuer.venueName,
-        nif: boot.issuer.nif,
-        bumpMode: boot.bumpMode,
-        fireControl: boot.fireControl,
-        courses: boot.courses,
-        cardProvider: (deps.cardProvider?.provider === "simulator"
-          ? "simulator"
-          : (boot.defaultReaderProvider ?? "none")) satisfies TillCardProvider,
-        // A venue can have several active readers on one provider, so the till needs the row id.
-        defaultReaderId:
-          deps.cardProvider?.provider === "simulator" ? undefined : boot.defaultReaderId,
-        activeReaders:
-          deps.cardProvider?.provider === "simulator"
-            ? [{ id: DEMO_READER_ID, name: "Demo card reader", provider: "simulator" }]
-            : boot.activeReaders,
-        tipsEnabled: deps.cfg.tipsEnabled,
-        formFactor: boot.formFactor,
-        capabilities: boot.capabilities,
-        inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
-        ...(boot.startingScreen === null ? {} : { startingScreen: boot.startingScreen }),
-        // The till polls each server's `GET /api/node` to follow the primary across a failover.
-        nodeId: deps.cfg.nodeId,
+        ...setup,
+        setupRevision: setupRevisionOf(setup),
         servers: routableServers(held),
-        // So the basket refuses an order over it as it is entered, not at the pay step.
-        simplifiedInvoiceLimit: deps.cfg.simplifiedInvoiceLimit,
-        // An F1 request is refused by refuseUnavailableInvoiceRequest (./till-sale.ts) and an order
-        // saved as F1 by refuseUnavailableFullInvoice (./working-order.ts); keep in step.
-        fullInvoices: false,
       });
     }),
   );
@@ -1625,6 +1512,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             at,
             menuState.menus.map((menu) => menu.menuId),
           ),
+          setupRevision: setupRevisionOf(await readTillSetup(tx, deps, device)),
         };
       });
       return c.json(state);

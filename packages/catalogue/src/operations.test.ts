@@ -2136,7 +2136,7 @@ describe("what a menu offers: its structure, Active and Available decide", () =>
     await run((tx) => publishMenu(tx, f.lunch, hash, "person-1"));
     const served = await run(async (tx) => {
       const live = await readLiveDocuments(tx, [f.lunch]);
-      return (await applyLiveFields(tx, [live.get(f.lunch)!.document])).get(f.lunch)!;
+      return (await applyLiveFields(tx, [live.get(f.lunch)!.document])).offers.get(f.lunch)!;
     });
     expect(served.map((offer) => [offer.productId, offer.available])).toEqual([
       [f.lemonade, true],
