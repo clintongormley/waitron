@@ -439,7 +439,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) readers: TillActiveReader[] = [];
   /** The device's own reader, shown chosen until another is picked; it is never sent. */
   @property() defaultReaderId?: string;
-  /** Asked only on the payment that pays what is left, which is the one that records the sale. */
+  /** Asked only on the payment that pays what is left. */
   @property({ type: Boolean }) asksGuests = false;
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;
@@ -1411,15 +1411,12 @@ export class TillBillPayDialog extends LitElement {
     const guestsShown = this.#guestsShown(preview);
     if (tipChecked) this.tipAttempted = true;
     if (guestsShown) this.guestsAttempted = true;
-    if (
-      (cash !== null && tipChecked && this.#tipErrors(cash).size > 0) ||
-      (guestsShown && this.#guestsInvalid())
-    ) {
+    if ((tipChecked && this.#tipErrors(cash).size > 0) || (guestsShown && this.#guestsInvalid())) {
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    if (cash !== null && tipChecked) {
+    if (tipChecked) {
       const tip = typedAmount(this.tipAmount)!;
       if (compareDecimal(decimal(tip), decimal(cash.preview.tip)) !== 0) {
         this.#askWithTip(asked, cash.pay, this.#addedTipFor(cash, tip));

@@ -11777,7 +11777,7 @@ export class TillApp extends LitElement {
   /**
    * Takes the payment the dialog showed. Its submission id is fresh for each confirmation, and is
    * the one sent before only while that same confirmation on the same bill got no answer (plan
-   * D8); the request is sent again unchanged while it gets none.
+   * D8).
    */
   async #onBillPayConfirm(event: Event): Promise<void> {
     // Sent only from the confirmation, which shows an allocated preview of what was asked.
