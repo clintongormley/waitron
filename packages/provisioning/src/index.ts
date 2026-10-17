@@ -118,3 +118,16 @@ export {
   type RecoveryDeliveryInput,
   type RecoveryKeptInput,
 } from "./first-setup-recovery-delivery.js";
+
+export {
+  activateFirstSetup,
+  publishCheckedFirstSetup,
+  checkedFirstSetupCommit,
+  firstSetupProvisionRequest,
+} from "./first-setup-activation.js";
+export type {
+  CheckedFirstSetupCommit,
+  FirstSetupActivationHost,
+  FirstSetupActivationDeps,
+  FirstSetupPublicationDeps,
+} from "./first-setup-activation.js";

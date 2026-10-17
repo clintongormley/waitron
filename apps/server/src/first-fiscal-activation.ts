@@ -3,7 +3,15 @@ import { isDeepStrictEqual } from "node:util";
 import { readMembershipTrustSet, readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import type { FirstSetupHold, FirstSetupState, VenueResult } from "@waitron/provisioning";
+import {
+  activateFirstSetup,
+  publishCheckedFirstSetup,
+  checkedFirstSetupCommit,
+  firstSetupProvisionRequest as firstFiscalProvisionRequest,
+  type FirstSetupHold,
+  type FirstSetupState,
+  type VenueResult,
+} from "@waitron/provisioning";
 import type { SetupDeps } from "./setup-api.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -34,60 +42,13 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
-export function firstFiscalProvisionRequest(state: FirstSetupState) {
-  const offering = state.frozen.modules.filter((module) => module.request !== null);
-  return {
-    environment: state.frozen.environment,
-    ...(state.frozen.configurationImport === undefined
-      ? {}
-      : {
-          configurationImport: true,
-          configurationDigest: state.frozen.configurationImport.digest,
-          newTaxpayer: state.frozen.configurationImport.newTaxpayer,
-        }),
-    venue: structuredClone(state.frozen.request),
-    initialOperations: {
-      nodeId: state.frozen.nodeId,
-      administratorId: state.frozen.administratorId,
-      inputs: offering.map((module) => ({
-        module: module.module,
-        eventId: module.eventId,
-        sourceId: state.frozen.sourceId,
-        input: state.inputs[module.module],
-      })),
-    },
-  };
-}
+export { firstSetupProvisionRequest as firstFiscalProvisionRequest } from "@waitron/provisioning";
 export async function checkedFirstFiscalCommit(
   host: FirstFiscalHost,
   deps: SetupDeps,
   state: FirstSetupState,
 ) {
-  if (deps.db === undefined || deps.recoverProvision === undefined)
-    throw new AppError("setup.not_ready", {});
-  const offering = state.frozen.modules.filter(
-    (module) => initialSetupFor(host.modules, module.module) !== undefined,
-  );
-  if (offering.length === 0) conflict();
-  const results = await withTransaction(deps.db, async (tx) => {
-    const checked: Record<string, unknown> = {};
-    for (const module of offering) {
-      const seat = initialSetupFor(host.modules, module.module)!;
-      const result = await seat.committed(
-        tx,
-        firstSetupModuleContext(state, module.module),
-        state.inputs[module.module],
-      );
-      if (result === null) return null;
-      checked[module.module] = result;
-    }
-    return checked;
-  });
-  if (results === null) return null;
-  const recovered = await deps.recoverProvision(firstFiscalProvisionRequest(state));
-  const result = { venue: recovered, modules: results };
-  if (state.result !== null && !isDeepStrictEqual(state.result, result)) conflict();
-  return result;
+  return checkedFirstSetupCommit(host, deps, state);
 }
 export function firstFiscalPayload(
   host: FirstFiscalHost,
@@ -171,7 +132,7 @@ export async function activateFirstFiscal(
   body: Record<string, unknown>,
   hold: FirstSetupHold,
 ): Promise<VenueResult> {
-  let state = await host.owner.authorize(owner);
+  const state = await host.owner.authorize(owner);
   if (["uncertain", "abandoned", "claimed"].includes(state.status)) conflict();
   for (const module of state.frozen.modules)
     if (initialSetupFor(host.modules, module.module) !== undefined)
@@ -190,82 +151,45 @@ export async function activateFirstFiscal(
     req = firstFiscalProvisionRequest(state);
   if (state.frozen.environment === "production" && payload.email === undefined)
     throw new AppError("setup.email_required", { field: "email" });
-  if (
-    state.inputs.$publication !== undefined &&
-    !isDeepStrictEqual(state.inputs.$publication, { digest: payload.digest })
-  )
-    throw new AppError("setup.attempt_conflict", {});
-  const advance = async (change: Parameters<typeof host.store.update>[2]) => {
-    state = await host.store.update(state.frozen.attemptId, state.revision, change, hold);
-  };
-  let checked: Awaited<ReturnType<typeof checkedFirstFiscalCommit>>;
-  if (state.status === "consumption-intent") {
-    for (const module of state.frozen.modules)
-      if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined)
-        await host.recoveryDelivery.consume(owner, module.module, hold);
-    if (state.frozen.environment === "production") {
-      if (deps.assertFiscalReady === undefined)
-        throw new AppError("setup.fiscal_test_required", { module: payload.contribution.id });
-      await deps.assertFiscalReady({
-        request: req,
-        contribution: payload.contribution,
-        secret: body.aeatCert,
-      });
-    }
-    try {
-      await deps.provision(req, async () => {
-        if (state.inputs.$publication === undefined)
-          await advance({ kind: "publication-binding", digest: payload.digest });
-        await advance({ kind: "activation-started" });
-      });
-    } catch (error) {
-      if ((state as FirstSetupState).status === "activation-started") {
-        try {
-          checked = await checkedFirstFiscalCommit(host, deps, state);
-          if (checked !== null) await advance({ kind: "committed", result: checked });
-          else await advance({ kind: "uncertain" });
-        } catch {
-          await advance({ kind: "uncertain" });
+  return activateFirstSetup(
+    host,
+    {
+      provision: (beforeTransaction) => deps.provision!(req, beforeTransaction),
+      check: (current) => checkedFirstFiscalCommit(host, deps, current),
+      assertReady: async () => {
+        if (state.frozen.environment !== "production") return;
+        if (deps.assertFiscalReady === undefined)
+          throw new AppError("setup.fiscal_test_required", { module: payload.contribution.id });
+        await deps.assertFiscalReady({
+          request: req,
+          contribution: payload.contribution,
+          secret: body.aeatCert,
+        });
+      },
+      confirmCommitted: async (current) => {
+        for (const module of current.frozen.modules) {
+          if (initialSetupFor(host.modules, module.module) === undefined) continue;
+          const evidence = await host.evidence.read(
+            firstSetupModuleContext(current, module.module).binding,
+          );
+          if (
+            typeof evidence?.current !== "object" ||
+            evidence.current === null ||
+            !("priorActivation" in evidence.current) ||
+            evidence.current.priorActivation !== "committed"
+          )
+            throw new AppError("sif.allocation_invalid", {
+              reason: "outside_confirmation_missing",
+            });
         }
-      }
-      throw error;
-    }
-    if ((state as FirstSetupState).status !== "activation-started") conflict();
-    checked = await checkedFirstFiscalCommit(host, deps, state);
-    if (checked === null) {
-      await advance({ kind: "uncertain" });
-      conflict();
-    }
-    await advance({ kind: "committed", result: checked });
-  } else {
-    try {
-      checked = await checkedFirstFiscalCommit(host, deps, state);
-    } catch {
-      await advance({ kind: "uncertain" });
-      conflict();
-    }
-    if (checked === null) {
-      await advance({ kind: "uncertain" });
-      conflict();
-    }
-    // A retained activation is read only; a new live consultation authorizes unfinished publication.
-    for (const module of state.frozen.modules) {
-      if (initialSetupFor(host.modules, module.module) === undefined) continue;
-      const evidence = await host.evidence.read(
-        firstSetupModuleContext(state, module.module).binding,
-      );
-      if (
-        typeof evidence?.current !== "object" ||
-        evidence.current === null ||
-        !("priorActivation" in evidence.current) ||
-        evidence.current.priorActivation !== "committed"
-      )
-        throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
-    }
-    if (state.status === "activation-started")
-      await advance({ kind: "committed", result: checked });
-  }
-  return publishCheckedFirstFiscal(host, deps, state, checked!, { owner, body, payload }, hold);
+      },
+      publish: (current, checked) =>
+        publishCheckedFirstFiscal(host, deps, current, checked, { owner, body, payload }, hold),
+    },
+    owner,
+    payload.digest,
+    hold,
+  );
 }
 
 export async function finishFirstFiscalSetup(
@@ -327,88 +251,84 @@ export async function publishCheckedFirstFiscal(
     deps.persistTrading === undefined
   )
     throw new AppError("setup.not_ready", {});
-  if (
-    !["committed", "publication"].includes(state.status) ||
-    !isDeepStrictEqual(state.result, checked)
-  )
-    conflict();
   const { owner, body, payload } = publication;
-  if (!isDeepStrictEqual(state.inputs.$publication, { digest: payload.digest })) conflict();
-  const advance = async (change: Parameters<typeof host.store.update>[2]) => {
-    state = await host.store.update(state.frozen.attemptId, state.revision, change, hold);
-  };
-  const result = checked.venue;
-  for (const module of state.frozen.modules) {
-    if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined) {
-      await host.recoveryDelivery.install(
-        deps.db,
-        state,
-        { ...owner, revision: state.revision },
-        module.module,
-        hold,
-      );
-      continue;
-    }
-    const binding = firstSetupModuleContext(state, module.module).binding;
-    if (!(await host.delivery.has(binding))) continue;
-    const stage = await host.keys.readStage({ ...owner, revision: state.revision }, hold);
-    await host.keys.installStagedNodeKey(deps.db, state, stage, hold);
-  }
-  await host.publishSelection(state);
-  const identity = async () => ({
-    trust: await readMembershipTrustSet(deps.db!),
-    credential: await withTransaction(deps.db!, (tx) =>
-      tryGetCredential(tx, deps.ring!, { purpose: NODE_KEY_PURPOSE }),
-    ),
-  });
-  let own = await identity();
-  if (own.trust[result.nodeId] === undefined && own.credential === null) {
-    await deps.establishIdentity(result.nodeId);
-    own = await identity();
-  }
-  const publicKey = own.trust[result.nodeId];
-  if (publicKey === undefined || own.credential === null) conflict();
-  const challenge = JSON.stringify([
-    "waitron.first-setup-node-check",
-    state.frozen.attemptId,
-    result.nodeId,
-  ]);
-  if (!verifyBytes(challenge, signBytes(challenge, own.credential.privateKey!), publicKey))
-    conflict();
-  let membership = await readNodeMembershipRow(deps.db);
-  if (membership === null) {
-    await deps.seedMembership(result.nodeId);
-    membership = await readNodeMembershipRow(deps.db);
-  }
-  if (
-    membership === null ||
-    !isMembershipDocument(membership.document) ||
-    membership.document.body.term !== 0 ||
-    membership.document.signerNodeId !== result.nodeId ||
-    membership.document.body.nodes.length !== 1 ||
-    membership.document.body.nodes[0]?.nodeId !== result.nodeId ||
-    membership.document.body.nodes[0]?.standing !== "serving-primary" ||
-    !verifyMembershipDocument(membership.document, own.trust).valid
-  )
-    conflict();
-  // Repeat only the seals and settings; the retained node key and membership stay unchanged.
-  if (payload.required) await payload.secret!.seal({ db: deps.db, ring: deps.ring }, body.aeatCert);
-  const email = payload.email;
-  if (email !== undefined)
-    await withTransaction(deps.db!, (tx) =>
-      putCredential(tx, deps.ring!, { purpose: "email.smtp", value: email }),
-    );
-  await deps.persistTrading({
-    nodeId: result.nodeId,
-    locationId: result.locationId,
-    environment: state.frozen.environment,
-    ...(deps.devMode === true ? { developmentMode: true } : {}),
-    onboardingIntent: "live",
-  });
-  await deps.clearConfiguration?.();
-  if (state.status === "committed") await advance({ kind: "publication" });
-  // Keep password recovery available until the publication audit is durable.
-  await beforeComplete?.();
-  await advance({ kind: "complete" });
-  return result;
+  return publishCheckedFirstSetup(
+    host,
+    {
+      db: deps.db,
+      publishSelection: async (current) => {
+        await host.publishSelection(current);
+      },
+      publishIdentity: async (result, state) => {
+        const identity = async () => ({
+          trust: await readMembershipTrustSet(deps.db!),
+          credential: await withTransaction(deps.db!, (tx) =>
+            tryGetCredential(tx, deps.ring!, { purpose: NODE_KEY_PURPOSE }),
+          ),
+        });
+        let own = await identity();
+        if (own.trust[result.nodeId] === undefined && own.credential === null) {
+          await deps.establishIdentity!(result.nodeId);
+          own = await identity();
+        }
+        const publicKey = own.trust[result.nodeId];
+        if (publicKey === undefined || own.credential === null) conflict();
+        const challenge = JSON.stringify([
+          "waitron.first-setup-node-check",
+          state.frozen.attemptId,
+          result.nodeId,
+        ]);
+        if (!verifyBytes(challenge, signBytes(challenge, own.credential.privateKey!), publicKey))
+          conflict();
+        let membership = await readNodeMembershipRow(deps.db!);
+        if (membership === null) {
+          await deps.seedMembership!(result.nodeId);
+          membership = await readNodeMembershipRow(deps.db!);
+        }
+        if (
+          membership === null ||
+          !isMembershipDocument(membership.document) ||
+          membership.document.body.term !== 0 ||
+          membership.document.signerNodeId !== result.nodeId ||
+          membership.document.body.nodes.length !== 1 ||
+          membership.document.body.nodes[0]?.nodeId !== result.nodeId ||
+          membership.document.body.nodes[0]?.standing !== "serving-primary" ||
+          !verifyMembershipDocument(membership.document, own.trust).valid
+        )
+          conflict();
+      },
+      installLegacyKey: async (current, owner, module, hold) => {
+        const binding = firstSetupModuleContext(current, module).binding;
+        if (!(await host.delivery.has(binding))) return;
+        const stage = await host.keys.readStage({ ...owner, revision: current.revision }, hold);
+        await host.keys.installStagedNodeKey(deps.db!, current, stage, hold);
+      },
+      sealSettings: async () => {
+        if (payload.required)
+          await payload.secret!.seal({ db: deps.db!, ring: deps.ring! }, body.aeatCert);
+        const email = payload.email;
+        if (email !== undefined)
+          await withTransaction(deps.db!, (tx) =>
+            putCredential(tx, deps.ring!, { purpose: "email.smtp", value: email }),
+          );
+      },
+      persistTrading: (result, current) =>
+        deps.persistTrading!({
+          nodeId: result.nodeId,
+          locationId: result.locationId,
+          environment: current.frozen.environment,
+          ...(deps.devMode === true ? { developmentMode: true } : {}),
+          onboardingIntent: "live",
+        }),
+      ...(deps.clearConfiguration === undefined
+        ? {}
+        : { clearConfiguration: deps.clearConfiguration }),
+    },
+    state,
+    checked,
+    owner,
+    payload.digest,
+    hold,
+    beforeComplete,
+  );
 }
