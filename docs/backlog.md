@@ -5068,10 +5068,12 @@ the tree. What remains, largest first:
 
 - **Other server test files still hash fixed PINs and passwords on every test.** A801 moved the
   shared fixtures under `apps/server/src/testing/` and the set-up of five heavy test files onto
-  `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); 156
-  test files still call `hashPin`/`hashPassword` directly, among them the `attendance-*` suites,
-  left alone while lane G's A773-1 was editing them. Move the set-up ones over; leave any test that
-  is about hashing. Left open by A801.
+  `fixturePinHash`/`fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`); other
+  test files and helpers still call `hashPin`/`hashPassword` directly (`rg -l
+  'hashPin\(|hashPassword\(' apps/server -g '*.test.ts' -g '**/testing/**'`), among them the
+  `attendance-*` suites, left alone while lane G's A773-1 was editing them, and the two venue
+  helpers under `apps/server/scripts/` (`testing/venue.ts`, `demo-seed/testing/provision-venue.ts`).
+  Move the set-up ones over; leave any test that is about hashing. Left open by A801.
 
 - **Tests copy the dashboard shell's link handler instead of calling it.** `#onAppLink`
   (`apps/dashboard/src/dashboard-app.ts`) has hand-made copies in tests, one of them
