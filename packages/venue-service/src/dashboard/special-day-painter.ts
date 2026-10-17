@@ -429,8 +429,9 @@ export class SpecialDayPainter extends LitElement {
   private seeded?: string;
   /** The stored dates, each with the public holiday it was saved on, if any. */
   private stored = new Map<LocalDate, string | undefined>();
-  /** The saved blocks `dropDeletedPeriods` took out of the draft's and the saved state's paint,
-   *  which the next {@link merge} fills from the stored day. */
+  /** The stretches where `dropDeletedPeriods` took out a deleted period's paint over a block of it
+   *  that was saved, which the next {@link merge} fills from the stored day. Save is held while any
+   *  wait: sent before, the save would overwrite the replacement the server moved there. */
   private vacated?: { draft: OwnerPaint; baseline: OwnerPaint };
   /** The clock revision the draft was seeded with; followed only while nothing is edited. */
   private revision = 0;
@@ -730,8 +731,8 @@ export class SpecialDayPainter extends LitElement {
     return since;
   }
   /** A save naming a deleted period is refused, so its paint leaves the draft and the saved state.
-   *  A deletion naming a replacement moves the saved blocks to it, so the next {@link merge} fills
-   *  a saved block's stretch from the stored day. */
+   *  A deletion naming a replacement moves the saved blocks to it, so each stretch where a
+   *  deleted-period block overlapped a saved block of that period is kept in {@link vacated}. */
   private dropDeletedPeriods(previous: Model) {
     const removed = removedPeriods(previous, this.model);
     if (!removed.size) return;
@@ -749,10 +750,9 @@ export class SpecialDayPainter extends LitElement {
         }
       return into;
     };
-    this.vacated = {
-      draft: holes(this.draft.paint, this.vacated?.draft),
-      baseline: holes(this.baseline.paint, this.vacated?.baseline),
-    };
+    const draft = holes(this.draft.paint, this.vacated?.draft);
+    const baseline = holes(this.baseline.paint, this.vacated?.baseline);
+    this.vacated = draft.size || baseline.size ? { draft, baseline } : undefined;
     const strip = (paint: OwnerPaint): OwnerPaint =>
       new Map([...paint].map(([owner, days]) => [owner, withoutPeriods(days, removed)]));
     this.draft = { ...this.draft, paint: strip(this.draft.paint) };
@@ -846,6 +846,7 @@ export class SpecialDayPainter extends LitElement {
       this.saving ||
       this.loading ||
       this.offered ||
+      this.vacated ||
       saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged
     )
       return;
@@ -1539,6 +1540,7 @@ export class SpecialDayPainter extends LitElement {
         .coordinator=${this.coordinator}
         .dirty=${
           !this.offered &&
+          !this.vacated &&
           !saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged &&
           !this.blocked()
         }

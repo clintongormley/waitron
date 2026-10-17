@@ -713,3 +713,72 @@ describe("a period the live model no longer lists, moved to a replacement", () =
     ]);
   });
 });
+
+describe("a period deleted with a replacement before the stored day is read again", () => {
+  const withoutLunch = () => {
+    const next = painterModel();
+    const restaurant = next.departments[0]!;
+    restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+    return next;
+  };
+  /** Mounts a day with Lunch 08:00–10:00 saved on Dec 15, then stores Dinner there in its place
+   *  and drops Lunch from the model, with each re-read of the day awaiting `reread`. */
+  async function deleteLunch(reread: () => Promise<unknown> | undefined) {
+    let follow: () => Promise<unknown> | undefined = () => undefined;
+    const day = storedDay({
+      paint: [{ departmentId: "d1", date: DEC_15, ranges: [lunch("08:00", "10:00")] }],
+    });
+    const mounted = await mount({ days: { sd1: day }, dayAfter: () => follow() });
+    follow = reread;
+    day.paint = [{ departmentId: "d1", date: DEC_15, ranges: [dinner("08:00", "10:00")] }];
+    mounted.painter.model = withoutLunch();
+    await settle(mounted.painter);
+    expect(part(mounted.painter, "paint-p1")).toBeNull();
+    chip(mounted.painter, "paint-p2").click();
+    await drag(mounted.painter, DEC_15, at("19:00"), at("22:00"));
+    chip(mounted.painter, "paint-closed").click();
+    await drag(mounted.painter, DEC_15, at("08:00"), at("09:00"));
+    expect(grid(mounted.painter).days.get(DEC_15)).toEqual([
+      closed("08:00", "09:00"),
+      dinner("19:00", "22:00"),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await settle(mounted.painter);
+    expect(saveButton(mounted.painter).disabled).toBe(true);
+    saveButton(mounted.painter).click();
+    frame(mounted.painter).dispatchEvent(
+      new CustomEvent("painter-save", { bubbles: true, composed: true }),
+    );
+    await settle(mounted.painter);
+    expect(mounted.writes).toEqual([]);
+    return mounted;
+  }
+  const refilled = [closed("08:00", "09:00"), dinner("09:00", "10:00"), dinner("19:00", "22:00")];
+  async function savesTheReplacement(painter: SpecialDayPainter, writes: Write[]) {
+    await expect.poll(() => grid(painter).days.get(DEC_15)).toEqual(refilled);
+    await expect.poll(() => saveButton(painter).disabled).toBe(false);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect((writes[0]!.body as { paint: unknown }).paint).toEqual([
+      { departmentId: "d1", date: DEC_15, ranges: refilled },
+    ]);
+  }
+
+  it("holds Save while the re-read hangs, and once it lands sends the replacement beside the paint made meanwhile", async () => {
+    let release: () => void = () => {};
+    const hung = new Promise<void>((resolve) => (release = resolve));
+    const { painter, writes } = await deleteLunch(() => hung);
+    release();
+    await savesTheReplacement(painter, writes);
+  });
+
+  it("holds Save when the re-read fails, and reads again when the next model arrives", async () => {
+    let failing = true;
+    const { painter, writes } = await deleteLunch(() =>
+      failing ? Promise.reject(new Error("offline")) : undefined,
+    );
+    failing = false;
+    painter.model = withoutLunch();
+    await savesTheReplacement(painter, writes);
+  });
+});

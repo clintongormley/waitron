@@ -118,13 +118,16 @@ continues to use the watches described in A722-3 above.
 Calendar's Periods window, and reads and re-reads as the A506-11 line above says. When a refreshed
 model no longer lists a period that a department still in it listed before, both painters take
 that period's blocks out of their draft and their saved state (`removedPeriods`,
-`painter-labels.ts`; `withoutPeriods`, `paint-model.ts`). A block the saved state held takes, at
-its own times, whatever the stored paint now holds there — the replacement the delete named,
-which the server moved the saved blocks to — on a day the draft changed as well as one it did
-not, except over a stretch the draft has painted since (`savedBlocks` and `refill`,
-`paint-model.ts`). The season painter fills it in from the refreshed model; the special-day
-painter when its re-read of the stored day lands (`merge`). An unsaved block of the deleted
-period has no stored counterpart and is dropped.
+`painter-labels.ts`; `withoutPeriods`, `paint-model.ts`). Wherever one of those blocks overlapped
+a block of the same period saved on the same day, that stretch takes whatever the stored paint now
+holds there — the replacement the delete named, which the server moved the saved blocks to — even
+where the draft had split, shortened or lengthened the saved block, and on a day the draft changed
+as well as one it did not (`savedBlocks` and `refill`, `paint-model.ts`). The season painter fills
+it in from the refreshed model. The special-day painter fills it when its re-read of the stored day
+lands (`merge`), and while any such stretch waits it holds Save; a failed re-read leaves Save held,
+and the next model the painter is handed reads the day again (`follow`). Paint made on the special day before that re-read
+lands keeps its stretch, and the fill takes only the rest. The rest of a deleted-period block, with
+nothing saved behind it, is dropped.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`
