@@ -1,5 +1,5 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
-import { copyRecalledSplit, isRecalledDish } from "./draft-source.js";
+import { copyRecalledSplit, isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import {
@@ -2420,6 +2420,14 @@ export async function sendLines(
   if (namedLines.some((line) => line.parentLineId !== null)) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
+  if (namedLines.length > 0)
+    await refuseRecalledWrite(
+      tx,
+      inArray(
+        workingOrderLines.id,
+        namedLines.map((line) => line.id),
+      ),
+    );
   const heldGroupLines = await tx
     .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
@@ -2545,6 +2553,7 @@ export async function recallLines(
     }
   }
   const lineIds = lines.map((r) => r.id);
+  if (lineIds.length > 0) await refuseRecalledWrite(tx, inArray(workingOrderLines.id, lineIds));
   // Read BEFORE the un-fire, so `fired_at` still says which lines printed and need a RECALLED slip.
   const items = await tx
     .select({
@@ -3143,6 +3152,7 @@ export async function setLineCourse(
   if (line.parentLineId !== null) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
+  await refuseRecalledWrite(tx, eq(workingOrderLines.id, line.id));
   const [item] = await tx
     .select({ firedAt: ticketItems.firedAt })
     .from(ticketItems)
@@ -6101,6 +6111,7 @@ export async function updateHeldOrder(
 ): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label, locationId } = await requireEditableOrder(tx, id, req.revision);
+    await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
@@ -6195,6 +6206,7 @@ export async function updateOrderLine(
   if (parent === undefined) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
+  await refuseRecalledWrite(tx, eq(workingOrderLines.id, parent.id));
   const { changed, at } = await applyLineEdits(
     tx,
     cfg,
@@ -6245,6 +6257,7 @@ export async function abandonHeldOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await refuseRecalledWrite(tx, eq(workingOrderLines.workingOrderId, id));
     await refusePaymentInFlight(tx, [id]);
     await refuseBillHoldingMoney(tx, [id]);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));

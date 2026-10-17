@@ -72,7 +72,7 @@ import "./errors.js";
 import { stillMovable } from "./station-move.js";
 import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { readPartyTables } from "./orders-list.js";
-import { isRecalledDish } from "./draft-source.js";
+import { isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -860,6 +860,13 @@ export async function moveLinesToGroup(
           throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
         }
       }
+      await refuseRecalledWrite(
+        tx,
+        inArray(
+          workingOrderLines.id,
+          moves.map((move) => move.lineId),
+        ),
+      );
       const printed = await printedHeldGroups(tx, [
         ...lines.map((line) => line.groupId!),
         ...(target === "new" ? [] : [target.groupId]),

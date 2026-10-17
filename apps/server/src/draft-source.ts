@@ -1,4 +1,6 @@
 import { and, eq, exists, gt, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
 import {
   orderDraftRecalledLines,
   orderDraftLines,
@@ -7,6 +9,18 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
+import "./errors.js";
+
+/** Legacy edits lack the draft revision; recalled families must use the draft commands. */
+export async function refuseRecalledWrite(tx: Transaction, scope: SQL): Promise<void> {
+  const [source] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(and(scope, isRecalledDish(tx)))
+    .limit(1);
+  if (source !== undefined)
+    throw new AppError("management.request_invalid", { field: "sourceLineId" });
+}
 
 /** A recalled parent and its extras remain charged, but are no longer sent work. */
 export function isRecalledDish(tx: Transaction) {
