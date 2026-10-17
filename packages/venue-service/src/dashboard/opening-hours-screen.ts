@@ -742,8 +742,8 @@ export class OpeningHoursScreen extends LitElement {
       );
     });
   }
-  /** What the Month and the Week draw for the shown station: the same object while nothing it is
-   *  built from changes, so a view does not take it for a new station. */
+  /** What the Month and the Week draw for the shown station: the same object while every one of
+   *  `inputs` is unchanged, so a view does not take it for a new station. */
   private stationShow(): StationShow | undefined {
     const station = this.shownStation();
     if (!station && !this.stationListPending()) return undefined;

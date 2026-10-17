@@ -3821,7 +3821,8 @@ key to the tints, not buttons (`keyOnly` on `season-chips.ts`). These are planne
 station closures and service extensions do not change them. A default station shows "Always open: this is the default
 station" and no month. A failed read shows "This station's times could not be loaded. It will be
 tried again." above the month until that read succeeds again. The month is not kept in the
-address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
+address: the tab opens on the browser's current month. The Calendar's Show picker offers the same
+reading in the Month and the Week (below). Special days are made and painted in Opening hours' special-day painter, opened
 from the Year, the Month or the Week.
 
 ### Tabbed management pages
@@ -4106,8 +4107,19 @@ Opening hours' Year.
   too; days are picked as Picking days (below) says, and
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
   today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
-  the dates are plain and nothing is picked.
-- **Week.** `/view/week[/department/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws,
+  the dates are plain and nothing is picked. Unless the Calendar is read-only, Show also lists the
+  active prep stations under their own heading; the Calendar is read-only for anyone without
+  `venue_service.manage`, the permission Prep stations needs, and a read-only Calendar reads no
+  station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`
+  and draws, in place of the departments, the times it gets orders, worked out as the Times tab
+  works them out: one row per department that sends it dishes on any date read for the view, named
+  by the department even when only one does. A date none of them sends on reads "No orders" once;
+  the default station shows "Always open: this is the default station" in place of the dates, and
+  nothing is drawn below the head while the station's times load. Clicking a date still picks it
+  and opens the day box, which lists every department's opening hours. If the station list cannot be
+  read, Show offers departments only; a failed read of a station's times shows an alert above the
+  view until a read succeeds.
+- **Week.** `/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws,
   when the Week itself is 560 px wide or more, the Monday-to-Sunday week holding the `week` date,
   which need not be a Monday. A missing, malformed
   or out-of-range date shows the week holding the venue's today, and the address is left as
@@ -4139,7 +4151,10 @@ Opening hours' Year.
   language (`dayTitleCandidateDates`). ‹ › step a day, and so does a swipe across the card with a
   finger or a pen, a left swipe to the next day and a right swipe to the one before, once it travels
   at least 48 px and more than twice as far across as down; a second finger or pen on the card ends it,
-  and no swipe starts again until every one of them has lifted.
+  and no swipe starts again until every one of them has lifted. Show lists prep stations as in the
+  Month, to the same people; a station's day draws one row per department that sends it dishes, a
+  day none of them sends on reads "No orders" once in place of its rows, and a week whose station
+  times have not arrived draws no days.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the

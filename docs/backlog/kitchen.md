@@ -149,7 +149,8 @@ list does not exist.
 
 1. **Prep stations sits just after Departments and zones** in the sidebar.
 2. **The Times tab and each station's "When it gets orders" link go** (`station-table.ts:79`). What
-   the tab showed moves to the Calendar's Show picker (A722 point 6). Landing deletes the open notes
+   the tab showed has moved to the Calendar's Show picker (`calendar-show.ts`), offered to the
+   same people as the Times tab. Landing deletes the open notes
    "The Times tab opens on the browser's current month" and "Supervisors have no dashboard path to a
    prep station's times"; the second's question becomes who may open the Calendar's station view.
 3. **No drag handles, and stations listed by name everywhere**, the default one among them (it keeps
