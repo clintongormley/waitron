@@ -2061,6 +2061,7 @@ async function bootServer(
     db,
     nodeId: till.nodeId,
     stateDir: config.stateDir,
+    venueDir: config.venueDir,
     modules: availableModules,
     resolvers: {},
     environment: config.environment,

@@ -17,12 +17,14 @@ import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.j
 import "./errors.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
+import { readModuleRecoveryEvidence } from "./backup-sources.js";
 import {
   recoveryFiscalSelection,
   type RecoveryFiscalSelection,
 } from "./recovery-fiscal-selection.js";
 
 export interface RecoveryBackupPreview {
+  readonly moduleEvidence?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly fiscalSelection?: RecoveryFiscalSelection;
   readonly sourceId: string;
   /** A bucket generation can contain several points; activation binds the bytes before migration. */
@@ -79,7 +81,9 @@ export async function readRecoveryCopyPreview(
       deps.migrationsRoot,
       recordedVersions,
     );
+    const moduleEvidence = readModuleRecoveryEvidence(deps.modules, copy.secretEntries);
     return {
+      ...(Object.keys(moduleEvidence).length === 0 ? {} : { moduleEvidence }),
       ...(fiscalSelection === undefined ? {} : { fiscalSelection }),
       sourceId,
       createdAt: copy.manifest.createdAt,

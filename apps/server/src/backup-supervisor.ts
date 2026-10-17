@@ -244,6 +244,7 @@ export class BackupSupervisor {
         environment: this.#deps.environment,
         resolvers: {},
         stateDir: this.#deps.stateDir,
+        venueDir: this.#deps.venueDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
         archive: (outFile) => venue.venue.archiveTo(outFile),
         stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),

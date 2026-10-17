@@ -177,6 +177,26 @@ function entryKey(entry: Entry) {
     ...(entry.kind === "resume" ? [entry.contextKey] : []),
   ]);
 }
+export function publicHourSelectionHistory(values: readonly unknown[]): HourHistorySource {
+  return {
+    reference: "prepared-hours",
+    complete: true,
+    records: values.flatMap((value) =>
+      parseState(value)
+        .filter((entry): entry is Intent => entry.kind === "intent")
+        .map((entry) => ({
+          taxpayerNif: entry.scope.taxpayerNif,
+          environment: entry.scope.environment,
+          reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
+          kind: "intent",
+          softwareId: entry.softwareId,
+          nodeId: entry.binding.targetNodeId,
+          identity: entry.identity,
+          recordedAtMs: Date.parse(entry.issuedAt),
+        })),
+    ),
+  };
+}
 function fingerprint(entry: EntryBase): string {
   return JSON.stringify([
     entry.binding.module,

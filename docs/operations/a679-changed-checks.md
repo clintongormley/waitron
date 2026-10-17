@@ -918,3 +918,25 @@ source/context/input changes, recovery-key operator scope and isolation. Its hos
 observations are controlled fixtures. The adapter is not yet installed in the default recovery
 hosts; these cases do not qualify archive/bucket placement, matching-secret authentication,
 durable host evidence export, HTTP/CLI recovery or restart of those hosts. Task 7 remains open.
+
+
+## Public hour evidence in backups (2026-10-17)
+
+Existing assertion expressions and fixture values changed: none. Four new cases append to
+`apps/server/src/hour-recovery.test.ts`; the separate new backup suites qualify public projection,
+retained and conflicting floors, private-field exclusion, damaged input, workspace retirement and
+archive/sealed-state capture. The nested-scope case first exposed an extra private field in the
+export; the exporter now names each public field explicitly.
+
+The new module source uses the existing `backup.nonDbState` declaration. Generic capture reads
+the anchor preparation journal, asks the module for public records, and combines previously
+exported evidence at the anchor and current workspace. The opaque journal, raw keys and PDF files
+are not capture entries. The default archive writer and sealed-state refresher have real-database
+checks after workspace retirement. The three selected-source preview checks read the exact archive
+or sealed point; external Cloud responses and bucket downloads are controlled fixtures.
+
+These checks qualify backup capture and preview transport. They do not yet qualify recovery-host
+admission, matching-secret authentication, destructive placement, durable recovery restart or
+source-specific HTTP/CLI Finish. The existing restore hook, writer, SQL, schema, fiscal assertions
+and recovery-pack contribution stay unchanged. The prior provisioning coverage failure remains
+open; isolated coverage of the new fiscal projector is not package coverage.

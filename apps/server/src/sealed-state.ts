@@ -13,6 +13,7 @@ import type { Logger } from "./logger.js";
 /** The archive's entries without the database copy, in the archive's order. */
 export async function collectSealedEntries(deps: {
   readonly stateDir: string;
+  readonly venueDir?: string;
   readonly modules: readonly WaitronModule[];
   readonly resolvers: Record<string, string>;
   readonly manifest: BackupManifest;
@@ -77,6 +78,7 @@ export interface SealedStateDeps {
   readonly db: Database;
   readonly nodeId: string;
   readonly stateDir: string;
+  readonly venueDir?: string;
   readonly modules: readonly WaitronModule[];
   readonly resolvers: Record<string, string>;
   readonly environment: DeploymentEnvironment;
@@ -118,6 +120,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       });
       const entries = await collectSealedEntries({
         stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
         modules: deps.modules,
         resolvers: deps.resolvers,
         manifest,

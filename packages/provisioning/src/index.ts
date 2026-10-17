@@ -14,6 +14,7 @@ export type { InitialVenueInput } from "./initial-venue-input.js";
 export { renameTaxpayer } from "./taxpayer-name.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
+export { readModulePreparationHistory } from "./module-preparation-state.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
 export type { VenueFiscalSelection } from "./venue-fiscal.js";

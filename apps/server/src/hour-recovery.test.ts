@@ -290,3 +290,161 @@ it("derives managed Cloud selection only after the exact approved point is downl
     client.preview((request) => previewRecoveryArchive(deps(request.artifact)), LOCATION),
   ).rejects.toThrow("Cloud recovery is unavailable");
 });
+
+const hourEvidenceName = "secrets/module-evidence/fiscal-verifactu/hour-history.json";
+const publicHourEvidence = {
+  reference: "prepared-hours",
+  complete: true,
+  records: [
+    {
+      reference: "intent/fiscal-verifactu/abandoned",
+      kind: "intent",
+      taxpayerNif: "89890001K",
+      environment: "preproduction",
+      softwareId: "another-software",
+      nodeId: NODE,
+      identity: "06RC",
+      recordedAtMs: 1792152060000,
+    },
+  ],
+};
+async function hourEvidenceArchive(value: unknown = publicHourEvidence) {
+  const f = await archive();
+  const entries = [
+    ...f.entries,
+    { name: hourEvidenceName, bytes: Buffer.from(JSON.stringify(value)) },
+  ];
+  const artifact = encryptArtifact(
+    packArchive([...entries, { name: "db.dump", bytes: await readFile(f.database) }]),
+    archiveKey,
+  );
+  return { ...f, entries, artifact };
+}
+it("binds public spent-hour evidence to the validated archive without exposing setup material", async () => {
+  const f = await hourEvidenceArchive();
+  const preview = await previewRecoveryArchive(deps(f.artifact));
+  expect(preview).toHaveProperty("moduleEvidence", {
+    "fiscal-verifactu": { "hour-history": publicHourEvidence },
+  });
+  expect(preview.sourceId).toBe(createHash("sha256").update(f.artifact).digest("hex"));
+});
+it("refuses corrupt public hour history in the selected copy rather than lowering its floor", async () => {
+  const f = await hourEvidenceArchive({
+    ...publicHourEvidence,
+    records: [{ ...publicHourEvidence.records[0], identity: "bad!" }],
+  });
+  await expect(previewRecoveryArchive(deps(f.artifact))).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "history_invalid" },
+  });
+});
+it("reads public hour evidence from the exact sealed bucket point", async () => {
+  const f = await hourEvidenceArchive();
+  await writeSealedStateRow(
+    suite.db,
+    NODE,
+    await sealNodeState(f.entries, "bucket-password"),
+    new Date(createdAt),
+  );
+  await suite.db.archiveTo(f.database);
+  const signer = generateNodeKeyPair(),
+    store = createMemoryObjectStore();
+  const generation = `gen-0-${NODE}-20261016T114000Z`;
+  await writePointer(
+    store,
+    LOCATION,
+    signPointer(
+      { venueId: LOCATION, term: 0, nodeId: NODE, generation, writtenAt: createdAt },
+      signer.privateKey,
+    ),
+    null,
+  );
+  const preview = await previewRecoveryStream({
+    ...deps(f.artifact),
+    kit: {
+      version: 1,
+      venueId: LOCATION,
+      bucket: {
+        region: "local",
+        bucket: "copy",
+        prefix: "",
+        accessKeyId: "unused",
+        secretAccessKey: "unused",
+      },
+      recoveryKey: "bucket-password",
+      pointerSignerPublicKey: signer.publicKey,
+    },
+    litestreamBin: "/unused",
+    oldBoxGone: true,
+    now: () => new Date("2026-10-17T12:00:00Z"),
+    log: () => {},
+    openStore: () => store,
+    restoreGeneration: async ({ outPath }) => {
+      await copyFile(f.database, outPath);
+    },
+  });
+  expect(preview).toHaveProperty("moduleEvidence", {
+    "fiscal-verifactu": { "hour-history": publicHourEvidence },
+  });
+  expect(preview.activationSourceId).toMatch(/^stream-sha256:[0-9a-f]{64}$/);
+});
+it("reads public hour evidence only from the approved managed-Cloud artifact", async () => {
+  const f = await hourEvidenceArchive();
+  const deadline = new Date(Date.now() + 3600000).toISOString();
+  const point = {
+    id: POINT,
+    venueId: LOCATION,
+    capturedAt: createdAt,
+    modules: f.manifest.modules,
+    digest: createHash("sha256").update(f.artifact).digest("hex"),
+    size: f.artifact.length,
+    objectKey: `snapshots/${POINT}`,
+    verification: "verified",
+    kind: "snapshot",
+    deleting: false,
+    deletedAt: null,
+  };
+  const client = createCloudRecoveryClient({
+    stateDir: join(scratch, "cloud-evidence"),
+    origin: "https://cloud.example.test",
+    environment: "preproduction",
+    download: async () => f.artifact,
+    fetch: (async (url, init) => {
+      const action = new URL(String(url)).pathname.split("/").at(-1);
+      const body = JSON.parse(String(init?.body)) as { payload: string };
+      const requestId = JSON.parse(Buffer.from(body.payload, "base64url").toString())[2] as string;
+      if (action === "start" || action === "status")
+        return Response.json({
+          requestId,
+          state: action === "start" ? "awaiting_owner" : "approved",
+          expiresAt: deadline,
+          operationId: action === "start" ? null : requestId,
+        });
+      if (action === "info") return Response.json({ point, operationExpiresAt: deadline });
+      if (action === "read")
+        return Response.json({
+          point,
+          operationExpiresAt: deadline,
+          expiresAt: deadline,
+          recoveryKey: archiveKey,
+          location: { endpoint: "https://store.example.test", bucket: "backup", region: "local" },
+          credentials: {
+            accessKeyId: "access",
+            secretAccessKey: "secret",
+            sessionToken: "session",
+          },
+        });
+      throw new Error(String(action));
+    }) as typeof fetch,
+  });
+  await client.start();
+  const preview = await client.preview(
+    (request) =>
+      previewRecoveryArchive({ ...deps(request.artifact), recoveryKey: request.recoveryKey }),
+    POINT,
+  );
+  expect(preview).toHaveProperty("moduleEvidence", {
+    "fiscal-verifactu": { "hour-history": publicHourEvidence },
+  });
+  expect(preview.sourceId).toBe(point.digest);
+});

@@ -1407,8 +1407,17 @@ export interface VenueServiceContribution {
   readReleaseReminderMinutes(tx: Transaction): Promise<number | null>;
 }
 
-/** A reference to non-DB state a module owns, resolved to a path by the composition root. */
-export type NonDbSource = { readonly kind: "content-addressed-dir"; readonly source: string };
+export type NonDbSource =
+  | { readonly kind: "content-addressed-dir"; readonly source: string }
+  | {
+      readonly kind: "preparation-history";
+      readonly source: string;
+      /** Select public evidence only; the opaque preparation journal is never an archive entry. */
+      project(input: {
+        readonly preparations: readonly unknown[];
+        readonly retained: readonly unknown[];
+      }): unknown;
+    };
 
 /** A module's backup contribution: the non-DB state it owns, and what it does after a restore. */
 export interface ModuleBackupContribution {

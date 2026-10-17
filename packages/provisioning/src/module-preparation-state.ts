@@ -68,6 +68,18 @@ function snapshot(value: unknown): unknown {
     return invalid();
   }
 }
+export async function readModulePreparationHistory(
+  options: { stateDir: string; venueDir: string },
+  module: string,
+): Promise<readonly unknown[]> {
+  const anchor = await firstSetupAnchorFor(options);
+  const file = parse(
+    await readDurableHostJson(join(anchor.stateDir, "module-preparation-state.json"), LIMIT),
+  );
+  return file.revisions
+    .filter((row) => row.binding.module === module)
+    .map((row) => structuredClone(row.value));
+}
 export function createModulePreparationState(options: Options) {
   return {
     async withState<T>(

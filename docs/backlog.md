@@ -396,8 +396,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   territory, zone and recorded filing-module selection, including damaged or conflicting evidence.
   A separate module recovery adapter has local checks through the existing restore hook for
   fresh-hour activation, retained counters, exact committed replay, isolation and retained waits.
-  It is not yet wired into the recovery hosts. Public hour-evidence export and all recovery-source
-  integrations remain part of Task 7.
+  Declared module backup sources now project public spent-hour evidence into archives and sealed
+  bucket state, including evidence retained at the original workspace anchor. Selected archive,
+  bucket and managed-Cloud previews carry that evidence through local checks. The recovery adapter
+  is not yet wired into the recovery hosts; admission, restart and source-specific recovery remain
+  part of Task 7.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,
