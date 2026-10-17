@@ -106,7 +106,7 @@ it("lists every season from the one in force on 1 January, with colour, name, st
     expect(field(el, name).hasAttribute("hide-label"), name).toBe(true);
   expect(runsUntil(el, "winter")).toBe("28 Feb");
   expect(runsUntil(el, "spring")).toBe("31 May");
-  expect(headings(el).slice(0, 4)).toEqual(["Colour", "Season", "Starts on*", "Runs until"]);
+  expect(headings(el).slice(0, 4)).toEqual(["Colour", "Season*", "Starts on*", "Runs until"]);
   expect(root(el).querySelector("[data-test=window-hint]")!.textContent!.trim()).toBe(
     "A season runs until the next one starts. The list re-sorts by start date when you save.",
   );
@@ -186,6 +186,31 @@ it("the bin removes a row; the last row's bin is disabled", async () => {
   expect(bins(el)[0]!.disabled).toBe(true);
 });
 
+it("marks the name, day and month of every row required, the heading drawing the one asterisk", async () => {
+  const el = await mount();
+  const marks = [...root(el).querySelectorAll("thead th")].map(
+    (th) => th.querySelector(".required[aria-hidden=true]")?.textContent ?? null,
+  );
+  expect(marks.slice(0, 4)).toEqual([null, "*", "*", null]);
+  await press(el, button(el, "add-season")!);
+  for (let index = 0; index < 5; index += 1) {
+    const name = field(el, `season-${index}-name`);
+    expect(name.shadowRoot!.querySelector("input")!.required, `row ${index} name`).toBe(true);
+    for (const part of ["day", "month"]) {
+      const combobox = field(el, `season-${index}-${part}`);
+      expect(combobox.hasAttribute("required"), `row ${index} ${part}`).toBe(true);
+    }
+    for (const part of ["name", "day", "month", "colour"]) {
+      const control = field(el, `season-${index}-${part}`);
+      await control.updateComplete;
+      expect(
+        control.shadowRoot!.querySelector("[data-required], .required"),
+        `row ${index} ${part} draws its own asterisk`,
+      ).toBeNull();
+    }
+  }
+});
+
 it("Save stays quiet and disabled until the draft changes", async () => {
   const el = await mount();
   const save = button(el, "save-seasons")!;
@@ -250,7 +275,7 @@ it("Spanish", async () => {
   try {
     setLocale("es");
     const el = await mount();
-    expect(headings(el).slice(0, 4)).toEqual(["Color", "Temporada", "Empieza el*", "Hasta el"]);
+    expect(headings(el).slice(0, 4)).toEqual(["Color", "Temporada*", "Empieza el*", "Hasta el"]);
     expect(root(el).querySelector("[data-test=window-hint]")!.textContent!.trim()).toBe(
       "Una temporada dura hasta que empieza la siguiente. La lista se ordena por fecha de inicio al guardar.",
     );

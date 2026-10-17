@@ -233,6 +233,7 @@ export class SeasonsWindow extends LitElement {
         <wt-input
           name=${`season-${index}-name`}
           label=${t("prep.name")}
+          required
           hide-label
           .value=${row.name}
           @wt-change=${on("name")}
@@ -243,6 +244,7 @@ export class SeasonsWindow extends LitElement {
           <wt-combobox
             name=${`season-${index}-day`}
             label=${t("season.day")}
+            required
             hide-label
             search="never"
             .value=${row.day}
@@ -252,6 +254,7 @@ export class SeasonsWindow extends LitElement {
           <wt-combobox
             name=${`season-${index}-month`}
             label=${t("season.month")}
+            required
             hide-label
             search="never"
             .value=${row.month}
@@ -300,7 +303,11 @@ export class SeasonsWindow extends LitElement {
         <thead>
           <tr>
             <th scope="col">${t("hours.colour")}</th>
-            <th scope="col">${t("season.column_name")}</th>
+            <th scope="col">
+              ${t("season.column_name")}${
+                editable ? html`<span class="required" aria-hidden="true">*</span>` : nothing
+              }
+            </th>
             <th scope="col">
               ${t("season.starts")}${
                 editable ? html`<span class="required" aria-hidden="true">*</span>` : nothing
