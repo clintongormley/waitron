@@ -442,3 +442,119 @@ describe("A768 a held zone's menu", () => {
     expect(api.listZoneOffers).toHaveBeenCalledWith("z2");
   });
 });
+
+describe("A768 a held zone's menu follows the server", () => {
+  beforeEach(() => {
+    server = draftServer();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    cleanupWidgets();
+  });
+
+  async function poll(el: TillApp): Promise<void> {
+    vi.advanceTimersByTime(15_000);
+    await flush(el);
+  }
+
+  function later<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  }
+
+  const beer = (el: TillApp) => tableOrder(el)!.products.find((p) => p.name === "Beer");
+
+  function twoMenus(defaultMenuId: string): ZoneOfferCatalogue {
+    const base = catalogue("v1");
+    const lunch = base.menus[0]!;
+    return {
+      ...base,
+      defaultMenuId,
+      menus: [
+        { ...lunch, isDefault: defaultMenuId === "lunch" },
+        { ...lunch, id: "dinner", name: "Dinner", isDefault: defaultMenuId === "dinner" },
+      ],
+    };
+  }
+
+  function twoMenuState(defaultMenuId: string): MenuStateAnswer {
+    const base = state("v1");
+    return {
+      ...base,
+      defaultMenuId,
+      menus: [
+        ...base.menus,
+        { menuId: "dinner", versionId: "v1", orderable: true, sendable: true },
+      ],
+    };
+  }
+
+  it("a default menu changed while the zone was off screen is selected when the table opens again", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockResolvedValue(twoMenus("lunch")),
+      menuState: vi.fn(async () => twoMenuState("lunch")),
+    });
+    await openMesa(el);
+    expect(tableOrder(el)!.selectedMenuId).toBe("lunch");
+    await back(el);
+    api.menuState.mockImplementation(async () => twoMenuState("dinner"));
+    await reopen(el, "t7");
+    await poll(el);
+    expect(tableOrder(el)!.selectedMenuId).toBe("dinner");
+  });
+
+  it("a check for the table just left loads nothing into the next table while it opens", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await back(el);
+    const check = later<MenuStateAnswer>();
+    api.menuState.mockImplementationOnce(() => check.promise);
+    await reopen(el, "t7");
+    await back(el);
+    const z2 = later<ZoneOfferCatalogue>();
+    api.listZoneOffers.mockClear();
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      zoneId === "z2" ? z2.promise : Promise.resolve(catalogue("v2", { Beer: "6.00" })),
+    );
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el);
+    check.resolve(state("v2"));
+    await flush(el);
+    expect(api.listZoneOffers.mock.calls.map(([zoneId]) => zoneId)).toEqual(["z2"]);
+    z2.resolve({
+      ...catalogue("v1", { Beer: "8.00" }),
+      context: { ...catalogue("v1").context, zoneId: "z2" },
+    });
+    await flush(el);
+    expect(beer(el)!.unitPrice).toBe("8.00");
+  });
+
+  it("an older menu read answering after a newer one does not replace it", async () => {
+    const { el } = await mountApp();
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    const older = later<ZoneOfferCatalogue>();
+    const newer = later<ZoneOfferCatalogue>();
+    api.listZoneOffers.mockImplementationOnce(() => older.promise);
+    api.listZoneOffers.mockImplementationOnce(() => newer.promise);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    newer.resolve(catalogue("v1", { Beer: "7.00" }));
+    await flush(el);
+    older.resolve(catalogue("v1", { Beer: "6.00" }));
+    await flush(el);
+    expect(beer(el)!.unitPrice).toBe("7.00");
+    await back(el);
+    api.listZoneOffers.mockClear();
+    await reopen(el, "t4");
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(beer(el)!.unitPrice).toBe("7.00");
+  });
+});

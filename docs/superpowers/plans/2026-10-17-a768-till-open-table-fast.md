@@ -897,6 +897,9 @@ every value, and the next answer that names another revision asks again.
     offers, and applied mid-session they could remove the screen the person is on; at those three
     points the till already lays itself out again (owner decision 4).
   - A kitchen screen in device mode: nothing refreshes.
+  Record two known limits of a held menu: its sold-out marks are as of its last full read until
+  the check sent at the open answers, or, if that check fails, a later one (every 15 s); its department name is not checked,
+  and changes only at the next full read.
   Cite the tests that pin each refreshed value. Say what nothing guards: a new `/api/till` field
   moves the revision but reaches an open till only once someone adds it to `#applyVenueSetup`.
 - [ ] **Step 4:** In `CLAUDE.md` §3, under the screens heading, add one line:

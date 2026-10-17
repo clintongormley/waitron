@@ -3917,13 +3917,10 @@ export class TillApp extends LitElement {
         });
         this.counterServiceZoneId = "";
       } else {
-        let catalogue: ZoneOfferCatalogue;
-        if (retainedZone === undefined) {
-          const api = this.api;
-          const read = ++this.#zoneOfferReads;
-          catalogue = await api.listDefaultZoneOffers();
-          if (api === this.api) this.#rememberZoneCatalogue(read, catalogue);
-        } else catalogue = await this.#readZoneOffers(retainedZone);
+        const catalogue =
+          retainedZone === undefined
+            ? await this.#keepZoneRead(this.api, (api) => api.listDefaultZoneOffers())
+            : await this.#readZoneOffers(retainedZone);
         if (replaced()) return;
         const { zones, context } = catalogue;
         this.#loadCounterOffers(catalogue);
@@ -4576,7 +4573,7 @@ export class TillApp extends LitElement {
         void this.#refreshBasket().then(() => this.#followDefault());
       else this.#followDefault();
     }
-    if (zoneId === this.#tableZoneId) {
+    if (zoneId === this.#tableZoneId && !this.#tableOpenUnclaimed()) {
       const unavailableMoved = this.#tableOffers.setUnavailable(state.unavailable);
       if (this.#tableGridOffers.setUnavailable(state.unavailable) || unavailableMoved) {
         this.tableProducts = this.#tableGridOffers.products();
@@ -4594,13 +4591,23 @@ export class TillApp extends LitElement {
         !menusMoved(this.tableMenus, state.menus) &&
         state.liveFields === this.#tableOffers.liveFields &&
         !serviceMoved
-      )
+      ) {
+        if (state.defaultMenuId !== undefined && state.defaultMenuId !== this.#tableDefaultMenuId) {
+          this.#tableDefaultMenuId = state.defaultMenuId;
+          this.#followTableMenu();
+        }
         this.#reconcileDraft();
-      else
+      } else
         void this.#reloadTableOffers(zoneId).then((read) => {
           if (read) this.#reconcileDraft(false);
         });
     }
+  }
+
+  /** A table open is under way that has not yet put its own zone's offers on the table, so a
+   * check's answer would still be about the table being left. */
+  #tableOpenUnclaimed(): boolean {
+    return this.#tableOpensPending > 0 && this.#openClaimed < this.#tableOfferRequest;
   }
 
   #menuMemory(): ZoneMenuMemory {
@@ -4731,10 +4738,21 @@ export class TillApp extends LitElement {
     options?: ReadOptions,
     api: TillApi = this.api,
   ): Promise<ZoneOfferCatalogue> {
+    return this.#keepZoneRead(
+      api,
+      (sent) =>
+        options === undefined ? sent.listZoneOffers(zoneId) : sent.listZoneOffers(zoneId, options),
+      zoneId,
+    );
+  }
+
+  async #keepZoneRead(
+    api: TillApi,
+    send: (api: TillApi) => Promise<ZoneOfferCatalogue>,
+    zoneId?: string,
+  ): Promise<ZoneOfferCatalogue> {
     const read = ++this.#zoneOfferReads;
-    const catalogue = await (options === undefined
-      ? api.listZoneOffers(zoneId)
-      : api.listZoneOffers(zoneId, options));
+    const catalogue = await send(api);
     if (api === this.api) this.#rememberZoneCatalogue(read, catalogue, zoneId);
     return catalogue;
   }
