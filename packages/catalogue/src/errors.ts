@@ -40,7 +40,7 @@ declare module "@waitron/shared" {
     "unit.translation_required": { field: "name" | "abbreviation"; language: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
-    "content.translation_stale": { kind: string; id: string };
+    "content.translation_stale": { kind: string; id: string } | { scope: "configuration" };
     /** A Translate all job is already submitting or running for the venue. */
     "content.suggestion_job_running": Record<string, never>;
     /** The Cloud account has not agreed to menu text going to the named language-model providers. */

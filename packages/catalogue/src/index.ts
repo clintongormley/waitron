@@ -158,6 +158,8 @@ export * from "./settings.js";
 
 export * from "./content-translation-types.js";
 export * from "./content-translation-targets.js";
+export { resolveTranslationCells } from "./content-translation-cells.js";
+export { listTranslationItems } from "./content-translation-pages.js";
 export * from "./content-translation-writes.js";
 
 export * from "./content-translations.js";

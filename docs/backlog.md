@@ -1138,7 +1138,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   The feature branch has checkpointed unit foundations, optional ordinary catalogue writers,
   free default choice and customer-form fallback. The shared missing-value queries now include
   default-language blanks, unnamed extras lists and unit abbreviations, with a count-only read.
-  Obsolete boot callback cleanup waits for lane E. Bounded multilingual cell reads, the editor,
+  Catalogue reads now project individual fields and pages of at most fifty rows across the viewed
+  languages, with configuration-bound cursors; the HTTP routes and editor still need integration.
+  Obsolete boot callback cleanup waits for lane E. Atomic multilingual saves, the editor,
   automatic-translation review and their remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
