@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, onTestFinished, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -163,7 +163,9 @@ describe.each(["light", "dark"] as const)(
   "Opening hours week on a phone accessibility (%s)",
   (theme) => {
     test.each(Object.keys(phoneStates))("%s", async (state) => {
+      const before = [innerWidth, innerHeight] as const;
       await page.viewport(390, 800);
+      onTestFinished(() => page.viewport(...before));
       expect(window.innerWidth).toBe(390);
       if (phoneStates[state]!.spanish) setLocale("es");
       try {

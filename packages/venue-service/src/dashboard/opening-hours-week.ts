@@ -152,6 +152,9 @@ export class OpeningHoursWeekView extends LitElement {
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
       }
+      .head wt-combobox {
+        min-width: 0;
+      }
       .title-link {
         display: inline-block;
         padding: 0;
@@ -327,9 +330,11 @@ export class OpeningHoursWeekView extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
+        overflow-wrap: anywhere;
       }
       .card {
         touch-action: pan-y;
+        overflow-wrap: anywhere;
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -467,6 +472,7 @@ export class OpeningHoursWeekView extends LitElement {
       changed.has("narrow")
     )
       this.#hideTip();
+    if (changed.has("narrow")) this.#swipeStop();
   }
 
   /** A change of size moves the blocks, so a shown tip is hidden as a scroll hides it. */
@@ -526,6 +532,7 @@ export class OpeningHoursWeekView extends LitElement {
     this.#resizes.disconnect();
     cancelAnimationFrame(this.#narrowing);
     this.#hideTip();
+    this.#swipeStop();
   }
 
   #emit<T>(name: string, detail: T): void {
@@ -678,32 +685,46 @@ export class OpeningHoursWeekView extends LitElement {
         class="card"
         data-test="day-card"
         @pointerdown=${(event: PointerEvent) => this.#swipeStart(event)}
-        @pointerup=${(event: PointerEvent) => this.#swipeEnd(event)}
-        @pointercancel=${() => (this.#swipeFrom = undefined)}
       >
         ${weekRows(day!, chosen, names).map((row) => this.#phoneRow(row, day!, names))}
       </div>`;
   }
 
   #swipeFrom: { id: number; x: number; y: number } | undefined;
+  /** The touch and pen contacts down on the day card. */
+  #contacts = new Set<number>();
 
   #swipeStart(event: PointerEvent) {
-    // A second finger makes the gesture a pinch or a two-finger hold, not a swipe.
-    this.#swipeFrom =
-      event.pointerType === "mouse" || this.#swipeFrom
-        ? undefined
-        : { id: event.pointerId, x: event.clientX, y: event.clientY };
+    if (event.pointerType === "mouse") return;
+    if (this.#contacts.size === 0) {
+      // Heard on the window, so a contact lifted where the card does not hear it still ends.
+      window.addEventListener("pointerup", this.#swipeEnd);
+      window.addEventListener("pointercancel", this.#swipeEnd);
+      this.#swipeFrom = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    } else {
+      // A second contact makes the gesture a pinch or a hold until every contact has lifted.
+      this.#swipeFrom = undefined;
+    }
+    this.#contacts.add(event.pointerId);
   }
 
-  #swipeEnd(event: PointerEvent) {
+  #swipeEnd = (event: PointerEvent): void => {
+    if (!this.#contacts.delete(event.pointerId)) return;
     const from = this.#swipeFrom;
-    if (!from || from.id !== event.pointerId) return;
-    this.#swipeFrom = undefined;
+    if (this.#contacts.size === 0) this.#swipeStop();
+    if (event.type !== "pointerup" || from?.id !== event.pointerId) return;
     const across = event.clientX - from.x;
     const down = event.clientY - from.y;
     if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
     const target = addDays(this.date, across < 0 ? 1 : -1);
     if (weekInRange(target)) this.#emit("week-change", { date: target });
+  };
+
+  #swipeStop(): void {
+    this.#swipeFrom = undefined;
+    this.#contacts.clear();
+    window.removeEventListener("pointerup", this.#swipeEnd);
+    window.removeEventListener("pointercancel", this.#swipeEnd);
   }
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames) {

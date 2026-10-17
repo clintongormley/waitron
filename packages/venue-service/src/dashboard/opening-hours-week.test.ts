@@ -1027,12 +1027,12 @@ describe("Opening hours week on a phone", () => {
     expect(sent).toEqual([]);
   });
 
-  it("two fingers held still step nothing", async () => {
-    const el = await mount({ date: "2026-12-01" });
-    const sent = events<{ date: LocalDate }>(el, "week-change");
+  /** Sends synthetic touch events of finger `pointerId` at `clientX`, on one line across `el`'s
+   *  day card, to the card or to `on`. */
+  function fingersOn(el: OpeningHoursWeekView) {
     const y = card(el).getBoundingClientRect().top + 20;
-    const finger = (type: string, pointerId: number, clientX: number) =>
-      card(el).dispatchEvent(
+    return (type: string, pointerId: number, clientX: number, on: Element = card(el)) =>
+      on.dispatchEvent(
         new PointerEvent(type, {
           pointerId,
           pointerType: "touch",
@@ -1043,14 +1043,56 @@ describe("Opening hours week on a phone", () => {
           composed: true,
         }),
       );
+  }
+
+  it("a pinch steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
     finger("pointerdown", 1, 106);
     finger("pointerdown", 2, 284);
-    finger("pointerup", 1, 106);
-    finger("pointerup", 2, 284);
+    finger("pointerup", 2, 184);
+    finger("pointerup", 1, 206);
     expect(sent).toEqual([]);
   });
 
-  it("a cancelled scroll leaves nothing for a later press to finish", async () => {
+  it("a finger re-landed during a two-finger hold steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 2, 284);
+    finger("pointerdown", 3, 284);
+    finger("pointerup", 3, 106);
+    finger("pointerup", 1, 106);
+    expect(sent).toEqual([]);
+  });
+
+  it("once every finger has lifted, a swipe steps a day again", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 2, 284);
+    finger("pointerup", 1, 106);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a finger lifted off the card leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerup", 1, 106, document.body);
+    expect(sent).toEqual([]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a cancelled scroll leaves the next swipe working", async () => {
     const el = await mount({ date: "2026-12-01" });
     const tall = document.createElement("div");
     tall.style.height = "3000px";
@@ -1063,11 +1105,34 @@ describe("Opening hours week on a phone", () => {
     await vi.waitFor(() => expect(cancelled).toHaveLength(1));
     window.scrollTo(0, 0);
     await frames();
-    await commands.mouseDrag([
-      'opening-hours-week [data-test="day-name"]',
-      `${cardAt} .row[data-row="rest"] .block:last-child`,
-    ]);
     expect(sent).toEqual([]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a finger down as the Week widens leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    fingersOn(el)("pointerdown", 1, 106);
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(testId(el, "day-card")).toBeNull());
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a finger down as the Week is taken out leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    fingersOn(el)("pointerdown", 1, 106);
+    el.remove();
+    document.body.append(el);
+    await el.updateComplete;
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
   });
 
   it("a tap on the day's name still opens the day box", async () => {
@@ -1078,6 +1143,37 @@ describe("Opening hours week on a phone", () => {
     await vi.waitFor(() => expect(opened).toHaveLength(1));
     expect(opened[0]!.date).toBe("2026-12-01");
     expect(sent).toEqual([]);
+  });
+
+  it("a long name with no spaces wraps inside the page", async () => {
+    const long = "Desayunocontinentalconzumodenaranjaycafedelacasaporlasmanana";
+    expect(long).toHaveLength(60);
+    const departments = DEPARTMENTS.map((d) =>
+      d.id !== "rest"
+        ? d
+        : {
+            ...d,
+            name: long,
+            zones: d.zones.map((zone) => ({ ...zone, name: long })),
+            periods: d.periods.map((p) => (p.id === "breakfast" ? { ...p, name: long } : p)),
+          },
+    );
+    const model = monthModel();
+    model.days.find((day) => day.date === "2026-12-01")!.specialDay = { id: "long", name: long };
+    const el = await mount({ model, departments, date: "2026-12-01", departmentId: "rest" });
+    await vi.waitFor(() => expect(root(el).querySelector("wt-combobox")).not.toBeNull());
+    const show = root(el).querySelector<HTMLElement>("wt-combobox")!;
+    expect(show.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    const parts = [
+      ...root(el).querySelectorAll<HTMLElement>(".day-names .name"),
+      ...card(el).querySelectorAll<HTMLElement>(".row-name, .words"),
+    ];
+    expect(parts.map(text).filter((words) => words.includes(long))).toHaveLength(parts.length);
+    for (const part of parts) {
+      expect(part.getBoundingClientRect().right, part.className).toBeLessThanOrEqual(390);
+      expect(part.scrollWidth, part.className).toBeLessThanOrEqual(part.clientWidth);
+    }
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   });
 
   it("nothing runs off the side", async () => {
