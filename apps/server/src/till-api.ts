@@ -2639,15 +2639,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ tender: TillTender; receiptLanguage?: string }>(c);
+      const body = await readJsonBody<{
+        tender: TillTender;
+        receiptLanguage?: string;
+        guests?: unknown;
+      }>(c);
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
+      const guests = readGuestsChoice(body.guests);
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log, attendance: deps.attendance },
         cfg,
-        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage },
+        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage, guests },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);

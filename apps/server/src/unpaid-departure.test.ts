@@ -12,6 +12,7 @@ import {
   partyTables,
   parties,
   printJobs,
+  saleReceiptGuests,
   saleSettlements,
   sales,
   unpaidDepartures,
@@ -23,6 +24,8 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { offerProducts } from "./testing/zone-offers.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import {
   inTx,
   partyRevisionOf,
@@ -1564,5 +1567,74 @@ describe("a merged party", () => {
     expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 2000 })]);
     expect(await tableHeldBy(ana.tableId)).toBeNull();
     expect(await tableHeldBy(luis.tableId)).toBeNull();
+  });
+});
+
+describe("the guests its invoice's receipts print", () => {
+  async function seatedFor(guestCount: number, ...names: string[]) {
+    const party = await seatedWith(venue, ...names);
+    const counted = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${party.partyId}/guests`,
+      {
+        expectedPartyRevision: revisionOf(party.partyId),
+        guestCount,
+      },
+    );
+    expect(counted.status).toBe(200);
+    return party;
+  }
+
+  function guestsRowsOf(billId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ guests: saleReceiptGuests.guests })
+        .from(saleReceiptGuests)
+        .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+        .where(eq(sales.workingOrderId, billId)),
+    );
+  }
+
+  it("stores the party's count at the departure, and a later collect's guests is ignored", async () => {
+    const party = await seatedFor(4, "Botella tinto");
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+    expect(answer.status).toBe(200);
+    expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
+
+    // By direct write: the guests route answers 409 `party.not_open` for the party the departure closed.
+    venue.db.run(sql`update parties set guest_count = 6 where id = ${party.partyId}`);
+    const collected = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/collect`,
+      { tender: { method: "cash", amount: "30.00" }, guests: 2 },
+    );
+    expect(collected.status).toBe(200);
+    expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
+
+    const reprinted = await send(
+      venue.app,
+      staffSessionCookie,
+      "POST",
+      `/api/sales/${party.tabId}/reprint`,
+    );
+    expect(reprinted.status).toBe(200);
+    const [issued] = await salesOf(party.tabId);
+    const copies = await inTx(venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.saleId, issued!.id)),
+    );
+    expect(decodeTicket(copies.at(-1)!.payload)).toContain("4 comensales");
+  });
+
+  it("stores the party's count on an invoice issued unpaid without a departure", async () => {
+    const party = await seatedFor(3, "Botella tinto");
+    await issueOrderInvoice(venue, venue.cfg, party.tabId, venue.operatorId);
+    expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 3 }]);
   });
 });

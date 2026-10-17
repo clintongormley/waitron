@@ -29,6 +29,9 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
+import { createTable } from "./testing/live-table.js";
+import { seatTable } from "./parties.js";
+import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -55,8 +58,16 @@ interface Venue {
   app: Hono;
   /** A till signed in on an enrolled device whose receipts print on the one printer. */
   till: string;
-  /** An offer at 1,50 €. */
+  /** An offer at 1,50 € in the counter zone. */
   menuItemId: string;
+  db: Database;
+  backend: VerifactuBackend;
+  cfg: Awaited<ReturnType<typeof deviceRequestCfg>>;
+  staffId: string;
+  counterZone: string;
+  tablesZone: string;
+  /** The same product's offer in the tables zone. */
+  tableItemId: string;
 }
 
 async function venue(db: Database): Promise<Venue> {
@@ -99,47 +110,52 @@ async function venue(db: Database): Promise<Venue> {
     }),
     simplifiedInvoiceLimit: null,
   });
-  const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
-    const category = await createCategory(tx, { name: "Tapas" });
-    const product = await createProduct(tx, {
-      catalogueId: menu.id,
-      categoryId: category.id,
-      name: "Pan",
-      pricingUnit: "each",
-      unitPrice: "1.50",
-      vatClass: "general",
+  const { menuItemId, staffId, profileId, printerId, counterZone, tablesZone, tableItemId } =
+    await withTransaction(db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Carta" });
+      const category = await createCategory(tx, { name: "Tapas" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        name: "Pan",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
+      const tables = await offerProducts(tx, cfg, { zone: "tables", productIds: [product.id] });
+      const [staff] = await tx
+        .insert(persons)
+        .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+        .returning({ id: persons.id });
+      const { id: printerId } = await createPrinter(
+        tx,
+        { locationId: cfg.locationId },
+        {
+          name: "Recibos",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+          hasCashDrawer: true,
+        },
+      );
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({
+          name: "Barra",
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+        })
+        .returning({ id: deviceProfiles.id });
+      return {
+        menuItemId: offers.offerFor(product.id),
+        staffId: staff!.id,
+        profileId: profile!.id,
+        printerId,
+        counterZone: offers.zoneId,
+        tablesZone: tables.zoneId,
+        tableItemId: tables.offerFor(product.id),
+      };
     });
-    const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
-    const [staff] = await tx
-      .insert(persons)
-      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
-    const { id: printerId } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Recibos",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    );
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({
-        name: "Barra",
-        formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
-      })
-      .returning({ id: deviceProfiles.id });
-    return {
-      menuItemId: offers.offerFor(product.id),
-      staffId: staff!.id,
-      profileId: profile!.id,
-      printerId,
-    };
-  });
   const backend = new VerifactuBackend({
     clock,
     db,
@@ -164,7 +180,18 @@ async function venue(db: Database): Promise<Venue> {
   await withTransaction(db, (tx) =>
     tx.update(devices).set({ receiptPrinterId: printerId, cashDrawerPrinterId: printerId }),
   );
-  return { app, till: `${tillSession}; ${deviceCookie}`, menuItemId };
+  return {
+    app,
+    till: `${tillSession}; ${deviceCookie}`,
+    menuItemId,
+    db,
+    backend,
+    cfg,
+    staffId,
+    counterZone,
+    tablesZone,
+    tableItemId,
+  };
 }
 
 const CASH = { method: "cash", amount: "12.00" };
@@ -281,5 +308,98 @@ describe("/api/sales keeps the guests its receipt prints", () => {
     const again = await sell(v, { guests: 7 }, { id: first.id });
     expect(again.status).toBe(200);
     expect(await storedGuests(suite.db, first.id)).toEqual([{ guests: 5 }]);
+  });
+});
+
+/** A party of 4 seated on one bill holding eight at 1,50 € (12,00 €), never sent. */
+async function partyOfFourBill(v: Venue): Promise<string> {
+  return withTransaction(v.db, async (tx) => {
+    const { id: tableId } = await createTable(tx, v.cfg, {
+      label: `Mesa ${randomUUID().slice(0, 8)}`,
+      zoneId: v.tablesZone,
+    });
+    const { tabId } = await seatTable(tx, v.cfg, { tableId, guestCount: 4, operatorId: v.staffId });
+    await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.tableItemId, quantity: "8" }]);
+    return tabId;
+  });
+}
+
+describe("/api/sales on a party's bill tells a chosen no line from the default", () => {
+  it("stores no line for null, and prints no guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyOfFourBill(v);
+    const sale = await sell(v, { lines: [], guests: null }, { id: billId });
+    expect(sale.status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+    const [receipt] = await receipts(suite.db);
+    expect(receipt).not.toContain("comensal");
+  });
+
+  it("stores the party's 4 when the request sends no guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyOfFourBill(v);
+    const sale = await sell(v, { lines: [] }, { id: billId });
+    expect(sale.status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+  });
+});
+
+/** A counter order of eight at 1,50 € (12,00 €), parked and placed, with no invoice yet. */
+async function placedCounterOrder(v: Venue): Promise<string> {
+  const id = randomUUID();
+  const deps = { db: v.db, backend: v.backend, clock };
+  await parkOrder(deps, v.cfg, {
+    id,
+    lines: [{ menuItemId: v.menuItemId, quantity: "8" }],
+    zoneId: v.counterZone,
+    operatorId: v.staffId,
+  });
+  await placeOrder(deps, v.cfg, id, v.staffId);
+  return id;
+}
+
+async function collect(
+  v: Venue,
+  id: string,
+  extra: Record<string, unknown>,
+): Promise<{ status: number; body: unknown }> {
+  const res = await v.app.request(`/api/working-orders/${id}/collect`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: v.till },
+    body: JSON.stringify({ tender: CASH, ...extra }),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+describe("/collect of a placed order keeps the guests its receipt prints", () => {
+  it("stores the chosen count", async () => {
+    const v = await venue(suite.db);
+    const id = await placedCounterOrder(v);
+    const answer = await collect(v, id, { guests: 2 });
+    expect(answer.status).toBe(200);
+    expect(await storedGuests(suite.db, id)).toEqual([{ guests: 2 }]);
+  });
+
+  it("stores a counter order's default, no line, when the request sends no guests", async () => {
+    const v = await venue(suite.db);
+    const id = await placedCounterOrder(v);
+    const answer = await collect(v, id, {});
+    expect(answer.status).toBe(200);
+    expect(await storedGuests(suite.db, id)).toEqual([{ guests: null }]);
+  });
+
+  it("refuses guests 0 and records no sale", async () => {
+    const v = await venue(suite.db);
+    const id = await placedCounterOrder(v);
+    const answer = await collect(v, id, { guests: 0 });
+    expect(answer.status).toBe(400);
+    expect(answer.body).toEqual({
+      error: { code: "management.request_invalid", params: { field: "guests" } },
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        tx.select().from(sales).where(eq(sales.workingOrderId, id)),
+      ),
+    ).toEqual([]);
   });
 });

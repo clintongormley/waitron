@@ -229,10 +229,14 @@ async function saleOf(billId: string): Promise<string> {
 }
 
 /**
- * A sale of one Burger at 12,00 € paid in cash on the bill, recorded straight through `recordSale`
- * so that no guests row is written beside it, as every till payment now writes one.
+ * A sale of one dish (a Burger at 12,00 € unless another is named) paid in cash on the bill,
+ * recorded straight through `recordSale` so that no guests row is written beside it, as every till
+ * payment now writes one.
  */
-async function saleWithNoRow(billId: string): Promise<string> {
+async function saleWithNoRow(
+  billId: string,
+  { name = "Burger", price = "12.00", vatRate = "10.00" } = {},
+): Promise<string> {
   return inTx(v, async (tx) => {
     const [series] = await tx
       .select({ id: invoiceSeries.id })
@@ -245,22 +249,22 @@ async function saleWithNoRow(billId: string): Promise<string> {
       workingOrderId: brandWorkingOrderId(billId),
       locale: v.cfg.locale,
       invoiceLocales: v.cfg.invoiceLocales,
-      total: "12.00",
+      total: price,
       lines: [
         {
           lineNo: 1,
-          name: "Burger",
-          descriptions: { [v.cfg.locale]: "Burger" },
+          name,
+          descriptions: { [v.cfg.locale]: name },
           quantity: "1",
-          unitPrice: "12.00",
-          vatRate: "10.00",
-          lineTotal: "12.00",
+          unitPrice: price,
+          vatRate,
+          lineTotal: price,
         },
       ],
       clock: v.clock,
       settlement: {
         kind: "immediate",
-        tenders: [{ method: "cash", amount: "12.00", tipAmount: "0.00", settledAt: new Date() }],
+        tenders: [{ method: "cash", amount: price, tipAmount: "0.00", settledAt: new Date() }],
       },
     });
     return saleId;
@@ -379,7 +383,7 @@ describe("the guests row written beside a recorded sale", () => {
     const { partyId, tabId } = await seat(v, await v.table("Fila 4"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
-    const saleId = await saleWithNoRow(second);
+    const saleId = await saleWithNoRow(second, { name: "Vino", price: "30.00", vatRate: "21.00" });
     await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });

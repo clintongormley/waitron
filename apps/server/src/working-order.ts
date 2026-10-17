@@ -209,6 +209,7 @@ import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
+import { recordReceiptGuests } from "./receipt-guests.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
 import {
@@ -6167,6 +6168,7 @@ export async function issueUnpaidInvoice(
   });
   const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
   await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
+  await recordReceiptGuests(tx, saleId, undefined);
   const order = await readReceiptOrder(tx, cfg, id, { atIssuance: true });
   await tx
     .update(workingOrders)
