@@ -11,7 +11,9 @@ import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
+  floorPlanPlacements,
   floorPlans,
+  floorPlanSets,
   floorPlanTableParts,
   floorPlanTableSizes,
   floorPlanTables,
@@ -73,6 +75,26 @@ describe("floor plan tables", () => {
     return inTx((tx) =>
       tx.insert(floorPlanTables).values(values as typeof floorPlanTables.$inferInsert),
     );
+  }
+
+  async function insertSet(): Promise<string> {
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: LOCATION })
+        .returning({ id: floorPlanSets.id });
+      return row!.id;
+    });
+  }
+
+  async function insertPlanTable(label: string): Promise<string> {
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorPlanTables)
+        .values({ ...GOOD_MASTER_TABLE, label })
+        .returning({ id: floorPlanTables.id });
+      return row!.id;
+    });
   }
 
   it.each([
@@ -782,6 +804,100 @@ describe("floor plan tables", () => {
       )
       .map((row) => row.name);
     expect(names).toEqual([]);
+  });
+
+  it("keeps one placement per table in a layout", async () => {
+    const tableId = await insertPlanTable("P1");
+    await inTx((tx) =>
+      tx.insert(floorPlanPlacements).values({ planId: PLAN, planTableId: tableId, ...PLACED }),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanPlacements)
+          .values({ planId: PLAN, planTableId: tableId, ...PLACED, x: 30 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_plan_placements",
+        columns: ["plan_id", "plan_table_id"],
+      }),
+    ).toBe(true);
+  });
+
+  it("refuses a placement out of range", async () => {
+    const tableId = await insertPlanTable("P1");
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanPlacements)
+          .values({ planId: PLAN, planTableId: tableId, ...PLACED, x: 1000 }),
+      ),
+    );
+    expect(checkFailed(error, "floor_plan_placements_x_ck")).toBe(true);
+  });
+
+  it("allows a zone a layout in each set", async () => {
+    const lunch = await insertSet();
+    const dinner = await insertSet();
+    await inTx((tx) =>
+      tx.insert(floorPlans).values([
+        { zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T10:00:00Z" },
+        { zoneId: OTHER_ZONE, setId: dinner, savedAt: "2026-10-08T10:00:00Z" },
+      ]),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlans)
+          .values({ zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T11:00:00Z" }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["set_id", "zone_id"] }),
+    ).toBe(true);
+  });
+
+  it("starts a reset row not ready to move", async () => {
+    await inTx((tx) => tx.insert(floorResetTables).values({ zoneId: ZONE, label: "R1" }));
+    const [row] = await inTx((tx) => tx.select().from(floorResetTables));
+    expect(row!.readyToMove).toBe(false);
+  });
+
+  it("keeps a table's off-plan size in each layout", async () => {
+    const lunch = await insertSet();
+    const dinner = await insertSet();
+    const [lunchPlan, dinnerPlan] = await inTx(async (tx) => {
+      const rows = await tx
+        .insert(floorPlans)
+        .values([
+          { zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T10:00:00Z" },
+          { zoneId: OTHER_ZONE, setId: dinner, savedAt: "2026-10-08T10:00:00Z" },
+        ])
+        .returning({ id: floorPlans.id });
+      return [rows[0]!.id, rows[1]!.id];
+    });
+    const tableId = await insertPlanTable("S1");
+    await inTx((tx) =>
+      tx.insert(floorPlanTableSizes).values([
+        { planId: lunchPlan, planTableId: tableId, width: 2, height: 2 },
+        { planId: dinnerPlan, planTableId: tableId, width: 3, height: 3 },
+      ]),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: lunchPlan, planTableId: tableId, width: 4, height: 4 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_plan_table_sizes",
+        columns: ["plan_id", "plan_table_id"],
+      }),
+    ).toBe(true);
   });
 
   it("starts a today's zone at revision 0", async () => {
