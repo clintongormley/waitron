@@ -48,11 +48,23 @@ describe("staffing strings", () => {
     );
   });
 
-  it("names each calendar colour", () => {
-    expect(colourName("purple", "en")).toBe("Purple");
-    expect(colourName("amber", "es")).toBe("Ámbar");
-    expect(colourName("teal", "en")).toBe("Teal");
-    expect(colourName("teal", "es")).toBe("Turquesa");
+  it.each([
+    ["red", "Red", "Rojo"],
+    ["orange", "Orange", "Naranja"],
+    ["amber", "Amber", "Ámbar"],
+    ["lime", "Lime", "Lima"],
+    ["green", "Green", "Verde"],
+    ["teal", "Teal", "Turquesa"],
+    ["cyan", "Cyan", "Cian"],
+    ["blue", "Blue", "Azul"],
+    ["indigo", "Indigo", "Índigo"],
+    ["purple", "Purple", "Morado"],
+    ["pink", "Pink", "Rosa"],
+    ["brown", "Brown", "Marrón"],
+    ["grey", "Grey", "Gris"],
+  ] as const)("names the calendar colour %s in both languages", (colour, en, es) => {
+    expect(colourName(colour, "en")).toBe(en);
+    expect(colourName(colour, "es")).toBe(es);
   });
 
   it("registers a message for each code the page can meet", () => {

@@ -29,6 +29,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { addDays } from "./hours-rules.js";
+import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
   readOpeningHoursModel,
@@ -613,7 +614,7 @@ describe("service-period writers", () => {
     expect(await colour()).toBe("brown");
   });
 
-  it("lets the colour CHECK take a newer calendar colour and refuses an unknown one", async () => {
+  it("lets the colour CHECK take every calendar colour and refuses an unknown one", async () => {
     const v = await venue({ timetable: false });
     const insert = (colour: string) =>
       db.insert(menuPeriods).values({
@@ -622,7 +623,7 @@ describe("service-period writers", () => {
         menuId: v.menus.Bebidas,
         colour: colour as never,
       });
-    await insert("teal");
+    for (const colour of CALENDAR_COLOURS) await insert(colour);
     await expect(insert("magenta")).rejects.toThrow(
       "CHECK constraint failed: menu_periods_colour_ck",
     );

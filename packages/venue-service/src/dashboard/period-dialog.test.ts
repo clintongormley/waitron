@@ -1174,7 +1174,21 @@ it("typing in another field keeps the chooser's choices; a language change rebui
     el.requestUpdate();
     await el.updateComplete;
     expect(chooser(el).choices).not.toBe(before);
-    expect(chooser(el).choices[0]!.label).toBe("Rojo");
+    expect(chooser(el).choices.map((choice) => [choice.value, choice.label])).toEqual([
+      ["red", "Rojo"],
+      ["orange", "Naranja"],
+      ["amber", "Ámbar"],
+      ["lime", "Lima"],
+      ["green", "Verde"],
+      ["teal", "Turquesa"],
+      ["cyan", "Cian"],
+      ["blue", "Azul"],
+      ["indigo", "Índigo"],
+      ["purple", "Morado"],
+      ["pink", "Rosa"],
+      ["brown", "Marrón"],
+      ["grey", "Gris"],
+    ]);
   } finally {
     setLocale("en");
   }

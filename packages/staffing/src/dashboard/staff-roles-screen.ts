@@ -1,5 +1,4 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
-import { PERIOD_COLOUR_TOKENS } from "@waitron/venue-service/dashboard/period-colour-styles";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
@@ -9,6 +8,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import { PERIOD_COLOUR_TOKENS } from "@waitron/venue-service/dashboard/period-colour-styles";
 import type { ListedStaffRole, StaffRole, StaffingApi } from "./client.js";
 import { staffRoleDeleteCopy } from "./staff-role-delete-copy.js";
 import { holderNames, t, tf } from "./strings.js";
@@ -18,6 +18,12 @@ import "./staff-role-dialog.js";
 export const HOLDER_NAMES_SHOWN = 5;
 
 const NO_STAFF_ROLES: readonly ListedStaffRole[] = [];
+
+const swatchColours = unsafeCSS(
+  Object.entries(PERIOD_COLOUR_TOKENS)
+    .map(([colour, { fill }]) => `wt-data-table::part(swatch-${colour}) { background: ${fill}; }`)
+    .join("\n"),
+);
 
 type Deletion = {
   staffRoleId: string;
@@ -69,13 +75,7 @@ export class StaffRolesScreen extends LitElement {
         border-radius: var(--wt-radius-sm);
       }
     `,
-    unsafeCSS(
-      Object.entries(PERIOD_COLOUR_TOKENS)
-        .map(
-          ([colour, { fill }]) => `wt-data-table::part(swatch-${colour}) { background: ${fill}; }`,
-        )
-        .join("\n"),
-    ),
+    swatchColours,
   ];
 
   @property({ attribute: false }) api!: StaffingApi;
