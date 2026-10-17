@@ -146,7 +146,7 @@ so in the dark theme a sold-out tile sits at the page's own level, below an avai
 `--wt-color-surface`.
 
 `--wt-color-track` is the empty track behind the Opening hours Week's bars, on the page on a wide
-screen and on a card on a phone, and behind the Opening hours Month's bars on each date: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
+screen and on a card on a phone, behind the Opening hours Month's bars on each date, and the fill of the Rota's "Draft" pill on the page: `#cdd0d8` light and `#333945`, the value of `--wt-color-border`,
 dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--wt-color-text` at
 4.5:1 or more on it (the "bar track" cases in `packages/ui-core/src/tokens/colors.test.ts`).
 
@@ -4057,25 +4057,61 @@ area in its own address. Each opens over the month, and closing it returns to th
 area in its address.
 
 The Rota view (`packages/staffing/src/dashboard/rota-view.ts`) opens for `schedule.manage` at
-`/view/rota/week/<monday>[/area/<area>]`. It starts with the week holding the Calendar month's first
-day when the address supplies no valid Monday. The area's staff roles form the rows; slots show
-filled, partly uncovered, unfilled and outside-staff-role states, with unmatched assigned shifts
-marked as not needed. Unassigned shifts and shifts whose area is inactive sit under Not in a slot.
-A version's shifts outside its business week remain visible on the first or last day with the
-adjacent-week label. The people panel shows planned hours across all areas against contracted hours.
-With 1280 px available to the view, the seven days fit beside the panel; at phone width the panel follows the grid, whose
-staff-role column stays pinned while you scroll sideways.
+`/view/rota/week/<monday>[/area/<area>|/area/everyone]`. It starts with the week holding the
+Calendar month's first day when the address supplies no valid Monday. Its one bar holds ‹, the
+week's title, › and a Show menu (Everyone, then every area), then at the end the week's state
+(Draft or Published), "Staff still see the published week" while a published week is being
+changed, what needs attention, the labour count (or a quiet "No labour rules to check against")
+and the one action. With no `area`, or an unknown one, the Rota shows its first area; with no active
+area it shows Everyone. The title is the week's range, keeps one width from week to week, and links
+each month it names to Staffing → Month when you may open that view; on a phone it is plain text. The counts (unfilled, partly
+uncovered, over; zero counts left out) are buttons: each press moves to the next such slot or
+shift (in Everyone the unfilled count moves to the next day's header, on a phone its strip button),
+wrapping, and scrolls it into view. With none left the bar reads "All slots filled", "No
+shifts yet" in Everyone when the week has none, or "Nothing to fill". Publish is in the bar of every
+week that is not published, quiet and disabled while the week has no shifts or its labour warnings
+have not loaded; it reads "Publish changes" on a published week being changed. A published week
+offers "Change this week". The open-swaps notice is a box under the bar.
 
-Choose an unfilled slot to open its picker. Staff-role holders come first, with leave or overlapping
-work and their week hours; Show everyone includes the other active people. A choice writes at once,
-and a refusal stays in the picker for retry. The picker closes after a successful write before the
-rota refreshes. Published weeks offer no slot actions. Use By person to see each person's shifts across all areas.
-A draft's shifts open the staffing shift editor; Save waits for a changed draft, and Delete asks
-first. Labour warnings appear while you plan, and Publish lets you review them before publishing
-anyway. Change this week copies a published week into a draft. The old Team Rota page is retired;
-you reach both planning views through Calendar → Rota. The Staffing
-month shows unfilled counts for weeks with a roster version, and offers Rota for this week when
-you may read that view.
+A day's header names what needs attention under its date ("2 unfilled"). It reads "Closed" when no
+active department opens that day, whichever area is shown, and the shown area or Everyone has no
+slot that day. In an area the staff roles form the rows, a row only when the area has a slot or a
+shift with that staff role that week; slots show filled, partly uncovered, unfilled and
+outside-staff-role states, and assigned shifts no slot needs are marked not needed. Unassigned
+shifts and shifts whose area is inactive sit under Not in a slot, shown only when a day has one. A
+version's shifts outside its business week remain visible on the first or last day with the
+adjacent-week label. An unfilled slot reads Fill; choosing it opens its picker beside the slot (or
+on its other side, or below it, to stay inside the window), which follows the slot as the grid
+scrolls and closes once the slot scrolls out of view. Staff-role holders come first, with leave or
+overlapping work and their week hours against their contract, and "would go over … h contract" when
+the slot would take them over it; Show everyone includes the other active people. A choice writes at
+once, and a refusal stays in the picker for retry; once the picker closes it shows under the bar
+until the next pick, except that a phone sheet's Cancel discards it. The empty part of a cell holds "+ Add shift", its words shown on
+hover or focus, which opens the shift editor with the day, area and staff role chosen. In an area
+the person-level weekly labour warnings have no cell; the bar's labour count, the publish dialog and
+Everyone still show them.
+
+Show: Everyone has one row per active person, in staff-role order, then by name; a person with no
+staff role comes last. Each shows their hours under the name and their shifts as cards with the
+staff role's colour, area and role. Clicking the empty part of a day opens a menu of that day's open
+slots, those in the person's staff roles first and the rest marked outside staff role, then
+"Another shift…" (the shift editor). An area with no staffing painted for the week says so, explains
+that slots come from staffing paint, and offers "Paint {season}'s standard week" (the season of the week's first ordinary day that has
+one, or on a phone the shown day's; with none, the first special day's editor; "Show…" for someone who may only
+read Staffing; no button without Staffing access) and "Show everyone"; Everyone with no
+shifts keeps everyone's rows with one line saying how to add one. A draft's shifts open the staffing
+shift editor; Save waits for a changed draft, and Delete asks first. Labour warnings appear while
+you plan, and Publish lets you review them before publishing anyway. Change this week copies a
+published week into a draft. The old Team Rota page is retired; Calendar → Rota is the planning
+view. The Staffing month shows unfilled counts for weeks with a roster version, and offers Rota for
+this week when you may read that view.
+
+Below 560 px of the Rota's own width it shows one day at a time: the venue's business day now when
+it falls in the week (until the day's changeover that is still the day before), else Monday. A seven-day strip marks the days that need attention and picks a day, a
+sideways swipe steps a day, and ‹ › still step a week, keeping the weekday. In an area the day lists
+each staff role's slots and cards; in Everyone each person is a button with their name, staff roles
+and hours that opens the same open-slots menu. The picker and that menu open as a sheet from the
+bottom ending with Cancel, and Publish sits at the foot.
 
 The season painter (Forms above) has its own address,
 `/view/season/season/<id>/department/<id>`, with `/zone/<id>` for a zone; it opens over the view

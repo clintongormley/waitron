@@ -52,3 +52,20 @@ export const dateLabel = (date: string) =>
     .filter(({ type }) => type !== "literal")
     .map(({ value }) => value)
     .join(" ");
+
+/** A week's title in parts, "30 Nov – 6 Dec 2026", from its Monday, in `language`, else the
+ *  dashboard's. A month part carries the `YYYY-MM` it names. A copy of venue-service's
+ *  `formatWeekTitleParts` (`hours-view.ts`), which its package does not export. */
+export function weekTitleParts(
+  monday: string,
+  language?: string,
+): { text: string; month?: string }[] {
+  const sunday = new Date(utc(monday).getTime() + 6 * DAY_MS).toISOString().slice(0, 10);
+  return dateFormat({ day: "numeric", month: "short", year: "numeric" }, language)
+    .formatRangeToParts(utc(monday), utc(sunday))
+    .map(({ type, value, source }) =>
+      type === "month"
+        ? { text: value, month: (source === "endRange" ? sunday : monday).slice(0, 7) }
+        : { text: value },
+    );
+}

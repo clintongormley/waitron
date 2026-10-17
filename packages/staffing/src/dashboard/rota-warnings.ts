@@ -1,6 +1,7 @@
-import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hours-occurrences";
+import { offsetMinutes } from "@waitron/venue-service/hours-occurrences";
 import type { Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
+import { slotInstants } from "./rota-model.js";
 import {
   validateRoster,
   type PlannedShift,
@@ -19,26 +20,24 @@ export function shiftBreaches(breaches: readonly RosterBreach[], shiftId: string
   return breaches.filter((b) => "shiftId" in b && b.shiftId === shiftId);
 }
 
+/** The week's warnings before any candidate, which `candidateWarnings` leaves out. */
+export function rosterBaseline(week: RotaWeek, ruleset: WorkTimeRuleset): ReadonlySet<string> {
+  return new Set(validateRoster(week.shifts, ruleset).map((b) => JSON.stringify(b)));
+}
+
+/** What filling `slot` with the person would add to their warnings; `baseline` is
+ *  `rosterBaseline` of the same week and ruleset, worked out here when not given. */
 export function candidateWarnings(
   week: RotaWeek,
   slot: Slot,
   personId: string,
   ruleset: WorkTimeRuleset | null,
+  baseline?: ReadonlySet<string>,
 ): RosterBreach[] {
   if (!ruleset) return [];
-  const cutover = week.days.find((d) => d.businessDay === slot.businessDay)!.cutover;
-  const time = (at: string, end: boolean) => {
-    const date =
-      at < cutover || (end && at === cutover)
-        ? new Date(Date.parse(`${slot.businessDay}T00:00:00Z`) + 86400000)
-            .toISOString()
-            .slice(0, 10)
-        : slot.businessDay;
-    return localTimeOccurrences(date, at, week.timeZone)[0];
-  };
-  const start = time(slot.startsAt, false),
-    end = time(slot.endsAt, true);
-  if (!start || !end) return [];
+  const at = slotInstants(week, slot);
+  if (!at) return [];
+  const { start, end } = at;
   const candidate: PlannedShift = {
     shiftId: "candidate",
     personId,
@@ -47,8 +46,8 @@ export function candidateWarnings(
     startsOffsetMinutes: offsetMinutes(start.getTime(), week.timeZone),
     endsOffsetMinutes: offsetMinutes(end.getTime(), week.timeZone),
   };
-  const baseline = new Set(validateRoster(week.shifts, ruleset).map((b) => JSON.stringify(b)));
+  const before = baseline ?? rosterBaseline(week, ruleset);
   return validateRoster([...week.shifts, candidate], ruleset).filter(
-    (b) => b.personId === personId && !baseline.has(JSON.stringify(b)),
+    (b) => b.personId === personId && !before.has(JSON.stringify(b)),
   );
 }

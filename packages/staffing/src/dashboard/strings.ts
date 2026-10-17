@@ -10,9 +10,8 @@ import type { CalendarColour } from "../staffing-types.js";
 // Registers its catalogue and code messages at load, so importing `t` is enough to resolve them.
 
 const en = {
-  "staffing.rota.by_area": "By area",
-  "staffing.rota.by_person": "By person",
-  "staffing.rota.view": "Rota view",
+  "staffing.rota.everyone": "Everyone",
+  "staffing.rota.everyone_search": "Everyone's rota",
   "staffing.shift.edit": "Edit shift",
   "staffing.shift.add": "Add shift",
   "staffing.shift.personId": "Person",
@@ -43,7 +42,7 @@ const en = {
 
   "staffing.rota.labour_count": "{count} labour warnings",
   "staffing.rota.labour_one": "1 labour warning",
-  "staffing.rota.no_rules": "Labour rules are not set up",
+  "staffing.rota.no_rules": "No labour rules to check against",
   "staffing.rota.warnings_error": "Could not load labour warnings: {reason}",
   "staffing.rota.publish": "Publish week",
   "staffing.rota.publish_anyway": "Publish anyway",
@@ -64,33 +63,61 @@ const en = {
   "staffing.rota.tab": "Rota",
   "staffing.rota.previous": "Previous week",
   "staffing.rota.next": "Next week",
+  "staffing.rota.month_hint": "Opens this month's staffing",
   "staffing.rota.loading": "Loading rota…",
   "staffing.rota.load_error": "Could not load the rota: {reason}",
   "staffing.rota.save_error": "Could not fill the slot: {reason}",
-  "staffing.rota.area": "Area",
   "staffing.rota.staff_role": "Staff role",
-  "staffing.rota.people": "People this week (all areas)",
+  "staffing.rota.picker_sub": "{area} · holders of the staff role first",
+  "staffing.rota.would_go_over": "would go over {contract} h contract",
   "staffing.rota.hours": "{planned} / {contract} h",
   "staffing.rota.hours_no_contract": "{planned} h",
   "staffing.rota.draft": "Draft",
   "staffing.rota.published": "Published",
-  "staffing.rota.changed": "changed since published",
+  "staffing.rota.still_published": "Staff still see the published week",
+  "staffing.rota.publish_changes": "Publish changes",
+  "staffing.rota.partly_count": "{count} partly uncovered",
+  "staffing.rota.partly_one": "1 partly uncovered",
+  "staffing.rota.over_count": "{count} over",
+  "staffing.rota.over_one": "1 over",
+  "staffing.rota.all_filled": "All slots filled",
+  "staffing.rota.nothing_to_fill": "Nothing to fill",
+  "staffing.rota.no_shifts": "No shifts yet",
   "staffing.rota.not_in_slot": "Not in a slot",
   "staffing.rota.previous_week": "belongs to the previous week",
   "staffing.rota.next_week": "belongs to the next week",
   "staffing.rota.closed": "Closed",
   "staffing.rota.outside_role": "outside staff role",
   "staffing.rota.uncovered": "uncovered {times}",
-  "staffing.rota.unfilled": "+ unfilled",
+  "staffing.rota.fill": "Fill",
+  "staffing.rota.add_here": "+ Add shift",
+  "staffing.rota.add_label_area": "Add shift: {role}, {day}",
+  "staffing.rota.add_label_person": "Add shift: {name}, {day}",
+  "staffing.rota.open_heading": "{day} · {name}",
+  "staffing.rota.open_in_roles": "Open slots in {name}'s staff roles",
+  "staffing.rota.open_other": "Other open slots this day",
+  "staffing.rota.no_open": "No open slots this day",
+  "staffing.rota.another_shift": "Another shift…",
+  "staffing.rota.would_make": "would make {planned} / {contract} h",
   "staffing.rota.over": "not needed",
-  "staffing.rota.attention": "{unfilled} unfilled · {partly} partly uncovered · {over} over",
   "staffing.rota.free": "free",
   "staffing.rota.leave": "on leave",
   "staffing.rota.working": "working {times}",
   "staffing.rota.show_everyone": "Show everyone",
-  "staffing.rota.close": "Close picker",
   "staffing.rota.week_link": "Rota for this week",
   "staffing.rota.empty": "No active areas.",
+  "staffing.rota.unpainted_title": "No staffing is painted for {area} this week",
+  "staffing.rota.unpainted_season":
+    "Slots come from the staffing you paint: who {area} needs, and when. Paint {season}'s standard week once and every week of the season gets its slots. You can still add shifts by person.",
+  "staffing.rota.unpainted_plain":
+    "Slots come from the staffing you paint: who {area} needs, and when. You can still add shifts by person.",
+  "staffing.rota.paint_week": "Paint {season}'s standard week",
+  "staffing.rota.no_shifts_hint":
+    "No shifts this week yet. Click a day in someone's row to fill a slot or add a shift.",
+  "staffing.rota.no_shifts_hint_phone":
+    "No shifts this week yet. Tap a person to fill a slot or add a shift.",
+  "staffing.rota.days": "Days",
+  "staffing.rota.needs_attention": "needs attention",
   "staffing.rota.choose": "Choose a person",
   "staffing.rota.no_holders": "Nobody holds this staff role. Show everyone to choose someone else.",
 
@@ -201,9 +228,8 @@ const en = {
 };
 
 const es: Record<keyof typeof en, string> = {
-  "staffing.rota.by_area": "Por área",
-  "staffing.rota.by_person": "Por persona",
-  "staffing.rota.view": "Vista del cuadrante",
+  "staffing.rota.everyone": "Todo el equipo",
+  "staffing.rota.everyone_search": "Turnos de todo el equipo",
   "staffing.shift.edit": "Editar turno",
   "staffing.shift.add": "Añadir turno",
   "staffing.shift.personId": "Persona",
@@ -234,7 +260,7 @@ const es: Record<keyof typeof en, string> = {
 
   "staffing.rota.labour_count": "{count} avisos laborales",
   "staffing.rota.labour_one": "1 aviso laboral",
-  "staffing.rota.no_rules": "Las reglas laborales no están configuradas",
+  "staffing.rota.no_rules": "No hay reglas laborales con las que comprobar",
   "staffing.rota.warnings_error": "No se pudieron cargar los avisos laborales: {reason}",
   "staffing.rota.publish": "Publicar semana",
   "staffing.rota.publish_anyway": "Publicar de todos modos",
@@ -256,37 +282,64 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.tab": "Turnos",
   "staffing.rota.previous": "Semana anterior",
   "staffing.rota.next": "Semana siguiente",
+  "staffing.rota.month_hint": "Abre el personal de este mes",
   "staffing.rota.loading": "Cargando turnos…",
   "staffing.rota.load_error": "No se han podido cargar los turnos: {reason}",
   "staffing.rota.save_error": "No se ha podido cubrir el puesto: {reason}",
-  "staffing.rota.area": "Área",
   "staffing.rota.staff_role": "Rol de personal",
-  "staffing.rota.people": "Personas esta semana (todas las áreas)",
+  "staffing.rota.picker_sub": "{area} · primero quienes tienen el rol",
+  "staffing.rota.would_go_over": "superaría su contrato de {contract} h",
   "staffing.rota.hours": "{planned} / {contract} h",
   "staffing.rota.hours_no_contract": "{planned} h",
   "staffing.rota.draft": "Borrador",
   "staffing.rota.published": "Publicado",
-  "staffing.rota.changed": "cambiado desde su publicación",
+  "staffing.rota.still_published": "El equipo sigue viendo la semana publicada",
+  "staffing.rota.publish_changes": "Publicar cambios",
+  "staffing.rota.partly_count": "{count} parcialmente cubiertos",
+  "staffing.rota.partly_one": "1 parcialmente cubierto",
+  "staffing.rota.over_count": "{count} sobrantes",
+  "staffing.rota.over_one": "1 sobrante",
+  "staffing.rota.all_filled": "Todos los puestos cubiertos",
+  "staffing.rota.nothing_to_fill": "Nada que cubrir",
+  "staffing.rota.no_shifts": "Aún no hay turnos",
   "staffing.rota.not_in_slot": "Sin puesto",
   "staffing.rota.previous_week": "pertenece a la semana anterior",
   "staffing.rota.next_week": "pertenece a la semana siguiente",
   "staffing.rota.closed": "Cerrado",
   "staffing.rota.outside_role": "fuera del rol de personal",
   "staffing.rota.uncovered": "sin cubrir {times}",
-  "staffing.rota.unfilled": "+ sin cubrir",
+  "staffing.rota.fill": "Cubrir",
+  "staffing.rota.add_here": "+ Añadir turno",
+  "staffing.rota.add_label_area": "Añadir turno: {role}, {day}",
+  "staffing.rota.add_label_person": "Añadir turno: {name}, {day}",
+  "staffing.rota.open_heading": "{day} · {name}",
+  "staffing.rota.open_in_roles": "Puestos libres en los roles de {name}",
+  "staffing.rota.open_other": "Otros puestos libres este día",
+  "staffing.rota.no_open": "No hay puestos libres este día",
+  "staffing.rota.another_shift": "Otro turno…",
+  "staffing.rota.would_make": "pasaría a {planned} / {contract} h",
   "staffing.rota.over": "no necesario",
-  "staffing.rota.attention":
-    "{unfilled} sin cubrir · {partly} parcialmente cubiertos · {over} sobrantes",
   "staffing.rota.free": "libre",
   "staffing.rota.leave": "de permiso",
   "staffing.rota.working": "trabajando {times}",
-  "staffing.rota.show_everyone": "Mostrar a todo el mundo",
-  "staffing.rota.close": "Cerrar selector",
+  "staffing.rota.show_everyone": "Mostrar a todo el equipo",
   "staffing.rota.week_link": "Turnos de esta semana",
   "staffing.rota.empty": "No hay áreas activas.",
+  "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
+  "staffing.rota.unpainted_season":
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana habitual de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos por persona.",
+  "staffing.rota.unpainted_plain":
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Puedes seguir añadiendo turnos por persona.",
+  "staffing.rota.paint_week": "Pintar la semana habitual de {season}",
+  "staffing.rota.no_shifts_hint":
+    "Aún no hay turnos esta semana. Haz clic en un día de la fila de alguien para cubrir un puesto o añadir un turno.",
+  "staffing.rota.no_shifts_hint_phone":
+    "Aún no hay turnos esta semana. Toca a una persona para cubrir un puesto o añadir un turno.",
+  "staffing.rota.days": "Días",
+  "staffing.rota.needs_attention": "requiere atención",
   "staffing.rota.choose": "Elige una persona",
   "staffing.rota.no_holders":
-    "Nadie tiene este rol de personal. Muestra a todo el mundo para elegir a otra persona.",
+    "Nadie tiene este rol de personal. Muestra a todo el equipo para elegir a otra persona.",
 
   "nav.staff_roles": "Roles de personal",
   "staffing.role.title": "Roles de personal",
@@ -445,6 +498,16 @@ export function holderNames(names: readonly string[], shown: number, locale?: st
 export function peopleNeeded(count: number, locale?: string): string {
   if (count === 1) return t("staffing.grid.people_one", locale);
   return tf("staffing.grid.people_other", { count: String(count) }, locale);
+}
+
+/** A rota count in words: "1 over", "3 partly uncovered". */
+export function countWords(
+  kind: "unfilled" | "partly" | "over",
+  count: number,
+  locale?: string,
+): string {
+  if (kind !== "unfilled" && count === 1) return t(`staffing.rota.${kind}_one`, locale);
+  return tf(`staffing.rota.${kind}_count`, { count: String(count) }, locale);
 }
 
 const COLOUR_NAMES: NameTable = {

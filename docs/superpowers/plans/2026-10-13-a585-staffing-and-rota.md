@@ -1,5 +1,8 @@
 # A585 Staffing needs and the rota — Implementation Plan
 
+> 2026-10-17: A763 replaces the By area | By person switch, the area picker and the people panel
+> with one Show menu (Everyone or an area); see [its plan](2026-10-17-a763-rota-redesign.md).
+
 > 2026-10-16: A710 aligns the staffing painter hint, creation action,
 > tooltips and headcount controls. The owner kept the whole-day scale, with tooltip and block menu
 > for short blocks; a later readability design remains open. The current contract is in

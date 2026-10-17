@@ -305,14 +305,56 @@ describe("the Rota contribution", () => {
   });
 });
 
-it("opens the Rota modes declared for search on the real view", async () => {
+it("passes canWriteStaffing from the Staffing entry in ctx.calendarViews", async () => {
   const rota = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "rota")!;
-  expect(rota.searchDestinations?.map((x) => x.params)).toEqual([
-    { mode: "area" },
-    { mode: "person" },
-  ]);
+  const staffing = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "staffing")!;
+  const request = (async (path: string) =>
+    path.includes("/roster/breaches?")
+      ? { breaches: [], ruleset: null }
+      : rotaWeek("2026-11-30")) as DashboardRequest;
+  const host: CalendarViewHost = {
+    month: "2026-12",
+    params: { week: "2026-11-30" },
+    canWrite: true,
+    open: () => undefined,
+  };
+  const cases = [
+    [
+      [
+        { view: staffing, canWrite: true },
+        { view: rota, canWrite: true },
+      ],
+      true,
+    ],
+    [
+      [
+        { view: staffing, canWrite: false },
+        { view: rota, canWrite: true },
+      ],
+      false,
+    ],
+    [[{ view: rota, canWrite: true }], false],
+    [undefined, false],
+  ] as const;
+  for (const [calendarViews, expected] of cases) {
+    const container = document.createElement("div");
+    container.style.width = "1280px";
+    document.body.append(container);
+    containers.push(container);
+    render(rota.create({ request, calendarViews }, host).render(), container);
+    const view = container.querySelector<LitElement & { canWriteStaffing: boolean }>(
+      "staffing-rota",
+    )!;
+    expect(view.canWriteStaffing).toBe(expected);
+  }
+});
+
+it("opens the Rota's Everyone destination declared for search on the real view", async () => {
+  const rota = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "rota")!;
+  expect(rota.searchDestinations?.map((x) => x.params)).toEqual([{ area: "everyone" }]);
   for (const destination of rota.searchDestinations!) {
     const container = document.createElement("div");
+    container.style.width = "1280px";
     document.body.append(container);
     containers.push(container);
     const request = (async (path: string) =>
@@ -326,13 +368,47 @@ it("opens the Rota modes declared for search on the real view", async () => {
     render(handle.render(), container);
     const view = container.querySelector<LitElement>("staffing-rota")!;
     await view.updateComplete;
-    await vi.waitFor(() =>
-      expect(
-        view
-          .shadowRoot!.querySelector(`[data-test="by-${destination.params.mode}"]`)
-          ?.getAttribute("aria-pressed"),
-      ).toBe("true"),
-    );
+    await vi.waitFor(() => expect(view.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+    expect(view.shadowRoot!.querySelector("rota-by-area")).toBeNull();
+    expect(
+      view.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.value,
+    ).toBe("everyone");
     container.remove();
+  }
+});
+
+it("passes canOpenStaffing when ctx.calendarViews holds the Staffing entry", () => {
+  const rota = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "rota")!;
+  const staffing = STAFFING_DASHBOARD.calendarViews!.find((x) => x.id === "staffing")!;
+  const request = (async (path: string) =>
+    path.includes("/roster/breaches?")
+      ? { breaches: [], ruleset: null }
+      : rotaWeek("2026-11-30")) as DashboardRequest;
+  const host: CalendarViewHost = {
+    month: "2026-12",
+    params: { week: "2026-11-30" },
+    canWrite: true,
+    open: () => undefined,
+  };
+  const cases = [
+    [
+      [
+        { view: staffing, canWrite: false },
+        { view: rota, canWrite: true },
+      ],
+      true,
+    ],
+    [[{ view: rota, canWrite: true }], false],
+    [undefined, false],
+  ] as const;
+  for (const [calendarViews, expected] of cases) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(rota.create({ request, calendarViews }, host).render(), container);
+    const view = container.querySelector<LitElement & { canOpenStaffing: boolean }>(
+      "staffing-rota",
+    )!;
+    expect(view.canOpenStaffing).toBe(expected);
   }
 });

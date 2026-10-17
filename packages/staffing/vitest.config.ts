@@ -1,6 +1,7 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
+import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.js";
 
 export default defineConfig({
   test: {
@@ -38,8 +39,8 @@ export default defineConfig({
             provider: playwright({}),
             headless: true,
             instances: [{ browser: "chromium" }],
-            // The a11y suite imports @waitron/ui's a11y-helpers.ts, whose beforeEach runs this command.
-            commands: { ...parkPointerCommands },
+            // The a11y suite imports @waitron/ui's a11y-helpers.ts, whose beforeEach runs `parkPointer`.
+            commands: { ...parkPointerCommands, ...pointerGestureCommands },
           },
         },
       },

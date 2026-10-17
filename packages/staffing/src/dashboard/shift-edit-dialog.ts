@@ -57,6 +57,8 @@ export class ShiftEditDialog extends LitElement {
   @property() shiftId?: string;
   @property() businessDay = "";
   @property() personId = "";
+  @property() area = "";
+  @property() staffRoleId = "";
   @state() private draft: Draft = empty();
   @state() private busy = false;
   @state() private attempted = false;
@@ -84,7 +86,7 @@ export class ShiftEditDialog extends LitElement {
       this.identity = undefined;
       return;
     }
-    const subject = `${this.week.week}:${this.shiftId ?? `${this.businessDay}:${this.personId}`}`;
+    const subject = `${this.week.week}:${this.shiftId ?? `${this.businessDay}:${this.personId}:${this.area}:${this.staffRoleId}`}`;
     if (!this.identity || this.subject !== subject) {
       this.scope?.dispose();
       this.scope = undefined;
@@ -103,7 +105,12 @@ export class ShiftEditDialog extends LitElement {
             startsAt: wallTime(shift.startsAt, shift.startsOffsetMinutes),
             endsAt: wallTime(shift.endsAt, shift.endsOffsetMinutes),
           }
-        : { ...empty(), personId: this.personId };
+        : {
+            ...empty(),
+            personId: this.personId,
+            area: this.area,
+            staffRoleId: this.staffRoleId,
+          };
       this.baseline = copy(this.draft);
     }
     if (this.isConnected && !this.scope) {

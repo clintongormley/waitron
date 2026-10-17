@@ -1,8 +1,11 @@
 # A585 — Staffing needs and the rota: who the venue needs, when, and who fills it
 
+> 2026-10-17: A763 points 1–8 are built (see the [plan](../plans/2026-10-17-a763-rota-redesign.md));
+> point 9 waits for A724 Part 2.
+
 > 2026-10-16: A763 redesigns the Rota view. One Show menu replaces decision 9's By area | By
 > person switch and the area picker, and the people panel goes. See
-> [A763](../../backlog/workforce.md#a763-the-rota-view-redesigned-one-show-menu-no-button-per-cell-an-empty-week-that-says-why).
+> [A763's plan](../plans/2026-10-17-a763-rota-redesign.md).
 
 > 2026-10-16: A724 replaces the painters’ bare opening-hour guides with named period bands and
 > station sending-department lanes, and calls the season painter a standard week. See its
