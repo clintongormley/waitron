@@ -5,6 +5,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import type { SeasonChips, SeasonChip, SeasonWrites } from "./season-chips.js";
 import type { SeasonDialog } from "./season-dialog.js";
 import type { Season } from "../season-rules.js";
+import { SEASON_TINT_TOKENS } from "./season-tint.js";
 import "./season-chips.js";
 
 const winter: SeasonChip = {
@@ -117,7 +118,7 @@ const footerError = () => dq<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-
 const fieldError = (name: string) =>
   dq<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.error;
 
-it("labels each chip from the server's last day and tints it by start order, repeating after four", async () => {
+it("labels each chip from the server's last day and tints it by its season's stored colour", async () => {
   const fifth: SeasonChip = {
     id: "x",
     name: "Late summer",
@@ -133,32 +134,40 @@ it("labels each chip from the server's last day and tints it by start order, rep
     "Autumn · 1 Sept – 30 Nov ✎",
     "Winter · 1 Dec – 29 Feb ✎",
   ]);
-  expect(chips().map((chip) => chip.dataset.tint)).toEqual(["1", "2", "3", "4", "1"]);
+  expect(chips().map((chip) => chip.dataset.tint)).toEqual([
+    "green",
+    "amber",
+    "teal",
+    "orange",
+    "blue",
+  ]);
   expect(chips()[0]!.querySelector("[data-test=season-edit]")!.getAttribute("aria-label")).toBe(
     "Edit Spring, 1 Mar – 31 May",
   );
 });
 
-it("paints each chip with its season's colour tokens", async () => {
+it("paints each chip with its season's stored colour", async () => {
   await mount();
-  const token = (name: string) => {
-    const probe = document.createElement("span");
-    probe.style.color = `var(${name})`;
-    el.shadowRoot!.append(probe);
-    const value = getComputedStyle(probe).color;
-    probe.remove();
-    return value;
+  const probe = (value: string) => {
+    const span = document.createElement("span");
+    span.style.color = value;
+    el.shadowRoot!.append(span);
+    const read = getComputedStyle(span).color;
+    span.remove();
+    return read;
   };
-  for (const chip of chips()) {
-    const tint = chip.dataset.tint!;
+  for (const [chip, season] of chips().map((chip, index) => [chip, four[index]!] as const)) {
+    const { tint, onTint, line } = SEASON_TINT_TOKENS[season.colour];
     const painted = getComputedStyle(chip);
-    expect([painted.backgroundColor, painted.color, painted.borderTopColor]).toEqual([
-      token(`--wt-color-season-${tint}`),
-      token(`--wt-color-on-season-${tint}`),
-      token(`--wt-color-season-${tint}-line`),
+    expect([painted.backgroundColor, painted.color, painted.borderTopColor], season.name).toEqual([
+      probe(tint),
+      probe(onTint),
+      probe(line),
     ]);
   }
-  expect(new Set(chips().map((chip) => getComputedStyle(chip).backgroundColor)).size).toBe(4);
+  expect(new Set(chips().map((chip) => getComputedStyle(chip).backgroundColor)).size).toBe(
+    new Set(four.map(({ colour }) => colour)).size,
+  );
 });
 
 it("renames a season through the api with its start and the clock revision, then says it changed", async () => {

@@ -771,9 +771,9 @@ it("labels its submit with submitLabel when one is given, else Save", async () =
 });
 
 const seasons = [
-  { id: "summer", startsOn: "06-01" },
-  { id: "winter", startsOn: "12-01" },
-  { id: "spring", startsOn: "03-01" },
+  { id: "summer", startsOn: "06-01", colour: "amber" },
+  { id: "winter", startsOn: "12-01", colour: "blue" },
+  { id: "spring", startsOn: "03-01", colour: "green" },
 ];
 async function mountEdit(setup: (el: PeriodDialog) => void) {
   const el = await mount(true);
@@ -818,14 +818,14 @@ it("Painted in shows season chips in the order given with their tints, then spec
       text: "Winter",
       tag: "a",
       href: "/manage/opening-hours/view/season/season/winter/department/restaurant",
-      tint: "3",
+      tint: "blue",
       special: false,
     },
     {
       text: "Summer",
       tag: "a",
       href: "/manage/opening-hours/view/season/season/summer/department/restaurant",
-      tint: "2",
+      tint: "amber",
       special: false,
     },
     {
@@ -845,7 +845,7 @@ it("Painted in shows season chips in the order given with their tints, then spec
     { tag: "span", href: null },
     { tag: "span", href: null },
   ]);
-  expect(paintedChips(el).map(({ tint }) => tint)).toEqual(["3", "2", null]);
+  expect(paintedChips(el).map(({ tint }) => tint)).toEqual(["blue", "amber", null]);
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;

@@ -7,6 +7,7 @@ import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
+import { SEASON_TINT_TOKENS } from "./season-tint.js";
 import "./opening-hours-year.js";
 
 const hosts: HTMLElement[] = [];
@@ -203,13 +204,13 @@ describe("Opening hours year", () => {
     );
   });
 
-  it("tints each day by its season's place in start order, cycling past the fourth", async () => {
+  it("tints each day and chip by its season's stored colour", async () => {
     const el = await mount();
     expect(
       ["2027-01-15", "2027-04-10", "2027-07-01", "2027-10-01", "2027-12-01"].map(
         (date) => cell(el, date).dataset.tint,
       ),
-    ).toEqual(["4", "1", "2", "3", "4"]);
+    ).toEqual(["blue", "green", "amber", "orange", "blue"]);
     const five = await mount(
       yearModel({
         seasons: [
@@ -221,38 +222,48 @@ describe("Opening hours year", () => {
         ),
       }),
     );
-    expect(cell(five, "2027-12-25").dataset.tint).toBe("1");
-    expect(cell(five, "2027-12-01").dataset.tint).toBe("4");
+    expect(cell(five, "2027-12-20").dataset.tint).toBe("purple");
+    expect(cell(five, "2027-12-25").dataset.tint).toBe("purple");
+    expect(cell(five, "2027-12-01").dataset.tint).toBe("blue");
     expect(
       root(five)
         .querySelector("season-chips")!
         .shadowRoot!.querySelector<HTMLElement>('[data-season="x"]')!.dataset.tint,
-    ).toBe("1");
+    ).toBe("purple");
   });
 
-  it("paints each tinted day with its season's colour tokens", async () => {
+  it("paints each tinted day with its season's colour", async () => {
     const el = await mount();
     applyTokens(el);
     await el.updateComplete;
-    const token = (name: string) => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(${name})`;
-      root(el).append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
+    const probe = (value: string) => {
+      const span = document.createElement("span");
+      span.style.color = value;
+      root(el).append(span);
+      const read = getComputedStyle(span).color;
+      span.remove();
+      return read;
     };
-    const dates = { "1": "2027-04-10", "2": "2027-07-01", "3": "2027-10-01", "4": "2027-01-15" };
-    for (const [tint, date] of Object.entries(dates)) {
+    const dates = {
+      green: "2027-04-10",
+      amber: "2027-07-01",
+      orange: "2027-10-01",
+      blue: "2027-01-15",
+    } as const;
+    for (const [colour, date] of Object.entries(dates) as [keyof typeof dates, string][]) {
       const painted = getComputedStyle(dayButton(el, date));
-      expect([painted.backgroundColor, painted.color]).toEqual([
-        token(`--wt-color-season-${tint}`),
-        token(`--wt-color-on-season-${tint}`),
+      expect([painted.backgroundColor, painted.color], colour).toEqual([
+        probe(SEASON_TINT_TOKENS[colour].tint),
+        probe(SEASON_TINT_TOKENS[colour].onTint),
       ]);
     }
-    expect(new Set(Object.keys(dates).map((tint) => token(`--wt-color-season-${tint}`))).size).toBe(
-      4,
-    );
+    expect(
+      new Set(
+        Object.keys(dates).map((colour) =>
+          probe(SEASON_TINT_TOKENS[colour as keyof typeof dates].tint),
+        ),
+      ).size,
+    ).toBe(4);
   });
 
   it("marks public holidays, special days and closed days", async () => {

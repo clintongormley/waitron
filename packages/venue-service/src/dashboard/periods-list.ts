@@ -1,3 +1,4 @@
+import type { CalendarColour } from "@waitron/shared";
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -44,8 +45,8 @@ const swatchColours = unsafeCSS(
 const chipTints = unsafeCSS(
   Object.entries(SEASON_TINT_TOKENS)
     .map(
-      ([tint, { tint: fill, onTint, line }]) =>
-        `wt-data-table::part(tint-${tint}) { background: ${fill}; color: ${onTint}; border-color: ${line}; }`,
+      ([colour, { tint, onTint, line }]) =>
+        `wt-data-table::part(tint-${colour}) { background: ${tint}; color: ${onTint}; border-color: ${line}; }`,
     )
     .join("\n"),
 );
@@ -177,7 +178,7 @@ export class PeriodsList extends LitElement {
 
   private lookups?: {
     model: OpeningHoursModel;
-    tints: Map<string, string>;
+    tints: Map<string, CalendarColour>;
     menuNames: Map<string, string>;
   };
   /** Season tints and menu names, worked out once per model rather than once per row. */
@@ -204,7 +205,7 @@ export class PeriodsList extends LitElement {
       >${painted.seasons.map(
         (season) =>
           html`<a
-            part=${`chip tint-${tints.get(season.id) ?? "1"}`}
+            part=${`chip tint-${tints.get(season.id) ?? "grey"}`}
             href=${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}
             >${season.name}</a
           >`,

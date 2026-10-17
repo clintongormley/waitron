@@ -46,10 +46,10 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     }
     if (state.startsWith("painted-in") || state === "not-painted") {
       el.seasons = [
-        { id: "autumn", startsOn: "09-01" },
-        { id: "winter", startsOn: "12-01" },
-        { id: "spring", startsOn: "03-01" },
-        { id: "summer", startsOn: "06-01" },
+        { id: "autumn", colour: "orange" },
+        { id: "winter", colour: "blue" },
+        { id: "spring", colour: "green" },
+        { id: "summer", colour: "amber" },
       ];
       el.departmentId = "restaurant";
       el.paintedInLinks = state === "painted-in-links";

@@ -124,7 +124,7 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   /** Where the period is painted; absent draws no Painted in. */
   @property({ attribute: false }) paintedIn?: PaintedIn;
-  @property({ attribute: false }) seasons: readonly { id: string; startsOn: string }[] = [];
+  @property({ attribute: false }) seasons: readonly { id: string; colour: string }[] = [];
   @property() departmentId = "";
   @property({ type: Boolean }) paintedInLinks = false;
   @property({ type: Boolean }) deletable = false;

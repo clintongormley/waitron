@@ -133,6 +133,14 @@ it("titles the season's week and draws the first area's weekdays, Monday first, 
   );
 });
 
+it("the season chip takes the season's stored colour", async () => {
+  const { painter } = await mount();
+  expect(byTest(painter, "season")!.dataset.tint).toBe("blue");
+  painter.remove();
+  const autumn = await mount({ seasonId: "autumn" });
+  expect(byTest(autumn.painter, "season")!.dataset.tint).toBe("orange");
+});
+
 it("keeps the same columns from one render to the next", async () => {
   const { painter } = await mount();
   const columns = grid(painter).columns;

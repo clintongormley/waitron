@@ -167,8 +167,8 @@ describe("the Staffing view's month", () => {
     const { el } = await mount();
     expect(root(el).querySelector("[data-test=seasons]")).toBeNull();
     expect(root(el).querySelector(".legend")).toBeNull();
-    expect(cell(el, "2026-11-30").dataset.tint).toBe("1");
-    expect(cell(el, "2026-12-01").dataset.tint).toBe("2");
+    expect(cell(el, "2026-11-30").dataset.tint).toBe("orange");
+    expect(cell(el, "2026-12-01").dataset.tint).toBe("blue");
   });
 
   it("filters the days to one area, kept in the address, and back to every area", async () => {
