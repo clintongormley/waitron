@@ -304,8 +304,8 @@ no reset, and a period kept open before it ends just moves the moment.
 > floor keeps Standard until 16:45, the moment it recorded, then switches to Dinner's set.
 >
 > Monday is a day with no period, so the zones take the default set, Standard, until the day ends.
-> At 11:00 the owner paints a lunch for today: the menus offer it at once, but the floor takes its
-> set only from tomorrow's start.
+> At 11:00 the owner paints a lunch for today only: the menus offer it when it runs, but the floor
+> keeps Standard for the rest of today, so today's lunch never gets its own layout.
 
 **"Reset to … plan" in the till's zone menu (default: onto the recorded set).** It resets onto the
 recorded set's current layout, as "Reset to saved plan" does today. So it brings early an edit to
@@ -571,7 +571,7 @@ after a period ended; (8) what a switch does and the till's notice; (9) publishi
   read in its delete dialog should count them
   ([reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md)).
 - **A zone's own closed times and "keep open"** (`zone_days` and `zone_day_ranges`,
-  `packages/venue-service/src/schema/seasons.ts:164`, `203`; `zone_extensions`,
+  `packages/venue-service/src/schema/seasons.ts:162-163`, `203`; `zone_extensions`,
   `packages/venue-service/src/schema/zone-extensions.ts`, A366). The older `zone_closed_times` table
   is gone (`packages/venue-service/src/migrations.test.ts:191-197`). The rule here follows the
   department's period; whether a zone kept open past its department's period keeps its layout is for
