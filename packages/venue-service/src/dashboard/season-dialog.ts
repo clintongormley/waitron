@@ -21,6 +21,7 @@ import type { LocalDate } from "../hours-types.js";
 import { byStart, type Season } from "../season-rules.js";
 import type { SeasonInput } from "./opening-hours-client.js";
 import { MONTHS } from "./calendar-grid.js";
+import { daysIn } from "./season-draft.js";
 import { format, formatDate, formatMonthName } from "./hours-view.js";
 import { t } from "./strings.js";
 import { currentLocale } from "@waitron/dashboard-kit";
@@ -30,9 +31,6 @@ type Draft = { name: string; day: string; month: string };
 type Field = "name" | "startsOn";
 const fields: Field[] = ["name", "startsOn"];
 
-/** 29 February is never a start, so February always offers 28 days. */
-const daysIn = (month: string) =>
-  month === "02" ? 28 : new Date(Date.UTC(2001, Number(month), 0)).getUTCDate();
 const copy = (draft: Draft): Draft => ({ ...draft });
 const same = (a: Draft, b: Draft) => a.name === b.name && a.day === b.day && a.month === b.month;
 const draftOf = (season?: Season): Draft =>
