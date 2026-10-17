@@ -103,6 +103,34 @@ describe("the field", () => {
     expect(plain.label.querySelector("[data-required]")).toBeNull();
   });
 
+  test("hide-label draws no label and no asterisk, keeps the trigger named by its label and colour, and makes the field compact", async () => {
+    const shown = await mountChooser('label="Colour" required value="blue"');
+    const shownHeight = shown.field.getBoundingClientRect().height;
+    const { el, root, field, label, trigger, panel, tile } = await mountChooser(
+      'label="Colour" hide-label required value="blue"',
+    );
+    expect(el.hideLabel).toBe(true);
+    const box = label.getBoundingClientRect();
+    expect(box.width).toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
+    expect(root.querySelector("[data-required]")).toBeNull();
+    expect(field.textContent).not.toContain("*");
+    const names = trigger
+      .getAttribute("aria-labelledby")!
+      .split(" ")
+      .map((id) => root.getElementById(id)!.textContent!.trim());
+    expect(names).toEqual(["Colour", "Blue"]);
+    const named = page.getByRole("button", { name: "Colour Blue", exact: true });
+    expect(named.element()).toBe(trigger);
+    expect(field.getBoundingClientRect().height).toBeLessThan(shownHeight);
+    const changes: unknown[] = [];
+    el.addEventListener("wt-change", (event) => changes.push((event as CustomEvent).detail));
+    await openByClick(el);
+    await userEvent.click(tile("green"));
+    expect(changes).toEqual([{ value: "green" }]);
+    await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+  });
+
   test("the label floats while a choice matches value", async () => {
     const { field } = await mountChooser();
     expect(field.dataset.label).toBe(fieldLabelState({ value: "Blue", hint: "", placeholder: "" }));

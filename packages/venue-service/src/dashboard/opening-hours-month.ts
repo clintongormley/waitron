@@ -647,7 +647,6 @@ export class OpeningHoursMonthView extends LitElement {
           ? html`<div class="sub">
               <season-chips
                 .seasons=${model.seasons}
-                .clockRevision=${model.clockRevision}
                 .readOnly=${this.readOnly}
                 .keyOnly=${true}
               ></season-chips>

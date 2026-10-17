@@ -281,7 +281,7 @@ export async function readSeasonStaffing(
   });
   return {
     cutover,
-    seasons: all.map(({ id, name, startsOn }) => ({ id, name, startsOn })),
+    seasons: all.map(({ id, name, startsOn, colour }) => ({ id, name, startsOn, colour })),
     areas: areas.map(({ area, name }) => {
       const byDay = paint.get(areaKey(area));
       return {

@@ -141,10 +141,28 @@ describe("the Opening hours year read", () => {
       closed: true,
     });
     expect(year.seasons).toEqual([
-      { id: v.seasons.Spring, name: "Spring", startsOn: "03-01", lastDay: "05-31" },
-      { id: v.seasons.Summer, name: "Summer", startsOn: "06-01", lastDay: "08-31" },
-      { id: v.seasons.Autumn, name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
-      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28" },
+      {
+        id: v.seasons.Spring,
+        name: "Spring",
+        startsOn: "03-01",
+        lastDay: "05-31",
+        colour: "green",
+      },
+      {
+        id: v.seasons.Summer,
+        name: "Summer",
+        startsOn: "06-01",
+        lastDay: "08-31",
+        colour: "amber",
+      },
+      {
+        id: v.seasons.Autumn,
+        name: "Autumn",
+        startsOn: "09-01",
+        lastDay: "11-30",
+        colour: "orange",
+      },
+      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
     ]);
   });
 
@@ -346,8 +364,14 @@ describe("the Opening hours month read", () => {
     expect(month.month).toBe("2030-12");
     expect(month.today).toBe("2026-10-09");
     expect(month.seasons).toEqual([
-      { id: v.seasons.Autumn, name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
-      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28" },
+      {
+        id: v.seasons.Autumn,
+        name: "Autumn",
+        startsOn: "09-01",
+        lastDay: "11-30",
+        colour: "orange",
+      },
+      { id: v.seasons.Winter, name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
     ]);
     const dayOn = (date: string) => month.days.find((day) => day.date === date);
     expect(dayOn("2030-11-30")).toEqual({

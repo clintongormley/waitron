@@ -7,6 +7,7 @@ import type { HolidayFact, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import type { OpeningHoursYearView } from "./opening-hours-year.js";
+import { SEASON_TINT_TOKENS } from "./season-tint.js";
 import "./opening-hours-year.js";
 
 const hosts: HTMLElement[] = [];
@@ -17,11 +18,11 @@ afterEach(() => {
   setLocale("en");
 });
 
-const seasons = [
-  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28" },
-  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31" },
-  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31" },
-  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30" },
+const seasons: OpeningHoursYear["seasons"][number][] = [
+  { id: "w", name: "Winter", startsOn: "12-01", lastDay: "02-28", colour: "blue" },
+  { id: "sp", name: "Spring", startsOn: "03-01", lastDay: "05-31", colour: "green" },
+  { id: "su", name: "Summer", startsOn: "06-01", lastDay: "08-31", colour: "amber" },
+  { id: "a", name: "Autumn", startsOn: "09-01", lastDay: "11-30", colour: "orange" },
 ];
 const holiday = (date: LocalDate, name: string): HolidayFact => ({
   id: `h-${date}`,
@@ -203,53 +204,66 @@ describe("Opening hours year", () => {
     );
   });
 
-  it("tints each day by its season's place in start order, cycling past the fourth", async () => {
+  it("tints each day and chip by its season's stored colour", async () => {
     const el = await mount();
     expect(
       ["2027-01-15", "2027-04-10", "2027-07-01", "2027-10-01", "2027-12-01"].map(
         (date) => cell(el, date).dataset.tint,
       ),
-    ).toEqual(["4", "1", "2", "3", "4"]);
+    ).toEqual(["blue", "green", "amber", "orange", "blue"]);
     const five = await mount(
       yearModel({
-        seasons: [...seasons, { id: "x", name: "Late", startsOn: "12-20", lastDay: "02-28" }],
+        seasons: [
+          ...seasons,
+          { id: "x", name: "Late", startsOn: "12-20", lastDay: "02-28", colour: "purple" },
+        ],
         days: yearModel().days.map((day) =>
           day.date >= "2027-12-20" ? { ...day, seasonId: "x" } : day,
         ),
       }),
     );
-    expect(cell(five, "2027-12-25").dataset.tint).toBe("1");
-    expect(cell(five, "2027-12-01").dataset.tint).toBe("4");
+    expect(cell(five, "2027-12-20").dataset.tint).toBe("purple");
+    expect(cell(five, "2027-12-25").dataset.tint).toBe("purple");
+    expect(cell(five, "2027-12-01").dataset.tint).toBe("blue");
     expect(
       root(five)
         .querySelector("season-chips")!
         .shadowRoot!.querySelector<HTMLElement>('[data-season="x"]')!.dataset.tint,
-    ).toBe("1");
+    ).toBe("purple");
   });
 
-  it("paints each tinted day with its season's colour tokens", async () => {
+  it("paints each tinted day with its season's colour", async () => {
     const el = await mount();
     applyTokens(el);
     await el.updateComplete;
-    const token = (name: string) => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(${name})`;
-      root(el).append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
+    const probe = (value: string) => {
+      const span = document.createElement("span");
+      span.style.color = value;
+      root(el).append(span);
+      const read = getComputedStyle(span).color;
+      span.remove();
+      return read;
     };
-    const dates = { "1": "2027-04-10", "2": "2027-07-01", "3": "2027-10-01", "4": "2027-01-15" };
-    for (const [tint, date] of Object.entries(dates)) {
+    const dates = {
+      green: "2027-04-10",
+      amber: "2027-07-01",
+      orange: "2027-10-01",
+      blue: "2027-01-15",
+    } as const;
+    for (const [colour, date] of Object.entries(dates) as [keyof typeof dates, string][]) {
       const painted = getComputedStyle(dayButton(el, date));
-      expect([painted.backgroundColor, painted.color]).toEqual([
-        token(`--wt-color-season-${tint}`),
-        token(`--wt-color-on-season-${tint}`),
+      expect([painted.backgroundColor, painted.color], colour).toEqual([
+        probe(SEASON_TINT_TOKENS[colour].tint),
+        probe(SEASON_TINT_TOKENS[colour].onTint),
       ]);
     }
-    expect(new Set(Object.keys(dates).map((tint) => token(`--wt-color-season-${tint}`))).size).toBe(
-      4,
-    );
+    expect(
+      new Set(
+        Object.keys(dates).map((colour) =>
+          probe(SEASON_TINT_TOKENS[colour as keyof typeof dates].tint),
+        ),
+      ).size,
+    ).toBe(4);
   });
 
   it("marks public holidays, special days and closed days", async () => {
@@ -404,29 +418,18 @@ describe("Opening hours year", () => {
     expect(opened).toEqual([{ date: "2027-03-01" }]);
   });
 
-  it("hands the seasons, the clock revision, the api and every special day to the chips", async () => {
-    const api = {
-      saveSeason: vi.fn(),
-      addSeason: vi.fn(),
-      deleteSeason: vi.fn(),
-      readSeasonDeleteImpact: vi.fn(),
-    };
-    const specialDays = [
-      { id: "fair", name: "Town fair" },
-      { id: "later", name: "Next year's fair" },
-    ];
-    const el = await mount(yearModel(), { api, specialDays });
-    const chips = root(el).querySelector("season-chips")!;
-    expect(chips.seasons).toEqual(seasons);
-    expect(chips.clockRevision).toBe(7);
-    expect(chips.api).toBe(api);
-    expect(chips.specialDays).toEqual(specialDays);
-    expect(chips.readOnly).toBe(false);
-    const changed = vi.fn();
-    document.body.addEventListener("season-changed", changed);
-    chips.dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
-    document.body.removeEventListener("season-changed", changed);
-    expect(changed).toHaveBeenCalledTimes(1);
+  it("hands the seasons and read-only to the chips", async () => {
+    for (const readOnly of [false, true]) {
+      const el = await mount(yearModel(), { readOnly });
+      const chips = root(el).querySelector("season-chips")!;
+      expect(chips.seasons).toEqual(seasons);
+      expect(chips.readOnly).toBe(readOnly);
+      for (const writing of ["api", "clockRevision", "specialDays", "draftParent"])
+        expect(writing in chips).toBe(false);
+      expect(
+        chips.shadowRoot!.querySelector("[data-test=season-edit], [data-test=add-season]"),
+      ).toBeNull();
+    }
   });
 
   it("sends calendar-day-open for a date, a viewer's too", async () => {
@@ -475,7 +478,7 @@ describe("Opening hours year", () => {
     expect(opened.map(({ date }) => date)).toEqual(["2027-05-12"]);
   });
 
-  it("the season row ends with Periods…, also for a viewer, which asks for the Periods window", async () => {
+  it("the season row offers Seasons… then Periods…, also for a viewer, each asking for its window", async () => {
     for (const readOnly of [false, true]) {
       const el = await mount(yearModel(), { readOnly });
       const chips = root(el).querySelector("season-chips")!;
@@ -485,8 +488,20 @@ describe("Opening hours year", () => {
       expect((last!.assignedSlot ?? undefined)?.getRootNode(), "slotted into the chips' row").toBe(
         chips.shadowRoot,
       );
+      const seasons = last!.previousElementSibling as HTMLElementTagNameMap["wt-button"] | null;
+      expect(seasons?.dataset.test).toBe("open-seasons");
+      expect(text(seasons)).toBe("Seasons…");
+      expect(
+        (seasons!.assignedSlot ?? undefined)?.getRootNode(),
+        "slotted into the chips' row",
+      ).toBe(chips.shadowRoot);
       const asked: CustomEvent[] = [];
       el.addEventListener("calendar-window-open", (event) => asked.push(event as CustomEvent));
+      await userEvent.click(seasons!);
+      expect(asked).toHaveLength(1);
+      expect(asked[0]!.detail).toEqual({ window: "seasons" });
+      expect(asked[0]!.composed).toBe(true);
+      asked.length = 0;
       await userEvent.click(last!);
       expect(asked).toHaveLength(1);
       expect(asked[0]!.detail).toEqual({ window: "periods" });
@@ -496,6 +511,7 @@ describe("Opening hours year", () => {
     try {
       const el = await mount();
       expect(text(root(el).querySelector("[data-test=open-periods]"))).toBe("Periodos…");
+      expect(text(root(el).querySelector("[data-test=open-seasons]"))).toBe("Temporadas…");
     } finally {
       setLocale("en");
     }

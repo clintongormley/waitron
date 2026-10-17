@@ -1442,10 +1442,10 @@ describe("the opening-hours model's seasons", () => {
       readOpeningHoursModel(tx, v.cfg, madrid("2026-12-04", "12:00")),
     );
     expect(december.seasons).toEqual([
-      { id: id("Spring"), name: "Spring", startsOn: "03-01" },
-      { id: id("Summer"), name: "Summer", startsOn: "06-01" },
-      { id: id("Autumn"), name: "Autumn", startsOn: "09-01" },
-      { id: id("Winter"), name: "Winter", startsOn: "12-01" },
+      { id: id("Spring"), name: "Spring", startsOn: "03-01", colour: "green" },
+      { id: id("Summer"), name: "Summer", startsOn: "06-01", colour: "amber" },
+      { id: id("Autumn"), name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: id("Winter"), name: "Winter", startsOn: "12-01", colour: "blue" },
     ]);
     expect(december.currentSeasonId).toBe(id("Winter"));
     const restaurant = december.departments.find((department) => department.id === v.restaurant)!;

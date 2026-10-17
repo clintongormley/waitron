@@ -407,6 +407,13 @@
       "when": 1792229426270,
       "tag": "0057_black_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1792260753968,
+      "tag": "0058_dusty_iron_fist",
+      "breakpoints": true
     }
   ]
 }

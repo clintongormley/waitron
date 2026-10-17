@@ -92,7 +92,7 @@ Left open by A506-3, #1591.
 A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
 draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
 every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
-`deleteSeason` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
+`saveSeasons` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
 the code, not run.
 
 ## The special-day-then-season rule is written out in several places
@@ -181,25 +181,6 @@ reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unrea
 which start at year 100; changing `isLocalDate` would change which dates the server accepts from
 outside (menu publication dates, imports), so it needs a decision.
 
-## A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
-
-**A721 (owner, 2026-10-15).** Mockup: [the Seasons window](mockups/a718-a727-calendar-and-stations/02-seasons-window.png). Files:
-`packages/venue-service/src/dashboard/season-chips.ts`, the season dialog, `season-tint.ts`, and
-the season schema and routes. Migration: a colour per season (pre-live, so no data migration).
-
-1. **A "Seasons…" window**, opened from a "Seasons…" button on the Calendar Year's season row,
-   replaces the existing addressable chooser at `window/seasons` and lists every season in the order it
-   starts in the year. Each row edits its colour (`wt-colour-chooser`, choices from
-   `calendarColourChoices`, `packages/venue-service/src/dashboard/calendar-colours.ts`), name and start date in
-   place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
-   "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
-   window; Cancel discards. The separate season editor and the chips' ✎ go. The row's "Periods…"
-   (A719) is placed into `season-chips`' default slot by the Year view; keep it after "Seasons…".
-2. **Each season stores its colour.** Today `seasonTints` colours a season by its place in the list
-   it is handed, so February's Month view, handed only Winter and Spring, paints Winter yellow while
-   the Year paints it blue. A stored colour is the same on every view. Landing deletes the open note
-   "Season colours differ between Opening hours' Year and its month (and the Times tab)".
-
 ## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
 
 **A723 (owner, 2026-10-15).** Mockups: [season painter](mockups/a718-a727-calendar-and-stations/06-season-painter.png),
@@ -234,8 +215,8 @@ special-day write routes.
 week vs a special range. maybe through the use of colour. even on the month view the special day is
 not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
 `special-day-painter.ts`, `painter-frame.ts`; `packages/staffing/src/dashboard/staffing-season-painter.ts`,
-`staffing-special-day-painter.ts`, `staffing-month.ts`. After A721 (stored season colours) and A723
-(the opening-hours painters' wording).
+`staffing-special-day-painter.ts`, `staffing-month.ts`. After A723 (the opening-hours painters'
+wording); the stored season colours it paints with landed in A721.
 
 1. **All four painters — opening hours and staffing, standard week and special day — carry the
    colour of what they edit** (owner chose all four, 2026-10-16): a band along the top bar in the
@@ -258,6 +239,41 @@ shipped list has one: a probe on 2026-10-13 over every province and area of
 Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
+
+- **`seasons.colour` has no CHECK and no trigger (A721 plan, Decision 1; plan default).** A CHECK
+  makes drizzle-kit rebuild `seasons`, whose `DROP TABLE` empties every season's weeks; a wrong value
+  only paints grey. `saveSeasons` and the configuration transfer refuse one
+  (developers/conventions-data.md, "2026-10-17, A721").
+
+- **Existing seasons became grey; a new venue's are Spring green, Summer amber, Autumn orange and
+  Winter blue (A721 plan, Decision 2; plan default, sent to the owner as an FYI, 2026-10-17).** No
+  data migration, pre-live.
+
+- **Two seasons may share a colour (A721 plan, Decision 3; plan default).** The chooser names the
+  other seasons that use each colour, as for periods.
+
+- **The Seasons window lists the season in force on 1 January first, then the rest by start, and
+  does not re-sort while editing (A721 plan, Decision 12; plan default, sent to the owner as an FYI,
+  2026-10-17).** "+ Season" appends; the list comes back sorted after Save.
+
+- **A season's start is a Day and a Month combobox side by side (A721 plan, Decision 13; plan
+  default, sent to the owner as an FYI, 2026-10-17)**, not the single field mockup 02 draws: no
+  primitive picks a month and day, and a 365-option list was rejected.
+
+- **The Seasons window draws its own wide `wt-modal`, footer `[Cancel] … [Save]`, with "+ Season"
+  under the table (A721 plan, Decision 14; plan default, sent to the owner as an FYI, 2026-10-17).**
+  Mockup 02's "+ Season" in the footer predates the 2026-10-16 footer rule. Cancel, Escape and Back
+  ask before discarding changes.
+
+- **The bin removes a row from the draft and a note under the table says what Save will delete
+  (A721 plan, Decision 15; plan default, sent to the owner as an FYI, 2026-10-17)**: where its days
+  go and which departments lose hours, with no confirmation step. The last row's bin is disabled;
+  Cancel is the only undo.
+
+- **A season list arriving while the Seasons window is open is folded into the draft field by field
+  (A721 plan, Decision 17; plan default, sent to the owner as an FYI, 2026-10-17).** A field the
+  person changed keeps their value; a season deleted elsewhere is dropped if untouched or binned,
+  and kept with "This season no longer exists." if touched, and Save waits until it is binned.
 
 - **In the Calendar's Month and Week a day's name breaks only between its words, a word too wide
   for its place cut with "…" and kept whole in the name's title; the day box shows the name whole,
@@ -365,10 +381,6 @@ Re-check when a new year's list is added.
   `venue_service.manage`) gets a read-only station view is the owner's open question: backlog.md,
   "Supervisors have no dashboard path to a prep station's times".
 
-- **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
-  (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.
-  A721 replaces them, and then deletes this note.
-
 - **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it
   offers "Show {season}'s standard week", which opens the read-only painter. In Staffing a viewer's
   box offers "Show {special day} staffing" and "Show {season}'s standard week".
@@ -419,6 +431,7 @@ Re-check when a new year's list is added.
 - A season delete's confirmation names only the departments with hours in it, though the delete
   also removes the zones' closed times for that season (`seasonDeleteImpact`,
   `packages/venue-service/src/seasons.ts`). Owner, 2026-10-13 ~08:42: keep as built.
+  2026-10-17, A721: the Seasons window's delete note keeps the same list.
 
 - **Business-day changes are dated (A495, 2026-10-11).** You schedule one future start, from
   two to 366 business-calendar dates ahead. You can replace or cancel it before the preceding

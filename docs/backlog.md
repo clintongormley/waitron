@@ -1317,6 +1317,25 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
+- **The owner has not yet confirmed the Seasons window's plan defaults** (A721, sent as an FYI,
+  2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the
+  [A721 plan](superpowers/plans/2026-10-17-a721-seasons-window.md), each in
+  [Decisions and deliberate limits](backlog/service-periods.md#decisions-and-deliberate-limits).
+
+- **A Save refused because a season the person binned was deleted elsewhere says nothing**: the
+  window drops the bin's note and the delete, and Save offers the rest of the draft again with no
+  message (`save`, `seasons-window.ts`). Whether it should say so is the owner's call. Left open by A721.
+
+- **The Seasons window names each row's fields by their field label alone** — "Name", "Day", "Month"
+  and "Colour", the last three followed by the chosen value — never by the row's season. Consider
+  naming each by its row ("Day: Winter"), as `variant-table.ts` names a row's buttons
+  ("Edit: {variant}"). Left open by A721.
+
+- **Seasons on a venue that ran before A721 read grey until recoloured**, the owner's box
+  included unless it is reset: the migration gives every existing season `grey` (`0058_dusty_iron_fist.sql`,
+  `packages/venue-service/drizzle/`). Recolour them in the Seasons window, or reset the venue.
+  Left open by A721.
+
 - **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
   name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
   height with about 300 px blank above Close, because it is the unsized `wt-modal`. Both measured
@@ -1372,7 +1391,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A762. Every painter says what it edits in its colour, and the Staffing month marks special days
   (owner, 2026-10-16).** All four painters get a band in the season's or the special day's colour;
   the staffing painters take A723's "Winter: standard week" wording; the Staffing month marks a
-  special day's dates as one coloured run. After A721 and A723.
+  special day's dates as one coloured run. After A723.
   [Detail](backlog/service-periods.md#a762-every-painter-says-what-it-edits-in-its-colour-and-the-staffing-month-marks-special-days)
 
 - **Loose ends left by A720.**
@@ -1401,10 +1420,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
     themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
     uses the commands.
-
-- **A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
-  (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
-  ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's
   closures inside opening hours (owner, 2026-10-15).** "Autumn: standard week" with a line saying
@@ -1572,17 +1587,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   whole**: the tooltip needs a pointer, and the day box shows only the special day's name
   (`openingHoursDay`, `opening-hours-day.ts`) — left open by A784.
 
-- **Season colours differ between Opening hours' Year and its month**: Autumn is
-  salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
-  list it is given, and the month colours its dates' top borders from only the seasons it touches
-  (`seasonTints(model.seasons)` in `#grid`, `opening-hours-month.ts`).
-
 - **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
   twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
-
-- **A season dialog whose season another session deletes stays open with Save and Delete live**
-  (`season-dialog.ts`), where the zone and department dialogs close; the server refuses either
-  press — left open by A506-6, #1609.
 
 - **Two date helpers read years 0 to 99 as 1900 to 1999** (`isLocalDate`, `addMonths`); changing
   `isLocalDate` changes which dates the server accepts, so it needs a decision — left open by
@@ -3639,7 +3645,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `aria-required` on nothing, while a combobox with a search box set it on its input. Every screen
   using a required combobox without search is affected. One way to fix it is moving the trigger to the
   WAI-ARIA Authoring Practices' select-only combobox (`role="combobox"`, which can carry
-  `aria-required`); A775 kept the button and fixed only its name.
+  `aria-required`); A775 kept the button and fixed only its name. The Seasons window's Day and
+  Month (A721) are among them.
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
 
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
@@ -4127,6 +4134,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal),
   [the purchase form's case](backlog/dashboard.md#once-put-back-with-an-edit-keyboard-focus-is-outside-the-dialog-and-escape-neither-asks-nor-closes)
 
+- **In a text field inside a dialog, with the field's text selected, End and Home do not move the
+  caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the
+  period dialog; a bare input and a bare dialog in the same Chromium behave normally. Cause not
+  found; not tested on main.
+
 - **On a hovered Products row in the dark theme, status and allergen badge borders appear to
   disappear into the row** — the earlier screenshot-only observation remains open. Contrast for those
   borders, a category row's maker link and the prep stations screen remains unmeasured. Left open by
@@ -4159,8 +4171,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
   purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).
 
-- **Opening hours' create texts say "New …" and "+ …"** — `season.new` ("New season"),
-  `special.new` ("New special day") and `season.add` ("+ Season") in
+- **Opening hours' create texts say "New …" and "+ …"** — `special.new` ("New special day") and
+  `season.add` ("+ Season", the Seasons window's add button) in
   `packages/venue-service/src/dashboard/strings.ts`, against design-system.md → Wording's
   "Add …". The "+" label comes from the A506 seasons spec.
   Seen by A546's review; not changed there.
@@ -4401,9 +4413,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (A585-3's review; `locations` is already read once). Next: hand the plan's holiday facts to the
   second read.
 
-- **A702. Opening hours' season chips may widen the page on a long season name.**
-  `packages/venue-service/src/dashboard/season-chips.ts` has no width rule, untried at phone width.
-  Next: try it at 390 px and wrap it with `max-width: 100%; overflow-wrap: anywhere`.
+- **A702. Opening hours' season chip is clipped on a season name that is one long word.** Measured
+  on the A721 branch at 390 px on 2026-10-18: the page does not scroll sideways (scrollWidth 390 =
+  innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
+  chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
+  text with `overflow-wrap: anywhere`.
 
 - **A703. Keeping a Calendar view's address words is a special case named in the app.**
   `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`

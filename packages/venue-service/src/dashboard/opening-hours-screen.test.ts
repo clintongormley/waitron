@@ -875,7 +875,9 @@ describe("Year view", () => {
       year,
       timeZone: "Europe/Madrid",
       today: "2026-10-12",
-      seasons: [{ id: "all", name: "All year", startsOn: "01-01", lastDay: "12-31" }],
+      seasons: [
+        { id: "all", name: "All year", startsOn: "01-01", lastDay: "12-31", colour: "grey" },
+      ],
       days: [
         {
           date: `${year}-10-13`,
@@ -978,30 +980,17 @@ describe("Year view", () => {
     await expect.poll(() => years).toEqual(["2026"]);
   });
 
-  it("hands the year view its model, the season writes and the area writes, and every special day once a season dialog opens", async () => {
+  it("hands the Year its model and read-only", async () => {
     const { el, view, years, listReads } = await yearMount(
       "/manage/opening-hours/view/year/year/2027",
     );
     await expect.poll(() => view()?.model?.year).toBe(2027);
-    expect(view()!.api).toBe(el.api);
     expect(view()!.readOnly).toBe(false);
-    const chips = view()!.shadowRoot!.querySelector("season-chips")!;
-    expect(chips.clockRevision).toBe(4);
+    for (const gone of ["api", "specialDays"]) expect(gone in view()!).toBe(false);
     el.api.rereadWithSpecialDays();
     await expect.poll(() => years).toEqual(["2027", "2027"]);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(listReads()).toEqual([]);
-    expect(view()!.specialDays).toEqual([]);
-    chips
-      .shadowRoot!.querySelector<HTMLElement>("[data-season=all] [data-test=season-edit]")!
-      .click();
-    await expect
-      .poll(() => view()!.specialDays)
-      .toEqual([
-        { id: "annual/day", name: "Anniversary" },
-        { id: "later", name: "Later fair" },
-      ]);
-    expect(listReads()).toEqual([{ passive: true }]);
   });
 
   async function heldMount(address: string, hold: (path: string) => boolean, readOnly = false) {
@@ -1349,31 +1338,36 @@ describe("Year view", () => {
   });
 
   it("applies only the newest special-day list when an older read answers last", async () => {
-    const { view, held } = await heldMount("/manage/opening-hours/view/year/year/2027", (path) =>
-      path.endsWith("/special-days"),
+    const { el, view, held } = await heldMount(
+      "/manage/opening-hours/view/year/year/2027",
+      (path) => path.endsWith("/special-days"),
     );
     await expect.poll(() => view().model?.year).toBe(2027);
-    const chips = view().shadowRoot!.querySelector("season-chips")!;
-    const open = () =>
-      chips
-        .shadowRoot!.querySelector<HTMLElement>("[data-season=all] [data-test=season-edit]")!
+    await view().updateComplete;
+    const win = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["seasons-window"]>(
+        "[data-test=calendar-window][data-window=seasons]",
+      );
+    const open = async () => {
+      view()
+        .shadowRoot!.querySelector<HTMLElement>("season-chips [data-test=open-seasons]")!
         .click();
-    open();
+      await expect.poll(() => win()).not.toBeNull();
+    };
+    await open();
     await expect.poll(() => held.length).toBe(1);
-    await chips.updateComplete;
-    chips
-      .shadowRoot!.querySelector("season-dialog")!
-      .dispatchEvent(new CustomEvent("season-close"));
-    await chips.updateComplete;
-    open();
+    await win()!.updateComplete;
+    win()!.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-seasons]")!.click();
+    await expect.poll(() => win()).toBeNull();
+    await open();
     await expect.poll(() => held.length).toBe(2);
     const list = (id: string, name: string) => [{ id, name, repeatsYearly: true, dates: [] }];
     held[1]!.release(list("new", "New fair"));
-    await expect.poll(() => view().specialDays).toEqual([{ id: "new", name: "New fair" }]);
+    await expect.poll(() => win()!.specialDays).toEqual([{ id: "new", name: "New fair" }]);
     held[0]!.release(list("old", "Old fair"));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    await view().updateComplete;
-    expect(view().specialDays).toEqual([{ id: "new", name: "New fair" }]);
+    await el.updateComplete;
+    expect(win()!.specialDays).toEqual([{ id: "new", name: "New fair" }]);
   });
 
   it("opens the Year from an old Calendar address", async () => {
@@ -1437,15 +1431,22 @@ describe("Year view", () => {
     expect(drawnView(el)).toBe("month");
   });
 
-  it("re-reads the year and the opening hours after a season change", async () => {
-    const { view, years, openingReads } = await yearMount("/manage/opening-hours/view/year");
+  it("re-reads the year and the opening hours after the window saves", async () => {
+    const { el, view, years, openingReads } = await yearMount(
+      "/manage/opening-hours/view/year/window/seasons",
+    );
     await expect.poll(() => view()?.model?.year).toBe(2026);
+    const win = await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=seasons]"))
+      .not.toBeNull()
+      .then(() => el.shadowRoot!.querySelector("[data-window=seasons]")!);
     const before = openingReads();
-    view()!
-      .shadowRoot!.querySelector("season-chips")!
-      .dispatchEvent(new CustomEvent("season-changed", { bubbles: true, composed: true }));
+    win.dispatchEvent(
+      new CustomEvent("seasons-saved", { detail: { seasons: [] }, bubbles: true, composed: true }),
+    );
     await expect.poll(() => years).toEqual(["2026", "2026"]);
     await expect.poll(openingReads).toBe(before + 1);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
   });
 
   it("re-reads the year after the year view saves the holiday area", async () => {
@@ -1800,8 +1801,8 @@ describe("Month view", () => {
 
   const withWinter = (data: OpeningHoursModel) => {
     data.seasons = [
-      { id: "autumn", name: "Autumn", startsOn: "09-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ];
     data.currentSeasonId = "autumn";
   };

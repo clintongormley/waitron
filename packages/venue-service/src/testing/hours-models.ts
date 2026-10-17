@@ -1,6 +1,7 @@
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
-const AUTUMN = { id: "autumn", name: "Autumn", startsOn: "09-01" };
+import type { Season } from "../season-rules.js";
+const AUTUMN: Season = { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" };
 const lunchWeek = [
   { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
   { weekday: 2, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },

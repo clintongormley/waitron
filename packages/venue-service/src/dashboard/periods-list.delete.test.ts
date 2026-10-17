@@ -41,7 +41,7 @@ function model(periods: Period[] = [lunch()]): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
-    seasons: [{ id: "winter", name: "Winter", startsOn: "12-01" }],
+    seasons: [{ id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" }],
     currentSeasonId: "winter",
     departments: [
       { id: "restaurant", name: "Restaurant", active: true, zones: [], periods, seasonWeeks: [] },

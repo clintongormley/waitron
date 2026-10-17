@@ -52,9 +52,9 @@ export function seasonStaffing(seasonId = "winter"): SeasonStaffing {
   return {
     cutover: "06:00",
     seasons: [
-      { id: "spring", name: "Spring", startsOn: "03-01" },
-      { id: "autumn", name: "Autumn", startsOn: "09-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ],
     areas: [
       { area: restaurant, name: "Restaurant", weekdays: winter ? { 2: [{ ...headChef }] } : {} },

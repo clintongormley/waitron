@@ -134,7 +134,7 @@ describe("readStaffingMonth", () => {
       { area: v.grill, name: "Grill" },
     ]);
     expect(month.seasons).toEqual([
-      { id: v.seasonId, name: "Summer", startsOn: "06-01", lastDay: "05-31" },
+      { id: v.seasonId, name: "Summer", startsOn: "06-01", lastDay: "05-31", colour: "grey" },
     ]);
     // 2026-08-01 is a Saturday: the weeks run from Monday 2026-07-27 to Sunday 2026-09-06.
     expect(month.days).toHaveLength(42);

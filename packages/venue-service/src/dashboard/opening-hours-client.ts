@@ -3,7 +3,7 @@ import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
-import type { Season } from "../season-rules.js";
+import type { Season, SeasonChange } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { SpecialDaysApi } from "./special-days-client.js";
@@ -12,11 +12,6 @@ import type { PrepStation } from "./routing-client.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
 
-export interface SeasonInput {
-  name: string;
-  /** "MM-DD", never "02-29". */
-  startsOn: string;
-}
 /** The departments whose painted hours deleting a season would lose. */
 export interface SeasonDeleteImpact {
   departments: { id: string; name: string }[];
@@ -259,14 +254,8 @@ export class OpeningHoursApi {
       expectedClockRevision,
     });
   }
-  saveSeason(id: string, input: SeasonInput, expectedClockRevision: number): Promise<Season> {
-    return this.request(`${BASE}/seasons/${at(id)}`, "PUT", { ...input, expectedClockRevision });
-  }
-  addSeason(input: SeasonInput, expectedClockRevision: number): Promise<Season> {
-    return this.request(`${BASE}/seasons`, "POST", { ...input, expectedClockRevision });
-  }
-  deleteSeason(id: string, expectedClockRevision: number): Promise<void> {
-    return this.request(`${BASE}/seasons/${at(id)}`, "DELETE", { expectedClockRevision });
+  saveSeasons(change: SeasonChange, expectedClockRevision: number): Promise<Season[]> {
+    return this.request(`${BASE}/seasons`, "PUT", { ...change, expectedClockRevision });
   }
   readSeasonDeleteImpact(id: string): Promise<SeasonDeleteImpact> {
     return this.request(`${BASE}/seasons/${at(id)}/delete-impact`, "GET");

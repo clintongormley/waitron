@@ -242,7 +242,9 @@ describe("the menu timetable rows of a bundle", () => {
     const tables = menuTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
     expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
-    tables.seasons = [{ id: "s-year", location_id: "location", name: "Year", starts_on: "01-01" }];
+    tables.seasons = [
+      { id: "s-year", location_id: "location", name: "Year", starts_on: "01-01", colour: "grey" },
+    ];
     tables.department_days = [5, 6].map((weekday) => ({
       id: `d-${weekday}`,
       department_id: RESTAURANT,
@@ -1198,8 +1200,20 @@ describe("season weeks in a configuration bundle", () => {
         { id: LATE, department_id: RESTAURANT, name: "Late", colour: "red", menu_id: "m-late" },
       ],
       seasons: [
-        { id: "s-autumn", location_id: "venue", name: "Autumn", starts_on: "09-01" },
-        { id: "s-winter", location_id: "venue", name: "Winter", starts_on: "12-01" },
+        {
+          id: "s-autumn",
+          location_id: "venue",
+          name: "Autumn",
+          starts_on: "09-01",
+          colour: "orange",
+        },
+        {
+          id: "s-winter",
+          location_id: "venue",
+          name: "Winter",
+          starts_on: "12-01",
+          colour: "blue",
+        },
       ],
       department_days: [
         day("w-fri", "s-winter", 5),
@@ -1291,6 +1305,27 @@ describe("season weeks in a configuration bundle", () => {
     const blank = seasonTables();
     blank.seasons![1]!.name = "  ";
     expect(() => validate(blank, clock)).toThrowError(refusal("seasons.name"));
+  });
+
+  it.each([" 3f2c1e9a-0000-4000-8000-000000000001", "Winter ", "\tWinter"])(
+    "refuses a season name %j that saving a season would have trimmed",
+    (name) => {
+      const tables = seasonTables();
+      tables.seasons![1]!.name = name;
+      expect(() => validate(tables, clock)).toThrowError(refusal("seasons.name"));
+    },
+  );
+
+  it("refuses a season whose colour is not a calendar colour, or has none", () => {
+    const mauve = seasonTables();
+    mauve.seasons![0]!.colour = "mauve";
+    expect(() => validate(mauve, clock)).toThrowError(refusal("seasons.colour"));
+    const none = seasonTables();
+    delete none.seasons![0]!.colour;
+    expect(() => validate(none, clock)).toThrowError(refusal("seasons.colour"));
+    const teal = seasonTables();
+    teal.seasons![0]!.colour = "teal";
+    expect(() => validate(teal, clock)).not.toThrow();
   });
 
   it("refuses a period's end offset reaching the next day's placement in the same season", () => {
@@ -1622,7 +1657,15 @@ describe("special days in a configuration bundle", () => {
     ["zone_days", "season_id", { season_id: "s-autumn" }],
   ])("refuses a special-day %s row with a %s", (table, field, change) => {
     const tables = specialTables();
-    tables.seasons = [{ id: "s-autumn", location_id: "venue", name: "Autumn", starts_on: "09-01" }];
+    tables.seasons = [
+      {
+        id: "s-autumn",
+        location_id: "venue",
+        name: "Autumn",
+        starts_on: "09-01",
+        colour: "orange",
+      },
+    ];
     Object.assign(tables[table]![0]!, change);
     expect(() => validate(tables, clock)).toThrowError(refusal(`${table}.${field}`));
   });

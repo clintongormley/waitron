@@ -18,7 +18,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "./season-chips.js";
+import "./seasons-window.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
@@ -272,6 +272,7 @@ export class OpeningHoursScreen extends LitElement {
       this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
       return;
     }
+    if (windowId === "seasons" && this.windowId !== "seasons") this.readKnownSpecialDays();
     this.windowId = windowId ?? "";
     const contentPath = calendarWindowPath(current.pathname, null);
     const contentKey = contentPath + current.search + current.hash;
@@ -448,30 +449,26 @@ export class OpeningHoursScreen extends LitElement {
         ></periods-list
         >${this.windowFooter()}</wt-modal
       >`;
-    return html`<wt-modal
+    return html`<seasons-window
       data-test="calendar-window"
       data-window="seasons"
-      size="compact"
-      .open=${true}
-      heading=${t("season.seasons")}
+      .seasons=${this.model.seasons}
+      .clockRevision=${this.model.clockRevision}
+      .specialDays=${this.knownSpecialDays}
+      .readOnly=${this.readOnly}
+      .draftParent=${this.windowDraftRoot}
+      .api=${this.api}
       .beforeClose=${this.beforeWindowClose}
       @wt-close=${this.windowClosed}
-      ><season-chips
-        .draftParent=${this.windowDraftRoot}
-        .seasons=${this.yearModel?.seasons ?? this.monthModel?.seasons ?? []}
-        .clockRevision=${this.model.clockRevision}
-        .api=${this.api}
-        .specialDays=${this.knownSpecialDays}
-        .readOnly=${this.readOnly}
-        @season-week-open=${this.openSeasonWeek}
-        @season-changed=${(event: Event) => {
-          event.stopPropagation();
-          this.api.rereadWithSpecialDays();
-        }}
-      ></season-chips
-      >${this.windowFooter()}</wt-modal
-    >`;
+      @seasons-saved=${this.seasonsSaved}
+    ></seasons-window>`;
   }
+  /** Re-reads rather than taking the answer's list, which a newer live list may already replace. */
+  private readonly seasonsSaved = (event: Event) => {
+    event.stopPropagation();
+    this.api.rereadWithSpecialDays();
+    void this.closeWindow();
+  };
   private openCalendarView(view: string, params: Record<string, string>) {
     if (!this.isConnected) return;
     if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
@@ -882,7 +879,7 @@ export class OpeningHoursScreen extends LitElement {
       );
     });
   }
-  /** Feeds only the season dialog's naming of a refusal, so a failed read keeps the last list. */
+  /** Feeds only the naming of a season refusal, so a failed read keeps the last list. */
   private readKnownSpecialDays() {
     const read = (this.knownSpecialDaysRead = {});
     void this.api.specialDays.listSpecialDays({ passive: true }).then(
@@ -1518,18 +1515,11 @@ export class OpeningHoursScreen extends LitElement {
                   .model=${this.yearModel}
                   .year=${this.shownYear()}
                   .readFailed=${this.yearReadError !== ""}
-                  .api=${this.api}
                   .areaApi=${this.areaWrites}
-                  .specialDays=${this.knownSpecialDays}
                   .readOnly=${this.readOnly}
                   @calendar-day-open=${this.openDayBox}
                   @calendar-days-open=${this.openDays}
-                  @season-dialog-open=${() => this.readKnownSpecialDays()}
                   @season-week-open=${this.openSeasonWeek}
-                  @season-changed=${(event: Event) => {
-                    event.stopPropagation();
-                    this.api.rereadWithSpecialDays();
-                  }}
                   @year-change=${(event: CustomEvent<{ year: number }>) => {
                     event.stopPropagation();
                     void Promise.resolve(

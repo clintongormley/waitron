@@ -39,7 +39,7 @@ export interface SeasonStaffing {
   /** The location's current changeover, `HH:MM`. */
   cutover: string;
   /** Every season at the location, by start. */
-  seasons: { id: string; name: string; startsOn: string }[];
+  seasons: { id: string; name: string; startsOn: string; colour: CalendarColour }[];
   areas: { area: AreaRef; name: string; weekdays: Record<number, StaffingBlock[]> }[];
   /** areaKey → weekday → opening ranges or station sending ranges. */
   guides: Record<string, Record<number, StaffingGuideRange[]>>;
@@ -80,6 +80,7 @@ export interface StaffingSeason {
   startsOn: string;
   /** The MM-DD before the next season starts. */
   lastDay: string;
+  colour: CalendarColour;
 }
 
 /** A staffing area's slots on one business day; `unfilled` is null until the rota counts it. */

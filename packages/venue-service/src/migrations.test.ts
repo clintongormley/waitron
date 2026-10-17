@@ -1042,6 +1042,22 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
   });
 
+  it("a season row written without a colour takes grey, and the table takes any text there", async () => {
+    const v = await venue();
+    const plain = randomUUID();
+    await db.execute(sql`insert into seasons (id, location_id, name, starts_on)
+      values (${plain}, ${v.locationId}, 'Summer', '06-01')`);
+    expect((await db.execute(sql`select colour from seasons where id = ${plain}`)).rows).toEqual([
+      { colour: "grey" },
+    ]);
+    const mauve = randomUUID();
+    await db.execute(sql`insert into seasons (id, location_id, name, starts_on, colour)
+      values (${mauve}, ${v.locationId}, 'Winter', '12-01', 'mauve')`);
+    expect((await db.execute(sql`select colour from seasons where id = ${mauve}`)).rows).toEqual([
+      { colour: "mauve" },
+    ]);
+  });
+
   it("a season's week rows go with the season, and a special day's dates with the special day", async () => {
     const v = await venue();
     const periodId = randomUUID();

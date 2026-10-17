@@ -62,10 +62,10 @@ function model(empty: boolean): OpeningHoursModel {
       { id: "wine", name: "Wine list", active: true, includes: [] },
     ],
     seasons: [
-      { id: "spring", name: "Spring", startsOn: "03-01" },
-      { id: "summer", name: "Summer", startsOn: "06-01" },
-      { id: "autumn", name: "Autumn", startsOn: "09-01" },
-      { id: "winter", name: "Winter", startsOn: "12-01" },
+      { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" },
+      { id: "summer", name: "Summer", startsOn: "06-01", colour: "amber" },
+      { id: "autumn", name: "Autumn", startsOn: "09-01", colour: "orange" },
+      { id: "winter", name: "Winter", startsOn: "12-01", colour: "blue" },
     ],
     currentSeasonId: "autumn",
     departments: empty

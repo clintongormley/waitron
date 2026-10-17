@@ -633,7 +633,8 @@ In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetab
 department its first Open period at provisioning and whenever a department is created, and the demo
 seed, still write every season.
 
-**2026-10-13, A506-6.** `addSeason`, `saveSeason` and `deleteSeason`
+**2026-10-13, A506-6** (its three writes and routes replaced by `saveSeasons` on 2026-10-17, A721,
+below). `addSeason`, `saveSeason` and `deleteSeason`
 (`packages/venue-service/src/seasons.ts`) add, rename or move, and delete a season, behind
 `POST …/seasons`, `PUT …/seasons/:seasonId` and `DELETE …/seasons/:seasonId` (`routes.ts`);
 `GET …/seasons/:seasonId/delete-impact` names the departments whose painted hours a delete loses. A
@@ -646,6 +647,34 @@ must send `expectedClockRevision`; a stale one refuses an add, a move or a delet
 `hours.clock_changed`, but not a rename. An unknown or another venue's `seasonId` is refused
 `season.not_found`, and while a day-cutover change is pending an add, a move or a delete is refused
 `hours.clock_change_pending`.
+
+**2026-10-17, A721.** `saveSeasons` (`packages/venue-service/src/seasons.ts`), behind
+`PUT …/seasons` (`routes.ts`), replaced `addSeason`, `saveSeason` and `deleteSeason` and their three
+routes; `GET …/seasons/:seasonId/delete-impact` stays. The body may hold only `save`, `delete` and
+`expectedClockRevision`. A `save` entry holds `name`, `startsOn` and `colour`, and an `id` when it
+changes a stored season; one without an `id` adds a season. `delete` lists the ids to delete. A
+malformed body, an unknown key or an id named twice across the two lists is refused
+`management.request_invalid`, and an id the venue does not hold, in either list, `season.not_found`
+naming `seasonId`. A refusal names
+its place in the request, as `saveSeasonWeeks`' do: `season.invalid` with `field`
+`save.<i>.name`, `save.<i>.startsOn` or `save.<i>.colour` (reason `taken` for a name or start
+another season holds), `delete` (reason `last`), or `seasons` (reason `end_offset`). Every entry is
+checked before the clock: a call that only renames or recolours skips the clock check, and one with
+an add, a delete or a moved start is refused `hours.clock_changed` on a stale
+`expectedClockRevision` and `hours.clock_change_pending` while a day-cutover change is pending
+(`assertBusinessDayScheduleWrite`). It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
+hold, so a swap of two names or two starts never meets the unique indexes; ids are kept, so each
+season's weeks stay with it. A new season copies the weeks of the season that held its start
+before the call, read before any delete. It answers the venue's seasons by start.
+
+`seasons.colour` (`packages/venue-service/src/schema/seasons.ts`) is a plain text column,
+`$type<CalendarColour>()`, defaulting to `grey`, with no CHECK. A CHECK makes drizzle-kit rebuild
+`seasons`, and that rebuild's `DROP TABLE` empties `department_days`, `zone_days` and
+`staffing_days`, whose season keys cascade (A721 plan, Decision 1, from a plan reviewer's probe in
+a throwaway worktree, 2026-10-17). The refusal lives where a colour arrives from outside instead:
+`saveSeasons` (`season.invalid`, field `save.<i>.colour`) and the configuration transfer's `validateSeasonWeeks`
+(`setup.request_invalid`, field `seasons.colour`, `packages/venue-service/src/configuration-transfer.ts`). A stored value that
+names no calendar colour is painted grey (`seasonTints`, `season-tint.ts`).
 
 **2026-10-13, A506-8.** `saveSeasonWeeks` (`packages/venue-service/src/season-weeks.ts`), behind
 `PUT …/seasons/:seasonId/weeks` (`routes.ts`), saves several departments' weeks and zones' closed
@@ -667,7 +696,8 @@ export, finds the target holding the exported four, and asks `resolveDepartmentS
 `closedZoneIdsAt` about one Saturday in each of two seasons.
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
-others: a season start that is not a common year's date or is `02-29`; a range off the
+others: a season name that is blank, held by another season, or has spaces around it
+(`setup.request_invalid`, field `seasons.name`); a season start that is not a common year's date or is `02-29`; a range off the
 quarter-hour or overlapping another on the same day; on a season day, a department range with no
 period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
 seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.

@@ -139,21 +139,20 @@ describe("OpeningHoursApi", () => {
     }
   });
 
-  it("sends each season write with the clock revision and reads a delete's impact", async () => {
-    const request = vi.fn(async (_path: string, method: string) =>
-      method === "GET" ? { departments: [] } : { id: "s/1", name: "Winter", startsOn: "12-01" },
-    );
-    const api = new OpeningHoursApi(request as DashboardRequest);
-    const input = { name: "Winter", startsOn: "12-01" };
-    await api.saveSeason("s/1", input, 3);
-    await api.addSeason(input, 4);
-    await api.deleteSeason("s/1", 5);
+  it("reads a season delete's impact", async () => {
+    const request = vi.fn(async () => ({ departments: [] }));
+    const api = new OpeningHoursApi(request as unknown as DashboardRequest);
     expect(await api.readSeasonDeleteImpact("s/1")).toEqual({ departments: [] });
+    expect(request.mock.calls).toEqual([[`${base}/seasons/s%2F1/delete-impact`, "GET"]]);
+  });
+
+  it("sends the season changes in one request with the clock revision", async () => {
+    const request = vi.fn(async () => []);
+    const api = new OpeningHoursApi(request as unknown as DashboardRequest);
+    const entry = { id: "s/2", name: "Winter", startsOn: "12-01", colour: "blue" as const };
+    expect(await api.saveSeasons({ save: [entry], delete: ["s/1"] }, 3)).toEqual([]);
     expect(request.mock.calls).toEqual([
-      [`${base}/seasons/s%2F1`, "PUT", { ...input, expectedClockRevision: 3 }],
-      [`${base}/seasons`, "POST", { ...input, expectedClockRevision: 4 }],
-      [`${base}/seasons/s%2F1`, "DELETE", { expectedClockRevision: 5 }],
-      [`${base}/seasons/s%2F1/delete-impact`, "GET"],
+      [`${base}/seasons`, "PUT", { save: [entry], delete: ["s/1"], expectedClockRevision: 3 }],
     ]);
   });
 
