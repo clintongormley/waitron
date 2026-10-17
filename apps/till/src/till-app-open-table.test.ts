@@ -1,4 +1,5 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
+import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
@@ -1014,6 +1015,34 @@ describe("A768 the order screen shows at once", () => {
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
     expect(banner(el)).not.toBeNull();
+  });
+
+  it("a bill opened from Find a bill shows no loading line, and Back during its read stops it", async () => {
+    const offers = deferred<ZoneOfferCatalogue>();
+    const { el } = await mountApp({
+      findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listBills: vi.fn().mockResolvedValue(listPage()),
+      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v1", workingOrderId: "wo-4" })),
+      listZoneOffers: vi.fn(() => offers.promise),
+    });
+    await onFloor(el);
+    emit(shell(el), "find-bill");
+    await flush(el);
+    const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
+    emit(findBill()!, "find-bill-open", { row: billRow({ workingOrderId: "wo-4" }) });
+    await vi.waitFor(() => expect(api.getFindBill).toHaveBeenCalledTimes(1));
+    await flush(el);
+    expect(findBill()).not.toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(opening(el)).toBe(false);
+    await vi.waitFor(() => expect(api.listZoneOffers).toHaveBeenCalledTimes(1));
+    emit(findBill()!, "find-bill-back");
+    await flush(el);
+    offers.resolve(catalogue("v1"));
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(loadingLine(el)).toBeNull();
+    expect(api.getTabLines).not.toHaveBeenCalled();
   });
 
   it("a same-party open shows its loading line while the left save is out", async () => {

@@ -2800,6 +2800,10 @@ describe("till-app: seating a free table while something else happens", () => {
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
     await flush(el);
+    expect(seat.seatTable).toHaveBeenCalledTimes(1);
+    // The order tab replaces the floor at once, so the waiter goes back to it to open the next.
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -3078,6 +3082,10 @@ describe("till-app: two table opens overlapping", () => {
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(api.seatTable).toHaveBeenCalledTimes(1);
+    // The order tab replaces the floor at once, so the waiter goes back to it to open the next.
+    emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
     emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);

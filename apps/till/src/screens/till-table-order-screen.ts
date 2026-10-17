@@ -2646,12 +2646,16 @@ export class TillTableOrderScreen extends LitElement {
     event.stopPropagation();
   }
 
+  /** One probe across both views, because {@link #observeWidth} watches the element it first finds. */
   override render() {
-    if (this.loading) return this.#loadingScreen();
+    return html`<div class="width-probe"></div>
+      ${this.loading ? this.#loadingScreen() : this.#orderScreen()}`;
+  }
+
+  #orderScreen(): TemplateResult {
     const pending = this.#pending();
     const draft = this.#draftStore;
     return html`
-      <div class="width-probe"></div>
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}
@@ -2708,7 +2712,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #loadingScreen(): TemplateResult {
     return html`
-      <div class="width-probe"></div>
       <section
         class="screen"
         data-order-id=${this.orderId ?? nothing}

@@ -4010,13 +4010,16 @@ export class TillApp extends LitElement {
       if (!left() && this.#floorLoaded && table?.party?.id === tableToResume.partyId) {
         const visit = ++this.#orderVisit;
         const offerRequest = ++this.#tableOfferRequest;
-        if (this.#inShell()) this.#showOrderScreen();
+        const shownEarly = this.#inShell();
+        if (shownEarly) this.#showOrderScreen();
         await this.#openTable(
           table.id,
           undefined,
           offerRequest,
           undefined,
           () => replaced() || this.#orderVisit !== visit,
+          undefined,
+          shownEarly,
         );
         if (replaced()) return;
       }
@@ -4318,8 +4321,14 @@ export class TillApp extends LitElement {
     this.tableOpening = true;
   }
 
-  #leaveFailedOpen(left: () => boolean, offerRequest: number, session: number): void {
+  #leaveFailedOpen(
+    shownEarly: boolean,
+    left: () => boolean,
+    offerRequest: number,
+    session: number,
+  ): void {
     if (
+      !shownEarly ||
       left() ||
       offerRequest !== this.#tableOfferRequest ||
       session !== this.#operatorSession ||
@@ -6151,9 +6160,11 @@ export class TillApp extends LitElement {
           return;
         }
         const opening = this.#orderVisit + 1;
+        // Not shown at once: this page abandons the open once it is no longer showing.
         await this.#onOpenTable(
           new CustomEvent("open-table", { detail: { tableId: table.id, seated: true } }),
           () => !current(),
+          false,
         );
         if (
           session === this.#operatorSession &&
@@ -8495,7 +8506,11 @@ export class TillApp extends LitElement {
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
    * ({@link billToOpen}). */
-  async #onOpenTable(event: Event, left: () => boolean = () => false): Promise<void> {
+  async #onOpenTable(
+    event: Event,
+    left: () => boolean = () => false,
+    showAtOnce = true,
+  ): Promise<void> {
     const detail = (event as CustomEvent<{ tableId: string; seated: boolean }>).detail;
     const seatingDraft =
       !detail.seated && detail.tableId === this.activeTableId && this.orderParty === null;
@@ -8503,11 +8518,11 @@ export class TillApp extends LitElement {
       await this.leave.coordinator.request({
         scopes: [this.#partylessOwner],
         reason: "navigation",
-        proceed: () => this.#openTableFromEvent(event, left),
+        proceed: () => this.#openTableFromEvent(event, left, showAtOnce),
       });
       return;
     }
-    await this.#openTableFromEvent(event, left);
+    await this.#openTableFromEvent(event, left, showAtOnce);
   }
 
   /** Takes the draft off the screen and lets its save answer in the background. Its own `onRefused`
@@ -8537,7 +8552,11 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #openTableFromEvent(event: Event, left: () => boolean = () => false): Promise<void> {
+  async #openTableFromEvent(
+    event: Event,
+    left: () => boolean = () => false,
+    showAtOnce = true,
+  ): Promise<void> {
     if (!this.#inShell() || left()) return;
     const { tableId, seated, guestCount, withTableIds } = (
       event as CustomEvent<{
@@ -8565,7 +8584,7 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
-    this.#showOrderScreen();
+    if (showAtOnce) this.#showOrderScreen();
     try {
       const leaving = this.#draftSync;
       if (
@@ -8582,6 +8601,7 @@ export class TillApp extends LitElement {
         withTableIds,
         left,
         carried,
+        showAtOnce,
       );
     } finally {
       unlock?.();
@@ -8599,6 +8619,7 @@ export class TillApp extends LitElement {
     withTableIds?: string[],
     left: () => boolean = () => false,
     carried?: { note: string | null; lines: OrderLine[] },
+    shownEarly = false,
   ): Promise<void> {
     try {
       const session = this.#operatorSession;
@@ -8634,7 +8655,7 @@ export class TillApp extends LitElement {
           );
         } catch {
           if (left() || offerRequest !== this.#tableOfferRequest) return;
-          this.#leaveFailedOpen(left, offerRequest, session);
+          this.#leaveFailedOpen(shownEarly, left, offerRequest, session);
           this.#loadTableOffers(
             undefined,
             {
@@ -8747,7 +8768,7 @@ export class TillApp extends LitElement {
             opened.sync.store.loadFrom(opened.sync.store.id, carried.lines);
           this.#showDraft(opened);
         } catch (error) {
-          this.#leaveFailedOpen(left, offerRequest, session);
+          this.#leaveFailedOpen(shownEarly, left, offerRequest, session);
           this.errorKey = tableWriteError(error);
           await this.#refreshFloor();
           return;
@@ -8756,11 +8777,18 @@ export class TillApp extends LitElement {
         if (left() || session !== this.#operatorSession) return;
       }
       if (left()) return;
-      // A destination drill pushed meanwhile may have replaced the loading screen.
-      if (this.#inShell() && this.#orderScreenShown()) {
-        this.#shownOnVisit = this.#orderVisit;
-        if (this.#tableOrderTabKey() !== undefined)
-          this.#writeUrl({ "till-tab": "order", "till-view": null, "till-station": null });
+      if (this.#inShell()) {
+        const orderTabKey = this.#tableOrderTabKey();
+        if (!shownEarly) {
+          if (orderTabKey !== undefined) this.#setActiveTab(orderTabKey);
+          else this.#pushDrill({ kind: "table-order" });
+          this.#shownOnVisit = this.#orderVisit;
+        } else if (this.#orderScreenShown()) {
+          // A destination drill pushed meanwhile may have replaced the loading screen.
+          this.#shownOnVisit = this.#orderVisit;
+          if (orderTabKey !== undefined)
+            this.#writeUrl({ "till-tab": "order", "till-view": null, "till-station": null });
+        }
       }
       void this.#loadStations();
     } finally {
