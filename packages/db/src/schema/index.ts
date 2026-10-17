@@ -11,6 +11,7 @@ export * from "./parties.js";
 export * from "./order-groups.js";
 export * from "./order-drafts.js";
 export * from "./order-draft-recalled-lines.js";
+export * from "./line-service-cancellations.js";
 export * from "./floor-zones.js";
 export * from "./kitchen-stations.js";
 export * from "./kitchen-timing.js";

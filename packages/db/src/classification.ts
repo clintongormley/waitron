@@ -152,6 +152,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "order lines in flight; copied to a standby, never drained back",
   ),
+  classify(
+    "line_service_cancellations",
+    "state",
+    "cancelled service that retains its bill charge; copied to a standby, never drained back",
+  ),
   appendOnly(
     "order_amendments",
     "state",
