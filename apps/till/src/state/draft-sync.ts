@@ -146,18 +146,19 @@ export function asRefusal(error: unknown): DraftRefused | undefined {
 /** What a line orders, with its answers and picks in a fixed order. */
 function lineKey(input: DraftLineInput): string {
   return JSON.stringify([
+    input.sourceLineId ?? null,
     input.menuItemId,
     input.variantId,
     input.menuVersionId,
     input.note,
     input.courseId,
     input.makeAt ?? null,
-    input.noMerge,
+    input.sourceLineId == null ? input.noMerge : true,
     input.slot,
     input.joinGroupId,
     input.afterGroupId,
-    input.options.map((answer) => `${answer.listId} ${answer.labelId}`).sort(),
-    input.extras
+    (input.options ?? []).map((answer) => `${answer.listId} ${answer.labelId}`).sort(),
+    (input.extras ?? [])
       .flatMap(({ listId, picks }) =>
         picks.map((pick) => `${listId} ${pick.productId} ${pick.quantity}`),
       )
@@ -428,16 +429,21 @@ export class DraftSync {
     const available = new Map(draft.lines.map((line) => [line.id, line]));
     for (const [index, line] of pending.entries()) {
       const input = inputs[index]!;
-      const saved =
+      const candidate =
         input.id === undefined
           ? [...available.values()].find(
               (candidate) => !retained.has(candidate.id) && lineKey(input) === lineKey(candidate),
             )
           : available.get(input.id);
+      const saved =
+        (candidate?.sourceLineId ?? null) === (input.sourceLineId ?? null) ? candidate : undefined;
       if (saved !== undefined) available.delete(saved.id);
       if (!this.store.lines.includes(line)) continue;
       if (saved === undefined) delete line.draftLineId;
-      else line.draftLineId = saved.id;
+      else {
+        line.draftLineId = saved.id;
+        this.#refreshSource(line, saved);
+      }
     }
   }
 
@@ -446,10 +452,17 @@ export class DraftSync {
     this.#take(draft);
     this.store.lines.forEach((line, index) => {
       line.draftLineId = draft.lines[index]!.id;
+      this.#refreshSource(line, draft.lines[index]!);
     });
     this.#quietly(() =>
       this.store.setUnavailableOnServer(draft.lines.map((line) => line.unavailable)),
     );
+  }
+
+  #refreshSource(line: OrderLine, saved: DraftLine): void {
+    if (saved.sourceLineId == null) return;
+    const rebuilt = this.#options.rebuild([saved])[0];
+    if (rebuilt !== undefined) this.#quietly(() => this.store.refreshRecalledLine(line, rebuilt));
   }
 
   /** The server's draft replaces what the store holds. */

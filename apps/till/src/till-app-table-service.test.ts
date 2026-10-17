@@ -749,6 +749,8 @@ it("clears a saved draft station missing from the station list", async () => {
         joinGroupId: null,
         afterGroupId: null,
         id: "draft-line-1",
+        sourceLineId: null,
+        source: null,
         menuItemId: "menu-item-cafe-0",
         variantId: null,
         menuVersionId: null,

@@ -257,6 +257,8 @@ export interface SentGroup {
 }
 
 function asGroupLine(line: DraftLine): GroupLine {
+  if (line.sourceLineId != null)
+    throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
   return {
     menuItemId: line.menuItemId,
     quantity: line.quantity,
@@ -269,13 +271,7 @@ function asGroupLine(line: DraftLine): GroupLine {
   };
 }
 
-/**
- * The server's side of drafts for an app test's `TillApi` stub: each person's open draft per party,
- * merged on save with the shared rule and re-identified on every save; a submission takes its lines
- * out, and a repeat of a submission id answers as the first. Requests come from {@link personId}'s
- * session. {@link answer} says what the placed groups were; a test replaces it for another tab or
- * revision, or wraps {@link apply} to refuse or to lose the reply.
- */
+/** Submission assertions read that revision's rows even after later saves. */
 export function draftServer(
   answer: (partyId: string) => SubmittedGroups = () => ({
     tabId: "wo-4",
@@ -286,9 +282,44 @@ export function draftServer(
   let ids = 0;
   const replies = new Map<string, SubmittedDraft>();
   const clone = <T>(value: T): T => structuredClone(value);
+  const rowsAtRevision = new Map<number, Map<string, DraftLine>>();
+  const remember = (draft: Draft): void => {
+    const rows = rowsAtRevision.get(draft.revision) ?? new Map<string, DraftLine>();
+    for (const line of draft.lines) rows.set(line.id, clone(line));
+    rowsAtRevision.set(draft.revision, rows);
+  };
   const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
-    normaliseDraftLines(lines).map((line) => {
-      const saved = { ...line, id: line.id ?? `line-${++ids}`, unavailable: false };
+    normaliseDraftLines(
+      lines.map((line) => (line.sourceLineId != null ? { ...line, noMerge: true as const } : line)),
+    ).map((line) => {
+      let saved: DraftLine;
+      if (line.sourceLineId != null) {
+        const prior =
+          server.linesById.get(line.id) ??
+          server.drafts.flatMap((draft) => draft.lines).find((row) => row.id === line.id);
+        if (prior?.sourceLineId !== line.sourceLineId)
+          throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
+        saved = {
+          ...prior,
+          quantity: line.quantity,
+          note: line.note,
+          courseId: line.courseId,
+          makeAt: line.makeAt,
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+          noMerge: true,
+          unavailable: false,
+        };
+      } else {
+        saved = {
+          ...line,
+          sourceLineId: null,
+          source: null,
+          id: line.id ?? `line-${++ids}`,
+          unavailable: false,
+        };
+      }
       server.linesById.set(saved.id, saved);
       return saved;
     });
@@ -315,7 +346,9 @@ export function draftServer(
     /** `unavailable` worked out on each answer, as the server does, never stored. */
     flagged<T extends Draft | Draft[] | null>(answer: T): T {
       for (const draft of answer === null ? [] : Array.isArray(answer) ? answer : [answer])
-        for (const line of draft.lines) line.unavailable = server.unavailable.has(line.menuItemId);
+        for (const line of draft.lines)
+          if (line.sourceLineId === null)
+            line.unavailable = server.unavailable.has(line.menuItemId);
       return answer;
     },
     save(partyId: string, save: DraftSave): Draft {
@@ -344,6 +377,7 @@ export function draftServer(
       }
       draft.revision += 1;
       draft.lines = reidentify(save.lines);
+      remember(draft);
       return draft;
     },
     /** A take-over as the server does it: the person's own draft answers as it is; another's
@@ -366,11 +400,13 @@ export function draftServer(
         draft.ownerId = server.personId;
         draft.ownerName = server.personName;
         draft.revision += 1;
+        remember(draft);
         return draft;
       }
       server.drafts.splice(server.drafts.indexOf(draft), 1);
       own.revision += 1;
       own.lines = reidentify([...own.lines, ...draft.lines]);
+      remember(own);
       return own;
     },
     /** A submission as the server takes it, whether or not its answer reaches the till. */
@@ -383,6 +419,7 @@ export function draftServer(
         throw { code: "management.request_invalid", status: 400, field: "groups" };
       draft.lines = draft.lines.filter((line) => !named.includes(line.id));
       draft.revision += 1;
+      remember(draft);
       if (draft.lines.length === 0) server.drafts.splice(server.drafts.indexOf(draft), 1);
       const reply = {
         ...server.answer(partyId),
@@ -411,7 +448,11 @@ export function draftServer(
     sentGroups(submission: DraftSubmission): SentGroup[] {
       return submission.groups.map((group) => ({
         release: group.release,
-        lines: group.lineIds.map((id) => asGroupLine(server.linesById.get(id)!)),
+        lines: group.lineIds.map((id) =>
+          asGroupLine(
+            rowsAtRevision.get(submission.draftRevision)?.get(id) ?? server.linesById.get(id)!,
+          ),
+        ),
       }));
     },
   };

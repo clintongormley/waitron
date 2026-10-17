@@ -1,9 +1,11 @@
-import { draftLineMergeKey, QUANTITY_SCALE } from "@waitron/shared";
+import { divideDecimal, decimal, draftLineMergeKey, QUANTITY_SCALE } from "@waitron/shared";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import {
   menuOfferToTillProduct,
-  type DraftLine,
   type DraftLineInput,
+  type FreshDraftLine,
+  type FreshDraftLineInput,
+  type RecalledDraftLine,
   type TillMenuOffer,
   type TillProduct,
 } from "../api/client.js";
@@ -19,42 +21,50 @@ import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { productUnit } from "../widgets/product-name.js";
 
-/**
- * The line as a person's draft saves it. The note goes as the server keeps it, trimmed and null when
- * blank, so the till and the server read the merge rule over the same value.
- */
 export function toDraftLineInput(line: OrderLine): DraftLineInput {
+  const note = line.note?.trim() ?? "";
+  const common = {
+    note: note === "" ? null : note,
+    quantity: line.quantity,
+    courseId: line.courseId ?? null,
+    slot: line.place?.kind === "new" ? line.place.slot : 0,
+    joinGroupId: line.place?.kind === "join" ? line.place.groupId : null,
+    afterGroupId: line.place?.kind === "new" ? (line.place.afterGroupId ?? null) : null,
+  };
+  if (line.source !== undefined) {
+    if (line.draftLineId === undefined) throw new Error("recalled line has no draft reference");
+    return {
+      ...common,
+      id: line.draftLineId,
+      sourceLineId: line.source.line.id,
+      makeAt: line.makeAt ?? null,
+    };
+  }
   const { product } = line;
   if (product.menuItemId === undefined) {
     throw new Error(`product ${product.id} has no menu item to order it by`);
   }
-  const note = line.note?.trim() ?? "";
   return {
+    ...common,
     ...(line.draftLineId === undefined ? {} : { id: line.draftLineId }),
     menuItemId: product.menuItemId,
     variantId: product.variantId ?? null,
     menuVersionId: product.menuVersionId ?? null,
     options: line.options ?? [],
     extras: toWireModifiers(line).extras ?? [],
-    note: note === "" ? null : note,
-    quantity: line.quantity,
-    courseId: line.courseId ?? null,
     ...(line.makeAt === undefined ? {} : { makeAt: line.makeAt }),
     noMerge: line.noMerge === true,
-    slot: line.place?.kind === "new" ? line.place.slot : 0,
-    joinGroupId: line.place?.kind === "join" ? line.place.groupId : null,
-    afterGroupId: line.place?.kind === "new" ? (line.place.afterGroupId ?? null) : null,
   };
 }
 
-/** The draft merge key (D10) of the line as its draft saves it. A line naming no menu item is no
- * draft line, and merges with nothing. */
 export function orderLineMergeKey(line: OrderLine): string | null {
-  return line.product.menuItemId === undefined ? null : draftLineMergeKey(toDraftLineInput(line));
+  if (line.source !== undefined || line.product.menuItemId === undefined) return null;
+  const input = toDraftLineInput(line);
+  return input.sourceLineId != null ? null : draftLineMergeKey(input);
 }
 
 /**
- * A saved draft line as the till shows it, named and priced from `offers` (the table zone's live
+ * A saved fresh draft line as the till shows it, named and priced from `offers` (the table zone's live
  * offers, by menu item id) the way a tap builds a line. The product keeps the line's own menu
  * version, so a line naming another version than the live one is still seen as stale; with
  * `liveVersions` (the version each menu's offers come from) such a line is marked as holding no
@@ -68,10 +78,17 @@ export function orderLineMergeKey(line: OrderLine): string | null {
  * unit widened to the quantity scale, so pricing the preview does not refuse it.
  */
 export function fromDraftLine(
-  line: Omit<DraftLine, "id"> & { id?: string },
+  line:
+    | (Omit<FreshDraftLine, "id" | "source" | "sourceLineId"> & {
+        id?: string;
+        sourceLineId?: null;
+        source?: null;
+      })
+    | RecalledDraftLine,
   offers: ReadonlyMap<string, TillMenuOffer>,
   liveVersions?: ReadonlyMap<string, string>,
 ): OrderLine {
+  if (line.sourceLineId != null) return fromRecalledLine(line);
   const offer = offers.get(line.menuItemId);
   const earlierPrice =
     offer !== undefined &&
@@ -135,8 +152,10 @@ export function rebuildReturned(
 ): Map<number, OrderLine> {
   const rebuilt = new Map<number, OrderLine>();
   lines.forEach((line, index) => {
+    if (line.source !== undefined) return;
     if (line.notOffered !== true) return;
     const saved = toDraftLineInput(line);
+    if (saved.sourceLineId != null) return;
     if (!offers.has(saved.menuItemId)) return;
     const returned = {
       ...saved,
@@ -157,7 +176,7 @@ function asVariant(dish: TillProduct, variantId: string | null): TillProduct {
 
 /** The zero price, general rate and unit are placeholders: a draft line sends no price, and the
  * server prices it at submit. The unit takes every quantity the server stores. */
-function unofferedProduct(line: DraftLineInput): TillProduct {
+function unofferedProduct(line: FreshDraftLineInput): TillProduct {
   return {
     id: line.menuItemId,
     menuItemId: line.menuItemId,
@@ -170,6 +189,55 @@ function unofferedProduct(line: DraftLineInput): TillProduct {
     category: null,
     allergens: null,
     unit: UNKNOWN_UNIT,
+  };
+}
+
+function fromRecalledLine(line: RecalledDraftLine): OrderLine {
+  const parent = line.source.line;
+  const product: TillProduct = {
+    id: parent.productId ?? parent.id,
+    name: parent.name ?? "",
+    unitPrice: parent.unitPriceGross,
+    vatClass: "general",
+    category: null,
+    allergens: null,
+    unit: { ...UNKNOWN_UNIT, precision: parent.unitPrecision ?? QUANTITY_SCALE },
+  };
+  return {
+    draftLineId: line.id,
+    workingOrderLineId: line.sourceLineId,
+    source: line.source,
+    product,
+    quantity: displayQuantity(product, line.quantity),
+    noMerge: true,
+    ...(parent.optionSnapshots?.length ? { optionSnapshots: parent.optionSnapshots } : {}),
+    ...(line.source.extras.length
+      ? {
+          notOfferedExtras: line.source.extras.map((extra) => ({
+            productId: extra.productId ?? extra.id,
+            name: extra.name ?? "",
+            price: extra.unitPriceGross,
+            quantity: Number(
+              divideDecimal(decimal(extra.quantity), decimal(line.quantity), QUANTITY_SCALE),
+            ),
+          })),
+        }
+      : {}),
+    ...(line.note === null ? {} : { note: line.note }),
+    ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.course?.id === line.courseId ? { course: line.course } : {}),
+    ...(line.makeAt === null ? {} : { makeAt: line.makeAt }),
+    ...(line.joinGroupId !== null
+      ? { place: { kind: "join" as const, groupId: line.joinGroupId } }
+      : line.slot > 0
+        ? {
+            place: {
+              kind: "new" as const,
+              slot: line.slot,
+              ...(line.afterGroupId === null ? {} : { afterGroupId: line.afterGroupId }),
+            },
+          }
+        : {}),
   };
 }
 

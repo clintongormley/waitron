@@ -25,7 +25,7 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
-  DraftLineInput,
+  FreshDraftLineInput,
   OrderGroup,
   TableState,
   TableParty,
@@ -5200,7 +5200,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     });
     const refresh = (el: TillApp) => el.shadowRoot!.querySelector("till-basket-refresh-dialog");
 
-    function savedBeer(over: Partial<DraftLineInput> = {}): void {
+    function savedBeer(over: Partial<FreshDraftLineInput> = {}): void {
       server.save("v1", {
         billId: "wo-4",
         draftId: null,

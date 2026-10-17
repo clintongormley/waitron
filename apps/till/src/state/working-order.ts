@@ -17,7 +17,13 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
-import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
+import type {
+  KitchenNoteSnapshot,
+  HeldExtra,
+  TillCourse,
+  TillProduct,
+  RecalledDraftLine,
+} from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 
@@ -59,6 +65,7 @@ export interface LineSelection {
 }
 
 export interface OrderLine {
+  source?: RecalledDraftLine["source"];
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
@@ -423,14 +430,27 @@ export class WorkingOrderStore {
     this.#total = null;
   }
 
-  /**
-   * An edit sends each line without its not-offered picks, so the server takes them off the order;
-   * they leave the basket now to match. No prompt: the retrieve banner
-   * (`held.extra_not_offered`) already said that changing the order removes them.
-   */
+  /** Recalled families retain their stored extras; their draft writes send no picks. */
   #markDirty(): void {
     this.#dirty = true;
-    for (const line of this.#lines) delete line.notOfferedExtras;
+    for (const line of this.#lines) if (line.source === undefined) delete line.notOfferedExtras;
+  }
+
+  refreshRecalledLine(line: OrderLine, snapshot: OrderLine): void {
+    if (
+      !this.#lines.includes(line) ||
+      snapshot.source === undefined ||
+      line.source?.line.id !== snapshot.source.line.id
+    )
+      return;
+    line.source = snapshot.source;
+    line.product = snapshot.product;
+    if (snapshot.optionSnapshots === undefined) delete line.optionSnapshots;
+    else line.optionSnapshots = snapshot.optionSnapshots;
+    if (snapshot.notOfferedExtras === undefined) delete line.notOfferedExtras;
+    else line.notOfferedExtras = snapshot.notOfferedExtras;
+    this.#invalidatePricing();
+    this.emit("changed");
   }
 
   appendLines(lines: readonly OrderLine[]): void {

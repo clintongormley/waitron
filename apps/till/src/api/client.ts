@@ -673,12 +673,9 @@ export interface SubmittedGroups {
   groups: OrderGroup[];
 }
 
-/**
- * One line of a person's unsent order on a party (`apps/server/src/order-drafts.ts`). A draft line
- * carries offer ids and no product name or price. Its course metadata is read-only.
- * `unavailable` is worked out by the server on each read, never stored.
- */
-export interface DraftLine {
+export interface FreshDraftLine {
+  sourceLineId: null;
+  source: null;
   id: string;
   menuItemId: string;
   variantId: string | null;
@@ -703,8 +700,52 @@ export interface DraftLine {
   unavailable: boolean;
 }
 
-/** A draft line as the till saves it. */
-export type DraftLineInput = Omit<DraftLine, "id" | "unavailable" | "course"> & { id?: string };
+export interface RecalledDraftLine {
+  id: string;
+  sourceLineId: string;
+  source: { line: TabLine; extras: TabLine[]; netAmount: string };
+  quantity: string;
+  note: string | null;
+  courseId: string | null;
+  course?: TillCourse;
+  makeAt: string | null;
+  noMerge: true;
+  slot: number;
+  joinGroupId: string | null;
+  afterGroupId: string | null;
+  unavailable: false;
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  options?: never;
+  extras?: never;
+}
+
+export type DraftLine = FreshDraftLine | RecalledDraftLine;
+export type FreshDraftLineInput = Omit<
+  FreshDraftLine,
+  "id" | "unavailable" | "course" | "source" | "sourceLineId"
+> & { id?: string; sourceLineId?: null };
+export type RecalledDraftLineInput = Pick<
+  RecalledDraftLine,
+  | "id"
+  | "sourceLineId"
+  | "quantity"
+  | "note"
+  | "courseId"
+  | "makeAt"
+  | "slot"
+  | "joinGroupId"
+  | "afterGroupId"
+> & {
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+  menuItemId?: never;
+  variantId?: never;
+  menuVersionId?: never;
+  noMerge?: true;
+};
+export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
 
 export interface DeadEndAnswer {
   sends: boolean;

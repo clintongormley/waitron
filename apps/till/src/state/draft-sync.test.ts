@@ -10,7 +10,7 @@ import {
   resendUnanswered,
 } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
-import type { Draft, DraftLine, TillProduct } from "../api/client.js";
+import type { Draft, DraftLine, FreshDraftLine, TillProduct } from "../api/client.js";
 import type { Place } from "./draft-place.js";
 import { fromDraftLine } from "./draft-lines.js";
 
@@ -31,7 +31,7 @@ const byOffer = new Map([beer, steak].map((product) => [product.menuItemId!, pro
 /** Rebuilds a saved line as the app does from the table's offers, trimming a whole count. */
 const rebuild = (lines: readonly DraftLine[]): OrderLine[] =>
   lines.map((line) => ({
-    product: byOffer.get(line.menuItemId)!,
+    product: byOffer.get(line.menuItemId!)!,
     quantity: line.quantity.replace(/\.0+$/, ""),
     ...(line.note === null ? {} : { note: line.note }),
   }));
@@ -388,16 +388,16 @@ describe("DraftSync: saving", () => {
       ],
     };
 
-    async function saveAnswered(change: (line: DraftLine) => void): Promise<DraftSync> {
+    async function saveAnswered(change: (line: FreshDraftLine) => void): Promise<DraftSync> {
       const draft = sync();
       await draft.load();
       draft.store.loadFrom(draft.store.id, [structuredClone(answered)]);
       draft.store.setLineExtras(0, { note: "no ice" });
       server.saveDraft.mockImplementationOnce(async (partyId, save) => {
         const saved = structuredClone(server.save(partyId, save));
-        saved.lines[0]!.options.reverse();
-        saved.lines[0]!.extras[0]!.picks.reverse();
-        change(saved.lines[0]!);
+        (saved.lines[0] as FreshDraftLine).options.reverse();
+        (saved.lines[0] as FreshDraftLine).extras[0]!.picks.reverse();
+        change(saved.lines[0] as FreshDraftLine);
         return saved;
       });
       await draft.flush();

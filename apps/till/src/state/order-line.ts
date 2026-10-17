@@ -23,6 +23,7 @@ type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
  * for it. An options answer has no price.
  */
 export function lineGross(line: OrderLine): Decimal {
+  if (line.source !== undefined) return decimal(line.source.netAmount);
   const dish = dishGross(line);
   const extras = [...(line.extras ?? []), ...(line.notOfferedExtras ?? [])];
   if (extras.length === 0) {

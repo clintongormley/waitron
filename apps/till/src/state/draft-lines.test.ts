@@ -3,7 +3,7 @@ import {
   fromDraftLine,
   orderLineMergeKey,
   rebuildReturned,
-  toDraftLineInput,
+  toDraftLineInput as draftInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
 import { draftSections } from "./draft-groups.js";
@@ -12,11 +12,17 @@ import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import type { Place } from "./draft-place.js";
 import {
   menuOfferToTillProduct,
-  type DraftLine,
-  type DraftLineInput,
+  type FreshDraftLine,
+  type FreshDraftLineInput,
   type TillMenuOffer,
   type TillProduct,
 } from "../api/client.js";
+
+function toDraftLineInput(line: OrderLine): FreshDraftLineInput {
+  const input = draftInput(line);
+  if (input.sourceLineId != null) throw new Error("fresh fixture became a recalled line");
+  return input;
+}
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
@@ -171,7 +177,9 @@ describe("fresh draft row identity", () => {
   });
 
   it("keeps the saved row ID through hydration and a missing offer returning", () => {
-    const savedLine: DraftLine = {
+    const savedLine: FreshDraftLine = {
+      sourceLineId: null,
+      source: null,
       ...toDraftLineInput(burgerLine()),
       id: "saved-row",
       unavailable: false,
@@ -240,8 +248,10 @@ const burgerLine = (): OrderLine => ({
 });
 
 /** A saved row with an explicit identity and quantity at three places. */
-const saved = (input: DraftLineInput, quantity: string): DraftLine => ({
+const saved = (input: FreshDraftLineInput, quantity: string): FreshDraftLine => ({
   ...input,
+  sourceLineId: null,
+  source: null,
   id: "dl-1",
   quantity,
   unavailable: false,
@@ -262,7 +272,7 @@ describe("toDraftLineInput", () => {
       { kind: "join", groupId: "g2" },
       { slot: 0, joinGroupId: "g2", afterGroupId: null },
     ],
-  ] satisfies [Place, Pick<DraftLineInput, "slot" | "joinGroupId" | "afterGroupId">][])(
+  ] satisfies [Place, Pick<FreshDraftLineInput, "slot" | "joinGroupId" | "afterGroupId">][])(
     "round-trips the %j place through a saved draft",
     (place, wire) => {
       const line: OrderLine = { ...burgerLine(), place };
@@ -444,7 +454,7 @@ describe("fromDraftLine", () => {
   });
 
   it("keeps a variant, a pick and an answer the offer no longer holds, by their ids", () => {
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       variantId: "v-gone",
       options: [{ listId: "doneness", labelId: "blue" }],
@@ -504,7 +514,7 @@ describe("fromDraftLine", () => {
         extrasList("toppings", [extraItem("p-cheese", "1.00", false)]),
       ],
     });
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       options: [{ listId: "doneness", labelId: "rare" }],
       extras: [{ listId: "toppings", picks: [{ productId: "p-cheese", quantity: 1 }] }],
@@ -600,7 +610,7 @@ describe("fromDraftLine: a saved quantity the offered unit cannot hold", () => {
 
 describe("rebuildReturned: a line kept while its dish was not offered", () => {
   const live = (version: string) => new Map([["dinner", version]]);
-  const kept = (input: DraftLineInput, unavailable = false) =>
+  const kept = (input: FreshDraftLineInput, unavailable = false) =>
     fromDraftLine({ ...saved(input, "2.000"), unavailable }, new Map());
 
   it("rebuilds the line from the offer once it is back, keeping every id and selection", () => {
@@ -684,7 +694,7 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
   });
 
   it("keeps a pick the returned offer no longer holds, which still stops the line", () => {
-    const input: DraftLineInput = {
+    const input: FreshDraftLineInput = {
       ...toDraftLineInput(burgerLine()),
       extras: [{ listId: "toppings", picks: [{ productId: "p-gone", quantity: 1 }] }],
     };
