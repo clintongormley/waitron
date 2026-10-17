@@ -1209,6 +1209,10 @@ export const en = {
   "table.round_unconfirmed":
     "The server did not answer, so the items may have been added. Check the tab before sending them again.",
   "table.draft_changed_elsewhere": "Your order on this table was changed on another device.",
+  "table.draft_replaced_groups":
+    "{groups} changed. The affected dishes have been re-arranged. Check New order and press Send again.",
+  "table.draft_recovery_failed":
+    "Could not refresh the order. Your dishes are unchanged. Try again.",
   "table.draft_recount": "The order on this table changed. Check it and send again.",
   "table.draft_save_failed":
     "Your last change to an order was not saved. Open its table to check it.",
@@ -2773,6 +2777,10 @@ export const es: Record<StringKey, string> = {
   "table.round_unconfirmed":
     "El servidor no respondió, así que los artículos pueden haberse añadido. Revisa la cuenta antes de volver a enviarlos.",
   "table.draft_changed_elsewhere": "Tu pedido de esta mesa se ha cambiado en otro dispositivo.",
+  "table.draft_replaced_groups":
+    "{groups}: los platos afectados se han reorganizado. Revisa Nuevo pedido y vuelve a enviar.",
+  "table.draft_recovery_failed":
+    "No se ha podido actualizar el pedido. Tus platos siguen igual. Inténtalo de nuevo.",
   "table.draft_recount": "El pedido de esta mesa ha cambiado. Revísalo y vuelve a enviarlo.",
   "table.draft_save_failed":
     "Tu último cambio en un pedido no se ha guardado. Abre su mesa para revisarlo.",

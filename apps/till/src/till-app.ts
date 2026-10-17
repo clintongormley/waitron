@@ -1009,6 +1009,7 @@ type CounterError =
   /** `tableId`: the table a refusal names, for wording that names it. */
   | { code: string; menuId?: string; tableId?: string }
   | { billPayments: string }
+  | { replacedGroups: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
   | { excess: string; lineChange?: true }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
@@ -1050,6 +1051,8 @@ function errorText(
   if (typeof error === "object" && "unsentBill" in error)
     return billUnsentText(error.unsentBill, billLabel);
   if (typeof error === "string") return t(error);
+  if ("replacedGroups" in error)
+    return t("table.draft_replaced_groups").replace("{groups}", () => error.replacedGroups);
   if ("code" in error) {
     if (error.code === "menu_period.not_running") {
       const menu = menus.find((menu) => menu.id === error.menuId);
@@ -9574,6 +9577,123 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
+  async #recoverDraftTargets(sync: DraftSync, live: () => boolean): Promise<boolean> {
+    if (
+      !sync.store.lines.some(
+        (line) =>
+          line.place?.kind === "join" ||
+          (line.place?.kind === "new" && line.place.afterGroupId !== undefined),
+      )
+    )
+      return false;
+    const oldGroups = this.tabGroups;
+    const partyId = sync.partyId;
+    const billId = sync.billId;
+    const current = () =>
+      live() &&
+      this.#draftSync === sync &&
+      this.orderParty?.id === partyId &&
+      this.activeTabId === billId;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const refreshed = await Promise.race([
+        Promise.all([
+          this.api.getTablesState(),
+          this.api.listGroups(partyId),
+          this.api.readCurrentOrders(partyId),
+        ]),
+        pause(limit.signal).then(() => undefined),
+      ]);
+      if (!current()) return true;
+      if (refreshed === undefined) throw new Error("refresh timed out");
+      const [tables, groups, orders] = refreshed;
+      const party = tables.find((table) => table.id === this.activeTableId)?.party;
+      if (
+        party?.id !== partyId ||
+        party.revision < this.orderParty!.revision ||
+        groups.revision < this.orderParty!.revision ||
+        orders.revision < this.orderParty!.revision
+      ) {
+        this.errorKey = { code: "party.out_of_date" };
+        return true;
+      }
+      const held = heldViews(orders, groups.groups);
+      const heldIds = new Set(held.map((group) => group.id));
+      const invalid = new Map<number, string>();
+      for (const [index, line] of sync.store.lines.entries()) {
+        const place = line.place;
+        const target =
+          place?.kind === "join"
+            ? place.groupId
+            : place?.kind === "new"
+              ? place.afterGroupId
+              : undefined;
+        if (target !== undefined && !heldIds.has(target)) invalid.set(index, target);
+      }
+      if (invalid.size === 0) return false;
+      const courses = new Map([
+        ...sync.store.lines.flatMap((line) =>
+          line.course === undefined ? [] : [[line.course.id, line.course] as const],
+        ),
+        ...orders.retainedCourses.map((course) => [course.id, course] as const),
+        ...this.courses.map((course) => [course.id, course] as const),
+      ]);
+      const placed = sync.store.lines.flatMap((line, index) =>
+        invalid.has(index)
+          ? []
+          : [
+              {
+                courseId: line.courseId ?? line.product.courseId ?? null,
+                place: line.place ?? { kind: "fire" as const },
+              },
+            ],
+      );
+      const replacements = new Map<number, OrderLine>();
+      for (const index of invalid.keys()) {
+        const line = sync.store.lines[index]!;
+        const courseId = line.courseId ?? line.product.courseId ?? null;
+        const { place } = placeFor(courseId, {
+          courses: [...courses.values()],
+          held,
+          firstOrder: false,
+          placed,
+        });
+        replacements.set(index, { ...line, place });
+        placed.push({ courseId, place });
+      }
+      const outcome = await sync.correctPlaces(replacements, limit.signal, current);
+      if (!current()) return true;
+      if (outcome !== "saved") {
+        this.errorKey =
+          outcome === "failed" ? "table.draft_recovery_failed" : { code: outcome.refused };
+        return true;
+      }
+      this.tables = tables;
+      this.orderParty = party;
+      this.tabGroups = groups.groups;
+      this.currentOrders = orders;
+      this.#groupsUnread = false;
+      this.#groupsReadFor = partyId;
+      this.currentOrdersUnread = false;
+      this.errorKey = {
+        replacedGroups: [...new Set(invalid.values())]
+          .map((id) => {
+            const group = oldGroups.find((group) => group.id === id);
+            return group === undefined
+              ? t("table.group_held")
+              : t("table.group_n").replace("{n}", () => String(group.displayNumber));
+          })
+          .join(", "),
+      };
+      return true;
+    } catch {
+      if (current()) this.errorKey = "table.draft_recovery_failed";
+      return true;
+    } finally {
+      limit.done();
+    }
+  }
+
   async #onSubmitDraft(event: Event): Promise<void> {
     const { groups, joinGroupId, billId, store, sent, draft } = (
       event as CustomEvent<Partial<SubmitDraftDetail>>
@@ -9764,6 +9884,12 @@ export class TillApp extends LitElement {
           : await sync.flush(send.signal);
       if (!live()) return;
       if (saved !== "saved") {
+        if (
+          saved !== "failed" &&
+          isGroupGone({ code: saved.refused }) &&
+          (await this.#recoverDraftTargets(sync, live))
+        )
+          return;
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         return;
       }
@@ -9811,6 +9937,15 @@ export class TillApp extends LitElement {
         this.errorKey = "table.round_unconfirmed";
         return "find-tab";
       }
+      if (
+        (isGroupGone(error) ||
+          (isPartyOutOfDate(error) &&
+            groups.some(
+              (group) => group.joinGroupId !== undefined || group.afterGroupId !== undefined,
+            ))) &&
+        (await this.#recoverDraftTargets(sync, live))
+      )
+        return;
       if (isPartyOutOfDate(error)) {
         await this.#onPartyOutOfDate(error, live);
         return;

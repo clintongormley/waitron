@@ -1903,6 +1903,229 @@ describe("till-app: sending the draft", () => {
     );
   });
 
+  describe("A773 raced draft targets", () => {
+    const mains: OrderGroup = {
+      id: "held-mains",
+      position: 1,
+      displayNumber: 7,
+      numberPartyId: "v1",
+      state: "held",
+      firedAt: null,
+      remindAt: null,
+      courseIds: ["mains"],
+      lineIds: [],
+      summary: "1 × Fish",
+    };
+    const desserts: OrderGroup = {
+      ...mains,
+      id: "held-desserts",
+      position: 2,
+      displayNumber: 9,
+      courseIds: ["desserts"],
+      summary: "1 × Flan",
+    };
+    const current = {
+      revision: 4,
+      nextDisplayNumber: 10,
+      groups: [],
+      ungrouped: [],
+      retainedCourses: [],
+      hasGroups: true,
+      reminder: null,
+    };
+
+    async function raced(
+      when: "save" | "submit" | "party",
+      overrides: Record<string, unknown> = {},
+    ) {
+      const listGroups = vi.fn().mockResolvedValue({ revision: 3, groups: [mains, desserts] });
+      const { el } = await mountApp({
+        listGroups,
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        getTill: vi.fn().mockResolvedValue({
+          ...till(drillFormFactor),
+          courses: [
+            { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
+            { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
+            { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+          ],
+        }),
+        ...overrides,
+      });
+      await openMesa(el);
+      await tap(el, "Steak");
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+      const store = draft(el);
+      store.setLinePlaces([0], { kind: "join", groupId: mains.id });
+      store.setLinePlaces([1], { kind: "new", slot: 4, afterGroupId: mains.id });
+      store.setLinePlaces([2], { kind: "new", slot: 8, afterGroupId: desserts.id });
+      const before = [...store.lines];
+      const refuse = () => {
+        listGroups.mockResolvedValue({
+          revision: 4,
+          groups: [{ ...mains, state: "fired", firedAt: "2026-10-17T12:00:00.000Z" }, desserts],
+        });
+        api.getTablesState!.mockResolvedValue([
+          { ...mesa4, party: { ...mesa4.party!, revision: 4 } },
+          mesa7,
+        ]);
+        throw {
+          code: when === "party" ? "party.out_of_date" : "group.not_held",
+          status: 409,
+          groupId: mains.id,
+          partyId: "v1",
+        };
+      };
+      if (when === "save") api.saveDraft!.mockImplementationOnce(refuse);
+      else api.submitDraft!.mockImplementationOnce(refuse);
+      const detail = {
+        groups: [
+          { release: "hold", lineIndexes: [0], joinGroupId: mains.id },
+          { release: "hold", lineIndexes: [1], afterGroupId: mains.id },
+          { release: "hold", lineIndexes: [2], afterGroupId: desserts.id },
+        ],
+        store,
+        sent: [...store.lines],
+      };
+      return { el, store, before, detail, listGroups };
+    }
+
+    it.each(["save", "submit", "party"] as const)(
+      "re-places only invalid joins and anchors after a %s refusal and waits for another press",
+      async (when) => {
+        const { el, store, before, detail } = await raced(when);
+        emit(tableOrder(el)!, "submit-draft", detail);
+        await vi.waitFor(() =>
+          expect(store.lines.map((line) => line.place)).toEqual([
+            { kind: "fire" },
+            { kind: "fire" },
+            { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+          ]),
+        );
+        await vi.waitFor(() =>
+          expect(
+            server.drafts[0]!.lines.map((line) => [line.slot, line.joinGroupId, line.afterGroupId]),
+          ).toEqual([
+            [0, null, null],
+            [0, null, null],
+            [8, null, "held-desserts"],
+          ]),
+        );
+        expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+        expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+        expect(api.submitDraft).toHaveBeenCalledTimes(when === "save" ? 0 : 1);
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(tableOrder(el)!.party!.revision).toBe(4);
+        expect(banner(el)?.textContent).toContain("Group 7");
+        expect(banner(el)?.textContent).toContain("Send again");
+        await flush(el, 6);
+        expect(api.submitDraft).toHaveBeenCalledTimes(when === "save" ? 0 : 1);
+      },
+    );
+
+    it.each(["getTablesState", "listGroups", "readCurrentOrders", "listDrafts"] as const)(
+      "retains the candidate without another save or send when recovery %s fails",
+      async (read) => {
+        const { el, store, before, detail } = await raced("submit");
+        const places = structuredClone(before.map((line) => line.place));
+        api[read]!.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        emit(tableOrder(el)!, "submit-draft", detail);
+        await vi.waitFor(() => expect(store.sending).toBe(false));
+        await flush(el, 6);
+        expect(api.submitDraft).toHaveBeenCalledOnce();
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+        expect(store.lines.map((line) => line.place)).toEqual(places);
+        expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+        expect(banner(el)?.textContent).toContain(
+          "Could not refresh the order. Your dishes are unchanged. Try again.",
+        );
+      },
+    );
+
+    it("keeps corrected local lines when their save loses a revision race", async () => {
+      const { el, store, before, detail } = await raced("submit");
+      api
+        .saveDraft!.mockImplementationOnce(async (partyId, save) =>
+          structuredClone(server.save(partyId, save)),
+        )
+        .mockImplementationOnce(() => {
+          const own = server.drafts[0]!;
+          own.revision++;
+          own.lines = own.lines.map((line) => ({ ...line, quantity: "9" }));
+          throw { code: "draft.out_of_date", status: 409 };
+        });
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+      expect(store.lines.map((line) => line.place)).toEqual([
+        { kind: "fire" },
+        { kind: "fire" },
+        { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+      ]);
+      expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+      expect(server.drafts[0]!.lines.map((line) => line.quantity)).toEqual(["9", "9", "9"]);
+      expect(api.saveDraft).toHaveBeenCalledTimes(2);
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    });
+
+    it("ignores a target recovery after another table replaced its draft", async () => {
+      const { el, store, detail } = await raced("submit");
+      let answer!: (value: unknown) => void;
+      api.readCurrentOrders!.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+      emit(tableOrder(el)!, "back", {});
+      await flush(el, 6);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el, 6);
+      answer(current);
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(rows(el)).toEqual([]);
+      expect(store.lines.map((line) => line.place)).toEqual([
+        { kind: "join", groupId: "held-mains" },
+        { kind: "new", slot: 4, afterGroupId: "held-mains" },
+        { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+      ]);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+    });
+
+    it("retains the local candidate when the authoritative draft revision moved", async () => {
+      const { el, store, before, detail } = await raced("submit");
+      api.submitDraft!.mockReset().mockImplementationOnce(() => {
+        api.listGroups!.mockResolvedValue({ revision: 4, groups: [desserts] });
+        const own = server.drafts[0]!;
+        server.drafts = [
+          {
+            ...own,
+            revision: own.revision + 1,
+            lines: own.lines.map((line) => ({ ...line, quantity: "9" })),
+          },
+        ];
+        throw { code: "group.not_held", status: 409, groupId: mains.id };
+      });
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await flush(el, 6);
+      expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+      expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(server.drafts[0]!.revision).toBe(2);
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    });
+  });
+
   it("sends Send all as one held group per course, under the ids the save answered", async () => {
     const { el } = await mountApp();
     await openMesa(el);

@@ -266,6 +266,7 @@ export class DraftSync {
   #commandsStarted = 0;
   #commandAbort?: AbortController;
   #recoveryRequired = false;
+  #correctingPlaces = false;
   #unlockRecovery?: () => void;
   readonly #unsubscribe: () => void;
 
@@ -325,7 +326,7 @@ export class DraftSync {
 
   /** Reads the party's drafts and shows the person's own; false when they could not be read. */
   async load(): Promise<boolean> {
-    if (this.#commanding) return false;
+    if (this.#commanding || this.#correctingPlaces) return false;
     return this.#load();
   }
 
@@ -362,7 +363,8 @@ export class DraftSync {
   /** Sends any unsaved edit now; resolves once every save has answered, with the last outcome, or
    * as `failed` once `signal` aborts, which also cuts off the save this sends. */
   flush(signal?: AbortSignal): Promise<DraftSaveOutcome> {
-    if (this.#commanding || this.#recoveryRequired) return Promise.resolve("failed");
+    if (this.#commanding || this.#recoveryRequired || this.#correctingPlaces)
+      return Promise.resolve("failed");
     this.#cancelTimer();
     const saved = this.#save(signal);
     if (signal === undefined) return saved;
@@ -484,6 +486,37 @@ export class DraftSync {
     }
   }
 
+  /** A target refusal never grants permission to overwrite a newer draft. Keep the local
+   * candidate on failed reads and refused correction saves, including revision races. */
+  async correctPlaces(
+    replacements: ReadonlyMap<number, OrderLine>,
+    signal: AbortSignal,
+    live: () => boolean,
+  ): Promise<DraftSaveOutcome> {
+    if (this.#ended || this.#commanding || this.#recoveryRequired || this.#correctingPlaces)
+      return "failed";
+    this.#correctingPlaces = true;
+    this.#cancelTimer();
+    const read = this.#reads;
+    try {
+      await this.#queue;
+      const drafts = await this.#options.api.listDrafts(this.partyId, { signal });
+      if (this.#ended || signal.aborted || !live() || read !== this.#reads) return "failed";
+      const own = drafts.find(
+        (draft) => draft.billId === this.billId && draft.ownerId === this.personId,
+      );
+      if ((own?.id ?? null) !== this.#draftId || (own?.revision ?? 0) !== this.#revision)
+        return { refused: "draft.out_of_date" };
+      this.#quietly(() => this.store.adoptLines(replacements));
+      this.#unsaved = true;
+      return await this.#save(signal, false, true);
+    } catch {
+      return "failed";
+    } finally {
+      this.#correctingPlaces = false;
+    }
+  }
+
   /** Replaces the lines at the given positions for display only: the saved draft does not change,
    * so nothing is saved. */
   reshow(lines: ReadonlyMap<number, OrderLine>): void {
@@ -519,14 +552,22 @@ export class DraftSync {
   }
 
   /** `closing` is the sign-out's own save, queued just before {@link close} shuts the queue. */
-  #save(signal?: AbortSignal, closing = false): Promise<DraftSaveOutcome> {
+  #save(
+    signal?: AbortSignal,
+    closing = false,
+    preserveCandidate = false,
+  ): Promise<DraftSaveOutcome> {
     this.#queue = this.#queue
-      .then(() => this.#saveNow(signal, closing))
+      .then(() => this.#saveNow(signal, closing, preserveCandidate))
       .catch((): DraftSaveOutcome => "failed");
     return this.#queue;
   }
 
-  async #saveNow(signal: AbortSignal | undefined, closing: boolean): Promise<DraftSaveOutcome> {
+  async #saveNow(
+    signal: AbortSignal | undefined,
+    closing: boolean,
+    preserveCandidate: boolean,
+  ): Promise<DraftSaveOutcome> {
     if (this.#dropped || (this.#closed && !closing)) return "failed";
     if (!this.#unsaved) return "saved";
     const refusal = this.#billRefusal;
@@ -550,7 +591,7 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#dropped || read !== this.#reads) return "failed";
-      return await this.#refused(error);
+      return await this.#refused(error, preserveCandidate);
     } finally {
       this.#saving = false;
       limit.done();
@@ -564,15 +605,15 @@ export class DraftSync {
     return "saved";
   }
 
-  /** A refusal of the draft itself shows the server's draft; after any other, and after no answer,
-   * the edits stay unsaved, so the next flush sends them again. */
-  async #refused(error: unknown): Promise<DraftSaveOutcome> {
+  /** Ordinary draft conflicts reload. A placement correction keeps its candidate on refusal,
+   * so a concurrent save cannot erase the arrangement being recovered. */
+  async #refused(error: unknown, preserveCandidate: boolean): Promise<DraftSaveOutcome> {
     const refusal = asRefusal(error);
     if (refusal === undefined) {
       this.#unsaved = true;
       return "failed";
     }
-    if (DRAFT_REFUSALS.has(refusal.refused)) {
+    if (DRAFT_REFUSALS.has(refusal.refused) && !preserveCandidate) {
       const reloaded = await this.#load();
       if (this.#commanding && !reloaded) this.#recoveryRequired = true;
     } else this.#unsaved = true;
