@@ -8,6 +8,7 @@ import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonPainter } from "./season-painter.js";
 import { drag, frame, settle, withBar } from "../testing/season-painter-fixture.js";
+import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -62,6 +63,15 @@ class PainterApp extends LitElement {
   readonly writes: unknown[] = [];
   model = withBar();
   readonly api = new OpeningHoursApi(request(() => this.model, this.writes));
+  private releaseLinks?: () => void;
+  override connectedCallback() {
+    super.connectedCallback();
+    this.releaseLinks = captureShellLinks(this);
+  }
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.releaseLinks?.();
+  }
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;

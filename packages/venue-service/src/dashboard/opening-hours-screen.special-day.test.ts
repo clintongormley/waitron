@@ -11,6 +11,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { frame, painterModel, settle, storedDay } from "../testing/special-day-painter-fixture.js";
+import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -336,6 +337,15 @@ class GuardedApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly recorded: Recorded = { writes: [], months: [], failing: [] };
   readonly api = new OpeningHoursApi(request(this.recorded));
+  private releaseLinks?: () => void;
+  override connectedCallback() {
+    super.connectedCallback();
+    this.releaseLinks = captureShellLinks(this);
+  }
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.releaseLinks?.();
+  }
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;

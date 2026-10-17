@@ -98,6 +98,7 @@ it("lists each active department with its zones beneath, and says the zones foll
   const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   expect(link.textContent!.trim()).toBe("Periods");
   expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
+  expect(link.hasAttribute("data-own-click")).toBe(true);
   expect(chip(painter, "hint")!.textContent!.trim()).toBe(
     "Drag down a day to paint · drag over a block to replace it",
   );

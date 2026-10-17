@@ -16,7 +16,7 @@ type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
 export function periodsLink() {
-  return html`<a slot="link" data-test="periods-link" href=${periodsWindowPath}
+  return html`<a slot="link" data-test="periods-link" data-own-click href=${periodsWindowPath}
     >${t("period.title")}</a
   >`;
 }
