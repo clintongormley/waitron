@@ -4,6 +4,7 @@ import "./shift-edit-dialog.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
+import { businessDayAt } from "@waitron/shared";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/fixed-title";
 import { areaKey, type AreaRef, type Slot } from "../slots.js";
@@ -49,16 +50,17 @@ export const PHONE_WIDTH = 560;
  *  (`opening-hours-week.ts:42`), which venue-service does not export. */
 const SWIPE_PX = 48;
 
-/** The calendar date now in `timeZone`. */
-function dateIn(timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const part = (type: string) => parts.find((p) => p.type === type)!.value;
-  return `${part("year")}-${part("month")}-${part("day")}`;
+/** The venue's business day now. The read gives only its own week's changeovers, so a day just
+ *  outside the week is taken to change over as its nearest day in the week does. */
+function businessDayNow(read: RotaWeek): string {
+  const [first, ...rest] = read.days;
+  const cutoverChanges = rest
+    .filter((d, i) => d.cutover !== read.days[i]!.cutover)
+    .map((d) => ({ effectiveBusinessDay: d.businessDay, dayCutover: d.cutover }));
+  return businessDayAt(
+    { timeZone: read.timeZone, dayCutover: first!.cutover, cutoverChanges },
+    new Date(),
+  );
 }
 
 let widthCandidates: TemplateResult[] | undefined;
@@ -405,7 +407,7 @@ export class RotaView extends LitElement {
         this.read = read;
         this.loadError = "";
         if (week === this.week && !read.days.some((d) => d.businessDay === this.day)) {
-          const today = dateIn(read.timeZone);
+          const today = businessDayNow(read);
           this.day = read.days.some((d) => d.businessDay === today) ? today : week;
         }
         this.warnings = undefined;

@@ -4104,8 +4104,8 @@ published week into a draft. The old Team Rota page is retired; Calendar → Rot
 view. The Staffing month shows unfilled counts for weeks with a roster version, and offers Rota for
 this week when you may read that view.
 
-Below 560 px of the Rota's own width it shows one day at a time: the venue's today when it falls in
-the week, else Monday. A seven-day strip marks the days that need attention and picks a day, a
+Below 560 px of the Rota's own width it shows one day at a time: the venue's business day now when
+it falls in the week (until the day's changeover that is still the day before), else Monday. A seven-day strip marks the days that need attention and picks a day, a
 sideways swipe steps a day, and ‹ › still step a week, keeping the weekday. In an area the day lists
 each staff role's slots and cards; in Everyone each person is a button with their name, staff roles
 and hours that opens the same open-slots menu. The picker and that menu open as a sheet from the

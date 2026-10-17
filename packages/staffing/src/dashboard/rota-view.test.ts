@@ -1571,19 +1571,29 @@ describe("the Rota on a phone", () => {
     el.week = "2026-12-14";
     await vi.waitFor(() => expect(day(el)?.businessDay).toBe("2026-12-14"));
   });
-  it("the shown day starts on the venue's today when it is in the week, else Monday", async () => {
+  it("the shown day starts on the venue's business day today when it is in the week, else Monday", async () => {
     await useViewport(390, 844);
-    const at = async (now: string) => {
+    const at = async (now: string, client?: StaffingApi) => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date(now));
       try {
-        return await mount(undefined, "390px");
+        return await mount(client, "390px");
       } finally {
         vi.useRealTimers();
       }
     };
-    // Friday 00:30 in Europe/Madrid, the read's zone; still Thursday in UTC.
-    expect(day(await at("2026-12-03T23:30:00Z")).businessDay).toBe("2026-12-04");
+    // The fixture's days change over at 06:00. Friday 06:30 in Europe/Madrid, the read's zone, is
+    // Friday's business day; in UTC it is 05:30, still Thursday's.
+    expect(day(await at("2026-12-04T05:30:00Z")).businessDay).toBe("2026-12-04");
+    // Friday 00:30 in Madrid is before the changeover, so Thursday's business day.
+    expect(day(await at("2026-12-03T23:30:00Z")).businessDay).toBe("2026-12-03");
+    const midnight = rotaApi(async (w) => {
+      const read = rotaWeek(w);
+      for (const d of read.days) if (d.businessDay >= "2026-12-04") d.cutover = "00:00";
+      return read;
+    }).api;
+    // From Friday the venue changes over at midnight, so Friday 00:30 is Friday's.
+    expect(day(await at("2026-12-03T23:30:00Z", midnight)).businessDay).toBe("2026-12-04");
     expect(day(await at("2026-12-10T10:00:00Z")).businessDay).toBe("2026-11-30");
   });
   it("on a phone a count shows the target's day before focusing it", async () => {
