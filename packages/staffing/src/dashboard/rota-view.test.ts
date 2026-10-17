@@ -1852,3 +1852,53 @@ describe("the Rota on a phone", () => {
     });
   });
 });
+
+describe.each(["light", "dark"] as const)("the Rota's warning colours (%s)", (theme) => {
+  async function themed(params: Record<string, string> = {}, width = 1280, grid?: string) {
+    await useViewport(width, 900);
+    const el = await mount(rotaApi().api, `${width}px`, params, grid);
+    frames[0]!.setAttribute("data-theme", theme);
+    await el.updateComplete;
+    return el;
+  }
+  const inner = async (el: View, selector: string) => {
+    const grid = q<LitElement>(el, selector)!;
+    await grid.updateComplete;
+    return grid.shadowRoot!;
+  };
+  const barCount = (el: View) => getComputedStyle(counts(el)[0]!).color;
+  it("an unfilled slot is dashed and drawn in the bar counts' colour, and so is a day header's count; Closed stays muted", async () => {
+    const el = await themed();
+    const warning = barCount(el);
+    expect(warning).toBe(tokenColour("--wt-color-warning"));
+    const grid = await inner(el, "rota-by-area");
+    const slot = getComputedStyle(grid.querySelector("[data-slot=empty]")!);
+    expect(slot.color).toBe(warning);
+    expect(slot.borderTopStyle).toBe("dashed");
+    expect(slot.borderTopColor).toBe(warning);
+    const friday = grid.querySelector("[data-day-head='2026-12-04'] small")!;
+    expect(normal(friday.textContent!)).toBe("1 unfilled");
+    expect(getComputedStyle(friday).color).toBe(warning);
+    const monday = grid.querySelector("[data-day-head='2026-11-30'] small")!;
+    expect(normal(monday.textContent!)).toBe("Closed");
+    expect(getComputedStyle(monday).color).toBe(tokenColour("--wt-color-text-muted"));
+  });
+  it("in Everyone a day header's count is drawn in the bar counts' colour", async () => {
+    const el = await themed({ area: "everyone" }, 1280, "rota-by-person");
+    const grid = await inner(el, "rota-by-person");
+    const friday = grid.querySelector("[data-day-head='2026-12-04'] small")!;
+    expect(normal(friday.textContent!)).toBe("1 unfilled");
+    expect(getComputedStyle(friday).color).toBe(barCount(el));
+  });
+  it("on a phone the day's unfilled slot and its heading's count are drawn in the bar counts' colour", async () => {
+    const el = await themed({}, 390);
+    q<HTMLButtonElement>(el, "[data-test=strip] [data-day='2026-12-04']")!.click();
+    await el.updateComplete;
+    const day = await inner(el, "rota-day");
+    const slot = getComputedStyle(day.querySelector("[data-slot=empty]")!);
+    expect(slot.color).toBe(barCount(el));
+    expect(slot.borderTopColor).toBe(barCount(el));
+    const heading = day.querySelector("[data-day-head='2026-12-04'] small")!;
+    expect(getComputedStyle(heading).color).toBe(barCount(el));
+  });
+});

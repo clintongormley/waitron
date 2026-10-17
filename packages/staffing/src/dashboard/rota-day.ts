@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { areaKey } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
-import { RotaByArea, dayWords, focusIn } from "./rota-by-area.js";
+import { RotaByArea, dayNote, focusIn } from "./rota-by-area.js";
 import {
   notInSlotCard,
   overCard,
@@ -149,11 +149,8 @@ export class RotaDay extends LitElement {
   override render() {
     const day = this.week?.days.find((d) => d.businessDay === this.businessDay);
     if (!day || !this.show) return nothing;
-    const words = dayWords(this.week, this.show, day.businessDay);
     return html`<h3 data-day-head=${day.businessDay}>
-        ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(day.businessDay))}${
-          words ? html`<small>${words}</small>` : nothing
-        }
+        ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(day.businessDay))}${dayNote(this.week, this.show, day.businessDay)}
       </h3>
       ${this.show.kind === "area" ? this.#area(day, this.show) : this.#everyone(day)}`;
   }

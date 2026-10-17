@@ -10,22 +10,22 @@ import { notInSlotCard, overCard, slotCard } from "./rota-cards.js";
 import { dayCounts, isClosed, rolesShown, type Show, type Target } from "./rota-model.js";
 import { countWords, t, tf } from "./strings.js";
 
-/** What a day's header says below the date: its attention in scope, or Closed. */
-export function dayWords(week: RotaWeek, show: Show, businessDay: string): string {
+/** What a day's header says below the date: its attention in scope, in the warning colour, or
+ *  Closed. */
+export function dayNote(week: RotaWeek, show: Show, businessDay: string) {
+  if (isClosed(week, show, businessDay)) return html`<small>${t("staffing.rota.closed")}</small>`;
   const counts = dayCounts(week, show, businessDay);
-  return isClosed(week, show, businessDay)
-    ? t("staffing.rota.closed")
-    : (["unfilled", "partly", "over"] as const)
-        .filter((k) => counts[k] > 0)
-        .map((k) => countWords(k, counts[k]))
-        .join(" · ");
+  const words = (["unfilled", "partly", "over"] as const)
+    .filter((k) => counts[k] > 0)
+    .map((k) => countWords(k, counts[k]))
+    .join(" · ");
+  return words ? html`<small class="counts">${words}</small>` : nothing;
 }
 
 /** A day's header: the date, then what needs attention in scope, or Closed. */
 export function dayHead(week: RotaWeek, show: Show, businessDay: string) {
-  const words = dayWords(week, show, businessDay);
   return html`<th scope="col" data-day-head=${businessDay}>
-    ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(businessDay))}${words ? html`<small>${words}</small>` : nothing}
+    ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(businessDay))}${dayNote(week, show, businessDay)}
   </th>`;
 }
 
@@ -115,8 +115,9 @@ export class RotaByArea extends LitElement {
         border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
       }
       .card[data-kind="unfilled"] {
-        border: 1px dashed var(--wt-color-text-muted);
+        border: 1px dashed var(--wt-color-warning);
         background: var(--wt-color-surface);
+        color: var(--wt-color-warning);
       }
       button.card {
         cursor: pointer;
@@ -152,6 +153,9 @@ export class RotaByArea extends LitElement {
       small {
         display: block;
         color: var(--wt-color-text-muted);
+      }
+      small.counts {
+        color: var(--wt-color-warning);
       }
       .note {
         font-size: var(--wt-font-size-sm);
