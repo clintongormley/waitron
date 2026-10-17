@@ -20,6 +20,36 @@ describe("observed resources", () => {
     expect(changed).toHaveBeenCalledTimes(2);
     stop();
   });
+  it("gives each watched identity's serialised form once, sorted", () => {
+    const data = new LiveData();
+    expect(data.interestKeys).toEqual([]);
+    const a = data.observe(
+      {
+        key: "a",
+        dependencies: [
+          { type: "zones", id: "z1" },
+          { type: "printers", id: "p1" },
+        ],
+        read: async () => 1,
+      },
+      () => {},
+    );
+    const b = data.observe(
+      { key: "b", dependencies: [{ type: "printers", id: "p1" }], read: async () => 2 },
+      () => {},
+    );
+    expect(data.interestKeys).toEqual([
+      JSON.stringify({ type: "printers", id: "p1" }),
+      JSON.stringify({ type: "zones", id: "z1" }),
+    ]);
+    expect(data.interests).toEqual([
+      { type: "zones", id: "z1" },
+      { type: "printers", id: "p1" },
+    ]);
+    a.unsubscribe();
+    b.unsubscribe();
+    expect(data.interestKeys).toEqual([]);
+  });
   it("refreshes every display of a changed object through one shared read", async () => {
     const data = new LiveData();
     let pending = 0;

@@ -37,12 +37,20 @@ export class LiveData {
   #interestListeners = new Set<() => void>();
 
   get interests(): ResourceIdentity[] {
+    return [...this.#interests().values()];
+  }
+
+  get interestKeys(): string[] {
+    return [...this.#interests().keys()].sort();
+  }
+
+  #interests(): Map<string, ResourceIdentity> {
     const interests = new Map<string, ResourceIdentity>();
     for (const entry of this.#entries.values()) {
       for (const identity of entry.query.dependencies)
         interests.set(JSON.stringify(identity), identity);
     }
-    return [...interests.values()];
+    return interests;
   }
 
   subscribeToInterests(changed: () => void): () => void {
