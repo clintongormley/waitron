@@ -5403,7 +5403,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
-  Build waits for owner agreement and A739/A764; retained protection comes first. Google's access-check scope remains undecided.
+  Build waits for owner agreement and A739; retained protection comes first. Google's access-check scope remains undecided.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
