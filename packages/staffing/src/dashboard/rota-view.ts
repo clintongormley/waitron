@@ -732,7 +732,7 @@ export class RotaView extends LitElement {
   }
   /** Why an area with no slots this week has nothing to fill, and the painter that gives it some. */
   #unpainted(read: RotaWeek, show: Show & { kind: "area" }) {
-    const target = paintTarget(read);
+    const target = paintTarget(read, this.narrow ? this.day : undefined);
     const words = { area: show.name, season: target?.name ?? "" };
     const label =
       target?.painter === "season"

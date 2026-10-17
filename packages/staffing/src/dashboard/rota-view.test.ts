@@ -1244,6 +1244,46 @@ describe("the Rota's empty weeks", () => {
     await el.updateComplete;
     expect(normal(paint(el)!.textContent!)).toBe("Show Nadal staffing");
   });
+  it("on a phone an unpainted area offers the shown day's painter: a special day's editor, else the season's", async () => {
+    await useViewport(390, 844);
+    const client = unpainted((r) => {
+      r.days[2]!.specialDay = { id: "nadal", name: "Nadal" };
+    });
+    const el = (await mount(client, "390px", {}, "[data-test=unpainted]")) as Staffing;
+    el.canOpenStaffing = true;
+    el.canWriteStaffing = true;
+    await el.updateComplete;
+    const days = () => [
+      ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-test=strip] button"),
+    ];
+    await userEvent.click(days()[2]!);
+    await el.updateComplete;
+    expect(normal(paint(el)!.textContent!)).toBe("Edit Nadal staffing");
+    expect(paint(el)!.variant).toBe("primary");
+    paint(el)!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+      painter: "special-day",
+      "special-day": "nadal",
+    });
+    el.canWriteStaffing = false;
+    await el.updateComplete;
+    expect(normal(paint(el)!.textContent!)).toBe("Show Nadal staffing");
+    await userEvent.click(days()[0]!);
+    await el.updateComplete;
+    expect(normal(paint(el)!.textContent!)).toBe("Show Winter's standard week");
+    el.canWriteStaffing = true;
+    await el.updateComplete;
+    expect(normal(paint(el)!.textContent!)).toBe("Paint Winter's standard week");
+    paint(el)!.click();
+    expect(el.open).toHaveBeenLastCalledWith("staffing", {
+      month: "2026-11",
+      area: "station:kitchen",
+      painter: "season",
+      season: "winter",
+    });
+  });
   it("an area with no paint this week: without the Staffing view it offers no paint button", async () => {
     const el = await mountUnpainted(unpainted(), {
       canOpenStaffing: false,
