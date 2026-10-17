@@ -1,3 +1,4 @@
+import { localTimeOccurrences } from "@waitron/venue-service/hours-occurrences";
 import { areaKey, type AreaDayMatch, type AreaRef, type Slot } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 
@@ -192,4 +193,29 @@ export function openSlots(
     own: open.filter((o) => held.includes(o.slot.staffRoleId)),
     other: open.filter((o) => !held.includes(o.slot.staffRoleId)),
   };
+}
+
+/** The instants a shift filling `slot` would start and end at, dated as the server dates them;
+ *  null when the venue's clock never shows one of its times. */
+export function slotInstants(read: RotaWeek, slot: Slot): { start: Date; end: Date } | null {
+  const cutover = read.days.find((d) => d.businessDay === slot.businessDay)!.cutover;
+  const at = (time: string, end: boolean) => {
+    const date =
+      time < cutover || (end && time === cutover)
+        ? new Date(Date.parse(`${slot.businessDay}T00:00:00Z`) + 86400000)
+            .toISOString()
+            .slice(0, 10)
+        : slot.businessDay;
+    return localTimeOccurrences(date, time, read.timeZone)[0];
+  };
+  const start = at(slot.startsAt, false),
+    end = at(slot.endsAt, true);
+  return start && end ? { start, end } : null;
+}
+
+/** A slot's length in elapsed minutes, as a person's planned minutes count it; its clock length
+ *  when the clock never shows one of its times, a slot the server refuses to fill. */
+export function slotMinutes(read: RotaWeek, slot: Slot): number {
+  const at = slotInstants(read, slot);
+  return at ? (at.end.getTime() - at.start.getTime()) / 60000 : slot.end - slot.start;
 }

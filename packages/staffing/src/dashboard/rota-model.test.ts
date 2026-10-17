@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rotaWeek } from "../testing/rota-fixture.js";
+import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import {
   EVERYONE,
   attentionTargets,
@@ -12,6 +12,7 @@ import {
   paintTarget,
   peopleInOrder,
   rolesShown,
+  slotMinutes,
   summary,
   weekCounts,
   weekShiftCount,
@@ -489,5 +490,20 @@ describe("what the empty area's paint button opens", () => {
     const read = rotaWeek();
     for (const d of read.days) d.seasonId = null;
     expect(paintTarget(read)).toBeNull();
+  });
+});
+
+describe("how long a slot is", () => {
+  it("is the elapsed time a shift filling it would last, across either clock change", () => {
+    const plain = rotaWeek();
+    expect(slotMinutes(plain, plain.days[4]!.areas[0]!.match.slots[0]!.slot)).toBe(480);
+    const autumn = clockChangeWeek("autumn");
+    expect(slotMinutes(autumn.week, autumn.slot)).toBe(540);
+    const spring = clockChangeWeek("spring");
+    expect(slotMinutes(spring.week, spring.slot)).toBe(420);
+  });
+  it("is the clock length when the clock never shows one of its times", () => {
+    const { week, slot } = clockChangeWeek("spring");
+    expect(slotMinutes(week, { ...slot, startsAt: "02:30", start: 1230 })).toBe(210);
   });
 });

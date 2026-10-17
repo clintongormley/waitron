@@ -144,6 +144,24 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
     ],
   };
 }
+/** A week whose Saturday has one open Sous chef slot, 22:00–06:00, across the night Madrid's clocks
+ *  change: back an hour in the autumn week, forward an hour in the spring week. */
+export function clockChangeWeek(change: "autumn" | "spring"): { week: RotaWeek; slot: Slot } {
+  const week = rotaWeek(change === "autumn" ? "2026-10-19" : "2026-03-23");
+  const saturday = week.days[5]!;
+  const slot: Slot = {
+    key: "night",
+    businessDay: saturday.businessDay,
+    area: rotaArea,
+    staffRoleId: "sous",
+    startsAt: "22:00",
+    endsAt: "06:00",
+    start: 960,
+    end: 1440,
+  };
+  saturday.areas[0]!.match.slots = [{ slot, status: { kind: "unfilled" } }];
+  return { week, slot };
+}
 export function rotaApi(
   read: (week: string) => Promise<RotaWeek> = async (week) => rotaWeek(week),
   liveData?: LiveData,

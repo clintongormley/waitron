@@ -7,6 +7,7 @@ import { areaKey, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import { hours, shiftTime } from "./rota-format.js";
 import { dateLabel } from "./format.js";
+import { slotMinutes } from "./rota-model.js";
 import { t, tf } from "./strings.js";
 import "@waitron/ui/src/components/wt-button.js";
 
@@ -150,7 +151,7 @@ export class SlotPicker extends LitElement {
         ]
       : holders;
     const area = this.week.areas.find((a) => areaKey(a.area) === areaKey(this.pickedSlot.area))!;
-    const length = this.pickedSlot.end - this.pickedSlot.start;
+    const length = slotMinutes(this.week, this.pickedSlot);
     // The popup it sits in carries this text as its heading, which is what a screen reader hears.
     return html`<div>
       <p class="title" data-test="picker-title" aria-hidden="true">

@@ -1,6 +1,7 @@
-import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hours-occurrences";
+import { offsetMinutes } from "@waitron/venue-service/hours-occurrences";
 import type { Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
+import { slotInstants } from "./rota-model.js";
 import {
   validateRoster,
   type PlannedShift,
@@ -26,19 +27,9 @@ export function candidateWarnings(
   ruleset: WorkTimeRuleset | null,
 ): RosterBreach[] {
   if (!ruleset) return [];
-  const cutover = week.days.find((d) => d.businessDay === slot.businessDay)!.cutover;
-  const time = (at: string, end: boolean) => {
-    const date =
-      at < cutover || (end && at === cutover)
-        ? new Date(Date.parse(`${slot.businessDay}T00:00:00Z`) + 86400000)
-            .toISOString()
-            .slice(0, 10)
-        : slot.businessDay;
-    return localTimeOccurrences(date, at, week.timeZone)[0];
-  };
-  const start = time(slot.startsAt, false),
-    end = time(slot.endsAt, true);
-  if (!start || !end) return [];
+  const at = slotInstants(week, slot);
+  if (!at) return [];
+  const { start, end } = at;
   const candidate: PlannedShift = {
     shiftId: "candidate",
     personId,

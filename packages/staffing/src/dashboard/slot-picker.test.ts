@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LitElement } from "lit";
-import { rotaWeek } from "../testing/rota-fixture.js";
+import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
 import { STAFFING_STRINGS } from "./strings.js";
@@ -112,6 +112,29 @@ describe("the slot picker", () => {
     expect(
       r.querySelector("[data-person=laia] [data-test=would-go-over]")!.textContent!.trim(),
     ).toBe("superaría su contrato de 40 h");
+  });
+  it("counts a night slot across the autumn clock change as the nine hours it lasts", async () => {
+    const el = await mount();
+    const { week, slot } = clockChangeWeek("autumn");
+    week.people.find((p) => p.personId === "laia")!.plannedMinutes = 1920;
+    el.week = week;
+    el.pickedSlot = slot;
+    await el.updateComplete;
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-person=laia] [data-test=would-go-over]")!
+        .textContent!.trim(),
+    ).toBe("would go over 40 h contract");
+  });
+  it("counts a night slot across the spring clock change as the seven hours it lasts", async () => {
+    const el = await mount();
+    const { week, slot } = clockChangeWeek("spring");
+    week.people.find((p) => p.personId === "laia")!.plannedMinutes = 1980;
+    el.week = week;
+    el.pickedSlot = slot;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-person=laia]")!.textContent).toContain("33 / 40 h");
+    expect(el.shadowRoot!.querySelector("[data-person=laia] [data-test=would-go-over]")).toBeNull();
   });
   it("names the area and says holders come first under its heading", async () => {
     const el = await mount();

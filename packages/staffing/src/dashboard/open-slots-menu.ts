@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { RotaWeek } from "../staffing-types.js";
 import { dateLabel } from "./format.js";
-import { openSlots, type OpenSlot } from "./rota-model.js";
+import { openSlots, slotMinutes, type OpenSlot } from "./rota-model.js";
 import { t, tf } from "./strings.js";
 import "@waitron/ui/src/components/wt-button.js";
 
@@ -119,7 +119,7 @@ export class OpenSlotsMenu extends LitElement {
   #row({ slot, areaName }: OpenSlot, outside: boolean) {
     const person = this.week.people.find((p) => p.personId === this.personId)!;
     const role = this.week.staffRoles.find((r) => r.id === slot.staffRoleId)!;
-    const planned = person.plannedMinutes + slot.end - slot.start;
+    const planned = person.plannedMinutes + slotMinutes(this.week, slot);
     return html`<button
       data-slot=${slot.key}
       ?disabled=${this.busy}

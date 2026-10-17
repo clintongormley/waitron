@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import { rotaWeek } from "../testing/rota-fixture.js";
+import { localTimeOccurrences } from "@waitron/venue-service/hours-occurrences";
+import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
+import type { Slot } from "../slots.js";
 import { OpenSlotsMenu } from "./open-slots-menu.js";
 
 const frames: HTMLElement[] = [];
@@ -12,6 +14,15 @@ afterEach(() => {
   setLocale("en");
 });
 const normal = (s: string) => s.replace(/\s+/g, " ").trim();
+/** A 22:00–06:00 slot's real length, read from the venue's clock rather than the code under test. */
+function elapsedMinutes(week: RotaWeek, slot: Slot) {
+  const next = new Date(Date.parse(`${slot.businessDay}T00:00:00Z`) + 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const start = localTimeOccurrences(slot.businessDay, slot.startsAt, week.timeZone)[0]!;
+  const end = localTimeOccurrences(next, slot.endsAt, week.timeZone)[0]!;
+  return (end.getTime() - start.getTime()) / 60000;
+}
 async function mount(personId: string, businessDay = "2026-12-04", week: RotaWeek = rotaWeek()) {
   const frame = document.createElement("div");
   frames.push(frame);
@@ -117,6 +128,31 @@ describe("a day's open slots", () => {
     el.personId = "ibra";
     await el.updateComplete;
     expect(root.querySelector("[data-test=would-make]")).toBeNull();
+  });
+  it("counts a night slot across the autumn clock change as the nine hours it lasts", async () => {
+    const { week, slot } = clockChangeWeek("autumn");
+    expect(elapsedMinutes(week, slot)).toBe(540);
+    week.people.find((p) => p.personId === "marc")!.plannedMinutes = 1920;
+    const { root } = await mount("marc", slot.businessDay, week);
+    expect(
+      normal(root.querySelector("[data-slot=night] [data-test=would-make]")!.textContent!),
+    ).toBe("would make 41 / 40 h");
+  });
+  it("counts a night slot across the spring clock change as the seven hours it lasts", async () => {
+    const { week, slot } = clockChangeWeek("spring");
+    expect(elapsedMinutes(week, slot)).toBe(420);
+    const marc = week.people.find((p) => p.personId === "marc")!;
+    marc.plannedMinutes = 1980;
+    const { root, el } = await mount("marc", slot.businessDay, week);
+    expect(root.querySelector("[data-test=would-make]")).toBeNull();
+    el.week = {
+      ...week,
+      people: week.people.map((p) => (p === marc ? { ...p, plannedMinutes: 2040 } : p)),
+    };
+    await el.updateComplete;
+    expect(
+      normal(root.querySelector("[data-slot=night] [data-test=would-make]")!.textContent!),
+    ).toBe("would make 41 / 40 h");
   });
   it("with nothing open that day it says so and still offers another shift", async () => {
     const { root } = await mount("marc", "2026-12-02");
