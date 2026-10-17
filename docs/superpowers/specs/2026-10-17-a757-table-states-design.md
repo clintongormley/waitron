@@ -138,7 +138,7 @@ motion is reduced: the blink is set on every dot, not only the red one
 - **A508 — the table's QR code** (`docs/backlog/till.md:537-557`): a guest can call a waiter, or ask
   for the bill. Not queued to a lane. It would add one signal (**Waiter called**) and reuse **Bill
   requested** for the guest's request.
-- **A738 — the counter's Waiting tab "flashes while it holds an order"** (`docs/backlog/till.md:1920-1921`).
+- **A738 — the counter's Waiting tab "flashes while it holds an order"** (`docs/backlog/till.md:1923-1924`).
   Not built. No shared pulse exists today: apart from the loading spinner (`wt-spinner`), the only
   repeating animations are the 1 s forgotten flash,
   copied in `till-floor-screen.ts:358-366`, `station-queue.ts`, `till-expo-screen.ts` and
@@ -497,7 +497,7 @@ empty and goes: `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-setting
 the core panel `{ key: "statuses", tab: "tables" }` (`apps/dashboard/src/dashboard-app.ts:309-317`)
 and the venue-service panel `venue-service-tables`
 (`packages/venue-service/src/dashboard/index.ts:153-171`). The open note that its colour-field
-labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4045-4049`; "C…" in
+labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4048-4052`; "C…" in
 `docs/backlog/till.md:1438-1439`) goes with it.
 
 ## 11. Build slices (after the answers; the build waits for A756)
