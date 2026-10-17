@@ -339,18 +339,18 @@ Re-check when a new year's list is added.
   cannot be read it lists the twelve month names, so the Month stays reachable. The station Times
   tab's year and Staffing's year are plain text, since neither has a Year view.
 
-- **The Week's address takes over `view/week` (A722 Part 1, Decision 1).** The Week is
+- **The Week's address takes over `view/week` ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 1; plan default, sent to the owner as an FYI, 2026-10-17).** The Week is
   `/manage/opening-hours/view/week[/department/<id>][/week/<yyyy-mm-dd>]`, matching the Year's and
   the Month's addresses. An old `view/week` bookmark now opens the Week instead of the season
   painter; the painter keeps its own `/view/season/…` addresses, and an address with no view that
   names a season, department, zone or `?station=` still opens it.
 
 - **Every block in the Week shows its whole label on pointing or tapping, not only the clipped ones
-  (A722 Part 1, Decision 4).** Telling which labels are clipped would mean measuring text, and a
+  ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 4; plan default, sent to the owner as an FYI, 2026-10-17).** Telling which labels are clipped would mean measuring text, and a
   label that fits, shown again in full, says nothing wrong. The tip sits above the block, and below
   it only when there is no room above.
 
-- **The Week draws every day on one scale, the week's longest day (A722 Part 1, Decision 5).** Each
+- **The Week draws every day on one scale, the week's longest day ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 5; plan default, sent to the owner as an FYI, 2026-10-17).** Each
   block sits on its own day from that day's changeover, so a shorter day's track ends early and the
   ruler and the blocks agree on a week holding a 25-hour day. Deliberate limit: a week whose days
   have different changeovers (a scheduled change of when the business day starts) labels the ruler

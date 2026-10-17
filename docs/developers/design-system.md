@@ -3767,7 +3767,7 @@ station closures and service extensions do not change them. A default station sh
 station" and no month. A failed read shows "This station's times could not be loaded. It will be
 tried again." above the month until that read succeeds again. The month is not kept in the
 address: the tab opens on the browser's current month. Special days are made and painted in Opening hours' special-day painter, opened
-from the Year or the month.
+from the Year, the Month or the Week.
 
 ### Tabbed management pages
 
@@ -4070,7 +4070,7 @@ Opening hours' Year.
   and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
   labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
-  when there is no room above it inside the area the Week scrolls in): pointing shows it, a click or tap pins it, a click on the pinned block
+  when there is no room above it inside the area the Week scrolls in): pointing with a mouse shows it while no tip is pinned, a click or tap pins it, a click on the pinned block
   hides it, leaving the block or the tip hides an unpinned one, and a click elsewhere, Escape or a
   scroll hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
   is the one button per day and opens the day box (below). Nothing is painted in the Week.
@@ -4098,8 +4098,8 @@ Opening hours' Year.
   resize leaves none of the date inside the window and every box around it that clips its contents.
   In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;
   then a line saying which season's standard hours the date follows, or that a special day replaces
-  them; then each department's hours followed by its zones' (in the Month, with one department
-  picked, that department alone). A zone that follows its department reads "as <department>"; a
+  them; then each department's hours followed by its zones' (in the Month and the Week, with one
+  department picked, that department alone). A zone that follows its department reads "as <department>"; a
   zone with hours of its own lists them and its closed times, in bold as a department is. Opened
   from the Year, it reads its date's month and says Loading… until that read answers; when its
   month's read fails it says so, beside any hours it already shows. Make a
