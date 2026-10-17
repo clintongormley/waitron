@@ -1098,8 +1098,12 @@ class ZoneOfferIndex {
   sendable = new Set<string>();
   /** False after a load that failed, when there is nothing to judge a line against. */
   loaded = false;
+  liveFields: string | undefined;
 
-  load(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+  load(
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "liveFields">,
+    loaded = true,
+  ): void {
     this.selectable = new Set(
       catalogue.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
     );
@@ -1108,6 +1112,7 @@ class ZoneOfferIndex {
     this.#unavailableKey = null;
     this.#setLive(catalogue.offers);
     this.versions = new Map(catalogue.menus.map((menu) => [menu.id, menu.versionId]));
+    this.liveFields = catalogue.liveFields;
     this.loaded = loaded;
   }
 
@@ -4351,7 +4356,7 @@ export class TillApp extends LitElement {
   }
 
   #loadCounterOffers(
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service" | "liveFields"> &
       Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
@@ -4401,7 +4406,7 @@ export class TillApp extends LitElement {
    */
   #loadTableOffers(
     zoneId: string | undefined,
-    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service"> &
+    catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus" | "service" | "liveFields"> &
       Partial<Pick<ZoneOfferCatalogue, "context" | "defaultMenuId">>,
     loaded = true,
   ): void {
@@ -4555,15 +4560,13 @@ export class TillApp extends LitElement {
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.counterService?.zoneKeepOpen);
       this.#polledOccurrences.set(zoneId, state.service.periodOccurrenceKey);
       const busy = this.#requestsOut();
-      if ((menusMoved(this.menus, state.menus) || serviceMoved) && busy) {
+      const counterMoved =
+        menusMoved(this.menus, state.menus) || state.liveFields !== this.#counterOffers.liveFields;
+      if ((counterMoved || serviceMoved) && busy) {
         this.#counterOffersDue = true;
         this.#counterMenuPending = true;
       }
-      if (
-        (menusMoved(this.menus, state.menus) || serviceMoved) &&
-        !busy &&
-        this.basketRefresh === undefined
-      )
+      if ((counterMoved || serviceMoved) && !busy && this.basketRefresh === undefined)
         void this.#refreshBasket().then(() => this.#followDefault());
       else this.#followDefault();
     }
@@ -4581,7 +4584,12 @@ export class TillApp extends LitElement {
         state.service.periodOccurrenceKey !== this.tableService?.periodOccurrenceKey ||
         keepOpenMoved(state.service.keepOpen, this.tableService?.keepOpen) ||
         zoneKeepOpenMoved(state.service.zoneKeepOpen, this.tableService?.zoneKeepOpen);
-      if (!menusMoved(this.tableMenus, state.menus) && !serviceMoved) this.#reconcileDraft();
+      if (
+        !menusMoved(this.tableMenus, state.menus) &&
+        state.liveFields === this.#tableOffers.liveFields &&
+        !serviceMoved
+      )
+        this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
           if (read) this.#reconcileDraft(false);

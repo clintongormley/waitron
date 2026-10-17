@@ -435,6 +435,7 @@ export interface ZoneOfferCatalogue {
   menus: TillZoneMenu[];
   offers: TillMenuOffer[];
   zones?: ServiceZoneSummary[];
+  liveFields?: string;
 }
 
 export interface ServiceZoneSummary {
@@ -447,7 +448,7 @@ export interface ServiceZoneSummary {
 
 export type { MenuState, MenuUnavailable };
 
-export type MenuStateAnswer = MenuState & { defaultMenuId?: string | null };
+export type MenuStateAnswer = MenuState & { defaultMenuId?: string | null; liveFields?: string };
 
 /** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
 function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {
