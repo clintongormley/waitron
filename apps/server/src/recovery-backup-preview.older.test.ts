@@ -40,7 +40,29 @@ for (const entry of journal.entries)
     join(prefix, `${entry.tag}.sql`),
   );
 writeFileSync(join(prefix, "meta/_journal.json"), JSON.stringify(journal));
-const suite = useVenueDb({ migrations: [{ ...CORE_MIGRATIONS, migrationsFolder: prefix }] });
+const created = tablesCreatedBy(
+  prefix,
+  journal.entries.map((entry) => entry.tag),
+);
+const suite = useVenueDb({
+  migrations: [
+    {
+      ...CORE_MIGRATIONS,
+      migrationsFolder: prefix,
+      appendOnlyTables: CORE_MIGRATIONS.appendOnlyTables.filter((table) => created.has(table)),
+    },
+  ],
+});
+/** The tables a prefix of migrations creates, so a predecessor gets only its own append-only triggers. */
+function tablesCreatedBy(folder: string, tags: readonly string[]): Set<string> {
+  return new Set(
+    tags.flatMap((tag) =>
+      [
+        ...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE [`"]?(\w+)/gi),
+      ].map((match) => match[1]!),
+    ),
+  );
+}
 afterAll(() => rmSync(prefix, { recursive: true, force: true }));
 
 it("previews a backup predating named keys by migrating only its private scratch copy", async () => {

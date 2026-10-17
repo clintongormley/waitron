@@ -107,10 +107,29 @@ function predecessor(root: string) {
   expect(index).toBeGreaterThan(0);
   journal.entries = journal.entries.slice(0, index);
   writeFileSync(journalPath, JSON.stringify(journal));
+  const created = tablesCreatedBy(
+    core,
+    journal.entries.map((entry) => entry.tag),
+  );
   return migrationOptionsFor(manifestSets(), null).map((option) =>
     option.migrationsTable === CORE_MIGRATIONS.migrationsTable
-      ? { ...option, migrationsFolder: core }
+      ? {
+          ...option,
+          migrationsFolder: core,
+          appendOnlyTables: (option.appendOnlyTables ?? []).filter((table) => created.has(table)),
+        }
       : option,
+  );
+}
+
+/** The tables a prefix of migrations creates, so a predecessor gets only its own append-only triggers. */
+function tablesCreatedBy(folder: string, tags: readonly string[]): Set<string> {
+  return new Set(
+    tags.flatMap((tag) =>
+      [
+        ...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE [`"]?(\w+)/gi),
+      ].map((match) => match[1]!),
+    ),
   );
 }
 
@@ -376,13 +395,14 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     const oldJournal = before![journal]! as { created_at: number }[];
     const oldTimes = new Set(oldJournal.map((row) => row.created_at));
     const newJournal = actual[journal]! as { created_at: number }[];
-    expect(newJournal).toHaveLength(oldJournal.length + 6);
+    expect(newJournal).toHaveLength(oldJournal.length + 7);
     expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
     const retained: Record<string, unknown[]> = {
       ...before!,
       [journal]: newJournal,
       device_profile_admission_roles: [],
       tender_refunds: [],
+      sale_receipt_guests: [],
     };
     delete retained.canvases;
     retained.device_profiles = before!.device_profiles!.map((row) =>

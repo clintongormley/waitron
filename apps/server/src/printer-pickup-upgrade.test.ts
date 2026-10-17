@@ -48,11 +48,32 @@ try {
   if (previousFolder) rmSync(previousFolder, { recursive: true, force: true });
   throw error;
 }
+const created = tablesCreatedBy(
+  core.migrationsFolder,
+  journal.entries.slice(0, index).map((entry) => entry.tag),
+);
 const suite = useVenueDb({
   migrations: options.map((set) =>
-    set === core ? { ...set, migrationsFolder: previousFolder! } : set,
+    set === core
+      ? {
+          ...set,
+          migrationsFolder: previousFolder!,
+          appendOnlyTables: (set.appendOnlyTables ?? []).filter((table) => created.has(table)),
+        }
+      : set,
   ),
 });
+
+/** The tables a prefix of migrations creates, so a predecessor gets only its own append-only triggers. */
+function tablesCreatedBy(folder: string, tags: readonly string[]): Set<string> {
+  return new Set(
+    tags.flatMap((tag) =>
+      [
+        ...readFileSync(join(folder, `${tag}.sql`), "utf8").matchAll(/CREATE TABLE [`"]?(\w+)/gi),
+      ].map((match) => match[1]!),
+    ),
+  );
+}
 
 it("upgrades populated printers through the pre-canvas-retirement schema without changing settings, holder or device choices", async () => {
   await seedTenant(suite.db);
