@@ -364,6 +364,8 @@ Re-check when a new year's list is added.
   The Times tab names a lone row after the station, and keeps doing so. The day box still lists
   every department's opening hours: it is about the day, and a station is a way of looking at the
   dates. If the station list cannot be read, Show offers departments only, with no alert.
+  **2026-10-17:** A725 retires the Times tab; Calendar's station view above remains the current
+  surface. The earlier sentence about the lone Times row records the pre-retirement behavior.
 
 - **A read-only Calendar offers no prep stations in Show ([A722 Part 3](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs

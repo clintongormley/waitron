@@ -150,3 +150,15 @@ expect(foreignKeyCheckRows).toEqual([]);
 - [ ] Push through the normal hook. Wait for all required **current-head** CI coverage/merge/licence checks and inspect selected affected consumers, including db/shared/provisioning/staffing/venue-service/server/dashboard/till. Do not equate skipped jobs with evidence. No duplicate full local workspace run solely to finish this Waitron branch. A red required check gets a reproduced fix and fresh current-head results.
 - [ ] Lane F's existing queue authorises land after all required checks and review findings are resolved. Acquire H11 `~/waitron-campaign-shared/main.lock` by atomic mkdir; retry every 30 seconds up to ten minutes, checkpoint if unavailable; remove only an empty stale lock over 30 minutes and reacquire. Hold **your acquired** lock around the entire `land-branch` operation from `~/workspace/repos/waitron`, main update, `pnpm install`, own registered worktree/local+remote branch cleanup and remote-deletion verification. Release only your lock; no new owner gate is added here.
 - [ ] H12: confirm a main CI run for the **exact merge SHA**, record run ID/result, and read it next firing if pending. Missing/cancelled/red is reported precisely, never called green. Only then reconcile completion receipts/queue/backlog and remove remaining own temporary resources. Plan-only publication never performs this product completion sequence.
+
+
+## Delivery verification — 2026-10-17
+
+Tasks 1–4 are implemented. The permanent A725 decisions now live under
+[Kitchen decisions](../../backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor).
+The native core0167 column drop retained the populated fully composed predecessor's recorded
+values except station order; the schema/upgrade guard group passed 414 cases and the unedited
+protected fiscal group passed 20. Configuration exports use version 4 and version-3 staging is
+refused with and without the old column. The native execution ledger and campaign receipts retain
+RED/GREEN commands, assertion changes and independent installed controls. Final authenticated-app
+LOOK, whole-branch review, hook/current-head CI and authorised landing complete Task 5.

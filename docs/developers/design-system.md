@@ -3837,7 +3837,11 @@ this is the default station" in place of the dates. The station choices require
 `venue_service.manage`; a read-only Calendar keeps its department choices.
 
 Prep stations itself has only Stations and Routes. The former Times tab and each station's
-"When it gets orders" link are retired.
+"When it gets orders" link are retired. Station lists use name order, with the Default badge at
+its alphabetical place and a colour square on every Stations row. Add and Edit use
+`wt-colour-chooser`; a missing creation colour takes the first unused active-local station colour,
+or red when all choices are occupied. The Edit window groups its late-flag minutes into one row
+with one inheritance hint. There is no station order field or drag handle.
 
 ### Tabbed management pages
 
@@ -4596,7 +4600,7 @@ preferences and restored URLs retain their capability checks.
 
 A menu's Device Home Page, receipt configuration, tenant themes and the floor-plan editor remain
 independent. Profile writes and `/api/till` carry no authored canvas; the boot response carries the
-device's `formFactor`. Configuration exports use format 3; an older export is refused as outdated,
+device's `formFactor`. Configuration exports use format 4; an older export is refused as outdated,
 including one with an empty canvas list. No earlier canvas settings are carried over.
 Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.

@@ -1509,12 +1509,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   leave dark unchanged. **Next action:** an owner call — the 2026-10-17 "darken it" covered the
   Week only — left open by A722's follow-up, #1835.
 
-- **A prep station is drawn by two paths in the Month.** The Times tab works the station's rows out
-  itself and hands them over with `stationMode`; the Calendar hands over a `StationShow`. The Month
-  and the Week each repeat the loading, "Always open" and ready cases, the "Always open" paragraph
-  is drawn in three places, and the screen and the Times tab each keep their own watch on a
-  station's times. One `StationShow` from both callers, one shared drawing of those cases and one
-  watch would leave `stationMode` only for what differs — left open by A722 Part 3's review.
+- **Calendar Month and Week repeat the station loading, "Always open" and ready cases.**
+  A725 retired the separate Times tab and its watcher; a shared drawing of the Calendar's
+  station states remains a possible cleanup (`opening-hours-month.ts`, `opening-hours-week.ts`).
 
 - **A failed re-read of the prep-station list keeps the stations already shown** in the
   Calendar's Show picker; only a list that never loaded leaves Show with departments only. Kept
@@ -1568,7 +1565,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A506-12's look at the Times tab in Spanish ("Fiesta Nacio|nal de Españ|a"), then cut with "…"
   (`overflow-wrap: anywhere` and the four-line clamp on `.name` in `opening-hours-month.ts`).
 
-- **Season colours differ between Opening hours' Year and its month (and the Times tab)**: Autumn is
+- **Season colours differ between Opening hours' Year and its month**: Autumn is
   salmon on the Year and green in the month. `seasonTints` colours a season by its place in the
   list it is given, and the month colours its dates' top borders from only the seasons it touches
   (`seasonTints(model.seasons)` in `#grid`, `opening-hours-month.ts`).
@@ -1669,15 +1666,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
-  station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
-  station takes an unused colour; the late-flag minutes on one row, plainer wording, and its colour
-  picked with the shared `wt-colour-chooser` (#1828). The branch checkpoint has those colour/editor
-  changes, swatches, sidebar placement, name-sorted Stations/Calendar choices and no row drag
-  controls. The Times tab and row links are retired with Calendar coverage; the Add order field, backend
-  ordering and stored column are retired too. The populated native-drop and upgrade checks pass;
-  configuration exports use format 4. Final authenticated-app checks, review, CI and landing remain. [Implementation plan](superpowers/plans/2026-10-17-a725-prep-stations.md). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
   get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the
   order against A773's plan. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
@@ -1777,10 +1765,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   cook's eye before a real service:** whether that is enough for something a cook must not miss, or
   whether an options answer deserves its own prominent form on the ticket.
   [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
-
-- **Prep stations review note retained for future cleanup** — left open by A261 step 3 (#1269):
-  station reordering repeats an active filter after an active-only read (`reorderStations`,
-  `apps/server/src/kitchen.ts`).
 
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
