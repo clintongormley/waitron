@@ -8230,26 +8230,29 @@ describe("mounted public department dialogs", () => {
   it("the real Set up periods link has its own history entry and returns through Back and Forward", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
     await expect.poll(() => find(app, '[part="setup-issue"] a')).not.toBeNull();
+    const pushed = vi.spyOn(history, "pushState");
+    const pushedPaths = () =>
+      pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname);
     find(app, '[part="setup-issue"] a')!.click();
     await expect.poll(() => location.pathname).toBe(periodsWindow);
     await expect.poll(() => windowList(app)).not.toBeNull();
-    const pushed = vi.spyOn(history, "pushState");
+    expect(pushedPaths()).toEqual([periodsWindow]);
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
     await expect.poll(() => find(app, "department-settings")).not.toBeNull();
-    expect(pushed).not.toHaveBeenCalled();
+    expect(pushedPaths()).toEqual([periodsWindow]);
     const box = await draft(app);
     history.forward();
     await choose(app, "keep");
     expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-    expect(pushed).not.toHaveBeenCalled();
+    expect(pushedPaths()).toEqual([periodsWindow]);
     expect(box.value).toBe("Draft restaurant");
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
     history.forward();
     await choose(app, "discard");
     await expect.poll(() => location.pathname).toBe(periodsWindow);
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
-    expect(pushed).not.toHaveBeenCalled();
+    expect(pushedPaths()).toEqual([periodsWindow]);
     await expect.poll(() => windowList(app)).not.toBeNull();
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   });

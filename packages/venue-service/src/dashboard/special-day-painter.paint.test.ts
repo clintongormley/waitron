@@ -320,7 +320,7 @@ describe("the department and zone picker", () => {
     ).toBe(false);
   });
 
-  it("with no active department and no dates says to add dates, and links to no Periods page", async () => {
+  it("with no active department and no dates says to add dates, and draws no link to the Periods window", async () => {
     painter = document.createElement("special-day-painter");
     painter.api = specialDayApi([], {});
     const model = painterModel();
@@ -496,7 +496,7 @@ describe("periods from the painter", () => {
     return editor;
   }
 
-  it("links the bar to the department's Periods page, as the season painter does", async () => {
+  it("its bar links to the Periods window, as the season painter's does", async () => {
     const { painter } = await mount();
     const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
     expect(link.slot).toBe("link");

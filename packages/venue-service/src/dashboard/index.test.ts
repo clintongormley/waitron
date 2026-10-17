@@ -289,7 +289,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
   });
 });
 
-it("the Periods destination opens the Calendar's window, read-only for a viewer", async () => {
+it("the Calendar's Periods window is read-only for a viewer and editable for a manager", async () => {
   const model = {
     dayCutover: "06:00",
     clockRevision: 0,
