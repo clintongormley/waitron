@@ -3975,7 +3975,7 @@ The page is titled Calendar (Calendario). When another module adds a view the pe
 view in `order`; with none, no switch is drawn. A chosen view replaces the Year, the Month or the Week at
 `/view/<id>`, followed by that view's own `<key>/<value>` pairs, and choosing a view from Opening
 hours' Month carries that month into its address, and from the Week the month of the shown week's
-Monday. The Staffing view
+Monday, or, when the Week shows one day, that day's month. The Staffing view
 (`packages/staffing/src/dashboard/staffing-month.ts`) shows the whole Monday-to-Sunday weeks
 covering a month; each day lists the areas with a bar whose width is the area's share of the
 month's largest number, and the number. ‹ › step months, its title keeps one width as the Month's
@@ -4090,7 +4090,15 @@ Opening hours' Year.
   hides it, leaving the block or the tip hides an unpinned one a moment later, so the pointer can
   still reach the tip on a path the bridge does not cover, and a click elsewhere, Escape, a scroll or a change of
   the Week's size hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
-  is the one button per day and opens the day box (below). Nothing is painted in the Week.
+  is the one button per day and opens the day box (below). Nothing is painted in the Week. When the
+  Week itself is narrower than 560 px (`PHONE_WIDTH`) it draws the `week` date alone: its special
+  day's and public holiday's names over a card holding the same rows, each its name, its times in
+  words and a thin bar of its blocks, with no ruler and no tips. Its title ("Tue 1 Dec") has no
+  year: the weekday and day open the day box and the month opens that Month, and it keeps one width,
+  as wide as the longest title for the 22nd to the 28th of each month of 2026 in any interface
+  language (`dayTitleCandidateDates`). ‹ › step a day, and so does a swipe across the card with a
+  finger or a pen, a left swipe to the next day and a right swipe to the one before, once it travels
+  at least 48 px and more than twice as far across as down; a second finger on the card ends it.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the

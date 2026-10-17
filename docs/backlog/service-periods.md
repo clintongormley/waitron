@@ -236,8 +236,6 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
 [on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
 
-4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
-   for the next day.
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
    department that sends it dishes, from each period's start to its last orders — what A725 retires
    with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,

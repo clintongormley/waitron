@@ -202,13 +202,14 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
-    ["the Week", false],
-    ["the day box over the Week", true],
-  ] as const)("%s", async (_state, boxed) => {
+    ["the Week", false, 1280],
+    ["the day box over the Week", true, 1280],
+    ["the Week on a phone", false, 390],
+  ] as const)("%s", async (_state, boxed, width) => {
     const before = [innerWidth, innerHeight] as const;
-    await page.viewport(1280, 800);
+    await page.viewport(width, 800);
     onTestFinished(() => page.viewport(...before));
-    expect(window.innerWidth).toBe(1280);
+    expect(window.innerWidth).toBe(width);
     setLocale("en");
     history.replaceState(
       null,
@@ -229,6 +230,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       .poll(() => screen.shadowRoot!.querySelector("opening-hours-week")?.model)
       .toBeDefined();
     const week = screen.shadowRoot!.querySelector("opening-hours-week")!;
+    await expect.poll(() => week.narrow).toBe(width < 560);
     await week.updateComplete;
     if (boxed) {
       week
