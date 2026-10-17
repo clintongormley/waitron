@@ -809,6 +809,7 @@ export class StaffingGrid extends LitElement {
                     >${t("staffing.role.cancel")}</wt-button
                   >
                   <wt-button
+                    data-test="delete-block"
                     variant="danger"
                     @click=${() => {
                       this.#closeMenu();

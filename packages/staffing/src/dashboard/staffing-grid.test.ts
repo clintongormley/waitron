@@ -910,6 +910,27 @@ test("a block whose staff role is gone opens with an empty role; Save stays quie
   expect(save(el).variant).toBe("primary");
 });
 
+test("an unchanged editor's Save sends nothing, even clicked directly, and the editor stays open", async () => {
+  const el = await grid({ mon: [sous] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  save(el).click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
+test("a gone staff role's Save sends nothing after a How many change, even clicked directly, and the editor stays open", async () => {
+  const el = await grid({ mon: [{ ...headChef, staffRoleId: "gone" }] });
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await step(el, 1);
+  save(el).click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(menu(el).matches(":popover-open")).toBe(true);
+});
+
 test("How many in the editor stays within 1 to 50 and puts back the last count for other text", async () => {
   const el = await grid({ mon: [sous] });
   const seen = changes(el);
