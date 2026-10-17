@@ -1,7 +1,7 @@
 import * as orderWrites from "./working-order.js";
 import * as groupWrites from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { AppError } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
@@ -66,6 +66,7 @@ import "./errors.js";
 import { mergeBills, splitBill } from "./bill-actions.js";
 import { joinTables, splitTable } from "./table-actions.js";
 import { moveBill } from "./move-bill.js";
+import { saveRecalledLine } from "./draft-recall.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -3764,6 +3765,177 @@ describe("source-backed draft foundations", () => {
     afterGroupId: null,
   });
 
+  it("raises a recalled weighed dish and its extras at their frozen discounted prices and preserves its allergy tick", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    const state = await inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: [{ who: "Window", allergens: { milk: {} } }],
+        },
+        ALEX,
+      ),
+    );
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [{ guestId: state.guests[0]!.id, workingLineId: parentId }]),
+    );
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.id);
+    const saved = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      { ...sourceInput(id, parentId), courseId: v.courseId, quantity: "3.500" },
+      ...draft.lines,
+    ]);
+    expect(saved.lines[0]).toMatchObject({
+      id,
+      sourceLineId: parentId,
+      quantity: "3.500",
+      source: {
+        netAmount: "17.50",
+        line: { id: parentId, quantity: "3.500", unitPriceGross: "2.00", priceQuantity: "0.500" },
+        extras: [{ id: extraId, quantity: "7.000", unitPriceGross: "0.50" }],
+      },
+    });
+    expect(
+      await db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.id),
+    ).toEqual(
+      before.map((line) =>
+        line.id === parentId
+          ? { ...line, quantity: 3500, lineTotal: 1400 }
+          : line.id === extraId
+            ? { ...line, quantity: 7000, lineTotal: 350 }
+            : line,
+      ),
+    );
+    expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual([
+      { guestId: state.guests[0]!.id, draftLineId: null, workingLineId: parentId },
+    ]);
+    const taken = await takeOver(v, partyId, draft.id, SAM, saved.revision);
+    expect(taken.lines).toEqual(saved.lines);
+    const resent = await submit(v, partyId, taken, SAM, [{ lineIds: [id], release: "hold" }]);
+    expect(resent.groups[0]!.lineIds).toContain(parentId);
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.id);
+    expect(after).toEqual(
+      before.map((line) =>
+        line.id === parentId
+          ? { ...line, quantity: 3500, lineTotal: 1400, groupId: resent.groups[0]!.id }
+          : line.id === extraId
+            ? { ...line, quantity: 7000, lineTotal: 350, groupId: resent.groups[0]!.id }
+            : line,
+      ),
+    );
+  });
+
+  it("refuses an increased recalled total past the simplified-invoice limit without changing any table", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId } = await reserved(v, partyId, tabId);
+    await refusedWritingNothing(
+      () =>
+        save(
+          { ...v, cfg: { ...v.cfg, simplifiedInvoiceLimit: decimal("15.00") } },
+          partyId,
+          ALEX,
+          draft.id,
+          draft.revision,
+          [
+            { ...sourceInput(id, parentId), courseId: v.courseId, quantity: "3.500" },
+            ...draft.lines,
+          ],
+        ),
+      { code: "sale.total_exceeds_simplified_limit", params: { total: "17.50", limit: "15.00" } },
+    );
+  });
+
+  it("keeps a recalled portioned extra's own pricing quantity when the dish quantity rises", async () => {
+    const v = await setupVenue();
+    const { partyId, tabId } = await seated(v);
+    const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: 2500, priceQuantity: 500 })
+      .where(eq(workingOrderLines.id, extraId));
+    const saved = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      { ...sourceInput(id, parentId), courseId: v.courseId, quantity: "3.500" },
+      ...draft.lines,
+    ]);
+    expect(saved.lines[0]).toMatchObject({
+      source: {
+        netAmount: "17.50",
+        extras: [
+          { id: extraId, quantity: "3.500", priceQuantity: "0.500", unitPriceGross: "0.50" },
+        ],
+      },
+    });
+    const [extra] = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, extraId));
+    expect(extra).toMatchObject({ quantity: 3500, priceQuantity: 500, lineTotal: 350 });
+  });
+
+  it.each([
+    "other owner",
+    "other party",
+    "other reference",
+    "extra source",
+    "terminal draft",
+  ] as const)(
+    "refuses a recalled edit through the helper with an %s without writing anything",
+    async (kind) => {
+      const v = await setupVenue();
+      const { partyId, tabId } = await seated(v);
+      const { draft, id, parentId, extraId } = await reserved(v, partyId, tabId);
+      if (kind === "terminal draft")
+        await db
+          .update(orderDrafts)
+          .set({ state: "discarded" })
+          .where(eq(orderDrafts.id, draft.id));
+      if (kind === "extra source")
+        await db
+          .update(orderDraftRecalledLines)
+          .set({ sourceLineId: extraId })
+          .where(eq(orderDraftRecalledLines.id, id));
+      await refusedWritingNothing(
+        () =>
+          inTx((tx) =>
+            saveRecalledLine(
+              tx,
+              v.cfg,
+              kind === "other party" ? randomUUID() : partyId,
+              kind === "extra source" ? extraId : parentId,
+              {
+                ...sourceInput(
+                  kind === "other reference" ? randomUUID() : id,
+                  kind === "extra source" ? extraId : parentId,
+                ),
+                quantity: kind === "extra source" ? "5.000" : "2.500",
+                courseId: v.courseId,
+                note: "Forged edit",
+              },
+              kind === "other owner" ? SAM : ALEX,
+            ),
+          ),
+        { code: "management.request_invalid", params: { field: "sourceLineId" } },
+      );
+    },
+  );
+
   async function billDraft(v: Venue, partyId: string, billId: string, owner = ALEX) {
     return inTx((tx) =>
       saveDraft(tx, v.cfg, partyId, owner, {
@@ -4507,9 +4679,6 @@ describe("source-backed draft foundations", () => {
     "duplicate",
     "omitted",
     "quantity",
-    "note",
-    "courseId",
-    "makeAt",
     "options",
     "extras",
   ])("refuses unresolved source changes: %s", async (kind) => {
@@ -4519,10 +4688,7 @@ describe("source-backed draft foundations", () => {
     const source = { ...sourceInput(id, parentId), courseId: v.courseId };
     let lines: unknown[] = [source, ...draft.lines];
     const edits: Record<string, unknown> = {
-      quantity: "3",
-      note: "changed",
-      courseId: null,
-      makeAt: randomUUID(),
+      quantity: "2",
       options: [],
       extras: [],
     };

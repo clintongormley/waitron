@@ -42,6 +42,7 @@ import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import { saveRecalledLine } from "./draft-recall.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 
@@ -290,13 +291,8 @@ export async function saveDraft(
     }
     if (prior?.sourceLineId !== line.sourceLineId) throw invalid(`lines.${index}.sourceLineId`);
     const source = prior as RecalledDraftLine;
-    for (const key of ["quantity", "note", "courseId", "makeAt"] as const) {
-      const same =
-        key === "quantity"
-          ? stringToThousandths(line.quantity) === stringToThousandths(source.quantity)
-          : line[key] === source[key];
-      if (!same) throw invalid(`lines.${index}.${key}`);
-    }
+    if (stringToThousandths(line.quantity) < stringToThousandths(source.quantity))
+      throw invalid(`lines.${index}.quantity`);
     if (line.options !== undefined || line.extras !== undefined)
       throw invalid(`lines.${index}.sourceLineId`);
     retainedSources.delete(line.id);
@@ -358,6 +354,10 @@ export async function saveDraft(
     const held = priorChoices.get(key) ?? 0;
     if (held > 0) priorChoices.set(key, held - 1);
     else await requireMakeAtStation(tx, cfg, line.makeAt);
+  }
+  for (const line of lines) {
+    if (line.sourceLineId !== null)
+      await saveRecalledLine(tx, cfg, partyId, line.sourceLineId, line, operatorId);
   }
   const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
   const assigned = new Set(

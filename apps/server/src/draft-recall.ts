@@ -1,23 +1,152 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   orderDraftRecalledLines,
+  orderDrafts,
   orderGroups,
   ticketItems,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  decimalToThousandths,
+  divideDecimal,
+  MONEY_SCALE,
+  multiplyDecimal,
+  stringToThousandths,
+  thousandthsToDecimal,
+} from "@waitron/shared";
+import { MAX_UNIT_PRECISION, assertQuantityPrecision } from "@waitron/catalogue";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { appendRecalledLine, type Draft } from "./order-drafts.js";
+import { appendRecalledLine, type Draft, type DraftLineInput } from "./order-drafts.js";
+import { requireLiveCourse } from "./kitchen.js";
+import { requireMakeAtStation } from "./dead-ends.js";
 import type { PartyCommandArgs } from "./order-groups.js";
 import { checkAndBumpParty, requireBillOfParty, runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
-import { bumpRevision, refusePaymentInFlight, type OrderAttendance } from "./working-order.js";
+import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
+import {
+  bumpRevision,
+  extraQuantityFor,
+  keptExtrasOf,
+  partyAfterEdit,
+  refuseOrderOverSimplifiedLimit,
+  refusePaymentInFlight,
+  storedOrderTotal,
+  type OrderAttendance,
+} from "./working-order.js";
 import "./errors.js";
+
+export async function saveRecalledLine(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  sourceLineId: string,
+  input: DraftLineInput,
+  operatorId: string,
+): Promise<void> {
+  const [owned] = await tx
+    .select({ line: workingOrderLines })
+    .from(orderDraftRecalledLines)
+    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
+    .where(
+      and(
+        eq(orderDraftRecalledLines.id, input.id ?? ""),
+        eq(orderDraftRecalledLines.sourceLineId, sourceLineId),
+        eq(orderDrafts.partyId, partyId),
+        eq(orderDrafts.ownerId, operatorId),
+        eq(orderDrafts.state, "open"),
+        eq(orderDrafts.billId, workingOrderLines.workingOrderId),
+      ),
+    );
+  if (
+    owned === undefined ||
+    input.sourceLineId !== sourceLineId ||
+    owned.line.parentLineId !== null
+  )
+    throw invalid("sourceLineId");
+  const { line } = owned;
+  const quantity = stringToThousandths(input.quantity);
+  if (quantity < line.quantity) throw invalid("quantity");
+  const changed =
+    quantity !== line.quantity ||
+    line.note !== input.note ||
+    line.courseId !== input.courseId ||
+    line.makeAtStationId !== input.makeAt;
+  if (!changed) return;
+  await requireBillOfParty(tx, partyId, line.workingOrderId);
+  await refusePaymentInFlight(tx, [line.workingOrderId]);
+  assertQuantityPrecision(input.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
+    positive: true,
+  });
+  const children = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.parentLineId, line.id));
+  await refusePaidLines(
+    tx,
+    line.workingOrderId,
+    [line, ...children].map((part) => ({ id: part.id, lineNo: part.lineNo, keeps: 0 })),
+  );
+  if (input.courseId !== null && input.courseId !== line.courseId)
+    await requireLiveCourse(tx, cfg, input.courseId);
+  if (input.makeAt != null && input.makeAt !== line.makeAtStationId)
+    await requireMakeAtStation(tx, cfg, input.makeAt);
+  const before =
+    quantity !== line.quantity && cfg.simplifiedInvoiceLimit !== null
+      ? await storedOrderTotal(tx, line.workingOrderId)
+      : null;
+  await tx
+    .update(workingOrderLines)
+    .set({
+      note: input.note,
+      courseId: input.courseId,
+      makeAtStationId: input.makeAt,
+      ...(quantity === line.quantity
+        ? {}
+        : {
+            quantity,
+            lineTotal: decimalToCents(
+              divideDecimal(
+                multiplyDecimal(centsToDecimal(line.unitPriceGross), decimal(input.quantity)),
+                thousandthsToDecimal(line.priceQuantity),
+                MONEY_SCALE,
+              ),
+            ),
+          }),
+    })
+    .where(eq(workingOrderLines.id, sourceLineId));
+  if (quantity !== line.quantity) {
+    for (const { child, perDish } of keptExtrasOf(children, line.quantity)) {
+      const childQuantity = extraQuantityFor(perDish, decimal(input.quantity), child.priceQuantity);
+      await tx
+        .update(workingOrderLines)
+        .set({
+          quantity: decimalToThousandths(childQuantity),
+          lineTotal: decimalToCents(
+            divideDecimal(
+              multiplyDecimal(child.unitPriceGross, childQuantity),
+              child.priceQuantity!,
+              MONEY_SCALE,
+            ),
+          ),
+        })
+        .where(eq(workingOrderLines.id, child.id));
+    }
+    await assertBillInvariant(tx, [line.workingOrderId]);
+    await refuseOrderOverSimplifiedLimit(tx, cfg, line.workingOrderId, before);
+  }
+  await bumpRevision(tx, [line.workingOrderId]);
+  await partyAfterEdit(tx, line.workingOrderId, [], operatorId);
+}
 
 export async function recallToDraft(
   tx: Transaction,

@@ -3,6 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
+  kitchenCourses,
   orderDraftRecalledLines,
   orderDraftLines,
   orderDraftEvents,
@@ -29,6 +30,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { createPrinter } from "@waitron/printing";
 import { printedLines } from "./testing/decode-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import * as orderWrites from "./working-order.js";
 
 let venue: BillVenue;
 let stationId: string;
@@ -100,6 +102,7 @@ async function frozen(partyId: string) {
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     items: await venue.db.select().from(ticketItems).orderBy(ticketItems.id),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
+    fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
     sources: await venue.db
       .select()
       .from(orderDraftRecalledLines)
@@ -113,6 +116,384 @@ async function frozen(partyId: string) {
 }
 
 describe("party Recall to draft", () => {
+  it.each(["retained context", "no retained context"] as const)(
+    "saves recalled note, course and station edits with %s without changing the charged family",
+    async (context) => {
+      const p = await setup("fire");
+      if (context === "no retained context")
+        await venue.db
+          .delete(workingLineContexts)
+          .where(eq(workingLineContexts.workingOrderLineId, p.line.id));
+      const course = await inTx(venue, (tx) =>
+        createCourse(tx, venue.cfg, { name: `Edited-${randomUUID()}` }),
+      );
+      const answer = await recall(p.partyId, p.line.id);
+      expect(answer.status).toBe(200);
+      const { draft } = answer.json as unknown as { draft: Draft };
+      const before = await frozen(p.partyId);
+      const input = { ...draft.lines[0]!, note: "No salt", courseId: course.id, makeAt: stationId };
+      const read = vi
+        .spyOn(VENUE_SERVICE, "listZoneOffers")
+        .mockRejectedValue(new Error("stored edits must not read a live offer"));
+      try {
+        const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+          billId: p.tabId,
+          draftId: draft.id,
+          revision: draft.revision,
+          lines: [input],
+        });
+        expect(saved.status).toBe(200);
+        expect(saved.json).toMatchObject({
+          id: draft.id,
+          revision: draft.revision + 1,
+          lines: [
+            {
+              id: draft.lines[0]!.id,
+              sourceLineId: p.line.id,
+              note: "No salt",
+              courseId: course.id,
+              makeAt: stationId,
+              source: { line: { id: p.line.id, note: "No salt", courseId: course.id } },
+            },
+          ],
+        });
+        const after = await frozen(p.partyId);
+        expect(after.lines).toEqual(
+          before.lines.map((line) =>
+            line.id === p.line.id
+              ? { ...line, note: "No salt", courseId: course.id, makeAtStationId: stationId }
+              : line,
+          ),
+        );
+        expect(after.items).toEqual(before.items);
+        expect(after.jobs).toEqual(before.jobs);
+        expect(after.adjustments).toEqual(before.adjustments);
+        expect(after.sources).toEqual(before.sources);
+        expect(after.bills.find((bill) => bill.id === p.tabId)!.revision).toBe(
+          before.bills.find((bill) => bill.id === p.tabId)!.revision + 1,
+        );
+        expect(after.revision).toBe(before.revision + 1);
+        const loaded = await call("GET", `/api/parties/${p.partyId}/drafts`);
+        expect(loaded.status).toBe(200);
+        expect(loaded.json).toEqual({ drafts: [saved.json] });
+      } finally {
+        read.mockRestore();
+      }
+    },
+  );
+
+  it("clears a recalled course and station without repricing or changing its group destination", async () => {
+    const p = await setup("hold");
+    const course = await inTx(venue, (tx) =>
+      createCourse(tx, venue.cfg, { name: `Clear-${randomUUID()}` }),
+    );
+    await venue.db
+      .update(workingOrderLines)
+      .set({ courseId: course.id, makeAtStationId: stationId })
+      .where(eq(workingOrderLines.id, p.line.id));
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+      billId: p.tabId,
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: [{ ...draft.lines[0]!, note: null, courseId: null, makeAt: null }],
+    });
+    expect(saved.status).toBe(200);
+    expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+      courseId: null,
+      makeAt: null,
+      joinGroupId: p.groupId,
+      source: { line: { id: p.line.id, courseId: null, unitPriceGross: "18.00" } },
+    });
+    expect((saved.json as unknown as Draft).lines[0]).not.toHaveProperty("course");
+    const [stored] = await venue.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, p.line.id));
+    expect(stored).toMatchObject({ courseId: null, makeAtStationId: null, groupId: p.groupId });
+  });
+
+  it("keeps an unchanged retired course and disabled station while editing only a recalled note", async () => {
+    const p = await setup("hold");
+    const course = await inTx(venue, (tx) =>
+      createCourse(tx, venue.cfg, { name: `Retired-${randomUUID()}` }),
+    );
+    await venue.db
+      .update(workingOrderLines)
+      .set({ courseId: course.id, makeAtStationId: stationId })
+      .where(eq(workingOrderLines.id, p.line.id));
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    await venue.db
+      .update(kitchenCourses)
+      .set({ active: false })
+      .where(eq(kitchenCourses.id, course.id));
+    await venue.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, stationId));
+    try {
+      const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+        billId: p.tabId,
+        draftId: draft.id,
+        revision: draft.revision,
+        lines: [{ ...draft.lines[0]!, note: "Retain recorded choices" }],
+      });
+      expect(saved.status).toBe(200);
+      expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+        note: "Retain recorded choices",
+        courseId: course.id,
+        makeAt: stationId,
+      });
+    } finally {
+      await venue.db
+        .update(kitchenStations)
+        .set({ active: true })
+        .where(eq(kitchenStations.id, stationId));
+    }
+  });
+
+  it.each(["missing course", "retired course", "missing station", "disabled station"] as const)(
+    "refuses a new %s on a recalled line without writing anything",
+    async (kind) => {
+      const p = await setup("hold");
+      const answer = await recall(p.partyId, p.line.id);
+      expect(answer.status).toBe(200);
+      const { draft } = answer.json as unknown as { draft: Draft };
+      let targetId: string = randomUUID();
+      if (kind === "retired course") {
+        const course = await inTx(venue, (tx) =>
+          createCourse(tx, venue.cfg, { name: `Refused-${randomUUID()}` }),
+        );
+        await venue.db
+          .update(kitchenCourses)
+          .set({ active: false })
+          .where(eq(kitchenCourses.id, course.id));
+        targetId = course.id;
+      } else if (kind === "disabled station") {
+        targetId = stationId;
+        await venue.db
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, stationId));
+      }
+      try {
+        const before = await frozen(p.partyId);
+        const isCourse = kind.endsWith("course");
+        const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+          billId: p.tabId,
+          draftId: draft.id,
+          revision: draft.revision,
+          lines: [
+            {
+              ...draft.lines[0]!,
+              note: "Must roll back",
+              [isCourse ? "courseId" : "makeAt"]: targetId,
+            },
+          ],
+        });
+        expect(saved.json).toMatchObject({
+          code: isCourse ? "course.not_found" : "route.station_inactive",
+        });
+        expect(saved.status).toBe(isCourse ? 404 : 409);
+        expect(await frozen(p.partyId)).toEqual(before);
+      } finally {
+        if (kind === "disabled station")
+          await venue.db
+            .update(kitchenStations)
+            .set({ active: true })
+            .where(eq(kitchenStations.id, stationId));
+      }
+    },
+  );
+
+  it("does not advance bill or party revisions for an unchanged recalled save", async () => {
+    const p = await setup("fire");
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    const before = await frozen(p.partyId);
+    const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+      billId: p.tabId,
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: draft.lines,
+    });
+    expect(saved.status).toBe(200);
+    const after = await frozen(p.partyId);
+    expect(after.bills).toEqual(before.bills);
+    expect(after.revision).toBe(before.revision);
+    expect(after.lines).toEqual(before.lines);
+  });
+
+  it("increases an actually discounted recalled line without repricing it or rewriting its adjustment", async () => {
+    const p = await setup("hold");
+    await inTx(venue, async (tx) => {
+      const reason = await createAdjustmentReason(tx, {
+        name: `Keep-discount-${randomUUID()}`,
+        names: {},
+        actions: ["discount_percent"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRole: "staff",
+        approverRole: "staff",
+        noteRequired: false,
+      });
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, p.tabId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          orderId: p.tabId,
+          expectedRevision: bill!.revision,
+          submissionId: randomUUID(),
+          lineId: p.line.id,
+          reasonId: reason.id,
+          action: "discount_percent",
+          percentBp: 2500,
+          note: null,
+          operatorId: venue.adminId,
+        },
+        venue.cfg.locale,
+      );
+    });
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    const before = await frozen(p.partyId);
+    const list = vi
+      .spyOn(VENUE_SERVICE, "listZoneOffers")
+      .mockRejectedValue(new Error("recalled increases keep stored prices"));
+    try {
+      const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+        billId: p.tabId,
+        draftId: draft.id,
+        revision: draft.revision,
+        lines: [{ ...draft.lines[0]!, quantity: "3" }],
+      });
+      expect(saved.status).toBe(200);
+      expect((saved.json as unknown as Draft).lines[0]).toMatchObject({
+        quantity: "3.000",
+        source: { netAmount: "40.50", line: { id: p.line.id, unitPriceGross: "13.50" } },
+      });
+      const after = await frozen(p.partyId);
+      expect(after.lines).toEqual(
+        before.lines.map((line) =>
+          line.id === p.line.id ? { ...line, quantity: 3000, lineTotal: 4050 } : line,
+        ),
+      );
+      expect(after.adjustments).toEqual(before.adjustments);
+      expect(after.sources).toEqual(before.sources);
+      expect(after.jobs).toEqual(before.jobs);
+    } finally {
+      list.mockRestore();
+    }
+  });
+
+  it("refuses a fractional increase of a whole-unit recalled dish without writing anything", async () => {
+    const p = await setup("hold");
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    const before = await frozen(p.partyId);
+    const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+      billId: p.tabId,
+      draftId: draft.id,
+      revision: draft.revision,
+      lines: [{ ...draft.lines[0]!, quantity: "2.5" }],
+    });
+    expect(saved.json).toMatchObject({ code: "quantity.invalid", params: { reason: "precision" } });
+    expect(saved.status).toBe(400);
+    expect(await frozen(p.partyId)).toEqual(before);
+  });
+
+  it.each(["note", "quantity"] as const)(
+    "refuses a recalled %s edit after an item payment",
+    async (field) => {
+      const p = await setup("hold", 2);
+      const paid = await call("POST", `/api/working-orders/${p.tabId}/payments`, {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: p.line.lineNo, quantity: "1" }],
+        method: "cash",
+        tendered: "18.00",
+        applied: "18.00",
+        tip: "0.00",
+      });
+      expect(paid.status).toBe(200);
+      const answer = await recall(p.partyId, p.line.id);
+      expect(answer.status).toBe(200);
+      const { draft } = answer.json as unknown as { draft: Draft };
+      const before = await frozen(p.partyId);
+      const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+        billId: p.tabId,
+        draftId: draft.id,
+        revision: draft.revision,
+        lines: [{ ...draft.lines[0]!, [field]: field === "note" ? "No salt" : "3" }],
+      });
+      expect(saved.status).toBe(409);
+      expect(saved.json).toMatchObject({
+        code: "bill.line_paid",
+        params: { workingOrderId: p.tabId, lineNo: p.line.lineNo },
+      });
+      expect(await frozen(p.partyId)).toEqual(before);
+    },
+  );
+
+  it("rolls back a recalled metadata edit when hydration of a retained fresh line fails", async () => {
+    const p = await setup("hold");
+    const answer = await recall(p.partyId, p.line.id);
+    expect(answer.status).toBe(200);
+    const { draft } = answer.json as unknown as { draft: Draft };
+    const fresh = await venue.db
+      .insert(orderDraftLines)
+      .values({
+        draftId: draft.id,
+        position: 2,
+        menuItemId: venue.offerFor("Croquetas"),
+        quantity: 1000,
+        options: [],
+        extras: [],
+      })
+      .returning();
+    const lines = [
+      { ...draft.lines[0]!, note: "Must roll back" },
+      { id: fresh[0]!.id, menuItemId: venue.offerFor("Croquetas"), quantity: "1" },
+    ];
+    const before = await frozen(p.partyId);
+    const readLines = orderWrites.readTabLines;
+    let calls = 0;
+    const read = vi.spyOn(orderWrites, "readTabLines").mockImplementation(async (...args) => {
+      if (++calls === 2) throw new Error("injected final hydration failure");
+      return readLines(...args);
+    });
+    try {
+      const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+        billId: p.tabId,
+        draftId: draft.id,
+        revision: draft.revision,
+        lines,
+      });
+      expect(saved.status).toBe(500);
+      expect(await frozen(p.partyId)).toEqual(before);
+    } finally {
+      read.mockRestore();
+    }
+    expect(
+      (
+        await call("PUT", `/api/parties/${p.partyId}/drafts`, {
+          billId: p.tabId,
+          draftId: draft.id,
+          revision: draft.revision,
+          lines,
+        })
+      ).status,
+    ).toBe(200);
+  });
+
   it("rolls back kitchen corrections, source ownership and revisions if the final draft read fails", async () => {
     const p = await setup("fire");
     const [draft] = await venue.db
