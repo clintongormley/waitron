@@ -85,3 +85,14 @@ export function themeChoices(options: {
     )}
   </div>`;
 }
+
+/** Lit compares `.labels` by identity, so a fresh object every render redraws the chooser. */
+export function themeLabelsPerLocale(
+  build: () => WtThemeLabels,
+): (locale: string) => WtThemeLabels {
+  let built: { locale: string; labels: WtThemeLabels } | undefined;
+  return (locale) => {
+    if (built?.locale !== locale) built = { locale, labels: build() };
+    return built.labels;
+  };
+}

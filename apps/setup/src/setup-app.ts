@@ -1,4 +1,9 @@
-import { LeaveController, ThemeChoiceController, type DraftScope } from "@waitron/ui";
+import {
+  LeaveController,
+  ThemeChoiceController,
+  themeLabelsPerLocale,
+  type DraftScope,
+} from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -481,6 +486,12 @@ export class SetupApp extends LitElement {
   #localeChosen = false;
 
   readonly #theme = new ThemeChoiceController(this, { applies: true });
+  readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
+    theme: t("shell.theme.label"),
+    light: t("shell.theme.light"),
+    dark: t("shell.theme.dark"),
+    device: t("shell.theme.device"),
+  }));
 
   constructor() {
     super();
@@ -1491,12 +1502,7 @@ export class SetupApp extends LitElement {
             <wt-theme-chooser
               data-test="theme-chooser"
               .active=${this.#theme.choice}
-              .labels=${{
-                theme: t("shell.theme.label"),
-                light: t("shell.theme.light"),
-                dark: t("shell.theme.dark"),
-                device: t("shell.theme.device"),
-              }}
+              .labels=${this.#themeLabelsFor(currentLocale())}
             ></wt-theme-chooser>
             <wt-language-chooser
               .active=${currentLocale()}

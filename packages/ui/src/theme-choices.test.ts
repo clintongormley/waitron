@@ -1,7 +1,7 @@
 import { html, render } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import { themeChoices, themeChoicesStyles } from "./theme-choices.js";
+import { themeChoices, themeChoicesStyles, themeLabelsPerLocale } from "./theme-choices.js";
 import { applyTokens } from "./tokens/index.js";
 import type { ThemeChoice } from "./theme-choice.js";
 
@@ -101,4 +101,16 @@ it("lays the label and the three choices on one row at 320 px, each at least a t
     expect(r.width).toBeGreaterThanOrEqual(tap);
     expect(r.height).toBeGreaterThanOrEqual(tap);
   }
+});
+
+it("themeLabelsPerLocale hands back the same labels until the language changes", () => {
+  const build = vi.fn(() => ({ ...labels }));
+  const labelsFor = themeLabelsPerLocale(build);
+  const spanish = labelsFor("es-ES");
+  expect(labelsFor("es-ES")).toBe(spanish);
+  expect(build).toHaveBeenCalledOnce();
+  const english = labelsFor("en-GB");
+  expect(english).not.toBe(spanish);
+  expect(labelsFor("en-GB")).toBe(english);
+  expect(build).toHaveBeenCalledTimes(2);
 });

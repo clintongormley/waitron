@@ -318,3 +318,16 @@ it("has no accessibility violations with the account menu open, in both themes",
     cleanupWidgets();
   }
 });
+
+it("hands the banner chooser the same labels on a redraw, and new ones when the language changes", async () => {
+  const { el } = await mountApp(stubApi("en-GB"));
+  const english = bannerChooser(el)!.labels;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(bannerChooser(el)!.labels).toBe(english);
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(bannerChooser(el)!.labels).not.toBe(english);
+  expect(bannerChooser(el)!.labels.theme).toBe("Tema");
+});

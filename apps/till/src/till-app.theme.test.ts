@@ -10,6 +10,7 @@ import {
 } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { themeLabels } from "./widgets/theme-chooser.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
@@ -240,4 +241,13 @@ it("picking a theme in the person's menu with an unsent order open asks nothing 
   await expect.poll(() => question.open).toBe(true);
   expect(counter.store.lines.map((line) => line.product.id)).toEqual(["cafe"]);
   expect(staged).toBe("Typed");
+});
+
+it("the theme chooser's labels stay the same object until the language changes", () => {
+  setLocale("en-GB");
+  const english = themeLabels();
+  expect(themeLabels()).toBe(english);
+  setLocale("es-ES");
+  expect(themeLabels()).not.toBe(english);
+  expect(themeLabels().theme).toBe("Tema");
 });

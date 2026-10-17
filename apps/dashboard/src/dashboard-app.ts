@@ -13,11 +13,11 @@ import {
   ThemeChoiceController,
   themeChoices,
   themeChoicesStyles,
+  themeLabelsPerLocale,
   trackIconTooltip,
   UrlStateController,
   type ThemeChoice,
   type WtInput,
-  type WtThemeLabels,
   type WtToast,
 } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
@@ -997,14 +997,12 @@ export class DashboardApp extends LitElement {
   #sessionLocaleChoice = 0;
   readonly #theme = new ThemeChoiceController(this, { applies: true });
 
-  #themeLabels(): WtThemeLabels {
-    return {
-      theme: t("theme.label"),
-      light: t("theme.light"),
-      dark: t("theme.dark"),
-      device: t("theme.device"),
-    };
-  }
+  readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
+    theme: t("theme.label"),
+    light: t("theme.light"),
+    dark: t("theme.dark"),
+    device: t("theme.device"),
+  }));
 
   constructor() {
     super();
@@ -1747,7 +1745,7 @@ export class DashboardApp extends LitElement {
             : html`<wt-theme-chooser
                 data-test="theme-chooser"
                 .active=${this.#theme.choice}
-                .labels=${this.#themeLabels()}
+                .labels=${this.#themeLabelsFor(currentLocale())}
               ></wt-theme-chooser>`
         }
         <wt-language-chooser
@@ -1794,7 +1792,7 @@ export class DashboardApp extends LitElement {
                   >
                   ${themeChoices({
                     active: this.#theme.choice,
-                    labels: this.#themeLabels(),
+                    labels: this.#themeLabelsFor(currentLocale()),
                     onPick: chooseTheme,
                   })}
                   <wt-button

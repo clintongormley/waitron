@@ -114,3 +114,16 @@ it("labels the chooser in Spanish", async () => {
     )
     .toHaveAccessibleName("Tema: Según el dispositivo");
 });
+
+it("hands the chooser the same labels on a redraw, and new ones when the language changes", async () => {
+  const { el } = await mountSetupApp();
+  const english = chooserOf(el).labels;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(chooserOf(el).labels).toBe(english);
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(chooserOf(el).labels).not.toBe(english);
+  expect(chooserOf(el).labels.theme).toBe("Tema");
+});
