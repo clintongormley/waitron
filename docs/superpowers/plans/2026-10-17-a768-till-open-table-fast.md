@@ -115,6 +115,44 @@ start the first slot nothing listens on and leaves a slot another running instan
 from a worktree"). Task 0 runs on this branch before Task 1 lands, while its product code is still
 base `ed0be7d89` (the branch holds only this plan).
 
+#### Real till page, BEFORE
+
+Taken 2026-10-17 on this branch at `009c1a8c4` (product code is base `ed0be7d89`), Node v26.11.1,
+the workspace's Playwright Chromium (headless, 1280×800). Stack: `wa-wt demo
+waitron-feat-a768-till-open-table-fast`, which took slot 0 (till `http://localhost:5190`, server
+`localhost:8080`; the owner's `waitron-local-santet-data` held slot 1 and was not touched). Data set:
+the demo seed already in slot 0's shared venue, not reset. The till is the Vite dev server
+(unbundled modules) and the server is on the same machine, so there is no network delay in these
+numbers. Device `Mostrador` (counter till), waiter Lucía Fernández, PIN `5555`, Dining room. Before
+the runs, tables 1–4 of the Dining room were seated with two guests each by `seat.mjs`
+(`POST /api/tables/:id/seat`), and they were left seated for Task 8. Each run tapped House bread
+on table 2, so table 2's unsent draft grew by one line per run.
+
+The script is Appendix C, kept in `/tmp/a768-real-till/`. Commands:
+
+```sh
+node /tmp/a768-real-till/seat.mjs        # once, to seat tables 1–4
+node /tmp/a768-real-till/measure.mjs 5   # five runs, each in a fresh browser signed in afresh
+```
+
+Each run opens table 1 (the first open after sign-in), Back to floor, waits 500 ms, opens table 2,
+taps Tapas → House bread, Back to floor at once, then opens table 3. A run's time starts at the
+click's `pointerdown` and stops at the first animation frame in which a `[data-draft-pane]` (found
+through shadow roots) has a non-zero width. The requests are every `/api/` request from the click
+until 1.5 s after that moment. Before the run, a failing probe would have shown no
+`GET /api/service-zones/<zone>/offers` for an open; every open of every run listed exactly one.
+
+| Open | shown (ms), runs 1–5 | median | Requests the open sent (each once) |
+| --- | --- | --- | --- |
+| First seated table in the zone (table 1) | 581 / 542 / 547 / 523 / 561 | 547 | 8: `service-zones/:id/offers`, `parties/:id/groups`, `parties/:id/print-problems`, `parties/:id/current-orders`, `working-orders/:id/lines`, `parties/:id/bills`, `parties/:id/drafts`, `stations` |
+| Back, then a second seated table, same zone (table 2) | 542 / 414 / 552 / 521 / 499 | 521 | the same 8, plus `GET /api/node` in all five runs |
+| Tap a dish, Back at once, then another party's table (table 3) | 588 / 540 / 445 / 405 / 615 | 540 | the same 8, plus `GET /api/tables/state` |
+| A seated table with no main bill | not measured | — | the demo floor has none: seating each of tables 1–4 gave its party a `mainBillId` |
+
+Every request in a window is a `GET`: no draft save fell inside the third case's window. The
+script did not record when, or whether, the left draft's save was sent. I did not establish why `GET /api/node` fell inside the
+second case's window in every run.
+
 ---
 
 ## Global Constraints
@@ -1050,3 +1088,128 @@ describe("A768 route cost probe", () => {
 ```
 
 Command: `cd apps/server && for n in 20 80 200; do A768_DISHES=$n AI_AGENT= CLAUDECODE= pnpm exec vitest run src/a768-route-cost.probe.test.ts | grep A768-ROUTES; done`.
+
+## Appendix C — the real till page script (`/tmp/a768-real-till/`, never committed)
+
+The device id is the demo seed's `Mostrador` in slot 0's venue on 2026-10-17; a reset venue gives it a new
+id (`GET /api/dev/devices` lists them). The dev chooser keeps the choice in `sessionStorage`, not
+`localStorage`.
+
+`common.mjs`:
+
+```js
+import { chromium } from "/Users/clintongormley/workspace/worktrees/waitron-feat-a768-till-open-table-fast/apps/till/node_modules/playwright/index.mjs";
+export const TILL = process.env.TILL_URL ?? "http://localhost:5190";
+export const DEVICE = "18ce33bc-4ff8-4015-a8b7-afb2061d0e98"; // Mostrador, counter till
+export async function signedIn() {
+  const b = await chromium.launch();
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.goto(TILL + "/");
+  await p.evaluate((d) => sessionStorage.setItem("waitron.devDeviceId", d), DEVICE);
+  await p.reload();
+  await p.getByRole("button", { name: "Lucía Fernández" }).click();
+  for (const d of "5555") await p.getByRole("button", { name: d, exact: true }).first().click();
+  await p.getByRole("button", { name: "Log in" }).click();
+  const ci = p.getByRole("button", { name: "Clock in" });
+  await Promise.race([ci.waitFor({ timeout: 5000 }).then(() => ci.click()).catch(() => {}),
+    p.getByRole("button", { name: "Floor", exact: true }).waitFor()]);
+  await p.getByRole("button", { name: "Floor", exact: true }).click();
+  await p.getByText("Dining room", { exact: true }).waitFor();
+  return { b, p };
+}
+export const api = (p, path, method = "GET", body) => p.evaluate(async ([path, method, body, d]) => {
+  const r = await fetch(path, { method, headers: { "content-type": "application/json", "x-waitron-dev-device": d }, body: body === undefined ? undefined : JSON.stringify(body) });
+  return { status: r.status, body: await r.json().catch(() => null) };
+}, [path, method, body, DEVICE]);
+```
+
+`seat.mjs`:
+
+```js
+import { signedIn, api } from "./common.mjs";
+const { b, p } = await signedIn();
+const tables = (await api(p, "/api/tables/state")).body.filter((t) => t.zoneId === "329feb7d-de67-4f30-83f6-319de0aa5a42");
+for (const t of tables.filter((t) => ["1", "2", "3", "4"].includes(t.label) && t.party === null)) {
+  const r = await api(p, `/api/tables/${t.id}/seat`, "POST", { guestCount: 2 });
+  console.log("seat", t.label, r.status, JSON.stringify(r.body));
+}
+for (const t of (await api(p, "/api/tables/state")).body.filter((t) => t.party)) console.log(t.label, JSON.stringify(t.party));
+await b.close();
+```
+
+`measure.mjs`:
+
+```js
+// A768 Task 0/8: time table opens on a real till page. Usage: node measure.mjs [runs]
+import { signedIn } from "./common.mjs";
+const RUNS = Number(process.argv[2] ?? 5);
+const SETTLE_MS = 1500;
+
+const installTimer = (p) => p.evaluate(() => {
+  const deep = (root) => {
+    const hit = root.querySelector("[data-draft-pane]");
+    if (hit) return hit;
+    for (const el of root.querySelectorAll("*")) if (el.shadowRoot) { const h = deep(el.shadowRoot); if (h) return h; }
+    return null;
+  };
+  window.__a768 = { deep };
+  window.addEventListener("pointerdown", () => {
+    if (window.__a768.armed !== true) return;
+    window.__a768.armed = false;
+    const t0 = performance.now();
+    window.__a768.result = new Promise((resolve) => {
+      const tick = () => {
+        const el = deep(document);
+        if (el && el.getBoundingClientRect().width > 0) resolve(performance.now() - t0);
+        else if (performance.now() - t0 > 10000) resolve(-1);
+        else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  }, { capture: true });
+});
+
+async function timedOpen(p, log, label) {
+  await p.getByRole("button", { name: `${label}, Seated` }).waitFor();
+  const present = await p.evaluate(() => window.__a768.deep(document) !== null);
+  if (present) throw new Error("draft pane already on screen before the click");
+  await p.evaluate(() => { window.__a768.armed = true; });
+  log.length = 0;
+  log.on = true;
+  await p.getByRole("button", { name: `${label}, Seated` }).click();
+  const ms = await p.evaluate(() => window.__a768.result);
+  await p.waitForTimeout(SETTLE_MS);
+  log.on = false;
+  return { ms: Math.round(ms), requests: [...log] };
+}
+
+const back = async (p) => { await p.getByRole("button", { name: "Back to floor" }).click(); };
+
+const results = { first: [], second: [], leftUnsaved: [] };
+for (let run = 0; run < RUNS; run++) {
+  const { b, p } = await signedIn();
+  const log = [];
+  p.on("request", (r) => {
+    const u = new URL(r.url());
+    if (log.on && u.pathname.startsWith("/api/")) log.push(`${r.method()} ${u.pathname}${u.search}`);
+  });
+  await installTimer(p);
+  results.first.push(await timedOpen(p, log, "1"));
+  await back(p);
+  await p.waitForTimeout(500);
+  results.second.push(await timedOpen(p, log, "2"));
+  await p.getByText("Tapas", { exact: true }).click();
+  await p.locator("till-menu-browser").getByText("House bread", { exact: true }).click();
+  await back(p);
+  results.leftUnsaved.push(await timedOpen(p, log, "3"));
+  await back(p);
+  await b.close();
+}
+
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+const tally = (reqs) => { const c = {}; for (const r0 of reqs) { const r = r0.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ":id"); c[r] = (c[r] ?? 0) + 1; } return c; };
+for (const [name, rs] of Object.entries(results)) {
+  console.log(`A768-REAL ${name}: ms ${rs.map((r) => r.ms).join(" / ")}, median ${median(rs.map((r) => r.ms))}`);
+  rs.forEach((r, i) => console.log(`  run ${i + 1} requests (${r.requests.length}): ${JSON.stringify(tally(r.requests))}`));
+}
+```
