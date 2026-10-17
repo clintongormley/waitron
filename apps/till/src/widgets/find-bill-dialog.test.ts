@@ -188,3 +188,60 @@ it("no selected bill means no collection or legacy search", async () => {
   expect(el.shadowRoot!.querySelector("[name=bill-search]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
 });
+
+it.each(["cash", "card"] as const)(
+  "A773 unanswered %s collection locks its confirmation but permits retry",
+  async (method) => {
+    const el = await mount();
+    if (method === "card") {
+      await click(el, "[data-card]");
+      await type(el, "terminal-reference", "original");
+    }
+    const paid: unknown[] = [];
+    el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
+    Object.assign(el, { unconfirmed: true, error: "sale.unconfirmed" });
+    await el.updateComplete;
+    const field = input(el, method === "cash" ? "cash-received" : "terminal-reference");
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector<HTMLButtonElement>("[slot=cancel]")!.disabled).toBe(true);
+    await click(el, method === "cash" ? "[data-card]" : ".methods wt-button");
+    expect(input(el, method === "cash" ? "cash-received" : "terminal-reference")).not.toBeNull();
+    await click(el, "[data-collect]");
+    expect(paid).toEqual([
+      {
+        workingOrderId: "wo-1",
+        invoiced: true,
+        tender:
+          method === "cash"
+            ? { method: "cash", amount: "30.00" }
+            : { method: "card", amount: "30.00", externalRef: "original" },
+      },
+    ]);
+  },
+);
+
+it("A773 reopening an unanswered card collection restores its original shown confirmation", async () => {
+  const el = await mount();
+  Object.assign(el, {
+    unconfirmed: true,
+    confirmationTender: { method: "card", amount: "30.00", externalRef: "terminal-original" },
+  });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[name=cash-received]")).toBeNull();
+  expect(input(el, "terminal-reference").value).toBe("terminal-original");
+});
+
+it("A773 initial unanswered collection renders the original locked card confirmation", async () => {
+  const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
+    bill: debt,
+    unconfirmed: true,
+    confirmationTender: { method: "card", amount: "30.00", externalRef: "original" },
+  });
+  expect(el.shadowRoot!.textContent).toContain("Birthday");
+  expect(input(el, "terminal-reference").value).toBe("original");
+  await input(el, "terminal-reference").updateComplete;
+  expect(
+    input(el, "terminal-reference").shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled,
+  ).toBe(true);
+});

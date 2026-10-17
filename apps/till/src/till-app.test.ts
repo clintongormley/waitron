@@ -11355,6 +11355,333 @@ describe("till-app", () => {
       expect(currentApi.collectOrder).not.toHaveBeenCalled();
     });
 
+    const collectionEdit = (version = 7) => ({
+      billId: "wo-debt",
+      editorId: null,
+      editorName: null,
+      editorVersion: version,
+      draftId: null,
+      draftRevision: null,
+    });
+    const debtSelection = (edit: unknown = collectionEdit()) => ({
+      ...billRow({
+        workingOrderId: "wo-debt",
+        partyId: "party-debt",
+        collectionStatus: "waiting_for_payment",
+        stillOwed: "30.00",
+        invoiceNumber: "A/12",
+      }),
+      edit,
+    });
+    async function openCollection(el: TillApp) {
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      return selectDebt(el);
+    }
+    it("A773 Find a bill carries the selected bill's released edit version into collection", async () => {
+      const { el } = await mountApp({ getFindBill: vi.fn().mockResolvedValue(debtSelection()) });
+      const form = await openCollection(el);
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!),
+      );
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledExactlyOnceWith(
+        "wo-debt",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      );
+    });
+    it("A773 Find a bill refuses missing table edit metadata before collection", async () => {
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection(undefined)),
+      });
+      // Explicitly remove the property rather than using the fixture's default argument.
+      vi.mocked(currentApi.getFindBill).mockResolvedValue({
+        ...debtSelection(),
+        edit: undefined,
+      } as never);
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+      expect(ticket(el)).toBeNull();
+      expect(form.error).toEqual({ code: "draft.out_of_date" });
+    });
+    it("A773 Find a bill retains the original collection tender and edit after a lost answer", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(saleResult);
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      const original = { method: "card", amount: "30.00", externalRef: "terminal-original" };
+      emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender: original, invoiced: true });
+      await flush(el);
+      expect(form.error).toBe("sale.unconfirmed");
+      original.externalRef = "mutated-after-send";
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "40.00" },
+        invoiced: false,
+      });
+      await flush(el);
+      expect(collect.mock.calls).toEqual([
+        [
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "terminal-original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+        [
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "terminal-original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      ]);
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    it("A773 Find a bill ignores a collection answer from a replaced API", async () => {
+      let answer!: (result: TillSaleResult) => void;
+      const collect = vi.fn(
+        () =>
+          new Promise<TillSaleResult>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await vi.waitFor(() => expect(collect).toHaveBeenCalledOnce());
+      el.api = stubApi();
+      await el.updateComplete;
+      answer(saleResult);
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+    });
+    it.each(["draft.out_of_date", "draft.taken_over"])(
+      "A773 Find a bill shows %s and permits a fresh collection after a confirmed refusal",
+      async (code) => {
+        const collect = vi
+          .fn()
+          .mockRejectedValueOnce({ code, status: 409 })
+          .mockResolvedValue(saleResult);
+        const { el } = await mountApp({
+          getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+          collectOrder: collect,
+        });
+        const form = await openCollection(el);
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "cash", amount: "30.00" },
+          invoiced: true,
+        });
+        await flush(el);
+        expect(form.error).toEqual({ code });
+        expect(form.unconfirmed).toBe(false);
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "card", amount: "30.00", externalRef: "fresh-choice" },
+          invoiced: true,
+        });
+        await flush(el);
+        expect(collect.mock.calls[1]).toEqual([
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "fresh-choice" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ]);
+      },
+    );
+    it("A773 Find a bill keeps the original request through a retry authentication refusal", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockRejectedValueOnce({ code: "session.required", status: 401 })
+        .mockResolvedValue(saleResult);
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: collect,
+      });
+      const form = await openCollection(el);
+      const ask = (tender: unknown) =>
+        emit(form, "find-bill-pay", { workingOrderId: "wo-debt", tender, invoiced: true });
+      ask({ method: "card", amount: "30.00", externalRef: "original" });
+      await flush(el);
+      expect(form.unconfirmed).toBe(true);
+      ask({ method: "cash", amount: "40.00" });
+      await flush(el);
+      expect(form.unconfirmed).toBe(true);
+      ask({ method: "cash", amount: "50.00" });
+      await flush(el);
+      expect(collect.mock.calls).toHaveLength(3);
+      for (const call of collect.mock.calls)
+        expect(call).toEqual([
+          "wo-debt",
+          { method: "card", amount: "30.00", externalRef: "original" },
+          undefined,
+          undefined,
+          { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+        ]);
+    });
+    it("A773 Find a bill does not collect a different bill through an old confirmation", async () => {
+      const { el } = await mountApp({ getFindBill: vi.fn().mockResolvedValue(debtSelection()) });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-other",
+        tender: { method: "cash", amount: "30.00" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(currentApi.collectOrder).not.toHaveBeenCalled();
+    });
+    it("A773 Find a bill ignores a selected bill read after API replacement", async () => {
+      let answer!: (value: unknown) => void;
+      const getFindBill = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el } = await mountApp({ getFindBill });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-debt" }),
+      });
+      await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledOnce());
+      el.api = stubApi();
+      await el.updateComplete;
+      answer(debtSelection());
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
+    });
+    it("A773 reopening a collection keeps its original amount and tender after a fresh changed read", async () => {
+      const collect = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(saleResult);
+      const lookup = vi.fn().mockResolvedValue(debtSelection());
+      const { el } = await mountApp({ getFindBill: lookup, collectOrder: collect });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "card", amount: "30.00", externalRef: "original" },
+        invoiced: true,
+      });
+      await flush(el);
+      lookup.mockResolvedValue({
+        ...debtSelection(collectionEdit(11)),
+        stillOwed: "12.00",
+        invoiceNumber: null,
+      });
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-debt" }),
+      });
+      await flush(el);
+      expect(form.bill!.stillOwed).toBe("30.00");
+      expect(form.bill!.invoiceNumber).toBe("A/12");
+      expect(form.shadowRoot!.querySelector("[name=cash-received]")).toBeNull();
+      const reference = form.shadowRoot!.querySelector<WtInput>("[name=terminal-reference]")!;
+      expect(reference.value).toBe("original");
+      await userEvent.click(
+        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!),
+      );
+      await flush(el);
+      expect(collect.mock.calls[1]).toEqual([
+        "wo-debt",
+        { method: "card", amount: "30.00", externalRef: "original" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      ]);
+    });
+    it("A773 Find a bill retries its original unanswered request through a replacement API", async () => {
+      const first = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getFindBill: vi.fn().mockResolvedValue(debtSelection()),
+        collectOrder: first,
+      });
+      const form = await openCollection(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "card", amount: "30.00", externalRef: "original" },
+        invoiced: true,
+      });
+      await flush(el);
+      const retry = vi.fn().mockResolvedValue(saleResult);
+      el.api = stubApi({ collectOrder: retry });
+      await flush(el);
+      emit(form, "find-bill-pay", {
+        workingOrderId: "wo-debt",
+        tender: { method: "cash", amount: "40.00" },
+        invoiced: false,
+      });
+      await flush(el);
+      expect(retry).toHaveBeenCalledExactlyOnceWith(
+        "wo-debt",
+        { method: "card", amount: "30.00", externalRef: "original" },
+        undefined,
+        undefined,
+        { billId: "wo-debt", editorVersion: 7, draftId: null, draftRevision: null },
+      );
+      expect(ticket(el)!.originalReceiptAvailable).toBe(false);
+    });
+    it("A773 Find a bill never replays an unanswered payment through a different selected bill", async () => {
+      const collect = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const lookup = vi
+        .fn()
+        .mockResolvedValueOnce(debtSelection())
+        .mockResolvedValue({
+          ...debtSelection(),
+          workingOrderId: "wo-other",
+          edit: { ...collectionEdit(), billId: "wo-other" },
+        });
+      const { el } = await mountApp({ getFindBill: lookup, collectOrder: collect });
+      const form = await openCollection(el);
+      const pay = () =>
+        emit(form, "find-bill-pay", {
+          workingOrderId: "wo-debt",
+          tender: { method: "cash", amount: "30.00" },
+          invoiced: true,
+        });
+      pay();
+      await flush(el);
+      expect(collect).toHaveBeenCalledOnce();
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: billRow({ workingOrderId: "wo-other" }),
+      });
+      await flush(el);
+      pay();
+      await flush(el);
+      expect(collect).toHaveBeenCalledOnce();
+      expect(ticket(el)).toBeNull();
+    });
     it("Find a bill collects an existing debt and offers a duplicate receipt", async () => {
       const waiting = vi.fn().mockResolvedValue([]);
       const { el } = await mountApp({ listCounterWaiting: waiting });
@@ -21229,10 +21556,10 @@ describe("A737 Find a bill page", () => {
   });
 
   it("freshens a bill by ID before showing the selected unpaid-invoice collector", async () => {
-    let resolve!: (value: ReturnType<typeof billRow>) => void;
+    let resolve!: (value: Awaited<ReturnType<TillApi["getFindBill"]>>) => void;
     const getFindBill = vi.fn<TillApi["getFindBill"]>(
       () =>
-        new Promise<ReturnType<typeof billRow>>((done) => {
+        new Promise<Awaited<ReturnType<TillApi["getFindBill"]>>>((done) => {
           resolve = done;
         }),
     );
@@ -21242,14 +21569,15 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
     expect(getFindBill.mock.calls[0]![0]).toBe("bill-1");
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
-    resolve(
-      billRow({
+    resolve({
+      ...billRow({
         invoiceNumber: "F/99",
         stillOwed: "17.25",
         collectionStatus: "left_without_paying",
         departedAt: "2026-10-14T20:00:00Z",
       }),
-    );
+      edit: null,
+    });
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).not.toBeNull(),
     );

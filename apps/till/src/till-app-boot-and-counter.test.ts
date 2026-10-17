@@ -1,6 +1,7 @@
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import {
   transactionRow,
+  billRow,
   billOptions,
   listPage,
   resolvedDates,
@@ -172,6 +173,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       revision: 0,
       ownerRevision: 0,
     })),
+    getFindBill: vi.fn(async (id: string) => ({ ...billRow({ workingOrderId: id }), edit: null })),
     getTill: vi.fn().mockResolvedValue(till),
     getLocales: vi.fn().mockResolvedValue({
       locales: [

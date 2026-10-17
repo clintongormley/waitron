@@ -3707,7 +3707,10 @@ export class TillApi {
     );
   }
 
-  getFindBill(workingOrderId: string, options: ReadOptions = {}): Promise<BillRow> {
+  getFindBill(
+    workingOrderId: string,
+    options: ReadOptions = {},
+  ): Promise<BillRow & { edit: BillEditState | null }> {
     return this.#request(
       `/api/bills/${encodeURIComponent(workingOrderId)}`,
       "GET",

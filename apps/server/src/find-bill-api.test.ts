@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
+  billEditStates,
   deviceProfiles,
   devices,
   floorZones,
@@ -75,6 +76,32 @@ describe("Find a bill list routes", () => {
       status: 200,
       json: { timeZone: "Pacific/Honolulu" },
     });
+  });
+  it("returns the selected table bill's retained edit version and no bill edit for a counter order", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values({
+        billId: party.tabId,
+        editorId: null,
+        editorVersion: 7,
+      }),
+    );
+    const counter = await parked(venue, "Caña");
+    expect(await get(`/api/bills/${party.tabId}`)).toMatchObject({
+      status: 200,
+      json: {
+        partyId: party.partyId,
+        edit: {
+          billId: party.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 7,
+          draftId: null,
+          draftRevision: null,
+        },
+      },
+    });
+    expect(await get(`/api/bills/${counter}`)).toMatchObject({ status: 200, json: { edit: null } });
   });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
     const id = await parked(venue, "Caña");
