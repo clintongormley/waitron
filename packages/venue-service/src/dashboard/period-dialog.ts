@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { currentLocale } from "@waitron/dashboard-kit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -7,6 +8,7 @@ import {
   focusFirstInvalid,
   saveActionState,
   submitOnEnter,
+  type ColourChoice,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -20,7 +22,11 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
-import { calendarColourChoices, firstUnusedCalendarColour } from "./calendar-colours.js";
+import {
+  calendarColourChoices,
+  firstUnusedCalendarColour,
+  type ColourUser,
+} from "./calendar-colours.js";
 import { format } from "./hours-view.js";
 import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -32,14 +38,14 @@ type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
   /** Empty unless the dialog asks for the department. */
   departmentId: string;
 };
-type Department = { id: string; name: string; usedColours: readonly CalendarColour[] };
+type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
 const offsetNumber = (text: string): number | undefined =>
   /^[+-]?\d+$/.test(text) ? Number(text) : undefined;
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
-const empty = (usedColours: readonly CalendarColour[] = []): Draft => ({
+const empty = (users: readonly ColourUser[] = []): Draft => ({
   name: "",
-  colour: firstUnusedCalendarColour(usedColours),
+  colour: firstUnusedCalendarColour(users.map(({ colour }) => colour)),
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
@@ -110,7 +116,8 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false })
   period?: OpeningHoursModel["departments"][number]["periods"][number];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
-  @property({ attribute: false }) usedColours: readonly CalendarColour[] = [];
+  /** The department's other periods; their colours are marked as used. */
+  @property({ attribute: false }) colourUsers: readonly ColourUser[] = [];
   @property({ attribute: false }) refusal?: { code: string; params?: Record<string, unknown> };
   /** Where the period is painted; absent draws no Painted in. */
   @property({ attribute: false }) paintedIn?: PaintedIn;
@@ -170,8 +177,8 @@ export class PeriodDialog extends LitElement {
             departmentId: "",
           }
         : this.departments?.length === 1
-          ? { ...empty(this.departments[0]!.usedColours), departmentId: this.departments[0]!.id }
-          : empty(this.usedColours);
+          ? { ...empty(this.departments[0]!.colourUsers), departmentId: this.departments[0]!.id }
+          : empty(this.colourUsers);
       this.colourPicked = false;
       this.baseline = copy(this.input);
       this.attempted = false;
@@ -208,6 +215,24 @@ export class PeriodDialog extends LitElement {
       endOffsetMinutes: offset === undefined ? this.draft.endOffsetMinutes : String(offset),
     };
   }
+  private get shownColourUsers(): readonly ColourUser[] {
+    if (!this.choosesDepartment) return this.colourUsers;
+    return this.departments!.find(({ id }) => id === this.draft.departmentId)?.colourUsers ?? [];
+  }
+  private choicesFor?: { users: readonly ColourUser[]; locale: string; choices: ColourChoice[] };
+  private colourChoices(): ColourChoice[] {
+    const users = this.shownColourUsers;
+    const locale = currentLocale();
+    if (this.choicesFor?.users !== users || this.choicesFor.locale !== locale)
+      this.choicesFor = {
+        users,
+        locale,
+        choices: calendarColourChoices((colour) => t(`hours.colour.${colour}`), users),
+      };
+    return this.choicesFor.choices;
+  }
+  private readonly usedByLabel = (colour: string, names: string) =>
+    format("hours.colour_used_by", { colour, names });
   private get choosesDepartment() {
     return !this.period && this.departments !== undefined;
   }
@@ -274,7 +299,9 @@ export class PeriodDialog extends LitElement {
       const department = this.departments?.find((entry) => entry.id === value);
       this.draft = {
         ...this.draft,
-        colour: firstUnusedCalendarColour(department ? department.usedColours : this.usedColours),
+        colour: firstUnusedCalendarColour(
+          (department ? department.colourUsers : this.colourUsers).map(({ colour }) => colour),
+        ),
       };
     }
     if (this.refusalField() === field) this.refusal = undefined;
@@ -459,8 +486,8 @@ export class PeriodDialog extends LitElement {
             label=${t("hours.colour")}
             required
             .value=${this.draft.colour}
-            .choices=${calendarColourChoices((colour) => t(`hours.colour.${colour}`))}
-            .usedByLabel=${(colour: string, names: string) => format("hours.colour_used_by", { colour, names })}
+            .choices=${this.colourChoices()}
+            .usedByLabel=${this.usedByLabel}
             .error=${this.error("colour")}
             ?disabled=${this.busy}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {

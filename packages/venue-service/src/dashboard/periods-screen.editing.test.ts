@@ -592,10 +592,10 @@ it("+ Add period on a venue with two departments asks for the department and cre
   }) as DashboardRequest);
   const dialog = await edit(el);
   expect(
-    dialog.departments?.map(({ id, name, usedColours }) => ({ id, name, usedColours })),
+    dialog.departments?.map(({ id, name, colourUsers }) => ({ id, name, colourUsers })),
   ).toEqual([
-    { id: "restaurant", name: "Restaurant", usedColours: ["green"] },
-    { id: "bar", name: "Bar", usedColours: ["red"] },
+    { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "green" }] },
+    { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
   ]);
   expect(dialog.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add period");
   expect(saveButton(dialog).textContent!.trim()).toBe("Save");
@@ -903,4 +903,22 @@ it("a late period save cannot revive the removed department's retained dialog", 
   expect(dialog.isConnected).toBe(false);
   expect(dialogOf(screen)).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("editing a period marks the colours its department's other periods use, never its own", async () => {
+  const data = model();
+  data.departments[0]!.periods = [
+    { ...lunch(), colour: "red" },
+    { ...lunch(), id: "p2", name: "Dinner", colour: "red" },
+    { ...lunch(), id: "p3", name: "Brunch", colour: "blue" },
+  ];
+  const el = await mount((async () => structuredClone(data)) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  const chooser = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-colour-chooser[name=colour]",
+  )!;
+  const marks = Object.fromEntries(chooser.choices.map((c) => [c.value, c.usedBy ?? []]));
+  expect(marks.red).toEqual(["Dinner"]);
+  expect(marks.blue).toEqual(["Brunch"]);
+  expect(checkedColour(dialog)).toBe("red");
 });

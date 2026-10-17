@@ -954,8 +954,15 @@ it("Delete… on a clean draft closes the dialog and emits period-delete once wi
 });
 
 const departments = [
-  { id: "restaurant", name: "Restaurant", usedColours: ["red", "amber"] as const },
-  { id: "bar", name: "Bar", usedColours: ["red"] as const },
+  {
+    id: "restaurant",
+    name: "Restaurant",
+    colourUsers: [
+      { name: "Lunch", colour: "red" },
+      { name: "Dinner", colour: "amber" },
+    ],
+  },
+  { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
 ];
 async function mountAdd(list: typeof departments | (typeof departments)[number][]) {
   const el = document.createElement("period-dialog");
@@ -1063,4 +1070,72 @@ it("a department.not_found refusal for the chosen department shows under Departm
   await change(el, "departmentId", { value: "restaurant" });
   expect(field(el, "departmentId").error).toBe("");
   expect(bottom()).toBe("");
+});
+
+const usedBy = (el: PeriodDialog) =>
+  Object.fromEntries(chooser(el).choices.map((choice) => [choice.value, choice.usedBy ?? []]));
+
+it("adding, the chooser names the periods that use each colour, and the new period starts on the first unused one", async () => {
+  const el = document.createElement("period-dialog");
+  el.menus = menus;
+  el.departmentName = "Restaurant";
+  el.colourUsers = [
+    { name: "Lunch", colour: "red" },
+    { name: "Dinner", colour: "amber" },
+  ];
+  el.open = true;
+  applyTokens(el);
+  hosts.push(el);
+  document.body.append(el);
+  await el.updateComplete;
+  expect(usedBy(el)).toEqual({
+    red: ["Lunch"],
+    amber: ["Dinner"],
+    grey: [],
+    green: [],
+    blue: [],
+    purple: [],
+  });
+  expect(checkedColour(el)).toBe("grey");
+});
+
+it("with two departments, no colour is marked until one is chosen, then the chosen department's periods are", async () => {
+  const el = await mountAdd(departments);
+  expect(chooser(el).choices.every((choice) => !choice.usedBy?.length)).toBe(true);
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(usedBy(el).red).toEqual(["Lunch"]);
+  expect(usedBy(el).amber).toEqual(["Dinner"]);
+  await change(el, "departmentId", { value: "bar" });
+  expect(usedBy(el).red).toEqual(["All day"]);
+  expect(usedBy(el).amber).toEqual([]);
+});
+
+it("in Spanish a marked tile is named by its colour and the period using it", async () => {
+  setLocale("es");
+  try {
+    const el = await mountAdd([departments[0]!]);
+    await chooser(el).updateComplete;
+    expect(chooserTile(el, "red").getAttribute("aria-label")).toBe("Rojo, en uso por Lunch");
+  } finally {
+    setLocale("en");
+  }
+});
+
+it("typing in another field keeps the chooser's choices; a language change rebuilds their labels", async () => {
+  const el = await mountAdd(departments);
+  await change(el, "departmentId", { value: "restaurant" });
+  const before = chooser(el).choices;
+  const label = chooser(el).usedByLabel;
+  await change(el, "name", { value: "Brunch" });
+  expect(chooser(el).choices).toBe(before);
+  expect(chooser(el).usedByLabel).toBe(label);
+  setLocale("es");
+  try {
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(chooser(el).choices).not.toBe(before);
+    expect(chooser(el).choices[0]!.label).toBe("Rojo");
+  } finally {
+    setLocale("en");
+  }
 });

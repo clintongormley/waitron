@@ -302,8 +302,15 @@ it("Delete… on a changed draft asks first: keep emits nothing and keeps the dr
 it("changing only the department of a new period makes it dirty, and choosing it back makes it clean", async () => {
   const el = await mountWith((el) => {
     el.departments = [
-      { id: "restaurant", name: "Restaurant", usedColours: ["red", "amber"] },
-      { id: "bar", name: "Bar", usedColours: ["red"] },
+      {
+        id: "restaurant",
+        name: "Restaurant",
+        colourUsers: [
+          { name: "Lunch", colour: "red" },
+          { name: "Dinner", colour: "amber" },
+        ],
+      },
+      { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
     ];
   });
   const department = async (value: string) => {

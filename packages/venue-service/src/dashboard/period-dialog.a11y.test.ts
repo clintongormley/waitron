@@ -69,8 +69,8 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     if (state === "deletable") el.deletable = true;
     if (state === "add-from-page")
       el.departments = [
-        { id: "restaurant", name: "Restaurant", usedColours: ["red"] },
-        { id: "bar", name: "Bar", usedColours: [] },
+        { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "red" }] },
+        { id: "bar", name: "Bar", colourUsers: [] },
       ];
     el.open = true;
     await el.updateComplete;

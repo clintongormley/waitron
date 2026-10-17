@@ -184,7 +184,10 @@ export class PeriodEditing implements ReactiveController {
     const editor = this.editor;
     if (!editor) return nothing;
     const model = this.options.model();
-    const colours = (department: Department) => department.periods.map(({ colour }) => colour);
+    const colourUsers = (department: Department) =>
+      department.periods
+        .filter(({ id }) => id !== editor.period?.id)
+        .map(({ name, colour }) => ({ name, colour }));
     const department = model.departments.find(({ id }) => id === editor.departmentId);
     if (editor.departmentId !== null && !department) return nothing;
     const fromPainter = !editor.period && !this.options.chooseDepartment;
@@ -198,13 +201,17 @@ export class PeriodEditing implements ReactiveController {
         .seasons=${model.seasons}
         .departmentId=${department?.id ?? ""}
         .departmentName=${department?.name ?? ""}
-        .usedColours=${department ? colours(department) : []}
+        .colourUsers=${department ? colourUsers(department) : []}
         .departments=${
           department
             ? undefined
             : model.departments
                 .filter(({ active }) => active)
-                .map((entry) => ({ id: entry.id, name: entry.name, usedColours: colours(entry) }))
+                .map((entry) => ({
+                  id: entry.id,
+                  name: entry.name,
+                  colourUsers: colourUsers(entry),
+                }))
         }
         .menus=${model.menus}
         .busy=${this.busy}
