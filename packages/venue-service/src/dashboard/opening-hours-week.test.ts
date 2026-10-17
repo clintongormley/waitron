@@ -1016,6 +1016,49 @@ describe("Opening hours week on a phone", () => {
     expect(sent).toEqual([]);
   });
 
+  it("two fingers held still step nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const y = card(el).getBoundingClientRect().top + 20;
+    const finger = (type: string, pointerId: number, clientX: number) =>
+      card(el).dispatchEvent(
+        new PointerEvent(type, {
+          pointerId,
+          pointerType: "touch",
+          isPrimary: pointerId === 1,
+          clientX,
+          clientY: y,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 1, 106);
+    finger("pointerup", 2, 284);
+    expect(sent).toEqual([]);
+  });
+
+  it("a cancelled scroll leaves nothing for a later press to finish", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const tall = document.createElement("div");
+    tall.style.height = "3000px";
+    document.body.append(tall);
+    hosts.push(tall);
+    const cancelled: PointerEvent[] = [];
+    card(el).addEventListener("pointercancel", (event) => cancelled.push(event));
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 0, y: -200 } });
+    await vi.waitFor(() => expect(cancelled).toHaveLength(1));
+    window.scrollTo(0, 0);
+    await frames();
+    await commands.mouseDrag([
+      'opening-hours-week [data-test="day-name"]',
+      `${cardAt} .row[data-row="rest"] .block:last-child`,
+    ]);
+    expect(sent).toEqual([]);
+  });
+
   it("a tap on the day's name still opens the day box", async () => {
     const el = await mount({ date: "2026-12-01" });
     const opened = events<CalendarDayOpen>(el, "calendar-day-open");

@@ -684,17 +684,20 @@ export class OpeningHoursWeekView extends LitElement {
       </div>`;
   }
 
-  #swipeFrom: { x: number; y: number } | undefined;
+  #swipeFrom: { id: number; x: number; y: number } | undefined;
 
   #swipeStart(event: PointerEvent) {
+    // A second finger makes the gesture a pinch or a two-finger hold, not a swipe.
     this.#swipeFrom =
-      event.pointerType === "mouse" ? undefined : { x: event.clientX, y: event.clientY };
+      event.pointerType === "mouse" || this.#swipeFrom
+        ? undefined
+        : { id: event.pointerId, x: event.clientX, y: event.clientY };
   }
 
   #swipeEnd(event: PointerEvent) {
     const from = this.#swipeFrom;
+    if (!from || from.id !== event.pointerId) return;
     this.#swipeFrom = undefined;
-    if (!from) return;
     const across = event.clientX - from.x;
     const down = event.clientY - from.y;
     if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
