@@ -44,7 +44,7 @@ import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createStation } from "./kitchen.js";
-import { moveDishesToStation } from "./station-move.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
 import { parkOrder } from "./working-order.js";

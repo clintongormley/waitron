@@ -24,6 +24,7 @@ import {
 } from "./testing/bill-venue.js";
 import { fireLines, fireableLineColumns } from "./working-order.js";
 import { setStationToday } from "@waitron/venue-service";
+import { readBillEditState } from "./bill-editing.js";
 
 let venue: BillVenue;
 let bar: string;
@@ -41,8 +42,21 @@ useVenueDb({
   },
 });
 
-const call = (path: string, body: unknown, cookie = venue.cookie) =>
-  send(venue.app, cookie, "POST", path, body);
+const call = async (path: string, body: unknown, cookie = venue.cookie) => {
+  const id = path.match(/^\/api\/working-orders\/([^/]+)\/lines\/move-station$/)?.[1];
+  return send(
+    venue.app,
+    cookie,
+    "POST",
+    path,
+    id === undefined
+      ? body
+      : {
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
+          ...(body as Record<string, unknown>),
+        },
+  );
+};
 
 describe("GET /api/stations", () => {
   it("reports the current open state of active stations", async () => {
@@ -320,6 +334,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         path === "whole order"
           ? await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}`, {
               revision,
+              expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
               lines: [
                 {
                   workingOrderLineId: item!.workingOrderLineId,
@@ -331,6 +346,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
             })
           : await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${tabId}/lines/1`, {
               revision,
+              expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
               quantity: "2",
               makeAt: null,
             });

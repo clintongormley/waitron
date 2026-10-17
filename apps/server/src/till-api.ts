@@ -3727,7 +3727,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const request = stationMoveRequest(id, await readJsonBody<Record<string, unknown>>(c));
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const request = stationMoveRequest(id, body);
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         return moveDishesToStation(
@@ -3738,6 +3739,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           {
             deviceId: session.deviceId,
             personId: session.personId,
+            kind: "order",
+            expectedEdit: body.expectedEdit as BillEditExpected | null,
           },
           {
             attendance:

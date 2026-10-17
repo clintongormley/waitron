@@ -15,6 +15,7 @@ import {
   abandonHeldOrder as abandon,
 } from "../working-order.js";
 import type { OrderAttendance, UpdateHeldOrderRequest } from "../working-order.js";
+import { moveDishesToStation as moveStation, type StationMoveActor } from "../station-move.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
 async function authority(tx: Transaction, id: string, operatorId: string | undefined) {
@@ -185,4 +186,29 @@ export async function abandonHeldOrder(
 ) {
   const observed = await withTransaction(deps.db, (tx) => authority(tx, id, attendance?.personId));
   return abandon(deps, cfg, id, observed, attendance);
+}
+
+export async function moveDishesToStation(
+  tx: Transaction,
+  cfg: Parameters<typeof moveStation>[1],
+  id: string,
+  request: Parameters<typeof moveStation>[3],
+  mover: StationMoveActor,
+  options?: Parameters<typeof moveStation>[5],
+) {
+  if (mover.personId === null)
+    return moveStation(tx, cfg, id, request, { ...mover, kind: "kitchen" }, options);
+  const observed = await authority(tx, id, mover.personId ?? undefined);
+  return moveStation(
+    tx,
+    cfg,
+    id,
+    request,
+    {
+      ...mover,
+      kind: "order",
+      expectedEdit: observed.expectedEdit,
+    },
+    options,
+  );
 }

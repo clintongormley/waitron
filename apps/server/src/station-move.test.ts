@@ -54,7 +54,8 @@ import { routeProductTo } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { readStationQueueMoves } from "./station-queue-moves.js";
-import { moveDishesToStation, stillMovable } from "./station-move.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
+import { stillMovable } from "./station-move.js";
 import { withStationDishes } from "./station-closing.js";
 import {
   carveOffLines,

@@ -24,6 +24,8 @@ import { createPairingMode } from "./pairing-mode.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createStation } from "./kitchen.js";
 import { moveDishesToStation } from "./station-move.js";
+import { readBillEditState } from "./bill-editing.js";
+import { saveDraft } from "./order-drafts.js";
 import {
   inTx,
   provisionBillVenue,
@@ -117,6 +119,45 @@ const move = (
   });
 
 describe("POST /api/device/working-orders/:id/lines/move-station", () => {
+  it("keeps kitchen authority when another person edits this bill", async () => {
+    const screen = await display(stationScreen(bar));
+    const { tabId, item } = await paella();
+    const saved = await inTx(venue, async (tx) => {
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId));
+      const expectedEdit = await readBillEditState(tx, tabId);
+      return saveDraft(tx, venue.cfg, bill!.partyId!, venue.adminId, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        expectedEdit,
+        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+      });
+    });
+    const answer = await send(
+      app,
+      screen.cookie,
+      "POST",
+      `/api/device/working-orders/${tabId}/lines/move-station`,
+      {
+        submissionId: randomUUID(),
+        lineIds: [item.workingOrderLineId],
+        stationId: grill,
+        kind: "order",
+        expectedEdit: null,
+        personId: venue.operatorId,
+      },
+    );
+    expect(answer.status).toBe(200);
+    expect(await movesOf(item.workingOrderLineId)).toEqual([
+      expect.objectContaining({
+        movedByDeviceId: screen.id,
+        movedByPersonId: null,
+        fromStationId: bar,
+        toStationId: grill,
+      }),
+    ]);
+    expect(await inTx(venue, (tx) => readBillEditState(tx, tabId))).toEqual(saved.edit);
+  });
   it.each([false, true])(
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
@@ -281,7 +322,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
         venue.cfg,
         tabId,
         { submissionId: randomUUID(), lineIds: [atGrill.workingOrderLineId], stationId: grill },
-        { deviceId: screen.id, personId: null },
+        { deviceId: screen.id, personId: null, kind: "kitchen" },
       ),
     );
     const answer = await move(screen.cookie, tabId, {

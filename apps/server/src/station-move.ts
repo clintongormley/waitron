@@ -5,6 +5,10 @@ import type { SQL } from "drizzle-orm";
 import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
+import { invalid } from "./bill-allocation.js";
+import { refuseRecalledWrite } from "./draft-source.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
 import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kitchen-print.js";
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
@@ -174,10 +178,13 @@ export interface StationMoveResult {
   moved: { workingOrderLineId: string; fromStationId: string }[];
 }
 
-export interface StationMover {
+export interface StationMoveActor {
   deviceId: string | null;
   personId: string | null;
 }
+
+export type StationMover = StationMoveActor &
+  ({ kind: "order"; expectedEdit: BillEditExpected | null } | { kind: "kitchen" });
 
 export interface StationMoveOptions {
   attendance?: OrderAttendance;
@@ -196,14 +203,19 @@ export async function moveDishesToStation(
   mover: StationMover,
   options: StationMoveOptions = {},
 ): Promise<StationMoveResult> {
+  if (mover.kind !== "order" && mover.kind !== "kitchen") throw invalid("authority");
   const at = new Date();
   const lineIds = [...new Set(request.lineIds)].sort();
+  const expectedEdit =
+    mover.kind === "order" && mover.expectedEdit != null
+      ? parseBillEditExpected(mover.expectedEdit)
+      : null;
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: orderId },
     request.submissionId,
     "line.move_station",
-    { orderId, lineIds, stationId: request.stationId },
+    { orderId, lineIds, stationId: request.stationId, authority: mover.kind, expectedEdit },
     async () => {
       const [order] = await tx
         .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
@@ -215,6 +227,20 @@ export async function moveDishesToStation(
         throw new AppError("working_order.not_open", { workingOrderId: orderId });
       if (order.collectedAt !== null)
         throw new AppError("working_order.already_collected", { workingOrderId: orderId });
+
+      if (mover.kind === "order")
+        await requireOrderBillEditor(tx, orderId, {
+          operatorId: mover.personId ?? undefined,
+          expectedEdit,
+        });
+      if (lineIds.length > 0)
+        await refuseRecalledWrite(
+          tx,
+          and(
+            eq(workingOrderLines.workingOrderId, orderId),
+            inArray(workingOrderLines.id, lineIds),
+          )!,
+        );
 
       const stations = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, at);
       const destination = stations.get(request.stationId);
