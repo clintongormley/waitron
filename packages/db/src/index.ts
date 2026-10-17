@@ -90,6 +90,7 @@ export type {
 } from "./order-amendment-hash.js";
 export { diningTables } from "./schema/dining-tables.js";
 export {
+  floorPlanPlacements,
   floorPlanShape,
   floorPlans,
   floorPlanTableParts,

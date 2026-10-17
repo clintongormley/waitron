@@ -7,6 +7,7 @@ import {
   deviceProfiles,
   diningTables,
   floorTodayTables,
+  floorPlanPlacements,
   floorPlans,
   floorPlanTables,
   floorZones,
@@ -483,9 +484,13 @@ describe("stale floor identifiers", () => {
         .insert(floorPlans)
         .values({ zoneId: f.zoneId, savedAt: now.toISOString() })
         .returning();
-      await tx.insert(floorPlanTables).values({
+      const [master] = await tx
+        .insert(floorPlanTables)
+        .values({ planId: plan!.id, zoneId: f.zoneId, label: table!.label })
+        .returning();
+      await tx.insert(floorPlanPlacements).values({
         planId: plan!.id,
-        label: table!.label,
+        planTableId: master!.id,
         x: 1,
         y: 1,
         width: 2,

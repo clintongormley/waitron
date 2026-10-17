@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   diningTables,
+  floorPlans,
+  floorPlanTables,
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -97,13 +99,22 @@ export async function plannedZone(
   return { zoneId, table, master: ids, revision };
 }
 
-/** Gives master table `masterId` the size it keeps while off the plan. */
+/** Gives master table `masterId` the size it keeps while off its zone's plan. */
 export async function giveKeptSize(
   v: PartyVenue,
   masterId: string,
   size: { width: number; height: number },
 ): Promise<void> {
-  await inTx(v, (tx) => tx.insert(floorPlanTableSizes).values({ planTableId: masterId, ...size }));
+  await inTx(v, async (tx) => {
+    const [plan] = await tx
+      .select({ id: floorPlans.id })
+      .from(floorPlans)
+      .innerJoin(floorPlanTables, eq(floorPlanTables.zoneId, floorPlans.zoneId))
+      .where(eq(floorPlanTables.id, masterId));
+    await tx
+      .insert(floorPlanTableSizes)
+      .values({ planId: plan!.id, planTableId: masterId, ...size });
+  });
 }
 
 /** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */

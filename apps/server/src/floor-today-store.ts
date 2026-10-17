@@ -1,4 +1,4 @@
-import { requireZone } from "./floor-plan.js";
+import { layoutTables, requireZone } from "./floor-plan.js";
 import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
@@ -125,19 +125,19 @@ async function resetZoneFor(
       .where(eq(floorTodayZones.id, today.id));
   }
 
-  const master = await tx
-    .select()
-    .from(floorPlanTables)
-    .innerJoin(floorPlans, eq(floorPlans.id, floorPlanTables.planId))
+  const [plan] = await tx
+    .select({ id: floorPlans.id })
+    .from(floorPlans)
     .where(eq(floorPlans.zoneId, zoneId));
+  const master = await layoutTables(tx, zoneId, plan?.id ?? null);
   const live = await zoneTables(tx, cfg, zoneId);
   const targets = targetsFromMaster(
-    master.map(({ floor_plan_tables: row }) => ({
+    master.map((row) => ({
       id: row.id,
       label: row.label,
       seats: row.seats,
       fixed: row.fixed,
-      placement: placementOf(row),
+      placement: row.placement,
     })),
     live,
   );
@@ -183,8 +183,7 @@ async function copyParts(
     .select({ joined: floorPlanTableParts.joinedTableId, part: floorPlanTableParts.partTableId })
     .from(floorPlanTableParts)
     .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
-    .innerJoin(floorPlans, eq(floorPlans.id, floorPlanTables.planId))
-    .where(eq(floorPlans.zoneId, zoneId));
+    .where(eq(floorPlanTables.zoneId, zoneId));
   const rowsOf = new Map<string, string[]>();
   for (const row of written) {
     if (row.planTableId === null) continue;

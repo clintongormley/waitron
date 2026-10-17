@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorZones,
+  floorPlanPlacements,
   floorPlanTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -61,9 +62,22 @@ async function merge(zoneId: string, tableIds: string[]): Promise<void> {
   });
 }
 
+/** The master table, with its place on the zone's plan. */
 async function masterRow(id: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, id)),
+    tx
+      .select({
+        ...getTableColumns(floorPlanTables),
+        x: floorPlanPlacements.x,
+        y: floorPlanPlacements.y,
+        width: floorPlanPlacements.width,
+        height: floorPlanPlacements.height,
+        shape: floorPlanPlacements.shape,
+        rotation: floorPlanPlacements.rotation,
+      })
+      .from(floorPlanTables)
+      .leftJoin(floorPlanPlacements, eq(floorPlanPlacements.planTableId, floorPlanTables.id))
+      .where(eq(floorPlanTables.id, id)),
   );
   return row;
 }

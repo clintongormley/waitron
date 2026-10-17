@@ -304,10 +304,10 @@ describe("saved part", () => {
       .insert(floorPlans)
       .values({ id: PLAN, zoneId: ZONE, savedAt: "2026-10-10T12:00:00.000Z" });
     await suite.db.insert(floorPlanTables).values([
-      { id: LONG_MASTER, planId: PLAN, label: "Long table", seats: 10 },
-      { id: COUNTER_3_MASTER, planId: PLAN, label: "Counter 3", seats: 2 },
-      { id: COUNTER_4_MASTER, planId: PLAN, label: "Counter 4", seats: 6 },
-      { id: COUNTER_5_MASTER, planId: PLAN, label: "Counter 5", seats: 4 },
+      { id: LONG_MASTER, planId: PLAN, zoneId: ZONE, label: "Long table", seats: 10 },
+      { id: COUNTER_3_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 3", seats: 2 },
+      { id: COUNTER_4_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 4", seats: 6 },
+      { id: COUNTER_5_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 5", seats: 4 },
     ]);
     await suite.db.insert(floorPlanTableParts).values([
       { joinedTableId: LONG_MASTER, partTableId: COUNTER_3_MASTER },

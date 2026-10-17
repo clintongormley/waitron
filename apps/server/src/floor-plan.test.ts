@@ -6,6 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorPlanPlacements,
   floorPlans,
   floorPlanTableParts,
   floorPlanTables,
@@ -114,14 +115,14 @@ async function masterOf(
     for (const table of tables) {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({
-          planId: plan!.id,
-          label: table.label,
-          seats: 4,
-          ...(table.place === true ? PLACE : {}),
-        })
+        .values({ planId: plan!.id, zoneId, label: table.label, seats: 4 })
         .returning({ id: floorPlanTables.id });
       ids.push(row!.id);
+      if (table.place === true) {
+        await tx
+          .insert(floorPlanPlacements)
+          .values({ planId: plan!.id, planTableId: row!.id, ...PLACE });
+      }
       if (table.live !== undefined) {
         await tx
           .update(diningTables)
@@ -425,7 +426,7 @@ describe("checkZonePlanSave", () => {
         .returning({ id: floorPlans.id });
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, label, seats: 4 })
+        .values({ planId: plan!.id, zoneId: z, label, seats: 4 })
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });
@@ -1017,6 +1018,45 @@ describe("saveZonePlan", () => {
     ]);
   });
 
+  it("stores a placed table's place in floor_plan_placements and none on the table", async () => {
+    const z = await zone();
+    const placement = { x: 12, y: 34, width: 5, height: 6, shape: "round" as const, rotation: 45 };
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("p", fresh("Placed"), { placement }), unplaced("s", "Spare")],
+    });
+    const [plan] = await inTx(v, (tx) =>
+      tx.select({ id: floorPlans.id }).from(floorPlans).where(eq(floorPlans.zoneId, z)),
+    );
+    const placements = await inTx(v, (tx) =>
+      tx
+        .select()
+        .from(floorPlanPlacements)
+        .where(inArray(floorPlanPlacements.planTableId, [ids.p!, ids.s!])),
+    );
+    expect(placements).toEqual([
+      { id: expect.any(String), planId: plan!.id, planTableId: ids.p!, ...placement },
+    ]);
+    const tables = await inTx(v, (tx) =>
+      tx
+        .select()
+        .from(floorPlanTables)
+        .where(inArray(floorPlanTables.id, [ids.p!, ids.s!])),
+    );
+    expect(tables).toHaveLength(2);
+    for (const table of tables) {
+      expect(table).toMatchObject({
+        zoneId: z,
+        x: null,
+        y: null,
+        width: null,
+        height: null,
+        shape: null,
+        rotation: null,
+      });
+    }
+  });
+
   describe("a table's kept size", () => {
     const SIZED = { ...PLACE, width: 2, height: 3 };
 
@@ -1083,6 +1123,17 @@ describe("saveZonePlan", () => {
         tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
       );
       expect(sizes).toEqual([]);
+    });
+
+    it("keeps a table's off-plan size in its layout", async () => {
+      const { z, c3 } = await takenOff();
+      const [plan] = await inTx(v, (tx) =>
+        tx.select({ id: floorPlans.id }).from(floorPlans).where(eq(floorPlans.zoneId, z)),
+      );
+      const sizes = await inTx(v, (tx) =>
+        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+      );
+      expect(sizes).toMatchObject([{ planId: plan!.id, width: 2, height: 3 }]);
     });
 
     it("keeps sizes in the same statements, however many tables leave the plan", async () => {

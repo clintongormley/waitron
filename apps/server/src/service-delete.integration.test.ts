@@ -873,8 +873,8 @@ it.each(["zone", "department"] as const)(
       const masters = await tx
         .insert(floorPlanTables)
         .values([
-          { planId: plan!.id, label, seats: 4 },
-          { planId: plan!.id, label: `Saved ${randomUUID()}`, seats: 4 },
+          { planId: plan!.id, zoneId: f.zoneId, label, seats: 4 },
+          { planId: plan!.id, zoneId: f.zoneId, label: `Saved ${randomUUID()}`, seats: 4 },
         ])
         .returning();
       for (const [i, tableId] of [f.tableId, second].entries())
@@ -1219,7 +1219,7 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
       .returning();
     const [master] = await tx
       .insert(floorPlanTables)
-      .values({ planId: plan!.id, label: table!.label, seats: 4 })
+      .values({ planId: plan!.id, zoneId: f.zoneId, label: table!.label, seats: 4 })
       .returning();
     await tx
       .update(diningTables)

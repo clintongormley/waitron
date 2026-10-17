@@ -2,6 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import {
   diningTables,
   floorZones,
+  floorPlanPlacements,
   floorPlans,
   floorPlanTableParts,
   floorPlanTableSizes,
@@ -61,11 +62,7 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
     .where(and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.zoneId, ids)));
   tables.sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
   const plans = await tx.select().from(floorPlans).where(inArray(floorPlans.zoneId, ids));
-  const planIds = plans.map((plan) => plan.id);
-  const saved = await tx
-    .select()
-    .from(floorPlanTables)
-    .where(inArray(floorPlanTables.planId, planIds));
+  const saved = await tx.select().from(floorPlanTables).where(inArray(floorPlanTables.zoneId, ids));
   const todayJoins = await tx
     .select()
     .from(floorTodayJoins)
@@ -224,16 +221,18 @@ export function floorDeletionFor(
       await tx
         .delete(floorPlanTableParts)
         .where(inArray(floorPlanTableParts.joinedTableId, masterIds));
+      const planIds = floor.plans.map((plan) => plan.id);
+      await tx.delete(floorPlanPlacements).where(inArray(floorPlanPlacements.planId, planIds));
       await tx
         .delete(floorPlanTableSizes)
-        .where(inArray(floorPlanTableSizes.planTableId, masterIds));
+        .where(
+          or(
+            inArray(floorPlanTableSizes.planId, planIds),
+            inArray(floorPlanTableSizes.planTableId, masterIds),
+          ),
+        );
       await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
-      await tx.delete(floorPlans).where(
-        inArray(
-          floorPlans.id,
-          floor.plans.map((plan) => plan.id),
-        ),
-      );
+      await tx.delete(floorPlans).where(inArray(floorPlans.id, planIds));
     },
   };
 }

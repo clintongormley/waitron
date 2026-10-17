@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import {
   diningTables,
+  floorPlanPlacements,
   floorPlans,
   floorPlanTableParts,
   floorPlanTableSizes,
@@ -115,7 +116,11 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
     const masters = await tx
       .insert(floorPlanTables)
       .values(
-        ["C", "A", "B"].map((label) => ({ planId: plan!.id, label: `${prefix} saved ${label}` })),
+        ["C", "A", "B"].map((label) => ({
+          planId: plan!.id,
+          zoneId: z,
+          label: `${prefix} saved ${label}`,
+        })),
       )
       .returning();
     const live = await tx
@@ -551,6 +556,27 @@ describe("floor hierarchy deletion", () => {
         tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
       ),
     ).toEqual([]);
+  });
+
+  it("deleting a zone removes its placements", async () => {
+    const { zoneId } = await plannedZone(
+      v,
+      [
+        { key: "bar", label: "Bar", seats: 4 },
+        { key: "t2", label: "T2", seats: 2, place: { x: 20, y: 0 } },
+      ],
+      NOW,
+    );
+    const [plan] = await inTx(v, (tx) =>
+      tx.select({ id: floorPlans.id }).from(floorPlans).where(eq(floorPlans.zoneId, zoneId)),
+    );
+    const placementsOf = () =>
+      inTx(v, (tx) =>
+        tx.select().from(floorPlanPlacements).where(eq(floorPlanPlacements.planId, plan!.id)),
+      );
+    expect(await placementsOf()).toHaveLength(2);
+    await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
+    expect(await placementsOf()).toEqual([]);
   });
 
   it("clears a zone whose saved plan holds Long table made of three tables", async () => {

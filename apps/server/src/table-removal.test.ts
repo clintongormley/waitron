@@ -95,7 +95,7 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
     for (const [i, label] of labels.entries()) {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, label, fixed: false })
+        .values({ planId: plan!.id, zoneId, label, fixed: false })
         .returning({ id: floorPlanTables.id });
       await tx
         .update(diningTables)

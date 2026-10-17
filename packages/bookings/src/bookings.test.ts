@@ -772,7 +772,7 @@ describe("a part of a joined table on the saved plan", () => {
     for (const key of ["long", "c3", "c4", "c5"] as const) {
       const [row] = await db
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, label: labels[key], seats: seats[key] })
+        .values({ planId: plan!.id, zoneId: zone!.id, label: labels[key], seats: seats[key] })
         .returning({ id: floorPlanTables.id });
       master[key] = row!.id;
       const table = await db.execute<{ id: string }>(sql`

@@ -3,6 +3,8 @@ import {
   diningTables,
   nowIso,
   partyTables,
+  floorPlanPlacements,
+  floorPlans,
   floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
@@ -33,8 +35,8 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
     .select({
       tableId: diningTables.id,
       label: diningTables.label,
-      placedWidth: floorPlanTables.width,
-      placedHeight: floorPlanTables.height,
+      placedWidth: floorPlanPlacements.width,
+      placedHeight: floorPlanPlacements.height,
       keptWidth: floorPlanTableSizes.width,
       keptHeight: floorPlanTableSizes.height,
       savedSeats: partRow.seats,
@@ -51,7 +53,21 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
     .innerJoin(partRow, eq(partRow.id, floorResetTableParts.partResetTableId))
     .innerJoin(diningTables, eq(diningTables.id, partRow.tableId))
     .leftJoin(floorPlanTables, eq(floorPlanTables.id, diningTables.planTableId))
-    .leftJoin(floorPlanTableSizes, eq(floorPlanTableSizes.planTableId, diningTables.planTableId))
+    .leftJoin(floorPlans, eq(floorPlans.zoneId, floorPlanTables.zoneId))
+    .leftJoin(
+      floorPlanPlacements,
+      and(
+        eq(floorPlanPlacements.planId, floorPlans.id),
+        eq(floorPlanPlacements.planTableId, floorPlanTables.id),
+      ),
+    )
+    .leftJoin(
+      floorPlanTableSizes,
+      and(
+        eq(floorPlanTableSizes.planId, floorPlans.id),
+        eq(floorPlanTableSizes.planTableId, floorPlanTables.id),
+      ),
+    )
     .where(eq(joinedRow.tableId, tableId));
   return rows
     .map((row) => ({

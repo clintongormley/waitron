@@ -163,8 +163,9 @@ describe("seedFloor", () => {
         y: number | null;
         shape: string | null;
       }>(
-        sql`select d.label, d.zone_id, p.seats, p.x, p.y, p.shape
+        sql`select d.label, d.zone_id, p.seats, pl.x, pl.y, pl.shape
             from dining_tables d left join floor_plan_tables p on p.id = d.plan_table_id
+            left join floor_plan_placements pl on pl.plan_table_id = p.id
             where d.location_id = ${locationId} order by d.label`,
       );
       const { rows: statuses } = await tx.execute<{ label: string; color: string }>(

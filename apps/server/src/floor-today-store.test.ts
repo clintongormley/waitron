@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   tableInService,
   diningTables,
+  floorPlanPlacements,
   floorPlans,
   floorPlanTables,
   floorResetTables,
@@ -20,6 +21,7 @@ import {
   joinedTableApart,
   stillJoinedPart,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -96,14 +98,29 @@ async function zone(): Promise<string> {
   return id;
 }
 
-function masterRow(planId: string, table: MasterTable) {
-  return {
-    planId,
-    label: table.label,
-    seats: table.seats ?? null,
-    fixed: table.fixed ?? false,
-    ...(table.place === undefined ? {} : { ...table.place, shape: "rect" as const, rotation: 0 }),
-  };
+/** Writes one master table of the zone's plan, with its place on the plan if it has one. */
+async function insertMaster(
+  tx: Transaction,
+  zoneId: string,
+  planId: string,
+  table: MasterTable,
+): Promise<string> {
+  const [row] = await tx
+    .insert(floorPlanTables)
+    .values({
+      planId,
+      zoneId,
+      label: table.label,
+      seats: table.seats ?? null,
+      fixed: table.fixed ?? false,
+    })
+    .returning({ id: floorPlanTables.id });
+  if (table.place !== undefined) {
+    await tx
+      .insert(floorPlanPlacements)
+      .values({ planId, planTableId: row!.id, ...table.place, shape: "rect", rotation: 0 });
+  }
+  return row!.id;
 }
 
 /** Writes the zone's master plan; a table naming `live` is followed by that live table. */
@@ -115,15 +132,12 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
       .returning({ id: floorPlans.id });
     const ids = new Map<string, string>();
     for (const table of tables) {
-      const [row] = await tx
-        .insert(floorPlanTables)
-        .values(masterRow(plan!.id, table))
-        .returning({ id: floorPlanTables.id });
-      ids.set(table.label, row!.id);
+      const id = await insertMaster(tx, zoneId, plan!.id, table);
+      ids.set(table.label, id);
       if (table.live !== undefined) {
         await tx
           .update(diningTables)
-          .set({ planTableId: row!.id })
+          .set({ planTableId: id })
           .where(eq(diningTables.id, table.live));
       }
     }
@@ -138,15 +152,28 @@ async function planIdOf(zoneId: string): Promise<string> {
   return plan!.id;
 }
 
-async function editMaster(masterId: string, values: Partial<typeof floorPlanTables.$inferInsert>) {
-  await inTx(v, (tx) =>
-    tx.update(floorPlanTables).set(values).where(eq(floorPlanTables.id, masterId)),
-  );
+/** Changes a master table; `x` and `y` move its place on the plan. */
+async function editMaster(
+  masterId: string,
+  values: { label?: string; seats?: number; fixed?: boolean; x?: number; y?: number },
+) {
+  const { x, y, ...table } = values;
+  await inTx(v, async (tx) => {
+    if (Object.keys(table).length > 0) {
+      await tx.update(floorPlanTables).set(table).where(eq(floorPlanTables.id, masterId));
+    }
+    if (x !== undefined || y !== undefined) {
+      await tx
+        .update(floorPlanPlacements)
+        .set({ x, y })
+        .where(eq(floorPlanPlacements.planTableId, masterId));
+    }
+  });
 }
 
 async function addToMaster(zoneId: string, table: MasterTable): Promise<void> {
   const planId = await planIdOf(zoneId);
-  await inTx(v, (tx) => tx.insert(floorPlanTables).values(masterRow(planId, table)));
+  await inTx(v, (tx) => insertMaster(tx, zoneId, planId, table));
 }
 
 async function deleteFromMaster(masterId: string): Promise<void> {
@@ -159,6 +186,7 @@ async function deleteFromMaster(masterId: string): Promise<void> {
       .update(floorResetTables)
       .set({ planTableId: null })
       .where(eq(floorResetTables.planTableId, masterId));
+    await tx.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, masterId));
     await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, masterId));
   });
 }
