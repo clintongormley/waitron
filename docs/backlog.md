@@ -1975,7 +1975,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
-  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
+  screen's unsent list, has a [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md). A [one-editor proposal](superpowers/specs/2026-10-17-a773-one-editor-design.md)
+  with light/dark pictures now addresses the owner’s 2026-10-17 request for explicit takeover across
+  a table’s bills; ownership and simpler Pay wording await approval. **A773-2**,
   firing and the pass, is planned from the spec once A773-1 lands. **Revised 2026-10-17** (owner):
   the table screen's panel becomes a Sent box (Served, Fired, Held) above a New order that empties
   on send; sent dishes are acted on through the line window; Recall returns a dish to the New order;
