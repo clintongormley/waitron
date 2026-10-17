@@ -1933,6 +1933,8 @@ export class TillApp extends LitElement {
   @state() private activeTabKey?: BuiltInScreen;
   /** The drill-in stacked over the shell's active tab, or undefined when the tab body is on top. */
   @state() private drill?: Drill;
+  /** The order screen is showing a table whose open has not finished. */
+  @state() private tableOpening = false;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
   /** An enrolled handheld: its menu browser shows the menu's handheld display. */
@@ -2251,6 +2253,8 @@ export class TillApp extends LitElement {
   /** Table opens not yet finished. While one is, an order the waiter came back to does not count as
    * back on screen, because the open may replace it. */
   #tableOpensPending = 0;
+  /** The tab a card-mount open switched away from, to go back to if the open fails. */
+  #openedFrom?: BuiltInScreen;
   /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
   /** The same for the party's bills. */
@@ -4005,10 +4009,12 @@ export class TillApp extends LitElement {
       const table = this.tables.find((candidate) => candidate.id === tableToResume.tableId);
       if (!left() && this.#floorLoaded && table?.party?.id === tableToResume.partyId) {
         const visit = ++this.#orderVisit;
+        const offerRequest = ++this.#tableOfferRequest;
+        if (this.#inShell()) this.#showOrderScreen();
         await this.#openTable(
           table.id,
           undefined,
-          ++this.#tableOfferRequest,
+          offerRequest,
           undefined,
           () => replaced() || this.#orderVisit !== visit,
         );
@@ -4294,8 +4300,35 @@ export class TillApp extends LitElement {
       this.#rememberZoneMenu(this.counterServiceZoneId, this.counterService, event.detail.id);
   }
 
+  /** While a table is still opening this says no, as it did before the screen switched early. */
   #tableCatalogueActive(): boolean {
+    return !this.tableOpening && this.#orderScreenShown();
+  }
+
+  #orderScreenShown(): boolean {
     return this.drill?.kind === "table-order" || this.#activeTab() === this.#tableOrderTabKey();
+  }
+
+  /** The URL is written only once the open completes, so a failed open leaves no history entry. */
+  #showOrderScreen(): void {
+    this.#openedFrom = this.activeTabKey;
+    const orderTabKey = this.#tableOrderTabKey();
+    if (orderTabKey !== undefined) this.activeTabKey = this.#resolveScreen(orderTabKey);
+    else this.#pushDrill({ kind: "table-order" });
+    this.tableOpening = true;
+  }
+
+  #leaveFailedOpen(left: () => boolean, offerRequest: number, session: number): void {
+    if (
+      left() ||
+      offerRequest !== this.#tableOfferRequest ||
+      session !== this.#operatorSession ||
+      !this.#orderScreenShown()
+    )
+      return;
+    this.#orderVisit++;
+    if (this.#tableOrderTabKey() !== undefined) this.activeTabKey = this.#openedFrom;
+    else this.#popDrill();
   }
 
   #selectTableMenu(id: string): void {
@@ -8532,6 +8565,7 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
+    this.#showOrderScreen();
     try {
       const leaving = this.#draftSync;
       if (
@@ -8552,6 +8586,7 @@ export class TillApp extends LitElement {
     } finally {
       unlock?.();
       this.#tableOpensPending--;
+      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
     }
   }
 
@@ -8565,34 +8600,64 @@ export class TillApp extends LitElement {
     left: () => boolean = () => false,
     carried?: { note: string | null; lines: OrderLine[] },
   ): Promise<void> {
-    const session = this.#operatorSession;
-    const table = this.tables.find((candidate) => candidate.id === tableId);
-    const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
-    const held = heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
-    if (heldZone !== undefined && held !== undefined) {
-      // Shown at once; the check's answer reaches #onMenuState, which reads again if it moved.
-      this.#loadTableOffers(heldZone, held);
-      this.tableSelectedCatalogueId = this.#resolveZoneMenu(
-        heldZone,
-        held.service.periodOccurrenceKey,
-        held.menus,
-        this.#tableDefaultMenuId,
-      );
-      void this.#menuPoll.readNow(heldZone);
-    } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
-      try {
-        const catalogue = await this.#readZoneOffers(table.zoneId);
-        if (left() || offerRequest !== this.#tableOfferRequest || session !== this.#operatorSession)
-          return;
-        this.#loadTableOffers(table.zoneId, catalogue);
+    try {
+      const session = this.#operatorSession;
+      const table = this.tables.find((candidate) => candidate.id === tableId);
+      const heldZone = this.#menuPoll.running ? (table?.zoneId ?? undefined) : undefined;
+      const held =
+        heldZone === undefined ? undefined : this.#zoneCatalogues.get(heldZone)?.catalogue;
+      if (heldZone !== undefined && held !== undefined) {
+        // Shown at once; the check's answer reaches #onMenuState, which reads again if it moved.
+        this.#loadTableOffers(heldZone, held);
         this.tableSelectedCatalogueId = this.#resolveZoneMenu(
-          table.zoneId,
-          catalogue.service.periodOccurrenceKey,
-          catalogue.menus,
+          heldZone,
+          held.service.periodOccurrenceKey,
+          held.menus,
           this.#tableDefaultMenuId,
         );
-      } catch {
-        if (left() || offerRequest !== this.#tableOfferRequest) return;
+        void this.#menuPoll.readNow(heldZone);
+      } else if (table?.zoneId !== null && table?.zoneId !== undefined) {
+        try {
+          const catalogue = await this.#readZoneOffers(table.zoneId);
+          if (
+            left() ||
+            offerRequest !== this.#tableOfferRequest ||
+            session !== this.#operatorSession
+          )
+            return;
+          this.#loadTableOffers(table.zoneId, catalogue);
+          this.tableSelectedCatalogueId = this.#resolveZoneMenu(
+            table.zoneId,
+            catalogue.service.periodOccurrenceKey,
+            catalogue.menus,
+            this.#tableDefaultMenuId,
+          );
+        } catch {
+          if (left() || offerRequest !== this.#tableOfferRequest) return;
+          this.#leaveFailedOpen(left, offerRequest, session);
+          this.#loadTableOffers(
+            undefined,
+            {
+              offers: [],
+              menus: [],
+              service: {
+                open: false,
+                zoneOpen: true,
+                periodName: null,
+                periodOccurrenceKey: null,
+                keepOpen: null,
+                zoneKeepOpen: null,
+              },
+            },
+            false,
+          );
+          this.tableSelectedCatalogueId = "";
+          const late = this.#lateChangeShown();
+          this.errorKey =
+            late === undefined ? "table.error" : { lateChange: late, also: "table.error" };
+          return;
+        }
+      } else {
         this.#loadTableOffers(
           undefined,
           {
@@ -8610,115 +8675,97 @@ export class TillApp extends LitElement {
           false,
         );
         this.tableSelectedCatalogueId = "";
-        const late = this.#lateChangeShown();
-        this.errorKey =
-          late === undefined ? "table.error" : { lateChange: late, also: "table.error" };
-        return;
       }
-    } else {
-      this.#loadTableOffers(
-        undefined,
-        {
-          offers: [],
-          menus: [],
-          service: {
-            open: false,
-            zoneOpen: true,
-            periodName: null,
-            periodOccurrenceKey: null,
-            keepOpen: null,
-            zoneKeepOpen: null,
-          },
-        },
-        false,
-      );
-      this.tableSelectedCatalogueId = "";
-    }
-    // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
-    this.activeTableId = tableId;
-    this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
-    this.finishRefused = false;
-    this.nameRefusal = null;
-    this.guestsRefusal = null;
-    this.splitRefusal = null;
-    this.reprintSent = [];
-    if (guestCount === undefined) {
-      this.orderParty = table?.party ?? null;
-      const main = this.orderParty?.mainBillId ?? null;
-      const billsRead = main === null && this.orderParty !== null;
-      this.activeTabId = main ?? undefined;
-      if (billsRead) {
-        const read = await this.#loadPartyBills();
+      // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
+      this.activeTableId = tableId;
+      this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
+      this.finishRefused = false;
+      this.nameRefusal = null;
+      this.guestsRefusal = null;
+      this.splitRefusal = null;
+      this.reprintSent = [];
+      if (guestCount === undefined) {
+        this.orderParty = table?.party ?? null;
+        const main = this.orderParty?.mainBillId ?? null;
+        const billsRead = main === null && this.orderParty !== null;
+        this.activeTabId = main ?? undefined;
+        if (billsRead) {
+          const read = await this.#loadPartyBills();
+          if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest)
+            return;
+          this.activeTabId = billToOpen(read.bills ?? []);
+        }
+        await this.#savesOutFor(this.orderParty?.id);
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-        this.activeTabId = billToOpen(read.bills ?? []);
-      }
-      await this.#savesOutFor(this.orderParty?.id);
-      if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-      const [, opened] = await Promise.all([
-        billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
-        this.#openDraft(true, session),
-      ]);
-      if (left() || session !== this.#operatorSession) return;
-      this.#showDraft(opened);
-    } else {
-      try {
-        const note = carried?.note;
-        const seated =
-          withTableIds === undefined
-            ? note
-              ? await this.api.seatTable(tableId, guestCount, note)
-              : await this.api.seatTable(tableId, guestCount)
-            : note
-              ? await this.api.seatAtTables(tableId, guestCount, withTableIds, note)
-              : await this.api.seatAtTables(tableId, guestCount, withTableIds);
-        const { tabId, partyId, revision } = seated;
-        // A table opened after this one has made its own table the active one, so this answer
-        // would put this table's order beside that table.
-        if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-        this.activeTableId = tableId;
-        this.activeTabId = tabId;
-        this.orderParty = {
-          id: partyId,
-          revision,
-          guestCount,
-          state: "open",
-          name: null,
-          displayName: table === undefined ? "" : shownUnder(table),
-          mainBillId: tabId,
-          outstanding: "0.00",
-          billCount: 1,
-          tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
-          unsentDrafts: [],
-          reminder: null,
-          kitchenNote: seated.kitchenNote ?? {
-            scope: { partyId },
-            note: null,
-            revision: 0,
-            ownerRevision: revision,
-          },
-        };
-        const opened = await this.#openDraft(false, session);
-        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
-        if (carried && opened?.sync && carried.lines.length > 0)
-          opened.sync.store.loadFrom(opened.sync.store.id, carried.lines);
+        const [, opened] = await Promise.all([
+          billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
+          this.#openDraft(true, session),
+        ]);
+        if (left() || session !== this.#operatorSession) return;
         this.#showDraft(opened);
-      } catch (error) {
-        this.errorKey = tableWriteError(error);
-        await this.#refreshFloor();
-        return;
+      } else {
+        try {
+          const note = carried?.note;
+          const seated =
+            withTableIds === undefined
+              ? note
+                ? await this.api.seatTable(tableId, guestCount, note)
+                : await this.api.seatTable(tableId, guestCount)
+              : note
+                ? await this.api.seatAtTables(tableId, guestCount, withTableIds, note)
+                : await this.api.seatAtTables(tableId, guestCount, withTableIds);
+          const { tabId, partyId, revision } = seated;
+          // A table opened after this one has made its own table the active one, so this answer
+          // would put this table's order beside that table.
+          if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest)
+            return;
+          this.activeTableId = tableId;
+          this.activeTabId = tabId;
+          this.orderParty = {
+            id: partyId,
+            revision,
+            guestCount,
+            state: "open",
+            name: null,
+            displayName: table === undefined ? "" : shownUnder(table),
+            mainBillId: tabId,
+            outstanding: "0.00",
+            billCount: 1,
+            tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
+            unsentDrafts: [],
+            reminder: null,
+            kitchenNote: seated.kitchenNote ?? {
+              scope: { partyId },
+              note: null,
+              revision: 0,
+              ownerRevision: revision,
+            },
+          };
+          const opened = await this.#openDraft(false, session);
+          if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+          if (carried && opened?.sync && carried.lines.length > 0)
+            opened.sync.store.loadFrom(opened.sync.store.id, carried.lines);
+          this.#showDraft(opened);
+        } catch (error) {
+          this.#leaveFailedOpen(left, offerRequest, session);
+          this.errorKey = tableWriteError(error);
+          await this.#refreshFloor();
+          return;
+        }
+        await this.#reloadOrder();
+        if (left() || session !== this.#operatorSession) return;
       }
-      await this.#reloadOrder();
-      if (left() || session !== this.#operatorSession) return;
+      if (left()) return;
+      // A destination drill pushed meanwhile may have replaced the loading screen.
+      if (this.#inShell() && this.#orderScreenShown()) {
+        this.#shownOnVisit = this.#orderVisit;
+        if (this.#tableOrderTabKey() !== undefined)
+          this.#writeUrl({ "till-tab": "order", "till-view": null, "till-station": null });
+      }
+      void this.#loadStations();
+    } finally {
+      if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
     }
-    if (left()) return;
-    if (this.#inShell()) {
-      const orderTabKey = this.#tableOrderTabKey();
-      if (orderTabKey !== undefined)
-        this.#setActiveTab(orderTabKey); // card mount (handheld/tablet)
-      else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
-      this.#shownOnVisit = this.#orderVisit;
-    }
-    void this.#loadStations();
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
@@ -12351,6 +12398,7 @@ export class TillApp extends LitElement {
     this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
+    this.tableOpening = false;
     this.#setActiveTab(this.#homeScreen(), true);
     this.#writeUrl({ "till-zone": null }, true);
     this.#floorLoaded = false;
@@ -12538,12 +12586,13 @@ export class TillApp extends LitElement {
   }
 
   #embeddedOrderBody(): TemplateResult {
-    const draft = this.#tableDraft();
+    const draft = this.tableOpening ? null : this.#tableDraft();
     return html`<till-table-order-screen
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
       .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
       .productSelectable=${this.#tableProductSelectable}
+      .loading=${this.tableOpening}
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
@@ -12662,12 +12711,13 @@ export class TillApp extends LitElement {
       case "find-bill":
         return nothing;
       case "table-order": {
-        const draft = this.#tableDraft();
+        const draft = this.tableOpening ? null : this.#tableDraft();
         return html`<till-table-order-screen
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
           .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
           .productSelectable=${this.#tableProductSelectable}
+          .loading=${this.tableOpening}
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
@@ -12869,7 +12919,7 @@ export class TillApp extends LitElement {
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const errorMessage = this.errorKey
-      ? errorText(this.errorKey, this.#tableCatalogueActive() ? this.tableMenus : this.menus)
+      ? errorText(this.errorKey, this.#orderScreenShown() ? this.tableMenus : this.menus)
       : nothing;
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}

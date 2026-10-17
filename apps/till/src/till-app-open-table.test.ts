@@ -876,3 +876,229 @@ describe("A768 the left draft saves in the background", () => {
     expect(savedLines()).toEqual(["offer-beer ×1", "offer-steak ×1"]);
   });
 });
+
+describe("A768 the order screen shows at once", () => {
+  beforeEach(() => {
+    setLocale("en");
+    server = draftServer();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanupWidgets();
+  });
+
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
+  const loadingLine = (el: TillApp) =>
+    tableOrder(el)?.shadowRoot?.querySelector<HTMLElement>("[data-loading]") ?? null;
+  const opening = (el: TillApp) => (el as unknown as { tableOpening: boolean }).tableOpening;
+  const orderTabFormFactor: FormFactor = "tablet-landscape";
+
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  }
+
+  async function onFloor(el: TillApp): Promise<void> {
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+  }
+
+  async function tap(el: TillApp, name: string): Promise<void> {
+    [
+      ...tableOrder(el)!
+        .shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
+        .shadowRoot!.querySelectorAll<HTMLElement>("wt-button"),
+    ]
+      .find((button) => button.querySelector(".name")?.textContent === name)!
+      .click();
+    await flush(el);
+  }
+
+  function holdNextSave(): () => void {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
+      const sentBy = server.personId;
+      await held;
+      const now = server.personId;
+      server.personId = sentBy;
+      const saved = server.save(partyId, save);
+      server.personId = now;
+      return structuredClone(saved);
+    });
+    return answer;
+  }
+
+  const orderPushes = () =>
+    vi
+      .mocked(history.pushState)
+      .mock.calls.filter(([, , url]) => String(url).includes("/tabs/order"));
+  const orderReplaces = () =>
+    vi
+      .mocked(history.replaceState)
+      .mock.calls.filter(([, , url]) => String(url).includes("/tabs/order"));
+
+  it("the order screen shows with its loading line before the table's reads answer", async () => {
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const drafts = deferred<void>();
+    const { el } = await mountApp({
+      getTabLines: vi.fn(() => lines.promise),
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        await drafts.promise;
+        return server.listDrafts(...args);
+      }),
+    });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el, 1);
+    expect(tableOrder(el)!.loading).toBe(true);
+    expect(loadingLine(el)).not.toBeNull();
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    drafts.resolve();
+    await flush(el);
+    expect(tableOrder(el)!.loading).toBe(false);
+    expect(tableOrder(el)!.draftStore).toBeTruthy();
+  });
+
+  it("a second open during the first's loading shows only the second table", async () => {
+    const mesa4Lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const z2Offers = deferred<ZoneOfferCatalogue>();
+    const { el } = await mountApp();
+    await openMesa(el, "t7");
+    await back(el);
+    api.getTabLines.mockImplementation(async (tabId: string) =>
+      tabId === "wo-4" ? mesa4Lines.promise : { lines: [], revision: 0, editSentLines: true },
+    );
+    api.listZoneOffers.mockImplementation(async (zoneId: string) =>
+      zoneId === "z2" ? z2Offers.promise : catalogue("v1"),
+    );
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(tableOrder(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el);
+    const z2 = catalogue("v1", { Beer: "7.00" });
+    z2Offers.resolve({ ...z2, context: { ...z2.context, zoneId: "z2" } });
+    await flush(el);
+    mesa4Lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el);
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    expect(tableOrder(el)!.products.find((p) => p.name === "Beer")!.unitPrice).toBe("7.00");
+    expect(tableOrder(el)!.loading).toBe(false);
+  });
+
+  it("a table whose menu cannot be read goes back to the floor with the error", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("a free table whose seating is refused goes back to the floor with the error", async () => {
+    const free = table("t5", "5", null);
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, free]),
+      seatTable: vi.fn().mockRejectedValue({ code: "table.occupied", status: 409 }),
+    });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t5", seated: false, guestCount: 2 });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(banner(el)).not.toBeNull();
+  });
+
+  it("a same-party open shows its loading line while the left save is out", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t4");
+    expect(loadingLine(el)).not.toBeNull();
+    release();
+    await flush(el);
+    expect(loadingLine(el)).toBeNull();
+  });
+
+  it("an open abandoned during its flush leaves no loading line", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await back(el);
+    await reopen(el, "t4");
+    expect(loadingLine(el)).not.toBeNull();
+    emit(shell(el), "logout");
+    await flush(el);
+    release();
+    await flush(el);
+    await signIn(el);
+    expect(opening(el)).toBe(false);
+    expect(loadingLine(el)).toBeNull();
+  });
+
+  it("signing out while a table loads does not resume it at the next sign-in", async () => {
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const { el } = await mountApp({ getTabLines: vi.fn(() => lines.promise) });
+    await onFloor(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(loadingLine(el)).not.toBeNull();
+    emit(shell(el), "logout");
+    await flush(el);
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el);
+    api.getTabLines.mockClear();
+    await signIn(el);
+    await flush(el, 6);
+    expect(api.getTabLines).not.toHaveBeenCalled();
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("the order tab shows at once and is written to history once it has loaded", async () => {
+    const lines = deferred<{ lines: never[]; revision: number; editSentLines: boolean }>();
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
+      getTabLines: vi.fn(() => lines.promise),
+    });
+    await onFloor(el);
+    vi.spyOn(history, "pushState");
+    vi.spyOn(history, "replaceState");
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.loading).toBe(true);
+    expect(orderPushes()).toEqual([]);
+    expect(orderReplaces()).toEqual([]);
+    lines.resolve({ lines: [], revision: 0, editSentLines: true });
+    await flush(el);
+    expect(tableOrder(el)!.loading).toBe(false);
+    expect(orderPushes()).toHaveLength(1);
+    expect(orderReplaces()).toEqual([]);
+  });
+
+  it("a failed open on the card mount returns to the floor tab with no history entry", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)),
+      listZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    await onFloor(el);
+    vi.spyOn(history, "pushState");
+    vi.spyOn(history, "replaceState");
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+    expect(vi.mocked(history.pushState)).not.toHaveBeenCalled();
+    expect(orderReplaces()).toEqual([]);
+  });
+});
