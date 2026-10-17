@@ -44,6 +44,7 @@ import {
  *
  * | Route                                                     | Action                     | `action` param        |
  * | --------------------------------------------------------- | -------------------------- | --------------------- |
+ * | GET/PUT /api/device/zones | admitted session; no selling action for display preferences | device-zones-api.test.ts: "requires an open session for %s", "refuses a changed profile admission for %s"; allowed: "serves admitted staff without a selling action and keeps automatic reads passive" |
  * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | session only; no profile action | find-bill-api.test.ts: "requires an open session on every list, options and by-ID route"; allowed: "allows admitted staff reads without any ordering, payment or print capability" |
  * | GET /api/tender-refunds/:refundId/receipt | admitted session; original-sale zones | tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt", "checks every original source zone on read and reprint and admits the allowed case" |
  * | POST /api/tender-refunds/:refundId/reprint | print-receipt; original-sale zones | same refusal and allowed cases; document only, never drawer |
@@ -789,4 +790,14 @@ describe("a refund checks the action its payment was taken with", () => {
       expect(answer.body.error?.code).toBe("management.request_invalid");
     });
   }
+});
+
+it("lets admitted staff save display zones while their profile still refuses ordering", async () => {
+  const { cookie } = await signIn([], "staff");
+  const current = await send(cookie, "GET", "/api/device/zones");
+  expect(current.status).toBe(200);
+  expect(current.body.startingZoneId).toEqual(expect.any(String));
+  expect((await send(cookie, "PUT", "/api/device/zones", current.body)).status).toBe(200);
+  const order = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
+  expect({ status: order.status, error: order.body.error }).toEqual(forbidden("take-orders"));
 });

@@ -3,6 +3,14 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "device_zones.invalid": {
+    en: "Choose the zones this device shows and a starting zone from that list.",
+    es: "Elige las zonas que muestra este dispositivo y una zona inicial de esa lista.",
+  },
+  "device_zones.changed": {
+    en: "These zone choices changed. Read them again before saving.",
+    es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+  },
   "party.not_found": {
     en: "The table order could not be found.",
     es: "No se ha encontrado el pedido de la mesa.",

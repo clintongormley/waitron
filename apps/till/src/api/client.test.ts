@@ -5021,3 +5021,53 @@ describe("TillApi: a bill's payments", () => {
     );
   });
 });
+
+const deviceZoneSelection = {
+  profileId: "11111111-1111-4111-8111-111111111111",
+  snapshot: "a".repeat(64),
+  zones: [
+    { id: "22222222-2222-4222-8222-222222222222", name: "Bar", serviceMode: "prepay" as const },
+  ],
+  selectedZoneIds: ["22222222-2222-4222-8222-222222222222"],
+  startingZoneId: "22222222-2222-4222-8222-222222222222",
+  adjusted: false,
+};
+it.each(["GET", "PUT"] as const)(
+  "device zones %s preserves method, body, signal and the response",
+  async (method) => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(deviceZoneSelection));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+    const input = {
+      profileId: deviceZoneSelection.profileId,
+      snapshot: deviceZoneSelection.snapshot,
+      selectedZoneIds: deviceZoneSelection.selectedZoneIds,
+      startingZoneId: deviceZoneSelection.startingZoneId,
+    };
+    const result =
+      method === "GET"
+        ? await api.getDeviceZones({ signal })
+        : await api.setDeviceZones(input, { signal });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/zones",
+      expect.objectContaining({ method, credentials: "include", signal }),
+    );
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe(method === "PUT" ? JSON.stringify(input) : undefined);
+    expect(result).toEqual(deviceZoneSelection);
+  },
+);
+it.each([
+  [400, "device_zones.invalid"],
+  [409, "device_zones.changed"],
+  [401, "session.required"],
+] as const)("propagates device zone refusal %s %s", async (status, code) => {
+  const fetchStub = vi
+    .fn()
+    .mockImplementation(() =>
+      Promise.resolve(jsonResponse({ error: { code, params: {} } }, status)),
+    );
+  const api = new TillApi("", fetchStub);
+  await expect(api.getDeviceZones()).rejects.toMatchObject({ code });
+  await expect(api.setDeviceZones({ ...deviceZoneSelection })).rejects.toMatchObject({ code });
+});

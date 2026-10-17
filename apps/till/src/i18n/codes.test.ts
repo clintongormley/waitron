@@ -706,3 +706,19 @@ it("tells staff extras go only on a dish sold by the unit, in both languages, no
     codeMessage("server.internal", "en"),
   );
 });
+
+it.each([
+  [
+    "device_zones.invalid",
+    "Choose the zones this device shows and a starting zone from that list.",
+    "Elige las zonas que muestra este dispositivo y una zona inicial de esa lista.",
+  ],
+  [
+    "device_zones.changed",
+    "These zone choices changed. Read them again before saving.",
+    "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+  ],
+])("explains device zone refusal %s", (code, en, es) => {
+  expect(codeMessage(code, "en")).toBe(en);
+  expect(codeMessage(code, "es")).toBe(es);
+});
