@@ -6,6 +6,7 @@ import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
 import { OpenSlotsMenu } from "./open-slots-menu.js";
+import { STAFFING_STRINGS } from "./strings.js";
 
 const frames: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -241,7 +242,7 @@ describe("a day's open slots", () => {
       "pasaría a 47 / 40 h",
     );
     expect(normal(root.querySelector("[data-test=another-shift]")!.textContent!)).toBe(
-      "Otro turno…",
+      STAFFING_STRINGS.es["staffing.rota.another_shift"],
     );
     const none = await mount("marc", "2026-12-02");
     expect(normal(none.root.textContent!)).toContain("No hay puestos libres este día");

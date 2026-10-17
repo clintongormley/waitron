@@ -6,7 +6,7 @@ import type { WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { clockChangeWeek, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { Slot } from "../slots.js";
-import { STAFFING_STRINGS } from "./strings.js";
+import { STAFFING_STRINGS, tf } from "./strings.js";
 import { STAFFING_DASHBOARD } from "./index.js";
 void STAFFING_DASHBOARD;
 const frames: HTMLElement[] = [];
@@ -155,7 +155,7 @@ describe("the slot picker", () => {
     await el.updateComplete;
     expect(
       r.querySelector("[data-person=laia] [data-test=would-go-over]")!.textContent!.trim(),
-    ).toBe("superaría su contrato de 40 h");
+    ).toBe(tf("staffing.rota.would_go_over", { contract: "40" }, "es"));
   });
   it("counts a night slot across the autumn clock change as the nine hours it lasts", async () => {
     const el = await mount();
@@ -189,7 +189,7 @@ describe("the slot picker", () => {
     el.requestUpdate();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=picker-sub]")!.textContent!.trim()).toBe(
-      "Kitchen · primero quienes tienen el rol",
+      tf("staffing.rota.picker_sub", { area: "Kitchen" }, "es"),
     );
   });
   it("has no Close button beside a slot, and Cancel in a sheet", async () => {

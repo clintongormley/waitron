@@ -7,6 +7,7 @@ import { rotaApi, rotaWeek } from "../testing/rota-fixture.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import "./rota-view.js";
+import { STAFFING_STRINGS, tf } from "./strings.js";
 const frames: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -378,8 +379,10 @@ describe("filling the rota from Everyone", () => {
     setLocale("es");
     const es = await mount();
     const spanish = dayAdd(es.root, "marc", "2026-12-04");
-    expect(normal(spanish.textContent!)).toBe("+ Añadir turno");
-    expect(spanish.getAttribute("aria-label")).toBe("Añadir turno: Marc, vie 4 dic");
+    expect(normal(spanish.textContent!)).toBe(STAFFING_STRINGS.es["staffing.rota.add_here"]);
+    expect(spanish.getAttribute("aria-label")).toBe(
+      tf("staffing.rota.add_label_person", { name: "Marc", day: "vie 4 dic" }, "es"),
+    );
   });
   it("clicking the empty part of a day opens that day's open slots beside it, and choosing one fills it for that person", async () => {
     await useViewport(1280, 900);
