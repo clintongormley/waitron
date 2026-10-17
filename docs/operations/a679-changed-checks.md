@@ -708,7 +708,7 @@ A679 branch remain incomplete. The owner approved explicit same-hour resume befo
 that separate operation, command readiness submission, retained imports, recovery/wizard work,
 coverage repair, generated-PDF acceptance and final branch gates remain.
 
-**Later update, 2026-10-17:** the [same-hour resumption checkpoint](#same-hour-command-resumption-2026-10-17) below implements that separate operation. The other listed work remains.
+**Later update, 2026-10-17:** the [same-hour resumption checkpoint](#same-hour-command-resumption-2026-10-17) implements that operation; the [command readiness checkpoint](#command-owned-readiness-2026-10-17) adds explicit test submission. Retained imports and later plan gates remain.
 
 
 ## Same-hour command resumption (2026-10-17)
@@ -726,3 +726,45 @@ An additional audit case refused an orphan resumption belonging to another event
 The new resumption fixture freezes wall and elapsed time together. Its earlier wall-only fake triggered the real clock-correction refusal when password verification took over a second. No product guard was changed for that fixture correction. The new journal-persistence assertion uses an awaited promise matcher so an omitted journal write fails an explicit admission assertion.
 
 This checkpoint does not complete Task 4 or qualify the remaining recovery/promotion/wizard paths. The generated-PDF owner acceptance, package coverage and final branch gates remain.
+
+
+## Command-owned readiness (2026-10-17)
+
+Add `--test-fiscal` to your owned `waitron-provision venue` invocation when you need an accepted
+readiness test. Confirm its separate question, including when you use `--yes`. The command uses
+your validated certificate settings and records its sample in a retained preproduction database;
+production activation still checks the authenticated receipt for the same certificate, taxpayer,
+module versions and build. Declining, rejection and uncertainty leave production unactivated.
+Repeat the command to retry the retained sample. Exact committed Finish sends no further sample.
+
+Existing assertions changed: **none**. The one fixture change below has exact owner approval.
+The command suites gain new cases; their
+previous bodies remain unchanged. The existing server runner suite remains at its path, and its
+behavioral cases also exercise the shared runner in provisioning. The server still supplies its
+original clock. The runner's sample preparation, sale and drain bodies move to provisioning, with
+an explicit clock argument and direct shared imports. The redundant environment field supplied to
+the recovered-venue reader is removed; that reader does not accept or inspect it. No fiscal writer,
+production SQL, schema or root guard changes.
+
+The new binary check blocks external clocks and TLS transport. It checks the actual bundled
+command's isolated sample, credential seal, refusal and unchanged production database. It does not
+qualify a real AEAT submission. The accepted command cases control the external drain only.
+
+New shared-runner cases also check malformed/unsupported inputs before file creation, an explicitly
+supplied disposable hour across retries, and the real fiscal drain against controlled accepted and
+rejected authority responses. Its 23-case diagnostic measures only the shared runner at 100% in all
+four metrics; the whole-package gate remains below its thresholds. Eight installed omission
+controls fail their intended assertions and pass after exact restoration.
+
+The retained `fiscal-readiness-runner.verifactu.test.ts` case failed its old signed-paper fixture
+at `sif.allocation_invalid`, both here and at starting commit
+`572fef619d67ed258d9aa1be6d7914625a3de62a` in an independently installed checkout. The owner's
+2026-10-17 17:00 approval authorises exactly the proposed patch with SHA-256
+`a3ab9df05d3fd17bb5d6ed1df9d48d80d3a87faec96b87f1a388c2b5b5f9d089`: remove the
+`initialSetupInput` import, creation of its paper fixture and the `initialOperations` argument.
+The test now uses automatic disposable hour preparation; every existing assertion is unchanged.
+Its one-sample, rejected-status and exact authority-refusal checks remain.
+
+Task 4, package coverage, retained provision qualification, recovery/wizard work, owner PDF
+acceptance and final review/publication gates remain open. Receipts: the lane's
+`a679-command-readiness-20261017` directory.

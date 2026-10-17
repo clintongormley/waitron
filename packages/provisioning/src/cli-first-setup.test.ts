@@ -1153,3 +1153,191 @@ it("a refusal after stamping retains that environment and can retry the original
       .sort(),
   ).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
 });
+
+async function commandReadinessFixture(answer = "yes") {
+  const f = await productionFixture(false);
+  const contribution = venueFiscalSelection(f.runtime.modules, "ES-common").contribution!;
+  const { emptyDrainResult } = await import("@waitron/fiscal");
+  const drain = vi.spyOn(contribution, "drain").mockResolvedValue({
+    ...emptyDrainResult(),
+    recordsAccepted: 1,
+  });
+  const prompt = f.deps.io.prompt;
+  f.deps.io.prompt = async (question) => {
+    if (question.startsWith("Send a preproduction fiscal test?")) {
+      f.prompts.push(question);
+      return answer;
+    }
+    return prompt(question);
+  };
+  return { ...f, drain, emptyDrainResult };
+}
+
+it("the owned production command runs an explicitly confirmed isolated readiness test before activation", async () => {
+  const f = await commandReadinessFixture();
+  try {
+    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    expect(f.prompts).toContain("Send a preproduction fiscal test? [y/N]: ");
+    expect((await f.runtime.store.read())!.status).toBe("complete");
+    expect(await readDeploymentEnvironment(venue.db)).toBe("production");
+    const { sql } = await import("drizzle-orm");
+    expect(
+      (await venue.db.execute<{ n: number }>(sql`select count(*) as n from sales`)).rows,
+    ).toEqual([{ n: 0 }]);
+    expect((await venue.db.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual([
+      1, 1, 1,
+    ]);
+    const { createFiscalReadinessStore, fiscalReadinessBinding } =
+      await import("./fiscal-readiness.js");
+    await expect(
+      createFiscalReadinessStore(
+        join(f.root, "state"),
+        async () => ({ status: "uncertain" }),
+        Buffer.alloc(32, 73),
+      ).assertReady(f.readiness),
+    ).resolves.toBeUndefined();
+    const { DatabaseSync } = await import("node:sqlite");
+    const sample = new DatabaseSync(
+      join(
+        f.root,
+        "state",
+        `fiscal-readiness-db-${fiscalReadinessBinding(f.readiness)}`,
+        "venue.db",
+      ),
+      { readOnly: true },
+    );
+    try {
+      expect(sample.prepare("select source, device_id from sales").all()).toEqual([
+        { source: "readiness_test", device_id: null },
+      ]);
+      expect(sample.prepare("select environment from deployment").get()).toEqual({
+        environment: "preproduction",
+      });
+    } finally {
+      sample.close();
+    }
+    expect(f.drain).toHaveBeenCalledOnce();
+    expect(f.drain.mock.calls[0]![0].environment).toBe("preproduction");
+  } finally {
+    f.drain.mockRestore();
+  }
+});
+
+it("--yes does not send a fiscal test when its separate confirmation is declined", async () => {
+  const f = await commandReadinessFixture("no");
+  try {
+    expect(await runCli([...f.args, "--test-fiscal"], f.deps)).toBe(1);
+    expect(f.prompts).toContain("Send a preproduction fiscal test? [y/N]: ");
+    expect(f.drain).not.toHaveBeenCalled();
+    expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    await expect(readFile(join(f.root, "state/fiscal-readiness.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    f.drain.mockRestore();
+  }
+});
+
+it.each(["rejected", "uncertain"] as const)(
+  "a %s command readiness result leaves production unactivated without accepted evidence",
+  async (status) => {
+    const f = await commandReadinessFixture();
+    f.drain.mockResolvedValue({
+      ...f.emptyDrainResult(),
+      ...(status === "rejected" ? { recordsHalted: 1 } : {}),
+    });
+    try {
+      expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(1);
+      expect(f.output).toContain(`Fiscal test: ${status}`);
+      expect(f.drain).toHaveBeenCalledOnce();
+      expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+      expect(await readTenantIdentities(venue.db)).toEqual([]);
+      await expect(readFile(join(f.root, "state/fiscal-readiness.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      f.drain.mockRestore();
+    }
+  },
+);
+
+it("an ordinary production command never submits readiness without --test-fiscal", async () => {
+  const f = await commandReadinessFixture();
+  try {
+    expect(await runCli(f.args, f.deps)).toBe(1);
+    expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
+    expect(f.drain).not.toHaveBeenCalled();
+    expect(
+      f.prompts.some((question) => question.startsWith("Send a preproduction fiscal test?")),
+    ).toBe(false);
+  } finally {
+    f.drain.mockRestore();
+  }
+});
+
+it("the readiness option refuses an unowned command before opening the venue", async () => {
+  const f = await fixture();
+  const deps: CliDeps = { ...f.deps };
+  delete deps.configureFirstSetup;
+  expect(await runCli([...f.args, "--test-fiscal"], deps)).toBe(1);
+  expect(f.output).toContain("setup.not_ready {}");
+  expect(f.deps.openVenue).not.toHaveBeenCalled();
+});
+
+it("an uncertain command readiness retry reuses its one isolated sample and then activates", async () => {
+  const f = await commandReadinessFixture();
+  f.drain.mockResolvedValueOnce(f.emptyDrainResult());
+  try {
+    expect(await runCli([...f.args, "--test-fiscal"], f.deps)).toBe(1);
+    const before = (await f.runtime.store.read())!;
+    const pdf = await readFile(join(f.root, "recovery.pdf"));
+    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    const after = (await f.runtime.store.read())!;
+    expect(after.inputs[MODULE]).toEqual(before.inputs[MODULE]);
+    expect(Object.keys(after.inputs).sort()).toEqual(["$publication", MODULE]);
+    expect(await readFile(join(f.root, "recovery.pdf"))).toEqual(pdf);
+    expect(f.drain).toHaveBeenCalledTimes(2);
+    const { fiscalReadinessBinding } = await import("./fiscal-readiness.js");
+    const { DatabaseSync } = await import("node:sqlite");
+    const sample = new DatabaseSync(
+      join(
+        f.root,
+        "state",
+        `fiscal-readiness-db-${fiscalReadinessBinding(f.readiness)}`,
+        "venue.db",
+      ),
+      { readOnly: true },
+    );
+    try {
+      expect(sample.prepare("select count(*) as n from sales").get()).toEqual({ n: 1 });
+    } finally {
+      sample.close();
+    }
+    expect((await venue.db.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual([
+      1, 1, 1,
+    ]);
+  } finally {
+    f.drain.mockRestore();
+  }
+});
+
+it("exact command Finish ignores --test-fiscal and preserves the accepted sample and series", async () => {
+  const f = await commandReadinessFixture();
+  f.interrupt(true);
+  try {
+    await expect(runCli([...f.args, "--test-fiscal"], f.deps)).rejects.toThrow(
+      "synthetic before trading publication",
+    );
+    const before = await venue.db.select().from(invoiceSeries);
+    expect((await f.runtime.store.read())!.status).toBe("committed");
+    f.interrupt(false);
+    f.prompts.length = 0;
+    expect(await runCli([...f.args, "--test-fiscal"], f.deps), JSON.stringify(f.output)).toBe(0);
+    expect(f.prompts).toEqual([]);
+    expect(f.drain).toHaveBeenCalledOnce();
+    expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+  } finally {
+    f.drain.mockRestore();
+  }
+});

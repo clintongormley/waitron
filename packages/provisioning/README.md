@@ -20,7 +20,8 @@ node packages/provisioning/dist/bin.js <command>
 
 `esbuild` produces `dist/bin.js` and that is the whole build. It used to copy every package's
 `drizzle/` folder to `dist/drizzle` as well, because the bundle migrated: that was `instance`'s job,
-and neither surviving command migrates anything.
+and neither surviving command migrates the venue. With `--test-fiscal`, `venue` migrates a
+separate retained preproduction sample database.
 
 ## The two commands
 
@@ -76,8 +77,8 @@ then every composed module's provisioning seed — the fiscal module's registers
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
 
-`venue` opens **one venue directory** — the two SQLite files `openVenueDatabase` opens — and
-writes through its venue file, the one every migration set is applied to. There is no
+You select the **venue directory** holding the two SQLite files `openVenueDatabase` opens.
+`venue` writes its setup through the venue file. There is no
 connection string, no cluster, no role and no grant: the directory IS the database. It takes the
 path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
 box's own setting is what stands its venue up), then from a prompt.
@@ -93,8 +94,17 @@ WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js 
 The command's interactive first Live setup flow is still unfinished in A679. Supplying an
 initial-input file does not replace the owned setup and its password confirmation.
 
+For an accepted production readiness test on this branch, set `WAITRON_SETUP_SETTINGS_FILE` to
+your certificate/email JSON and add `--test-fiscal` to the same `venue` invocation. For the bundled
+command, `WAITRON_MIGRATIONS_DIR` points to the packaged migration sets, as it does in the box
+image. The command asks separately before submitting its preproduction sample, even with `--yes`.
+An ordinary invocation uses an existing matching accepted receipt. A rejected or uncertain test
+leaves production unactivated; retrying uses the same isolated sample. Finishing a committed setup
+submits no further sample. See the [checkpoint inventory](../../docs/operations/a679-changed-checks.md#command-owned-readiness-2026-10-17)
+for qualification and remaining A679 work.
+
 The directory must already be **migrated** — boot does that (`apps/server/src/boot.ts` →
-`applyMigrations`), and nothing here does. A directory nothing has migrated is refused
+`applyMigrations`). This command migrates only its separate readiness sample. An unmigrated venue is refused
 (`provisioning.database_unmigrated`), which is also what a mistyped path meets: opening a virgin
 directory SUCCEEDS — it is created — so a read, not the open, is where a wrong path is caught.
 

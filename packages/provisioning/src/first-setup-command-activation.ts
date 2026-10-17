@@ -12,6 +12,7 @@ import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import type { FirstSetupState } from "./first-setup-state.js";
 import type { VenueResult } from "./venue-apply.js";
+import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import "./errors.js";
 
 export interface FirstSetupCommandDeployment {
@@ -20,6 +21,7 @@ export interface FirstSetupCommandDeployment {
     deps: Omit<FirstSetupPublicationDeps, "db">;
   }>;
   assertReady(state: FirstSetupState): Promise<void>;
+  runReadiness?(state: FirstSetupState): Promise<FiscalReadinessResult>;
   provision(
     request: ReturnType<typeof firstSetupProvisionRequest>,
     beforeTransaction: () => Promise<void>,

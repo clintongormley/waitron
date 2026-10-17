@@ -1609,6 +1609,9 @@ importers:
       '@waitron/composition':
         specifier: workspace:*
         version: link:../composition
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../core
       '@waitron/country-packs':
         specifier: workspace:*
         version: link:../country-packs
@@ -1649,9 +1652,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
-      '@waitron/core':
-        specifier: workspace:*
-        version: link:../core
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu

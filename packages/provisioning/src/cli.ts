@@ -91,7 +91,7 @@ const USAGE = [
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
-  "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
+  "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes] [--test-fiscal]",
   "           [--recovery-pdf <absolute path outside box state and venue directories>]",
   "",
   "Missing venue details are prompted for. --full-series-code defaults to FF.",
@@ -99,6 +99,7 @@ const USAGE = [
   "are omitted. Select --recovery-pdf explicitly; --yes never confirms that you kept it.",
   "Production reads certificate and email settings from WAITRON_SETUP_SETTINGS_FILE (JSON).",
   "It requires an accepted readiness test for the same certificate, venue and build.",
+  "Use --test-fiscal to run it in a separate preproduction database. Confirm separately, even with --yes.",
   "",
   "--venue-dir is the directory holding this node's two SQLite files. Omitted, it is",
   "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
@@ -107,8 +108,8 @@ const USAGE = [
   "",
   "A directory that carries no environment stamp is STAMPED from WAITRON_ENV — unset",
   "means preproduction, and production has to be typed out in full. A directory already",
-  "stamped for the OTHER environment is refused, never re-stamped. Nothing here migrates:",
-  "a directory nothing has migrated is refused too.",
+  "stamped for the OTHER environment is refused, never re-stamped. The venue must already",
+  "be migrated. A bundled fiscal test reads migrations from WAITRON_MIGRATIONS_DIR.",
   "",
   "The admin PIN and dashboard password (venue) are NOT options either, for the same reason: a",
   "login secret must not reach argv, so each is read from WAITRON_ADMIN_PIN /",
@@ -181,6 +182,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "admin-last-names": { type: "string" },
       "admin-email": { type: "string" },
       "recovery-pdf": { type: "string" },
+      "test-fiscal": { type: "boolean" },
       yes: { type: "boolean" },
     }));
   } catch {
@@ -302,7 +304,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const requested = resolveEnvironment(deps.env);
     const owned =
       runtime !== undefined && modules.some((module) => initialSetupFor(modules, module.name));
-    if (values["recovery-pdf"] !== undefined && !owned) throw new AppError("setup.not_ready", {});
+    if ((values["recovery-pdf"] !== undefined || values["test-fiscal"]) && !owned)
+      throw new AppError("setup.not_ready", {});
     let owner: FirstSetupOwnerAttempt | undefined;
     if (owned) {
       if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
@@ -427,12 +430,18 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
             }
           }
           if (deps.firstSetupDeployment === undefined) throw new AppError("setup.not_ready", {});
-          const result = await completeFirstSetupCommand(
-            runtime,
-            target,
-            owner,
-            deps.firstSetupDeployment({ runtime, db: target }),
-          );
+          const deployment = deps.firstSetupDeployment({ runtime, db: target });
+          if (values["test-fiscal"] && ["claimed", "consumption-intent"].includes(state.status)) {
+            if (deployment.runReadiness === undefined) throw new AppError("setup.not_ready", {});
+            const answer = (await deps.io.prompt("Send a preproduction fiscal test? [y/N]: "))
+              .trim()
+              .toLowerCase();
+            if (!["y", "yes"].includes(answer)) return 1;
+            const result = await deployment.runReadiness(await runtime.owner.authorize(owner));
+            deps.io.stdout(`Fiscal test: ${result.status}`);
+            if (!["accepted", "not-applicable"].includes(result.status)) return 1;
+          }
+          const result = await completeFirstSetupCommand(runtime, target, owner, deployment);
           deps.io.stdout("");
           deps.io.stdout(`node:     ${result.nodeId}`);
           for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);

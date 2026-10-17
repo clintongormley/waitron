@@ -38,6 +38,9 @@ import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput } from "./fiscal-readiness-input.js";
 import { parseFirstSetupSettings, readFirstSetupSettings } from "./first-setup-settings.js";
 import type { KeyRing } from "@waitron/credentials";
+import type { TrustedClock } from "@waitron/fiscal";
+import type { FirstSetupState } from "./first-setup-state.js";
+import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import "./errors.js";
 
 const keyPurpose = "membership.node_key";
@@ -59,7 +62,54 @@ export function createFirstSetupCommandDeployment(options: {
         ring: KeyRing;
       }
     | undefined;
+  async function readiness(state: FirstSetupState) {
+    if (
+      publication === undefined ||
+      firstSetupPublicationDigest(state, publication.settings) !== publication.digest
+    )
+      throw new AppError("setup.not_ready", {});
+    const selected = venueFiscalSelection(
+      runtime.modules,
+      state.frozen.request.location.fiscalTerritory,
+    );
+    if (selected.contribution === undefined) conflict();
+    const modules = enabledModules(runtime.modules, selected.config);
+    const versions: Record<string, number> = {};
+    for (const module of modules)
+      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+    const input = fiscalReadinessInput({
+      venue: state.frozen.request,
+      contribution: selected.contribution,
+      secret: publication.settings.aeatCert,
+      moduleVersions: versions,
+      applicationVersion: applicationVersion(environment),
+    });
+    const settings = publication.settings;
+    const ring = publication.ring;
+    const store = createFiscalReadinessStore(
+      state.stateDir,
+      (readinessInput) =>
+        submitFiscalReadiness({
+          stateDir: state.stateDir,
+          migrationsRoot: environment.WAITRON_MIGRATIONS_DIR || undefined,
+          modules,
+          venue: state.frozen.request,
+          contribution: selected.contribution!,
+          secret: settings.aeatCert,
+          ring,
+          readinessInput,
+          clock: sampleClock,
+        }),
+      ring.current.key,
+    );
+    return { store, input };
+  }
   return {
+    async runReadiness(state) {
+      await this.publication(state);
+      const { store, input } = await readiness(state);
+      return store.run(input);
+    },
     async publication(state) {
       if (state.frozen.configurationImport !== undefined) throw new AppError("setup.not_ready", {});
       const path = environment.WAITRON_SETUP_SETTINGS_FILE;
@@ -195,33 +245,8 @@ export function createFirstSetupCommandDeployment(options: {
     },
     async assertReady(state) {
       if (state.frozen.environment !== "production") return;
-      if (
-        publication === undefined ||
-        firstSetupPublicationDigest(state, publication.settings) !== publication.digest
-      )
-        throw new AppError("setup.not_ready", {});
-      const selected = venueFiscalSelection(
-        runtime.modules,
-        state.frozen.request.location.fiscalTerritory,
-      );
-      if (selected.contribution === undefined) conflict();
-      const modules = enabledModules(runtime.modules, selected.config);
-      const versions: Record<string, number> = {};
-      for (const module of modules)
-        versions[module.name] = await appliedSchemaVersion(db, module.migrations);
-      await createFiscalReadinessStore(
-        state.stateDir,
-        async () => ({ status: "uncertain" }),
-        publication.ring.current.key,
-      ).assertReady(
-        fiscalReadinessInput({
-          venue: state.frozen.request,
-          contribution: selected.contribution,
-          secret: publication.settings.aeatCert,
-          moduleVersions: versions,
-          applicationVersion: applicationVersion(environment),
-        }),
-      );
+      const { store, input } = await readiness(state);
+      await store.assertReady(input);
     },
     async provision(request, beforeTransaction) {
       const state = await runtime.store.read();
@@ -263,5 +288,24 @@ export function createFirstSetupCommandDeployment(options: {
       });
     },
     recoverProvision: (request) => recoverProvisionedVenue(db, request, runtime.modules),
+  };
+}
+
+function sampleClock(): TrustedClock {
+  return {
+    now: () => {
+      const instant = new Date();
+      return {
+        instant,
+        offsetMinutes: -instant.getTimezoneOffset(),
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      };
+    },
+    anchor: () => {
+      throw new Error("readiness sample does not anchor its clock");
+    },
+    currentAnchor: () => null,
   };
 }

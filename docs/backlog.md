@@ -377,15 +377,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   its SQLite read, which otherwise creates an empty WAL and invalidates password recovery's snapshot.
   The built production command now has local checks for certificate/email validation, authenticated
   readiness evidence, sealed credentials and exact Finish. It reads a separate settings file and
-  checks the existing readiness receipt; running the readiness submission from the command and
-  retained configuration imports remain open.
+  checks the existing readiness receipt. The explicit `--test-fiscal` option now has local checks
+  for a separately confirmed isolated submission, refused/uncertain outcomes, sample reuse and exact
+  Finish without another submission. Retained configuration imports remain open.
   Twelve retained provision cases
   still fail at unowned legacy preparation; the same failures were measured at the preceding checkpoint.
   Package coverage also remains below its gate. Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,
   require current kept consent and record the owner transition. Ordinary changed-context admission
-  still refuses. The remaining hour-plan tasks and command-owned readiness/import work stay open.
+  still refuses. The remaining hour-plan tasks and command configuration imports stay open.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
   Key-only recovery PDF components now have generated-document and transient-delivery checks.

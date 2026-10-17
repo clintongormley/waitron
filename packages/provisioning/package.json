@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@waitron/composition": "workspace:*",
+    "@waitron/core": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
@@ -38,7 +39,6 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^4.1.11",
-    "@waitron/core": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/verifactu": "^0.2.1",
     "esbuild": "^0.28.2",
