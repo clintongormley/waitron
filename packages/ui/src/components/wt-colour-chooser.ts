@@ -2,7 +2,7 @@ import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 
@@ -35,6 +35,10 @@ export class WtColourChooser extends LitElement {
          not through for. */
       .field-label {
         pointer-events: none;
+      }
+
+      .field-label.visually-hidden {
+        ${visuallyHiddenStyles}
       }
 
       .trigger {
@@ -139,6 +143,8 @@ export class WtColourChooser extends LitElement {
   @property() value = "";
   @property({ attribute: false }) choices: readonly ColourChoice[] = [];
   @property({ type: Boolean }) required = false;
+  /** Keeps the label only as the trigger's name, for a field in a table row. */
+  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() error = "";
   /** A used colour's accessible name; `names` are its `usedBy`, joined with ", ". */
@@ -317,10 +323,13 @@ export class WtColourChooser extends LitElement {
         data-label=${fieldLabelState({ value: chosen?.label ?? "", hint: "", placeholder: "" })}
         ?data-invalid=${hasError}
         ?data-disabled=${this.disabled}
+        ?data-compact=${this.hideLabel}
       >
-        <label class="field-label" id=${this.labelId}
+        <label
+          class=${this.hideLabel ? "field-label visually-hidden" : "field-label"}
+          id=${this.labelId}
           ><span class="field-label-text">${this.label}</span>${
-            this.required
+            this.required && !this.hideLabel
               ? html`<span class="required" data-required aria-hidden="true">*</span>`
               : nothing
           }</label

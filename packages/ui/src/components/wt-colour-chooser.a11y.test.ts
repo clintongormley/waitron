@@ -50,6 +50,11 @@ describe.each(["light", "dark"] as const)("wt-colour-chooser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  test("hide-label, required", async () => {
+    await mountChooser('value="blue" hide-label required', theme);
+    await expectNoA11yViolations(host);
+  });
+
   test("with an error", async () => {
     await mountChooser('value="pink" error="Choose a colour."', theme);
     await expectNoA11yViolations(host);
