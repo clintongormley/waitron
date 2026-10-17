@@ -9,7 +9,12 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 import type { PrepStation } from "./routing-client.js";
-import { monthWeeks, stationShowModel, type TimesPeriod } from "./station-show.js";
+import {
+  activeStationsInOrder,
+  monthWeeks,
+  stationShowModel,
+  type TimesPeriod,
+} from "./station-show.js";
 import { t } from "./strings.js";
 
 export type TimesStation = Pick<
@@ -76,9 +81,7 @@ export class PrepStationTimes extends LitElement {
   }
 
   #active(): TimesStation[] {
-    return this.stations
-      .filter((station) => station.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    return activeStationsInOrder(this.stations);
   }
 
   #station(): TimesStation | undefined {

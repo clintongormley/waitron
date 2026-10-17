@@ -32,11 +32,16 @@ export function weekInRange(date: LocalDate): boolean {
   return month >= FIRST_MONTH && month <= LAST_MONTH;
 }
 
+/** `model`'s days at `dates`, in that order, or undefined when the read does not hold every one. */
+export function daysAt(model: OpeningHoursMonth, dates: readonly LocalDate[]): Day[] | undefined {
+  const byDate = new Map(model.days.map((day) => [day.date, day] as const));
+  const days = dates.map((d) => byDate.get(d));
+  return days.every((day) => day !== undefined) ? days : undefined;
+}
+
 /** The week's seven days from `model`, or undefined when the read does not hold all seven. */
 export function weekDays(model: OpeningHoursMonth, date: LocalDate): Day[] | undefined {
-  const byDate = new Map(model.days.map((day) => [day.date, day] as const));
-  const days = weekDates(date).map((d) => byDate.get(d));
-  return days.every((day) => day !== undefined) ? days : undefined;
+  return daysAt(model, weekDates(date));
 }
 
 export interface WeekBlock {
@@ -69,6 +74,26 @@ export interface WeekRow {
   words: string;
 }
 
+/** `read`'s ranges as open blocks, each tooltip naming `name`. */
+function departmentBlocks(
+  read: Day["departments"][number],
+  name: string,
+  place: ReturnType<typeof placeOnDay>,
+  names: MonthNames,
+): WeekBlock[] {
+  return read.ranges.map((range) => {
+    const text = serviceRangeText(range, names);
+    return {
+      kind: "open",
+      periodId: range.periodId,
+      ...place(range),
+      text,
+      label: format("week.block_label", { name, text }),
+      faded: false,
+    };
+  });
+}
+
 /** `chosen` "" (or an id the day's read lacks): one row per department. A department id: it,
  *  then its zones. */
 export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[] {
@@ -84,17 +109,7 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
         name,
         zone: false,
         strong: true,
-        blocks: read.ranges.map((range) => {
-          const text = serviceRangeText(range, names);
-          return {
-            kind: "open",
-            periodId: range.periodId,
-            ...place(range),
-            text,
-            label: label(name, text),
-            faded: false,
-          };
-        }),
+        blocks: departmentBlocks(read, name, place, names),
         empty: !read.ranges.length && day.closedAllDay ? t("week.closed_all_day") : "",
         words: departmentRow(read, names).text,
       };
@@ -161,17 +176,7 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
   const place = placeOnDay(day);
   return day.departments.map((read) => {
     const name = names.name(read.departmentId);
-    const blocks = read.ranges.map((range): WeekBlock => {
-      const text = serviceRangeText(range, names);
-      return {
-        kind: "open",
-        periodId: range.periodId,
-        ...place(range),
-        text,
-        label: format("week.block_label", { name, text }),
-        faded: false,
-      };
-    });
+    const blocks = departmentBlocks(read, name, place, names);
     return {
       key: read.departmentId,
       name,

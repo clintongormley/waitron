@@ -23,6 +23,7 @@ import { POPOVER_MARGIN } from "./paint-grid-parts.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import {
+  daysAt,
   weekDates,
   weekDays,
   weekInRange,
@@ -617,7 +618,7 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${drawn ? this.#body(drawn, drawn.days, (body) => this.#week(body)) : nothing}
+      ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}
       <div
         popover="manual"
         class="tip"
@@ -661,7 +662,7 @@ export class OpeningHoursWeekView extends LitElement {
         )}
         ${this.#step(1, "next-day", "week.next_day", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
-      ${drawn ? this.#body(drawn, drawn.days, (body) => this.#day(body)) : nothing}
+      ${drawn ? this.#body(drawn, (body) => this.#day(body)) : nothing}
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>`;
   }
 
@@ -699,8 +700,8 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   /** The department view of `drawn`, or the station's in its place: nothing while it loads, Always
-   *  open for the default station, else `dates`' days of its read. */
-  #body(drawn: Drawn, dates: readonly Day[], draw: (body: Body) => unknown) {
+   *  open for the default station, else `drawn`'s days of its read. */
+  #body(drawn: Drawn, draw: (body: Body) => unknown) {
     const station = this.station;
     if (!station) {
       const { days, chosen, names } = drawn;
@@ -710,12 +711,13 @@ export class OpeningHoursWeekView extends LitElement {
       return html`<p class="always-open" data-test="always-open">
         ${t("prep.always_open_default")}
       </p>`;
-    const byDate = new Map(
-      station.state === "ready" ? station.model.days.map((day) => [day.date, day] as const) : [],
+    if (station.state === "loading") return nothing;
+    const days = daysAt(
+      station.model,
+      drawn.days.map((day) => day.date),
     );
-    const days = dates.map((day) => byDate.get(day.date));
     // A read that lacks a shown date is one still on its way for that week: drawn as loading.
-    if (station.state === "loading" || !days.every((day) => day !== undefined)) return nothing;
+    if (!days) return nothing;
     const names = monthNames(station.departments);
     return draw({ days, names, rows: (day) => weekStationRows(day, names), orders: true });
   }

@@ -51,6 +51,7 @@ import { t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 import type { PrepStation } from "./routing-client.js";
 import {
+  activeStationsInOrder,
   monthWeeks,
   stationShowModel,
   type StationShow,
@@ -682,7 +683,7 @@ export class OpeningHoursScreen extends LitElement {
       );
     });
   }
-  /** Decision 12: a read-only Calendar offers and reads no station. */
+  /** A722 plan, Decision 12: a read-only Calendar offers and reads no station. */
   private stationsWanted() {
     return !this.readOnly && !this.moduleView && (this.view === "month" || this.view === "week");
   }
@@ -695,9 +696,7 @@ export class OpeningHoursScreen extends LitElement {
     if (this.stationsDetach) return;
     this.stationsDetach = this.api.watchStations(
       (stations) => {
-        this.stations = stations
-          .filter((station) => station.active)
-          .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+        this.stations = activeStationsInOrder(stations);
       },
       // Show keeps its departments; the station list is a choice the page works without.
       () => {

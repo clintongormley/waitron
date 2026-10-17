@@ -23,6 +23,14 @@ export type StationShow =
       departments: readonly MonthDepartment[];
     };
 
+export function activeStationsInOrder<
+  Station extends { active: boolean; displayOrder: number; name: string },
+>(stations: readonly Station[]): Station[] {
+  return stations
+    .filter((station) => station.active)
+    .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+}
+
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 
 /** The whole Monday-to-Sunday weeks covering `month`, worked out as `readOpeningHoursMonth` does, so
@@ -54,8 +62,8 @@ export function stationShowModel(
   const fed = [
     ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
   ].sort((a, b) => rank(a) - rank(b));
-  const several = fed.length > 1 || lone === "department";
-  const rows = several ? fed : [station.id];
+  const perDepartment = fed.length > 1 || lone === "department";
+  const rows = perDepartment ? fed : [station.id];
   const model: OpeningHoursMonth = {
     ...meta,
     days: meta.days.map((day, index) => {
@@ -68,7 +76,7 @@ export function stationShowModel(
           departmentId: id,
           zones: [],
           ranges: sent
-            .filter((row) => !several || row.departmentId === id)
+            .filter((row) => !perDepartment || row.departmentId === id)
             .flatMap((row) => row.ranges)
             .sort((a, b) => offset(a.startsAt) - offset(b.startsAt)),
         })),
@@ -76,7 +84,7 @@ export function stationShowModel(
     }),
   };
   const plain = ({ id, name, colour }: TimesPeriod) => ({ id, name, colour });
-  const departments: MonthDepartment[] = several
+  const departments: MonthDepartment[] = perDepartment
     ? fed.map((id) => ({
         id,
         name: periods.find((period) => period.departmentId === id)?.departmentName ?? "",
