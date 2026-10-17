@@ -1951,6 +1951,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   two requests one after the other. A768's after-change probe timed it at 241–266 ms, against
   113–120 ms for a second table in the same zone.
 
+- **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
+  2026-10-17).** At 320×568, with the person's name moved into More, the menu's content (625 px)
+  overflows the 552 px it is given, so Log out sits below the menu's bottom edge and nothing says
+  the menu scrolls. The look hid A681's Theme row and Log out was still below the edge, so this is
+  believed to predate A681 (not run on `main`). A681 puts the Theme row after Log out, so at 360×640
+  and 390×664 that row is the part that needs a scroll. Decide whether More should show that it
+  scrolls, or hold fewer items on a short screen.
+
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones
   (left open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and
   whether clocking is offered change the till's layout, so they are applied only where the till
