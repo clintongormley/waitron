@@ -2101,7 +2101,8 @@ export class TillApp extends LitElement {
   /** Drafts left for another party's table, each settling once its save has answered. */
   #leavingDrafts = new Map<DraftSync, Promise<void>>();
   /** Left drafts whose save got no answer, by party. Each is shown again, and saved, only when its
-   * party opens for the person who made it; a sign-out or a server switch takes them all. */
+   * party opens for the person who made it; a sign-out sends that person's and drops the rest; a
+   * sign-in by someone else and a server switch drop them. */
   #unsavedDrafts = new Map<string, DraftSync>();
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
@@ -3865,6 +3866,7 @@ export class TillApp extends LitElement {
     this.#clockAccessLost = false;
     this.clockedOut = false;
     this.#loginPending = true;
+    if (personId !== this.operatorPersonId) this.#dropOthersDrafts(personId);
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
@@ -8577,7 +8579,7 @@ export class TillApp extends LitElement {
     this.#leavingDrafts.set(
       sync,
       sync.flush().then((saved) => {
-        this.#leavingDrafts.delete(sync);
+        if (!this.#leavingDrafts.delete(sync)) return;
         if (saved === "failed" && session === this.#operatorSession)
           this.#unsavedDrafts.set(sync.partyId, sync);
         else sync.drop();
@@ -9146,6 +9148,22 @@ export class TillApp extends LitElement {
     this.requestUpdate();
     if (!opened.read) this.errorKey = "table.draft_read_failed";
     else this.#reconcileDraft();
+  }
+
+  /** At a sign-in: the server takes the person from the session, so a save of anyone else's draft
+   * sent from now on would be saved as the person signing in. */
+  #dropOthersDrafts(personId: string): void {
+    if (this.#draftSync !== undefined && this.#draftSync.personId !== personId) this.#dropDraft();
+    for (const sync of [...this.#leavingDrafts.keys()])
+      if (sync.personId !== personId) {
+        sync.drop();
+        this.#leavingDrafts.delete(sync);
+      }
+    for (const [party, sync] of [...this.#unsavedDrafts])
+      if (sync.personId !== personId) {
+        sync.drop();
+        this.#unsavedDrafts.delete(party);
+      }
   }
 
   #dropLeavingDrafts(): void {

@@ -24,6 +24,7 @@ import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { setLocale, t } from "./i18n/t.js";
+import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
 
@@ -1050,6 +1051,131 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(savedBy).toEqual(["p1", "p1"]);
     expect(savedLines()).toEqual(["offer-beer ×1"]);
+  });
+
+  /** Holds the next sign-in's zone read until the returned function is called. */
+  function holdNextZones(): () => void {
+    let answer!: () => void;
+    api.getDeviceZones!.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => (answer = () => resolve(deviceZonesFixture(undefined, ["z1"])))),
+    );
+    return () => answer();
+  }
+
+  it("after a restart with no sign-out, a reopen waiting on a left order's save does not save it as the next person while their sign-in loads", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    await back(el);
+    await reopen(el, "t4");
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+    expect(server.drafts).toEqual([]);
+  });
+
+  it("after a restart with no sign-out, a left order's save queued behind one still out is not sent as the next person", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    const release = holdNextSave();
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await tap(el, "Beer");
+    await moveToMesa7(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    await flush(el, 6);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+    expect(server.drafts).toEqual([]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("after a restart with no sign-out, the order on screen is not saved as the next person while their sign-in loads", async () => {
+    const { savedBy, mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openMesa(el);
+    const release = holdNextSave();
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+    expect(server.drafts).toEqual([]);
+  });
+
+  it("after a restart with no sign-out, an order kept for the one before is not saved as the next person by a reopen still reading its bills", async () => {
+    const savedBy: string[] = [];
+    const bills = [{ workingOrderId: "wo-4" }];
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([table("t4", "4", party({ mainBillId: null })), mesa7, mesa9]),
+      getPartyBills: vi.fn().mockResolvedValue(bills),
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        savedBy.push(server.personId);
+        return server.saveDraft(...args);
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await back(el);
+    let answerBills!: () => void;
+    api.getPartyBills!.mockImplementationOnce(
+      () => new Promise((resolve) => (answerBills = () => resolve(bills))),
+    );
+    await reopen(el, "t4");
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+    answerBills();
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+    expect(savedBy).toEqual(["p1"]);
+    expect(server.drafts).toEqual([]);
+  });
+
+  it("after a restart with no sign-out, the next person is not left loading a table behind a left order's save that never answers", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    holdNextSave();
+    await moveToMesa7(el);
+    await back(el);
+    await reopen(el, "t4");
+    expect(tableOrder(el)?.draftStore ?? null).toBeNull();
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(tableOrder(el)!.party?.id).toBe("v1");
+    expect(rows(el)).toEqual([]);
   });
 
   it("a server switch lets go of a left draft whose background save got no answer", async () => {
