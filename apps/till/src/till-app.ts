@@ -342,7 +342,9 @@ import type {
   CollectCardDetail,
   ConfirmPaymentDetail,
   ParkOrderDetail,
+  ReceiptGuestsDetail,
 } from "./widgets/tender-pay.js";
+import { defaultReceiptGuests } from "./state/receipt-guests.js";
 
 import { setContentLanguages } from "@waitron/ui";
 
@@ -8160,13 +8162,22 @@ export class TillApp extends LitElement {
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
+        .asksGuests=${this.#billPayingAsksGuests(open)}
+        .receiptGuests=${open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
-        @bill-pay-confirm=${() => void this.#onBillPayConfirm()}
+        @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
         @bill-pay-close=${() => this.#closeBillPaying()}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  /** A bill with a full invoice chosen prints no guests line, so its payment asks none. */
+  #billPayingAsksGuests(open: BillPaying): boolean {
+    return open.surface === "table"
+      ? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.invoiceType !== "F1"
+      : this.invoiceChoice?.orderId !== open.billId;
   }
 
   /** The refund dialog and, over it, its approver's PIN prompt, whose events stop here so the
@@ -11769,16 +11780,21 @@ export class TillApp extends LitElement {
    * the one sent before only while that same confirmation on the same bill got no answer (plan
    * D8); the request is sent again unchanged while it gets none.
    */
-  async #onBillPayConfirm(): Promise<void> {
+  async #onBillPayConfirm(event: Event): Promise<void> {
     // Sent only from the confirmation, which shows an allocated preview of what was asked.
     const open = this.billPaying!;
     if (open.busy) return;
     const asked = open.asked!;
-    const confirmation = confirmationOf(
-      paymentAsk(asked.choice, asked.pay, asked.allocation),
-      open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
-      asked.card,
-    );
+    const detail: ReceiptGuestsDetail =
+      (event as CustomEvent<ReceiptGuestsDetail | null>).detail ?? {};
+    const confirmation = {
+      ...confirmationOf(
+        paymentAsk(asked.choice, asked.pay, asked.allocation),
+        open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
+        asked.card,
+      ),
+      ...("guests" in detail ? { guests: detail.guests } : {}),
+    };
     const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
     const turn = ++this.#paymentSends;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };

@@ -2344,6 +2344,195 @@ describe("till-app: a partly paid order at the counter", () => {
     await flush(el);
     expect(dialog(el)).not.toBeNull();
   });
+
+  it("sends no guests line on the rest of a counter order paid with the guests field untouched", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf(
+          { applied: "70.00", tendered: "70.00" },
+          { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("120.00"),
+        ),
+      );
+    const el = await retrieved({ takeBillPayment });
+    payRest(el)!.click();
+    await flush(el);
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    const field = inDialog(el, '[name="guests"]') as unknown as { value: string } | null;
+    expect(field?.value).toBe("");
+
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0]).toHaveProperty("guests", null);
+  });
+
+  it("asks no guests and sends no guests key on a counter order with a full invoice chosen", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf(
+          { applied: "70.00", tendered: "70.00" },
+          { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("120.00"),
+        ),
+      );
+    const el = await retrieved({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, formFactor: counterFormFactor, fullInvoices: true }),
+      takeBillPayment,
+    });
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+    payRest(el)!.click();
+    await flush(el);
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    expect(inDialog(el, '[name="guests"]')).toBeNull();
+
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0]).not.toHaveProperty("guests");
+  });
+});
+
+describe("till-app: the guests the receipt of a bill paid in parts prints", () => {
+  function twoContributions(bill: Partial<PartyBill> = {}) {
+    let latest = balanceOf();
+    const answers = [
+      takenOf({ applied: "50.00", tendered: "50.00" }, { received: "50.00", outstanding: "70.00" }),
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { received: "120.00", outstanding: "0.00", status: "settled" },
+        invoiceOf("120.00"),
+      ),
+    ];
+    return {
+      takeBillPayment: vi.fn(async () => {
+        const answer = answers.shift()!;
+        latest = answer.balance;
+        return answer;
+      }),
+      previewBillPayment: vi
+        .fn()
+        .mockResolvedValueOnce(cash("50.00", "0.00"))
+        .mockResolvedValueOnce(cash("70.00", "0.00")),
+      getBillBalance: vi.fn(async () => latest),
+      getPartyBills: vi.fn(async () => [
+        billOf({
+          ...bill,
+          outstanding: latest.outstanding,
+          hasPayments: latest.received !== "0.00",
+        }),
+      ]),
+    };
+  }
+
+  async function contribute(el: TillApp, amount: string): Promise<void> {
+    await type(el, "amount", amount);
+    await type(el, "tendered", amount);
+    await press(el, "[data-pay-continue]");
+  }
+
+  const guestsField = (el: TillApp) =>
+    inDialog(el, '[name="guests"]') as unknown as { value: string } | null;
+
+  it("sends no guests on the contribution that leaves some owing, and the party's 4 on the one that pays the rest", async () => {
+    const { el } = await mountApp(twoContributions());
+    await openTable(el);
+    await openDialog(el, "contribution");
+
+    await contribute(el, "50");
+    expect(guestsField(el)).toBeNull();
+    await press(el, "[data-pay-confirm]");
+    await press(el, 'input[name="way"][value="contribution"]');
+    await contribute(el, "70");
+    expect(guestsField(el)!.value).toBe("4");
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(2);
+    expect(sent()[0]).not.toHaveProperty("guests");
+    expect(sent()[1]).toHaveProperty("guests", 4);
+  });
+
+  it("sends the count the waiter changed it to on the one that pays the rest", async () => {
+    const { el } = await mountApp(twoContributions());
+    await openTable(el);
+    await openDialog(el, "contribution");
+
+    await contribute(el, "50");
+    await press(el, "[data-pay-confirm]");
+    await press(el, 'input[name="way"][value="contribution"]');
+    await contribute(el, "70");
+    const stepper = inDialog(el, '[name="guests"]') as unknown as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    input.value = "6";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()[0]).not.toHaveProperty("guests");
+    expect(sent()[1]).toHaveProperty("guests", 6);
+  });
+
+  it("starts the field empty on a split bill and sends null", async () => {
+    const { el } = await mountApp({
+      ...twoContributions(),
+      getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2 })]),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+
+    await contribute(el, "50");
+    await press(el, "[data-pay-confirm]");
+    await press(el, 'input[name="way"][value="contribution"]');
+    await contribute(el, "70");
+    expect(guestsField(el)!.value).toBe("");
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()[0]).not.toHaveProperty("guests");
+    expect(sent()[1]).toHaveProperty("guests", null);
+  });
+
+  it("asks no guests and sends no guests key on a bill with a full invoice chosen", async () => {
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      ...twoContributions({ invoiceType: "F1" }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+
+    await contribute(el, "50");
+    await press(el, "[data-pay-confirm]");
+    await press(el, 'input[name="way"][value="contribution"]');
+    await contribute(el, "70");
+    expect(guestsField(el)).toBeNull();
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]).not.toHaveProperty("guests");
+  });
 });
 
 describe("till-app: the owner's split after a contribution", () => {
