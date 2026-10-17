@@ -79,11 +79,20 @@ describe("recalled draft line reservations", () => {
           ownerId: OWNER,
         })
         .returning();
+      const [otherBill] = await tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          locationId: location!.id,
+          orderNumber: 2,
+          partyId: party!.id,
+        })
+        .returning();
       const [otherDraft] = await tx
         .insert(orderDrafts)
         .values({
           partyId: party!.id,
-          billId: bill!.id,
+          billId: otherBill!.id,
           ownerId: COLLEAGUE,
         })
         .returning();

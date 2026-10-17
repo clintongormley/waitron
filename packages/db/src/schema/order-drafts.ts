@@ -49,7 +49,7 @@ export const orderDrafts = table(
     }),
     index("order_drafts_party_idx").on(t.partyId),
     uniqueIndex("order_drafts_open_owner_uq")
-      .on(t.partyId, t.ownerId, t.billId)
+      .on(t.billId)
       .where(sql`${t.state} = 'open'`),
     check("order_drafts_state_ck", enumCheck(t.state)),
   ],

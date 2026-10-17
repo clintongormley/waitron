@@ -40,7 +40,7 @@ import {
 } from "@waitron/shared";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
 import {
   bumpGroupReady,
@@ -1493,7 +1493,13 @@ describe("where each submission's groups go (spec §3)", () => {
     courseId: null,
     noMerge: false,
   });
-  const save = (v: Venue, partyId: string, operatorId: string, lines: DraftLineInput[]) =>
+  const save = (
+    v: Venue,
+    partyId: string,
+    operatorId: string,
+    lines: DraftLineInput[],
+    billId?: string,
+  ) =>
     inTx(async (tx) => {
       const [bill] = await tx
         .select({ id: workingOrders.id })
@@ -1501,7 +1507,7 @@ describe("where each submission's groups go (spec §3)", () => {
         .where(eq(workingOrders.partyId, partyId))
         .limit(1);
       return saveDraft(tx, v.cfg, partyId, operatorId, {
-        billId: bill!.id,
+        billId: billId ?? bill!.id,
         draftId: null,
         revision: 0,
         lines,
@@ -1536,7 +1542,20 @@ describe("where each submission's groups go (spec §3)", () => {
     const v = await setupVenue();
     const s = await seated(v);
     const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
-    const mia = await save(v, s.partyId, MIA, [item(v, "water")]);
+    const miaBillId = await inTx(async (tx) => {
+      const [bill] = await tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          locationId: v.cfg.locationId,
+          orderNumber: 2,
+          partyId: s.partyId,
+        })
+        .returning();
+      await VENUE_SERVICE.recordOrderContext(tx, v.cfg, bill!.id, v.zoneId);
+      return bill!.id;
+    });
+    const mia = await save(v, s.partyId, MIA, [item(v, "water")], miaBillId);
     const { draft: rest } = await submit(v, s.partyId, alex, [
       { lineIds: [alex.lines[0]!.id], release: "fire" },
     ]);

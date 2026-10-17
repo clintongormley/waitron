@@ -19,7 +19,7 @@ const SAM = "cccccccc-2222-4000-8000-000000000002";
 const MENU_ITEM = "cccccccc-4444-4000-8000-000000000001";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
 
-const OPEN_DRAFT_KEY = { table: "order_drafts", columns: ["party_id", "owner_id", "bill_id"] };
+const OPEN_DRAFT_KEY = { table: "order_drafts", columns: ["bill_id"] };
 
 describe("order_drafts, order_draft_lines and order_draft_events", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
@@ -130,16 +130,93 @@ describe("order_drafts, order_draft_lines and order_draft_events", () => {
     expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
   });
 
-  it("allows another person's open draft on the same bill", async () => {
+  it("refuses another person's open draft on the same bill", async () => {
     const onParty = await party();
     const billId = await bill(onParty);
     await draft({ partyId: onParty, ownerId: ALEX, billId });
-    await draft({ partyId: onParty, ownerId: SAM, billId });
+    const error = await captureError(() => draft({ partyId: onParty, ownerId: SAM, billId }));
+    expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
     const rows = await inTx((tx) =>
       tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, onParty)),
     );
-    expect(rows.map((row) => row.ownerId).sort()).toEqual([ALEX, SAM].sort());
+    expect(rows.map((row) => row.ownerId)).toEqual([ALEX]);
   });
+
+  it("does not allow a different party to bypass the bill's single open draft", async () => {
+    const partyId = await party(),
+      otherPartyId = await party();
+    const billId = await bill(partyId);
+    const first = await draft({ partyId, ownerId: ALEX, billId });
+    const error = await captureError(() => draft({ partyId: otherPartyId, ownerId: SAM, billId }));
+    expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
+    expect(
+      (await inTx((tx) => tx.select().from(orderDrafts).where(eq(orderDrafts.billId, billId)))).map(
+        (row) => row.id,
+      ),
+    ).toEqual([first]);
+  });
+
+  it("allows different editors on different bills at the same party", async () => {
+    const partyId = await party();
+    const firstBill = await bill(partyId),
+      secondBill = await bill(partyId);
+    const first = await draft({ partyId, ownerId: ALEX, billId: firstBill });
+    const second = await draft({ partyId, ownerId: SAM, billId: secondBill });
+    const rows = await inTx((tx) =>
+      tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, partyId)),
+    );
+    expect(rows.map((row) => [row.id, row.billId, row.ownerId]).sort()).toEqual(
+      [
+        [first, firstBill, ALEX],
+        [second, secondBill, SAM],
+      ].sort(),
+    );
+  });
+
+  it("refuses moving an open draft into a bill with another editor's open draft", async () => {
+    const partyId = await party();
+    const firstBill = await bill(partyId),
+      secondBill = await bill(partyId);
+    await draft({ partyId, ownerId: ALEX, billId: firstBill });
+    const second = await draft({ partyId, ownerId: SAM, billId: secondBill });
+    const before = await inTx((tx) =>
+      tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, partyId)),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.update(orderDrafts).set({ billId: firstBill }).where(eq(orderDrafts.id, second)),
+      ),
+    );
+    expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
+    expect(
+      await inTx((tx) => tx.select().from(orderDrafts).where(eq(orderDrafts.partyId, partyId))),
+    ).toEqual(before);
+  });
+
+  it.each(["submitted", "discarded"] as const)(
+    "allows another editor after %s, but refuses reopening the old draft",
+    async (state) => {
+      const partyId = await party(),
+        billId = await bill(partyId);
+      const first = await draft({ partyId, ownerId: ALEX, billId });
+      await setState(first, state);
+      const second = await draft({ partyId, ownerId: SAM, billId });
+      const before = await inTx((tx) =>
+        tx.select().from(orderDrafts).where(eq(orderDrafts.billId, billId)),
+      );
+      const error = await captureError(() => setState(first, "open"));
+      expect(refusalOn(error, UNIQUE_VIOLATION, OPEN_DRAFT_KEY)).toBe(true);
+      expect(
+        await inTx((tx) => tx.select().from(orderDrafts).where(eq(orderDrafts.billId, billId))),
+      ).toEqual(before);
+      expect(before.map((row) => [row.id, row.state, row.ownerId]).sort()).toEqual(
+        [
+          [first, state, ALEX],
+          [second, "open", SAM],
+        ].sort(),
+      );
+    },
+  );
 
   it.each(["submitted", "discarded"] as const)(
     "allows a new open draft once the person's first is %s",

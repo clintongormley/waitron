@@ -3223,7 +3223,7 @@ describe("merging parties (D2)", () => {
     expect(await storedLines(incoming.id)).toHaveLength(1);
   });
 
-  it("moves the source's open drafts onto the target, and adds a person's source draft into their draft there, as a save adds lines, discarding it with an event", async () => {
+  it("merges the main bills after explicit takeover, retaining every row and the separate bill", async () => {
     const v = await setupVenue();
     const mesa4 = await seated(v);
     const mesa5 = await seated(v, "Mesa 5");
@@ -3238,26 +3238,28 @@ describe("merging parties (D2)", () => {
       item(v, "beer", { quantity: "2" }),
       burger(v),
     ]);
-    const samOn5 = await save(v, mesa5.partyId, SAM, null, 0, [
+    const samOn5 = await saveOnSeparateBill(v, mesa5.partyId, SAM, null, 0, [
       item(v, "wine", { variantId: v.glass }),
     ]);
 
-    await merge(v, mesa4, mesa5, SAM);
+    await refusedWritingNothing(() => merge(v, mesa4, mesa5, SAM), { code: "draft.taken_over" });
+    const moved = await takeOver(v, mesa5.partyId, samOn5.id, ALEX, samOn5.revision);
+    await merge(v, mesa4, mesa5, ALEX);
+    await takeOver(v, mesa4.partyId, samOn5.id, SAM, moved.revision + 1);
 
     const [alex, sam] = byOwner(await draftsOf(v, mesa4.partyId));
-    // Alex's source Beer adds into his Beer on the target, as a save would add it; the Burger goes
-    // after his last line, keeping its id.
     expect(alex).toEqual({
       ...alexOn4,
       revision: alexOn4.revision + 1,
-      lines: [{ ...alexOn4.lines[0]!, quantity: "3.000" }, alexOn4.lines[1], alexOn5.lines[1]],
+      lines: [...alexOn4.lines, ...alexOn5.lines],
     });
-    expect((await storedLines(alexOn4.id)).map((row) => row.position)).toEqual([1, 2, 3]);
+    expect((await storedLines(alexOn4.id)).map((row) => row.position)).toEqual([1, 2, 3, 4]);
     expect(sam).toEqual({
       ...samOn5,
       partyId: mesa4.partyId,
-      billId: mesa4.tabId,
-      revision: samOn5.revision + 1,
+      billId: samOn5.billId,
+      revision: samOn5.revision + 3,
+      takenOverFrom: { personId: ALEX, name: "Alex" },
     });
     expect(await openOwnersOn(mesa4.partyId)).toEqual([ALEX, SAM].sort());
     expect(await draftsOf(v, mesa5.partyId)).toEqual([]);
@@ -3275,18 +3277,22 @@ describe("merging parties (D2)", () => {
         kind: "discarded",
         fromPerson: ALEX,
         toPerson: ALEX,
-        actorId: SAM,
+        actorId: ALEX,
         detail: { intoDraftId: alexOn4.id },
       },
     ]);
     expect((await eventsOf(alexOn4.id)).map((event) => event.kind)).toEqual(["created"]);
-    expect((await eventsOf(samOn5.id)).map((event) => event.kind)).toEqual(["created"]);
+    expect((await eventsOf(samOn5.id)).map((event) => event.kind)).toEqual([
+      "created",
+      "taken_over",
+      "taken_over",
+    ]);
     // A draft that was no longer open stays with the party it was sent from.
     expect(await draftRow(miasSent.id)).toEqual(sentRow);
 
     // The source's table now seats the target's party, and shows its unsent orders.
     expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
-      { ownerName: "Alex", lineCount: 3 },
+      { ownerName: "Alex", lineCount: 4 },
       { ownerName: "Sam", lineCount: 1 },
     ]);
   });
@@ -3297,9 +3303,12 @@ describe("merging parties (D2)", () => {
     const mesa5 = await seated(v, "Mesa 5");
     const alexOn4 = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
     const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "fish")]);
-    const samOn5 = await save(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
+    const samOn5 = await saveOnSeparateBill(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
 
-    await merge(v, mesa4, mesa5, SAM);
+    await refusedWritingNothing(() => merge(v, mesa4, mesa5, SAM), { code: "draft.taken_over" });
+    const moved = await takeOver(v, mesa5.partyId, samOn5.id, ALEX, samOn5.revision);
+    await merge(v, mesa4, mesa5, ALEX);
+    await takeOver(v, mesa4.partyId, samOn5.id, SAM, moved.revision + 1);
 
     for (const [partyId, draft, operatorId, code] of [
       [mesa5.partyId, samOn5, SAM, "party.not_open"],
@@ -3313,7 +3322,7 @@ describe("merging parties (D2)", () => {
         { code },
       );
     }
-    const sam = await save(v, mesa4.partyId, SAM, samOn5.id, samOn5.revision + 1, [
+    const sam = await save(v, mesa4.partyId, SAM, samOn5.id, samOn5.revision + 3, [
       item(v, "fish", { quantity: "2" }),
     ]);
     expect(orders(sam)).toEqual([
@@ -3373,7 +3382,13 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
     expect(again).toEqual(first);
     expect(await everything()).toEqual(before);
     await refusedWritingNothing(
-      () => inTx((tx) => submitDraft(tx, v.cfg, mesa4.partyId, samOn5.id, input)),
+      () =>
+        inTx((tx) =>
+          submitDraft(tx, v.cfg, mesa4.partyId, samOn5.id, {
+            ...input,
+            expectedEdit: { ...input.expectedEdit, billId: mesa4.tabId },
+          }),
+        ),
       {
         code: "draft.out_of_date",
         params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
