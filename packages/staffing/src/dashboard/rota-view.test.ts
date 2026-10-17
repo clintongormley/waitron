@@ -1548,6 +1548,80 @@ describe("the Rota on a phone", () => {
     await vi.waitFor(() => expect(dialog.open).toBe(true));
     expect(dialog.shiftId).toBe("filled");
   });
+  it("on a phone a slot's picker and a person's open slots open as sheets", async () => {
+    let filled = false;
+    const { api, request } = rotaApi(async (week) => {
+      const r = rotaWeek(week);
+      if (filled)
+        r.days[4]!.areas[0]!.match.slots[0]!.status = {
+          kind: "filled",
+          shiftId: "filled",
+          outsideRole: false,
+        };
+      return r;
+    });
+    const el = await phone(api, { area: "station:kitchen" });
+    await userEvent.click(strip(el)[4]!);
+    await day(el).updateComplete;
+    const slot = day(el).shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!;
+    await userEvent.click(slot);
+    const popup = () => q<HTMLElementTagNameMap["rota-popup"]>(el, "rota-popup")!;
+    const sheet = () => popup().shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const atFoot = () => {
+      expect(popup().sheet).toBe(true);
+      expect(sheet().matches(":popover-open")).toBe(true);
+      expect(Math.abs(box(sheet()).left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box(sheet()).width - 390)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box(sheet()).bottom - 844)).toBeLessThanOrEqual(1);
+    };
+    await vi.waitFor(atFoot);
+    const picker = q<LitElement>(el, "slot-picker")!;
+    await picker.updateComplete;
+    expect(normal(picker.shadowRoot!.querySelector("[data-test=picker-title]")!.textContent!)).toBe(
+      "Fri 4 Dec · Sous chef · 09:00–17:00",
+    );
+    expect(picker.shadowRoot!.querySelector("[data-test=show-everyone]")).toBeTruthy();
+    const cancel = picker.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!;
+    expect(normal(cancel.textContent!)).toBe("Cancel");
+    await userEvent.click(cancel);
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    expect(sheet().matches(":popover-open")).toBe(false);
+
+    el.params = { area: "everyone" };
+    await vi.waitFor(() =>
+      expect(day(el).shadowRoot!.querySelector("[data-test=person]")).toBeTruthy(),
+    );
+    await userEvent.click(
+      day(el).shadowRoot!.querySelector<HTMLElement>("[data-person=marc] [data-test=person]")!,
+    );
+    await vi.waitFor(atFoot);
+    const menu = q<LitElement>(el, "rota-open-slots")!;
+    await menu.updateComplete;
+    const menuCancel = menu.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!;
+    expect(normal(menuCancel.textContent!)).toBe("Cancel");
+    await userEvent.click(menuCancel);
+    await vi.waitFor(() => expect(q(el, "rota-open-slots")).toBeNull());
+    expect(sheet().matches(":popover-open")).toBe(false);
+
+    await userEvent.click(
+      day(el).shadowRoot!.querySelector<HTMLElement>("[data-person=marc] [data-test=person]")!,
+    );
+    await vi.waitFor(atFoot);
+    filled = true;
+    const again = q<LitElement>(el, "rota-open-slots")!;
+    await again.updateComplete;
+    await userEvent.click(again.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!);
+    await vi.waitFor(() => expect(q(el, "rota-open-slots")).toBeNull());
+    expect(request).toHaveBeenCalledWith("/management-api/staffing/rota/shifts", "POST", {
+      week: "2026-11-30",
+      businessDay: "2026-12-04",
+      area: { kind: "station", id: "kitchen" },
+      staffRoleId: "sous",
+      startsAt: "09:00",
+      endsAt: "17:00",
+      personId: "marc",
+    });
+  });
   it("a week arrow pressed before the week has loaded steps the week", async () => {
     await useViewport(390, 844);
     const f = document.createElement("div");

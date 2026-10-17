@@ -955,6 +955,7 @@ export class RotaView extends LitElement {
               ${show!.kind === "area" && !hasSlots(read, show!) ? this.#unpainted(read, show!) : nothing}
               ${this.#grid(read, show!)}
               <rota-popup
+                .sheet=${this.narrow}
                 .heading=${this.picked ? slotHeading(read, this.picked) : this.openDay ? openHeading(read, this.openDay.personId, this.openDay.businessDay) : ""}
                 @rota-popup-close=${this.#popupClosed}
               >
@@ -966,6 +967,7 @@ export class RotaView extends LitElement {
                         .ruleset=${this.warnings?.ruleset ?? null}
                         .busy=${this.busy}
                         .error=${this.actionError}
+                        .sheet=${this.narrow}
                         @choose=${(e: CustomEvent<{ personId: string }>) => void this.#fill(this.picked!, e.detail.personId)}
                         @close-picker=${() => {
                           this.picked = undefined;
@@ -979,12 +981,17 @@ export class RotaView extends LitElement {
                           .businessDay=${this.openDay.businessDay}
                           .busy=${this.busy}
                           .error=${this.actionError}
+                          .sheet=${this.narrow}
                           @choose-slot=${(e: CustomEvent<{ slot: Slot }>) => void this.#fill(e.detail.slot, this.openDay!.personId)}
                           @another-shift=${(
                             e: CustomEvent<{ personId: string; businessDay: string }>,
                           ) => {
                             this.openDay = undefined;
                             this.editor = e.detail;
+                          }}
+                          @close-menu=${() => {
+                            this.openDay = undefined;
+                            this.actionError = "";
                           }}
                         ></rota-open-slots>`
                       : nothing

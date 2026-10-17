@@ -82,6 +82,8 @@ export class OpenSlotsMenu extends LitElement {
   @property() businessDay = "";
   @property({ type: Boolean }) busy = false;
   @property() error = "";
+  /** On a phone the menu is a sheet, which ends with Cancel. */
+  @property({ type: Boolean }) sheet = false;
   #emit(name: string, detail: unknown) {
     if (!this.busy)
       this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -139,7 +141,18 @@ export class OpenSlotsMenu extends LitElement {
           this.#emit("another-shift", { personId: this.personId, businessDay: this.businessDay })}
         >${t("staffing.rota.another_shift")}</wt-button
       >
-      ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}`;
+      ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
+      ${
+        this.sheet
+          ? html`<wt-button
+              variant="secondary"
+              data-test="cancel"
+              ?disabled=${this.busy}
+              @click=${() => this.#emit("close-menu", {})}
+              >${t("staffing.role.cancel")}</wt-button
+            >`
+          : nothing
+      }`;
   }
 }
 

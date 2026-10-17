@@ -266,6 +266,61 @@ describe("rota-popup", () => {
     expect(el.shown).toBe(false);
   });
 
+  it("as a sheet it sits at the bottom of the window at full width, scrolls within 70% of its height, and dims the page", async () => {
+    await useViewport(390, 844);
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    host.append(spacer);
+    const anchor = anchorAt(100, 300);
+    content.style.cssText = "";
+    for (let i = 0; i < 40; i++) {
+      const row = document.createElement("button");
+      row.textContent = `Person ${i}`;
+      row.style.display = "block";
+      content.append(row);
+    }
+    el.sheet = true;
+    await el.updateComplete;
+    el.show(anchor);
+    expect(el.shown).toBe(true);
+    const placed = () => {
+      const rect = box();
+      near(rect.left, 0);
+      near(rect.width, 390);
+      near(rect.bottom, 844);
+      expect(rect.height).toBeLessThanOrEqual(591);
+    };
+    placed();
+    expect(popup().scrollHeight).toBeGreaterThan(popup().clientHeight);
+    expect(getComputedStyle(popup()).overflowY).toBe("auto");
+    const backdrop = getComputedStyle(popup(), "::backdrop").backgroundColor;
+    expect(backdrop).not.toBe("rgba(0, 0, 0, 0)");
+    expect(backdrop).not.toBe("transparent");
+    const scroll = scrolled(window);
+    window.scrollBy(0, 600);
+    await scroll;
+    expect(anchor.getBoundingClientRect().bottom).toBeLessThan(0);
+    await new Promise(requestAnimationFrame);
+    expect(el.shown).toBe(true);
+    placed();
+  });
+
+  it("a sheet's Cancel closes it and returns focus to what opened it", async () => {
+    await useViewport(390, 844);
+    const anchor = anchorAt(100, 300);
+    const cancel = document.createElement("button");
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => el.hide());
+    el.append(cancel);
+    el.sheet = true;
+    await el.updateComplete;
+    el.show(anchor);
+    expect(deepActive()).toBe(el.shadowRoot!.querySelector("h2"));
+    await userEvent.click(cancel);
+    await closedOnce();
+    expect(deepActive()).toBe(anchor);
+  });
+
   it("paints its background and border from the surface and border tokens", async () => {
     await useViewport(1280, 900);
     el.show(anchorAt(100, 200));

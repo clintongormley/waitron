@@ -44,7 +44,12 @@ async function useViewport(width: number, height: number) {
   await vi.waitFor(() => expect(innerWidth).toBe(width));
   onTestFinished(() => page.viewport(...before));
 }
-type Phone = "phone area" | "phone everyone" | "phone closed day";
+type Phone =
+  | "phone area"
+  | "phone everyone"
+  | "phone closed day"
+  | "phone picker sheet"
+  | "phone open-slots sheet";
 describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => {
   test.each([
     "draft",
@@ -67,6 +72,8 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     "phone area",
     "phone everyone",
     "phone closed day",
+    "phone picker sheet",
+    "phone open-slots sheet",
   ])("%s", async (state) => {
     setLocale("en");
     const phone = state.startsWith("phone");
@@ -126,7 +133,8 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
       state === "everyone" ||
       state === "open-slots" ||
       state === "everyone-empty" ||
-      state === "phone everyone"
+      state === "phone everyone" ||
+      state === "phone open-slots sheet"
     )
       el.params = { area: "everyone" };
     if (state === "draft" || state === "unpainted") el.canOpenStaffing = true;
@@ -134,7 +142,13 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     host.append(el);
     if (phone) {
       await vi.waitFor(() => expect(el.shadowRoot?.querySelector("rota-day")).toBeTruthy());
-      const shown = { "phone area": 4, "phone everyone": 1, "phone closed day": 0 }[state as Phone];
+      const shown = {
+        "phone area": 4,
+        "phone everyone": 1,
+        "phone closed day": 0,
+        "phone picker sheet": 4,
+        "phone open-slots sheet": 4,
+      }[state as Phone];
       await userEvent.click(
         el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=strip] button")[shown]!,
       );
@@ -149,6 +163,25 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
         expect(day.shadowRoot!.querySelector("[data-test=person]")).toBeTruthy();
       if (state === "phone closed day")
         expect(day.shadowRoot!.querySelector("[data-day-head]")!.textContent).toContain("Closed");
+      if (state === "phone picker sheet" || state === "phone open-slots sheet") {
+        await userEvent.click(
+          day.shadowRoot!.querySelector<HTMLElement>(
+            state === "phone picker sheet"
+              ? "[data-slot=empty]"
+              : "[data-person=marc] [data-test=person]",
+          )!,
+        );
+        const popup = el.shadowRoot!.querySelector("rota-popup")!;
+        await vi.waitFor(() => {
+          expect(
+            el.shadowRoot!.querySelector(
+              state === "phone picker sheet" ? "slot-picker" : "rota-open-slots",
+            ),
+          ).toBeTruthy();
+          expect(popup.sheet).toBe(true);
+          expect(popup.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+        });
+      }
     } else if (state === "loading")
       await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain("Loading rota"));
     else if (state === "error")

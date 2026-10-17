@@ -48,6 +48,18 @@ export class RotaPopup extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
       }
+      :host([sheet]) [popover] {
+        inset: auto 0 0 0;
+        width: 100%;
+        max-width: none;
+        max-height: 70vh;
+        overflow-y: auto;
+        border-width: 1px 0 0;
+        border-radius: var(--wt-radius-lg) var(--wt-radius-lg) 0 0;
+      }
+      :host([sheet]) [popover]::backdrop {
+        background: var(--wt-color-scrim);
+      }
       h2 {
         ${visuallyHiddenStyles}
       }
@@ -68,13 +80,20 @@ export class RotaPopup extends LitElement {
 
   /** Opens beside `anchor`, or below it when neither side has room, and follows it while open:
    *  on each window resize and each scroll of the page or of a box `anchor` is drawn inside, it
-   *  places itself again, or closes once no part of `anchor` is left in view. Called again after
-   *  the content changes, it places again without moving focus. */
+   *  places itself again, or closes once no part of `anchor` is left in view. A sheet sits at the
+   *  foot of the window and does not follow. Called again after the content changes, it places
+   *  again without moving focus. */
   show(anchor: HTMLElement): void {
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
-    this.#place();
-    this.#follow(anchor);
+    if (this.sheet) {
+      this.#stopFollowing();
+      this.popup.style.left = this.popup.style.top = "";
+      if (opening) this.popup.showPopover({ source: anchor });
+    } else {
+      this.#place();
+      this.#follow(anchor);
+    }
     if (opening) this.headingEl.focus();
   }
 

@@ -140,6 +140,27 @@ describe("a day's open slots", () => {
     another.dispatchEvent(new MouseEvent("click"));
     expect(sent).toBe(0);
   });
+  it("beside a day it has no Cancel; in a sheet it ends with Cancel, which sends close-menu unless busy", async () => {
+    const { el, root } = await mount("marc");
+    const buttons = () =>
+      [...root.querySelectorAll("wt-button")].map((b) => normal(b.textContent!));
+    expect(buttons()).toEqual(["Another shift…"]);
+    el.sheet = true;
+    el.error = "Could not fill the slot. Try again.";
+    await el.updateComplete;
+    expect(buttons()).toEqual(["Another shift…", "Cancel"]);
+    const cancel = root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=cancel]")!;
+    expect(root.lastElementChild).toBe(cancel);
+    let closes = 0;
+    el.addEventListener("close-menu", () => closes++);
+    cancel.click();
+    expect(closes).toBe(1);
+    el.busy = true;
+    await el.updateComplete;
+    expect(cancel.disabled).toBe(true);
+    cancel.dispatchEvent(new MouseEvent("click"));
+    expect(closes).toBe(1);
+  });
   it("draws nothing until it has a week", async () => {
     const el = new OpenSlotsMenu();
     document.body.append(el);
