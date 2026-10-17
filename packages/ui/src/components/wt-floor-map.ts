@@ -412,8 +412,8 @@ export class WtFloorMap extends LitElement {
    * does not shrink the plan; null until such a drag of a movable group moves. */
   #dragCrop: PlanRect | null = null;
 
-  /** Set while the view is fitted to a drag's crop. Ending the drag refits it: the tables' crop can
-   * have the same ratio, so no resize would. */
+  /** Set by a fit to a drag's crop, cleared by the next fit. Ending a hold then refits an untouched
+   * view: the tables' crop can have the same ratio, so no resize would. */
   #fittedToDrag = false;
 
   #refitFrame = 0;

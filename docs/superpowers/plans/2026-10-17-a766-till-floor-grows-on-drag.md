@@ -44,12 +44,12 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    imports go with it) and keeps reading the variable in its CSS. The map owns the variable; a
    parent only reads it (a parent binding `style` as a plain attribute would wipe it — say so in
    design-system.md).
-3. **During a drag the view is refitted only by a resize, as on release today** (what release
+3. **During a drag the view is refitted only by a resize or a `fitKey` change, as on release today** (what release
    itself does is decision 7). `#fitView` fits the effective crop. A host whose CSS reads the ratio
    (the till) is resized when the ratio changes, and the `ResizeObserver` refits it unless the view
    was touched. A host of fixed size — every existing suite's box, fixed in both dimensions
-   (600 × 300, 480 × 240, 400 × 200) — is never refitted during a drag, so those suites keep their
-   assertions.
+   (600 × 300, 480 × 240, 400 × 200) — is never refitted during a drag unless `fitKey` changes, so
+   those suites keep their assertions.
 4. **The drag follows the finger's travel, never a view the drag itself caused.** Today the squares
    are `snapToSquare(dx, view.scale)`; with the scale changing under a drag that would feed back.
    The map banks the travel each time the scale changes: it keeps the squares travelled at the scale
@@ -64,7 +64,7 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    view has no drag's crop: the map publishes the tables' ratio and nothing changes during the drag.
    A pan or zoom during a drag stops the drag's crop growing, but the map keeps publishing it until
    release, so the host does not change shape under the finger. On release the tables' ratio comes
-   back and the person's view is kept: nothing refits a touched view.
+   back and the person's view is kept: nothing in the release refits a touched view.
 6. **A fixed group does not grow the plan.** Its drag draws a copy that can only be dropped on
    another table (`dropAction`), which is already inside the plan.
 7. **Release refits only a view the drag refitted.** Where the ratio changes at release (a refused
@@ -72,7 +72,7 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    refits an untouched view, as today. The ratio can also stay the same while the crop changes: an
    L-shaped drag, 12 × 8 to 15 × 8 to 15 × 10, ends at the tables' ratio of 3 to 2 with the view
    fitted to 15 × 10. So when the view was last fitted to a drag's crop, ending a hold (a drop, a
-   cancel, a long press) refits on the next animation frame, unless the view has been touched by
+   cancel, a long press, a live update that removes the held table) refits on the next animation frame, unless the view has been touched by
    then. The frame is what lets the fit see the tables the parent sets in answer to the drop: the
    map's own update from the drop runs before the till re-renders with the pending place. A new hold
    cancels a waiting refit, and that hold's end asks for it again unless a fit has run since;
