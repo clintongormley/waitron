@@ -142,6 +142,7 @@ export {
 } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { receiptReprints } from "./schema/receipt-reprints.js";
+export { saleReceiptGuests } from "./schema/sale-receipt-guests.js";
 export { invoicePdfDownloads } from "./schema/invoice-pdf-downloads.js";
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";

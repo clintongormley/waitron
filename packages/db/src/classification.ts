@@ -26,6 +26,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who requested a receipt copy and which document job carries it",
   ),
   appendOnly(
+    "sale_receipt_guests",
+    "ledger",
+    "the guest count a sale's simplified receipt prints, fixed when it was recorded; never corrected",
+  ),
+  appendOnly(
     "invoice_pdf_downloads",
     "ledger",
     "who requested an invoice's PDF from the dashboard, and when; an audit row is never corrected",
