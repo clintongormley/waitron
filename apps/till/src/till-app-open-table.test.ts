@@ -872,6 +872,103 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual(["Beer ×1"]);
   });
 
+  it("a left draft whose background save got no answer is shown and saved when its table opens again", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+    await back(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+  });
+
+  it("a left draft whose save and the next table's menu both failed is shown when its table opens again", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, { ...mesa7, zoneId: "z2" }, mesa9]),
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValueOnce(catalogue("v1"))
+        .mockRejectedValueOnce(new TypeError("Failed to fetch menu"))
+        .mockResolvedValue(catalogue("v1")),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch save"));
+    await flush(el, 6);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+  });
+
+  it("a left draft whose background save was refused is read afresh when its table opens again", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release({ code: "product.not_sold_separately", status: 409 });
+    await flush(el, 6);
+    await back(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+  });
+
+  it("signing out sends a left draft whose background save got no answer, and the next person never saves it", async () => {
+    const savedBy: string[] = [];
+    const { el } = await mountApp({
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        savedBy.push(server.personId);
+        return server.saveDraft(...args);
+      }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    emit(shell(el), "logout");
+    await flush(el, 6);
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+    await signIn(el, "p2", "Bea");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(rows(el)).toEqual([]);
+    expect(savedBy).not.toContain("p2");
+  });
+
+  it("a server switch lets go of a left draft whose background save got no answer", async () => {
+    const { el, switchServer } = await mountWithRouter();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await switchServer();
+    const saves = api.saveDraft.mock.calls.length;
+    await openMesa(el, "t4");
+    await flush(el, 6);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(rows(el)).toEqual([]);
+    expect(api.saveDraft.mock.calls.length).toBe(saves);
+  });
+
   it("moving guests onto the table just left waits for its own save", async () => {
     const { el } = await mountApp({
       moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", mainBillId: "wo-4", merged: true }),

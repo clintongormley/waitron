@@ -2100,6 +2100,9 @@ export class TillApp extends LitElement {
   #draftSync?: DraftSync;
   /** Drafts left for another party's table, each settling once its save has answered. */
   #leavingDrafts = new Map<DraftSync, Promise<void>>();
+  /** Left drafts whose save got no answer, by party. Each belongs to the current operator session
+   * and is shown again, and saved, when its party opens; a session's end takes them all. */
+  #unsavedDrafts = new Map<string, DraftSync>();
   /** Moved on by each sign-in, so a sign-out still saving its draft, or an older sign-in still
    * loading, leaves a later session alone. */
   #signIns = 0;
@@ -8573,7 +8576,9 @@ export class TillApp extends LitElement {
       sync,
       sync.flush().then((saved) => {
         this.#leavingDrafts.delete(sync);
-        sync.drop();
+        if (saved === "failed" && session === this.#operatorSession)
+          this.#unsavedDrafts.set(sync.partyId, sync);
+        else sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
         if (saved === "failed") {
           if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
@@ -9066,6 +9071,13 @@ export class TillApp extends LitElement {
     if (session !== this.#operatorSession) return undefined;
     const party = this.orderParty;
     if (party === null) return { sync: undefined, read: true };
+    const unsaved = this.#unsavedDrafts.get(party.id);
+    if (unsaved !== undefined) {
+      this.#unsavedDrafts.delete(party.id);
+      this.#draftSync = unsaved;
+      void this.#flushDraft();
+      return { sync: unsaved, read: true };
+    }
     const sync: DraftSync = new DraftSync({
       api: this.api,
       partyId: party.id,
@@ -9127,8 +9139,10 @@ export class TillApp extends LitElement {
   }
 
   #dropLeavingDrafts(): void {
-    for (const sync of this.#leavingDrafts.keys()) sync.drop();
+    for (const sync of [...this.#leavingDrafts.keys(), ...this.#unsavedDrafts.values()])
+      sync.drop();
     this.#leavingDrafts.clear();
+    this.#unsavedDrafts.clear();
   }
 
   #dropDraft(): void {
@@ -12484,7 +12498,9 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const sync = this.#draftSync;
-    const leaving = [...this.#leavingDrafts.keys()];
+    const unsaved = [...this.#unsavedDrafts.values()];
+    this.#unsavedDrafts.clear();
+    const leaving = [...this.#leavingDrafts.keys(), ...unsaved];
     if (sync !== undefined || leaving.length > 0) {
       this.#draftSync = undefined;
       this.#draftReady = false;
@@ -12492,6 +12508,7 @@ export class TillApp extends LitElement {
         Promise.all([sync?.close(), ...leaving.map((each) => each.close())]),
       );
       sync?.drop();
+      for (const each of unsaved) each.drop();
     }
     if (signIns !== this.#signIns || session !== this.#operatorSession || api !== this.api) return;
     try {
