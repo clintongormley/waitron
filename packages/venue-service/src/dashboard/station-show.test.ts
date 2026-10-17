@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StationServiceTimes } from "../station-service-times.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
-import { monthWeeks, stationShowModel } from "./station-show.js";
-import type { TimesPeriod } from "./station-times-tab.js";
+import { monthWeeks, stationShowModel, type TimesPeriod } from "./station-show.js";
 
 const PERIODS: TimesPeriod[] = [
   {
@@ -101,6 +100,24 @@ describe("stationShowModel", () => {
     ]);
     expect(shown.model.days[3]!.departments).toEqual([
       { departmentId: "pass", zones: [], ranges: [ALL_DAY, LATE] },
+    ]);
+  });
+
+  it("gives the Calendar no rows when no department sends to the station", () => {
+    const meta = monthModel();
+    const shown = stationShowModel(meta, times([]), STATION, PERIODS, "department")!;
+    expect(shown.departments).toEqual([]);
+    expect(shown.model.days.map((day) => day.date)).toEqual(meta.days.map((day) => day.date));
+    expect(shown.model.days.every((day) => day.departments.length === 0)).toBe(true);
+  });
+
+  it("gives the Times tab one station row when no department sends to the station", () => {
+    const shown = stationShowModel(monthModel(), times([]), STATION, PERIODS, "station")!;
+    expect(shown.departments.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: "pass", name: "Pass" },
+    ]);
+    expect(shown.model.days[3]!.departments).toEqual([
+      { departmentId: "pass", zones: [], ranges: [] },
     ]);
   });
 

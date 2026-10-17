@@ -1,10 +1,14 @@
 import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
+import type { RoutingPeriod } from "../routing-types.js";
 import type { StationServiceTimes } from "../station-service-times.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
-import type { TimesPeriod } from "./station-times-tab.js";
 
+export type TimesPeriod = Pick<
+  RoutingPeriod,
+  "id" | "departmentId" | "departmentName" | "name" | "colour"
+>;
 export interface ShowStation {
   id: string;
   name: string;
@@ -30,10 +34,9 @@ export function monthWeeks(month: string): [LocalDate, LocalDate] {
 }
 
 /** The month read's dates, each carrying one row per department that sends `station` orders on any
- *  shown date (empty on a date it sends nothing), in the month read's department order. A single
- *  sender is one row named after the station when `lone` is `"station"`, after its department when
- *  `"department"`; no sender is one row named after the station. Undefined unless both reads cover
- *  the same dates. */
+ *  shown date (empty on a date it sends nothing), in the month read's department order. With `lone`
+ *  `"station"`, one sender or none is instead one row named after the station; with `"department"`,
+ *  no sender is no rows. Undefined unless both reads cover the same dates. */
 export function stationShowModel(
   meta: OpeningHoursMonth,
   times: StationServiceTimes,
@@ -51,7 +54,7 @@ export function stationShowModel(
   const fed = [
     ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
   ].sort((a, b) => rank(a) - rank(b));
-  const several = fed.length > 1 || (lone === "department" && fed.length === 1);
+  const several = fed.length > 1 || lone === "department";
   const rows = several ? fed : [station.id];
   const model: OpeningHoursMonth = {
     ...meta,

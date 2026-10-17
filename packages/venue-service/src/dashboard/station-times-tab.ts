@@ -3,23 +3,18 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import type { RoutingPeriod } from "../routing-types.js";
 import type { StationServiceTimes } from "../station-service-times.js";
 import { browserToday } from "./hours-view.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
 import type { PrepStation } from "./routing-client.js";
-import { monthWeeks, stationShowModel } from "./station-show.js";
+import { monthWeeks, stationShowModel, type TimesPeriod } from "./station-show.js";
 import { t } from "./strings.js";
 
 export type TimesStation = Pick<
   PrepStation,
   "id" | "name" | "active" | "isDefault" | "displayOrder"
->;
-export type TimesPeriod = Pick<
-  RoutingPeriod,
-  "id" | "departmentId" | "departmentName" | "name" | "colour"
 >;
 
 /** One prep station's month, read-only: when it gets orders on each date, seasons and special days
