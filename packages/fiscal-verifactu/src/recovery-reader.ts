@@ -29,7 +29,7 @@ export function openRecoveryPdf(bytes: Uint8Array) {
     useWasm: false,
   });
 }
-async function checkCarrier(bytes: Uint8Array): Promise<void> {
+async function checkCarrier(bytes: Uint8Array): Promise<string> {
   const pdf = await PDFDocument.load(bytes, { throwOnInvalidObject: true, updateMetadata: false });
   let attachedSpec: PDFDict | undefined;
   const visited = new Set<PDFDict>();
@@ -82,6 +82,10 @@ async function checkCarrier(bytes: Uint8Array): Promise<void> {
   const associated = pdf.catalog.lookupMaybe(PDFName.of("AF"), PDFArray);
   if (associated && (associated.size() !== 1 || associated.lookup(0, PDFDict) !== attachedSpec))
     refuseRecovery();
+  const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
+  const contentDigest = string(info.lookup(PDFName.of("WaitronRecoveryDigest")));
+  if (!/^sha256-v1:[a-f0-9]{64}$/.test(contentDigest)) refuseRecovery();
+  return contentDigest;
 }
 export async function readRecoveryPdf(
   bytes: Uint8Array,
@@ -90,7 +94,7 @@ export async function readRecoveryPdf(
     refuseRecovery();
   let task: ReturnType<typeof openRecoveryPdf> | undefined;
   try {
-    await checkCarrier(bytes);
+    const contentDigest = await checkCarrier(bytes);
     task = openRecoveryPdf(bytes);
     const pdf = await task.promise;
     const attachments = await pdf.getAttachments();
@@ -109,6 +113,9 @@ export async function readRecoveryPdf(
       canonical.some((b, i) => attachmentBytes[i] !== b)
     )
       refuseRecovery();
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", attachmentBytes));
+    const actual = "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
+    if (actual !== contentDigest) refuseRecovery();
     return { document, attachmentBytes };
   } catch (error) {
     if (

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import PDFKit from "pdfkit";
 import { PDFDocument, PDFArray, PDFDict, PDFName, PDFString } from "pdf-lib";
 import fontUrl from "./assets/register-noto-sans.ttf?url";
-import { readRecoveryPdf } from "./recovery-reader.js";
+import { renderRecoveryPdf } from "./recovery-pdf.js";
+import { openRecoveryPdf, readRecoveryPdf } from "./recovery-reader.js";
 import {
   RECOVERY_ATTACHMENT,
   MAX_RECOVERY_ATTACHMENT,
@@ -19,9 +20,33 @@ const document: RecoveryDocument = {
   createdAt: "2026-10-17T12:30:00.000Z",
   nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
 };
+async function contentDigest(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return "sha256-v1:" + Array.from(digest, (n) => n.toString(16).padStart(2, "0")).join("");
+}
+async function visibleText(bytes: Uint8Array): Promise<string> {
+  const task = openRecoveryPdf(bytes);
+  try {
+    const pdf = await task.promise;
+    const texts: string[] = [];
+    for (let n = 1; n <= pdf.numPages; n++)
+      texts.push(
+        (await (await pdf.getPage(n)).getTextContent()).items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" "),
+      );
+    return texts.join("\n");
+  } finally {
+    await task.destroy();
+  }
+}
 async function carrier(entries: readonly (readonly [string, Uint8Array])[]) {
   const font = new Uint8Array(await (await fetch(fontUrl)).arrayBuffer());
   const pdf = new PDFKit({ font: font as unknown as string });
+  if (entries[0])
+    Object.assign(pdf.info, {
+      WaitronRecoveryDigest: await contentDigest(new Uint8Array(entries[0][1])),
+    });
   const result = new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
     const chunks: Uint8Array[] = [];
     pdf.on("data", (b: Uint8Array) => chunks.push(b));
@@ -134,6 +159,62 @@ describe("strict recovery PDF attachment reader", () => {
       attachmentBytes: recoveryDocumentBytes(document),
     });
   });
+  it("offers manual entry for a real generated PDF whose attachment was stripped", async () => {
+    const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en"));
+    pdf.catalog.lookup(PDFName.of("Names"), PDFDict).delete(PDFName.of("EmbeddedFiles"));
+    pdf.catalog.delete(PDFName.of("AF"));
+    await expect(readRecoveryPdf(await pdf.save())).rejects.toThrow(
+      "No recovery key attachment; enter the key from the sheet manually",
+    );
+  });
+  it("binds the real generated carrier to its exact canonical attachment", async () => {
+    const bytes = await renderRecoveryPdf(document, "en");
+    const pdf = await PDFDocument.load(bytes);
+    const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
+    expect(info.lookup(PDFName.of("WaitronRecoveryDigest"), PDFString).decodeText()).toBe(
+      await contentDigest(recoveryDocumentBytes(document)),
+    );
+    expect((await readRecoveryPdf(bytes)).document).toEqual(document);
+  });
+  it.each(["secret", "scope", "context"])(
+    "refuses a canonical valid %s attachment edit with original visible pages",
+    async (kind) => {
+      const original = await renderRecoveryPdf(document, "en");
+      const pdf = await PDFDocument.load(original);
+      const edited = structuredClone(document);
+      if (kind === "secret") Object.assign(edited.nodeKey, { secret: "z".repeat(32) });
+      if (kind === "scope") Object.assign(edited.scope, { environment: "preproduction" });
+      if (kind === "context") edited.venueName = "Another venue";
+      const bytes = recoveryDocumentBytes(edited);
+      const spec = names(pdf).lookup(1, PDFDict);
+      spec.lookup(PDFName.of("EF"), PDFDict).set(
+        PDFName.of("F"),
+        pdf.context.register(
+          pdf.context.flateStream(bytes, {
+            Type: "EmbeddedFile",
+            Params: { Size: bytes.length },
+          }),
+        ),
+      );
+      const changed = await pdf.save();
+      expect(await visibleText(changed)).toBe(await visibleText(original));
+      await expect(readRecoveryPdf(changed)).rejects.toThrow("Recovery PDF refused");
+    },
+  );
+  it.each(["missing", "malformed", "wrong version", "mismatch", "not a string"])(
+    "refuses %s content binding on an attachment-bearing PDF",
+    async (kind) => {
+      const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en"));
+      const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
+      const key = PDFName.of("WaitronRecoveryDigest");
+      if (kind === "missing") info.delete(key);
+      if (kind === "malformed") info.set(key, PDFString.of("sha256-v1:invalid"));
+      if (kind === "wrong version") info.set(key, PDFString.of("sha256-v2:" + "0".repeat(64)));
+      if (kind === "mismatch") info.set(key, PDFString.of("sha256-v1:" + "0".repeat(64)));
+      if (kind === "not a string") info.set(key, pdf.context.obj(42));
+      await expect(readRecoveryPdf(await pdf.save())).rejects.toThrow("Recovery PDF refused");
+    },
+  );
   it("refuses excessive PDF bytes before parsing", async () => {
     await expect(readRecoveryPdf(new Uint8Array(MAX_RECOVERY_PDF + 1))).rejects.toThrow(
       "Recovery PDF refused",

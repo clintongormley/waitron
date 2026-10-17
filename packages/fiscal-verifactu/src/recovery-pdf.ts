@@ -27,12 +27,20 @@ export async function renderRecoveryPdf(
         ? c
         : `[U+${c.codePointAt(0)!.toString(16).toUpperCase()}]`,
     ).join("");
+  const attachment = recoveryDocumentBytes(document);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", attachment));
+  const contentDigest =
+    "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
   const en = locale === "en";
+  const info = {
+    Title: en ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+    WaitronRecoveryDigest: contentDigest,
+  };
   const pdf = new PDFDocument({
     size: "A4",
     margin: 42,
     font: fontBytes as unknown as string,
-    info: { Title: en ? "Waitron recovery key" : "Clave de recuperación de Waitron" },
+    info,
   });
   const chunks: Uint8Array[] = [];
   let length = 0;
@@ -98,7 +106,7 @@ export async function renderRecoveryPdf(
       ? "Keep older sheets for older backups. A new key does not unlock backups made with an older key."
       : "Guarda las hojas anteriores para copias anteriores. Una clave nueva no abre las copias hechas con una clave anterior.",
   );
-  pdf.file(recoveryDocumentBytes(document).buffer, {
+  pdf.file(attachment.buffer, {
     name: RECOVERY_ATTACHMENT,
     type: "application/json",
   });
