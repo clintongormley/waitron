@@ -272,8 +272,7 @@ special-day write routes.
 
 ## A753. Calendar colours: more of them
 
-**A753 (owner, 2026-10-16).** Points 2 and 3, one shared colour chooser and the Staff roles list
-naming who holds each role, landed in #NNNN.
+**A753 (owner, 2026-10-16; left open by A753 points 2 and 3, #NNNN).**
 
 1. **More colours for periods** ("we need more colours for periods"). Periods and staff roles pick
    from the six calendar colours — red, amber, grey, blue, green, purple (`CALENDAR_COLOURS`,
@@ -281,8 +280,7 @@ naming who holds each role, landed in #NNNN.
    pairs in `packages/ui-core/src/tokens/colors.css`). Grow the palette. The owner's swatch board
    is `docs/backlog/mockups/a753-calendar-colours/` (question in lane B's `questions.md`,
    2026-10-17). Two CHECK constraints list the six, so growing it is a migration:
-   `menu_periods_colour_ck` (venue-service, latest snapshot `0055_snapshot.json`) and
-   `staff_roles_colour_ck` (staffing, `0001_snapshot.json`).
+   `menu_periods_colour_ck` (venue-service) and `staff_roles_colour_ck` (staffing).
 
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 

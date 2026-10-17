@@ -1327,14 +1327,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the link must also go on the hidden width copies in `fixed-title.ts`, or the arrows move again.
   Left open by A759.
 
-- **A753. Calendar colours: more of them (owner, 2026-10-16).** Periods (which set the menus'
+- **A753. Calendar colours: more of them (owner, 2026-10-16; left open by A753 points 2 and 3, #NNNN).** Periods (which set the menus'
   times) and staff roles pick from six colours; special dates store no colour. The palette grows
   once the owner has seen a swatch board, with a migration, because a CHECK on each of the two
   tables lists the six. Every calendar-colour picker in dashboard code already uses the shared
   `wt-colour-chooser`: the period and staff role dialogs are the only callers of
   `calendarColourChoices`, which turns `CALENDAR_COLOURS` into its choices; prep stations use their
-  own palette (A725), and seasons store no colour yet (A721). Points 2 and 3, the shared chooser and
-  the Staff roles list naming who holds each role, landed in #NNNN.
+  own palette (A725), and seasons store no colour yet (A721).
   [Detail](backlog/service-periods.md#a753-calendar-colours-more-of-them)
 
 - **Loose ends left by A755 (#1809).**
@@ -1667,8 +1666,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer
   station editor (owner, 2026-10-15).** Stations sorted by name with their colour shown; a new
-  station takes an unused colour; the late-flag minutes on one row, plainer wording, and a popup
-  colour chooser shared with periods and seasons. [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  station takes an unused colour; the late-flag minutes on one row, plainer wording, and its colour
+  picked with the shared `wt-colour-chooser` (A753). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
   get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the
