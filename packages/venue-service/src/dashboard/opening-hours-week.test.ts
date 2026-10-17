@@ -7,8 +7,7 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { CalendarDayOpen } from "./opening-hours-month.js";
-import type { OpeningHoursWeekView } from "./opening-hours-week.js";
-import "./opening-hours-week.js";
+import { dayTitleCandidateDates, type OpeningHoursWeekView } from "./opening-hours-week.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(async () => {
@@ -19,6 +18,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await commands.parkPointer();
   for (const host of hosts.splice(0)) host.remove();
+  await commands.parkTouch();
   window.scrollTo(0, 0);
   setLocale("en");
 });
@@ -688,9 +688,9 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
   });
 
-  it("a tip shown again is placed afresh", async () => {
-    await page.viewport(390, 800);
-    expect(window.innerWidth).toBe(390);
+  it("a tip shown again is placed afresh in a narrow window", async () => {
+    await page.viewport(600, 800);
+    expect(window.innerWidth).toBe(600);
     const el = await mount();
     await userEvent.hover(block(el, "2026-12-02", "rest", 3));
     expect(open(el)).toBe(true);
@@ -700,7 +700,7 @@ describe("Opening hours week: a block's label", () => {
     const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
     expect(gap).toBeGreaterThan(0);
     const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(box.right).toBeLessThanOrEqual(600 - 8);
     expect(
       Math.abs(box.bottom - (breakfast.getBoundingClientRect().top - gap)),
     ).toBeLessThanOrEqual(0.5);
@@ -734,16 +734,461 @@ describe("Opening hours week: a block's label", () => {
     expect(text(tip(el))).toBe("Terrace · Lunch 13:00–16:00");
   });
 
-  it("stays on a phone's screen", async () => {
-    await page.viewport(390, 800);
-    expect(window.innerWidth).toBe(390);
+  it("stays inside a narrow window", async () => {
+    await page.viewport(600, 800);
+    expect(window.innerWidth).toBe(600);
     const el = await mount();
     const dinner = block(el, "2026-12-02", "rest", 3);
     await userEvent.hover(dinner);
     expect(open(el)).toBe(true);
     const box = tip(el).getBoundingClientRect();
-    expect(box.right).toBeLessThanOrEqual(390 - 8);
+    expect(box.right).toBeLessThanOrEqual(600 - 8);
     expect(box.left).toBeGreaterThanOrEqual(8);
     expect(box.left).toBeLessThan(dinner.getBoundingClientRect().left);
+  });
+});
+
+describe("Opening hours week on a phone", () => {
+  beforeEach(async () => {
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+  });
+
+  const card = (el: OpeningHoursWeekView) => testId(el, "day-card")!;
+  const cardRow = (el: OpeningHoursWeekView, key: string) =>
+    card(el).querySelector<HTMLElement>(`.row[data-row="${key}"]`)!;
+  const bold = (node: Element) => Number(getComputedStyle(node).fontWeight) >= 600;
+
+  it("below 560 px it shows the address's day alone", async () => {
+    const el = await mount({ date: "2026-12-01", departmentId: "rest" });
+    expect(root(el).querySelectorAll("section")).toHaveLength(0);
+    expect(root(el).querySelectorAll('[data-test="day-name"]')).toHaveLength(1);
+    expect(root(el).querySelector('[data-test="week"] [data-test="day-name"]')).not.toBeNull();
+    expect(text(testId(el, "week"))).toBe("Tue 1 Dec");
+    expect([...card(el).querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([
+      "rest",
+      "terrace",
+    ]);
+    const rest = cardRow(el, "rest");
+    expect(text(rest.querySelector(".row-name"))).toBe("Restaurant");
+    expect(bold(rest.querySelector(".row-name")!)).toBe(true);
+    expect(text(rest.querySelector(".words"))).toBe(
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 20:00–23:00",
+    );
+    const terrace = cardRow(el, "terrace");
+    expect(text(terrace.querySelector(".row-name"))).toBe("Terrace");
+    expect(bold(terrace.querySelector(".row-name")!)).toBe(true);
+    expect(text(terrace.querySelector(".words"))).toBe(
+      "Breakfast 08:00–11:00 · Lunch 13:00–16:00 · Dinner 22:00–23:00 · closed 20:00–22:00",
+    );
+    const terraceTrack = terrace.querySelector<HTMLElement>(".track")!;
+    expect(terraceTrack.getAttribute("aria-hidden")).toBe("true");
+    const thin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+    expect(thin).toBeGreaterThan(0);
+    expect(terraceTrack.getBoundingClientRect().height).toBe(thin);
+    expect(root(el).querySelector(".day-names")).toBeNull();
+    const blocks = [...terraceTrack.querySelectorAll<HTMLElement>(".block")];
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const b of blocks) expect(text(b)).toBe("");
+    expect(terraceTrack.querySelectorAll(".block[data-faded]")).toHaveLength(2);
+    expect(
+      getComputedStyle(terraceTrack.querySelector('.block[data-kind="closed"]')!).backgroundImage,
+    ).toContain("repeating-linear-gradient");
+    expect(root(el).querySelector(".ruler")).toBeNull();
+    expect(testId(el, "block-tip")).toBeNull();
+
+    el.date = "2026-12-02";
+    await el.updateComplete;
+    const followed = cardRow(el, "terrace");
+    expect(text(followed.querySelector(".words"))).toBe("as Restaurant");
+    expect(bold(followed.querySelector(".row-name")!)).toBe(false);
+  });
+
+  it("a zone that follows its department has its words muted as its name is", async () => {
+    const el = await mount({ date: "2026-12-02", departmentId: "rest" });
+    const colour = (row: HTMLElement, part: string) =>
+      getComputedStyle(row.querySelector(part)!).color;
+    const followed = cardRow(el, "terrace");
+    expect(text(followed.querySelector(".words"))).toBe("as Restaurant");
+    expect(colour(followed, ".words")).toBe(colour(followed, ".row-name"));
+    const rest = cardRow(el, "rest");
+    expect(colour(rest, ".words")).not.toBe(colour(followed, ".words"));
+  });
+
+  it("decides on its content width when it is first drawn", async () => {
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    const el = document.createElement("opening-hours-week");
+    Object.assign(el, { model: monthModel(), date: "2026-12-02", departments: DEPARTMENTS });
+    Object.assign(el.style, { boxSizing: "border-box", width: "600px", paddingInline: "30px" });
+    applyTokens(el);
+    document.body.append(el);
+    hosts.push(el);
+    await el.updateComplete;
+    expect(el.getBoundingClientRect().width).toBe(600);
+    expect(testId(el, "day-card")).not.toBeNull();
+  });
+
+  it("names the day's special day or holiday under the head", async () => {
+    const el = await mount({ date: "2026-12-08" });
+    const underHead = () => root(el).querySelector<HTMLElement>(".head + .day-names");
+    expect(text(underHead()?.querySelector(".name.holiday"))).toBe("Immaculate Conception");
+    el.date = "2026-12-14";
+    await el.updateComplete;
+    expect(text(underHead()?.querySelector(".name.special"))).toBe("Company dinners");
+  });
+
+  it("‹ › step a day", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    expect(testId(el, "previous-day")!.getAttribute("aria-label")).toBe("Previous day");
+    expect(testId(el, "next-day")!.getAttribute("aria-label")).toBe("Next day");
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    testId(el, "next-day")!.click();
+    testId(el, "previous-day")!.click();
+    expect(sent).toEqual([{ date: "2026-12-02" }, { date: "2026-11-30" }]);
+    expect(el.shownMonth).toBe("2026-12");
+
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(el.shownMonth).toBe("2026-11"));
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "next-day")).not.toBeNull());
+
+    let monday = "0100-02-01";
+    while (weekdayOf(monday) !== 1) monday = addDays(monday, 1);
+    el.model = undefined;
+    el.date = monday;
+    await el.updateComplete;
+    expect(testId(el, "previous-day")!.hasAttribute("disabled")).toBe(true);
+    expect(testId(el, "next-day")!.hasAttribute("disabled")).toBe(false);
+    await userEvent.click(testId(el, "previous-day")!, { force: true });
+    expect(sent).toHaveLength(2);
+  });
+
+  it("the day's name opens the day box", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const name = testId(el, "day-name")!;
+    expect(text(name)).toBe("Tue 1");
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    await userEvent.click(name);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.date).toBe("2026-12-01");
+    expect(opened[0]!.returnTo()).toBe(name);
+    const month = testId(el, "week-month")!;
+    expect(text(month)).toBe("Dec");
+    const monthSent = events<{ month: string }>(el, "week-month-open");
+    await userEvent.click(month);
+    expect(monthSent).toEqual([{ month: "2026-12" }]);
+    expect(testId(el, "week-year")).toBeNull();
+  });
+
+  it("the day title keeps one width", async () => {
+    const dates: LocalDate[] = [];
+    for (let date = "2026-11-30"; date <= "2026-12-06"; date = addDays(date, 1)) dates.push(date);
+    dates.push("2026-09-01", "2027-02-28");
+    const lefts: [string, number][] = [];
+    try {
+      for (const locale of ["en", "es"] as const) {
+        setLocale(locale);
+        const el = await mount({ model: undefined });
+        for (const date of dates) {
+          el.date = date;
+          await el.updateComplete;
+          lefts.push([`${locale} ${date}`, testId(el, "next-day")!.getBoundingClientRect().left]);
+        }
+      }
+    } finally {
+      setLocale("en");
+    }
+    expect(lefts).toHaveLength(18);
+    for (const [shown, left] of lefts)
+      expect(Math.abs(left - lefts[0]![1]), shown).toBeLessThanOrEqual(0.5);
+  });
+
+  it("the day title is sized against every weekday in every month", () => {
+    const pairs = new Set(
+      dayTitleCandidateDates().map((date) => `${weekdayOf(date)} ${date.slice(5, 7)}`),
+    );
+    expect(pairs.size).toBe(7 * 12);
+  });
+
+  it("the day title starts with a capital", async () => {
+    try {
+      setLocale("es");
+      const el = await mount({ model: undefined, date: "2026-12-01" });
+      expect(text(testId(el, "day-name"))).toBe("Mar, 1");
+      expect(text(testId(el, "week"))).toBe("Mar, 1 dic");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("the title's links are big enough to tap and apart", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const day = testId(el, "day-name")!.getBoundingClientRect();
+    const month = testId(el, "week-month")!.getBoundingClientRect();
+    for (const box of [day, month]) {
+      expect(box.width).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+    }
+    const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-1"));
+    expect(gap).toBeGreaterThan(0);
+    expect(month.left - day.right).toBeGreaterThanOrEqual(gap);
+  });
+
+  it("back above 560 px it shows the whole week again", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    expect(card(el)).not.toBeNull();
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(root(el).querySelectorAll("section")).toHaveLength(7));
+    expect(testId(el, "day-card")).toBeNull();
+    expect(testId(el, "next-week")).not.toBeNull();
+    expect(text(testId(el, "week"))).toBe("30 Nov – 6 Dec 2026");
+  });
+
+  it("turning narrow hides and unpins a shown tip", async () => {
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    const el = await mount();
+    await userEvent.click(block(el, "2026-12-02", "rest", 3));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    const shown = tip(el);
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
+    expect(shown.matches(":popover-open")).toBe(false);
+
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(root(el).querySelectorAll("section")).toHaveLength(7));
+    await userEvent.hover(block(el, "2026-12-02", "rest", 1));
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+  });
+
+  it("pointing at or tapping a row's bar shows no tip", async () => {
+    const el = await mount();
+    const track = card(el).querySelector<HTMLElement>(".track")!;
+    await userEvent.hover(track);
+    expect(testId(el, "block-tip")).toBeNull();
+    await userEvent.click(card(el).querySelector<HTMLElement>(".block")!);
+    expect(testId(el, "block-tip")).toBeNull();
+    await commands.touchGesture({
+      at: 'opening-hours-week [data-test="day-card"] .row[data-row="rest"] .track',
+    });
+    expect(testId(el, "block-tip")).toBeNull();
+  });
+
+  const cardAt = 'opening-hours-week [data-test="day-card"]';
+
+  it("a swipe left shows the next day", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }, { date: "2026-11-30" }]);
+  });
+
+  it("a finger moving down scrolls and steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const tall = document.createElement("div");
+    tall.style.height = "3000px";
+    document.body.append(tall);
+    hosts.push(tall);
+    expect(document.documentElement.scrollHeight).toBeGreaterThan(window.innerHeight);
+    expect(window.scrollY).toBe(0);
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 0, y: -200 } });
+    await vi.waitFor(() => expect(window.scrollY).toBeGreaterThan(0));
+    expect(sent).toEqual([]);
+  });
+
+  it("a short or slanted move steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -30, y: 0 } });
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -60, y: -50 } });
+    expect(sent).toEqual([]);
+  });
+
+  it("a mouse drag steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const blocks = `${cardAt} .row[data-row="rest"] .block`;
+    const first = card(el).querySelector<HTMLElement>('.row[data-row="rest"] .block:first-child')!;
+    const last = card(el).querySelector<HTMLElement>('.row[data-row="rest"] .block:last-child')!;
+    expect(last.getBoundingClientRect().left - first.getBoundingClientRect().right).toBeGreaterThan(
+      48,
+    );
+    await commands.mouseDrag([`${blocks}:first-child`, `${blocks}:last-child`]);
+    expect(sent).toEqual([]);
+  });
+
+  /** Sends synthetic touch events of finger `pointerId` at `clientX`, on one line across `el`'s
+   *  day card, to the card or to `on`. */
+  function fingersOn(el: OpeningHoursWeekView) {
+    const y = card(el).getBoundingClientRect().top + 20;
+    return (type: string, pointerId: number, clientX: number, on: Element = card(el)) =>
+      on.dispatchEvent(
+        new PointerEvent(type, {
+          pointerId,
+          pointerType: "touch",
+          isPrimary: pointerId === 1,
+          clientX,
+          clientY: y,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+  }
+
+  it("a pinch steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 2, 184);
+    finger("pointerup", 1, 206);
+    expect(sent).toEqual([]);
+  });
+
+  it("a finger re-landed during a two-finger hold steps nothing", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 2, 284);
+    finger("pointerdown", 3, 284);
+    finger("pointerup", 3, 106);
+    finger("pointerup", 1, 106);
+    expect(sent).toEqual([]);
+  });
+
+  it("once every finger has lifted, a swipe steps a day again", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerdown", 2, 284);
+    finger("pointerup", 2, 284);
+    finger("pointerup", 1, 106);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a lift the card does not hear leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    const finger = fingersOn(el);
+    finger("pointerdown", 1, 106);
+    finger("pointerup", 1, 106, document.body);
+    expect(sent).toEqual([]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a cancelled scroll leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const tall = document.createElement("div");
+    tall.style.height = "3000px";
+    document.body.append(tall);
+    hosts.push(tall);
+    const cancelled: PointerEvent[] = [];
+    card(el).addEventListener("pointercancel", (event) => cancelled.push(event));
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: cardAt, moveBy: { x: 0, y: -200 } });
+    await vi.waitFor(() => expect(cancelled).toHaveLength(1));
+    window.scrollTo(0, 0);
+    await frames();
+    expect(sent).toEqual([]);
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a finger down as the Week widens leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    fingersOn(el)("pointerdown", 1, 106);
+    await page.viewport(1280, 800);
+    expect(window.innerWidth).toBe(1280);
+    await vi.waitFor(() => expect(testId(el, "day-card")).toBeNull());
+    await page.viewport(390, 800);
+    expect(window.innerWidth).toBe(390);
+    await vi.waitFor(() => expect(testId(el, "day-card")).not.toBeNull());
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a finger down as the Week is taken out leaves the next swipe working", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    fingersOn(el)("pointerdown", 1, 106);
+    const removed = vi.spyOn(window, "removeEventListener");
+    el.remove();
+    expect(removed).toHaveBeenCalledWith("pointerup", expect.any(Function));
+    expect(removed).toHaveBeenCalledWith("pointercancel", expect.any(Function));
+    removed.mockRestore();
+    document.body.append(el);
+    await el.updateComplete;
+    await commands.touchGesture({ at: cardAt, moveBy: { x: -150, y: 0 } });
+    expect(sent).toEqual([{ date: "2026-12-02" }]);
+  });
+
+  it("a tap on the day's name still opens the day box", async () => {
+    const el = await mount({ date: "2026-12-01" });
+    const opened = events<CalendarDayOpen>(el, "calendar-day-open");
+    const sent = events<{ date: LocalDate }>(el, "week-change");
+    await commands.touchGesture({ at: 'opening-hours-week [data-test="day-name"]' });
+    await vi.waitFor(() => expect(opened).toHaveLength(1));
+    expect(opened[0]!.date).toBe("2026-12-01");
+    expect(sent).toEqual([]);
+  });
+
+  it("a long name with no spaces wraps inside the page", async () => {
+    const long = "Desayunocontinentalconzumodenaranjaycafedelacasaporlasmanana";
+    expect(long).toHaveLength(60);
+    const departments = DEPARTMENTS.map((d) =>
+      d.id !== "rest"
+        ? d
+        : {
+            ...d,
+            name: long,
+            zones: d.zones.map((zone) => ({ ...zone, name: long })),
+            periods: d.periods.map((p) => (p.id === "breakfast" ? { ...p, name: long } : p)),
+          },
+    );
+    const model = monthModel();
+    model.days.find((day) => day.date === "2026-12-01")!.specialDay = { id: "long", name: long };
+    const el = await mount({ model, departments, date: "2026-12-01", departmentId: "rest" });
+    await vi.waitFor(() => expect(root(el).querySelector("wt-combobox")).not.toBeNull());
+    const show = root(el).querySelector<HTMLElement>("wt-combobox")!;
+    expect(show.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    const parts = [
+      ...root(el).querySelectorAll<HTMLElement>(".day-names .name"),
+      ...card(el).querySelectorAll<HTMLElement>(".row-name, .words"),
+    ];
+    expect(parts.map(text).filter((words) => words.includes(long))).toHaveLength(parts.length);
+    for (const part of parts) {
+      expect(part.getBoundingClientRect().right, part.className).toBeLessThanOrEqual(390);
+      expect(part.scrollWidth, part.className).toBeLessThanOrEqual(part.clientWidth);
+    }
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  });
+
+  it("nothing runs off the side", async () => {
+    const el = await mount({ date: "2026-12-01", departmentId: "rest" });
+    await vi.waitFor(() => expect(root(el).querySelector("wt-combobox")).not.toBeNull());
+    const head = root(el).querySelector<HTMLElement>(".head")!;
+    const parts = [...head.children, ...card(el).querySelectorAll("*")];
+    expect(parts.length).toBeGreaterThan(4);
+    for (const part of parts)
+      expect(part.getBoundingClientRect().right, part.className).toBeLessThanOrEqual(390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   });
 });

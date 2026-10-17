@@ -63,7 +63,9 @@ function yearRead(year: number): OpeningHoursYear {
 
 const hosts: HTMLElement[] = [];
 const originalUrl = location.href;
-beforeEach(() => {
+beforeEach(async () => {
+  await resizeViewport(1280, 800);
+  expect(window.innerWidth).toBe(1280);
   setLocale("en");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-12-02T12:00:00Z"));
@@ -128,6 +130,16 @@ const dayName = (el: Screen, date: string) =>
   week(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-test=day-name][data-date="${date}"]`)!;
 const monthView = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-month");
 const yearView = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-year");
+const dayNames = (el: Screen) =>
+  [...week(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=day-name]")].map(
+    (name) => name.dataset["date"],
+  );
+/** Narrows the window to a phone's and waits for the Week to draw one day. */
+async function toPhone(el?: Screen) {
+  await resizeViewport(390, 800);
+  expect(window.innerWidth).toBe(390);
+  if (el) await expect.poll(() => week(el)?.narrow).toBe(true);
+}
 /** The element holding focus, through every shadow root. */
 function focused() {
   let at = document.activeElement;
@@ -263,6 +275,34 @@ describe("the Week at its address", () => {
   });
 });
 
+describe("at a phone's width", () => {
+  it("› pushes the next day", async () => {
+    await toPhone();
+    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
+    await toPhone(el);
+    await week(el)!.updateComplete;
+    expect(dayNames(el)).toEqual(["2026-12-09"]);
+    const pushed = pushedPaths();
+    week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
+    await expect.poll(() => week(el)!.date).toBe("2026-12-10");
+    expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2026-12-10"]);
+  });
+
+  it("a day crossing into the next month's read reads it", async () => {
+    await toPhone();
+    const { el, months } = await mount("/manage/opening-hours/view/week/week/2027-01-03");
+    await toPhone(el);
+    const pushed = pushedPaths();
+    week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-day]")!.click();
+    await expect.poll(() => week(el)!.date).toBe("2027-01-04");
+    expect(pushed()).toEqual(["/manage/opening-hours/view/week/week/2027-01-04"]);
+    await expect.poll(() => months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
+    await week(el)!.updateComplete;
+    expect(months.filter((month) => month === "2027-01")).toEqual(["2027-01"]);
+    expect(dayNames(el)).toEqual(["2027-01-04"]);
+  });
+});
+
 describe("the Calendar switch from the Week", () => {
   registerCatalogue({
     en: { "test.view.staffing": "Staffing" },
@@ -279,14 +319,27 @@ describe("the Calendar switch from the Week", () => {
   };
 
   it("a module view's switch from the Week carries the week's month", async () => {
-    const before = [innerWidth, innerHeight] as const;
-    await resizeViewport(1280, 800);
-    onTestFinished(() => resizeViewport(...before));
-    expect(window.innerWidth).toBe(1280);
     const { el } = await mount("/manage/opening-hours/view/week/week/2027-01-02", {
       ctx: { request: (async () => undefined) as DashboardRequest },
       views: [{ view: staffing, canWrite: true }],
     });
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>(
+        "[data-test=calendar-switch] input[value=staffing]",
+      )!,
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/staffing/month/2026-12");
+  });
+
+  it("a module view's switch from a phone's day carries that day's month", async () => {
+    await toPhone();
+    const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-01", {
+      ctx: { request: (async () => undefined) as DashboardRequest },
+      views: [{ view: staffing, canWrite: true }],
+    });
+    await toPhone(el);
     await userEvent.click(
       el.shadowRoot!.querySelector<HTMLInputElement>(
         "[data-test=calendar-switch] input[value=staffing]",
@@ -631,5 +684,24 @@ describe("Open this week from the day box", () => {
     await expect
       .poll(() => boxButtons(el))
       .toEqual(["Show Winter's standard week", "Open this week"]);
+  });
+
+  it("Open this week from a Month box at a phone's width shows that day", async () => {
+    await toPhone();
+    const el = await mountView("/manage/opening-hours/view/month/month/2026-12");
+    await userEvent.click(dateIn(monthView(el)!, "2026-12-10"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    const pushed = pushedPaths();
+    const close = closed(dayBox(el)!, "calendar-day-box-close");
+    await userEvent.click(openWeek(el)!);
+    await close;
+    await expect
+      .poll(() => pushed().at(-1))
+      .toBe("/manage/opening-hours/view/week/week/2026-12-10");
+    await expect.poll(() => week(el)?.model).toBeDefined();
+    await toPhone(el);
+    await week(el)!.updateComplete;
+    expect(week(el)!.date).toBe("2026-12-10");
+    expect(dayNames(el)).toEqual(["2026-12-10"]);
   });
 });

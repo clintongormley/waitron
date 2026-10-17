@@ -4,7 +4,9 @@ import {
   dateAroundDay,
   format,
   formatDate,
+  dayTitleFromParts,
   formatDayHeading,
+  formatDayTitleParts,
   formatLongDate,
   formatWeekTitleParts,
   formatWeekday,
@@ -116,4 +118,34 @@ describe("formatWeekTitleParts and formatDayHeading", () => {
   it("heads a day with its weekday, day and short month", () => {
     expect(formatDayHeading("2026-10-12")).toBe("Mon 12 Oct");
   });
+});
+
+it("splits a phone's day title into the day's link and the month's", () => {
+  expect(formatDayTitleParts("2026-12-01", "en")).toEqual([
+    { text: "Tue 1", day: true },
+    { text: " " },
+    { text: "Dec", month: "2026-12" },
+  ]);
+  expect(formatDayTitleParts("2026-12-01", "es")).toEqual([
+    { text: "Mar, 1", day: true },
+    { text: " " },
+    { text: "dic", month: "2026-12" },
+  ]);
+});
+
+it("keeps the month out of the day's link where it falls between the weekday and the day", () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).formatToParts(new Date("2026-12-01T00:00:00Z"));
+  expect(parts.map((part) => part.value).join("")).toBe("Tue, Dec 1");
+  expect(dayTitleFromParts(parts, "2026-12-01")).toEqual([
+    { text: "Tue" },
+    { text: ", " },
+    { text: "Dec", month: "2026-12" },
+    { text: " " },
+    { text: "1", day: true },
+  ]);
 });

@@ -236,8 +236,6 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
 [on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
 
-4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
-   for the next day.
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
    department that sends it dishes, from each period's start to its last orders — what A725 retires
    with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,
@@ -353,6 +351,12 @@ Re-check when a new year's list is added.
   ruler and the blocks agree on a week holding a 25-hour day. Deliberate limit: a week whose days
   have different changeovers (a scheduled change of when the business day starts) labels the ruler
   from Monday's.
+
+- **On a phone the Week shows one day, below 560 px of its own width, the Month's breakpoint
+  ([A722 Part 2](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 11; plan default, sent to the owner as an FYI, 2026-10-17).**
+  A `ResizeObserver` reads it, because the narrow Week draws different things and its ‹ › step a
+  day. The phone's day title has no year link, following board 5; the Year is one press further,
+  through the Month's year link.
 
 - **No "Seasons…" button until A721; the season chips keep their ✎ and "+ Season" until then
   (A720, 2026-10-15).** They are the only way to rename, move, add or delete a season today.

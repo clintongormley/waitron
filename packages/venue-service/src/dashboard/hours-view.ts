@@ -22,6 +22,7 @@ function dateFormat(options: Intl.DateTimeFormatOptions, language = currentLocal
   return formatter;
 }
 const asUtc = (date: LocalDate) => new Date(`${date}T00:00:00Z`);
+const joined = (parts: Intl.DateTimeFormatPart[]) => parts.map((part) => part.value).join("");
 
 /** A date as the dashboard reads it, "Mon, 12 Oct 2026", in the dashboard's language. */
 export function formatDate(date: LocalDate): string {
@@ -76,13 +77,49 @@ export function dateAroundDay(
 ): { before: string; after: string } {
   const parts = dateFormat(options).formatToParts(asUtc(date));
   const at = parts.findIndex((part) => part.type === "day");
-  const text = (some: Intl.DateTimeFormatPart[]) => some.map((part) => part.value).join("");
-  return { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
+  return { before: joined(parts.slice(0, at)), after: joined(parts.slice(at + 1)) };
 }
 
 /** A day's column heading, "Mon 12 Oct", in the dashboard's language. */
 export function formatDayHeading(date: LocalDate): string {
   return dateFormat({ weekday: "short", day: "numeric", month: "short" }).format(asUtc(date));
+}
+
+/** A phone's day title in parts, "Fri 16" and "Oct", in `language`, else the dashboard's; see
+ *  `dayTitleFromParts`. */
+export function formatDayTitleParts(
+  date: LocalDate,
+  language?: string,
+): { text: string; day?: true; month?: string }[] {
+  return dayTitleFromParts(
+    dateFormat({ weekday: "short", day: "numeric", month: "short" }, language).formatToParts(
+      asUtc(date),
+    ),
+    date,
+  );
+}
+
+/** A day title's formatted parts as one part marked `day`, its first letter a capital, holding the
+ *  weekday, the day and the literals between them — or the day alone where the month falls between
+ *  them — and the month part carrying `date`'s `YYYY-MM`. */
+export function dayTitleFromParts(
+  parts: Intl.DateTimeFormatPart[],
+  date: LocalDate,
+): { text: string; day?: true; month?: string }[] {
+  const at = (type: Intl.DateTimeFormatPartTypes) => parts.findIndex((part) => part.type === type);
+  const [weekday, day, month] = [at("weekday"), at("day"), at("month")];
+  const between = month > Math.min(weekday, day) && month < Math.max(weekday, day);
+  const [first, last] = between ? [day, day] : [Math.min(weekday, day), Math.max(weekday, day)];
+  const plain = (part: Intl.DateTimeFormatPart) =>
+    part.type === "month" ? { text: part.value, month: date.slice(0, 7) } : { text: part.value };
+  const shaped = [
+    ...parts.slice(0, first).map(plain),
+    { text: joined(parts.slice(first, last + 1)), day: true as const },
+    ...parts.slice(last + 1).map(plain),
+  ];
+  const [head] = shaped;
+  head!.text = head!.text.charAt(0).toUpperCase() + head!.text.slice(1);
+  return shaped;
 }
 
 /** A week's title in parts, "12 – 18 Oct 2026", in `language`, else the dashboard's. A month part

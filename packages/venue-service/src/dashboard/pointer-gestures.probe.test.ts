@@ -44,6 +44,7 @@ afterEach(async () => {
   await commands.parkPointer();
   for (const kind of KINDS) document.removeEventListener(kind, record, true);
   page.remove();
+  await commands.parkTouch();
   window.scrollTo(0, 0);
 });
 

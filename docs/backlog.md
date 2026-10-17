@@ -1405,9 +1405,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   (owner, 2026-10-15).** Name, colour and start date edited in place with one Save; a stored colour
   ends Winter turning yellow in February's month. Migration. [Detail](backlog/service-periods.md#a721-seasons-a-seasons-window-edited-in-its-table-and-a-stored-colour-for-each-season), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
-- **A722. The Calendar's Week: one day at a time on a phone, and prep stations in Show (owner,
-  2026-10-15).** On a phone the Week shows one day at a time, each row as its times in words over a
-  thin bar; Show lists prep stations in the Week and the Month. Left open by A722 Part 1, #1823.
+- **A722. The Calendar's Show lists prep stations, in the Week and the Month (owner, 2026-10-15).**
+  Choosing a station draws one row per department that sends it dishes. Left open by A722 Parts 1
+  (#1823) and 2 (#1826). Part 3 touches Show, so it also fixes this: at 390 px a department name
+  with no spaces widens the Month's Show picker and the page (a 60-letter name measured 487 px);
+  the phone Week's head gives its picker `min-width: 0` (#1826).
   [Detail](backlog/service-periods.md#a722-a-week-view-in-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A723. The season painter and special-day editor: say what they are, close on Save, keep a zone's

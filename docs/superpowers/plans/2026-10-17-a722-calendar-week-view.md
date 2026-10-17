@@ -812,7 +812,9 @@ its `YYYY-MM`. The weekday-and-day part ("Fri 16") is a link button `data-test="
 sends `calendar-day-open`; the month part is a `week-month` link. There is no year link on a phone,
 following the board; the Year is one press further, through the Month's own year link. The title
 sits in `fixedTitle`, whose candidates are every weekday × every month with day 28, per interface
-language, shaped as the visible title. The two links are tap targets of at least 24 × 24 px
+language, shaped as the visible title. (2026-10-17: superseded in Part 2's review; the candidates
+are the 22nd to the 28th of each month of 2026, `dayTitleCandidateDates`, since day 28 misses some
+weekday-and-month pairs.) The two links are tap targets of at least 24 × 24 px
 (WCAG 2.2, 2.5.8), with `var(--wt-space-1)` or more between them.
 
 - [ ] **Step 1: Failing tests** (at 390 px measured):

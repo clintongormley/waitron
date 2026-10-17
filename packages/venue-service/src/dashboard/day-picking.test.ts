@@ -121,6 +121,7 @@ afterEach(async () => {
   await commands.parkPointer();
   page?.remove();
   page = undefined;
+  await commands.parkTouch();
   window.scrollTo(0, 0);
 });
 

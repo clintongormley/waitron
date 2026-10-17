@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, onTestFinished, test } from "vitest";
+import { page } from "vitest/browser";
 import { html } from "lit";
 import { registerCatalogue, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -201,9 +202,14 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
   test.each([
-    ["the Week", false],
-    ["the day box over the Week", true],
-  ] as const)("%s", async (_state, boxed) => {
+    ["the Week", false, 1280],
+    ["the day box over the Week", true, 1280],
+    ["the Week on a phone", false, 390],
+  ] as const)("%s", async (_state, boxed, width) => {
+    const before = [innerWidth, innerHeight] as const;
+    await page.viewport(width, 800);
+    onTestFinished(() => page.viewport(...before));
+    expect(window.innerWidth).toBe(width);
     setLocale("en");
     history.replaceState(
       null,
@@ -224,6 +230,7 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       .poll(() => screen.shadowRoot!.querySelector("opening-hours-week")?.model)
       .toBeDefined();
     const week = screen.shadowRoot!.querySelector("opening-hours-week")!;
+    await expect.poll(() => week.narrow).toBe(width < 560);
     await week.updateComplete;
     if (boxed) {
       week

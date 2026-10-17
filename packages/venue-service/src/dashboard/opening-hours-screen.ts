@@ -436,8 +436,14 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** The Calendar switch beside the title carries the month the page shows, when it shows one. */
   private chooseCalendarView(id: string) {
-    const month = this.moduleView ? this.moduleView.params["month"] : this.readMonth();
+    const month = this.moduleView ? this.moduleView.params["month"] : this.switchMonth();
     this.openCalendarView(id, month ? { month } : {});
+  }
+  /** The month the page shows: a phone's Week shows one day, whose month may not be its Monday's. */
+  private switchMonth() {
+    const month = this.readMonth();
+    if (!month || this.view !== "week") return month;
+    return this.shadowRoot?.querySelector("opening-hours-week")?.shownMonth ?? month;
   }
   private static readonly ViewHost = class implements CalendarViewHost {
     constructor(
