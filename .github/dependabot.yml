@@ -7,8 +7,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Vitest majors wait for the Stryker retry: docs/backlog/dependencies.md → A Vitest 5 retry.
+    ignore:
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
     groups:
-      # Majors included: @vitest/browser-playwright 5 fails at startup beside vitest 4 (#766).
+      # No update-types, so once the ignore above goes a major moves vitest and @vitest/* together:
+      # @vitest/browser-playwright 5 fails at startup beside vitest 4 (#766).
       # Must precede npm-minor-and-patch, since a dependency joins the first group it matches.
       vitest:
         applies-to: version-updates

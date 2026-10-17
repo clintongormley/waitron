@@ -62,10 +62,11 @@ carries no sign-off and fails DCO (#160).
 version updates for npm (the pnpm workspace at the root), GitHub Actions, the base images in
 `deploy/Dockerfile`, and the images in `docker-compose.yml` and `deploy/compose.yml`. Version
 updates arrive like this: minor and patch bumps grouped, one PR per ecosystem, except that `vitest`
-and `@vitest/*` bumps at every level, majors included, get their own `vitest` group PR; any other
-major bump comes alone. The compose entry lists two directories, and its first run still opened ONE
-pull request for both (#764, _"Bump the compose-minor-and-patch group across 2 directories with 1
-update"_). Security-fix PRs are switched on in the repository settings.
+and `@vitest/*` minor and patch bumps get their own `vitest` group PR, and their majors are ignored
+until the Vitest 5 retry below; any other major bump comes alone. The compose entry lists two
+directories, and its first run still opened ONE pull request for both (#764, _"Bump the
+compose-minor-and-patch group across 2 directories with 1 update"_). Security-fix PRs are switched
+on in the repository settings.
 
 Dependabot's commits up to 2026-09-27 each carried their own sign-off, so the strict sign-off check
 passed: Dependabot's commit in each of #764 (compose), #765 and #766 (npm) carried
@@ -99,8 +100,12 @@ What still needs a person:
   5.0.1 while every `vitest` stayed on 4, and failed CI; an earlier Vitest 5 move was abandoned on
   2026-09-19 because Stryker killed almost no mutants under it, and a retry has to re-measure
   mutation: [backlog/dependencies.md](../backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it),
-  left behind by the Stryker upgrade (#447, 2026-09-19). The `vitest` group moves `vitest` and
-  `@vitest/*` together, but #766 was closed with `@dependabot ignore this major version`, which Dependabot answered _"OK, I won't notify you about
+  left behind by the Stryker upgrade (#447, 2026-09-19). Until that retry,
+  `.github/dependabot.yml` ignores `vitest` and `@vitest/*` majors (A779: the Vitest 5 PR #1179's
+  latest 30 CI runs, each on a new head, all failed or were cancelled, and #1179 was closed on
+  2026-10-17); the retry removes that ignore. The `vitest` group has no `update-types`, so without
+  the ignore it moves `vitest` and `@vitest/*` together, majors included, but #766 was closed with
+  `@dependabot ignore this major version`, which Dependabot answered _"OK, I won't notify you about
   version 5.x.x again, unless you re-open this PR"_. GitHub's docs describe such ignores as stored
   per dependency
   (`content/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands.md`

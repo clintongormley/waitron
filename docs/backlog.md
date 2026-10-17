@@ -5365,14 +5365,11 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it** — left
   behind by the Stryker upgrade (#447, 2026-09-19). Stryker 10.0.0's release notes mention neither
   issue, and nothing here was run under Vitest 5, so the question is untouched rather than resolved.
-  A `vitest` group moves `vitest` and `@vitest/*` together, majors included; closing #766 stored an
-  ignore of `@vitest/browser-playwright` 5.x, and whether the group's Vitest 5 PR obeys it is
-  untested (how to check and clear it: workflow-guide → Dependabot pull requests) — left open by
-  Dependabot's switch-on (#760, 2026-09-27).
+  The retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779; the Vitest 5 PR #1179
+  is closed). Closing #766 stored an ignore of `@vitest/browser-playwright` 5.x, and whether the
+  group's Vitest 5 PR obeys it is untested (how to check and clear it: workflow-guide → Dependabot
+  pull requests) — left open by Dependabot's switch-on (#760, 2026-09-27).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
-
-- **Open Dependabot pull requests.** #1179 (Vitest 5) waits on Stryker (owner).
-  [Detail](backlog/dependencies.md#open-dependabot-pull-requests)
 
 - **Bundled npm notices stop at a module-type-only package manifest.** Running
   `bundledNpmNotices` on Stripe's installed `cjs/stripe.cjs.node.js` returns no packages on both
