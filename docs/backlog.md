@@ -1141,8 +1141,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Catalogue reads now project individual fields and pages of at most fifty rows across the viewed
   languages, with configuration-bound cursors; the HTTP routes and editor still need integration.
   Cell-baseline parsing and root/default peer projection are checkpointed against real rereads.
-  Obsolete boot callback cleanup waits for lane E. Atomic multilingual saves, the editor,
-  automatic-translation review and their remaining validation are unfinished.
+  A catalogue-only cell-save function now replaces grouped maps, applies explicit clears, checks
+  whole-batch retries and removes only saved name suggestions. Its HTTP routes and editor remain
+  unwired. Obsolete boot callback cleanup waits for lane E. The editor, automatic-translation
+  review, future presentation and the remaining integration and validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

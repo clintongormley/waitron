@@ -60,7 +60,7 @@ declare module "@waitron/shared" {
       causeParams: Readonly<Record<string, unknown>>;
       kind: string;
       id: string;
-      field: "text" | "defaultText";
+      field: "text" | "defaultText" | "name" | "abbreviation";
       language: string;
     };
     "content.translation_invalid": Record<string, never>;

@@ -30,6 +30,7 @@ import {
 import {
   TRANSLATION_NAME_BYTES,
   type TranslationEdit,
+  type TranslationCellRef,
   type TranslationRef,
 } from "./content-translation-types.js";
 import "./errors.js";
@@ -361,4 +362,15 @@ export async function deleteSavedSuggestions(
         ),
       ),
     );
+}
+
+export async function deleteSavedCellSuggestions(
+  tx: Transaction,
+  cells: readonly TranslationCellRef[],
+): Promise<void> {
+  const names = cells.filter((cell) => cell.field === "name");
+  if (!names.length) return;
+  await tx
+    .delete(contentSuggestions)
+    .where(storedIn(names.map((cell) => [cell.kind, cell.id, cell.language] as const)));
 }
