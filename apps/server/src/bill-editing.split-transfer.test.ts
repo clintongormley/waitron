@@ -8,7 +8,8 @@ import { writeEditSentLines } from "@waitron/venue-service";
 import { splitBill, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import {
   readDrafts,
   saveDraft,

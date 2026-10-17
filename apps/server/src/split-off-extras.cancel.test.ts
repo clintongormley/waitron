@@ -5,7 +5,8 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";

@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -20,7 +21,12 @@ import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createTable } from "./testing/live-table.js";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  send as rawGroupSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -1309,3 +1315,5 @@ describe("per-group HTTP destinations draft", () => {
     },
   );
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

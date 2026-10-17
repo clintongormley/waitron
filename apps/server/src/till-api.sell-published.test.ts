@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -319,7 +320,9 @@ async function send(v: Lunch, method: string, path: string, body?: object): Prom
   return v.app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie: v.cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)) }),
   });
 }
 

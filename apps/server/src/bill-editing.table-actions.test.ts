@@ -21,7 +21,8 @@ import { combineParties, joinTables, moveGuests } from "./table-actions.js";
 import { writeEditSentLines } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createTable } from "./testing/live-table.js";

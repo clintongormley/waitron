@@ -57,7 +57,6 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   checkAndBumpParty,
   partyFamily,
-  partyMainBill,
   partyRevisionOfOrder,
   requireBillOfParty,
   runServiceCommand,
@@ -97,6 +96,7 @@ export type GroupRelease = "fire" | "hold";
 export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
 
 export interface SubmitGroupsInput {
+  expectedEdit: BillEditExpected;
   submissionId: string;
   expectedPartyRevision: number;
   groups: {
@@ -108,7 +108,7 @@ export interface SubmitGroupsInput {
   /** Add to this HELD group instead of creating one: then `groups` holds one group, `hold`. */
   joinGroupId?: string;
   operatorId: string;
-  /** The bill of the party the lines go on; absent, the party's main bill. */
+  /** When supplied, must agree with expectedEdit.billId. */
   billId?: string;
 }
 
@@ -153,7 +153,7 @@ export interface SubmittedGroups {
 }
 
 /**
- * Put each submitted group's lines on the party's main bill, or on the bill of the party it names,
+ * Put each submitted group's lines on the observed bill,
  * released to the kitchen now (`fire`) or held until {@link fireGroup}. Every line is credited to
  * the operator. A new held group prints its HOLD ticket where the venue prints held work in advance
  * ({@link printHoldTickets}); lines joining a group whose HOLD ticket was queued print `+N` for it.
@@ -165,20 +165,27 @@ export async function submitGroups(
   input: SubmitGroupsInput,
   attendance?: OrderAttendance,
 ): Promise<SubmittedGroups> {
-  const { submissionId, expectedPartyRevision, operatorId, ...body } = input;
+  const {
+    submissionId,
+    expectedPartyRevision,
+    operatorId,
+    expectedEdit: observed,
+    ...body
+  } = input;
+  const expectedEdit = parseBillEditExpected(observed);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     submissionId,
     "group.submit",
-    { partyId, operatorId, ...body },
+    { partyId, operatorId, ...body, expectedEdit },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
       return placeGroups(
         tx,
         cfg,
         partyId,
-        { ...input, revisionMoved: true },
+        { ...input, expectedEdit },
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
@@ -188,10 +195,11 @@ export async function submitGroups(
   );
 }
 
-export type PlaceGroupsInput = Pick<SubmitGroupsInput, "joinGroupId" | "operatorId" | "billId"> & {
+export type PlaceGroupsInput = Pick<
+  SubmitGroupsInput,
+  "joinGroupId" | "operatorId" | "billId" | "expectedEdit"
+> & {
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
-  /** The command has already moved the party's revision on, so making a main bill does not. */
-  revisionMoved?: boolean;
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
   sourceDraftLineIds?: readonly string[];
 };
@@ -208,6 +216,16 @@ export async function placeGroups(
   attendance?: { recorder: AttendanceRecorder; at: string },
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  const tabId = input.billId ?? expectedEdit.billId;
+  if (expectedEdit.billId !== tabId)
+    throw new AppError("management.request_invalid", { field: "expectedEdit.billId" });
+  await requireBillOfParty(tx, partyId, tabId);
+  await refusePaymentInFlight(tx, [tabId]);
+  await requireBillEditor(tx, tabId, operatorId, expectedEdit);
+  const existingLineIds = input.groups.flatMap((group) => group.existingLineIds ?? []);
+  if (existingLineIds.length > 0)
+    await refuseRecalledWrite(tx, inArray(workingOrderLines.id, existingLineIds));
   if (input.groups.length === 0) {
     throw new AppError("management.request_invalid", { field: "groups" });
   }
@@ -246,7 +264,6 @@ export async function placeGroups(
       release: group.release === "fire",
     })),
   );
-  const tabId = await resolveOrderBill(tx, cfg, partyId, input);
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
   // Recalled families already carry their charge and must bypass fresh pricing.
@@ -362,22 +379,6 @@ export async function placeGroups(
     revision: await currentRevision(tx, partyId),
     groups: groupIds.map((id) => listed.get(id)!),
   };
-}
-
-/** The bill a submission goes on: the open bill of the party it names, or else the main bill. */
-async function resolveOrderBill(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-  input: Pick<PlaceGroupsInput, "billId" | "revisionMoved">,
-): Promise<string> {
-  const { billId } = input;
-  if (billId === undefined) {
-    return partyMainBill(tx, cfg, partyId, input.revisionMoved === true ? "moved" : "move");
-  } else {
-    await requireBillOfParty(tx, partyId, billId);
-    return billId;
-  }
 }
 
 /**

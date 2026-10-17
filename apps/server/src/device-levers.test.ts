@@ -21,7 +21,8 @@ import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   OPERATOR,
   counterOrder,

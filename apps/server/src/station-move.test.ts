@@ -36,7 +36,8 @@ import {
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
+import { fireGroup, readCurrentOrders } from "./order-groups.js";
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {

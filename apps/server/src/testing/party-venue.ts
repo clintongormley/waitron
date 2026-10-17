@@ -30,7 +30,8 @@ import { splitBill } from "./bill-action-fixture.js";
 import { takeBillPayment } from "../bill-payments.js";
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
-import { placeGroups } from "../order-groups.js";
+
+import { placeGroups } from "./group-submit-fixture.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";

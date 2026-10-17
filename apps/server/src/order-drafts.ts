@@ -969,8 +969,8 @@ export async function submitDraft(
           joinGroupId,
           operatorId,
           billId,
+          expectedEdit,
           sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
-          revisionMoved: true,
         },
         attendance === undefined ? undefined : { recorder: attendance, at },
       );

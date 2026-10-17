@@ -37,7 +37,8 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { DEVICE_COOKIE } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -979,7 +980,12 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/groups",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups`,
-    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, groups: [] }),
+    (x) => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      groups: [],
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
     deliTableZone,
   ],
   ...(["fire", "ready", "away", "served", "snooze", "unsnooze"] as const).map((verb): Row => [

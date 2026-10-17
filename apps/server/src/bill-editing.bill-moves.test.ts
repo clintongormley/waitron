@@ -24,7 +24,8 @@ import { mergeBills } from "./bill-actions.js";
 import { writeEditSentLines } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";

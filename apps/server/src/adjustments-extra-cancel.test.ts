@@ -18,7 +18,8 @@ import { createExtraList, createProduct, writeProductModifiers } from "@waitron/
 import { createPrinter } from "@waitron/printing";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";

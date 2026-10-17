@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -169,6 +170,13 @@ beforeAll(async () => {
 });
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
+  if (/^\/api\/parties\/[^/]+\/groups$/.test(path) && typeof init.body === "string")
+    init = {
+      ...init,
+      body: JSON.stringify(
+        await observedGroupSubmitBody(suite.db, path, JSON.parse(init.body) as unknown),
+      ),
+    };
   return app.request(path, {
     ...init,
     headers: { "content-type": "application/json", cookie, ...init.headers },
@@ -302,7 +310,6 @@ describe("table + tab routes", () => {
 
     const round = await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
     expect(round.status).toBe(200);
-    // The tab the round landed on: a seated party's settled tab gets a new one (parties.test.ts).
     expect(await round.json()).toEqual({
       tabId,
       revision: expect.any(Number),
@@ -310,6 +317,9 @@ describe("table + tab routes", () => {
         {
           id: expect.any(String),
           position: 2,
+          displayNumber: 2,
+          numberPartyId: partyId,
+          courseIds: [],
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,

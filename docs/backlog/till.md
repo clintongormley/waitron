@@ -2119,7 +2119,9 @@ build after A757's board if it has been decided, else name the table alone.
   The unlanded Task 20 foundation retains cancelled charges separately from active food through
   bill splits. Fire, serving, Recall and reminder reads now consume that state; the cancellation
   command and public refund handoff exist on that branch; the sent-line menu and final panels
-  remain to be connected. Single-dish Fire now has its server/API and till command path, including
+  remain to be connected. Direct group submission and placement now require that bill's observed
+  editor state on the unlanded branch; independent editors can add their bills to one held group.
+  Remaining direct writer and till ownership integration stays open. Single-dish Fire now has its server/API and till command path, including
   the owner-approved paid-line group-only exception; its visible menu follows in Task 16.
   Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
   [mockups](mockups/a773-courses-and-groups/)

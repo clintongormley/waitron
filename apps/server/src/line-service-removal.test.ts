@@ -21,7 +21,8 @@ import {
 } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { createStation } from "./kitchen.js";
-import { placeGroups, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
+import { readCurrentOrders, readReleaseReminders } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   billWith,

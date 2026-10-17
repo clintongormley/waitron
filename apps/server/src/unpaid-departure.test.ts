@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -35,7 +36,7 @@ import {
   provisionBillVenue,
   registroCount,
   seatedWith,
-  send,
+  send as rawGroupSend,
   statusOf,
   tabWith,
   type Answer,
@@ -1712,3 +1713,5 @@ describe("the guests its invoice's receipts print", () => {
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 3 }]);
   });
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

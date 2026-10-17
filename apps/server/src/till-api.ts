@@ -3024,6 +3024,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitGroupsInput = {
         ...groupCommand(personId, body),
+        expectedEdit: parseBillEditExpected(body.expectedEdit),
         groups: parseSubmittedGroups(body.groups),
         ...joinGroupOf(body),
         ...billOf(body),

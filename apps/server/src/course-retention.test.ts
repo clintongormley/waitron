@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -151,7 +152,9 @@ async function setup() {
     return app.request(path, {
       method,
       headers: { cookie: chosenCookie, "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(await observedGroupSubmitBody(db, path, body)) }),
     });
   }
   async function seat() {

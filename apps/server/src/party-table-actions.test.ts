@@ -18,7 +18,8 @@ import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { readDrafts } from "./order-drafts.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./parties.js";
 import { switchOff } from "./testing/live-table.js";

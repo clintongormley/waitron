@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -13,7 +14,12 @@ import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  send as rawGroupSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import "./errors.js";
 
 // A kitchen ticket ended by a Bluetooth unpairing, read back through the till's printing-problem
@@ -185,3 +191,5 @@ describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
     });
   });
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 
 import { randomUUID } from "node:crypto";
@@ -98,11 +99,13 @@ async function sendRound(
   return app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({
-      submissionId: randomUUID(),
-      expectedPartyRevision: revision,
-      groups: [{ lines, release: "fire" }],
-    }),
+    body: JSON.stringify(
+      await observedGroupSubmitBody(suite.db, `/api/parties/${partyId}/groups`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revision,
+        groups: [{ lines, release: "fire" }],
+      }),
+    ),
   });
 }
 

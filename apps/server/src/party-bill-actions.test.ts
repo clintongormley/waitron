@@ -22,7 +22,8 @@ import {
   transferItems,
 } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./bill-payments.js";
-import { fireGroup, placeGroups } from "./order-groups.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";

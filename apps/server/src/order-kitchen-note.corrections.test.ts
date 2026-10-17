@@ -28,7 +28,8 @@ import {
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   readOrderKitchenNotes,
   readPartyKitchenNote,

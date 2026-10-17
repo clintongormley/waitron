@@ -24,7 +24,8 @@ import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { recallToDraft } from "./draft-recall.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 
 let venue: BillVenue;

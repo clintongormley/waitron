@@ -47,7 +47,8 @@ import {
   writePrintHeldWork,
   setStationToday,
 } from "@waitron/venue-service";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,

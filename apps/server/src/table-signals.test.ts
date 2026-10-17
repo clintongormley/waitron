@@ -31,7 +31,8 @@ import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
-import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
+import { fireGroup, snoozeReminder } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./parties.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import {

@@ -10,7 +10,17 @@ import {
 import type { BillEditExpected } from "../order-drafts.js";
 import type { TillConfig } from "../till-config.js";
 import type { OrderAttendance } from "../working-order.js";
+import { observedGroupSubmitBody } from "./group-submit-fixture.js";
 export * from "../order-groups.js";
+export { placeGroups, submitGroups } from "./group-submit-fixture.js";
+
+export function observedGroupSender(
+  database: () => Database,
+  send: typeof import("./bill-venue.js").send,
+): typeof send {
+  return async (app, cookie, method, path, body) =>
+    send(app, cookie, method, path, await observedGroupCompositionBody(database(), path, body));
+}
 
 type Observations = { expectedEdit?: BillEditExpected; expectedEdits?: BillEditExpected[] };
 const direct = new WeakMap<object, Map<string, Observations>>();
@@ -79,6 +89,7 @@ export async function observedGroupCompositionBody(
   path: string,
   body: unknown,
 ): Promise<unknown> {
+  body = await observedGroupSubmitBody(db, path, body);
   const match = /^\/api\/parties\/([^/]+)\/groups\/(move|split-line)$/.exec(path);
   if (match === null || body === null || typeof body !== "object" || Array.isArray(body))
     return body;

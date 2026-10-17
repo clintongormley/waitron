@@ -105,7 +105,8 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 const LOCALE = "es-ES";

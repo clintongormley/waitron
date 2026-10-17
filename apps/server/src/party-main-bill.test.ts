@@ -8,7 +8,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, parties, saleLines, sales, workingOrders } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
-import { placeGroups, submitGroups } from "./order-groups.js";
+
+import { placeGroups, submitGroups } from "./testing/group-submit-fixture.js";
 import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
 import {

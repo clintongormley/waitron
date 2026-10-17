@@ -22,7 +22,7 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 
-import { submitGroups } from "./order-groups.js";
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 

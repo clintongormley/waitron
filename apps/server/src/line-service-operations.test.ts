@@ -12,7 +12,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell, writeReleaseReminderMinutes } from "@waitron/venue-service";
-import { fireGroup, placeGroups, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
+import { fireGroup, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createStation } from "./kitchen.js";
 import { recallToDraft } from "./draft-recall.js";
 import {

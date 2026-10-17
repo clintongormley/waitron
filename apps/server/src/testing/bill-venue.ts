@@ -420,6 +420,7 @@ export async function seatedWith(
   const partyId = seated.json.partyId as string;
   if (names.length > 0) {
     const ordered = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, seated.json.tabId as string)),
       submissionId: randomUUID(),
       expectedPartyRevision: seated.json.revision,
       groups: [

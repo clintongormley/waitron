@@ -37,7 +37,8 @@ import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
-import { placeGroups } from "../order-groups.js";
+
+import { placeGroups } from "./group-submit-fixture.js";
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";

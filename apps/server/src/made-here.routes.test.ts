@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -31,7 +32,7 @@ import {
   inTx,
   provisionBillVenue,
   seatedWith,
-  send,
+  send as rawGroupSend,
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1736,3 +1737,5 @@ describe("made-here route wiring", () => {
     ).toHaveLength(jobsBefore.length + 1);
   });
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

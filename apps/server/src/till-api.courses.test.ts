@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -268,6 +269,7 @@ async function tabWithSopaAndFilete(): Promise<string> {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
       groups: [

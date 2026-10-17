@@ -25,7 +25,8 @@ import {
 } from "./testing/party-venue.js";
 import { createOpenOrder, carveOffLines } from "./working-order.js";
 import { moveDishesToStation } from "./station-move.js";
-import { placeGroups, fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

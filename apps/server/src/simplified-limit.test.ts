@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -17,7 +18,12 @@ import { createTable } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  send as rawGroupSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -1063,3 +1069,5 @@ describe("an edit that does not raise an order already over the limit", () => {
     expect(storedLines(secondBill)).toEqual(["1:2000"]);
   });
 });
+
+const send = observedGroupSender(() => venue.db, rawGroupSend);

@@ -58,7 +58,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { finishTable, seatTable } from "./parties.js";
 import { listTablesWithState } from "./working-order.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import type { GroupRelease } from "./order-groups.js";
 import { discardPartyDrafts, readDrafts, submitDraft } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
@@ -2683,7 +2684,7 @@ describe("two revisions (D19)", () => {
       submitGroups(tx, v.cfg, partyId, {
         submissionId: randomUUID(),
         expectedPartyRevision: seen,
-        operatorId: SAM,
+        operatorId: ALEX,
         groups: [{ lines: [{ menuItemId: v.offer("fish"), quantity: "1" }], release: "fire" }],
       }),
     );

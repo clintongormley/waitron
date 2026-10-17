@@ -1,3 +1,4 @@
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -20,10 +21,16 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { createCourse, createStation } from "./kitchen.js";
-import { submitGroups } from "./order-groups.js";
+
+import { submitGroups } from "./testing/group-submit-fixture.js";
 import { mountTillApi } from "./till-api.js";
 import { fireCourse } from "./working-order.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  send as rawGroupSend,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -255,3 +262,5 @@ describe("group events derived from accepted commands", () => {
     },
   );
 });
+
+const send = observedGroupSender(() => v.db, rawGroupSend);

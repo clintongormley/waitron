@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -48,8 +49,14 @@ useVenueDb({
   },
 });
 
-function call(method: string, path: string, body?: unknown) {
-  return send(venue.app, venue.cookie, method, path, body);
+async function call(method: string, path: string, body?: unknown) {
+  return send(
+    venue.app,
+    venue.cookie,
+    method,
+    path,
+    await observedGroupSubmitBody(venue.db, path, body),
+  );
 }
 async function revision(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));

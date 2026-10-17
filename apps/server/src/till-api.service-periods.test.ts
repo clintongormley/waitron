@@ -1,3 +1,4 @@
+import { readBillEditState } from "./bill-editing.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -1444,6 +1445,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     const c = await cocktailVenue();
     const submit = async (release: "fire" | "hold") => {
       const answer = await sendAsTill(c.v, "POST", `/api/parties/${c.partyId}/groups`, {
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, c.tabId)),
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(c.partyId),
         groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release }],

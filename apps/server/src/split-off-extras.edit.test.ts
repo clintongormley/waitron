@@ -23,7 +23,8 @@ import {
   updateHeldOrder,
   updateOrderLine,
 } from "./working-order.js";
-import { fireGroup, placeGroups } from "./order-groups.js";
+import { fireGroup } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 

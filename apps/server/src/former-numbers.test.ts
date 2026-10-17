@@ -12,7 +12,8 @@ import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixt
 import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { listPassMonitor, listPassScreen } from "./pass-board.js";
 import {
   OPERATOR,

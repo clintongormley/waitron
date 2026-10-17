@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
@@ -401,7 +402,9 @@ async function request(
   const res = await venue.app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)) }),
   });
   const text = await res.text();
   const parsed = res.headers.get("content-type")?.includes("json")

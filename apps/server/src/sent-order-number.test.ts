@@ -9,7 +9,8 @@ import { readFormerNumbers } from "./former-numbers.js";
 import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   OPERATOR,
   billRow,

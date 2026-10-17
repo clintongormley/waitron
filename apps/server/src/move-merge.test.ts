@@ -46,7 +46,8 @@ import {
   writePrintMovedSlips,
 } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
-import { placeGroups } from "./order-groups.js";
+
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {

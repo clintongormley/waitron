@@ -19,12 +19,12 @@ import { createCourse, createStation } from "./kitchen.js";
 import {
   correctJoin,
   listOrderGroups,
-  placeGroups,
   readCurrentOrders,
   readReleaseReminders,
   snoozeReminder,
   unsnoozeReminder,
 } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { listExpoQueue, listStationQueue, readTabLines } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { attachPrinterToStation } from "./station-printers.js";

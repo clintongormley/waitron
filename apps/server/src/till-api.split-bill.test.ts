@@ -1,3 +1,4 @@
+import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -365,7 +366,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       app.request(path, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify(body),
+        body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)),
       });
     const table = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),

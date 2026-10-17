@@ -1,3 +1,5 @@
+import { readBillEditState } from "./bill-editing.js";
+import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -22,7 +24,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
-import { provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -326,18 +328,27 @@ describe("existing service in a closed zone", () => {
       if (kind === "handheld draft") {
         const saved = await request(v, "PUT", `/api/parties/${seated.partyId}/drafts`, {
           billId: seated.tabId,
+          expectedEdit: await withTransaction(suite.db, (tx) =>
+            readBillEditState(tx, seated.tabId),
+          ),
           draftId: null,
           revision: 0,
           lines: [line(v)],
         });
         expect(saved.status).toBe(200);
-        draft = saved.json as typeof draft;
+        draft = (saved.json as unknown as { draft: typeof draft }).draft;
       }
       const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
       at("23:45");
       const answer =
         draft === undefined
           ? await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
+              expectedEdit: {
+                billId: seated.tabId,
+                editorVersion: 0,
+                draftId: null,
+                draftRevision: null,
+              },
               submissionId: randomUUID(),
               expectedPartyRevision: party!.revision,
               groups: [{ lines: [line(v)], release: "fire" }],
@@ -346,9 +357,16 @@ describe("existing service in a closed zone", () => {
               submissionId: randomUUID(),
               expectedPartyRevision: party!.revision,
               draftRevision: draft.revision,
+              expectedEdit: await withTransaction(suite.db, (tx) =>
+                readBillEditState(tx, seated.tabId),
+              ),
               groups: [{ lineIds: draft.lines.map((l) => l.id), release: "fire" }],
             });
-      expect(answer).toEqual(refused(v));
+      expect(answer).toEqual(
+        kind === "first order"
+          ? { status: 409, json: { code: "tab.not_open", params: { tabId: seated.tabId } } }
+          : refused(v),
+      );
       expect(await orderRows()).toEqual(before);
       const [after] = await suite.db
         .select({ mainBillId: parties.mainBillId })
@@ -526,3 +544,5 @@ describe("moving into closed zones", () => {
     ]);
   });
 });
+
+const send = observedGroupSender(() => suite.db, rawGroupSend);
