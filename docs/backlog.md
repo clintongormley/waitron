@@ -1319,7 +1319,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   window drops the bin's note and the delete, and Save offers the rest of the draft again with no
   message (`save`, `seasons-window.ts`). Whether it should say so is the owner's call. Left open by A721.
 
-- **The Seasons window names each row's fields by their column alone** — "Name", "Day", "Month"
+- **The Seasons window names each row's fields by their field label alone** — "Name", "Day", "Month"
   and "Colour", the last three followed by the chosen value — never by the row's season. Consider
   naming each by its row ("Day: Winter"), as `variant-table.ts` names a row's buttons
   ("Edit: {variant}"). Left open by A721.

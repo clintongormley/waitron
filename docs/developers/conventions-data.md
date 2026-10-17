@@ -673,7 +673,7 @@ before the call, read before any delete. It answers the venue's seasons by start
 `staffing_days`, whose season keys cascade (A721 plan, Decision 1, from a plan reviewer's probe in
 a throwaway worktree, 2026-10-17). The refusal lives where a colour arrives from outside instead:
 `saveSeasons` (`season.invalid`, field `save.<i>.colour`) and the configuration transfer's `validateSeasonWeeks`
-(`seasons.colour`, `packages/venue-service/src/configuration-transfer.ts`). A stored value that
+(`setup.request_invalid`, field `seasons.colour`, `packages/venue-service/src/configuration-transfer.ts`). A stored value that
 names no calendar colour is painted grey (`seasonTints`, `season-tint.ts`).
 
 **2026-10-13, A506-8.** `saveSeasonWeeks` (`packages/venue-service/src/season-weeks.ts`), behind

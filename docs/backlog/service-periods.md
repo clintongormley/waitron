@@ -428,9 +428,10 @@ Re-check when a new year's list is added.
   [spec](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md), with
   [mockups](mockups/a506-opening-hours-seasons/).
 
-- A binned season's note in the Seasons window names only the departments with hours in it, though the delete
+- A season delete's confirmation names only the departments with hours in it, though the delete
   also removes the zones' closed times for that season (`seasonDeleteImpact`,
   `packages/venue-service/src/seasons.ts`). Owner, 2026-10-13 ~08:42: keep as built.
+  2026-10-17, A721: the Seasons window's delete note keeps the same list.
 
 - **Business-day changes are dated (A495, 2026-10-11).** You schedule one future start, from
   two to 366 business-calendar dates ahead. You can replace or cancel it before the preceding
