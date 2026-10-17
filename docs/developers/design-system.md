@@ -4063,12 +4063,14 @@ Opening hours' Year.
   week starting in 2026 in any interface language (`fixed-title.ts`). Time runs left to right from
   each day's changeover, every day on one scale, the week's longest day, so a shorter day's track
   ends early. The ruler above the days is labelled every two hours from Monday's changeover, so a
-  week whose days have different changeovers is labelled by Monday's. A department's blocks carry
+  week whose days have different changeovers is labelled by Monday's; where the track is too narrow
+  for that it is labelled every four, six, eight, twelve or twenty-four hours, and the label before
+  the last is left out when the last, kept inside the track, would touch it. A department's blocks carry
   their period's colour, name and times; a zone's piece that only follows its department is faded
   and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
   labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
   all day", in its departments' tracks. Every block shows its whole label in a tip above it (below
-  when there is no room): pointing shows it, a click or tap pins it, a click on the pinned block
+  when there is no room above it inside the area the Week scrolls in): pointing shows it, a click or tap pins it, a click on the pinned block
   hides it, leaving the block or the tip hides an unpinned one, and a click elsewhere, Escape or a
   scroll hides it. Screen readers skip the tip and read each row's whole text instead. A day's name
   is the one button per day and opens the day box (below). Nothing is painted in the Week.

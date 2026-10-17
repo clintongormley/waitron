@@ -245,6 +245,8 @@ Registered in page search as `venue-service:week` (Part 1).
    with the Times tab. The same reading as the staffing painters' prep-station guides (workforce.md,
    "Named staffing guide bands").
 
+The Week's title and ruler scroll away with the days; pin them? (LOOK, Part 1)
+
 ## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
 
 **A723 (owner, 2026-10-15).** Mockups: [season painter](mockups/a718-a727-calendar-and-stations/06-season-painter.png),

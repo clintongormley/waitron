@@ -56,6 +56,8 @@ function events<T>(el: OpeningHoursWeekView, name: string): T[] {
   el.addEventListener(name, (event) => sent.push((event as CustomEvent<T>).detail));
   return sent;
 }
+const frames = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 /** A token's colour as the browser paints it. */
 function resolved(el: HTMLElement, token: string): string {
   const probe = document.createElement("div");
@@ -315,6 +317,27 @@ describe("Opening hours week", () => {
       el.getBoundingClientRect().right,
     );
   });
+
+  it("the ruler's labels never overlap, and the last stays inside the track", async () => {
+    const el = await mount();
+    for (const width of [1280, 1024, 768, 640, 560]) {
+      await page.viewport(width, 800);
+      expect(window.innerWidth).toBe(width);
+      await frames();
+      const scale = root(el).querySelector<HTMLElement>(".ruler .scale")!.getBoundingClientRect();
+      const shown = [...root(el).querySelectorAll<HTMLElement>(".ruler .label")]
+        .filter((label) => getComputedStyle(label).visibility !== "hidden")
+        .map((label) => ({ text: text(label), box: label.getBoundingClientRect() }));
+      expect(shown.length, `at ${width}px`).toBeGreaterThanOrEqual(3);
+      expect(shown[0]!.text, `at ${width}px`).toBe("06:00");
+      const overlaps = shown.slice(1).flatMap((label, i) => {
+        const by = shown[i]!.box.right - label.box.left;
+        return by > 0 ? [`${shown[i]!.text}|${label.text} by ${by.toFixed(1)}px`] : [];
+      });
+      expect(overlaps, `at ${width}px`).toEqual([]);
+      expect(shown.at(-1)!.box.right, `at ${width}px`).toBeLessThanOrEqual(scale.right);
+    }
+  });
 });
 
 /** December's model with the Restaurant's Lunch on 2 December moved to 16:00–17:00. */
@@ -346,8 +369,31 @@ const block = (el: OpeningHoursWeekView, date: LocalDate, key: string, nth: numb
   track(el, date, key).querySelector<HTMLElement>(`.block:nth-child(${nth})`)!;
 const tip = (el: OpeningHoursWeekView) => testId(el, "block-tip")!;
 const open = (el: OpeningHoursWeekView) => tip(el).matches(":popover-open");
-const frames = () =>
-  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+/** The Week inside a box that scrolls, drawn in another element's shadow root below a banner
+ *  `bannerHeight` tall, as the dashboard draws its pages. */
+async function mountInScroller(
+  bannerHeight: number,
+): Promise<{ el: OpeningHoursWeekView; scroller: HTMLElement }> {
+  const app = document.createElement("div");
+  const shadow = app.attachShadow({ mode: "open" });
+  const banner = document.createElement("div");
+  banner.style.height = `${bannerHeight}px`;
+  const scroller = document.createElement("div");
+  scroller.style.height = "500px";
+  scroller.style.overflow = "auto";
+  const el = document.createElement("opening-hours-week");
+  Object.assign(el, { model: sliverModel(), date: "2026-12-02", departments: DEPARTMENTS });
+  const spacer = document.createElement("div");
+  spacer.style.height = "3000px";
+  scroller.append(el, spacer);
+  shadow.append(banner, scroller);
+  applyTokens(el);
+  document.body.append(app);
+  hosts.push(app);
+  await el.updateComplete;
+  return { el, scroller };
+}
 
 describe("Opening hours week: a block's label", () => {
   it("a sliver's label shows whole when pointed at, above it", async () => {
@@ -463,6 +509,36 @@ describe("Opening hours week: a block's label", () => {
     await frames();
     expect(window.scrollY).toBeGreaterThan(0);
     expect(open(el)).toBe(false);
+  });
+
+  it("a scroll of a box the Week is drawn in, inside a shadow root, hides and unpins the tip", async () => {
+    const { el, scroller } = await mountInScroller(0);
+    await userEvent.click(block(el, "2026-12-02", "rest", 2));
+    await commands.parkPointer();
+    expect(open(el)).toBe(true);
+    scroller.scrollBy(0, 40);
+    await frames();
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(open(el)).toBe(false);
+    await userEvent.hover(block(el, "2026-12-03", "rest", 1));
+    expect(open(el)).toBe(true);
+    expect(text(tip(el))).toBe("Restaurant · Breakfast 08:00–11:00");
+  });
+
+  it("a block at the top of the box it scrolls in has its tip below", async () => {
+    const { el, scroller } = await mountInScroller(200);
+    const first = block(el, "2026-11-30", "rest", 1);
+    scroller.scrollTop = first.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    await frames();
+    const top = first.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    expect(Math.abs(top)).toBeLessThanOrEqual(1);
+    expect(first.getBoundingClientRect().top).toBeGreaterThan(150);
+    await userEvent.hover(first);
+    expect(open(el)).toBe(true);
+    expect(tip(el).dataset.side).toBe("below");
+    expect(tip(el).getBoundingClientRect().top).toBeGreaterThan(
+      first.getBoundingClientRect().bottom,
+    );
   });
 
   it("moving the mouse onto the tip keeps it, above or below its block", async () => {

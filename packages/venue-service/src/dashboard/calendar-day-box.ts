@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { flatParent, scrollTargets } from "./flat-tree.js";
 import { placePopover } from "./painter.js";
 
 export interface DayBoxRow {
@@ -124,14 +125,7 @@ export class CalendarDayBox extends LitElement {
 
   #follow(anchor: HTMLElement): void {
     this.#stopFollowing();
-    // A scroll does not bubble or leave its shadow root, so the capture phase is heard on the
-    // window and on the shadow root of every box the anchor is drawn inside, slots included.
-    const targets = new Set<EventTarget>([window]);
-    for (let at: Element | null = anchor; at !== null; at = flatParent(at)) {
-      const root = at.getRootNode();
-      if (root instanceof ShadowRoot) targets.add(root);
-    }
-    this.#scrollTargets = [...targets];
+    this.#scrollTargets = scrollTargets(anchor);
     for (const target of this.#scrollTargets)
       target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
     window.addEventListener("resize", this.#onResize, { passive: true });
@@ -246,11 +240,6 @@ export class CalendarDayBox extends LitElement {
       </div>
     </div>`;
   }
-}
-
-function flatParent(at: Element): Element | null {
-  const parent = at.parentNode;
-  return at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
 }
 
 declare global {

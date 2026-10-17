@@ -17,6 +17,7 @@ import {
   type MonthDepartment,
 } from "./opening-hours-month.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
+import { scrollTargets, visibleTop } from "./flat-tree.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import { weekDates, weekDays, weekMonth, weekRows, type WeekRow } from "./week-rows.js";
@@ -24,6 +25,8 @@ import { weekDates, weekDays, weekMonth, weekRows, type WeekRow } from "./week-r
 type Day = OpeningHoursMonth["days"][number];
 
 const RULER_STEP = 120;
+/** How many steps apart the ruler's labels may be drawn, the closest that fits chosen. */
+const RULER_SPACINGS = [1, 2, 3, 4, 6, 12];
 
 type TitlePart = ReturnType<typeof formatWeekTitleParts>[number];
 
@@ -50,8 +53,8 @@ function titleCandidates(): TemplateResult[] {
 const TIP_EDGE = 8;
 
 /** Shows `tip` and places it in the same call, so it never paints where it was last: above
- *  `block` when it fits inside the window, else below; its left lined up with the block's and
- *  kept inside the window's edges. */
+ *  `block` when it fits below the top of the area the block scrolls in, else below; its left lined
+ *  up with the block's and kept inside the window's edges. */
 function placeTip(tip: HTMLElement, block: HTMLElement): void {
   if (!tip.matches(":popover-open")) tip.showPopover();
   tip.style.left = "0px";
@@ -61,8 +64,9 @@ function placeTip(tip: HTMLElement, block: HTMLElement): void {
   const at = block.getBoundingClientRect();
   const size = tip.getBoundingClientRect();
   const above = at.top - gap - size.height;
-  tip.dataset.side = above >= 0 ? "above" : "below";
-  tip.style.top = `${above >= 0 ? above : at.bottom + gap}px`;
+  const fits = above >= visibleTop(block);
+  tip.dataset.side = fits ? "above" : "below";
+  tip.style.top = `${fits ? above : at.bottom + gap}px`;
   tip.style.left = `${Math.max(TIP_EDGE, Math.min(at.left, window.innerWidth - TIP_EDGE - size.width))}px`;
 }
 
@@ -136,6 +140,9 @@ export class OpeningHoursWeekView extends LitElement {
         translate: -50% 0;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
+      }
+      .label[data-thinned] {
+        visibility: hidden;
       }
       section {
         padding-block: var(--wt-space-2);
@@ -266,6 +273,7 @@ export class OpeningHoursWeekView extends LitElement {
   /** The block the tip was pinned to by a click or tap; leaving does not hide a pinned tip. */
   #pinned: HTMLElement | null = null;
   #shownFor: HTMLElement | null = null;
+  #scrollTargets: EventTarget[] = [];
 
   #tip(): HTMLElement | null {
     return this.renderRoot.querySelector<HTMLElement>('[data-test="block-tip"]');
@@ -278,11 +286,18 @@ export class OpeningHoursWeekView extends LitElement {
     this.#shownFor = block;
     this.#pinned = pinned ? block : null;
     placeTip(tip, block);
+    if (!this.#scrollTargets.length) {
+      this.#scrollTargets = scrollTargets(block);
+      for (const target of this.#scrollTargets)
+        target.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
+    }
   }
 
   #hideTip(): void {
     this.#pinned = null;
     this.#shownFor = null;
+    for (const target of this.#scrollTargets.splice(0))
+      target.removeEventListener("scroll", this.#onScroll, { capture: true });
     const tip = this.#tip();
     if (tip?.matches(":popover-open")) tip.hidePopover();
   }
@@ -326,18 +341,47 @@ export class OpeningHoursWeekView extends LitElement {
     if (changed.has("model") || changed.has("date") || changed.has("departmentId")) this.#hideTip();
   }
 
+  #resizes = new ResizeObserver(() => this.#fitRuler());
+
+  override updated(): void {
+    this.#fitRuler();
+  }
+
+  /** Leaves out labels until none is drawn over its neighbour: every step's label, else every
+   *  second's, third's and so on; then the one before the last when the last, pulled back inside
+   *  the track, would come within a gap of it. */
+  #fitRuler(): void {
+    const scale = this.renderRoot.querySelector<HTMLElement>(".scale");
+    if (!scale) return;
+    const labels = [...scale.querySelectorAll<HTMLElement>(".label")];
+    const gap = parseFloat(getComputedStyle(scale).getPropertyValue("--wt-space-2"));
+    const room = Math.max(...labels.map((label) => label.getBoundingClientRect().width)) + gap;
+    const stepWidth = (RULER_STEP / Number(scale.dataset.longest)) * scale.clientWidth;
+    const spacing =
+      RULER_SPACINGS.find((steps) => steps * stepWidth >= room) ?? RULER_SPACINGS.at(-1)!;
+    const kept = labels.filter((_, i) => i % spacing === 0);
+    const [before, last] = kept.slice(-2);
+    if (
+      before &&
+      last &&
+      last.getBoundingClientRect().left - before.getBoundingClientRect().right < gap
+    )
+      kept.splice(-2, 1);
+    for (const label of labels) label.toggleAttribute("data-thinned", !kept.includes(label));
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#resizes.observe(this);
     window.addEventListener("click", this.#onWindowClick);
     window.addEventListener("keydown", this.#onWindowKeydown, { capture: true });
-    window.addEventListener("scroll", this.#onScroll, { capture: true, passive: true });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#resizes.disconnect();
     window.removeEventListener("click", this.#onWindowClick);
     window.removeEventListener("keydown", this.#onWindowKeydown, { capture: true });
-    window.removeEventListener("scroll", this.#onScroll, { capture: true });
     this.#hideTip();
   }
 
@@ -438,7 +482,7 @@ export class OpeningHoursWeekView extends LitElement {
       (_, i) => i * RULER_STEP,
     );
     return html`<div class="ruler" aria-hidden="true">
-        <div class="scale">
+        <div class="scale" data-longest=${longest}>
           ${labels.map(
             (minute) =>
               html`<span
