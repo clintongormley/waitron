@@ -69,30 +69,37 @@ function titleCandidates(): TemplateResult[] {
   return widthCandidates;
 }
 
+/** The dates the phone's day title is sized against: the 22nd to the 28th of each month of 2026,
+ *  seven days in a row and so every weekday. Every day of two digits stands for every day, its
+ *  digits drawn tabular by `fixedTitleStyles`. */
+export function dayTitleCandidateDates(): LocalDate[] {
+  const dates: LocalDate[] = [];
+  for (let month = 1; month <= 12; month++)
+    for (let day = 22; day <= 28; day++)
+      dates.push(`2026-${String(month).padStart(2, "0")}-${day}`);
+  return dates;
+}
+
 let dayWidthCandidates: TemplateResult[] | undefined;
-/** A phone's day title for every weekday in every month, day 28 standing for every day, in each
- *  interface language, each shaped as the title is. */
+/** The phone's day title for each of `dayTitleCandidateDates()`, in each interface language, each
+ *  shaped as the title is. */
 function dayTitleCandidates(): TemplateResult[] {
   if (!dayWidthCandidates) {
     const titles = new Map<string, TemplateResult>();
     for (const language of Object.keys(VENUE_SERVICE_STRINGS))
-      for (let year = 2026; year < 2033; year++)
-        for (let month = 1; month <= 12; month++) {
-          const parts = formatDayTitleParts(
-            `${year}-${String(month).padStart(2, "0")}-28`,
-            language,
-          );
-          titles.set(
-            `${language} ${parts.map((part) => part.text).join("")}`,
-            html`<span class="day-title"
-              >${parts.map((part) =>
-                part.day || part.month
-                  ? html`<span class="title-link">${part.text}</span>`
-                  : part.text,
-              )}</span
-            >`,
-          );
-        }
+      for (const date of dayTitleCandidateDates()) {
+        const parts = formatDayTitleParts(date, language);
+        titles.set(
+          `${language} ${parts.map((part) => part.text).join("")}`,
+          html`<span class="day-title"
+            >${parts.map((part) =>
+              part.day || part.month
+                ? html`<span class="title-link">${part.text}</span>`
+                : part.text,
+            )}</span
+          >`,
+        );
+      }
     dayWidthCandidates = [...titles.values()];
   }
   return dayWidthCandidates;

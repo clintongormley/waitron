@@ -7,8 +7,7 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { CalendarDayOpen } from "./opening-hours-month.js";
-import type { OpeningHoursWeekView } from "./opening-hours-week.js";
-import "./opening-hours-week.js";
+import { dayTitleCandidateDates, type OpeningHoursWeekView } from "./opening-hours-week.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(async () => {
@@ -893,6 +892,24 @@ describe("Opening hours week on a phone", () => {
     expect(lefts).toHaveLength(18);
     for (const [shown, left] of lefts)
       expect(Math.abs(left - lefts[0]![1]), shown).toBeLessThanOrEqual(0.5);
+  });
+
+  it("the day title is sized against every weekday in every month", () => {
+    const pairs = new Set(
+      dayTitleCandidateDates().map((date) => `${weekdayOf(date)} ${date.slice(5, 7)}`),
+    );
+    expect(pairs.size).toBe(7 * 12);
+  });
+
+  it("the day title starts with a capital", async () => {
+    try {
+      setLocale("es");
+      const el = await mount({ model: undefined, date: "2026-12-01" });
+      expect(text(testId(el, "day-name"))).toBe("Mar, 1");
+      expect(text(testId(el, "week"))).toBe("Mar, 1 dic");
+    } finally {
+      setLocale("en");
+    }
   });
 
   it("the title's links are big enough to tap and apart", async () => {
