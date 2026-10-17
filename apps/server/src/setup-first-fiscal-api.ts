@@ -171,13 +171,14 @@ export function mountSetupFirstFiscalApi(
   deps: SetupDeps,
 ) {
   const root = "/setup-api/first-setup";
-  app.use(`${root}/*`, (c, next) =>
-    boundary(c, log, async () => {
+  app.use(`${root}/*`, (c, next) => {
+    c.header("Cache-Control", "no-store");
+    return boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
       await next();
       return c.res;
-    }),
-  );
+    });
+  });
   for (const path of ["/setup-api/provision", "/setup-api/fiscal-test", "/setup-api/email-test"])
     app.post(path, (c, next) => {
       if (c.req.header("X-Waitron-Setup-Owner") === undefined) return next();
@@ -223,7 +224,13 @@ export function mountSetupFirstFiscalApi(
         });
       });
     });
-  for (const action of ["node-key", "document", "document-kept"] as const)
+  for (const action of [
+    "node-key",
+    "document",
+    "document-kept",
+    "recovery-document",
+    "recovery-document-kept",
+  ] as const)
     app.post(`${root}/${action}`, (c) =>
       boundary(c, log, () =>
         host.coordinator.run(async (hold) => {
@@ -244,6 +251,27 @@ export function mountSetupFirstFiscalApi(
               stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
               key,
             });
+          }
+          if (action === "recovery-document" || action === "recovery-document-kept") {
+            const fields = ["module", "stageId", "inputDigest", "bindingDigest", "documentDigest"];
+            if (action === "recovery-document") {
+              exact(body, [...fields, "statement"]);
+              await host.recoveryDelivery.registerRecoveryDocumentDelivery(
+                owner,
+                body as unknown as import("./first-setup-recovery-delivery.js").RecoveryDeliveryInput,
+                hold,
+              );
+            } else {
+              exact(body, [...fields, "kept", "reconfirmation"]);
+              const { reconfirmation, ...input } = body;
+              await host.recoveryDelivery.confirmRecoveryDocumentKept(
+                owner,
+                input as unknown as import("./first-setup-recovery-delivery.js").RecoveryKeptInput,
+                text(reconfirmation),
+                hold,
+              );
+            }
+            return c.json({ accepted: true });
           }
           const fields = ["module", "stageId", "inputDigest", "historyDigest", "documentDigest"];
           if (action === "document") {

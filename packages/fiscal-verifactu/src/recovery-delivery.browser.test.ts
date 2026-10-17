@@ -18,6 +18,10 @@ async function digest(bytes: Uint8Array<ArrayBuffer>) {
 }
 describe("transient recovery delivery session", () => {
   it("reuses exact bytes and URL, confirms only on explicit kept and revokes on disposal", async () => {
+    const storage = {
+      local: Object.entries(localStorage),
+      session: Object.entries(sessionStorage),
+    };
     const confirm = vi.fn(async () => "host-grant");
     const session = createRecoveryDelivery(document, "en", confirm);
     try {
@@ -45,6 +49,10 @@ describe("transient recovery delivery session", () => {
       await expect(fetch(download)).rejects.toThrow();
       await expect(session.print()).rejects.toThrow("Recovery delivery disposed");
       await expect(session.kept()).rejects.toThrow("Recovery delivery disposed");
+      expect({
+        local: Object.entries(localStorage),
+        session: Object.entries(sessionStorage),
+      }).toEqual(storage);
     } finally {
       session.dispose();
     }

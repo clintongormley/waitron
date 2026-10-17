@@ -22,6 +22,10 @@ import {
 } from "./first-fiscal-delivery.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import {
+  createFirstSetupRecoveryDelivery,
+  readFirstSetupRecoveryDeliverySnapshot,
+} from "./first-setup-recovery-delivery.js";
+import {
   firstSetupModuleContext,
   createFirstFiscalEvidence,
   readFirstFiscalEvidenceSnapshot,
@@ -66,7 +70,9 @@ export function createFirstSetupModuleHost(options: {
           throw new AppError("setup.attempt_invalid", {});
         }
       }
-      const document = await readFirstFiscalDeliverySnapshot(name, state, originals);
+      const recovery = readFirstSetupRecoveryDeliverySnapshot(name, state, originals, modules);
+      const document =
+        recovery?.statement ?? (await readFirstFiscalDeliverySnapshot(name, state, originals));
       if (document !== undefined) publicEvidence.push(document);
       for (const attempt of [state, ...state.previous]) {
         if (!attempt.frozen.modules.some((entry) => entry.module === name)) continue;
@@ -105,11 +111,20 @@ export function createFirstSetupModuleHost(options: {
     bootId,
   });
   const { assertFreshAssignment, assertSelection, preparation } = runtime;
+  const recoveryDelivery = createFirstSetupRecoveryDelivery({
+    ...options,
+    modules,
+    store,
+    coordinator,
+    owner,
+    keys,
+  });
   const configuredEvidence = {
     ...legacyEvidence,
     invalidate(attemptId: string) {
       legacyEvidence.invalidate(attemptId);
       delivery.invalidate(attemptId);
+      recoveryDelivery.invalidate(attemptId);
     },
     async read(binding: OperationBinding) {
       if (binding.action !== "setup") return undefined;
@@ -141,6 +156,7 @@ export function createFirstSetupModuleHost(options: {
     evidence: configuredEvidence,
     keys,
     delivery,
+    recoveryDelivery,
     assertFreshAssignment,
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(

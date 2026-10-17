@@ -47,6 +47,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SetupDeps } from "./setup-api.js";
+import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -106,6 +107,7 @@ async function fixture() {
     .input;
   const imported = await host.preparation.import(owner, MODULE, input);
   owner = { ...owner, revision: imported.revision };
+  await keepHourRecoveryDocument(host, owner, PASSWORD);
   const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 21).toString("base64") });
   let activations = 0,
     publications = 0,

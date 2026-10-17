@@ -21,6 +21,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import {
   buildConfigurationBundle,
@@ -330,6 +331,36 @@ it.each([
       });
       expect(imported.status).toBe(200);
       state = imported.body.state;
+      const keyStage = await post("/setup-api/first-setup/node-key", await reconfirm("block-use"));
+      expect(keyStage.status).toBe(200);
+      const statement = {
+        kind: "waitron-recovery-document",
+        version: 1,
+        scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
+        taxpayerName: venue.legalName,
+        venueName: venue.location.name,
+        createdAt: new Date().toISOString(),
+        nodeKey: { nodeId: keyStage.body.stage.nodeId, name: keyStage.body.stage.name },
+      };
+      const delivery = {
+        module: MODULE,
+        stageId: keyStage.body.stage.stageId,
+        inputDigest: firstFiscalPublicDigest(prepared.input),
+        bindingDigest: firstFiscalPublicDigest(statement),
+        documentDigest: firstFiscalPublicDigest({ syntheticPdf: true, statement }),
+      };
+      expect(
+        (await post("/setup-api/first-setup/recovery-document", { ...delivery, statement })).status,
+      ).toBe(200);
+      expect(
+        (
+          await post("/setup-api/first-setup/recovery-document-kept", {
+            ...delivery,
+            kept: true,
+            ...(await reconfirm("activation")),
+          })
+        ).status,
+      ).toBe(200);
       if (readinessAfterImport) {
         expect(await post("/setup-api/fiscal-test", live)).toEqual({
           status: 200,

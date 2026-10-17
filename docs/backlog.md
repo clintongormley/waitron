@@ -365,8 +365,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   a successor workspace without a retired-evidence adapter refuses before clock selection.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
-  Legacy paper fixtures still fail qualification. Key-only PDF delivery, final command composition,
-  the complete wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
+  Key-only recovery PDF components now have generated-document and transient-delivery checks.
+  The owned host binds explicit kept confirmation to the current public document, staged key and
+  password-confirmed owner before activation. Retained publication, boot and import fixtures use
+  this replacement delivery path without changing their earlier behavioral assertions.
+  Other legacy paper fixtures still fail qualification. Final command composition, the complete
+  wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.

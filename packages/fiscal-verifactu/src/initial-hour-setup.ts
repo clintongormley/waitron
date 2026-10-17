@@ -9,6 +9,8 @@ import { AppError } from "@waitron/shared";
 import { encodeHourIdentity, decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
+import { parseRecoveryDocumentPublic } from "./recovery-document.js";
+import { WAITRON_ID_SISTEMA } from "./software.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -230,6 +232,27 @@ export function createHourInitialSetup(
       return refuse("outside_confirmation_missing");
     },
     documentConfirmation: undefined,
+    recoveryDocument(context, imported, document) {
+      readHourSetupInput(context, imported.input);
+      let statement: ReturnType<typeof parseRecoveryDocumentPublic>;
+      try {
+        statement = parseRecoveryDocumentPublic(document.statement);
+      } catch {
+        return refuse("outside_confirmation_missing");
+      }
+      if (
+        statement.scope.taxpayerNif !== context.taxId ||
+        statement.scope.softwareId !== WAITRON_ID_SISTEMA ||
+        statement.scope.environment !== context.environment ||
+        statement.nodeKey.nodeId !== context.binding.targetNodeId ||
+        statement.nodeKey.nodeId !== document.stage.nodeId ||
+        statement.nodeKey.name !== document.stage.name ||
+        statement.taxpayerName !== document.identity.taxpayerName ||
+        statement.venueName !== document.identity.venueName
+      )
+        refuse("outside_confirmation_missing");
+      return statement;
+    },
     assignmentKeys(context, input) {
       if (context.request == null && input === undefined) return [];
       const allocation = readHourSetupInput(

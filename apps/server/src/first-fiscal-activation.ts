@@ -200,6 +200,9 @@ export async function activateFirstFiscal(
   };
   let checked: Awaited<ReturnType<typeof checkedFirstFiscalCommit>>;
   if (state.status === "consumption-intent") {
+    for (const module of state.frozen.modules)
+      if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined)
+        await host.recoveryDelivery.consume(owner, module.module, hold);
     if (state.frozen.environment === "production") {
       if (deps.assertFiscalReady === undefined)
         throw new AppError("setup.fiscal_test_required", { module: payload.contribution.id });
@@ -336,6 +339,16 @@ export async function publishCheckedFirstFiscal(
   };
   const result = checked.venue;
   for (const module of state.frozen.modules) {
+    if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined) {
+      await host.recoveryDelivery.install(
+        deps.db,
+        state,
+        { ...owner, revision: state.revision },
+        module.module,
+        hold,
+      );
+      continue;
+    }
     const binding = firstSetupModuleContext(state, module.module).binding;
     if (!(await host.delivery.has(binding))) continue;
     const stage = await host.keys.readStage({ ...owner, revision: state.revision }, hold);

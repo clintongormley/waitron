@@ -4,6 +4,7 @@ import type { FirstSetupOriginal, FirstSetupState } from "@waitron/provisioning"
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { readDeliveryManifest, readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import { readFirstSetupStagedKey } from "./first-setup-node-key.js";
+import { readFirstSetupRecoveryDeliverySnapshot } from "./first-setup-recovery-delivery.js";
 
 export async function firstSetupUnusedAssignment(
   state: FirstSetupState,
@@ -83,6 +84,20 @@ export async function firstSetupUnusedAssignment(
         continue;
       }
       const imported = seat.inspect(context, state.inputs[module.module]);
+      if (seat.recoveryDocument !== undefined) {
+        const manifest = readFirstSetupRecoveryDeliverySnapshot(
+          module.module,
+          state,
+          originals,
+          modules,
+        );
+        if (manifest !== null) {
+          if (key === null || !isDeepStrictEqual(manifest.stage, key)) return false;
+          names.add(`${module.module}.recovery.json`);
+        }
+        assignments++;
+        continue;
+      }
       if (seat.documentConfirmation === undefined) {
         assignments++;
         continue;

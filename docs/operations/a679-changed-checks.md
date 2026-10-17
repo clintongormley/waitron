@@ -589,3 +589,45 @@ starting commit `7f7c93adb67c80725e46ab9581c1d8366758fe4a` reports 57 failures a
 six retained server suites. The installed candidate reports those same failure positions, plus the
 new hour cases; `legacy-comparison.json` lists every name. This measures those six suites only.
 Task 5 and the branch remain incomplete until their remaining qualification is resolved.
+
+
+## Key-only recovery delivery and retained fixtures, 2026-10-17
+
+You keep one A4 recovery PDF whose attachment contains the recovery key and its context. The new
+browser units render and read that document; the old node-key codec remains unchanged. Download
+and Print reuse one transient byte buffer. Disposal releases its references and Blob URL, and
+local/session storage remain unchanged during the tested delivery session.
+
+The reader requires one canonical attachment and a versioned digest in the PDF's metadata. This
+checks consistency within the document. A rebuilt, internally consistent PDF remains unsigned;
+you still need to authenticate its key against the matching backup. A copy with its attachment
+stripped offers manual entry. Generated English and Spanish documents, including maximum-length
+labels, were viewed locally. The owner's Drive acceptance remains open.
+
+The host stores only the public binding, under `<module>.recovery.json`, beside the staged key's
+verifier. `bindingDigest` covers the public recovery statement; it does not reuse the old
+register's `historyDigest`. The separately named PDF digest binds the explicit kept confirmation
+to the delivery session. A current password confirmation and exact owner, revision, stage, input
+and document references grant activation once. Exact publication-only Finish reads the retained
+public binding and installs the same staged verifier without replaying activation.
+
+The server fixtures use a synthetic PDF digest and exercise real ownership, staging, activation
+and publication. The browser tests exercise actual rendered PDF bytes. The new checks inspect
+public files, collected backup inputs, HTTP errors/logs and browser storage for secret material;
+they do not claim every future caller is covered.
+
+| Retained fixture | Fixture change | Existing behavioral matchers |
+| --- | --- | --- |
+| `first-fiscal-declared-publication.test.ts` | Hour preparation and explicit key delivery replace the obsolete paper preparation. The retry recovers ownership with its password before exact Finish. | All 55 unchanged. |
+| `first-fiscal-hour-finish.test.ts` | Keep the staged recovery document before activation. | All 79 unchanged. |
+| `first-fiscal-setup.e2e.test.ts` | Add staging, public binding and explicit kept confirmation after hour import. | All 46 retained in order; three new successful-response checks. |
+| `test/owned-hour-setup.ts` | Share the same HTTP staging and kept-confirmation steps. | The existing matcher remains; new steps use the same response check. |
+
+The retained publication suite now passes 15 cases, the exact Finish suite passes 26, and the
+manual-import suite passes eight. The shared-fixture boot/readiness selection passes 65. Across
+the six Task 5 retained suites, the current measurement is 52 passes and 42 failures: interruption
+(17), Finish routes (12), unused-PDF routes (12) and empty selection (one) still use obsolete
+paper preparation. Their assertions have not all executed. Task 5 and the branch remain open.
+The earlier complete provisioning coverage result remains below its bar; it was not remeasured
+or declared repaired in this step. No protected writer, golden test, SQL, schema or root guard
+changes in this step. Receipts are in the lane's `a679-task5-qualification-20261017` directory.

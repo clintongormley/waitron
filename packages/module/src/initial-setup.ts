@@ -33,6 +33,17 @@ export type InitialSetupCommandResult =
   | { readonly status: "cancelled" };
 
 export interface InitialSetupContribution {
+  recoveryDocument?(
+    context: InitialSetupContext,
+    imported: InitialSetupImport,
+    document: {
+      readonly statement: unknown;
+      readonly bindingDigest: string;
+      readonly documentDigest: string;
+      readonly stage: { readonly nodeId: string; readonly name: string };
+      readonly identity: { readonly taxpayerName: string; readonly venueName: string };
+    },
+  ): unknown;
   command?(
     context: InitialSetupContext,
     actions: InitialSetupCommandActions,

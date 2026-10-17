@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { expect } from "vitest";
-import type { InitialVenueInput } from "@waitron/provisioning";
+import type { InitialVenueInput, VenueRequest } from "@waitron/provisioning";
 import type { PublicFirstSetupState } from "../src/first-setup-owner.js";
+import { firstFiscalPublicDigest } from "../src/first-fiscal-delivery.js";
 
 export async function ownedHourSetup(
   transport: typeof fetch,
@@ -78,5 +79,39 @@ export async function ownedHourSetup(
     ],
   };
   await send("input", { module, input: prepared });
-  return { initialOperations, headers: headers(), state: owner!.state };
+  const staged = (await send("node-key", {
+    reconfirmation: (await send("reconfirm", { password, purpose: "block-use" })).reconfirmation,
+  })) as unknown as {
+    stage: { stageId: string; nodeId: string; name: string };
+    key: { nodeId: string; name: string; secret: string };
+  };
+  const request = venue as VenueRequest;
+  const statement = {
+    kind: "waitron-recovery-document",
+    version: 1,
+    scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: owner!.state.environment },
+    taxpayerName: request.legalName,
+    venueName: request.location.name,
+    createdAt: new Date().toISOString(),
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
+  };
+  const ref = {
+    module,
+    stageId: staged.stage.stageId,
+    inputDigest: firstFiscalPublicDigest(prepared),
+    bindingDigest: firstFiscalPublicDigest(statement),
+    documentDigest: firstFiscalPublicDigest({ syntheticPdf: true, statement }),
+  };
+  await send("recovery-document", { ...ref, statement });
+  await send("recovery-document-kept", {
+    ...ref,
+    kept: true,
+    reconfirmation: (await send("reconfirm", { password, purpose: "activation" })).reconfirmation,
+  });
+  return {
+    initialOperations,
+    headers: headers(),
+    state: owner!.state,
+    recovery: { ...staged, statement, ref },
+  };
 }
