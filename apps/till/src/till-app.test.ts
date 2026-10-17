@@ -728,6 +728,8 @@ beforeEach(() => {
     if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
+  drafts.bills.add("wo-7");
+  drafts.bills.add("wo-new");
 });
 const initialUrl = location.href;
 afterEach(() => {
@@ -3302,6 +3304,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient,
@@ -3349,6 +3352,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient,
@@ -3414,6 +3418,7 @@ describe("till-app", () => {
     emit(c, "place-order");
     await flush(el);
     expect(currentApi.setOrderInvoiceChoice).toHaveBeenCalledWith(id, {
+      expectedEdit: null,
       revision: 0,
       invoiceType: "F1",
       recipient: { ...recipient, legalName: "Ana García López" },
@@ -4087,6 +4092,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(id, {
+        expectedEdit: null,
         revision: 0,
         language: "es-ES",
       });
@@ -4125,6 +4131,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(held, {
+        expectedEdit: null,
         revision: 0,
         language: "es-ES",
       });
@@ -4211,6 +4218,7 @@ describe("till-app", () => {
       await choose(el, "ca-ES");
 
       expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-1", {
+        expectedEdit: null,
         revision: 3,
         language: "ca-ES",
       });
@@ -5594,7 +5602,17 @@ describe("till-app", () => {
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
     await flush(el);
-    expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "20.00" }, "wo-7");
+    expect(recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "20.00" },
+      "wo-7",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=open-drawer]")!.click();
     await flush(el);
     expect(openDrawer).toHaveBeenCalledTimes(1);
@@ -9092,7 +9110,7 @@ describe("till-app", () => {
             ],
           };
           drafts.drafts.push(draft);
-          return { revision: 4, draft };
+          return { revision: 4, draft, edit: drafts.edit(draft.billId) };
         });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
@@ -9112,6 +9130,7 @@ describe("till-app", () => {
           {
             submissionId: expect.any(String),
             expectedPartyRevision: 3,
+            expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
           },
           { signal: expect.any(AbortSignal) },
         );
@@ -9434,6 +9453,12 @@ describe("till-app", () => {
           [],
           { method: "cash", amount: "10.00" },
           "wo-check",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
         );
         emit(ticket(el)!, "reprint");
         await flush(el);
@@ -9566,7 +9591,17 @@ describe("till-app", () => {
         // The server files the tab's STORED locked lines and ignores the sent basket, so we send `[]`
         // (the documented shape) tagged with the tab's order id, and never #syncIfDirty →
         // updateWorkingOrder, which saves the counter basket, not the tab.
-        expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "10.00" }, "wo-7");
+        expect(recordSale).toHaveBeenCalledWith(
+          [],
+          { method: "cash", amount: "10.00" },
+          "wo-7",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        );
         expect(updateWorkingOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
       });
@@ -16534,6 +16569,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await flush(el);
 
     expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-sent", {
+      expectedEdit: null,
       revision: 2,
       language: "es-ES",
     });

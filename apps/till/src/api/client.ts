@@ -3011,6 +3011,7 @@ export class TillApi {
   setOrderInvoiceChoice(
     id: string,
     choice: {
+      expectedEdit: BillEditExpected | null;
       revision: number;
       invoiceType: "F1" | "F2";
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
@@ -3028,7 +3029,7 @@ export class TillApi {
    * `null` goes back to the location's own → `PUT /api/working-orders/:id/receipt-language`. */
   setOrderReceiptLanguage(
     id: string,
-    choice: { revision: number; language: string | null },
+    choice: { revision: number; language: string | null; expectedEdit: BillEditExpected | null },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(
       `/api/working-orders/${id}/receipt-language`,

@@ -802,9 +802,9 @@ function discardError(error: unknown): CounterError {
     : "held.stale";
 }
 
-/** A party bill whose receipt language is asked: its revision and party when asked, and the
- * operator session that asked. */
 interface AskedBill {
+  api: TillApi;
+  expectedEdit: BillEditExpected;
   revision: number;
   partyId: string;
   session: number;
@@ -2810,6 +2810,8 @@ export class TillApp extends LitElement {
   @state() private invoiceRecipientRefusalField = "";
   private invoiceRecipientOrderId?: string;
   private invoiceRecipientBill?: {
+    api: TillApi;
+    expectedEdit: BillEditExpected;
     orderId: string;
     revision: number;
     partyId: string;
@@ -6157,6 +6159,7 @@ export class TillApp extends LitElement {
         const saved = await this.api.setOrderInvoiceChoice(id, {
           revision: this.#store.revision,
           ...this.invoiceChoice.invoice,
+          expectedEdit: null,
         });
         if (session !== this.#operatorSession) return;
         this.#store.markSaved(saved.revision);
@@ -7511,6 +7514,7 @@ export class TillApp extends LitElement {
       const saved = await this.api.setOrderReceiptLanguage(id, {
         revision: this.#store.revision,
         language,
+        expectedEdit: null,
       });
       if (this.#hasLeftCounterOrder(id, session)) return;
       this.#store.markSaved(saved.revision);
@@ -7537,9 +7541,11 @@ export class TillApp extends LitElement {
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     const partyId = this.orderParty?.id;
     if (bill?.revision !== revision || partyId === undefined) return;
+    const expectedEdit = this.#billChoiceEdit(workingOrderId);
+    if (expectedEdit === null) return;
     this.receiptLanguageAsking = {
       orderId: workingOrderId,
-      bill: { revision, partyId, session: this.#operatorSession },
+      bill: { revision, partyId, session: this.#operatorSession, expectedEdit, api: this.api },
     };
   }
 
@@ -7548,17 +7554,24 @@ export class TillApp extends LitElement {
   async #saveBillReceiptLanguage(orderId: string, asked: AskedBill, language: string) {
     if (language === this.#billReceiptLanguageShown(orderId) || this.submitting) return;
     const sent = this.#sentNow();
-    if (sent.session !== asked.session || this.#hasLeftParty(asked.partyId, sent)) return;
+    if (
+      sent.session !== asked.session ||
+      asked.api !== this.api ||
+      this.#hasLeftParty(asked.partyId, sent)
+    )
+      return;
     // Holds the bill's other actions while it is saved, so none starts from the revision replaced.
     this.submitting = true;
     this.errorKey = undefined;
     let outOfDate = false;
     try {
+      if (!this.#billChoiceCurrent(asked.expectedEdit)) throw { code: "draft.out_of_date" };
       const saved = await this.api.setOrderReceiptLanguage(orderId, {
         revision: asked.revision,
         language,
+        expectedEdit: asked.expectedEdit,
       });
-      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      if (asked.api !== this.api || this.#hasLeftParty(asked.partyId, sent)) return;
       this.partyBills = this.partyBills.map((bill) =>
         bill.workingOrderId === orderId && bill.revision === asked.revision
           ? { ...bill, revision: saved.revision, receiptLanguage: language }
@@ -7567,12 +7580,14 @@ export class TillApp extends LitElement {
       if (this.activeTabId === orderId && this.tabRevision === asked.revision)
         this.tabRevision = saved.revision;
     } catch (error) {
-      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      if (asked.api !== this.api || this.#hasLeftParty(asked.partyId, sent)) return;
       const code = (error as { code?: string } | undefined)?.code;
       outOfDate = code === "working_order.out_of_date";
       this.errorKey = outOfDate
         ? "held.changed_elsewhere"
-        : counterError(error, "receipt_language.save_error");
+        : code === "draft.out_of_date" || code === "draft.taken_over"
+          ? { code }
+          : counterError(error, "receipt_language.save_error");
     } finally {
       this.submitting = false;
     }
@@ -7586,6 +7601,7 @@ export class TillApp extends LitElement {
     const saved = await this.api.setOrderReceiptLanguage(id, {
       revision: this.#store.revision,
       language: choice.language,
+      expectedEdit: null,
     });
     if (this.receiptLanguageChoice === choice)
       this.receiptLanguageChoice = { ...choice, saved: true };
@@ -12867,6 +12883,29 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
+  #billChoiceEdit(billId: string): BillEditExpected | null {
+    const sync = this.#draftSync;
+    const edit =
+      sync?.partyId === this.orderParty?.id && this.#draftReady
+        ? sync?.expectedEditFor(billId)
+        : null;
+    if (edit == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return null;
+    }
+    return edit;
+  }
+
+  #billChoiceCurrent(expected: BillEditExpected): boolean {
+    const current = this.#billChoiceEdit(expected.billId);
+    return (
+      current !== null &&
+      current.editorVersion === expected.editorVersion &&
+      current.draftId === expected.draftId &&
+      current.draftRevision === expected.draftRevision
+    );
+  }
+
   #onChooseBillInvoice(event: Event): void {
     if (!this.fullInvoices) return;
     const { workingOrderId, revision } = (
@@ -12878,11 +12917,15 @@ export class TillApp extends LitElement {
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     const partyId = this.orderParty?.id;
     if (bill?.revision !== revision || partyId === undefined) return;
+    const expectedEdit = this.#billChoiceEdit(workingOrderId);
+    if (expectedEdit === null) return;
     const target = {
       orderId: workingOrderId,
       revision,
       partyId,
       session: this.#operatorSession,
+      expectedEdit,
+      api: this.api,
     };
     this.invoiceRecipientBill = target;
     this.invoiceRecipientOrderId = undefined;
@@ -12899,18 +12942,21 @@ export class TillApp extends LitElement {
     complete: () => boolean,
   ): Promise<void> {
     const bill = this.invoiceRecipientBill;
-    if (bill === undefined || this.invoiceRecipientSaving) return;
+    if (bill === undefined || this.invoiceRecipientSaving || bill.api !== this.api) return;
     const lifetime = this.#invoiceRecipientLifetime;
     const current = () =>
       this.isConnected &&
       this.#invoiceRecipientLifetime === lifetime &&
       this.invoiceRecipientBill === bill &&
+      this.api === bill.api &&
       this.#operatorSession === bill.session;
     this.invoiceRecipientSaving = true;
     try {
+      if (!this.#billChoiceCurrent(bill.expectedEdit)) throw { code: "draft.out_of_date" };
       const saved = await this.api.setOrderInvoiceChoice(bill.orderId, {
         revision: bill.revision,
         ...choice,
+        expectedEdit: bill.expectedEdit,
       });
       if (!current()) return;
       const close = complete();

@@ -426,8 +426,164 @@ async function press(el: TillApp, selector: string): Promise<void> {
 beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
+  drafts.bills.add("wo-5");
 });
 afterEach(cleanupWidgets);
+
+describe("A773 bill document choices retain their editing observation", () => {
+  const recipient = {
+    taxId: "12345678Z",
+    legalName: "Ana García",
+    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  };
+
+  async function opening(kind: "invoice" | "language") {
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, fullInvoices: true, receiptLanguages: ["es-ES", "en-GB"] }),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      setOrderInvoiceChoice,
+      setOrderReceiptLanguage,
+    });
+    const order = await openTable(el);
+    emit(order, kind === "invoice" ? "choose-bill-invoice" : "choose-bill-receipt-language", {
+      workingOrderId: "wo-4",
+      revision: 7,
+    });
+    await flush(el);
+    const form = el.shadowRoot!.querySelector(
+      kind === "invoice" ? "till-invoice-recipient-dialog" : "till-reprint-language-dialog",
+    );
+    return {
+      el,
+      order,
+      form,
+      write: kind === "invoice" ? setOrderInvoiceChoice : setOrderReceiptLanguage,
+    };
+  }
+  function confirm(kind: "invoice" | "language", form: Element) {
+    emit(
+      form,
+      kind === "invoice" ? "invoice-recipient-confirm" : "reprint-language-confirm",
+      kind === "invoice" ? { invoiceType: "F1", recipient } : { language: "en-GB" },
+    );
+  }
+
+  it.each(["invoice", "language"] as const)(
+    "sends the shown bill observation with its %s choice",
+    async (kind) => {
+      const { el, form, write } = await opening(kind);
+      expect(form).not.toBeNull();
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).toHaveBeenCalledExactlyOnceWith("wo-4", {
+        revision: 7,
+        ...(kind === "invoice" ? { invoiceType: "F1", recipient } : { language: "en-GB" }),
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      });
+    },
+  );
+
+  it.each(["invoice", "language"] as const)(
+    "invalidates an open %s choice after bill responsibility changes",
+    async (kind) => {
+      const { el, form, write } = await opening(kind);
+      expect(form).not.toBeNull();
+      const edit = drafts.edit;
+      drafts.edit = (id) => ({ ...edit(id), editorVersion: 2 });
+      const reads = drafts.listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await vi.waitFor(() => expect(drafts.listDrafts.mock.calls.length).toBeGreaterThan(reads));
+      await flush(el);
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).not.toHaveBeenCalled();
+      const message =
+        kind === "invoice"
+          ? (form!.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+              .error
+          : el.shadowRoot!.textContent;
+      expect(message).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(["invoice", "language"] as const)(
+    "does not send an old %s choice through a replacement API",
+    async (kind) => {
+      const { el, form, write } = await opening(kind);
+      const replacementInvoice = vi.fn().mockResolvedValue({ revision: 8 });
+      const replacementLanguage = vi.fn().mockResolvedValue({ revision: 8 });
+      el.api = stubApi({
+        setOrderInvoiceChoice: replacementInvoice,
+        setOrderReceiptLanguage: replacementLanguage,
+      });
+      await flush(el);
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).not.toHaveBeenCalled();
+      expect(replacementInvoice).not.toHaveBeenCalled();
+      expect(replacementLanguage).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["invoice", "language"] as const)(
+    "ignores an old %s answer after API replacement",
+    async (kind) => {
+      const { el, order, form, write } = await opening(kind);
+      let answer!: (value: { revision: number }) => void;
+      write.mockImplementationOnce(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const shownLanguage = text(order.shadowRoot!.querySelector("[data-choose-bill-language]"));
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).toHaveBeenCalledOnce();
+      el.api = stubApi();
+      await flush(el);
+      answer({ revision: 8 });
+      await flush(el);
+      if (kind === "invoice") expect(form!.isConnected).toBe(true);
+      else
+        expect(text(order.shadowRoot!.querySelector("[data-choose-bill-language]"))).toBe(
+          shownLanguage,
+        );
+    },
+  );
+
+  it.each(["invoice", "language"] as const)(
+    "retains a previously released bill's version in its %s choice",
+    async (kind) => {
+      const edit = drafts.edit;
+      drafts.edit = (id) => ({ ...edit(id), editorVersion: 7 });
+      const { el, form, write } = await opening(kind);
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).toHaveBeenCalledExactlyOnceWith("wo-4", {
+        revision: 7,
+        ...(kind === "invoice" ? { invoiceType: "F1", recipient } : { language: "en-GB" }),
+        expectedEdit: { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+      });
+    },
+  );
+
+  it.each(["invoice", "language"] as const)(
+    "does not open a %s editor without an authoritative bill observation",
+    async (kind) => {
+      drafts.bills.delete("wo-4");
+      const { el, form, write } = await opening(kind);
+      expect(form).toBeNull();
+      expect(write).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+});
 
 describe("till-app: the three ways to pay part of a bill", () => {
   it("a bill's Full invoice choice opens no dialog while full invoices are off", async () => {
@@ -474,6 +630,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await flush(el);
 
     expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 7,
       invoiceType: "F1",
       recipient,
@@ -662,6 +819,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     await flush(el);
     expect(setOrderInvoiceChoice).toHaveBeenLastCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 8,
       invoiceType: "F1",
       recipient: {
@@ -4458,6 +4616,7 @@ describe("till-app: a party bill's receipt language", () => {
     await flush(el);
 
     expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 7,
       language: "ca-ES",
     });
@@ -4467,6 +4626,7 @@ describe("till-app: a party bill's receipt language", () => {
 
     await choose(el, order, "gl-ES");
     expect(setOrderReceiptLanguage).toHaveBeenLastCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 8,
       language: "gl-ES",
     });
@@ -4516,8 +4676,22 @@ describe("till-app: a party bill's receipt language", () => {
 
     await choose(el, order, "ca-ES");
     expect(setOrderReceiptLanguage.mock.calls).toEqual([
-      ["wo-4", { revision: 7, language: "ca-ES" }],
-      ["wo-4", { revision: 7, language: "ca-ES" }],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          language: "ca-ES",
+        },
+      ],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          language: "ca-ES",
+        },
+      ],
     ]);
     expect(text(languageButton(order))).toBe("Recibo: Catalán");
   });
@@ -4550,6 +4724,7 @@ describe("till-app: a party bill's receipt language", () => {
 
     await choose(el, order, "ca-ES");
     expect(setOrderReceiptLanguage).toHaveBeenLastCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 9,
       language: "ca-ES",
     });
@@ -4592,7 +4767,14 @@ describe("till-app: a party bill's receipt language", () => {
     await flush(el);
     expect(text(languageButton(order))).toBe("Receipt: Catalan");
     expect(setOrderReceiptLanguage.mock.calls).toEqual([
-      ["wo-4", { revision: 7, language: "ca-ES" }],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          language: "ca-ES",
+        },
+      ],
     ]);
   });
 
@@ -4718,6 +4900,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     });
     await flush(el);
     expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 7,
       invoiceType: "F1",
       recipient,
@@ -4849,8 +5032,22 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     emit(dialog, "invoice-recipient-confirm", choice);
     await flush(el);
     expect(setOrderInvoiceChoice.mock.calls).toEqual([
-      ["wo-4", { revision: 7, ...choice }],
-      ["wo-4", { revision: 7, ...choice }],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          ...choice,
+        },
+      ],
+      [
+        "wo-4",
+        {
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          revision: 7,
+          ...choice,
+        },
+      ],
     ]);
     expect(recipientDialog(el)).toBeNull();
   });
@@ -4929,6 +5126,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     await flush(el);
     await fillAndSave(el, "Ana García López");
     expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       revision: 7,
       invoiceType: "F1",
       recipient: { ...recipient, legalName: "Ana García López" },

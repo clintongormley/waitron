@@ -160,6 +160,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
     const api = new TillApi("", fetchStub);
     const choice = {
+      expectedEdit: null,
       revision: 3,
       invoiceType: "F1" as const,
       recipient: {
@@ -186,14 +187,16 @@ describe("TillApi", () => {
       const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
       const api = new TillApi("", fetchStub);
 
-      expect(await api.setOrderReceiptLanguage("order-1", { revision: 3, language })).toEqual({
+      expect(
+        await api.setOrderReceiptLanguage("order-1", { revision: 3, language, expectedEdit: null }),
+      ).toEqual({
         revision: 4,
       });
       expect(fetchStub).toHaveBeenCalledWith(
         "/api/working-orders/order-1/receipt-language",
         expect.objectContaining({
           method: "PUT",
-          body: JSON.stringify({ revision: 3, language }),
+          body: JSON.stringify({ revision: 3, language, expectedEdit: null }),
         }),
       );
     },
