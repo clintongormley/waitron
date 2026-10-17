@@ -1,7 +1,7 @@
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import "./publish-dialog.js";
 import "./shift-edit-dialog.js";
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
@@ -45,6 +45,9 @@ type Grid = LitElement & { focusTarget(target: Target): boolean };
 /** Below this many pixels of the rota's own width it draws one day: the Calendar Week's
  *  `PHONE_WIDTH` (`opening-hours-week.ts`), which venue-service does not export. */
 export const PHONE_WIDTH = 560;
+/** The least a finger moves across the day to step a day: the Calendar Week's `SWIPE_PX`
+ *  (`opening-hours-week.ts:42`), which venue-service does not export. */
+const SWIPE_PX = 48;
 
 /** The calendar date now in `timeZone`. */
 function dateIn(timeZone: string): string {
@@ -84,6 +87,9 @@ export class RotaView extends LitElement {
         display: block;
         min-width: 0;
         container: rota / inline-size;
+      }
+      rota-day {
+        touch-action: pan-y;
       }
       .head {
         display: flex;
@@ -351,8 +357,10 @@ export class RotaView extends LitElement {
     this.#generation++;
     this.#resizes.disconnect();
     cancelAnimationFrame(this.#narrowing);
+    this.#swipeStop();
   }
-  override willUpdate() {
+  override willUpdate(changed: PropertyValues<this>) {
+    if (changed.has("narrow")) this.#swipeStop();
     if ((this.params.area ?? "") !== this.#area) {
       this.#area = this.params.area ?? "";
       this.picked = undefined;
@@ -517,6 +525,43 @@ export class RotaView extends LitElement {
   #stepWeek(days: number) {
     if (this.day) this.#arriving = step(this.day, days);
     this.#go(step(this.week, days));
+  }
+  #swipeFrom: { id: number; x: number; y: number } | undefined;
+  /** The touch and pen contacts down on the day. */
+  #contacts = new Set<number>();
+  #swipeStart(event: PointerEvent) {
+    if (event.pointerType === "mouse") return;
+    if (this.#contacts.size === 0) {
+      // Heard on the window, so a contact lifted where the day does not hear it still ends.
+      window.addEventListener("pointerup", this.#swipeEnd);
+      window.addEventListener("pointercancel", this.#swipeEnd);
+      this.#swipeFrom = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    } else {
+      // A second contact ends the swipe; none starts until every contact has ended.
+      this.#swipeFrom = undefined;
+    }
+    this.#contacts.add(event.pointerId);
+  }
+  #swipeEnd = (event: PointerEvent): void => {
+    if (!this.#contacts.delete(event.pointerId)) return;
+    const from = this.#swipeFrom;
+    if (this.#contacts.size === 0) this.#swipeStop();
+    if (event.type !== "pointerup" || from?.id !== event.pointerId) return;
+    const across = event.clientX - from.x;
+    const down = event.clientY - from.y;
+    if (Math.abs(across) < SWIPE_PX || Math.abs(across) <= 2 * Math.abs(down)) return;
+    const next = step(this.day, across < 0 ? 1 : -1);
+    if (next >= this.week && next <= step(this.week, 6)) this.day = next;
+    else {
+      this.#arriving = next;
+      this.#go(step(this.week, across < 0 ? 7 : -7));
+    }
+  };
+  #swipeStop(): void {
+    this.#swipeFrom = undefined;
+    this.#contacts.clear();
+    window.removeEventListener("pointerup", this.#swipeEnd);
+    window.removeEventListener("pointercancel", this.#swipeEnd);
   }
   async #fill(slot: Slot, personId: string) {
     const pick = this.#pick(),
@@ -808,6 +853,7 @@ export class RotaView extends LitElement {
         @edit-shift=${this.#editShift}
         @pick-slot=${this.#pickSlot}
         @open-day=${this.#openDay}
+        @pointerdown=${(e: PointerEvent) => this.#swipeStart(e)}
       ></rota-day>`;
     if (show.kind === "everyone")
       return html`<rota-by-person

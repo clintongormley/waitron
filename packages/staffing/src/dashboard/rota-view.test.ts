@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -1538,5 +1538,136 @@ describe("the Rota on a phone", () => {
     frames[0]!.style.width = "390px";
     await vi.waitFor(() => expect(q(el, "rota-day")).toBeTruthy());
     expect(q(el, "rota-by-area")).toBeNull();
+  });
+  describe("a swipe across the day", () => {
+    afterEach(async () => {
+      await commands.parkTouch();
+    });
+    const at = "staffing-rota rota-day";
+    const shown = (el: View) => day(el).businessDay;
+    async function on(el: View, n: number) {
+      await userEvent.click(strip(el)[n]!);
+      await el.updateComplete;
+    }
+    it("a swipe left shows the next day and a swipe right the day before", async () => {
+      const el = await phone();
+      await on(el, 1);
+      expect(shown(el)).toBe("2026-12-01");
+      await commands.touchGesture({ at, moveBy: { x: -150, y: 0 } });
+      await vi.waitFor(() => expect(shown(el)).toBe("2026-12-02"));
+      expect(strip(el)[2]!.getAttribute("aria-pressed")).toBe("true");
+      await commands.touchGesture({ at, moveBy: { x: 150, y: 0 } });
+      await vi.waitFor(() => expect(shown(el)).toBe("2026-12-01"));
+      expect(el.open).not.toHaveBeenCalled();
+      expect(getComputedStyle(day(el)).touchAction).toBe("pan-y");
+    });
+    it("a swipe past Sunday opens the next week on its Monday, and past Monday the previous week on its Sunday", async () => {
+      const el = await phone(undefined, { area: "station:kitchen" });
+      await on(el, 6);
+      await commands.touchGesture({ at, moveBy: { x: -150, y: 0 } });
+      await vi.waitFor(() =>
+        expect(el.open).toHaveBeenCalledWith("rota", {
+          week: "2026-12-07",
+          area: "station:kitchen",
+        }),
+      );
+      expect(shown(el)).toBe("2026-12-06");
+      el.week = "2026-12-07";
+      await vi.waitFor(() => expect(shown(el)).toBe("2026-12-07"));
+      await commands.touchGesture({ at, moveBy: { x: 150, y: 0 } });
+      await vi.waitFor(() =>
+        expect(el.open).toHaveBeenLastCalledWith("rota", {
+          week: "2026-11-30",
+          area: "station:kitchen",
+        }),
+      );
+      el.week = "2026-11-30";
+      await vi.waitFor(() => expect(shown(el)).toBe("2026-12-06"));
+      expect(el.open).toHaveBeenCalledTimes(2);
+    });
+    it("a short, slanted or mouse move steps nothing", async () => {
+      const el = await phone();
+      await on(el, 1);
+      await commands.touchGesture({ at, moveBy: { x: -30, y: 0 } });
+      await commands.touchGesture({ at, moveBy: { x: -60, y: -50 } });
+      // Two marks over the day's left and right at one height; the press lands on the day beneath.
+      const middle = box(day(el)).top + Math.min(box(day(el)).height / 2, 40);
+      for (const [mark, left] of [
+        ["left", 30],
+        ["right", 330],
+      ] as const) {
+        const m = document.createElement("div");
+        m.dataset.mark = mark;
+        m.style.cssText = `position: fixed; left: ${left}px; top: ${middle}px; width: 4px; height: 4px; pointer-events: none`;
+        frames[0]!.append(m);
+      }
+      expect(document.elementFromPoint(332, middle + 2)?.localName).toBe("staffing-rota");
+      await commands.mouseDrag(["[data-mark=right]", "[data-mark=left]"]);
+      await new Promise(requestAnimationFrame);
+      await el.updateComplete;
+      expect(shown(el)).toBe("2026-12-01");
+      expect(el.open).not.toHaveBeenCalled();
+    });
+    /** Synthetic touch events of finger `pointerId` at `clientX`, on one line across the day. */
+    function fingersOn(el: View) {
+      const y = box(day(el)).top + 20;
+      return (type: string, pointerId: number, clientX: number, at: Element = day(el)) =>
+        at.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId,
+            pointerType: "touch",
+            isPrimary: pointerId === 1,
+            clientX,
+            clientY: y,
+            bubbles: true,
+            composed: true,
+          }),
+        );
+    }
+    it("a second finger cancels the swipe", async () => {
+      const el = await phone();
+      await on(el, 1);
+      const finger = fingersOn(el);
+      finger("pointerdown", 1, 300);
+      finger("pointerdown", 2, 200);
+      finger("pointerup", 2, 100);
+      finger("pointerup", 1, 50);
+      await el.updateComplete;
+      expect(shown(el)).toBe("2026-12-01");
+      // A cancelled finger steps nothing, and a lift no finger on the day began is not heard.
+      finger("pointerdown", 1, 300);
+      finger("pointerup", 3, 50, document.body);
+      finger("pointercancel", 1, 50, document.body);
+      await el.updateComplete;
+      expect(shown(el)).toBe("2026-12-01");
+      // The control: the same lift of one finger steps.
+      finger("pointerdown", 1, 300);
+      finger("pointerup", 1, 50, document.body);
+      await el.updateComplete;
+      expect(shown(el)).toBe("2026-12-02");
+    });
+    it("a finger down when the view leaves the page or grows wide steps nothing when lifted", async () => {
+      const el = await phone();
+      await on(el, 6);
+      let finger = fingersOn(el);
+      finger("pointerdown", 1, 300);
+      const frame = frames[0]!;
+      el.remove();
+      finger("pointerup", 1, 50, document.body);
+      frame.append(el);
+      await vi.waitFor(() => expect(day(el)).toBeTruthy());
+      expect(el.open).not.toHaveBeenCalled();
+      await on(el, 6);
+      finger = fingersOn(el);
+      finger("pointerdown", 1, 300);
+      frame.style.width = "1280px";
+      await vi.waitFor(() => expect(q(el, "rota-by-area")).toBeTruthy());
+      frame.style.width = "390px";
+      await vi.waitFor(() => expect(day(el)).toBeTruthy());
+      finger("pointerup", 1, 50, document.body);
+      await el.updateComplete;
+      expect(shown(el)).toBe("2026-12-06");
+      expect(el.open).not.toHaveBeenCalled();
+    });
   });
 });
