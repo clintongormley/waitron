@@ -146,3 +146,49 @@ it("busy settings block a second submission and native field edits", async () =>
   save(el)!.dispatchEvent(new Event("click"));
   expect(saved).toEqual([]);
 });
+
+it("queued native changes cannot replace the selection while its save is busy", async () => {
+  const { el, saved } = await mount();
+  await userEvent.click(input(el, "starting-zone", "room")!);
+  el.busy = true;
+  const shown = input(el, "shown-zone", "bar")!;
+  shown.checked = false;
+  shown.dispatchEvent(new Event("change", { bubbles: true }));
+  const start = input(el, "starting-zone", "bar")!;
+  start.checked = true;
+  start.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  expect(input(el, "shown-zone", "bar")!.checked).toBe(true);
+  expect(input(el, "starting-zone", "room")!.checked).toBe(true);
+  el.busy = false;
+  await el.updateComplete;
+  await userEvent.click(save(el)!);
+  expect(saved).toEqual([
+    {
+      profileId: "profile",
+      snapshot: "scope",
+      selectedZoneIds: ["bar", "room"],
+      startingZoneId: "room",
+    },
+  ]);
+});
+
+it("a nested close event cannot discard the zone editor's draft", async () => {
+  const { el, saved } = await mount();
+  await userEvent.click(input(el, "starting-zone", "room")!);
+  input(el, "starting-zone", "room")!.dispatchEvent(
+    new CustomEvent("wt-close", { bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.open).toBe(true);
+  expect(input(el, "starting-zone", "room")!.checked).toBe(true);
+  await userEvent.click(save(el)!);
+  expect(saved).toEqual([
+    {
+      profileId: "profile",
+      snapshot: "scope",
+      selectedZoneIds: ["bar", "room"],
+      startingZoneId: "room",
+    },
+  ]);
+});
