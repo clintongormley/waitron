@@ -10,7 +10,6 @@ import { areaKey, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
 import { weekTitleParts } from "./format.js";
-import { hours } from "./rota-format.js";
 import {
   EVERYONE,
   chosenShow,
@@ -19,11 +18,11 @@ import {
   weekShiftCount,
   type Show,
 } from "./rota-model.js";
-import { breachText } from "./rota-warnings.js";
 import { STAFFING_STRINGS, countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
 import "./rota-by-person.js";
-import "./slot-picker.js";
+import "./rota-popup.js";
+import { slotHeading } from "./slot-picker.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
@@ -144,59 +143,8 @@ export class RotaView extends LitElement {
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
-      .layout {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-4);
-        align-items: start;
-      }
-      .grid {
-        flex: 1 1 70%;
-        min-width: 0;
-        max-width: 100%;
-      }
-      aside {
-        flex: 1 1 calc(var(--wt-tap-min) * 5);
-        min-width: 0;
-        max-width: 100%;
-      }
-      @container rota (width < 1100px) {
-        .grid,
-        aside {
-          flex-basis: 100%;
-        }
-      }
-      small.status {
-        display: block;
-      }
-      h3 {
-        font-size: var(--wt-font-size-md);
-        margin: 0 0 var(--wt-space-2);
-      }
-      ul {
-        list-style: none;
-        padding: 0;
-        margin: 0 0 var(--wt-space-4);
-      }
-      li {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        padding-block: var(--wt-space-1);
-        border-block-end: 1px solid var(--wt-color-border);
-        overflow-wrap: anywhere;
-      }
-      li[data-over-contract] {
-        color: var(--wt-color-warning);
-        font-weight: var(--wt-font-weight-bold);
-      }
       .error {
         color: var(--wt-color-danger);
-      }
-      .status {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -230,6 +178,10 @@ export class RotaView extends LitElement {
   );
   #watching = "";
   #area = "";
+  #anchor: HTMLElement | undefined;
+  /** The slot key the popup was last shown for: a close queued from an earlier popup must not
+   *  clear a pick made since. */
+  #shownFor: string | undefined;
   #generation = 0;
   readonly #queries = new QueryController(
     this,
@@ -304,6 +256,36 @@ export class RotaView extends LitElement {
       })
       .catch(() => undefined);
   }
+  override updated() {
+    const popup = this.renderRoot.querySelector("rota-popup");
+    const picked = this.picked;
+    if (!picked) {
+      if (this.#shownFor !== undefined) popup?.hide();
+      this.#shownFor = undefined;
+      return;
+    }
+    if (this.#shownFor === picked.key) return;
+    this.#shownFor = picked.key;
+    const anchor = this.#anchor!;
+    void this.renderRoot.querySelector<LitElement>("slot-picker")!.updateComplete.then(() => {
+      if (this.picked === picked) popup!.show(anchor);
+    });
+  }
+  readonly #popupClosed = () => {
+    if (this.picked?.key !== this.#shownFor) return;
+    this.picked = undefined;
+    this.actionError = "";
+  };
+  /** A fill that settles once its picker is gone leaves focus on nothing: the card it started
+   *  from was redrawn while the fill was in flight. */
+  async #refocus(key: string) {
+    await this.updateComplete;
+    const grid = this.renderRoot.querySelector<LitElement>("rota-by-area");
+    if (this.picked || !grid) return;
+    await grid.updateComplete;
+    if (document.activeElement === document.body)
+      grid.shadowRoot!.querySelector<HTMLElement>(`[data-slot="${key}"]`)?.focus();
+  }
   #go(week: string, area = this.params.area) {
     this.open("rota", { week, ...(area ? { area } : {}) });
   }
@@ -339,7 +321,10 @@ export class RotaView extends LitElement {
       if (generation === this.#generation)
         this.actionError = tf("staffing.rota.save_error", { reason: codeMessage(codeOf(e)) });
     } finally {
-      if (generation === this.#generation) this.busy = false;
+      if (generation === this.#generation) {
+        this.busy = false;
+        void this.#refocus(slot.key);
+      }
     }
   }
   async #changeWeek() {
@@ -512,60 +497,43 @@ export class RotaView extends LitElement {
       ${this.changingError ? html`<p role="alert">${this.changingError}</p>` : nothing}
       ${this.warningsError ? html`<p role="alert">${this.warningsError}</p>` : nothing}
       ${this.loadError ? html`<p class="error" role="alert" data-test="load-error">${this.loadError}</p>` : nothing}
+      ${this.actionError && !this.picked ? html`<p class="error" role="alert" data-test="fill-error">${this.actionError}</p>` : nothing}
       ${
         read
-          ? html`<div class="layout">
-              <div class="grid">
-                ${read.areas.length === 0 ? html`<p>${t("staffing.rota.empty")}</p>` : nothing}
-                ${
-                  show!.kind === "everyone"
-                    ? html`<rota-by-person
-                        .week=${read}
-                        .canAdd=${read.areas.length > 0}
-                        .breaches=${this.warnings?.breaches ?? []}
-                        .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                        @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                          this.editor = e.detail;
-                        }}
-                        @add-shift=${(
-                          e: CustomEvent<{ personId: string; businessDay: string }>,
-                        ) => {
-                          this.editor = e.detail;
-                        }}
-                      ></rota-by-person>`
-                    : html`<rota-by-area
-                        .week=${read}
-                        .breaches=${this.warnings?.breaches ?? []}
-                        .area=${show!.area}
-                        .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
-                        @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
-                          this.editor = e.detail;
-                        }}
-                        @pick-slot=${(e: CustomEvent<{ slot: Slot }>) => {
-                          this.picked = e.detail.slot;
-                          this.actionError = "";
-                        }}
-                      ></rota-by-area>`
-                }
-              </div>
-              <aside>
-                <h3>${t("staffing.rota.people")}</h3>
-                <ul>
-                  ${read.people.map(
-                    (p) =>
-                      html`<li
-                        data-person=${p.personId}
-                        ?data-over-contract=${p.contractedMinutes !== null && p.plannedMinutes > p.contractedMinutes}
-                      >
-                        <span
-                          >${p.name}<small class="status"
-                            >${p.staffRoleIds.map((id) => read.staffRoles.find((r) => r.id === id)?.name).join(", ")}</small
-                          >
-                          ${this.warnings?.breaches.filter((b) => b.personId === p.personId && !("shiftId" in b)).map((b) => html`<small class="status">${breachText(b)}</small>`)} </span
-                        ><span>${hours(p)}</span>
-                      </li>`,
-                  )}
-                </ul>
+          ? html`${read.areas.length === 0 ? html`<p>${t("staffing.rota.empty")}</p>` : nothing}
+              ${
+                show!.kind === "everyone"
+                  ? html`<rota-by-person
+                      .week=${read}
+                      .canAdd=${read.areas.length > 0}
+                      .breaches=${this.warnings?.breaches ?? []}
+                      .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
+                      @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
+                        this.editor = e.detail;
+                      }}
+                      @add-shift=${(e: CustomEvent<{ personId: string; businessDay: string }>) => {
+                        this.editor = e.detail;
+                      }}
+                    ></rota-by-person>`
+                  : html`<rota-by-area
+                      .week=${read}
+                      .breaches=${this.warnings?.breaches ?? []}
+                      .area=${show!.area}
+                      .editable=${this.canWrite && read.version?.status !== "published" && !this.busy}
+                      @edit-shift=${(e: CustomEvent<{ shiftId: string }>) => {
+                        this.editor = e.detail;
+                      }}
+                      @pick-slot=${(e: CustomEvent<{ slot: Slot; anchor: HTMLElement }>) => {
+                        this.picked = e.detail.slot;
+                        this.#anchor = e.detail.anchor;
+                        this.actionError = "";
+                      }}
+                    ></rota-by-area>`
+              }
+              <rota-popup
+                .heading=${this.picked ? slotHeading(read, this.picked) : ""}
+                @rota-popup-close=${this.#popupClosed}
+              >
                 ${
                   this.picked
                     ? html`<slot-picker
@@ -582,8 +550,7 @@ export class RotaView extends LitElement {
                       ></slot-picker>`
                     : nothing
                 }
-              </aside>
-            </div>`
+              </rota-popup>`
           : this.loadError
             ? nothing
             : html`<p role="status">${t("staffing.rota.loading")}</p>`

@@ -1,5 +1,6 @@
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -117,9 +118,17 @@ describe.each(["light", "dark"] as const)("Rota accessibility (%s)", (theme) => 
     if (state === "picker") {
       const area = el.shadowRoot!.querySelector("rota-by-area")!;
       await (area as import("lit").LitElement).updateComplete;
-      area.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!.click();
+      await userEvent.click(area.shadowRoot!.querySelector<HTMLElement>("[data-slot=empty]")!);
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("slot-picker")).toBeTruthy();
+      await vi.waitFor(() =>
+        expect(
+          el
+            .shadowRoot!.querySelector("rota-popup")!
+            .shadowRoot!.querySelector("[popover]")!
+            .matches(":popover-open"),
+        ).toBe(true),
+      );
     }
     if (state === "no-rules")
       await vi.waitFor(() =>

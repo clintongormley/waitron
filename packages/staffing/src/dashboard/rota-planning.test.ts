@@ -82,6 +82,7 @@ async function mount(missing = false) {
   const el = document.createElement("staffing-rota") as LitElement & {
     api: StaffingApi;
     week: string;
+    params: Record<string, string>;
     canWrite: boolean;
     open: () => void;
   };
@@ -345,7 +346,7 @@ describe("planning request failures", () => {
   });
 });
 
-it("shows daily and weekly warnings beside the named person in the area view", async () => {
+it("draws a daily warning on that person's cards on that date in the area, and the bar counts the weekly one", async () => {
   const { el, setBreaches, live } = await mount();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=labour-count]")).toBeTruthy(),
@@ -367,13 +368,22 @@ it("shows daily and weekly warnings beside the named person in the area view", a
     },
   ]);
   live.invalidate([{ type: "shifts" }]);
+  const grid = () => el.shadowRoot!.querySelector("rota-by-area")!.shadowRoot!;
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-person=ana]")!.textContent).toContain(
+    expect(grid().querySelector("[data-slot=filled]")!.textContent).toContain(
       "2026-12-01: 10 h planned; daily maximum 9 h",
     ),
   );
-  expect(el.shadowRoot!.querySelector("[data-person=joan]")!.textContent).toContain(
-    "weekly maximum 40 h",
+  expect(el.shadowRoot!.querySelector("[data-test=labour-count]")!.textContent).toContain(
+    "2 labour warnings",
+  );
+  el.params = { area: "everyone" };
+  await vi.waitFor(() =>
+    expect(
+      el
+        .shadowRoot!.querySelector("rota-by-person")
+        ?.shadowRoot?.querySelector("[data-person=joan] th")?.textContent,
+    ).toContain("weekly maximum 40 h"),
   );
 });
 

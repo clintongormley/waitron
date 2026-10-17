@@ -84,6 +84,61 @@ describe("the slot picker", () => {
       true,
     );
   });
+  it("says when the slot would take someone over their contract", async () => {
+    const el = await mount();
+    el.week = {
+      ...el.week,
+      people: el.week.people.map((p) =>
+        p.personId === "laia" ? { ...p, plannedMinutes: 2100 } : p,
+      ),
+    };
+    await el.updateComplete;
+    const r = el.shadowRoot!;
+    const over = r.querySelector("[data-person=laia] [data-test=would-go-over]")!;
+    expect(over.textContent!.trim()).toBe("would go over 40 h contract");
+    const painted = getComputedStyle(over).color;
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-danger)";
+    frames[0]!.append(probe);
+    expect(painted).toBe(getComputedStyle(probe).color);
+    el.pickedSlot = { ...el.pickedSlot, end: el.pickedSlot.start + 60, endsAt: "10:00" };
+    await el.updateComplete;
+    expect(r.querySelector("[data-person=marc]")!.textContent).toContain("39 / 40 h");
+    expect(r.querySelector("[data-person=marc] [data-test=would-go-over]")).toBeNull();
+    expect(r.querySelector("[data-person=laia] [data-test=would-go-over]")).toBeNull();
+    setLocale("es");
+    el.pickedSlot = { ...el.pickedSlot, end: el.pickedSlot.start + 480, endsAt: "17:00" };
+    await el.updateComplete;
+    expect(
+      r.querySelector("[data-person=laia] [data-test=would-go-over]")!.textContent!.trim(),
+    ).toBe("superaría su contrato de 40 h");
+  });
+  it("names the area and says holders come first under its heading", async () => {
+    const el = await mount();
+    expect(el.shadowRoot!.querySelector("[data-test=picker-sub]")!.textContent!.trim()).toBe(
+      "Kitchen · holders of the staff role first",
+    );
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=picker-sub]")!.textContent!.trim()).toBe(
+      "Kitchen · primero quienes tienen el rol",
+    );
+  });
+  it("has no Close button beside a slot, and Cancel in a sheet", async () => {
+    const el = (await mount()) as Picker & { sheet: boolean };
+    const buttons = () =>
+      [...el.shadowRoot!.querySelectorAll("wt-button")].map((b) => b.textContent!.trim());
+    expect(buttons()).toEqual(["Show everyone"]);
+    expect(el.shadowRoot!.textContent).not.toContain("Close");
+    const close = vi.fn();
+    el.addEventListener("close-picker", close);
+    el.sheet = true;
+    await el.updateComplete;
+    expect(buttons()).toEqual(["Show everyone", "Cancel"]);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
   it("shows the same chooser in Spanish", async () => {
     setLocale("es");
     const el = await mount();

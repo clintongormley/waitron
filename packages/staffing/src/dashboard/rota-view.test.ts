@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { RosterBreach, WorkTimeRuleset } from "@waitron/workforce/roster-validation";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -53,6 +53,11 @@ const normal = (s: string) => s.replace(/\s+/g, " ").trim();
 const title = (el: View) => normal(el.shadowRoot!.querySelector("[data-test=week]")!.textContent!);
 const area = (el: View) => el.shadowRoot!.querySelector<LitElement>("rota-by-area")!;
 const text = (el: View) => area(el).shadowRoot!.textContent!;
+async function everyone(el: View) {
+  const grid = el.shadowRoot!.querySelector<LitElement>("rota-by-person")!;
+  await grid.updateComplete;
+  return grid.shadowRoot!;
+}
 
 describe("the Rota by area", () => {
   it("offers a Rota calendar contribution restricted to schedule managers", () => {
@@ -91,10 +96,13 @@ describe("the Rota by area", () => {
       ["button", "1 partly uncovered"],
       ["button", "1 over"],
     ]);
-    expect(el.shadowRoot!.querySelector("[data-person=joan]")!.textContent).toContain("41 / 40 h");
-    expect(
-      el.shadowRoot!.querySelector("[data-person=joan]")!.hasAttribute("data-over-contract"),
-    ).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-person]")).toBeNull();
+    expect(area(el).shadowRoot!.querySelector("[data-person]")).toBeNull();
+    el.params = { area: "everyone" };
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy());
+    const joan = (await everyone(el)).querySelector("[data-person=joan] th")!;
+    expect(joan.textContent).toContain("41 / 40 h");
+    expect(joan.hasAttribute("data-over-contract")).toBe(true);
   });
   it("paints a staff role's swatch in a calendar colour beyond the first six", async () => {
     const el = await mount(
@@ -322,9 +330,11 @@ describe("the Rota's request lifecycle", () => {
 });
 
 describe("Rota address and person details", () => {
-  it("lists staff roles in the people panel", async () => {
-    const el = await mount();
-    expect(el.shadowRoot!.querySelector("[data-person=ana]")!.textContent).toContain("Head chef");
+  it("lists staff roles under each name in Everyone", async () => {
+    const el = await mount(undefined, "1280px", { area: "everyone" }, "rota-by-person");
+    expect((await everyone(el)).querySelector("[data-person=ana] th")!.textContent).toContain(
+      "Head chef",
+    );
   });
   it("does not show a picker for another area after an address change", async () => {
     const el = await mount();
@@ -736,5 +746,140 @@ describe("the Rota's week title", () => {
     await el.updateComplete;
     expect(q(el, "[data-test=week]")!.querySelector("button")).toBeNull();
     expect(title(el)).toBe("30 Nov – 6 Dec 2026");
+  });
+});
+
+describe("the Rota's slot picker beside its slot", () => {
+  type Popup = HTMLElementTagNameMap["rota-popup"];
+  type Picker = LitElement & { pickedSlot: { key: string } };
+  const popupBox = (el: View) =>
+    q<Popup>(el, "rota-popup")!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  const slotIn = (el: View, key: string) =>
+    area(el).shadowRoot!.querySelector<HTMLElement>(`[data-slot=${key}]`)!;
+  async function opened(el: View) {
+    await vi.waitFor(() =>
+      expect(
+        q<Picker>(el, "slot-picker")?.shadowRoot?.querySelector("[data-person=marc]"),
+      ).toBeTruthy(),
+    );
+    await vi.waitFor(() => expect(popupBox(el).matches(":popover-open")).toBe(true));
+    return q<Picker>(el, "slot-picker")!;
+  }
+  function beside(el: View, slot: HTMLElement) {
+    const s = box(slot),
+      p = box(popupBox(el));
+    expect(Math.abs(p.top - s.top)).toBeLessThanOrEqual(1);
+    expect(near(p.left, s.right) || near(p.right, s.left)).toBe(true);
+    expect(p.left >= s.right - 1 || p.right <= s.left + 1).toBe(true);
+  }
+  it("the picker opens beside the slot that was clicked, not in a side panel, and the grid takes the full width", async () => {
+    await useViewport(1280, 900);
+    const el = await mount();
+    const slot = slotIn(el, "empty");
+    await userEvent.click(slot);
+    await opened(el);
+    expect(q(el, "rota-popup > slot-picker")).toBeTruthy();
+    beside(el, slot);
+    expect(q(el, "aside")).toBeNull();
+    const scroller = area(el).shadowRoot!.querySelector("[data-test=grid-scroll]")!;
+    expect(Math.abs(box(scroller).width - box(el).width)).toBeLessThanOrEqual(1);
+  });
+  it("the picker moves with its slot when the grid scrolls, and closes once the slot leaves the window", async () => {
+    await useViewport(1280, 900);
+    onTestFinished(() => scrollTo(0, 0));
+    const el = await mount(undefined, "700px");
+    const scroller = area(el).shadowRoot!.querySelector<HTMLElement>("[data-test=grid-scroll]")!;
+    expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth);
+    const slot = slotIn(el, "empty");
+    await userEvent.click(slot);
+    await opened(el);
+    beside(el, slot);
+    const before = box(slot).left;
+    scroller.scrollLeft = 40;
+    await vi.waitFor(() => {
+      expect(box(slot).left).toBeLessThan(before - 1);
+      beside(el, slot);
+    });
+    const spacer = document.createElement("div");
+    spacer.style.height = "3000px";
+    frames[0]!.append(spacer);
+    scrollTo(0, scrollY + box(slot).bottom + 10);
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    expect(popupBox(el).matches(":popover-open")).toBe(false);
+  });
+  it("clicking a second slot while a picker is open opens the second slot's picker", async () => {
+    await useViewport(1280, 900);
+    const el = await mount(
+      rotaApi(async (week) => {
+        const read = rotaWeek(week);
+        const empty = read.days[4]!.areas[0]!.match.slots[0]!;
+        read.days[3]!.areas[0]!.match.slots.push({
+          slot: { ...empty.slot, key: "empty2", businessDay: "2026-12-03" },
+          status: { kind: "unfilled" },
+        });
+        return read;
+      }).api,
+    );
+    await userEvent.click(slotIn(el, "empty"));
+    await opened(el);
+    await userEvent.click(slotIn(el, "empty2"));
+    await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+    expect(q<Picker>(el, "slot-picker")?.pickedSlot.key).toBe("empty2");
+    expect(popupBox(el).matches(":popover-open")).toBe(true);
+    beside(el, slotIn(el, "empty2"));
+  });
+  it("a close from the earlier popup that arrives after a new pick leaves the new pick open", async () => {
+    await useViewport(1280, 900);
+    const el = await mount(
+      rotaApi(async (week) => {
+        const read = rotaWeek(week);
+        const empty = read.days[4]!.areas[0]!.match.slots[0]!;
+        read.days[3]!.areas[0]!.match.slots.push({
+          slot: { ...empty.slot, key: "empty2", businessDay: "2026-12-03" },
+          status: { kind: "unfilled" },
+        });
+        return read;
+      }).api,
+    );
+    await userEvent.click(slotIn(el, "empty"));
+    await opened(el);
+    slotIn(el, "empty2").click();
+    q(el, "rota-popup")!.dispatchEvent(
+      new CustomEvent("rota-popup-close", { detail: {}, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await new Promise(requestAnimationFrame);
+    expect(q<Picker>(el, "slot-picker")?.pickedSlot.key).toBe("empty2");
+    expect(popupBox(el).matches(":popover-open")).toBe(true);
+    beside(el, slotIn(el, "empty2"));
+  });
+  it("a fill refused after the picker was dismissed shows under the bar", async () => {
+    await useViewport(1280, 900);
+    const client = rotaApi();
+    const original = client.request.getMockImplementation()!;
+    let refuse!: (e: unknown) => void;
+    client.request.mockImplementation((async (path: string, method: string, body: unknown) => {
+      if (method === "POST" && path.endsWith("/rota/shifts"))
+        return new Promise((_, reject) => (refuse = reject));
+      return original(path, method, body);
+    }) as unknown as typeof original);
+    const el = await mount(client.api);
+    await userEvent.click(slotIn(el, "empty"));
+    const picker = await opened(el);
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-person=marc]")!.click();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf("function"));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(q(el, "slot-picker")).toBeNull());
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeTruthy());
+    const alert = q(el, "[role=alert]")!;
+    expect(alert.textContent).toContain("Could not fill the slot");
+    expect(box(alert).top).toBeGreaterThanOrEqual(box(q(el, "[data-test=bar]")!).bottom);
+    await vi.waitFor(() =>
+      expect(area(el).shadowRoot!.activeElement?.getAttribute("data-slot")).toBe("empty"),
+    );
+    expect(document.activeElement).not.toBe(document.body);
   });
 });

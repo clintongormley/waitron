@@ -69,10 +69,13 @@ export class RotaByPerson extends LitElement {
           ${this.week.people.map(
             (p) =>
               html`<tr data-person=${p.personId}>
-                <th scope="row">
+                <th
+                  scope="row"
+                  ?data-over-contract=${p.contractedMinutes !== null && p.plannedMinutes > p.contractedMinutes}
+                >
                   ${p.name}<small
                     >${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}</small
-                  ><small>${hours(p)}</small
+                  ><small class="hours">${hours(p)}</small
                   >${this.warnings(this.breaches.filter((b) => b.personId === p.personId && !("shiftId" in b) && b.kind !== "exceeds_daily_max"))}
                 </th>
                 ${this.week.days.map((day) => {

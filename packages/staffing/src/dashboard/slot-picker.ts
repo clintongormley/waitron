@@ -3,12 +3,18 @@ import { candidateWarnings, breachText } from "./rota-warnings.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import type { Slot } from "../slots.js";
+import { areaKey, type Slot } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
 import { hours, shiftTime } from "./rota-format.js";
 import { dateLabel } from "./format.js";
 import { t, tf } from "./strings.js";
 import "@waitron/ui/src/components/wt-button.js";
+
+/** "Fri 4 Dec · Sous chef · 09:00–17:00" */
+export function slotHeading(week: RotaWeek, slot: Slot): string {
+  const role = week.staffRoles.find((r) => r.id === slot.staffRoleId)!;
+  return `${dateLabel(slot.businessDay)} · ${role.name} · ${slot.startsAt}–${slot.endsAt}`;
+}
 
 @customElement("slot-picker")
 export class SlotPicker extends LitElement {
@@ -18,16 +24,16 @@ export class SlotPicker extends LitElement {
       :host {
         display: block;
         min-width: 0;
-      }
-      section {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        padding: var(--wt-space-3);
+        max-width: calc(var(--wt-tap-min) * 8);
       }
       h3 {
         font-size: var(--wt-font-size-md);
+        margin: 0;
+      }
+      .sub {
         margin: 0 0 var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       button {
         display: block;
@@ -60,7 +66,8 @@ export class SlotPicker extends LitElement {
       p {
         margin: var(--wt-space-2) 0;
       }
-      .error {
+      .error,
+      small.over {
         color: var(--wt-color-danger);
       }
     `,
@@ -70,6 +77,9 @@ export class SlotPicker extends LitElement {
   @property({ attribute: false }) ruleset: WorkTimeRuleset | null = null;
   @property({ type: Boolean }) busy = false;
   @property() error = "";
+  /** On a phone the picker is a sheet, which ends with Cancel; beside a slot a click outside
+   *  closes it. */
+  @property({ type: Boolean }) sheet = false;
   @state() private everyone = false;
   #status(personId: string) {
     if (
@@ -109,12 +119,13 @@ export class SlotPicker extends LitElement {
           ...this.week.people.filter((p) => !p.staffRoleIds.includes(this.pickedSlot.staffRoleId)),
         ]
       : holders;
-    const role = this.week.staffRoles.find((r) => r.id === this.pickedSlot.staffRoleId)!;
+    const area = this.week.areas.find((a) => areaKey(a.area) === areaKey(this.pickedSlot.area))!;
+    const length = this.pickedSlot.end - this.pickedSlot.start;
     return html`<section aria-labelledby="heading">
-      <h3 id="heading">
-        ${dateLabel(this.pickedSlot.businessDay)} · ${role.name} ·
-        ${this.pickedSlot.startsAt}–${this.pickedSlot.endsAt}
-      </h3>
+      <h3 id="heading">${slotHeading(this.week, this.pickedSlot)}</h3>
+      <p class="sub" data-test="picker-sub">
+        ${tf("staffing.rota.picker_sub", { area: area.name })}
+      </p>
       ${!holders.length ? html`<p>${t("staffing.rota.no_holders")}</p>` : nothing}
       ${people.map(
         (p) =>
@@ -135,7 +146,13 @@ export class SlotPicker extends LitElement {
             <strong>${p.name}</strong> ·
             ${p.staffRoleIds.map((id) => this.week.staffRoles.find((r) => r.id === id)?.name).join(", ")}<small
               >${this.#status(p.personId)} · ${hours(p)}</small
-            >
+            >${
+              p.contractedMinutes !== null && p.plannedMinutes + length > p.contractedMinutes
+                ? html`<small class="over" data-test="would-go-over"
+                    >${tf("staffing.rota.would_go_over", { contract: String(p.contractedMinutes / 60) })}</small
+                  >`
+                : nothing
+            }
             ${candidateWarnings(this.week, this.pickedSlot, p.personId, this.ruleset).map((b) => html`<small>${breachText(b)}</small>`)}
           </button>`,
       )}
@@ -153,12 +170,17 @@ export class SlotPicker extends LitElement {
             >`
       }
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
-      <wt-button
-        variant="secondary"
-        ?disabled=${this.busy}
-        @click=${() => this.dispatchEvent(new CustomEvent("close-picker", { bubbles: true, composed: true }))}
-        >${t("staffing.rota.close")}</wt-button
-      >
+      ${
+        this.sheet
+          ? html`<wt-button
+              variant="secondary"
+              data-test="cancel"
+              ?disabled=${this.busy}
+              @click=${() => this.dispatchEvent(new CustomEvent("close-picker", { bubbles: true, composed: true }))}
+              >${t("staffing.role.cancel")}</wt-button
+            >`
+          : nothing
+      }
     </section>`;
   }
 }

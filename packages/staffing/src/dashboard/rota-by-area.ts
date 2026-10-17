@@ -92,6 +92,10 @@ export class RotaByArea extends LitElement {
       .note {
         font-size: var(--wt-font-size-sm);
       }
+      th[data-over-contract] .hours {
+        color: var(--wt-color-warning);
+        font-weight: var(--wt-font-weight-bold);
+      }
       .swatch {
         display: inline-block;
         width: var(--wt-space-2);
@@ -110,9 +114,9 @@ export class RotaByArea extends LitElement {
     const s = this.week.shifts.find((s) => s.shiftId === shiftId)!;
     return this.week.people.find((p) => p.personId === s.personId)?.name ?? "";
   }
-  #pick(slot: Slot) {
+  #pick(slot: Slot, anchor: HTMLElement) {
     this.dispatchEvent(
-      new CustomEvent("pick-slot", { detail: { slot }, bubbles: true, composed: true }),
+      new CustomEvent("pick-slot", { detail: { slot, anchor }, bubbles: true, composed: true }),
     );
   }
   #edit(shiftId: string) {
@@ -121,7 +125,14 @@ export class RotaByArea extends LitElement {
     );
   }
   #notes(shiftId: string) {
-    return html`${this.week.openSwaps.some((s) => s.fromShiftId === shiftId || s.toShiftId === shiftId) ? html`<small>${t("staffing.shift.swap_heading")}</small>` : nothing}${shiftBreaches(this.breaches, shiftId).map((b) => html`<small>${breachText(b)}</small>`)}`;
+    const shift = this.week.shifts.find((s) => s.shiftId === shiftId)!;
+    const daily = this.breaches.filter(
+      (b) =>
+        b.kind === "exceeds_daily_max" &&
+        b.personId === shift.personId &&
+        b.workDate === shift.businessDay,
+    );
+    return html`${this.week.openSwaps.some((s) => s.fromShiftId === shiftId || s.toShiftId === shiftId) ? html`<small>${t("staffing.shift.swap_heading")}</small>` : nothing}${[...shiftBreaches(this.breaches, shiftId), ...daily].map((b) => html`<small>${breachText(b)}</small>`)}`;
   }
   #card(shiftId: string, content: unknown, kind?: string) {
     return this.editable
@@ -152,7 +163,10 @@ export class RotaByArea extends LitElement {
           class="card"
           data-kind=${status.kind}
           data-slot=${slot.key}
-          @click=${() => (status.kind === "unfilled" ? this.#pick(slot) : this.#edit(status.shiftId))}
+          @click=${(e: Event) =>
+            status.kind === "unfilled"
+              ? this.#pick(slot, e.currentTarget as HTMLElement)
+              : this.#edit(status.shiftId)}
         >
           ${content}
         </button>`
