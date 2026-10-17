@@ -7,9 +7,11 @@ import "./period-dialog.js";
 
 class PeriodLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
+  draftParent?: object;
   override render() {
     return html`<period-dialog
         .open=${true}
+        .draftParent=${this.draftParent}
         departmentName="Restaurant"
         .menus=${[{ id: "lunch", name: "Lunch", active: true, includes: [] }]}
         .period=${{ id: "p1", name: "Lunch", colour: "blue", menuId: "lunch", staffMenuIds: [], endOffsetMinutes: -15, weekdays: [1] }}
@@ -24,8 +26,9 @@ afterEach(() => {
   app?.remove();
   setLocale("en");
 });
-async function mount() {
+async function mount(draftParent?: object) {
   app = document.createElement("period-dialog-leave-test-app") as PeriodLeaveApp;
+  app.draftParent = draftParent;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
@@ -326,4 +329,28 @@ it("changing only the department of a new period makes it dirty, and choosing it
   await department("");
   expect(unload()).toBe(false);
   expect(save(el).disabled).toBe(true);
+});
+
+it("a dialog given a draft parent is asked about only with that parent", async () => {
+  const root = {};
+  const el = await mount(root);
+  await change(el, "Dinner");
+  const asked = app.leave.coordinator.request({
+    scopes: [root],
+    reason: "navigation",
+    proceed() {},
+  });
+  await choose("keep");
+  expect(await asked).not.toBe("proceeded");
+  expect(
+    await app.leave.coordinator.request({ scopes: [{}], reason: "navigation", proceed() {} }),
+  ).toBe("proceeded");
+  expect((await question()).open).toBe(false);
+  app.remove();
+  const plain = await mount();
+  await change(plain, "Dinner");
+  expect(
+    await app.leave.coordinator.request({ scopes: [root], reason: "navigation", proceed() {} }),
+  ).toBe("proceeded");
+  expect((await question()).open).toBe(false);
 });

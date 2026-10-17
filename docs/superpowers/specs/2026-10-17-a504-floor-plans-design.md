@@ -85,7 +85,7 @@ From the backlog entry ([till.md, A504](../../backlog/till.md#a504-floor-plans-p
   2026-10-17: `pnpm exec vitest run src/keep-open.test.ts -t "reopens the last ended period"` in
   `packages/venue-service` passed (1 passed, 53 skipped); in it, a lunch painted 12:00–14:00 is kept
   open at 15:10 until 16:00, and reads back as running.
-- **The Periods page and period dialog keep a place for this.** The list has a Floor plan column
+- (2026-10-17, A719 landed: the Periods page is now the Calendar's Periods window, `periods-list.ts`, and the Floor plan column, the disabled field and the strings `period.floor_plan` and `period.floor_plan_later` are gone; A719's decisions are under _Decisions and deliberate limits_ in `docs/backlog/service-periods.md`.) **The Periods page and period dialog keep a place for this.** The list has a Floor plan column
   showing a muted dash (`packages/venue-service/src/dashboard/periods-screen.ts:304-308`); the
   dialog has a disabled Floor plan field reading "Not available yet" (`period-dialog.ts:591-600`;
   strings `period.floor_plan`, `period.floor_plan_later`,
@@ -236,7 +236,7 @@ Mock-up: [2-period-floor-plan-field.png](../../backlog/mockups/a504-floor-plans/
 - **The Periods list's Floor plan column shows the set's name.**
 - **A719 first.** A719 (lane A, owner 2026-10-15) removes this column and field "until A504", turns
   the Periods page into a window opened from the Calendar, and moves Delete… into the dialog's
-  bottom row with its danger look ([service-periods.md, A719](../../backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar),
+  bottom row with its danger look ([service-periods.md, A719](../../backlog/service-periods.md#decisions-and-deliberate-limits),
   points 4 and 5; design-system.md, "A destructive action in the row … keeping its danger look").
   A504 adds the column and field back to that window. Both change `periods-screen.ts` and
   `period-dialog.ts`, so A719 lands first.

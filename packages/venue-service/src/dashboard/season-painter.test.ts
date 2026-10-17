@@ -97,7 +97,8 @@ it("lists each active department with its zones beneath, and says the zones foll
   );
   const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   expect(link.textContent!.trim()).toBe("Periods");
-  expect(link.getAttribute("href")).toBe("/manage/periods");
+  expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
+  expect(link.hasAttribute("data-own-click")).toBe(true);
   expect(chip(painter, "hint")!.textContent!.trim()).toBe(
     "Drag down a day to paint · drag over a block to replace it",
   );
@@ -352,7 +353,7 @@ it("+ New period reads nothing and draws no Painted in; a failed or malformed re
   await dialog.updateComplete;
   expect(reads).toEqual([]);
   expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
-  dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  dialog.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
   await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
   // Checked once the promise the dialog awaits has settled, where a failed read and a good one
   // differ: the control answers and must already show the section at that same point.
@@ -373,7 +374,7 @@ it("+ New period reads nothing and draws no Painted in; a failed or malformed re
     await edit.updateComplete;
     expect(edit.period?.id).toBe("p1");
     const section = edit.shadowRoot!.querySelector("[data-test=painted-in]");
-    edit.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+    edit.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
     await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
     return section;
   }
@@ -394,7 +395,7 @@ it("a Painted-in read that answers after the dialog closed changes nothing", asy
   await settle(painter);
   const closing = painter.shadowRoot!.querySelector("period-dialog")!;
   await closing.updateComplete;
-  closing.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  closing.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
   await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
   const second = paintedInApi();
   painter.api = second.api;
@@ -619,7 +620,7 @@ async function cancelEditor(
   editor: HTMLElementTagNameMap["period-dialog"],
 ) {
   const closed = new Promise((resolve) => editor.addEventListener("period-close", resolve));
-  editor.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  editor.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
   await closed;
   await settle(painter);
 }
@@ -946,4 +947,59 @@ it("a period save refused after the painter left the page puts no refusal on the
   await editor.updateComplete;
   expect(editor.refusal).toBeUndefined();
   expect(reread).not.toHaveBeenCalled();
+});
+
+it("a period the live model no longer lists leaves the draft, which is clean when that was its only edit", async () => {
+  const { painter } = await mount();
+  await drag(painter, "3", 120, 240);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: "p1", startsAt: "08:00", endsAt: "10:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+  const next = painterModel();
+  const restaurant = next.departments[0]!;
+  restaurant.periods = restaurant.periods.filter(({ id }) => id !== "p1");
+  (restaurant.seasonWeeks[1]!.week[1]!.slots as unknown[]).splice(0, 1);
+  painter.model = next;
+  await settle(painter);
+  expect(grid(painter).days.get("3")).toEqual([]);
+  expect(grid(painter).days.get("1")).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+});
+
+it("the Periods link asks for the Periods window on a plain left click, and leaves every other click to the browser", async () => {
+  const { painter } = await mount();
+  const link = chip(painter, "periods-link")!;
+  const asked: unknown[] = [];
+  const seen: boolean[] = [];
+  const record = (event: Event) => asked.push((event as CustomEvent).detail);
+  // Bubbling on window runs after the link's own listener; cancelling here keeps the test page.
+  const settled = (event: Event) => {
+    seen.push(event.defaultPrevented);
+    event.preventDefault();
+  };
+  document.addEventListener("calendar-window-open", record);
+  window.addEventListener("click", settled);
+  try {
+    const press = (init: MouseEventInit = {}) =>
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
+      );
+    for (const init of [
+      { ctrlKey: true },
+      { metaKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ])
+      press(init);
+    expect(seen).toEqual([false, false, false, false, false]);
+    expect(asked).toEqual([]);
+    press();
+    expect(seen.at(-1)).toBe(true);
+    expect(asked).toEqual([{ window: "periods" }]);
+  } finally {
+    document.removeEventListener("calendar-window-open", record);
+    window.removeEventListener("click", settled);
+  }
 });

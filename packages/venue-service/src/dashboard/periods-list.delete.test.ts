@@ -7,9 +7,9 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 
-import "./periods-screen.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -64,14 +64,14 @@ const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
 const isImpactRead = (path: string, method: string) =>
   method === "GET" && path.endsWith("/delete-impact");
 
-/** Answers the page's reads from `data`, each impact read from `impact`, and every write with `write`. */
+/** Answers the list's reads from `data`, each impact read from `impact`, and every write with `write`. */
 function fake(options: {
   data?: () => OpeningHoursModel;
   impact?: (path: string) => unknown;
   write?: (path: string, method: string, body: unknown) => unknown;
-  /** Answers Painted in this many milliseconds late, in a later turn than the page's own read. */
+  /** Answers Painted in this many milliseconds late, in a later turn than the list's own read. */
   paintedInDelay?: number;
-  /** Answers the page's own read this many milliseconds late, after Painted in. */
+  /** Answers the list's own read this many milliseconds late, after Painted in. */
   dataDelay?: () => number;
 }): DashboardRequest {
   return (async (path, method, body) => {
@@ -96,7 +96,7 @@ async function mount(
   into: HTMLElement = document.body,
   liveData?: LiveData,
 ) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(request, liveData);
   applyTokens(el);
   if (into === document.body) hosts.push(el);
@@ -105,20 +105,22 @@ async function mount(
   await table(el)!.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-function rowButton(el: PeriodsScreen, test: string, id = "p1") {
+function rowButton(el: PeriodsList, test: "edit-period" | "delete-period", id = "p1") {
   const row = table(el)!.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
-  const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`);
+  const button = row?.querySelector<HTMLElement>(
+    test === "edit-period" ? "button.row-activate" : `[data-test=${test}]`,
+  );
   expect(button, `${test} on ${id}`).not.toBeNull();
   return button!;
 }
-const deleteDialog = (el: PeriodsScreen) =>
+const deleteDialog = (el: PeriodsList) =>
   el.shadowRoot!.querySelector<PeriodDeleteDialog>("period-delete-dialog");
-const periodDialog = (el: PeriodsScreen) =>
+const periodDialog = (el: PeriodsList) =>
   el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
-async function removePeriod(el: PeriodsScreen, id = "p1") {
+async function removePeriod(el: PeriodsList, id = "p1") {
   await table(el)!.updateComplete;
   rowButton(el, "delete-period", id).click();
   await el.updateComplete;
@@ -349,7 +351,7 @@ it("a failed impact read shows Retry, and Retry reads it again; a failed re-read
   expect(body(dialog)).toContain(`Painted in ${before + 1} seasons.`);
 });
 
-it("a failed then recovered page read leaves the delete dialog's refusal in place", async () => {
+it("a failed then recovered list read leaves the delete dialog's refusal in place", async () => {
   let data = model();
   let failRead = false;
   const el = await mount(
@@ -634,7 +636,7 @@ it("with live data, reads the impact again when today's kept-open period changes
   expect(reads).toBe(2);
 });
 
-it("with live data, an impact answer that arrives while the page is detached is shown once it is back, and Delete sends its revision", async () => {
+it("with live data, an impact answer that arrives while the list is detached is shown once it is back, and Delete sends its revision", async () => {
   const liveData = new LiveData();
   const sent: unknown[] = [];
   let reads = 0;
@@ -919,7 +921,7 @@ it("Cancel and native Escape close a deletion without a draft or a write", async
   expect(writes).toBe(0);
 });
 
-it("Delete… in the Edit dialog, after its own question, opens the delete dialog for that period", async () => {
+it("Delete… in the period dialog, after its own question, opens the delete dialog for that period", async () => {
   const { screen, question } = await inLeaveApp();
   const openEdit = async () => {
     rowButton(screen, "edit-period", "p1").click();

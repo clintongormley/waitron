@@ -98,6 +98,23 @@ const request = (async (path: string) => {
     };
   if (path.includes("/roster/breaches?")) return { breaches: [], ruleset: null };
   if (path.endsWith("/special-days")) return [];
+  if (path.endsWith("/special-days/sd1"))
+    return {
+      id: "sd1",
+      name: "Christmas dinners",
+      repeatsYearly: false,
+      dates: [{ date: "2026-12-14", closedAllDay: false }],
+      paint: [],
+      zonePaint: [],
+    };
+  if (path.includes("/opening-hours/season-days?"))
+    return {
+      days: url.searchParams
+        .get("dates")!
+        .split(",")
+        .map((date) => ({ date, seasonId: "spring", dayCutover: "06:00", departments: [] })),
+    };
+  if (path.endsWith("/menu-periods/painted-in")) return [];
   if (path.endsWith("/routing"))
     return {
       zones: [],
@@ -234,6 +251,29 @@ it.each(["light", "dark"] as const)(
   },
 );
 it.each(["light", "dark"] as const)(
+  "searching peri finds Periods in the Calendar and opens its window (%s)",
+  async (theme) => {
+    const { el } = await mount({ theme });
+    expect(el.shadowRoot!.querySelector("[data-test=nav-periods]")).toBeNull();
+    await search(el, "peri");
+    expect(result(el, "venue-service:periods")).not.toBeNull();
+    await userEvent.click(result(el, "venue-service:periods")!);
+    await vi.waitFor(() =>
+      expect(
+        calendar(el)
+          .shadowRoot!.querySelector(
+            "[data-test=calendar-window][data-window=periods] periods-list",
+          )
+          ?.shadowRoot?.querySelector("wt-data-table"),
+      ).toBeTruthy(),
+    );
+    expect(location.pathname).toBe("/manage/opening-hours/view/year/window/periods");
+    await expectNoA11yViolations(
+      calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!,
+    );
+  },
+);
+it.each(["light", "dark"] as const)(
   "real search destinations fit phones and desktops in both languages (%s)",
   async (theme) => {
     for (const width of [390, 1280])
@@ -304,6 +344,82 @@ it("the real shell delegates window-only navigation without discarding the actua
   await vi.waitFor(() => expect(location.pathname).toBe(base));
   expect(grid.days.get("3")).toEqual(painted);
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+});
+describe("the painters' Periods link inside the real shell", () => {
+  const seasonBase = "/manage/opening-hours/view/season/season/spring/department/restaurant";
+  const specialBase = "/manage/opening-hours/view/special-day/special-day/sd1";
+  const periodsWindow = (el: DashboardApp) =>
+    calendar(el).shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods]");
+  async function clickLink(el: DashboardApp, painter: HTMLElement, base: string) {
+    const pushed = vi.spyOn(history, "pushState");
+    const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
+    await userEvent.click(link);
+    await vi.waitFor(() => expect(periodsWindow(el)).not.toBeNull());
+    expect(location.pathname).toBe(`${base}/window/periods`);
+    expect(
+      pushed.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+    ).toEqual([`${base}/window/periods`]);
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  }
+
+  it.each([true, false])(
+    "opens the window over the season painter, with paint %s, keeping the painter",
+    async (dirty) => {
+      const { el } = await mount({ path: seasonBase });
+      await vi.waitFor(() =>
+        expect(
+          calendar(el)
+            .shadowRoot!.querySelector("season-painter")
+            ?.shadowRoot?.querySelector("paint-grid"),
+        ).not.toBeNull(),
+      );
+      const painter = calendar(el).shadowRoot!.querySelector("season-painter")!;
+      const grid = painter.shadowRoot!.querySelector("paint-grid")!;
+      const painted = [{ periodId: "lunch", startsAt: "12:00", endsAt: "14:00" }];
+      if (dirty) {
+        grid.dispatchEvent(
+          new CustomEvent("paint-change", {
+            detail: { key: "3", day: painted },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await painter.updateComplete;
+      }
+      expect(leaveCoordinatorFor(el)!.isDirty()).toBe(dirty);
+      await clickLink(el, painter, seasonBase);
+      expect(calendar(el).shadowRoot!.querySelector("season-painter")).toBe(painter);
+      if (dirty) expect(grid.days.get("3")).toEqual(painted);
+      expect(leaveCoordinatorFor(el)!.isDirty()).toBe(dirty);
+    },
+  );
+
+  it("opens the window over the special-day painter, keeping its unsaved name", async () => {
+    const { el } = await mount({ path: specialBase });
+    await vi.waitFor(() =>
+      expect(
+        calendar(el)
+          .shadowRoot!.querySelector("special-day-painter")
+          ?.shadowRoot?.querySelector("wt-input[name=name]"),
+      ).not.toBeNull(),
+    );
+    const painter = calendar(el).shadowRoot!.querySelector("special-day-painter")!;
+    const name = () => painter.shadowRoot!.querySelector<WtInput>("wt-input[name=name]")!.value;
+    await vi.waitFor(() => expect(name()).toBe("Christmas dinners"));
+    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Staff party" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await painter.updateComplete;
+    expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+    await clickLink(el, painter, specialBase);
+    expect(calendar(el).shadowRoot!.querySelector("special-day-painter")).toBe(painter);
+    expect(name()).toBe("Staff party");
+    expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+  });
 });
 it("opening Calendar preserves an unrelated bookmark query and hash but removes stale station", async () => {
   const { el } = await mount({

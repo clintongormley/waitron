@@ -33,12 +33,15 @@ import {
   calendarViewPath,
   calendarWindowPath,
   hoursPath,
+  isCalendarWindow,
+  type CalendarWindow,
   openingHoursPath,
   seasonPainterPath,
   specialDayPainterPath,
 } from "./opening-hours-paths.js";
 import { segmentedStyles } from "./segmented-styles.js";
 import "./special-day-painter.js";
+import "./periods-list.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
 import { HOURS_RANGE_MAX_DAYS, type HolidayFact, type LocalDate } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
@@ -146,7 +149,7 @@ export class OpeningHoursScreen extends LitElement {
   @property({ attribute: false }) calendar?: CalendarViews;
   /** Set while the address names one of `calendar`'s views. */
   @state() private moduleView?: ModuleAddress;
-  @state() private windowId = "";
+  @state() private windowId: CalendarWindow | "" = "";
   private contentKey = "";
   private readonly windowDraftRoot = {};
   /** Each view's handle, created the first time it is shown and kept for this screen's life. */
@@ -256,7 +259,7 @@ export class OpeningHoursScreen extends LitElement {
     const requestedView = this.url.read("view");
     if (
       current.searchParams.has("station") &&
-      (windowId === "seasons" ||
+      (isCalendarWindow(windowId) ||
         requestedView === "year" ||
         requestedView === "month" ||
         requestedView === "week" ||
@@ -265,7 +268,7 @@ export class OpeningHoursScreen extends LitElement {
       this.replaceAddress(this.calendarUrl(current.pathname));
       return;
     }
-    if (windowId !== null && windowId !== "seasons") {
+    if (windowId !== null && !isCalendarWindow(windowId)) {
       this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
       return;
     }
@@ -391,32 +394,68 @@ export class OpeningHoursScreen extends LitElement {
       calendarWindowPath(destination.pathname, null) !== calendarWindowPath(current.pathname, null)
     )
       return undefined;
-    return this.windowId === "seasons" ? [this.windowDraftRoot] : [];
+    return this.windowId ? [this.windowDraftRoot] : [];
   }
   private readonly beforeWindowClose = async () => {
     await this.closeWindow();
     return false;
   };
+  private readonly windowOpenRequested = (event: CustomEvent<{ window: CalendarWindow }>) => {
+    event.stopPropagation();
+    void this.openWindow(event.detail.window);
+  };
+  private async openWindow(id: CalendarWindow) {
+    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
+    await this.writeAddress(this.calendarUrl(calendarWindowPath(path, id)));
+  }
   private async closeWindow() {
     const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
     await this.writeAddress(this.calendarUrl(calendarWindowPath(path, null)));
   }
-  private seasonsWindow() {
-    if (this.windowId !== "seasons" || !this.model) return nothing;
+  private readonly windowClosed = (event: Event) => {
+    event.stopPropagation();
+    if (
+      event.target === event.currentTarget &&
+      event.currentTarget === this.shadowRoot?.querySelector("[data-test=calendar-window]")
+    )
+      void this.closeWindow();
+  };
+  private windowFooter() {
+    return html`<wt-form-actions slot="footer"
+      ><wt-button
+        slot="cancel"
+        data-test="close-calendar-window"
+        variant="secondary"
+        @click=${() => void this.closeWindow()}
+        >${t("calendar.window.close")}</wt-button
+      ></wt-form-actions
+    >`;
+  }
+  private calendarWindow() {
+    if (!this.windowId || !this.model) return nothing;
+    if (this.windowId === "periods")
+      return html`<wt-modal
+        data-test="calendar-window"
+        data-window="periods"
+        aria-label=${t("period.title")}
+        .open=${true}
+        .beforeClose=${this.beforeWindowClose}
+        @wt-close=${this.windowClosed}
+        ><periods-list
+          .api=${this.api}
+          .readOnly=${this.readOnly}
+          .draftParent=${this.windowDraftRoot}
+        ></periods-list
+        >${this.windowFooter()}</wt-modal
+      >`;
     return html`<wt-modal
       data-test="calendar-window"
+      data-window="seasons"
       size="compact"
       .open=${true}
       heading=${t("season.seasons")}
       .beforeClose=${this.beforeWindowClose}
-      @wt-close=${(event: Event) => {
-        event.stopPropagation();
-        if (
-          event.target === event.currentTarget &&
-          event.currentTarget === this.shadowRoot?.querySelector("[data-test=calendar-window]")
-        )
-          void this.closeWindow();
-      }}
+      @wt-close=${this.windowClosed}
       ><season-chips
         .draftParent=${this.windowDraftRoot}
         .seasons=${this.yearModel?.seasons ?? this.monthModel?.seasons ?? []}
@@ -430,15 +469,7 @@ export class OpeningHoursScreen extends LitElement {
           this.api.rereadWithSpecialDays();
         }}
       ></season-chips
-      ><wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          data-test="close-calendar-window"
-          variant="secondary"
-          @click=${() => void this.closeWindow()}
-          >${t("calendar.window.close")}</wt-button
-        ></wt-form-actions
-      ></wt-modal
+      >${this.windowFooter()}</wt-modal
     >`;
   }
   private openCalendarView(view: string, params: Record<string, string>) {
@@ -536,6 +567,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   override connectedCallback() {
     super.connectedCallback();
+    this.addEventListener("calendar-window-open", this.windowOpenRequested as EventListener);
     this.detach = this.api.watchOpeningHours(
       (model) => {
         const first = !this.model;
@@ -552,6 +584,7 @@ export class OpeningHoursScreen extends LitElement {
     );
   }
   override disconnectedCallback() {
+    this.removeEventListener("calendar-window-open", this.windowOpenRequested as EventListener);
     this.detach?.();
     this.monthWatch.stop();
     this.stationsDetach?.();
@@ -1056,26 +1089,6 @@ export class OpeningHoursScreen extends LitElement {
         event.stopPropagation();
         if (this.currentPainter(event)) this.closePainter();
       }}
-      @click=${(event: MouseEvent) => {
-        const link = event
-          .composedPath()
-          .find(
-            (node): node is HTMLAnchorElement =>
-              node instanceof HTMLAnchorElement && node.dataset["test"] === "periods-link",
-          );
-        if (
-          !link ||
-          event.defaultPrevented ||
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        )
-          return;
-        event.preventDefault();
-        void this.writeAddress(new URL(link.href));
-      }}
     ></season-painter>`;
   }
   private specialPainter() {
@@ -1539,7 +1552,7 @@ export class OpeningHoursScreen extends LitElement {
     }
     ${this.dayBoxTemplate()}
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-    ${this.seasonPainter()} ${this.specialPainter()} ${this.seasonsWindow()}`;
+    ${this.seasonPainter()} ${this.specialPainter()} ${this.calendarWindow()}`;
   }
 }
 declare global {

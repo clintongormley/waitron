@@ -3,14 +3,13 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 
-import "./periods-screen.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -18,6 +17,25 @@ afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
 });
+
+/** Each bin lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
+function expectBinsOnScreen(table: Element, rows: number) {
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  expect(scroll.scrollLeft).toBe(0);
+  const box = scroll.getBoundingClientRect();
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  expect(bins).toHaveLength(rows);
+  for (const [index, bin] of bins.entries()) {
+    const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(at.width, `row ${index}`).toBeGreaterThan(0);
+    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+    const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && bin.contains(hit), `row ${index} is covered`).toBe(true);
+  }
+}
 
 type Period = OpeningHoursModel["departments"][number]["periods"][number];
 const lunch = (): Period => ({
@@ -31,7 +49,7 @@ const lunch = (): Period => ({
   routingUses: [],
 });
 
-/** One active department, Restaurant, and an inactive Deli the page does not list. */
+/** One active department, Restaurant, and an inactive Deli the list does not show. */
 function model(): OpeningHoursModel {
   return {
     businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -80,7 +98,7 @@ function twoDepartments(): OpeningHoursModel {
 
 const PAINTED_IN = "/management-api/venue-service/menu-periods/painted-in";
 const unpainted = (): PaintedInRow[] => [{ periodId: "p1", seasons: [], specialDays: [] }];
-/** Answers the page's Painted-in watch with `painted`; everything else goes to `request`. */
+/** Answers the list's Painted-in watch with `painted`; everything else goes to `request`. */
 function withPaintedIn(
   request: DashboardRequest,
   painted: () => PaintedInRow[] = unpainted,
@@ -95,7 +113,7 @@ async function mount(
   request: DashboardRequest = (async () => structuredClone(model())) as DashboardRequest,
   readOnly = false,
 ) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(withPaintedIn(request));
   el.readOnly = readOnly;
   applyTokens(el);
@@ -105,21 +123,22 @@ async function mount(
   await table(el)!.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-const periodRow = (el: PeriodsScreen, id: string) =>
+const periodRow = (el: PeriodsList, id: string) =>
   table(el)!.rows.find((row) => row.kind === "period" && row.id === id) as
     (PeriodRow & { kind: "period" }) | undefined;
-function editButton(el: PeriodsScreen, id = "p1") {
+function editButton(el: PeriodsList, id = "p1") {
   const grid = table(el)!;
-  const row = grid.shadowRoot!.querySelector(`tr[data-row-key="period:${id}"]`);
-  const button = row?.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=edit-period]");
+  const button = grid.shadowRoot!.querySelector<HTMLButtonElement>(
+    `tr[data-row-key="period:${id}"] button.row-activate`,
+  );
   expect(button, `Edit on ${id}`).not.toBeNull();
   return button!;
 }
-const dialogOf = (el: PeriodsScreen) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
-async function edit(el: PeriodsScreen, existing?: string) {
+const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
+async function edit(el: PeriodsList, existing?: string) {
   await table(el)!.updateComplete;
   if (existing) editButton(el, existing).click();
   else el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
@@ -274,7 +293,7 @@ it("places a refused period name under Name with the bottom explanation and retr
   expect(writes).toEqual([body, body]);
 });
 
-it("reports a failed refresh as a page load failure after the write closed the dialog", async () => {
+it("reports a failed refresh as a load failure after the write closed the dialog", async () => {
   let reads = 0;
   const el = await mount((async (path, method) => {
     if (method === "GET") {
@@ -396,21 +415,27 @@ it("saves a changed period through the visible native button", async () => {
   await expect.poll(() => dialogOf(el)).toBeNull();
 });
 
-it("keeps the row menu reachable on a phone and opens Edit with native controls", async () => {
+it("on a phone a row tap opens its dialog and its bin is on screen", async () => {
   const initial = { width: window.innerWidth, height: window.innerHeight };
   try {
     await page.viewport(390, 844);
+    expect(window.innerWidth).toBe(390);
     const el = await mount();
     const grid = table(el)!;
-    const menu = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      'tr[data-row-key="period:p1"] wt-row-actions',
+    const bin = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      'tr[data-row-key="period:p1"] [data-test=delete-period]',
     )!;
-    await menu.updateComplete;
-    expectRowMenusOnScreen(grid, 1);
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-    const button = editButton(el);
-    await button.updateComplete;
-    await userEvent.click(button.shadowRoot!.querySelector("button")!);
+    await bin.updateComplete;
+    expectBinsOnScreen(grid, 1);
+    const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    expect(at.width).toBeGreaterThan(0);
+    expect(at.left).toBeGreaterThanOrEqual(0);
+    expect(at.right).toBeLessThanOrEqual(window.innerWidth);
+    const index = grid.columns.findIndex((c) => c.key === "customerMenu");
+    const menuCell = grid.shadowRoot!.querySelectorAll<HTMLElement>(
+      'tr[data-row-key="period:p1"] td',
+    )[index]!;
+    await userEvent.click(menuCell, { force: true });
     await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
   } finally {
     await page.viewport(initial.width, initial.height);
@@ -687,7 +712,7 @@ it("+ Add period: a chosen department a live update deactivates is no longer sen
 it("+ Add period is disabled until the periods have been read, and after a failed first read", async () => {
   let fail!: (error: unknown) => void;
   let reads = 0;
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(
     withPaintedIn((() =>
       ++reads === 1
@@ -715,9 +740,9 @@ it("+ Add period is disabled until the periods have been read, and after a faile
   expect((await edit(el)).departments?.map(({ id }) => id)).toEqual(["restaurant"]);
 });
 
-it("Edit shows Painted in as links from the page's own read, with no extra request", async () => {
+it("Opening a period shows Painted in as links from the list's own read, with no extra request", async () => {
   const paintedReads: string[] = [];
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi((async (path: string, method: string) => {
     if (path === PAINTED_IN) {
       paintedReads.push(method);
@@ -762,7 +787,6 @@ it("Edit shows Painted in as links from the page's own read, with no extra reque
   expect(paintedReads).toEqual(["GET"]);
 });
 
-// Ported from service-delete-editors.test.ts: a dialog held by the page while its rows change.
 class LeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
@@ -806,7 +830,7 @@ async function live(write: () => Promise<unknown> = async () => undefined) {
   const liveData = new LiveData();
   let current = liveFixture();
   const writes: unknown[][] = [];
-  const screen = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const screen = document.createElement("periods-list") as PeriodsList;
   screen.api = new OpeningHoursApi(
     withPaintedIn((async (path, method, body) => {
       if (method === "GET") return structuredClone(current);
@@ -940,7 +964,7 @@ it("editing a period marks the colours its department's other periods use, never
   expect(checkedColour(dialog)).toBe("red");
 });
 
-it("a page redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
+it("a list redraw that changes neither the periods nor the period edited hands the dialog the same colour arrays", async () => {
   const data = model();
   data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
   const el = await mount((async () => structuredClone(data)) as DashboardRequest);
@@ -962,7 +986,7 @@ it("a page redraw that changes neither the periods nor the period edited hands t
   expect(dialog.colourUsers).toEqual([{ name: "Dinner", colour: "blue" }]);
 });
 
-it("a page redraw hands a dialog asking for the department the same department list", async () => {
+it("a list redraw hands a dialog asking for the department the same department list", async () => {
   const el = await mount((async () => twoDepartments()) as DashboardRequest);
   const dialog = await edit(el);
   const departments = dialog.departments;

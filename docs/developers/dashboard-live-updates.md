@@ -42,7 +42,7 @@ whether the message came from a read (Payments' `#readErrorShown`, set only thro
 only a read's message; a reload that runs after a successful action and can finish after another
 action failed (the screen's actions are not serialised) clears only a read's message too; and a
 read's failure does not replace an action's message, except the period delete dialog's changed-clock
-refusal, whose impact the refusal dropped (design-system.md → Periods page). A read an action takes before its write
+refusal, whose impact the refusal dropped (design-system.md → Periods window). A read an action takes before its write
 counts as a read's, and when an action writes and then re-reads, a failure after the write counts
 as a read's. A screen whose most recent load stopped before it started its later reads (on opening,
 on being reattached, or in the reload after a save) runs the unfinished part again from `recovered`,
@@ -114,6 +114,24 @@ neither.
 2026-10-17, A725: Prep stations' Times tab is retired. Its month, station-change, read-recovery
 and reconnect checks now exercise the Calendar in `calendar-station-month.test.ts`; the Calendar
 continues to use the watches described in A722-3 above.
+2026-10-17, A719: the Periods page is retired. Its list is `periods-list` (`periods-list.ts`) in the
+Calendar's Periods window, and reads and re-reads as the A506-11 line above says. When a refreshed
+model no longer lists a period that a department still in it listed before, both painters take
+that period's blocks out of their draft and their saved state (`removedPeriods`,
+`painter-labels.ts`; `withoutPeriods`, `paint-model.ts`). Wherever one of those blocks overlapped
+a block of the same period saved on the same day, that stretch takes whatever the stored paint now
+holds there — the replacement the delete named, which the server moved the saved blocks to — even
+where the draft had split, shortened or lengthened the saved block, and on a day the draft changed
+as well as one it did not (`savedBlocks` and `refill`, `paint-model.ts`). The season painter fills
+it in from the refreshed model. The special-day painter fills it when its re-read of the stored day
+lands (`merge`); Save stays as it would be without the wait. A Save pressed while a stretch still
+waits shows the save in progress, asks for a re-read unless one is already out, and sends only
+once `merge` has filled it (`fillVacated`). If that re-read fails, the press ends with the
+generic refusal beside Save, Save stays enabled, and the stretch keeps waiting for the next press
+or the next model the painter is handed (`follow`). A save that was already out when the delete
+arrived, and is then refused, asks for the re-read itself. Paint made on the special day before
+the re-read lands keeps its stretch, and the fill takes only the rest. The rest of a
+deleted-period block, with nothing saved behind it, is dropped.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

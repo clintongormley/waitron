@@ -181,37 +181,6 @@ reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unrea
 which start at year 100; changing `isLocalDate` would change which dates the server accepts from
 outside (menu publication dates, imports), so it needs a decision.
 
-## A719. Periods become a window opened from the Calendar
-
-**A719 (owner, 2026-10-15).** Mockups: [the Periods window](mockups/a718-a727-calendar-and-stations/13-periods-window.png),
-[list rows and the period dialog](mockups/a718-a727-calendar-and-stations/11-periods-page-and-dialog.png) (drawn before the window; its
-rows and dialog still apply). Files: `packages/venue-service/src/dashboard/periods-screen.ts`,
-`period-dialog.ts`, `period-editing.ts`, and the `periods` page in `index.ts`.
-
-1. **The Periods page and its sidebar entry go; a Periods window replaces them.** It lists the
-   periods grouped by department — colour, name, customer menu, staff-only menus, "Painted in" and a
-   bin — with "+ Add period". A row opens the existing period dialog on top: a period has too many
-   fields to edit inside its row, unlike a season (A721).
-2. **Where it opens:** a "Periods…" button beside "Seasons…" on the Calendar Year's season row (A721
-   adds "Seasons…"; if A719 lands first it adds "Periods…" alone); the
-   painters' "Periods" link (`periodsLink`, `period-editing.ts`), which today navigates away and now
-   opens the window on top of the painter so unsaved paint stays; and the Departments warning "Set up
-   periods" (`departments-list.ts:219`), which opens the Calendar with the window open. The window
-   uses the Calendar's existing `window/<id>` address pair. Extend its window handler with `periods`,
-   reuse `calendarWindowPath`, and declare the destination in venue-service's `searchDestinations`.
-   Keep the retained painter outside the window's draft ancestry.
-3. **An unused period shows its colour.** Today a period painted nowhere gets an empty dashed square
-   and a greyed name (`swatch-unpainted`, `periods-screen.ts`); "Not painted anywhere" already says
-   so. Fill the square and drop the grey.
-4. **No Floor plan column or field until A504.** Remove the disabled field from the period dialog
-   and the column from the list, and change A504's entry — which says they are kept for it — to say
-   A504 adds them back.
-5. **Delete… moves into the dialog's bottom row**, after Cancel on the left, with Save alone on the
-   right — `[Cancel] [Delete…] … [Save]`, the house rule since 2026-10-16 (design-system.md → Forms);
-   today it sits alone in the body.
-
-Its button goes on the Year view's season row.
-
 ## A721. Seasons: a Seasons window edited in its table, and a stored colour for each season
 
 **A721 (owner, 2026-10-15).** Mockup: [the Seasons window](mockups/a718-a727-calendar-and-stations/02-seasons-window.png). Files:
@@ -224,7 +193,8 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
    `calendarColourChoices`, `packages/venue-service/src/dashboard/calendar-colours.ts`), name and start date in
    place; "Runs until" is worked out from the next season and is not typed; a bin removes the row.
    "+ Season" adds a row offered the next unused colour. One Save sends every change and closes the
-   window; Cancel discards. The separate season editor and the chips' ✎ go.
+   window; Cancel discards. The separate season editor and the chips' ✎ go. The row's "Periods…"
+   (A719) is placed into `season-chips`' default slot by the Year view; keep it after "Seasons…".
 2. **Each season stores its colour.** Today `seasonTints` colours a season by its place in the list
    it is handed, so February's Month view, handed only Winter and Spring, paints Winter yellow while
    the Year paints it blue. A stored colour is the same on every view. Landing deletes the open note
@@ -288,6 +258,22 @@ shipped list has one: a probe on 2026-10-13 over every province and area of
 Re-check when a new year's list is added.
 
 ## Decisions and deliberate limits
+
+- **The Periods window's "+ Add period" sits beside its heading (A719, owner 2026-10-17).**
+  `wt-modal` has no header slot, so the window has no modal heading: it is named by its
+  `aria-label`, and `periods-list` draws an `h2` "Periods" with "+ Add period" beside it.
+
+- **The Periods window has no "Open in Calendar"; a period row opens the period dialog (A719).**
+  The window is already in the Calendar, and Painted in's chips open each painter. The row menu
+  went; a bin in the pinned column opens the delete dialog.
+
+- **The period dialog's Delete… keeps its danger look in the bottom row (A719)**, after Cancel in
+  the `cancel` slot, by design-system.md → Forms (owner, 2026-10-16). The A719 mockups, drawn on
+  2026-10-15 before that rule, draw it plain.
+
+- **No redirect for an old `/manage/periods` address (A719).** Until Waitron is in production
+  there is no backwards-compatibility code (CLAUDE.md §3); the address falls back as any unknown
+  page does.
 
 - **Periods and staff roles pick from thirteen calendar colours, in rainbow order (owner,
   2026-10-17, option (a) of the A753 swatch board, `docs/backlog/mockups/a753-calendar-colours/`).**

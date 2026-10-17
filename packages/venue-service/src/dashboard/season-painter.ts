@@ -12,7 +12,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { WEEK_DISPLAY_ORDER } from "../hours-types.js";
-import { rebaseDays, samePaint, type Paint } from "../paint-model.js";
+import {
+  rebaseDays,
+  refill,
+  samePaint,
+  savedBlocks,
+  withoutPeriods,
+  type Paint,
+} from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
@@ -23,7 +30,14 @@ import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
-import { departmentOf, droppedNotice, listOf, ownerName, refusalReason } from "./painter-labels.js";
+import {
+  departmentOf,
+  droppedNotice,
+  listOf,
+  ownerName,
+  refusalReason,
+  removedPeriods,
+} from "./painter-labels.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 import { PeriodEditing, periodsLink } from "./period-editing.js";
@@ -300,6 +314,28 @@ export class SeasonPainter extends LitElement {
    *  week whose department or zone is gone or inactive has its edits dropped with a notice. */
   private refresh(previous: Model, confirmed?: Draft) {
     const fresh = seed(this.model, this.seasonId);
+    // A save naming a deleted period is refused, so its paint leaves every week held here. A
+    // deletion naming a replacement moves the saved blocks to it, so the stretch of a deleted-period
+    // block the week still holds where it was saved takes what the stored week now holds there.
+    const removed = removedPeriods(previous, this.model);
+    if (removed.size) {
+      const none: Week = new Map();
+      const strip = (weeks: Draft, saved: Draft): Draft =>
+        new Map(
+          [...weeks].map(([key, week]) => [
+            key,
+            refill(
+              withoutPeriods(week, removed),
+              savedBlocks(week, removed, saved.get(key) ?? none, this.model.dayCutover),
+              fresh.get(key) ?? none,
+              this.model.dayCutover,
+            ),
+          ]),
+        );
+      this.draft = strip(this.draft, this.baseline);
+      if (confirmed) confirmed = strip(confirmed, confirmed);
+      this.baseline = strip(this.baseline, this.baseline);
+    }
     if (confirmed) {
       this.draft = new Map(this.draft);
       this.baseline = new Map(this.baseline);

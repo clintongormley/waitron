@@ -20,6 +20,18 @@ export function departmentOf(model: Model, key: string): Department | undefined 
     key.startsWith("d:") ? department.id === id : department.zones.some((zone) => zone.id === id),
   );
 }
+/** The periods a department lists in `previous` and no longer lists in `model`; a department gone
+ *  from `model` counts none, so its edits stay for the notice that drops them. */
+export function removedPeriods(previous: Model, model: Model): Set<string> {
+  const removed = new Set<string>();
+  for (const department of model.departments) {
+    const kept = new Set(department.periods.map(({ id }) => id));
+    for (const { id } of previous.departments.find((entry) => entry.id === department.id)
+      ?.periods ?? [])
+      if (!kept.has(id)) removed.add(id);
+  }
+  return removed;
+}
 /** What a painter says beside Save when a refresh dropped edits: of the departments and zones
  *  `gone`, by name, and of those under the `inactive` departments. Empty when it dropped none. */
 export function droppedNotice(gone: readonly string[], inactive: ReadonlySet<string>): string {

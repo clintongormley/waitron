@@ -5,7 +5,7 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
-import "./periods-screen.js";
+import "./periods-list.js";
 
 function model(): OpeningHoursModel {
   return {
@@ -48,6 +48,7 @@ function model(): OpeningHoursModel {
 
 class PeriodsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
+  draftParent?: object;
   readonly writes: unknown[][] = [];
   readonly api = new OpeningHoursApi((async (path, method, body) => {
     if (method !== "GET") {
@@ -59,7 +60,7 @@ class PeriodsLeaveApp extends LitElement {
     return model();
   }) as DashboardRequest);
   override render() {
-    return html`<dashboard-periods-screen .api=${this.api}></dashboard-periods-screen
+    return html`<periods-list .api=${this.api} .draftParent=${this.draftParent}></periods-list
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
@@ -69,17 +70,20 @@ afterEach(() => {
   app?.remove();
   setLocale("en");
 });
-async function mount() {
+async function mount(draftParent?: object) {
   app = document.createElement("periods-leave-test-app") as PeriodsLeaveApp;
+  app.draftParent = draftParent;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
-  const screen = app.shadowRoot!.querySelector("dashboard-periods-screen")!;
+  const screen = app.shadowRoot!.querySelector("periods-list")!;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
   const table =
     screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
   await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-period]")!.click();
+  table
+    .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="period:p1"] button.row-activate')!
+    .click();
   await screen.updateComplete;
   const editor = screen.shadowRoot!.querySelector<PeriodDialog>("period-dialog")!;
   expect(editor, "period dialog opens").not.toBeNull();
@@ -171,4 +175,27 @@ it("changing only the period's menu protects the draft and restoring it makes it
   await editor.updateComplete;
   expect(unload()).toBe(false);
   expect(app.writes).toEqual([]);
+});
+
+it("the period dialog's draft is asked about only under the list's draft parent", async () => {
+  setLocale("en");
+  const root = {};
+  const { editor } = await mount(root);
+  await change(editor);
+  const asked = app.leave.coordinator.request({
+    scopes: [root],
+    reason: "navigation",
+    proceed() {},
+  });
+  await choose("keep");
+  expect(await asked).toBe("kept");
+  expect(
+    await app.leave.coordinator.request({ scopes: [{}], reason: "navigation", proceed() {} }),
+  ).toBe("proceeded");
+  app.remove();
+  const plain = await mount();
+  await change(plain.editor);
+  expect(
+    await app.leave.coordinator.request({ scopes: [root], reason: "navigation", proceed() {} }),
+  ).toBe("proceeded");
 });

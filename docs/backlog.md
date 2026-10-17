@@ -1360,11 +1360,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   special day's dates as one coloured run. After A721 and A723.
   [Detail](backlog/service-periods.md#a762-every-painter-says-what-it-edits-in-its-colour-and-the-staffing-month-marks-special-days)
 
-- **A719. Periods become a window opened from the Calendar (owner, 2026-10-15).** The Periods page
-  and sidebar entry go; the window lists periods by department and opens the period dialog, whose
-  Delete moves to the bottom row. An unused period still shows its colour; the unused Floor plan
-  column and field go until A504. [Detail](backlog/service-periods.md#a719-periods-become-a-window-opened-from-the-calendar), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
-
 - **Loose ends left by A720.**
   - Look at a picked, focused today in the Month. `--wt-focus-offset` and
     `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
@@ -1461,24 +1456,20 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   else edits a period's end offset. Owner to confirm; removing it is one field — left open by
   A506-11, #1694.
 
-- **A painter opened from a Painted in chip on the Periods page closes to the Opening hours Year,
-  not back to the Periods page**, so a manager loses their place — left open by A506-11, #1694.
+- **A painter opened from a Painted in chip in the Periods window does not return to the window
+  when it closes**, so a manager loses their place — left open by A506-11, #1694.
 
 - **The Opening hours model's `periods[].weekdays` and `routingUses` have no reader left in the
   dashboard**, while `readOpeningHoursModel` still works both out on every read. See also "Routing
   reads do work only one screen uses" — left open by A506-11, #1694.
 
 - **The period delete dialog can keep Delete greyed out** after a refusal for a changed business-day
-  start, when the page is taken out of the document during its re-read and comes back
+  start, when the Periods window's list is taken out of the document during its re-read and comes back
   (`period-delete-dialog.ts`; found by reading, not tried) — left open by A506-11, #1694.
 
 - **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
   updates; the server still refuses a delete sent with an old clock revision — left open by
   A506-11, #1694.
-
-- **Opening hours keeps its own click handler for the painters' Periods link**
-  (`opening-hours-screen.ts`), which the dashboard shell handles first in the real app; remove it
-  once the two painter tests that need it mount the shell — left open by A506-11, #1694.
 
 - **A special day whose dates start their business day at different times is painted on one grid
   drawn from the first date's changeover**, with a notice saying so (`cutover`,
@@ -2379,9 +2370,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A504. Floor plans published for a future date, and one per service period (owner,
   2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
   different layouts for different periods. Owner, 2026-10-16: floor plans get a page of their own,
-  edited as named sets a period picks. Backlog only, not queued to a lane. Until it lands, the
-  Periods page's Floor plan column shows a muted dash, and the period dialog a disabled Floor plan
-  field except when a painter's + New period opens it (`periods-screen.ts`, `period-dialog.ts`).
+  edited as named sets a period picks. Backlog only, not queued to a lane. A504 adds a Floor plan
+  column to the Periods window and a Floor plan field to the period dialog (`periods-list.ts`,
+  `period-dialog.ts`); A719 removed the placeholders.
   [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
 
 - **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**

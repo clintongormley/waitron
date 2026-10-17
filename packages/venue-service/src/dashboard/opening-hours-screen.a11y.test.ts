@@ -20,6 +20,7 @@ function request(state: string): DashboardRequest {
   return (async (path: string) => {
     if (state === "load-failed") throw new Error("offline");
     if (path === "/management-api/stations") return [];
+    if (path.endsWith("/menu-periods/painted-in")) return [];
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: {
@@ -54,6 +55,7 @@ function request(state: string): DashboardRequest {
       timeZone: "Europe/Madrid",
       clockReadable: state !== "unreadable-viewer",
       dayCutover: "06:00",
+      seasons: [],
       menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
       departments: [
         {
@@ -101,6 +103,27 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
       .poll(() => screen.shadowRoot!.querySelector("opening-hours-year")?.model)
       .toBeDefined();
     await screen.shadowRoot!.querySelector("opening-hours-year")!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+  test.each([
+    ["the Periods window", false],
+    ["the Periods window, read-only", true],
+  ] as const)("%s", async (_state, readOnly) => {
+    setLocale("en");
+    history.replaceState(null, "", "/manage/opening-hours/view/year/window/periods");
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    screen.api = new OpeningHoursApi(request("ready"));
+    screen.readOnly = readOnly;
+    wrapper.appendChild(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-window=periods] periods-list"))
+      .not.toBeNull();
+    const list = screen.shadowRoot!.querySelector("[data-window=periods] periods-list")!;
+    await expect.poll(() => list.shadowRoot?.querySelector("wt-data-table")).toBeTruthy();
+    const table = list.shadowRoot!.querySelector("wt-data-table")!;
+    await expect.poll(() => table.shadowRoot?.textContent ?? "").toContain("Lunch");
+    await table.updateComplete;
     await expectNoA11yViolations(host);
   });
   test.each([

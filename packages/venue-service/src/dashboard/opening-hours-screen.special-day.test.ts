@@ -11,6 +11,7 @@ import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
 import { frame, painterModel, settle, storedDay } from "../testing/special-day-painter-fixture.js";
+import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -132,6 +133,7 @@ function request(recorded: Recorded): DashboardRequest {
           .split(",")
           .map((date) => ({ date, seasonId: "winter", dayCutover: "06:00", departments: [] })),
       } satisfies SeasonDays;
+    if (path.endsWith("/menu-periods/painted-in")) return [];
     return painterModel();
   }) as DashboardRequest;
 }
@@ -335,6 +337,15 @@ class GuardedApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly recorded: Recorded = { writes: [], months: [], failing: [] };
   readonly api = new OpeningHoursApi(request(this.recorded));
+  private releaseLinks?: () => void;
+  override connectedCallback() {
+    super.connectedCallback();
+    this.releaseLinks = captureShellLinks(this);
+  }
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.releaseLinks?.();
+  }
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
@@ -743,5 +754,175 @@ describe("links into the special-day painter", () => {
     expect(chips(painter)).toEqual(["2026-12-10"]);
     expect(nameOf(painter)).toBe("");
     expect(writes).toEqual([]);
+  });
+});
+
+class AddingGuardedApp extends GuardedApp {
+  model = painterModel();
+  override readonly api = new OpeningHoursApi((async (
+    path: string,
+    method: string,
+    body: unknown,
+  ) => {
+    if (method === "POST" && path.endsWith("/departments/d1/menu-periods")) {
+      this.recorded.writes.push([path, method, body]);
+      const restaurant = this.model.departments[0]!;
+      this.model = {
+        ...this.model,
+        departments: [
+          {
+            ...restaurant,
+            periods: [
+              ...restaurant.periods,
+              { ...restaurant.periods[0]!, id: "p-new", name: "Brunch", colour: "blue" },
+            ],
+          },
+          ...this.model.departments.slice(1),
+        ],
+      };
+      return { id: "p-new" };
+    }
+    if (method === "GET" && path.endsWith("/opening-hours")) return this.model;
+    return request(this.recorded)(path, method, body);
+  }) as DashboardRequest);
+}
+customElements.define("special-day-adding-test-app", AddingGuardedApp);
+
+describe("the special-day painter's Periods link", () => {
+  const base = "/manage/opening-hours/view/special-day/special-day/sd1";
+  const link = (painter: SpecialDayPainter) =>
+    painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
+  const periodsWindow = (el: Screen) =>
+    el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods] periods-list");
+
+  it("the special-day painter's Periods link opens the window over it and keeps its unsaved day", async () => {
+    history.replaceState(null, "", base);
+    const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const painter = await shownPainter(el);
+    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Staff party" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    const question =
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    const pushes = pushedPaths();
+    await userEvent.click(link(painter));
+    await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+    await expect.poll(() => periodsWindow(el)).not.toBeNull();
+    expect(pushes()).toEqual([`${base}/window/periods`]);
+    expect(question.open).toBe(false);
+    expect(painterOf(el)).toBe(painter);
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    history.back();
+    await expect.poll(() => location.pathname).toBe(base);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    expect(question.open).toBe(false);
+    expect(painterOf(el)).toBe(painter);
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(app.recorded.writes).toEqual([]);
+  });
+
+  it("a period added in the window reaches the special-day painter underneath, which keeps its unsaved day", async () => {
+    history.replaceState(null, "", base);
+    const app = document.createElement("special-day-adding-test-app") as AddingGuardedApp;
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const painter = await shownPainter(el);
+    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Staff party" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')).toBeNull();
+    await userEvent.click(link(painter));
+    await expect.poll(() => periodsWindow(el)).not.toBeNull();
+    const list = periodsWindow(el) as HTMLElementTagNameMap["periods-list"];
+    await expect.poll(() => list.shadowRoot?.querySelector("[data-test=add-period]")).toBeTruthy();
+    list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
+    await list.updateComplete;
+    const dialog = list.shadowRoot!.querySelector("period-dialog")!;
+    await dialog.updateComplete;
+    for (const [name, value] of [
+      ["departmentId", "d1"],
+      ["name", "Brunch"],
+      ["menuId", "m1"],
+    ])
+      dialog
+        .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    await dialog.updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+    await expect.poll(() => list.shadowRoot!.querySelector("period-dialog")).toBeNull();
+    expect(app.recorded.writes).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/menu-periods",
+        "POST",
+        expect.objectContaining({ name: "Brunch", menuId: "m1" }),
+      ],
+    ]);
+    el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-test=calendar-window] [data-test=close-calendar-window]",
+    )!.click();
+    await expect.poll(() => location.pathname).toBe(base);
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    expect(painterOf(el)).toBe(painter);
+    await expect
+      .poll(() => painter.shadowRoot!.querySelector('[data-test="paint-p-new"]'))
+      .not.toBeNull();
+    expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')!.textContent).toContain(
+      "Brunch",
+    );
+    expect(nameOf(painter)).toBe("Staff party");
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(app.recorded.writes).toHaveLength(1);
+  });
+
+  it("a modified click on its Periods link is left to the browser", async () => {
+    const { el } = await mount(base);
+    const painter = await shownPainter(el);
+    const seen: boolean[] = [];
+    // Bubbling on window runs after the link's own listener, so it sees what the link did.
+    const record = (event: Event) => {
+      seen.push(event.defaultPrevented);
+      event.preventDefault();
+    };
+    window.addEventListener("click", record);
+    try {
+      const press = (init: MouseEventInit) =>
+        link(painter).dispatchEvent(
+          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
+        );
+      press({ ctrlKey: true });
+      await el.updateComplete;
+      expect(seen).toEqual([false]);
+      expect(location.pathname).toBe(base);
+      press({});
+      expect(seen).toEqual([false, true]);
+      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
+    } finally {
+      window.removeEventListener("click", record);
+    }
   });
 });

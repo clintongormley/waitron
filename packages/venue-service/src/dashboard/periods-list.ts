@@ -3,8 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
@@ -52,8 +52,8 @@ const chipTints = unsafeCSS(
 
 /** Every active department's periods, grouped under it. Cell markup lives in the table's shadow
  *  root, so each colour and season tint is its own part. */
-@customElement("dashboard-periods-screen")
-export class PeriodsScreen extends LitElement {
+@customElement("periods-list")
+export class PeriodsList extends LitElement {
   static override styles = [
     baseStyles,
     css`
@@ -69,8 +69,9 @@ export class PeriodsScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-block-end: var(--wt-space-4);
       }
-      h1 {
+      h2 {
         margin: 0;
+        font-size: var(--wt-font-size-lg);
       }
       wt-data-table::part(swatch) {
         display: inline-block;
@@ -82,17 +83,6 @@ export class PeriodsScreen extends LitElement {
         vertical-align: middle;
       }
       ${swatchColours}
-      wt-data-table::part(swatch-unpainted) {
-        background: transparent;
-        border: 1px dashed var(--wt-color-text-muted);
-      }
-      wt-data-table::part(unpainted),
-      wt-data-table::part(unavailable) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(unavailable) {
-        font-style: italic;
-      }
       wt-data-table::part(not-painted) {
         color: var(--wt-color-warning);
       }
@@ -128,6 +118,7 @@ export class PeriodsScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ type: Boolean }) readOnly = false;
+  @property({ attribute: false }) draftParent?: object;
   @state() private model?: OpeningHoursModel;
   @state() private painted?: Map<string, PaintedIn>;
   @state() private readError = "";
@@ -140,6 +131,7 @@ export class PeriodsScreen extends LitElement {
     paintedIn: (periodId) => this.painted?.get(periodId),
     paintedInLinks: true,
     readOnly: () => this.readOnly,
+    draftParent: () => this.draftParent,
     onDelete: (_department, period) => this.askDelete(period),
   });
   @state() private deleting?: Deletion;
@@ -202,10 +194,6 @@ export class PeriodsScreen extends LitElement {
   private menuName(id: string) {
     return this.lookup().menuNames.get(id) ?? id;
   }
-  private unpainted(row: PeriodRow) {
-    const painted = row.kind === "period" ? this.painted?.get(row.id) : undefined;
-    return painted !== undefined && !painted.seasons.length && !painted.specialDays.length;
-  }
   private paintedInCell(row: PeriodRow & { kind: "period" }) {
     const painted = this.painted?.get(row.id);
     if (!painted) return nothing;
@@ -228,29 +216,19 @@ export class PeriodsScreen extends LitElement {
       )}</span
     >`;
   }
-  private actions(row: PeriodRow) {
+  private bin(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
-    return html`<wt-row-actions label=${format("menu.row_actions", { name: row.name })}
-      ><wt-button
-        variant="secondary"
-        align="start"
-        data-test="edit-period"
-        @click=${() => this.edit(row)}
-        >${t("menu.edit")}</wt-button
-      ><a data-test="open-hours" href=${seasonPainterPath({ departmentId: row.departmentId })}
-        >${t("period.open_hours")}</a
-      ><wt-button
-        variant="danger"
-        align="start"
-        data-test="delete-period"
-        @click=${() => this.askDelete(row)}
-        >${t("menu.delete")}</wt-button
-      ></wt-row-actions
-    >`;
+    return html`<wt-button
+      variant="ghost"
+      data-test="delete-period"
+      aria-label=${format("period.delete_named", { name: row.name })}
+      @click=${() => this.askDelete(row)}
+      ><wt-icon name="bin"></wt-icon
+    ></wt-button>`;
   }
 
-  private edit(row: PeriodRow & { kind: "period" }) {
-    if (this.deleting) return;
+  private edit(row: PeriodRow) {
+    if (row.kind !== "period" || this.deleting) return;
     const department = this.model?.departments.find(({ id }) => id === row.departmentId);
     const period = department?.periods.find(({ id }) => id === row.id);
     if (period) this.periods.open(department!, period);
@@ -278,12 +256,8 @@ export class PeriodsScreen extends LitElement {
             return row.periods.length
               ? row.name
               : html`${row.name}<span part="no-periods">${t("period.no_periods")}</span>`;
-          const unpainted = this.unpainted(row);
-          return html`<span
-              part=${`swatch colour-${row.colour}${unpainted ? " swatch-unpainted" : ""}`}
-              data-colour=${row.colour}
-            ></span
-            ><span part=${unpainted ? "name unpainted" : "name"}>${row.name}</span>`;
+          return html`<span part=${`swatch colour-${row.colour}`} data-colour=${row.colour}></span
+            ><span part="name">${row.name}</span>`;
         },
       },
       {
@@ -302,11 +276,6 @@ export class PeriodsScreen extends LitElement {
               : "—",
       },
       {
-        key: "floorPlan",
-        label: t("period.floor_plan"),
-        cell: (row) => (row.kind === "period" ? html`<span part="unavailable">—</span>` : nothing),
-      },
-      {
         key: "paintedIn",
         label: t("period.painted_in"),
         cell: (row) => (row.kind === "period" ? this.paintedInCell(row) : nothing),
@@ -318,12 +287,12 @@ export class PeriodsScreen extends LitElement {
               key: "actions",
               label: t("menu.actions"),
               pinned: "end",
-              cell: (row: PeriodRow) => this.actions(row),
+              cell: (row: PeriodRow) => this.bin(row),
             } satisfies DataTableColumn<PeriodRow>,
           ]),
     ];
     return html`<div class="toolbar">
-        <h1>${t("period.title")}</h1>
+        <h2>${t("period.title")}</h2>
         ${
           this.readOnly
             ? nothing
@@ -351,6 +320,9 @@ export class PeriodsScreen extends LitElement {
                 .rowParent=${(row: PeriodRow) => (row.kind === "period" ? `department:${row.departmentId}` : null)}
                 .rowCollapsible=${() => false}
                 .rowCellParts=${(row: PeriodRow) => (row.kind === "department" ? "department-cell" : "")}
+                .rowClick=${this.readOnly ? undefined : (row: PeriodRow) => this.edit(row)}
+                .rowClickLabel=${(row: PeriodRow) => format("painter.edit_period", { name: row.name })}
+                .rowActivation=${(row: PeriodRow) => (row.kind === "period" ? "click" : "none")}
               ></wt-data-table>`
       }
       ${model && !this.readOnly ? this.periods.render() : nothing}
@@ -482,6 +454,6 @@ export class PeriodsScreen extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-periods-screen": PeriodsScreen;
+    "periods-list": PeriodsList;
   }
 }

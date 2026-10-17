@@ -488,7 +488,20 @@ export class OpeningHoursYearView extends LitElement {
         .api=${this.api}
         .specialDays=${this.specialDays}
         .readOnly=${this.readOnly}
-      ></season-chips>
+        ><wt-button
+          data-test="open-periods"
+          variant="secondary"
+          @click=${() =>
+            this.dispatchEvent(
+              new CustomEvent("calendar-window-open", {
+                detail: { window: "periods" },
+                bubbles: true,
+                composed: true,
+              }),
+            )}
+          >${t("period.open_window")}</wt-button
+        ></season-chips
+      >
       ${
         model.publicHolidaysAvailable
           ? nothing

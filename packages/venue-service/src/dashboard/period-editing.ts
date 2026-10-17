@@ -4,6 +4,7 @@ import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types
 import type { PaintedIn } from "../period-delete.js";
 import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
+import { periodsWindowPath } from "./opening-hours-paths.js";
 import type { PaintPot } from "./paint-row.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import { refusalOf } from "./refusal.js";
@@ -14,10 +15,34 @@ type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
-/** The Periods page, which a painter's bar links to. */
+function openPeriodsWindow(event: MouseEvent) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  )
+    return;
+  event.preventDefault();
+  (event.currentTarget as HTMLElement).dispatchEvent(
+    new CustomEvent("calendar-window-open", {
+      detail: { window: "periods" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
 export function periodsLink() {
-  return html`<a slot="link" data-test="periods-link" href="/manage/periods"
-    >${t("nav.periods")}</a
+  return html`<a
+    slot="link"
+    data-test="periods-link"
+    data-own-click
+    href=${periodsWindowPath}
+    @click=${openPeriodsWindow}
+    >${t("period.title")}</a
   >`;
 }
 
@@ -58,6 +83,7 @@ export class PeriodEditing implements ReactiveController {
       readOnly?: () => boolean;
       /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
       onDelete?: (department: Department, period: Period) => void;
+      draftParent?: () => object | undefined;
     },
   ) {
     host.addController(this);
@@ -234,7 +260,7 @@ export class PeriodEditing implements ReactiveController {
         .menus=${model.menus}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}
-        .fromPainter=${fromPainter}
+        .draftParent=${this.options.draftParent?.()}
         .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}
         @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {

@@ -53,6 +53,11 @@ export function hoursPath(month?: string | null): string {
   ]);
 }
 
+export const CALENDAR_WINDOWS = ["seasons", "periods"] as const;
+export type CalendarWindow = (typeof CALENDAR_WINDOWS)[number];
+export const isCalendarWindow = (id: string | null): id is CalendarWindow =>
+  (CALENDAR_WINDOWS as readonly (string | null)[]).includes(id);
+
 /** Changes only the window pair, retaining the view and its subject underneath. */
 export function calendarWindowPath(basePath: string, windowId: string | null): string {
   const parts = basePath.split("/");
@@ -63,3 +68,5 @@ export function calendarWindowPath(basePath: string, windowId: string | null): s
   if (windowId !== null) retained.push("window", encodePathSegment(windowId));
   return retained.join("/");
 }
+
+export const periodsWindowPath = calendarWindowPath(hoursPath(), "periods");

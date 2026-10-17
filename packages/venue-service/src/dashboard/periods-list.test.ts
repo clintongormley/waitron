@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, type WtDataTable } from "@waitron/ui";
+import { applyTokens, type WtDataTable, type WtModal } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
-import type { PeriodRow, PeriodsScreen } from "./periods-screen.js";
+import type { PeriodDialog } from "./period-dialog.js";
+import type { PeriodRow, PeriodsList } from "./periods-list.js";
 import { seasonTints } from "./season-tint.js";
 
-import "./periods-screen.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -107,7 +109,7 @@ function answering(
 }
 
 async function mount(request: DashboardRequest = answering(), readOnly = false) {
-  const el = document.createElement("dashboard-periods-screen") as PeriodsScreen;
+  const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(request);
   el.readOnly = readOnly;
   applyTokens(el);
@@ -116,10 +118,10 @@ async function mount(request: DashboardRequest = answering(), readOnly = false) 
   await el.updateComplete;
   return el;
 }
-function table(el: PeriodsScreen) {
+function table(el: PeriodsList) {
   return el.shadowRoot!.querySelector<WtDataTable<PeriodRow>>("wt-data-table");
 }
-async function loaded(el: PeriodsScreen) {
+async function loaded(el: PeriodsList) {
   await expect.poll(() => table(el)).not.toBeNull();
   const grid = table(el)!;
   await grid.updateComplete;
@@ -176,7 +178,7 @@ it("M3: department rows are group headings, bold on a shaded band across every c
   expect(cell(grid, "department:kiosk", "period")!.textContent).toContain("Sin periodos");
 });
 
-it("shows each period's colour, customer menu, staff-only menus and a greyed floor plan", async () => {
+it("shows each period's colour, customer menu and staff-only menus, and no Floor plan column", async () => {
   const el = await mount();
   const grid = await loaded(el);
   const text = grid.shadowRoot!.textContent!;
@@ -187,9 +189,14 @@ it("shows each period's colour, customer menu, staff-only menus and a greyed flo
   expect(swatch).not.toBeNull();
   expect(getComputedStyle(swatch!).width).not.toBe("0px");
   expect(getComputedStyle(swatch!).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-  const floor = grid.shadowRoot!.querySelector<HTMLElement>("[part=unavailable]")!;
-  expect(floor.textContent).toBe("—");
-  expect(getComputedStyle(floor).color).not.toBe(getComputedStyle(grid).color);
+  expect(grid.columns.map((c) => c.key)).toEqual([
+    "period",
+    "customerMenu",
+    "staffMenus",
+    "paintedIn",
+    "actions",
+  ]);
+  expect(grid.shadowRoot!.querySelector("[part=unavailable]")).toBeNull();
 });
 
 it("paints every period colour's swatch and every season tint's chip", async () => {
@@ -255,46 +262,148 @@ it("Painted in lists the seasons in order, then the special days, each linking t
   );
 });
 
-it("a period painted nowhere says Not painted anywhere and is drawn unpainted; a period the painted-in read does not list yet shows nothing in Painted in", async () => {
-  const el = await mount();
+it("an unused period shows its colour and a plain name, and says Not painted anywhere; a period the painted-in read does not list yet shows nothing in Painted in", async () => {
+  const el = await mount(
+    answering(() => {
+      const m = model();
+      m.departments[0]!.periods[1]!.colour = "green";
+      return m;
+    }),
+  );
   const grid = await loaded(el);
   await expect
     .poll(() => cell(grid, "period:p2", "paintedIn")?.textContent)
     .toContain("Not painted anywhere");
   expect(cell(grid, "period:p2", "paintedIn")!.querySelector("[part=not-painted]")).not.toBeNull();
-  expect(cell(grid, "period:p2", "period")!.querySelector("[part~=unpainted]")).not.toBeNull();
-  expect(cell(grid, "period:p1", "period")!.querySelector("[part~=unpainted]")).toBeNull();
+  const swatch = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=swatch]")!;
+  const name = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=name]")!;
+  expect(getComputedStyle(swatch("period:p2")).backgroundColor).toBe(
+    getComputedStyle(swatch("period:p1")).backgroundColor,
+  );
+  expect(getComputedStyle(swatch("period:p1")).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(name("period:p2")).color).toBe(getComputedStyle(name("period:p1")).color);
   expect(cell(grid, "period:p3", "paintedIn")!.textContent!.trim()).toBe("");
-  expect(cell(grid, "period:p3", "period")!.querySelector("[part~=unpainted]")).toBeNull();
+  expect(getComputedStyle(name("period:p3")).color).toBe(getComputedStyle(name("period:p1")).color);
 });
 
 it("shows nothing in Painted in while the painted-in read has not answered", async () => {
-  const el = await mount(answering(model, () => new Promise<PaintedInRow[]>(() => {})));
+  let answer!: (rows: PaintedInRow[]) => void;
+  const pending = new Promise<PaintedInRow[]>((done) => {
+    answer = done;
+  });
+  const el = await mount(answering(model, () => pending));
   const grid = await loaded(el);
   expect(cell(grid, "period:p2", "paintedIn")!.textContent!.trim()).toBe("");
-  expect(cell(grid, "period:p2", "period")!.querySelector("[part~=unpainted]")).toBeNull();
+  const swatch = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=swatch]")!;
+  const name = (id: string) =>
+    cell(grid, id, "period")!.querySelector<HTMLElement>("[part~=name]")!;
+  expect(getComputedStyle(swatch("period:p2")).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  const unanswered = getComputedStyle(name("period:p2")).color;
+  expect(unanswered).toBe(getComputedStyle(name("period:p1")).color);
+  answer(paintedIn());
+  await expect
+    .poll(() => cell(grid, "period:p2", "paintedIn")?.textContent)
+    .toContain("Not painted anywhere");
+  expect(getComputedStyle(name("period:p2")).color).toBe(unanswered);
+  expect(getComputedStyle(name("period:p1")).color).toBe(unanswered);
 });
 
-it("the row menu column is keyed actions and pinned to the end, holding Edit, Open in Calendar and Delete", async () => {
+it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (locale) => {
+  setLocale(locale);
   const el = await mount();
+  await loaded(el);
+  const heading = el.shadowRoot!.querySelector("h2")!;
+  expect(heading.textContent).toBe(locale === "en" ? "Periods" : "Periodos");
+  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  const h = heading.getBoundingClientRect();
+  const add = el.shadowRoot!.querySelector("[data-test=add-period]")!.getBoundingClientRect();
+  const middle = (h.top + h.bottom) / 2;
+  expect(add.top).toBeLessThanOrEqual(middle);
+  expect(add.bottom).toBeGreaterThanOrEqual(middle);
+  expect(add.left).toBeGreaterThan(h.right);
+});
+
+const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
+
+it("a period row opens its dialog; a department row opens nothing; the pinned actions column holds a bin per period", async () => {
+  const read = answering();
+  const el = await mount((async (path: string, ...rest: unknown[]) =>
+    path.endsWith("/delete-impact")
+      ? new Promise(() => {})
+      : (read as (...args: unknown[]) => unknown)(path, ...rest)) as DashboardRequest);
   const grid = await loaded(el);
+  for (const row of grid.rows)
+    expect(grid.rowActivation!(row), `${row.kind}:${row.id}`).toBe(
+      row.kind === "period" ? "click" : "none",
+    );
+  const activator = (key: string) =>
+    grid.shadowRoot!.querySelector<HTMLButtonElement>(
+      `tr[data-row-key="${key}"] button.row-activate`,
+    );
+  expect(activator("period:p1")!.getAttribute("aria-label")).toBe("Edit Lunch");
+  expect(activator("department:restaurant")).toBeNull();
+  expect(activator("department:bar")).toBeNull();
+  await userEvent.click(cell(grid, "period:p1", "customerMenu")!, { force: true });
+  await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
+  dialogOf(el)!.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
+  await expect.poll(() => dialogOf(el)).toBeNull();
+
   expect(grid.columns.find((c) => c.key === "actions")?.pinned).toBe("end");
-  expect(
-    cell(grid, "department:restaurant", "actions")!.querySelector("wt-row-actions"),
-  ).toBeNull();
-  const menu = cell(grid, "period:p1", "actions")!.querySelector("wt-row-actions")!;
-  expect(menu.getAttribute("label")).toBe("Actions: Lunch");
-  expect(menu.querySelector("[data-test=edit-period]")!.textContent!.trim()).toBe("Edit");
-  const open = menu.querySelector<HTMLAnchorElement>("a[data-test=open-hours]")!;
-  expect(open.textContent!.trim()).toBe("Open in Calendar");
-  expect(open.getAttribute("href")).toBe("/manage/opening-hours/view/season/department/restaurant");
-  expect(menu.querySelector("[data-test=delete-period]")!.textContent!.trim()).toBe("Delete");
-  const bar = cell(grid, "period:p3", "actions")!.querySelector("a[data-test=open-hours]")!;
-  expect(bar.getAttribute("href")).toBe("/manage/opening-hours/view/season/department/bar");
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periods");
+  for (const key of ["department:restaurant", "department:bar"])
+    expect(cell(grid, key, "actions")!.querySelector("[data-test=delete-period]"), key).toBeNull();
+  expect(grid.shadowRoot!.querySelectorAll("[data-test=delete-period]")).toHaveLength(3);
+  for (const [key, name] of [
+    ["period:p1", "Lunch"],
+    ["period:p2", "Christmas set menu"],
+    ["period:p3", "All day"],
+  ]) {
+    const bins = cell(grid, key!, "actions")!.querySelectorAll("[data-test=delete-period]");
+    expect(bins, key).toHaveLength(1);
+    expect(bins[0]!.getAttribute("aria-label")).toBe(`Delete ${name}`);
+    expect(bins[0]!.querySelector("wt-icon[name=bin]"), key).not.toBeNull();
+  }
+  expect(grid.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+  const bin = cell(grid, "period:p1", "actions")!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=delete-period]",
+  )!;
+  await userEvent.click(bin.shadowRoot!.querySelector("button")!);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("period-delete-dialog")?.period?.id)
+    .toBe("p1");
+  expect(dialogOf(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periods");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Add period",
   );
+});
+
+it("a Painted in chip in a clickable row follows its link and opens no period dialog", async () => {
+  const el = await mount();
+  const grid = await loaded(el);
+  await expect.poll(() => grid.shadowRoot!.querySelectorAll("a[part~=chip]").length).toBe(3);
+  const chip = cell(grid, "period:p1", "paintedIn")!.querySelector<HTMLAnchorElement>(
+    "a[part~=chip]",
+  )!;
+  const clicks: { target: EventTarget | undefined; defaultPrevented: boolean }[] = [];
+  const record = (event: Event) => {
+    clicks.push({ target: event.composedPath()[0], defaultPrevented: event.defaultPrevented });
+    event.preventDefault();
+  };
+  window.addEventListener("click", record);
+  try {
+    await userEvent.click(chip);
+    expect(clicks).toEqual([{ target: chip, defaultPrevented: false }]);
+    await el.updateComplete;
+    expect(dialogOf(el)).toBeNull();
+    await userEvent.click(cell(grid, "period:p1", "customerMenu")!, { force: true });
+    await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
+  } finally {
+    window.removeEventListener("click", record);
+  }
 });
 
 it("a venue viewer sees the list and its links but no Add and no actions column", async () => {
@@ -304,6 +413,7 @@ it("a venue viewer sees the list and its links but no Add and no actions column"
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
   expect(keys(grid)).toHaveLength(5);
   await expect.poll(() => grid.shadowRoot!.querySelectorAll("a[part~=chip]").length).toBe(3);
+  expect(grid.shadowRoot!.querySelectorAll("button.row-activate")).toHaveLength(0);
 });
 
 it("names a missing menu by its recorded id", async () => {
@@ -378,7 +488,7 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
   setLocale("es");
   const el = await mount();
   const grid = await loaded(el);
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periodos");
+  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periodos");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Añadir periodo",
   );
@@ -390,16 +500,16 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
       expect.stringContaining("Periodo"),
       expect.stringContaining("Carta de clientes"),
       expect.stringContaining("Cartas solo para el personal"),
-      expect.stringContaining("Plano de sala"),
       expect.stringContaining("Pintado en"),
     ]),
   );
+  expect(headers).not.toEqual(expect.arrayContaining([expect.stringContaining("Plano de sala")]));
   await expect.poll(() => grid.shadowRoot!.textContent).toContain("Sin pintar en ningún sitio");
   expect(
     cell(grid, "period:p1", "actions")!
-      .querySelector("a[data-test=open-hours]")!
-      .textContent!.trim(),
-  ).toBe("Abrir en Calendario");
+      .querySelector("[data-test=delete-period]")!
+      .getAttribute("aria-label"),
+  ).toBe("Eliminar Lunch");
 });
 
 // Verdana is about as wide as CI's Linux system font.
@@ -442,9 +552,10 @@ it.each(
         },
         { periodId: "p2", seasons: [], specialDays: [] },
       ];
-      const frame = document.createElement("div");
-      // The table's frame on the dashboard at 1280 px, measured in the A506-11 LOOK.
-      frame.style.inlineSize = "898px";
+      // The Periods window: an unsized, so wide, modal.
+      const frame = document.createElement("wt-modal") as WtModal;
+      frame.open = true;
+      applyTokens(frame);
       document.body.append(frame);
       hosts.push(frame);
       const el = await mount(
