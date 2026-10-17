@@ -153,6 +153,66 @@ Every request in a window is a `GET`: no draft save fell inside the third case's
 script did not record when, or whether, the left draft's save was sent. I did not establish why `GET /api/node` fell inside the
 second case's window in every run.
 
+## Measurements taken after the change (AFTER, Task 8)
+
+### 1. The till probe, AFTER
+
+Taken 2026-10-17 16:44 on this branch at `26bb32862`, Node v26.11.1, Vitest 4.1.11, Chromium through
+`@vitest/browser-playwright`. Appendix A, recreated with Task 8's two changes: "ready" waits for
+`screen?.draftStore && !screen.loading`, and "loadingShown" is the first moment `screen` exists. So
+"shown" and "loadingShown" are the same moment by construction. Same command as BEFORE:
+
+```sh
+cd apps/till && AI_AGENT= CLAUDECODE= pnpm exec vitest run src/till-app-a768-probe.test.ts | grep A768-PROBE
+```
+
+What an unchanged build would print, written before the run: the second open with `listZoneOffers: 1`
+and ready at about 200 ms or more. Three runs:
+
+| Open | loading screen shown (ms), runs 1 / 2 / 3 | ready (ms), runs 1 / 2 / 3 | BEFORE shown = ready (ms) | Requests the open sent |
+| --- | --- | --- | --- | --- |
+| First table in zone z1 | 10 / 6 / 15 | 233 / 223 / 253 | 235 / 248 / 235 | the same eight as BEFORE, `listZoneOffers` included |
+| Second table, same zone, nothing to save | 19 / 10 / 5 | 120 / 114 / 113 | 211 / 232 / 239 | `menuState` 1 in place of `listZoneOffers`; the other seven unchanged |
+| Back from a table with an unsaved edit, then another table | 7 / 8 / 6 | 113 / 108 / 124 | 307 / 311 / 284 | `menuState` 1 in place of `listZoneOffers`, the other seven, plus the floor's `getTablesState` |
+| A seated table with no main bill | 7 / 8 / 7 | 266 / 241 / 250 | 330 / 332 / 337 | `menuState` 1 in place of `listZoneOffers`, `getPartyBills` 1, `listDrafts` 1, `listStations` 1 |
+
+No open sent `listZoneOffers` except the first, so the run disproves the unchanged-build prediction.
+The no-main-bill open came out at 241–266 ms, above the 200–240 ms Task 8 expected; every other open
+fell inside its expected range. `saveDraft` and `getBillBalance` were not called inside any open.
+
+### 2. Real till page, AFTER
+
+Taken 2026-10-17 16:45 on this branch at `26bb32862`, same machine, Node and Chromium as the BEFORE
+table. Stack: `wa-wt demo waitron-feat-a768-till-open-table-fast`, which took slot 0 again (till
+`http://localhost:5190`, server `localhost:8080`; `waitron-local-santet-data` held slot 1 and was
+not touched). The same venue, not reset: device `Mostrador` kept its id, and tables 1–4 were still
+seated from Task 0, so `seat.mjs` was not rerun. The stack was stopped after the run with
+`wa-wt down waitron-feat-a768-till-open-table-fast`.
+
+`measure.mjs` now also records the first frame in which a `[data-loading]` line (found through shadow
+roots) has a non-zero width; -1 means no frame showed it. "Ready" is the BEFORE table's "shown": the
+first frame with a visible `[data-draft-pane]`. Command:
+
+```sh
+node /tmp/a768-real-till/measure.mjs 5
+```
+
+What an unchanged build would print, written before the run: one
+`GET /api/service-zones/<zone>/offers` on every open of every run, and no loading line.
+
+| Open | ready (ms), runs 1–5 | median | BEFORE median | loading line (ms), runs 1–5 | Requests the open sent (each once) |
+| --- | --- | --- | --- | --- | --- |
+| First seated table in the zone (table 1) | 407 / 405 / 494 / 411 / 507 | 411 | 547 | -1 / -1 / 343 / -1 / -1 | the BEFORE 8, `service-zones/:id/offers` included |
+| Back, then a second seated table, same zone (table 2) | 451 / 369 / 429 / 581 / 435 | 435 | 521 | 369 / -1 / -1 / -1 / -1 | 9: `menu-state?zoneId=:id` in place of the offers read, the other 7, plus `GET /api/node` in all five runs |
+| Tap a dish, Back at once, then another party's table (table 3) | 487 / 457 / 493 / 537 / 382 | 487 | 540 | -1 / -1 / -1 / -1 / 321 | 9: `menu-state?zoneId=:id` in place of the offers read, the other 7, plus `GET /api/tables/state` |
+| A seated table with no main bill | not measured | — | — | — | the demo floor still has none |
+
+No second or third open sent an offers read, so the run disproves the unchanged-build prediction.
+The loading line was seen in only 3 of the 15 opens, at 321–369 ms after the click, and never in
+the first 300 ms. The probe shows it within 20 ms. I did not establish why the real page draws no
+frame with the loading line in most opens, nor when it draws its first frame after the click.
+Every request in a window is a `GET`: no draft save fell inside the third case's window.
+
 ---
 
 ## Global Constraints
