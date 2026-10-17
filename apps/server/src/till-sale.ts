@@ -90,6 +90,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
+import { recordReceiptGuests, type GuestsChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
   personId: string;
@@ -207,6 +208,8 @@ export interface TillSaleRequest {
   deliveryTableId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
+  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guests?: number | null;
 }
 
 /**
@@ -497,6 +500,8 @@ export interface PayWorkingOrderRequest {
   zoneId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
+  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guests?: number | null;
 }
 
 function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
@@ -565,6 +570,8 @@ export interface IntegratedPayRequest {
   demoAttemptId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
+  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guests?: number | null;
 }
 
 /**
@@ -706,6 +713,7 @@ async function runPayWorkingOrder(
         req.tender,
         order,
         locked?.partyId ?? null,
+        req.guests,
         operatorId,
       );
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -748,11 +756,21 @@ async function fireAndFileSale(
   tender: TillTender | null,
   order: GrossOrder,
   partyId: string | null,
+  guests: GuestsChoice,
   operatorId?: string,
 ): Promise<TillSaleResult> {
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
 
-  const ticket = await fileImmediateSale(tx, deps, cfg, workingOrderId, tender, order, operatorId);
+  const ticket = await fileImmediateSale(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    tender,
+    order,
+    guests,
+    operatorId,
+  );
   if (notSent !== null) {
     const [sale] = await tx
       .select({ id: sales.id })
@@ -899,6 +917,7 @@ async function fileImmediateSale(
   workingOrderId: string,
   tender: TillTender | null,
   order: GrossOrder,
+  guests: GuestsChoice,
   operatorId?: string,
 ): Promise<TillSaleResult> {
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
@@ -952,6 +971,7 @@ async function fileImmediateSale(
   });
   const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
+  await recordReceiptGuests(tx, saleId, guests);
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
@@ -1210,7 +1230,7 @@ async function payIntegrated(
       tipOf(cfg, req);
       const attendanceAt = deps.attendance === undefined ? undefined : deps.clock.now().instant;
       const ticket = wasPlaced
-        ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, operatorId)
+        ? await fileImmediateSale(tx, deps, cfg, req.id, null, order, req.guests, operatorId)
         : await fireAndFileSale(
             tx,
             deps,
@@ -1219,6 +1239,7 @@ async function payIntegrated(
             null,
             order,
             locked?.partyId ?? null,
+            req.guests,
             operatorId,
           );
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -2101,7 +2122,16 @@ async function runCollectOrder(
     await refuseUnavailableFullInvoice(tx, req.id);
     await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
-    const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+    const ticket = await fileImmediateSale(
+      tx,
+      deps,
+      cfg,
+      req.id,
+      req.tender,
+      order,
+      req.guests,
+      operatorId,
+    );
     await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
     return ticket;
   });
@@ -2181,6 +2211,7 @@ async function runTillSale(
       deliveryTableId: req.deliveryTableId,
       zoneId: req.zoneId,
       receiptLanguage: req.receiptLanguage,
+      guests: req.guests,
     },
     operatorId,
     admit,

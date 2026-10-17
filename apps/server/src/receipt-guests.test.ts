@@ -1,10 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPayments, saleReceiptGuests, sales, tenants, workingOrders } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import {
+  billPayments,
+  invoiceSeries,
+  saleReceiptGuests,
+  sales,
+  tenants,
+  workingOrders,
+} from "@waitron/db";
+import { recordSale } from "@waitron/core";
+import {
+  AppError,
+  seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { completeBillPayment } from "./bill-payments.js";
 import { mergeBills, transferItems } from "./bill-actions.js";
 import { setPartyGuests } from "./parties.js";
@@ -216,12 +228,50 @@ async function saleOf(billId: string): Promise<string> {
   return sale!.id;
 }
 
-/** The sale of a party of 4 that paid one Burger at 12,00 € on its one bill. */
+/**
+ * A sale of one Burger at 12,00 € paid in cash on the bill, recorded straight through `recordSale`
+ * so that no guests row is written beside it, as every till payment now writes one.
+ */
+async function saleWithNoRow(billId: string): Promise<string> {
+  return inTx(v, async (tx) => {
+    const [series] = await tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(and(eq(invoiceSeries.nodeId, v.cfg.nodeId), eq(invoiceSeries.purpose, "standard")));
+    const { saleId } = await recordSale(tx, v.backend, {
+      origin: v.cfg.origin,
+      nodeId: v.cfg.nodeId,
+      seriesId: brandSeriesId(series!.id),
+      workingOrderId: brandWorkingOrderId(billId),
+      locale: v.cfg.locale,
+      invoiceLocales: v.cfg.invoiceLocales,
+      total: "12.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Burger",
+          descriptions: { [v.cfg.locale]: "Burger" },
+          quantity: "1",
+          unitPrice: "12.00",
+          vatRate: "10.00",
+          lineTotal: "12.00",
+        },
+      ],
+      clock: v.clock,
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "cash", amount: "12.00", tipAmount: "0.00", settledAt: new Date() }],
+      },
+    });
+    return saleId;
+  });
+}
+
+/** The sale, with no guests row, of a party of 4 that paid one Burger at 12,00 € on its one bill. */
 async function paidPartyOfFour(label: string): Promise<{ partyId: string; saleId: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label), 4);
   await orderForParty(v, partyId, ["Burger"], tabId);
-  await pay(v, tabId, "12.00");
-  return { partyId, saleId: await saleOf(tabId) };
+  return { partyId, saleId: await saleWithNoRow(tabId) };
 }
 
 /**
@@ -329,16 +379,14 @@ describe("the guests row written beside a recorded sale", () => {
     const { partyId, tabId } = await seat(v, await v.table("Fila 4"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
-    await pay(v, second, "30.00");
-    const saleId = await saleOf(second);
+    const saleId = await saleWithNoRow(second);
     await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
   it("writes no line by default for a counter sale", async () => {
     const orderId = await counterOrder(v, "Burger");
-    await pay(v, orderId, "12.00");
-    const saleId = await saleOf(orderId);
+    const saleId = await saleWithNoRow(orderId);
     await inTx(v, (tx) => recordReceiptGuests(tx, saleId, undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
@@ -379,8 +427,7 @@ describe("the guests a paper receipt of a sale prints", () => {
 
   it("prints a counter sale's stored count", async () => {
     const orderId = await counterOrder(v, "Burger");
-    await pay(v, orderId, "12.00");
-    const saleId = await saleOf(orderId);
+    const saleId = await saleWithNoRow(orderId);
     await storeRow(saleId, 3);
     expect(await printed(saleId)).toBe(3);
   });

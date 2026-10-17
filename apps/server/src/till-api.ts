@@ -86,6 +86,7 @@ import {
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
+import { readGuestsChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
   confirmReceiptHandover,
@@ -1763,6 +1764,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      readGuestsChoice(body.guests);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));

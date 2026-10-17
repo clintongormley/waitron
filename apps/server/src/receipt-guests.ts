@@ -50,9 +50,11 @@ export async function readPrintedGuests(
 }
 
 /**
- * The guests a sale's receipt prints, read as the party is now, or `undefined` for no line: the
- * sale's bill belongs to a party with a count that was not merged into another, and that party and
- * every party merged into it hold exactly one bill that is not abandoned.
+ * The default guests, read as the party is now, or `undefined` for no line: what a sale with no row
+ * and a full invoice print ({@link readPrintedGuests}), and what {@link recordReceiptGuests} stores
+ * when the request chose none. A count when the sale's bill belongs to a party with a count that was
+ * not merged into another, and that party and every party merged into it hold exactly one bill that
+ * is not abandoned.
  */
 export async function readReceiptGuests(
   tx: Transaction,

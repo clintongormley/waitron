@@ -168,7 +168,7 @@ async function readDevicePrinters(
   );
 }
 
-/** Use the filed issuer where available and the current optional trim, address, logo and guests. */
+/** Use the filed issuer where available and the current optional trim, address and logo. */
 async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId" | "practiceMode">,
